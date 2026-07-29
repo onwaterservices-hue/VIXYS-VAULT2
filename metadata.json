@@ -1,0 +1,6 @@
+{
+  "name": "VIXY Terminal",
+  "description": "Professional Decision Intelligence for Prediction Markets. Live 15-minute Bitcoin probabilities, order flow microstructure, and market edge analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,234 @@
+import React, { useState } from 'react';
+import { Lock, Mail, User, ShieldCheck, ArrowRight, X, Sparkles, CheckCircle2 } from 'lucide-react';
+import { AuthState } from '../types';
+
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  authState: AuthState;
+  setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
+  initialMode?: 'login' | 'register';
+  onSuccessRole?: (role: 'PRO' | 'DEMO' | 'ADMIN') => void;
+}
+
+export const AuthModal: React.FC<AuthModalProps> = ({
+  isOpen,
+  onClose,
+  authState,
+  setAuthState,
+  initialMode = 'login',
+  onSuccessRole,
+}) => {
+  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    setTimeout(() => {
+      setLoading(false);
+      setAuthState({
+        isAuthenticated: true,
+        user: {
+          id: `usr_${Math.random().toString(36).substring(2, 9)}`,
+          email: email || 'trader@vixysvault.com',
+          name: fullName || email.split('@')[0] || 'Quant Trader',
+          role: 'PRO',
+          apiKey: 'vault_live_8f3a2b1c90e',
+          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        },
+      });
+      if (onSuccessRole) onSuccessRole('PRO');
+      setSuccessMsg("Authentication successful. Welcome to VIXY'S VAULT!");
+      setTimeout(() => {
+        setSuccessMsg('');
+        onClose();
+      }, 1000);
+    }, 800);
+  };
+
+  const handleDemoBypass = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setAuthState({
+        isAuthenticated: true,
+        user: {
+          id: 'usr_demo_882',
+          email: 'demo.trader@vixysvault.com',
+          name: 'Demo Quant User',
+          role: 'PRO',
+          apiKey: 'vault_demo_982a1c',
+          joinedDate: 'July 2026',
+        },
+      });
+      if (onSuccessRole) onSuccessRole('PRO');
+      onClose();
+    }, 400);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0A0518]/80 backdrop-blur-md animate-fadeIn">
+      <div className="relative w-full max-w-md bg-[#120B28] border border-purple-500/40 rounded-2xl shadow-2xl overflow-hidden text-purple-100 font-mono">
+        {/* Glow Header Bar */}
+        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-violet-500 to-indigo-500" />
+
+        {/* Close Button */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-purple-300/60 hover:text-white bg-[#0B061A] p-1.5 rounded-lg border border-purple-900/40 transition-all"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="p-6 sm:p-8 space-y-6">
+          {/* Brand & Title */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-mono font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+              <span>VIXY'S VAULT AUTHENTICATION</span>
+            </div>
+            <h2 className="text-2xl font-black font-mono tracking-tight text-white">
+              {mode === 'login' && 'Welcome Back'}
+              {mode === 'register' && 'Create Your Vault Account'}
+              {mode === 'forgot' && 'Reset Password'}
+            </h2>
+            <p className="text-xs text-purple-300/60 font-sans">
+              Access live 15m prediction market intelligence & L2 order flow delta.
+            </p>
+          </div>
+
+          {successMsg ? (
+            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-purple-400 mx-auto" />
+              <p className="text-purple-300 font-bold text-xs">{successMsg}</p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+              {mode === 'register' && (
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/60 block font-semibold">Full Name</label>
+                  <div className="relative">
+                    <User className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Alex Mercer"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <label className="text-purple-300/60 block font-semibold">Email Address</label>
+                <div className="relative">
+                  <Mail className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="trader@vixysvault.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
+
+              {mode !== 'forgot' && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-purple-300/60 font-semibold">Password</label>
+                    {mode === 'login' && (
+                      <button
+                        type="button"
+                        onClick={() => setMode('forgot')}
+                        className="text-[10px] text-purple-300 hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <span>
+                  {loading
+                    ? 'Authenticating...'
+                    : mode === 'login'
+                    ? 'Sign In to Terminal'
+                    : mode === 'register'
+                    ? 'Create Account & Start Pass'
+                    : 'Send Password Reset Link'}
+                </span>
+                {!loading && <ArrowRight className="w-4 h-4" />}
+              </button>
+
+              {/* Quick Demo Bypass Button */}
+              <div className="pt-2 border-t border-purple-900/40">
+                <button
+                  type="button"
+                  onClick={handleDemoBypass}
+                  className="w-full py-2.5 rounded-xl bg-[#0B061A] hover:bg-[#1A1038] text-purple-300 border border-purple-900/40 text-xs font-bold transition-all flex items-center justify-center gap-2"
+                >
+                  <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  <span>Instant Demo Access (Bypass Sign In)</span>
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Switch Mode Footer */}
+          <div className="text-center text-xs text-purple-300/60 pt-2 border-t border-purple-900/40">
+            {mode === 'login' && (
+              <p>
+                Don't have an account?{' '}
+                <button onClick={() => setMode('register')} className="text-purple-300 font-bold hover:underline">
+                  Create Account
+                </button>
+              </p>
+            )}
+            {mode === 'register' && (
+              <p>
+                Already registered?{' '}
+                <button onClick={() => setMode('login')} className="text-purple-300 font-bold hover:underline">
+                  Sign In
+                </button>
+              </p>
+            )}
+            {mode === 'forgot' && (
+              <button onClick={() => setMode('login')} className="text-purple-300 font-bold hover:underline">
+                Back to Sign In
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
