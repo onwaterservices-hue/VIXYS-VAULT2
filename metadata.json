@@ -1,6 +1,6 @@
 {
-  "name": "VIXY Terminal",
-  "description": "Professional Decision Intelligence for Prediction Markets. Live 15-minute Bitcoin probabilities, order flow microstructure, and market edge analytics.",
+  "name": "Vixy's Vault",
+  "description": "AI-powered institutional decision-support platform for prediction markets. Live probabilities, 15s scalping desk, explainable multi-engine signals, whale delta tracking, and backtested track records.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

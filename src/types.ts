@@ -80,6 +80,8 @@ export interface HistoricalPrediction {
   id: string;
   timeString: string;
   timestamp: number;
+  asset?: string; // e.g. 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE'
+  timeframe?: string; // e.g. '15M', '15S', '1H'
   targetPrice: number;
   actualClose: number;
   direction: SignalDirection;

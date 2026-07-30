@@ -82,11 +82,11 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                       }`}
                     >
                       {asset.change24h >= 0 ? '+' : ''}
-                      {asset.change24h}%
+                      {asset.change24h.toFixed(2)}%
                     </span>
                   </div>
                   <span className="text-[11px] font-mono text-purple-200/90 font-bold">
-                    ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                    ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
 
@@ -109,10 +109,10 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                     e.stopPropagation();
                     onToggleFavorite(asset.symbol);
                   }}
-                  className="p-1 rounded-lg text-purple-400 hover:text-amber-400 transition-colors"
-                  title="Favorite Asset"
+                  className="p-1 rounded-lg text-purple-400/50 hover:text-amber-400 transition-colors shrink-0"
+                  title={isFav ? `Remove ${asset.symbol} from favorites` : `Add ${asset.symbol} to favorites`}
                 >
-                  <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : ''}`} />
+                  <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-purple-400/50 hover:text-amber-400'}`} />
                 </button>
               </div>
             );
@@ -129,20 +129,13 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
 
       {/* 2. AUTO-SYNC & VENUE CONTROLS ROW */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-2xl bg-[#0c061b]/90 border border-purple-900/40 backdrop-blur-xl font-mono text-xs">
-        {/* Auto-Sync Live Stream Indicator (Replaced duplicate timeframe bar) */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#06030d] border border-purple-900/60 shadow-inner">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shadow-sm shadow-emerald-400" />
-            <span className="text-emerald-300 font-extrabold text-xs tracking-wide">
-              AUTO-SYNC: STREAMING LIVE (250ms)
-            </span>
-          </div>
-          <span className="text-purple-300/60 text-xs font-sans">
-            Auto-Sync Active ({selectedTimeframe})
-          </span>
+        {/* Single Clean Data Stream Indicator */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-300 font-bold text-xs" title="Running on backtested sample data stream. Connect live venue websocket API in settings for real-time order flow execution.">
+          <span className="w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400" />
+          <span>Sample Stream ({selectedTimeframe} • Simulated)</span>
         </div>
 
-        {/* Venue Selector - Multi Select */}
+        {/* Venue Selector - Clean Ghost vs Solid Style */}
         <div className="flex items-center gap-1.5 overflow-x-auto">
           <span className="text-[10px] text-purple-400 font-bold px-1 uppercase tracking-wider hidden sm:inline">
             Venues:
@@ -155,11 +148,11 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                 onClick={() => onToggleVenue(v)}
                 className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-purple-950 text-purple-200 border border-purple-500/50 shadow-md'
-                    : 'bg-[#06030d] text-purple-400/60 border border-purple-900/30 hover:text-purple-200'
+                    ? 'bg-purple-600 text-white shadow-md border border-purple-400/50 font-black'
+                    : 'bg-transparent text-purple-300/70 border border-purple-900/40 hover:border-purple-500/40 hover:text-white'
                 }`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-purple-800'}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-300 animate-pulse' : 'bg-purple-700/50'}`} />
                 <span>{v}</span>
               </button>
             );
@@ -173,7 +166,7 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
           <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
           <span className="text-purple-100 font-medium leading-relaxed font-sans">
             <strong className="text-white font-mono uppercase font-black tracking-wide">
-              AI EXECUTIVE SYNTHESIS:
+              AI QUANT MODEL:
             </strong>{' '}
             {getAiSummary()}
           </span>

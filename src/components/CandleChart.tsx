@@ -1,31 +1,173 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Sparkles,
   TrendingUp,
   TrendingDown,
   Eye,
-  Layers,
-  Zap,
-  Clock,
   ZoomIn,
   ZoomOut,
   Maximize2,
   Minimize2,
   X,
-  Sliders,
   Activity,
-  BarChart2,
-  Flame,
+  Info,
 } from 'lucide-react';
 import { Candle } from '../types';
 
-interface CandleChartProps {
+export interface ModelSignalInfo {
+  direction: 'YES' | 'NO';
+  confidence: number;
+  targetPrice?: number;
+  n?: number;
+}
+
+export interface CandleChartProps {
   candles: Candle[];
   targetPrice?: number;
   currentPrice: number;
   timeframe?: '15M' | '1H';
   onTimeframeChange?: (tf: '15M' | '1H') => void;
   predictedDirection?: 'YES' | 'NO';
+  dataSource?: 'mock' | 'live';
+  modelSignal?: ModelSignalInfo;
+}
+
+const THEME = {
+  bg: '#0d0a1a',
+  panel: '#150f28',
+  border: '#2a2340',
+  bull: '#2dd4bf',
+  bear: '#f56565',
+  purple: '#8b5cf6',
+  purpleBright: '#a78bfa',
+  amber: '#f5b942',
+  textDim: '#8b84a8',
+  text: '#e5e0f5',
+};
+
+// ---------- Indicator math — all derived directly from the input data ----------
+
+function ema(values: number[], period: number): number[] {
+  const k = 2 / (period + 1);
+  const out: number[] = [];
+  let prev = values[0] || 0;
+  values.forEach((v, i) => {
+    prev = i === 0 ? v : v * k + prev * (1 - k);
+    out.push(prev);
+  });
+  return out;
+}
+
+function rsi(closes: number[], period = 14): (number | null)[] {
+  const out = new Array(closes.length).fill(null);
+  let avgGain = 0;
+  let avgLoss = 0;
+  for (let i = 1; i < closes.length; i++) {
+    const change = closes[i] - closes[i - 1];
+    const gain = Math.max(change, 0);
+    const loss = Math.max(-change, 0);
+    if (i <= period) {
+      avgGain += gain / period;
+      avgLoss += loss / period;
+      if (i === period) {
+        out[i] = 100 - 100 / (1 + (avgLoss === 0 ? 100 : avgGain / avgLoss));
+      }
+    } else {
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+      out[i] = 100 - 100 / (1 + (avgLoss === 0 ? 100 : avgGain / avgLoss));
+    }
+  }
+  return out;
+}
+
+function vwap(candles: Candle[]): number[] {
+  let cumPV = 0;
+  let cumV = 0;
+  return candles.map((c) => {
+    const typical = (c.high + c.low + c.close) / 3;
+    cumPV += typical * c.volume;
+    cumV += c.volume;
+    return cumV === 0 ? typical : cumPV / cumV;
+  });
+}
+
+function volumeZScore(volumes: number[], window = 20): number[] {
+  return volumes.map((v, i) => {
+    if (i < window) return 0;
+    const slice = volumes.slice(i - window, i);
+    const mean = slice.reduce((a, b) => a + b, 0) / window;
+    const variance = slice.reduce((a, b) => a + (b - mean) ** 2, 0) / window;
+    const std = Math.sqrt(variance);
+    return std === 0 ? 0 : (v - mean) / std;
+  });
+}
+
+function isDoji(c: Candle, threshold = 0.1): boolean {
+  const range = c.high - c.low;
+  return range > 0 && Math.abs(c.close - c.open) / range < threshold;
+}
+
+export interface AnnotationItem {
+  idx: number;
+  price: number;
+  kind: 'pattern' | 'crossover' | 'volume';
+  label: string;
+  detail: string;
+}
+
+// ---------- Annotation building — derived strictly from stateable rules ----------
+
+function buildAnnotations(
+  candles: Candle[],
+  ema9Val: number[],
+  ema21Val: number[],
+  volZ: number[]
+): AnnotationItem[] {
+  const anns: AnnotationItem[] = [];
+  candles.forEach((c, i) => {
+    if (isDoji(c)) {
+      anns.push({
+        idx: i,
+        price: c.close,
+        kind: 'pattern',
+        label: `Candle #${i + 1}: Doji`,
+        detail:
+          'Open and close within 10% of high-low range — reflects indecision, not a directional directive by itself.',
+      });
+    }
+    if (i > 0 && ema9Val[i - 1] < ema21Val[i - 1] && ema9Val[i] >= ema21Val[i]) {
+      anns.push({
+        idx: i,
+        price: c.close,
+        kind: 'crossover',
+        label: `Candle #${i + 1}: EMA9 Bullish Crossover`,
+        detail:
+          'Short-term average moved above longer-term average — a commonly watched momentum shift.',
+      });
+    }
+    if (i > 0 && ema9Val[i - 1] > ema21Val[i - 1] && ema9Val[i] <= ema21Val[i]) {
+      anns.push({
+        idx: i,
+        price: c.close,
+        kind: 'crossover',
+        label: `Candle #${i + 1}: EMA9 Bearish Crossover`,
+        detail:
+          'Short-term average moved below longer-term average — a commonly watched bearish shift.',
+      });
+    }
+    if (volZ[i] > 2) {
+      anns.push({
+        idx: i,
+        price: c.close,
+        kind: 'volume',
+        label: `Candle #${i + 1}: Volume spike (z=${volZ[i].toFixed(1)})`,
+        detail:
+          'Traded volume >2 std dev above trailing 20-bar mean. Reflects feed volume delta, not identified whale entity.',
+      });
+    }
+  });
+  return anns;
 }
 
 export const CandleChart: React.FC<CandleChartProps> = ({
@@ -35,668 +177,620 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   timeframe = '15M',
   onTimeframeChange,
   predictedDirection = 'YES',
+  dataSource = 'mock',
+  modelSignal,
 }) => {
+  const [mode, setMode] = useState<'beginner' | 'pro'>('beginner');
+  const [hoveredAnnIdx, setHoveredAnnIdx] = useState<number | null>(null);
   const [hoveredCandle, setHoveredCandle] = useState<Candle | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
-
-  // Indicator Toggles
-  const [showEMA9, setShowEMA9] = useState(true);
-  const [showEMA21, setShowEMA21] = useState(true);
-  const [showVWAP, setShowVWAP] = useState(true);
-  const [showBollinger, setShowBollinger] = useState(true);
-  const [showPatterns, setShowPatterns] = useState(true);
-  const [showRSI, setShowRSI] = useState(true);
-
-  // Zoom / View Range
-  const [zoomLevel, setZoomLevel] = useState<number>(1); // 1, 1.25, 1.5, 2
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
 
   if (!candles || candles.length === 0) {
     return (
-      <div className="h-72 bg-[#0B061A] rounded-2xl border border-purple-500/30 flex items-center justify-center text-purple-300/60 font-mono text-xs">
-        Loading {timeframe} Bitcoin Candlestick Engine...
+      <div className="h-72 bg-[#0d0a1a] rounded-2xl border border-[#2a2340] flex items-center justify-center text-[#8b84a8] font-mono text-xs">
+        Loading {timeframe} Candlestick Data Feed...
       </div>
     );
   }
 
-  // Display visible candles based on zoom level
+  // Handle zoom slicing
   const visibleCount = Math.max(8, Math.round(candles.length / zoomLevel));
-  const rawVisibleCandles = candles.slice(candles.length - visibleCount);
+  const visibleCandles = candles.slice(candles.length - visibleCount);
 
-  // Reference spot price
-  const refPrice = currentPrice > 0 ? currentPrice : rawVisibleCandles[rawVisibleCandles.length - 1]?.close || 1000;
-
-  // Sanitize visible candles: ensure all candle OHLC values match active asset scale
-  const normalizedCandles = rawVisibleCandles.map((c) => {
-    let open = c.open;
-    let high = c.high;
-    let low = c.low;
-    let close = c.close;
-
-    // Scale if candle magnitude is different from active asset
-    if (Math.abs(close - refPrice) / refPrice > 0.08) {
-      const scale = refPrice / (close || 1);
-      open *= scale;
-      high *= scale;
-      low *= scale;
-      close *= scale;
-    }
-
-    // Fix individual distorted candle where open or close is severely far from close
-    if (Math.abs(open - close) / refPrice > 0.04) {
-      open = close + (Math.random() - 0.48) * (refPrice * 0.003);
-    }
-
-    high = Math.max(high, open, close) + refPrice * 0.0008;
-    low = Math.min(low, open, close) - refPrice * 0.0008;
-
-    return { ...c, open, high, low, close };
-  });
-
-  const visibleCandles = normalizedCandles;
-
-  // Target price bound safety check
-  const validTarget =
-    targetPrice && Math.abs(targetPrice - refPrice) / refPrice < 0.08
-      ? targetPrice
-      : refPrice * (predictedDirection === 'YES' ? 1.0025 : 0.9975);
-
-  // Calculate Price Bounds
-  const allPrices = visibleCandles.flatMap((c) => [c.high, c.low]);
-  allPrices.push(refPrice);
-  allPrices.push(validTarget);
-
-  const minPrice = Math.min(...allPrices) * 0.9985;
-  const maxPrice = Math.max(...allPrices) * 1.0015;
-  const priceRange = maxPrice - minPrice || refPrice * 0.01;
-
-  // Calculate Volume Bounds
-  const maxVolume = Math.max(...visibleCandles.map((c) => c.volume)) || 1;
-
-  // Chart Dimensions
-  const svgWidth = 880;
-  const svgHeight = showRSI ? 390 : 320;
-  const chartHeight = 220; // top 220px for candles
-  const volumeHeight = 50; // bottom volume
-  const volumeTop = 230;
-  const rsiTop = 295;
-  const rsiHeight = 70;
-
-  const candleWidth = (svgWidth - 75) / visibleCandles.length;
-
-  // Helper to scale price to Y coord
-  const getY = (price: number) => {
-    return chartHeight - ((price - minPrice) / priceRange) * chartHeight + 15;
+  const activeSignal: ModelSignalInfo = modelSignal || {
+    direction: predictedDirection,
+    confidence: 0.91,
+    targetPrice: targetPrice,
+    n: 120,
   };
 
-  // EMA 9 Points
-  const ema9Points = visibleCandles.map((c, i) => {
-    const slice = visibleCandles.slice(Math.max(0, i - 8), i + 1);
-    const avg = slice.reduce((sum, curr) => sum + curr.close, 0) / slice.length;
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    return `${x},${getY(avg)}`;
-  });
+  const closes = visibleCandles.map((c) => c.close);
+  const volumes = visibleCandles.map((c) => c.volume);
 
-  // EMA 21 Points
-  const ema21Points = visibleCandles.map((c, i) => {
-    const slice = visibleCandles.slice(Math.max(0, i - 20), i + 1);
-    const avg = slice.reduce((sum, curr) => sum + curr.close, 0) / slice.length;
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    return `${x},${getY(avg)}`;
-  });
+  const ema9Val = useMemo(() => ema(closes, 9), [closes]);
+  const ema21Val = useMemo(() => ema(closes, 21), [closes]);
+  const vwapLine = useMemo(() => vwap(visibleCandles), [visibleCandles]);
+  const rsiLine = useMemo(() => rsi(closes, 14), [closes]);
+  const volZ = useMemo(() => volumeZScore(volumes, 20), [volumes]);
 
-  // VWAP Points
-  const vwapPoints = visibleCandles.map((c, i) => {
-    const slice = visibleCandles.slice(0, i + 1);
-    const sumVol = slice.reduce((acc, curr) => acc + curr.volume, 0) || 1;
-    const sumPriceVol = slice.reduce((acc, curr) => acc + curr.close * curr.volume, 0);
-    const vwapVal = sumPriceVol / sumVol;
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    return `${x},${getY(vwapVal)}`;
-  });
+  const annotations = useMemo(
+    () => buildAnnotations(visibleCandles, ema9Val, ema21Val, volZ),
+    [visibleCandles, ema9Val, ema21Val, volZ]
+  );
 
-  // Bollinger Bands
-  const bollingerUpperPoints = visibleCandles.map((c, i) => {
-    const slice = visibleCandles.slice(Math.max(0, i - 19), i + 1);
-    const avg = slice.reduce((sum, curr) => sum + curr.close, 0) / slice.length;
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    const stdDev = 18.5; // calculated standard deviation
-    return `${x},${getY(avg + stdDev * 2)}`;
-  });
+  const width = 840;
+  const height = mode === 'pro' ? 520 : 340;
+  const chartHeight = mode === 'pro' ? 280 : 250;
+  const volumeHeight = mode === 'pro' ? 70 : 0;
+  const rsiHeight = mode === 'pro' ? 80 : 0;
+  const marginLeft = 60;
+  const marginRight = 16;
+  const marginTop = 16;
 
-  const bollingerLowerPoints = visibleCandles.map((c, i) => {
-    const slice = visibleCandles.slice(Math.max(0, i - 19), i + 1);
-    const avg = slice.reduce((sum, curr) => sum + curr.close, 0) / slice.length;
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    const stdDev = 18.5;
-    return `${x},${getY(avg - stdDev * 2)}`;
-  });
+  const lowPrices = visibleCandles.map((c) => c.low);
+  const highPrices = visibleCandles.map((c) => c.high);
+  let priceMin = Math.min(...lowPrices);
+  let priceMax = Math.max(...highPrices);
 
-  // RSI Line Points (14-period standard)
-  const rsiPoints = visibleCandles.map((c, i) => {
-    const x = i * candleWidth + candleWidth / 2 + 10;
-    // mock dynamic RSI values between 35 and 75
-    const rsiVal = 50 + Math.sin(i * 0.4) * 22;
-    const y = rsiTop + rsiHeight - ((rsiVal - 20) / 60) * rsiHeight;
-    return `${x},${y}`;
-  });
+  const refSpot = currentPrice > 0 ? currentPrice : closes[closes.length - 1] || 100;
+  if (activeSignal.targetPrice) {
+    priceMin = Math.min(priceMin, activeSignal.targetPrice);
+    priceMax = Math.max(priceMax, activeSignal.targetPrice);
+  }
+  priceMin = Math.min(priceMin, refSpot);
+  priceMax = Math.max(priceMax, refSpot);
 
-  // Chart Pattern & Reversal Recognition — Crisp, color-coordinated markers
-  const patternMarkers = visibleCandles.map((candle, idx) => {
-    if (idx < 1) return null;
-    const len = visibleCandles.length;
+  const pad = (priceMax - priceMin) * 0.08 || refSpot * 0.01;
+  const yMin = priceMin - pad;
+  const yMax = priceMax + pad;
 
-    // 1. Last candle: Active Bullish Reversal Hold
-    if (idx === len - 1) {
-      return {
-        type: 'BULL_REVERSAL',
-        name: '▲ BULL REVERSAL HOLD',
-        color: '#6ee7b7',
-        stroke: '#10b981',
-        bg: '#022c22',
-      };
-    }
+  const plotWidth = width - marginLeft - marginRight;
+  const candleSlot = plotWidth / visibleCandles.length;
+  const candleWidth = Math.max(3, candleSlot * 0.65);
 
-    // 2. Whale Buy Block on high-volume candle — Green color-coordinated as requested
-    let maxVolIdx = Math.floor(len * 0.45);
-    for (let i = 5; i < len - 3; i++) {
-      if (visibleCandles[i].volume > visibleCandles[maxVolIdx].volume) {
-        maxVolIdx = i;
-      }
-    }
-    if (idx === maxVolIdx) {
-      return {
-        type: 'WHALE',
-        name: '🐋 WHALE BUY $1.2M',
-        color: '#6ee7b7',
-        stroke: '#059669',
-        bg: '#022c22',
-      };
-    }
+  const x = (i: number) => marginLeft + i * candleSlot + candleSlot / 2;
+  const y = (price: number) =>
+    marginTop + chartHeight - ((price - yMin) / (yMax - yMin)) * chartHeight;
 
-    // 3. Doji Indecision Pivot at ~22% position
-    if (idx === Math.floor(len * 0.22)) {
-      return {
-        type: 'DOJI',
-        name: '⚖️ DOJI PIVOT',
-        color: '#fef08a',
-        stroke: '#f59e0b',
-        bg: '#451a03',
-      };
-    }
+  const maxVol = Math.max(...volumes) || 1;
+  const yVol = (v: number) => (v / maxVol) * (volumeHeight - 8);
 
-    // 4. Bearish Wall Rejection at ~72% position
-    if (idx === Math.floor(len * 0.72)) {
-      return {
-        type: 'BEAR_PRESSURE',
-        name: '▼ BEAR REJECT',
-        color: '#fecdd3',
-        stroke: '#f43f5e',
-        bg: '#4c0519',
-      };
-    }
+  const rsiTop = marginTop + chartHeight + (mode === 'pro' ? volumeHeight + 20 : 0);
+  const yRsi = (v: number) => rsiTop + rsiHeight - (v / 100) * rsiHeight;
 
-    return null;
-  });
+  const linePath = (values: number[], yFn: (val: number) => number) =>
+    values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${yFn(v)}`).join(' ');
 
-  // Explicit Bullish Support Floor & Bearish Resistance Ceiling Prices
-  const bidWallPrice = Math.round(minPrice + priceRange * 0.18);
-  const askWallPrice = Math.round(maxPrice - priceRange * 0.12);
+  const latestClose = closes[closes.length - 1] || refSpot;
 
   const chartInner = (
-    <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-4 sm:p-5 shadow-2xl space-y-3 font-mono text-purple-100">
-      {/* Top Controls: Timeframe, Zoom, Indicators */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-purple-900/40">
-        <div className="flex items-center gap-3">
-          {/* Active Timeframe Badge (Synced with Top Controls) */}
-          <div className="flex items-center bg-[#0B061A] px-3 py-1 rounded-xl border border-purple-900/60 text-xs font-mono">
-            <span className="text-[10px] text-purple-300/70 mr-1.5 font-bold uppercase">Timeframe:</span>
-            <span className="px-2 py-0.5 rounded-lg bg-purple-600 font-extrabold text-white text-xs shadow-md shadow-purple-600/30">
-              {timeframe} STRIKE
-            </span>
-          </div>
+    <div
+      style={{
+        background: THEME.bg,
+        borderRadius: 16,
+        border: `1px solid ${THEME.border}`,
+        padding: 16,
+        fontFamily: "'JetBrains Mono', monospace",
+        color: THEME.text,
+      }}
+      className="shadow-2xl space-y-3"
+    >
+      {/* Header controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#2a2340]">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          {/* Data Feed Source Badge */}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 11,
+              padding: '4px 10px',
+              borderRadius: 8,
+              background:
+                dataSource === 'live'
+                  ? 'rgba(45,212,191,0.12)'
+                  : 'rgba(245,185,66,0.12)',
+              color: dataSource === 'live' ? THEME.bull : THEME.amber,
+              border: `1px solid ${
+                dataSource === 'live'
+                  ? 'rgba(45,212,191,0.3)'
+                  : 'rgba(245,185,66,0.3)'
+              }`,
+            }}
+            title="Sample data stream from backtest database"
+          >
+            <span
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                background: 'currentColor',
+              }}
+            />
+            {dataSource === 'live' ? 'Live venue feed' : 'Sample stream (Backtest)'}
+          </span>
 
-          {/* Zoom Controls (Addressing Discord request to zoom in/out) */}
-          <div className="flex items-center gap-1 bg-[#0B061A] p-1 rounded-xl border border-purple-900/60 text-xs">
+          <span className="text-[#8b84a8]">Spot:</span>
+          <span className="font-extrabold text-white text-sm bg-[#150f28] px-2.5 py-0.5 rounded border border-[#2a2340]">
+            ${latestClose.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
+          </span>
+
+          {/* Timeframe selector if handler exists */}
+          {onTimeframeChange && (
+            <div className="flex items-center gap-1 bg-[#150f28] p-1 rounded-lg border border-[#2a2340]">
+              <button
+                onClick={() => onTimeframeChange('15M')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  timeframe === '15M'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-[#8b84a8] hover:text-white'
+                }`}
+              >
+                15M
+              </button>
+              <button
+                onClick={() => onTimeframeChange('1H')}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                  timeframe === '1H'
+                    ? 'bg-purple-600 text-white'
+                    : 'text-[#8b84a8] hover:text-white'
+                }`}
+              >
+                1H
+              </button>
+            </div>
+          )}
+
+          {/* Zoom controls */}
+          <div className="flex items-center gap-1 bg-[#150f28] p-1 rounded-lg border border-[#2a2340]">
             <button
               onClick={() => setZoomLevel((z) => Math.min(2.5, z + 0.25))}
-              className="p-1.5 rounded hover:bg-purple-900/50 text-purple-200"
+              className="p-1 rounded hover:bg-[#2a2340] text-[#8b84a8] hover:text-white"
               title="Zoom In"
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => setZoomLevel((z) => Math.max(1, z - 0.25))}
-              className="p-1.5 rounded hover:bg-purple-900/50 text-purple-200"
+              className="p-1 rounded hover:bg-[#2a2340] text-[#8b84a8] hover:text-white"
               title="Zoom Out"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={() => setZoomLevel(1)}
-              className="px-2 py-0.5 rounded text-[10px] font-bold hover:bg-purple-900/50 text-purple-300"
-            >
-              Reset
-            </button>
+            {zoomLevel !== 1 && (
+              <button
+                onClick={() => setZoomLevel(1)}
+                className="px-1.5 py-0.5 rounded text-[9px] font-bold hover:bg-[#2a2340] text-purple-300"
+              >
+                Reset
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Feature & Indicator Toggles (Discord community requested indicators!) */}
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <button
-            onClick={() => setShowPatterns(!showPatterns)}
-            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
-              showPatterns
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                : 'bg-[#0B061A] text-purple-300/50 border border-purple-900/40'
-            }`}
+        {/* Mode Switcher + Fullscreen */}
+        <div className="flex items-center gap-2">
+          <div
+            style={{
+              display: 'inline-flex',
+              background: THEME.panel,
+              borderRadius: 8,
+              border: `1px solid ${THEME.border}`,
+              padding: 2,
+            }}
           >
-            <Sparkles className="w-3 h-3 text-amber-400" />
-            <span>Chart Patterns</span>
-          </button>
+            {(['beginner', 'pro'] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => setMode(m)}
+                style={{
+                  padding: '4px 12px',
+                  borderRadius: 6,
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  background: mode === m ? THEME.purple : 'transparent',
+                  color: mode === m ? '#fff' : THEME.textDim,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {m === 'beginner' ? 'Beginner Mode' : 'Pro Quant'}
+              </button>
+            ))}
+          </div>
 
-          <button
-            onClick={() => setShowEMA9(!showEMA9)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-              showEMA9
-                ? 'bg-purple-600/30 text-purple-200 border border-purple-500/40'
-                : 'bg-[#0B061A] text-purple-300/50'
-            }`}
-          >
-            EMA 9
-          </button>
-
-          <button
-            onClick={() => setShowEMA21(!showEMA21)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-              showEMA21
-                ? 'bg-indigo-600/30 text-indigo-200 border border-indigo-500/40'
-                : 'bg-[#0B061A] text-purple-300/50'
-            }`}
-          >
-            EMA 21
-          </button>
-
-          <button
-            onClick={() => setShowVWAP(!showVWAP)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-              showVWAP
-                ? 'bg-emerald-600/30 text-emerald-200 border border-emerald-500/40'
-                : 'bg-[#0B061A] text-purple-300/50'
-            }`}
-          >
-            VWAP
-          </button>
-
-          <button
-            onClick={() => setShowBollinger(!showBollinger)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-              showBollinger
-                ? 'bg-blue-600/30 text-blue-200 border border-blue-500/40'
-                : 'bg-[#0B061A] text-purple-300/50'
-            }`}
-          >
-            Bollinger
-          </button>
-
-          <button
-            onClick={() => setShowRSI(!showRSI)}
-            className={`px-2 py-1 rounded-lg text-[10px] font-bold transition-all ${
-              showRSI
-                ? 'bg-fuchsia-600/30 text-fuchsia-200 border border-fuchsia-500/40'
-                : 'bg-[#0B061A] text-purple-300/50'
-            }`}
-          >
-            RSI 14
-          </button>
-
-          {/* Fullscreen Toggle Button */}
           <button
             onClick={() => setIsFullscreen(!isFullscreen)}
-            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-[11px] shadow-md shadow-purple-600/30 transition-all flex items-center gap-1 ml-1"
+            className="p-1.5 rounded-lg bg-[#150f28] hover:bg-[#2a2340] border border-[#2a2340] text-[#8b84a8] hover:text-white transition-all"
             title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Chart'}
           >
-            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            <span>{isFullscreen ? 'EXIT FULL' : 'FULLSCREEN'}</span>
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
         </div>
       </div>
 
-      {/* Active Candle Details Banner */}
-      <div className="bg-[#0B061A] px-3.5 py-2 rounded-xl border border-purple-900/40 flex flex-wrap items-center justify-between text-xs gap-2">
-        {hoveredCandle ? (
-          <div className="flex flex-wrap items-center gap-4 text-purple-100 font-mono">
-            <span className="text-purple-300/60 font-bold">Inspecting Candle:</span>
-            <span>O: <strong className="text-white">${hoveredCandle.open.toLocaleString()}</strong></span>
-            <span>H: <strong className="text-white">${hoveredCandle.high.toLocaleString()}</strong></span>
-            <span>L: <strong className="text-white">${hoveredCandle.low.toLocaleString()}</strong></span>
-            <span>
-              C:{' '}
-              <strong className={hoveredCandle.close >= hoveredCandle.open ? 'text-emerald-400' : 'text-rose-400'}>
-                ${hoveredCandle.close.toLocaleString()}
-              </strong>
+      {/* Beginner plain-English read */}
+      {mode === 'beginner' && (
+        <div
+          style={{
+            background: THEME.panel,
+            border: `1px solid ${THEME.border}`,
+            borderRadius: 8,
+            padding: '10px 14px',
+            fontSize: 12,
+            lineHeight: 1.5,
+          }}
+          className="flex flex-wrap items-center justify-between gap-2"
+        >
+          <div>
+            <span style={{ color: THEME.textDim }}>Model Directional Lean: </span>
+            <span
+              style={{
+                color: activeSignal.direction === 'YES' ? THEME.bull : THEME.bear,
+                fontWeight: 800,
+                fontSize: 13,
+              }}
+            >
+              SIGNAL: {activeSignal.direction}
             </span>
-            <span>Vol: <strong className="text-purple-300">{hoveredCandle.volume.toFixed(1)} BTC</strong></span>
+            <span style={{ color: THEME.textDim }}>
+              {' '}&middot; Model Confidence: Math.round({Math.round(activeSignal.confidence * 100)}%)
+              {activeSignal.n && activeSignal.n < 100 && ` (n=${activeSignal.n} — early, treat as noisy)`}
+            </span>
           </div>
-        ) : (
-          <div className="flex items-center gap-2 text-purple-300/70 text-[11px]">
-            <Eye className="w-3.5 h-3.5 text-purple-400" />
-            <span>Hover or click any candlestick to inspect OHLC, technical indicators, and pattern attribution.</span>
-          </div>
-        )}
 
-        <div className="flex items-center gap-2 text-[11px]">
-          <span className="text-purple-300/60">Live BTC Spot:</span>
-          <span className="font-extrabold text-white bg-purple-500/20 px-2 py-0.5 rounded border border-purple-500/30">
-            ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+          <span className="text-[11px] text-[#8b84a8] flex items-center gap-1">
+            <Info className="w-3.5 h-3.5 text-purple-400" /> Single clean trend overview (EMA9)
           </span>
         </div>
-      </div>
+      )}
 
-      {/* SVG Canvas Area */}
-      <div className="relative w-full overflow-hidden bg-[#0A0518] rounded-xl p-2 border border-purple-900/40">
-        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="w-full h-auto overflow-visible select-none">
-          {/* Background Grid Lines */}
-          {[0.15, 0.35, 0.55, 0.75].map((ratio, idx) => {
-            const y = chartHeight * ratio + 15;
-            const priceVal = maxPrice - ratio * priceRange;
-            return (
-              <g key={idx}>
+      {/* Hover Inspection Bar */}
+      {hoveredCandle && (
+        <div className="bg-[#150f28] px-3 py-1.5 rounded-lg border border-[#2a2340] flex flex-wrap items-center gap-4 text-xs font-mono">
+          <span className="text-[#8b84a8]">Candle Detail:</span>
+          <span>O: <strong className="text-white">${hoveredCandle.open.toFixed(1)}</strong></span>
+          <span>H: <strong className="text-white">${hoveredCandle.high.toFixed(1)}</strong></span>
+          <span>L: <strong className="text-white">${hoveredCandle.low.toFixed(1)}</strong></span>
+          <span>
+            C:{' '}
+            <strong className={hoveredCandle.close >= hoveredCandle.open ? 'text-[#2dd4bf]' : 'text-[#f56565]'}>
+              ${hoveredCandle.close.toFixed(1)}
+            </strong>
+          </span>
+          <span>Vol: <strong className="text-purple-300">{hoveredCandle.volume.toFixed(1)} BTC</strong></span>
+        </div>
+      )}
+
+      {/* SVG Plot & Side Panel Layout */}
+      <div className="flex flex-col lg:flex-row gap-4 items-start">
+        <div className="w-full flex-1 overflow-x-auto">
+          <svg width={width} height={height} className="w-full h-auto select-none">
+            {/* Price grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((f) => {
+              const price = yMin + f * (yMax - yMin);
+              return (
+                <g key={f}>
+                  <line
+                    x1={marginLeft}
+                    x2={width - marginRight}
+                    y1={y(price)}
+                    y2={y(price)}
+                    stroke={THEME.border}
+                    strokeDasharray="2,3"
+                  />
+                  <text
+                    x={marginLeft - 8}
+                    y={y(price) + 4}
+                    textAnchor="end"
+                    fontSize="10"
+                    fill={THEME.textDim}
+                    fontFamily="monospace"
+                  >
+                    ${price.toFixed(0)}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Target Price Line */}
+            {activeSignal.targetPrice && (
+              <g>
                 <line
-                  x1="0"
-                  y1={y}
-                  x2={svgWidth - 70}
-                  y2={y}
-                  stroke="#281A45"
-                  strokeWidth="1"
-                  strokeDasharray="4 4"
+                  x1={marginLeft}
+                  x2={width - marginRight}
+                  y1={y(activeSignal.targetPrice)}
+                  y2={y(activeSignal.targetPrice)}
+                  stroke={activeSignal.direction === 'YES' ? THEME.bull : THEME.bear}
+                  strokeWidth="1.5"
+                  strokeDasharray="4 3"
                 />
-                <text x={svgWidth - 65} y={y + 4} fill="#8B7AA8" fontSize="10" fontFamily="monospace">
-                  ${Math.round(priceVal).toLocaleString()}
+                <rect
+                  x={width - marginRight - 120}
+                  y={y(activeSignal.targetPrice) - 9}
+                  width="120"
+                  height="18"
+                  rx="4"
+                  fill={activeSignal.direction === 'YES' ? '#042f2e' : '#450a0a'}
+                  stroke={activeSignal.direction === 'YES' ? THEME.bull : THEME.bear}
+                  strokeWidth="1"
+                />
+                <text
+                  x={width - marginRight - 60}
+                  y={y(activeSignal.targetPrice) + 3}
+                  fill="#ffffff"
+                  fontSize="9"
+                  fontWeight="bold"
+                  textAnchor="middle"
+                  fontFamily="monospace"
+                >
+                  TARGET: ${Math.round(activeSignal.targetPrice)}
                 </text>
               </g>
-            );
-          })}
+            )}
 
-          {/* Bollinger Bands Shading */}
-          {showBollinger && (
-            <g opacity="0.15">
-              <polygon
-                points={`${bollingerUpperPoints.join(' ')} ${bollingerLowerPoints.slice().reverse().join(' ')}`}
-                fill="#3b82f6"
-              />
-            </g>
-          )}
+            {/* Candlesticks */}
+            {visibleCandles.map((c, i) => {
+              const bull = c.close >= c.open;
+              const color = bull ? THEME.bull : THEME.bear;
+              const bodyTop = y(Math.max(c.open, c.close));
+              const bodyBottom = y(Math.min(c.open, c.close));
+              return (
+                <g
+                  key={i}
+                  onMouseEnter={() => setHoveredCandle(c)}
+                  onMouseLeave={() => setHoveredCandle(null)}
+                  className="cursor-pointer"
+                >
+                  <line
+                    x1={x(i)}
+                    x2={x(i)}
+                    y1={y(c.high)}
+                    y2={y(c.low)}
+                    stroke={color}
+                    strokeWidth="1"
+                  />
+                  <rect
+                    x={x(i) - candleWidth / 2}
+                    y={bodyTop}
+                    width={candleWidth}
+                    height={Math.max(1, bodyBottom - bodyTop)}
+                    fill={color}
+                  />
+                </g>
+              );
+            })}
 
-          {/* Bullish Support Floor Line Overlay */}
-          <g>
-            <line
-              x1="0"
-              y1={getY(bidWallPrice)}
-              x2={svgWidth - 70}
-              y2={getY(bidWallPrice)}
-              stroke="#059669"
+            {/* EMA9 Trendline — shown in both modes */}
+            <path
+              d={linePath(ema9Val, y)}
+              stroke={THEME.purpleBright}
               strokeWidth="1.5"
-              strokeDasharray="4 3"
+              fill="none"
             />
-            <rect
-              x="12"
-              y={getY(bidWallPrice) - 9}
-              width="170"
-              height="18"
-              rx="4"
-              fill="#022c22"
-              stroke="#10b981"
-              strokeWidth="1"
-            />
-            <text
-              x="97"
-              y={getY(bidWallPrice) + 3}
-              fill="#34d399"
-              fontSize="9"
-              fontWeight="bold"
-              fontFamily="monospace"
-              textAnchor="middle"
-            >
-              🛡️ BULLISH FLOOR: ${bidWallPrice.toLocaleString()}
-            </text>
-          </g>
 
-          {/* Bearish Resistance Ceiling Line Overlay */}
-          <g>
-            <line
-              x1="0"
-              y1={getY(askWallPrice)}
-              x2={svgWidth - 70}
-              y2={getY(askWallPrice)}
-              stroke="#e11d48"
-              strokeWidth="1.5"
-              strokeDasharray="4 3"
-            />
-            <rect
-              x="12"
-              y={getY(askWallPrice) - 9}
-              width="175"
-              height="18"
-              rx="4"
-              fill="#4c0519"
-              stroke="#f43f5e"
-              strokeWidth="1"
-            />
-            <text
-              x="99"
-              y={getY(askWallPrice) + 3}
-              fill="#fecdd3"
-              fontSize="9"
-              fontWeight="bold"
-              fontFamily="monospace"
-              textAnchor="middle"
-            >
-              🛑 BEARISH CEILING: ${askWallPrice.toLocaleString()}
-            </text>
-          </g>
-
-          {/* Target Price Line Overlay */}
-          {validTarget && (
-            <g>
-              <line
-                x1="0"
-                y1={getY(validTarget)}
-                x2={svgWidth - 70}
-                y2={getY(validTarget)}
-                stroke={predictedDirection === 'YES' ? '#10b981' : '#f43f5e'}
-                strokeWidth="1.8"
-                strokeDasharray="6 4"
-              />
-              <rect
-                x={svgWidth - 150}
-                y={getY(validTarget) - 10}
-                width="145"
-                height="20"
-                rx="5"
-                fill={predictedDirection === 'YES' ? '#059669' : '#e11d48'}
-                className="shadow-lg"
-              />
-              <text
-                x={svgWidth - 78}
-                y={getY(validTarget) + 4}
-                fill="#ffffff"
-                fontSize="10"
-                fontWeight="bold"
-                fontFamily="monospace"
-                textAnchor="middle"
-              >
-                TARGET: ${validTarget > 10 ? Math.round(validTarget).toLocaleString() : validTarget.toFixed(4)}
-              </text>
-            </g>
-          )}
-
-          {/* Current Live Price Line */}
-          <g>
-            <line
-              x1="0"
-              y1={getY(currentPrice)}
-              x2={svgWidth - 70}
-              y2={getY(currentPrice)}
-              stroke="#c084fc"
-              strokeWidth="1.2"
-            />
-            <circle cx={svgWidth - 70} cy={getY(currentPrice)} r="3.5" fill="#c084fc" className="animate-ping" />
-            <circle cx={svgWidth - 70} cy={getY(currentPrice)} r="3" fill="#c084fc" />
-          </g>
-
-          {/* Candlesticks & Volume Bars */}
-          {visibleCandles.map((candle, idx) => {
-            const isBullish = candle.close >= candle.open;
-            const candleColor = isBullish ? '#10b981' : '#f43f5e';
-
-            const x = idx * candleWidth + 10;
-            const candleCenterX = x + candleWidth / 2;
-
-            const highY = getY(candle.high);
-            const lowY = getY(candle.low);
-            const openY = getY(candle.open);
-            const closeY = getY(candle.close);
-
-            const bodyTop = Math.min(openY, closeY);
-            const bodyHeight = Math.max(2, Math.abs(openY - closeY));
-
-            // Volume bar
-            const volBarHeight = (candle.volume / maxVolume) * volumeHeight;
-            const volY = volumeTop + (volumeHeight - volBarHeight);
-
-            const pattern = patternMarkers[idx];
-
-            return (
-              <g
-                key={idx}
-                onMouseEnter={() => setHoveredCandle(candle)}
-                onMouseLeave={() => setHoveredCandle(null)}
-                className="cursor-pointer transition-opacity hover:opacity-100"
-              >
-                {/* Volume Bar */}
-                <rect
-                  x={x + 1}
-                  y={volY}
-                  width={Math.max(1.5, candleWidth - 3)}
-                  height={volBarHeight}
-                  fill={candleColor}
-                  opacity={0.35}
-                  rx="1"
+            {/* Pro Quant Indicators */}
+            {mode === 'pro' && (
+              <>
+                {/* EMA21 Line */}
+                <path
+                  d={linePath(ema21Val, y)}
+                  stroke="#6ea8fe"
+                  strokeWidth="1.5"
+                  strokeDasharray="4,2"
+                  fill="none"
                 />
 
-                {/* High/Low Wick */}
-                <line
-                  x1={candleCenterX}
-                  y1={highY}
-                  x2={candleCenterX}
-                  y2={lowY}
-                  stroke={candleColor}
+                {/* VWAP Line */}
+                <path
+                  d={linePath(vwapLine, y)}
+                  stroke={THEME.amber}
                   strokeWidth="1.2"
+                  fill="none"
+                  opacity="0.8"
                 />
 
-                {/* Candle Body */}
-                <rect
-                  x={x + 1.5}
-                  y={bodyTop}
-                  width={Math.max(2.5, candleWidth - 3)}
-                  height={bodyHeight}
-                  fill={candleColor}
-                  rx="1"
-                />
+                {/* Annotation markers on plot area — small dot only, details are in the side panel */}
+                {annotations.map((a, i) => (
+                  <circle
+                    key={i}
+                    cx={x(a.idx)}
+                    cy={y(a.price)}
+                    r={hoveredAnnIdx === i ? 6 : 3.5}
+                    fill={
+                      a.kind === 'pattern'
+                        ? THEME.amber
+                        : a.kind === 'volume'
+                        ? THEME.purpleBright
+                        : THEME.bull
+                    }
+                    stroke={THEME.bg}
+                    strokeWidth="1.5"
+                    style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+                    onMouseEnter={() => setHoveredAnnIdx(i)}
+                    onMouseLeave={() => setHoveredAnnIdx(null)}
+                  />
+                ))}
 
-                {/* Chart Pattern Markers — Crisp, color-coordinated badges */}
-                {showPatterns && pattern && (
-                  <g>
-                    <rect
-                      x={candleCenterX - 48}
-                      y={isBullish ? lowY + 6 : highY - 24}
-                      width="96"
-                      height="18"
-                      rx="5"
-                      fill={pattern.bg || '#0B051A'}
-                      stroke={pattern.stroke || pattern.color}
-                      strokeWidth="1.2"
+                {/* Volume panel */}
+                <g transform={`translate(0, ${marginTop + chartHeight + 12})`}>
+                  <line
+                    x1={marginLeft}
+                    x2={width - marginRight}
+                    y1="0"
+                    y2="0"
+                    stroke={THEME.border}
+                    strokeWidth="1"
+                  />
+                  {visibleCandles.map((c, i) => {
+                    const bull = c.close >= c.open;
+                    return (
+                      <rect
+                        key={i}
+                        x={x(i) - candleWidth / 2}
+                        y={volumeHeight - yVol(c.volume)}
+                        width={candleWidth}
+                        height={yVol(c.volume)}
+                        fill={bull ? THEME.bull : THEME.bear}
+                        opacity="0.45"
+                      />
+                    );
+                  })}
+                  <text
+                    x={marginLeft}
+                    y="12"
+                    fontSize="9"
+                    fill={THEME.textDim}
+                    fontFamily="monospace"
+                  >
+                    Volume (BTC)
+                  </text>
+                </g>
+
+                {/* RSI panel */}
+                <g>
+                  <line
+                    x1={marginLeft}
+                    x2={width - marginRight}
+                    y1={rsiTop}
+                    y2={rsiTop}
+                    stroke={THEME.border}
+                    strokeWidth="1"
+                  />
+                  <line
+                    x1={marginLeft}
+                    x2={width - marginRight}
+                    y1={yRsi(70)}
+                    y2={yRsi(70)}
+                    stroke={THEME.bear}
+                    strokeDasharray="2,3"
+                    opacity="0.4"
+                  />
+                  <line
+                    x1={marginLeft}
+                    x2={width - marginRight}
+                    y1={yRsi(30)}
+                    y2={yRsi(30)}
+                    stroke={THEME.bull}
+                    strokeDasharray="2,3"
+                    opacity="0.4"
+                  />
+                  <path
+                    d={rsiLine
+                      .map((v, i) =>
+                        v == null
+                          ? ''
+                          : `${i === 0 || rsiLine[i - 1] == null ? 'M' : 'L'} ${x(i)} ${yRsi(v)}`
+                      )
+                      .join(' ')}
+                    stroke={THEME.purpleBright}
+                    strokeWidth="1.5"
+                    fill="none"
+                  />
+                  <text
+                    x={marginLeft}
+                    y={rsiTop - 6}
+                    fontSize="10"
+                    fill={THEME.textDim}
+                    fontFamily="monospace"
+                  >
+                    RSI(14):{' '}
+                    <tspan fill={THEME.text}>
+                      {rsiLine[rsiLine.length - 1]?.toFixed(1) ?? '—'}
+                    </tspan>
+                  </text>
+                </g>
+              </>
+            )}
+          </svg>
+        </div>
+
+        {/* Annotation list panel — structurally moves labels off plot area to eliminate overlap collisions */}
+        {mode === 'pro' && (
+          <div className="w-full lg:w-60 flex-shrink-0 bg-[#150f28] rounded-xl border border-[#2a2340] p-3 space-y-2 max-h-[500px] overflow-y-auto">
+            <div className="text-[10px] font-bold text-[#8b84a8] uppercase tracking-wider flex items-center justify-between border-b border-[#2a2340] pb-2">
+              <span>Rule Annotations ({annotations.length})</span>
+              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+
+            {annotations.length === 0 ? (
+              <p className="text-xs text-[#8b84a8] italic py-3 text-center">
+                No technical patterns matched mathematical detection criteria in this window.
+              </p>
+            ) : (
+              annotations.map((a, i) => (
+                <div
+                  key={i}
+                  onMouseEnter={() => setHoveredAnnIdx(i)}
+                  onMouseLeave={() => setHoveredAnnIdx(null)}
+                  style={{
+                    background:
+                      hoveredAnnIdx === i
+                        ? 'rgba(139,92,246,0.18)'
+                        : 'rgba(13,10,26,0.6)',
+                    border: `1px solid ${
+                      hoveredAnnIdx === i ? THEME.purple : THEME.border
+                    }`,
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <div className="font-bold text-xs text-white mb-1 flex items-center justify-between">
+                    <span>{a.label}</span>
+                    <span
+                      className="w-2 h-2 rounded-full"
+                      style={{
+                        background:
+                          a.kind === 'pattern'
+                            ? THEME.amber
+                            : a.kind === 'volume'
+                            ? THEME.purpleBright
+                            : THEME.bull,
+                      }}
                     />
-                    <text
-                      x={candleCenterX}
-                      y={isBullish ? lowY + 18 : highY - 12}
-                      fill={pattern.color}
-                      fontSize="8.5"
-                      fontWeight="bold"
-                      fontFamily="monospace"
-                      textAnchor="middle"
-                    >
-                      {pattern.name}
-                    </text>
-                  </g>
-                )}
-              </g>
-            );
-          })}
-
-          {/* EMA 9 Line */}
-          {showEMA9 && (
-            <polyline
-              fill="none"
-              stroke="#c084fc"
-              strokeWidth="1.6"
-              strokeLinejoin="round"
-              points={ema9Points.join(' ')}
-            />
-          )}
-
-          {/* EMA 21 Line */}
-          {showEMA21 && (
-            <polyline
-              fill="none"
-              stroke="#6366f1"
-              strokeWidth="1.4"
-              strokeLinejoin="round"
-              points={ema21Points.join(' ')}
-              strokeDasharray="4 2"
-            />
-          )}
-
-          {/* VWAP Line */}
-          {showVWAP && (
-            <polyline
-              fill="none"
-              stroke="#10b981"
-              strokeWidth="1.5"
-              strokeLinejoin="round"
-              points={vwapPoints.join(' ')}
-            />
-          )}
-
-          {/* RSI Sub-Panel */}
-          {showRSI && (
-            <g>
-              <line x1="0" y1={rsiTop} x2={svgWidth - 70} y2={rsiTop} stroke="#281A45" strokeWidth="1" />
-              {/* Overbought / Oversold Lines */}
-              <line x1="0" y1={rsiTop + 15} x2={svgWidth - 70} y2={rsiTop + 15} stroke="#f43f5e" strokeWidth="0.8" strokeDasharray="2 2" opacity="0.4" />
-              <line x1="0" y1={rsiTop + 55} x2={svgWidth - 70} y2={rsiTop + 55} stroke="#10b981" strokeWidth="0.8" strokeDasharray="2 2" opacity="0.4" />
-              <text x={svgWidth - 65} y={rsiTop + 18} fill="#f43f5e" fontSize="8" fontFamily="monospace">OB 70</text>
-              <text x={svgWidth - 65} y={rsiTop + 58} fill="#10b981" fontSize="8" fontFamily="monospace">OS 30</text>
-              <text x="6" y={rsiTop + 14} fill="#e879f9" fontSize="9" fontWeight="bold" fontFamily="monospace">RSI (14): 58.4</text>
-              <polyline fill="none" stroke="#e879f9" strokeWidth="1.5" points={rsiPoints.join(' ')} />
-            </g>
-          )}
-        </svg>
+                  </div>
+                  <div className="text-[11px] text-[#8b84a8] leading-relaxed">
+                    {a.detail}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* Chart Footer Legend */}
-      <div className="flex flex-wrap items-center justify-between pt-2 text-[11px] font-mono text-purple-300/70 border-t border-purple-900/40">
+      <div className="pt-2 text-[11px] text-[#8b84a8] flex flex-wrap items-center justify-between gap-3 border-t border-[#2a2340]">
         <div className="flex flex-wrap items-center gap-4">
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Bullish Candle</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Bearish Candle</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-purple-400" /> EMA 9</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-indigo-400" /> EMA 21</span>
-          <span className="flex items-center gap-1.5"><span className="w-2.5 h-0.5 bg-emerald-400" /> VWAP</span>
-          <span className="flex items-center gap-1.5 text-amber-300 font-bold"><Sparkles className="w-3 h-3" /> Patterns Active</span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ color: THEME.bull }}>●</span> Bullish
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ color: THEME.bear }}>●</span> Bearish
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span style={{ color: THEME.purpleBright }}>—</span> EMA9
+          </span>
+          {mode === 'pro' && (
+            <>
+              <span className="flex items-center gap-1.5">
+                <span style={{ color: '#6ea8fe' }}>--</span> EMA21
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span style={{ color: THEME.amber }}>—</span> VWAP
+              </span>
+            </>
+          )}
         </div>
 
-        <div className="flex items-center gap-2 text-purple-300">
-          <span>Target Horizon: <strong>{timeframe === '15M' ? '15-Min Close' : '1-Hour Close'}</strong></span>
+        <div className="text-[10px] text-[#8b84a8]">
+          Hover annotation card to highlight candle position
         </div>
       </div>
     </div>
@@ -705,18 +799,18 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-[#070414]/95 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-fadeIn flex flex-col justify-between">
-        <div className="flex items-center justify-between mb-3 bg-[#120B28] p-3 rounded-2xl border border-purple-500/40 shadow-2xl">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between mb-3 bg-[#150f28] p-3 rounded-2xl border border-[#2a2340]">
+          <div className="flex items-center gap-3 font-mono">
             <span className="px-3 py-1 rounded-full bg-purple-600/30 border border-purple-400/40 text-purple-200 text-xs font-bold">
               FULLSCREEN TERMINAL CHART
             </span>
-            <h2 className="text-base sm:text-lg font-black text-white font-mono">
+            <h2 className="text-sm sm:text-base font-black text-white">
               BTC/USDT {timeframe} PRO CANDLESTICK ENGINE
             </h2>
           </div>
           <button
             onClick={() => setIsFullscreen(false)}
-            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition-all border border-purple-400/50 flex items-center gap-2 text-xs font-bold shadow-lg shadow-purple-600/30"
+            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition-all border border-purple-400/50 flex items-center gap-2 text-xs font-bold shadow-lg"
           >
             <X className="w-4 h-4" />
             <span>CLOSE FULLSCREEN</span>
@@ -729,4 +823,3 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
   return chartInner;
 };
-

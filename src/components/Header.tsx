@@ -14,6 +14,7 @@ import {
   Clock,
   Zap,
   BrainCircuit,
+  Globe,
 } from 'lucide-react';
 import { BTCTicker, UserSubscription, AuthState } from '../types';
 import { Logo } from './Logo';
@@ -64,20 +65,120 @@ export const Header: React.FC<HeaderProps> = ({
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
+  const getLocalTimezone = () => {
+    try {
+      const tzName = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+      const parts = new Date().toLocaleTimeString('en-US', { timeZoneName: 'short' }).split(' ');
+      const abbr = parts[parts.length - 1] || 'UTC';
+      return { tzName, abbr };
+    } catch {
+      return { tzName: 'UTC', abbr: 'UTC' };
+    }
+  };
+
+  const { tzName: userTzName, abbr: userTzAbbr } = getLocalTimezone();
+
+  if (activeTab === 'landing') {
+    return (
+      <header className="sticky top-0 z-40 bg-[#0A0518]/95 backdrop-blur-md border-b border-purple-900/40 text-purple-100 font-sans">
+        {/* Top System Status Bar */}
+        <div className="bg-[#0E0822] px-4 py-1.5 text-xs border-b border-purple-900/30 flex items-center justify-between font-mono">
+          <div className="flex items-center gap-2 mx-auto text-purple-300 text-[11px]">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
+            <span className="text-amber-300 font-bold">VIXY SYSTEM ACTIVE:</span>
+            <span>Live 15-Minute Bitcoin & Crypto Binary Option Probabilities</span>
+            <span className="hidden sm:inline text-purple-400/80">• Kalshi, Polymarket & DraftKings</span>
+          </div>
+        </div>
+
+        {/* Dedicated Public Landing Header Bar */}
+        <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4 font-mono">
+          {/* Logo */}
+          <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('landing')} />
+
+          {/* Public Navigation */}
+          <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-purple-200">
+            <button
+              onClick={() => setActiveTab('landing')}
+              className="hover:text-amber-300 transition-colors text-amber-300 font-black flex items-center gap-1"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Overview</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('pricing')}
+              className="hover:text-amber-300 transition-colors text-purple-300 hover:text-white"
+            >
+              Plans & Pricing
+            </button>
+
+            <button
+              onClick={() => setActiveTab('terminal')}
+              className="hover:text-amber-300 transition-colors text-purple-300 hover:text-white flex items-center gap-1"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>Live Terminal</span>
+            </button>
+          </nav>
+
+          {/* Public CTA Actions */}
+          <div className="flex items-center gap-3">
+            {authState.isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setActiveTab('settings')}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 transition-all"
+                >
+                  <User className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="hidden sm:inline">{authState.user?.name || 'Quant Member'}</span>
+                </button>
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  <span>Enter Terminal</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => onOpenAuth('login')}
+                  className="px-4 py-2 rounded-xl bg-[#120B24] border border-purple-800/50 text-xs font-bold text-purple-200 hover:text-white hover:border-purple-500/50 transition-all"
+                >
+                  Log In
+                </button>
+                <button
+                  onClick={() => onOpenAuth('register')}
+                  className="px-4.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-slate-950" />
+                  <span>Launch Free Trial</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-40 bg-[#0A0518]/95 backdrop-blur-md border-b border-purple-900/40 text-purple-100">
       {/* Top Real-time Ticker & Institutional Context Bar */}
-      <div className="bg-[#0E0822]/90 px-4 py-1.5 text-xs border-b border-purple-900/30 flex flex-wrap items-center justify-between gap-2 font-mono">
-        <div className="flex items-center gap-4 overflow-x-auto py-0.5">
-          <div className="flex items-center gap-2.5 font-bold text-purple-200">
+      <div className="bg-[#0E0822]/90 px-4 py-1 text-xs border-b border-purple-900/30 flex flex-wrap items-center justify-between gap-2 font-mono">
+        <div className="flex items-center gap-3 overflow-x-auto py-0.5">
+          {/* Active Market Chip */}
+          <div className="flex items-center gap-2 font-bold text-purple-200 bg-[#140C2E] px-2.5 py-1 rounded-xl border border-purple-800/40">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80" />
             <span className="text-white font-black">{selectedAsset}</span>
             <span className="text-purple-400/80">({selectedVenue})</span>
             <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] font-bold border border-purple-800/40">
               {selectedTimeframe}
             </span>
-            <span className="text-white font-black text-sm ml-1">
-              ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            <span className="text-white font-black text-xs ml-1">
+              ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
             <span
               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
@@ -89,86 +190,50 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          <div className="hidden md:flex items-center gap-3 text-purple-300/80 text-[11px] border-l border-purple-900/40 pl-4">
+          {/* Unified AI Signal Stat Cluster */}
+          <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
             <span>
-              Prediction: <span className="text-emerald-400 font-extrabold">YES (BULLISH)</span>
+              Predicting <strong className="text-emerald-400 font-extrabold">YES</strong>
             </span>
+            <span className="text-purple-700">•</span>
             <span>
-              Confidence: <span className="text-purple-100 font-extrabold">91%</span>
+              Confidence <strong className="text-white font-extrabold">91%</strong>
             </span>
+            <span className="text-purple-700">•</span>
             <span>
-              Edge: <span className="text-emerald-300 font-extrabold">+12.2%</span>
+              Edge <strong className="text-emerald-300 font-extrabold">+12.2%</strong>
             </span>
           </div>
         </div>
 
-        {/* 3-Hour Free Trial Badge for DEMO users + Role Switcher */}
-        <div className="flex items-center gap-3 text-[11px]">
+        {/* Timezone & User Status */}
+        <div className="flex items-center gap-2.5 text-[11px]">
+          {/* Persistent Local Timezone Indicator */}
+          <div
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#130B2C] border border-cyan-500/40 text-purple-200 font-mono text-[11px] shadow-sm hover:border-cyan-400/80 transition-colors cursor-default"
+            title={`Local Timezone: ${userTzName} (${userTzAbbr}). All prediction signals, timestamps, and alert logs are referenced to your local device time.`}
+          >
+            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="font-extrabold text-white tracking-wide uppercase">
+              {userTzAbbr}
+            </span>
+            <span className="text-cyan-300/80 font-mono text-[10px] hidden sm:inline">
+              ({userTzName.split('/')[1]?.replace('_', ' ') || userTzName})
+            </span>
+          </div>
+
           {userRole === 'DEMO' && (
             <div className="flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-purple-950/90 border border-amber-500/40 text-[11px] font-mono shadow-md">
               <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-              <span className="text-purple-200 font-bold hidden sm:inline">3H TRIAL PASS:</span>
+              <span className="text-purple-200 font-bold hidden sm:inline">3H TRIAL:</span>
               <span className="font-black text-amber-300 text-xs tracking-wider">{formatTrialTime(trialSeconds)}</span>
-              <div className="flex items-center gap-1 ml-1 border-l border-purple-800/60 pl-1.5">
-                {onExpireTrial && (
-                  <button
-                    onClick={onExpireTrial}
-                    title="Simulate trial expiration to view VIXY'S VAULT lockout overlay"
-                    className="px-1.5 py-0.2 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 text-[9px] font-bold border border-rose-500/30 transition-all"
-                  >
-                    [Expire Now]
-                  </button>
-                )}
-                {onResetTrial && (
-                  <button
-                    onClick={onResetTrial}
-                    title="Reset 3-hour trial timer back to 03:00:00"
-                    className="px-1.5 py-0.2 rounded bg-purple-500/20 hover:bg-purple-500/40 text-purple-300 text-[9px] font-bold border border-purple-500/30 transition-all"
-                  >
-                    [Reset 3h]
-                  </button>
-                )}
-              </div>
             </div>
           )}
 
-          <div className="flex items-center gap-1.5">
-            <span className="text-purple-300/70 hidden lg:inline font-mono">Access Level:</span>
-            <div className="bg-[#080313] p-1 rounded-xl flex items-center border border-purple-800/50 gap-1">
-              <button
-                onClick={() => setUserRole('DEMO')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                  userRole === 'DEMO'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                    : 'text-purple-300/60 hover:text-purple-200'
-                }`}
-              >
-                <Clock className="w-3 h-3 text-amber-400" />
-                <span>Free Trial</span>
-              </button>
-              <button
-                onClick={() => setUserRole('PRO')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
-                  userRole === 'PRO'
-                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-600/40 border border-purple-400/40'
-                    : 'text-purple-300/60 hover:text-purple-200'
-                }`}
-              >
-                <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                <span>Pro Member</span>
-              </button>
-              <button
-                onClick={() => setUserRole('ADMIN')}
-                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold transition-all ${
-                  userRole === 'ADMIN'
-                    ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/40 border border-indigo-400/40'
-                    : 'text-purple-300/60 hover:text-purple-200'
-                }`}
-              >
-                <Sparkles className="w-3 h-3 text-cyan-300" />
-                <span>Admin</span>
-              </button>
-            </div>
+          {/* Subtle Role Badge */}
+          <div className="flex items-center gap-1 bg-[#080313] px-2 py-0.5 rounded-lg border border-purple-800/50 text-[10px] font-mono text-purple-300">
+            <span className="text-purple-400/60 hidden lg:inline">Role:</span>
+            <span className="font-bold text-amber-300 uppercase">{userRole}</span>
           </div>
         </div>
       </div>

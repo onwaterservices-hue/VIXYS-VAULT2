@@ -35,10 +35,26 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
+
+    const userEmail = email.trim() || 'trader@vixysvault.com';
+    const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
+
+    if (isAdminEmail && password !== 'Seattle007') {
+      setTimeout(() => {
+        setLoading(false);
+        setErrorMsg('Access Denied: Incorrect password for Master Admin account (vixyvault0@gmail.com).');
+      }, 500);
+      return;
+    }
+
+    const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
+    const userName = fullName.trim() || (isAdminEmail ? 'Master Admin (Vixy Vault)' : email ? email.split('@')[0] : 'Free Trial Trader');
 
     setTimeout(() => {
       setLoading(false);
@@ -46,39 +62,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
         isAuthenticated: true,
         user: {
           id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email: email || 'trader@vixysvault.com',
-          name: fullName || email.split('@')[0] || 'Quant Trader',
-          role: 'PRO',
-          apiKey: 'vault_live_8f3a2b1c90e',
+          email: userEmail,
+          name: userName,
+          role: assignedRole,
+          apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
           joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         },
       });
-      setUserRole('PRO');
-      setSuccessMsg("Authentication successful! Welcome to VIXY'S VAULT.");
+      setUserRole(assignedRole);
+      setSuccessMsg(
+        isAdminEmail
+          ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
+          : mode === 'register'
+          ? `Account created successfully! Welcome, ${userName}. Your Free Access Pass is active.`
+          : `Signed in successfully. Welcome back, ${userName}!`
+      );
       if (onSuccessNavigate) {
         setTimeout(onSuccessNavigate, 1000);
       }
     }, 800);
-  };
-
-  const handleDemoBypass = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setAuthState({
-        isAuthenticated: true,
-        user: {
-          id: 'usr_demo_882',
-          email: 'demo.trader@vixysvault.com',
-          name: 'Demo Quant User',
-          role: 'PRO',
-          apiKey: 'vault_demo_982a1c',
-          joinedDate: 'July 2026',
-        },
-      });
-      setUserRole('PRO');
-      if (onSuccessNavigate) onSuccessNavigate();
-    }, 400);
   };
 
   return (
@@ -195,6 +197,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+              {errorMsg && (
+                <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-xs">
+                  {errorMsg}
+                </div>
+              )}
               {mode === 'register' && (
                 <div className="space-y-1.5">
                   <label className="text-purple-300/70 block font-semibold">Full Name</label>
@@ -266,26 +273,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     : mode === 'login'
                     ? 'SIGN IN TO TERMINAL'
                     : mode === 'register'
-                    ? 'CREATE ACCOUNT & START PASS'
+                    ? 'CREATE ACCOUNT & UNLOCK FREE ACCESS'
                     : 'SEND PASSWORD RESET LINK'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
-
-              {/* Instant Demo Bypass Option */}
-              <div className="pt-3 border-t border-purple-900/40 space-y-2">
-                <div className="text-[10px] text-purple-300/50 text-center uppercase font-bold">
-                  OR TRY INSTANT ACCESS
-                </div>
-                <button
-                  type="button"
-                  onClick={handleDemoBypass}
-                  className="w-full py-3 rounded-xl bg-[#0B061A] hover:bg-[#1A1038] text-purple-200 border border-purple-900/50 text-xs font-bold transition-all flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  <span>Instant Demo Quant Access (No Password Required)</span>
-                </button>
-              </div>
             </form>
           )}
         </div>

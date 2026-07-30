@@ -1,6 +1,7 @@
-import React from 'react';
-import { Sparkles, TrendingUp, ArrowRight, Star, ShieldCheck, Zap } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Sparkles, TrendingUp, ArrowRight, Star, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
+import { fetchAllCryptoTickers, CryptoTickerData } from '../services/api';
 
 interface MarketCardsViewProps {
   onSelectAssetAndNavigate: (symbol: string) => void;
@@ -13,7 +14,35 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
   favorites,
   onToggleFavorite,
 }) => {
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({});
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
   const assets = Object.values(ASSET_DATABASE);
+
+  const loadLivePrices = async () => {
+    setIsRefreshing(true);
+    try {
+      const data = await fetchAllCryptoTickers();
+      const priceMap: Record<string, { price: number; change24h: number }> = {};
+      data.forEach((item) => {
+        priceMap[item.symbol] = {
+          price: item.price,
+          change24h: item.change24h,
+        };
+      });
+      setLivePrices(priceMap);
+    } catch (e) {
+      console.warn('Failed to load live prices for market cards', e);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadLivePrices();
+    const interval = setInterval(loadLivePrices, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="space-y-6 font-sans">
@@ -23,13 +52,22 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
               <TrendingUp className="w-4 h-4 text-purple-400" />
-              <span>Prediction Markets Matrix</span>
+              <span>Prediction Markets Matrix • Scraped Live Exchange Feed</span>
             </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">Active Asset Market Intelligence</h1>
+            <h1 className="text-2xl font-black text-white tracking-tight">Active Crypto Intelligence Matrix</h1>
             <p className="text-xs text-purple-200/70">
-              Select any asset to load instant AI prediction confidence, order book depth, and probability matrices.
+              Scraped live market data across major exchanges with instant AI confidence, order book depth, and probability calculations.
             </p>
           </div>
+
+          <button
+            onClick={loadLivePrices}
+            disabled={isRefreshing}
+            className="px-4 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 border border-purple-700/50 text-purple-200 text-xs font-mono font-bold transition-all flex items-center gap-2 shrink-0 self-start md:self-center"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-purple-400 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>{isRefreshing ? 'Scraping Live Feeds...' : 'Refresh Live Tickers'}</span>
+          </button>
         </div>
       </div>
 
@@ -37,6 +75,9 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {assets.map((asset) => {
           const isFav = favorites.includes(asset.symbol);
+          const liveInfo = livePrices[asset.symbol];
+          const displayPrice = liveInfo ? liveInfo.price : asset.price;
+          const displayChange = liveInfo ? liveInfo.change24h : asset.change24h;
 
           return (
             <div
@@ -57,7 +98,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                       <h3 className="text-xl font-black text-white group-hover:text-purple-200 transition-colors">
                         {asset.name}
                       </h3>
-                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}/USD</span>
+                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}/USDT • Live Exchange</span>
                     </div>
                   </div>
 
@@ -72,9 +113,18 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
 
                 {/* Price & 24h Change */}
                 <div className="flex items-baseline justify-between font-mono mb-6 pb-4 border-b border-purple-900/40">
-                  <div className="text-2xl font-black text-white">${asset.price.toLocaleString()}</div>
-                  <div className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/30">
-                    +{asset.change24h}% 24H
+                  <div className="text-2xl font-black text-white">
+                    ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  </div>
+                  <div
+                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                      displayChange >= 0
+                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                        : 'text-rose-400 bg-rose-500/10 border-rose-500/30'
+                    }`}
+                  >
+                    {displayChange >= 0 ? '+' : ''}
+                    {displayChange.toFixed(2)}% 24H
                   </div>
                 </div>
 

@@ -17,12 +17,14 @@ import {
   Sliders,
   ShieldCheck,
   BrainCircuit,
+  AlertTriangle,
 } from 'lucide-react';
 import { BTCTicker, Candle, PredictionSignal } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
 import { AIPatternEngine } from './AIPatternEngine';
 import { fetchPrediction } from '../services/api';
+import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -32,6 +34,7 @@ interface LiveDashboardProps {
   onOpenJournal: () => void;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
+  onSelectAsset?: (symbol: string) => void;
   selectedTimeframe?: string;
   selectedVenues?: string[];
 }
@@ -44,6 +47,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   onOpenJournal,
   userRole,
   selectedAsset = 'BTC',
+  onSelectAsset = () => {},
   selectedTimeframe = '15M',
   selectedVenues = ['Kalshi'],
 }) => {
@@ -318,6 +322,16 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
       )}
 
+      {/* EXECUTIVE COMMAND CENTER (95% Quiet, 5% Loud - Executive Decision Core) */}
+      <ExecutiveCommandCenter
+        ticker={ticker}
+        signal={signal}
+        selectedAsset={selectedAsset}
+        onSelectAsset={onSelectAsset}
+        onOpenJournal={onOpenJournal}
+        timeframe={timeframe}
+      />
+
       {/* Active Market & UX Mode Switcher */}
       <div className="bg-[#120B28] p-3 rounded-2xl border border-purple-900/40 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
@@ -384,16 +398,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 <p className="text-[10px] text-purple-300/60 font-sans">CFTC Regulated Exchange • Direct Strike</p>
               </div>
               <div className="text-right">
-                <span className="text-xs font-black text-emerald-400 block">$0.54 YES</span>
-                <span className="text-[10px] text-rose-400 block">$0.46 NO</span>
+                <span className="text-base font-black text-emerald-400 block">54.0% Implied</span>
+                <span className="text-[10px] text-purple-300/80 font-mono block">$0.54 YES / $0.46 NO</span>
               </div>
             </div>
 
             <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Implied Prob:</span>
-              <span className="font-bold text-white">54.0%</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
               <span className="text-purple-300/60">Vault Model Edge:</span>
               <span className="font-black text-emerald-400">+12.2% EDGE</span>
             </div>
@@ -410,16 +420,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 <p className="text-[10px] text-purple-300/60 font-sans">Polygon On-Chain • USDC Liquidity</p>
               </div>
               <div className="text-right">
-                <span className="text-xs font-black text-emerald-400 block">52.0% YES</span>
-                <span className="text-[10px] text-rose-400 block">48.0% NO</span>
+                <span className="text-base font-black text-emerald-400 block">52.0% Implied</span>
+                <span className="text-[10px] text-purple-300/80 font-mono block">52¢ YES / 48¢ NO</span>
               </div>
             </div>
 
             <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Implied Prob:</span>
-              <span className="font-bold text-white">52.0%</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
               <span className="text-purple-300/60">Vault Model Edge:</span>
               <span className="font-black text-emerald-400">+12.2% EDGE</span>
             </div>
@@ -436,16 +442,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 <p className="text-[10px] text-purple-300/60 font-sans">American Odds • Instant Payout</p>
               </div>
               <div className="text-right">
-                <span className="text-xs font-black text-emerald-400 block">-115 YES</span>
-                <span className="text-[10px] text-rose-400 block">+105 NO</span>
+                <span className="text-base font-black text-emerald-400 block">53.5% Implied</span>
+                <span className="text-[10px] text-purple-300/80 font-mono block">-115 YES / +105 NO</span>
               </div>
             </div>
 
             <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Implied Prob:</span>
-              <span className="font-bold text-white">53.5%</span>
-            </div>
-            <div className="flex justify-between items-center text-xs">
               <span className="text-purple-300/60">Vault Model Edge:</span>
               <span className="font-black text-emerald-400">+10.7% EDGE</span>
             </div>
@@ -556,22 +558,30 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
 
         {/* THE GUARDIAN / POST-LOCK REVERSAL WATCH (BAIL-OUT WINDOW IF THINGS GO SOUTH) */}
-        <div className={`p-4 rounded-xl border transition-all ${isBailedOut ? 'bg-rose-950/60 border-rose-500/80 shadow-2xl shadow-rose-950/60' : 'bg-gradient-to-r from-rose-950/30 via-[#130B1A] to-purple-950/30 border-rose-500/40'}`}>
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-black uppercase flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping" />
-                  {isBailedOut ? 'BREAK CONFIRMED - EXITED' : 'THE GUARDIAN / POST-LOCK REVERSAL WATCH'}
+        <div className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${
+          isBailedOut
+            ? 'bg-emerald-950/40 border-emerald-500/80 shadow-2xl shadow-emerald-950/60'
+            : 'bg-gradient-to-r from-rose-950/90 via-[#210719] to-rose-950/90 border-rose-500 shadow-2xl shadow-rose-950/90 ring-4 ring-rose-500/30'
+        }`}>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase flex items-center gap-1.5 ${
+                  isBailedOut
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-rose-600 text-white border border-rose-300 shadow-md shadow-rose-600/60 animate-pulse'
+                }`}>
+                  <AlertTriangle className="w-4 h-4 text-white animate-bounce shrink-0" />
+                  {isBailedOut ? 'POSITION SAFELY EXITED' : '🚨 EMERGENCY EXIT / BAIL-OUT WINDOW ACTIVE'}
                 </span>
-                <span className="text-xs text-rose-200/80 font-bold">
-                  {isBailedOut ? 'POSITION CLOSED AT $0.54' : 'BAIL-OUT WINDOW — REVIEW POSITION NOW'}
+                <span className="text-xs font-mono font-black text-white bg-black/40 px-2 py-0.5 rounded border border-rose-500/30">
+                  {isBailedOut ? 'CLOSED AT $0.54 YES' : 'CRITICAL REVERSAL RISK: 90.0 / 100'}
                 </span>
               </div>
-              <p className="text-xs text-slate-300 font-sans">
+              <p className="text-xs text-rose-100 font-sans leading-relaxed max-w-3xl">
                 {isBailedOut
-                  ? 'Your position has been safely liquidated / exited at the current bid quote. Capital protected from downside breakdown.'
-                  : 'Multiple independent signals monitored. If order flow delta or VWAP support breaks, use the Emergency Exit button below to buy/sell out before expiration.'}
+                  ? 'Your position has been safely liquidated / exited at the current bid quote ($0.54 YES). Capital protected from downside breakdown.'
+                  : 'Multiple order flow indicators detect aggressive downside sell volume breaking VWAP support. Click Emergency Bail Out immediately to liquidate position at current bid before expiration.'}
               </p>
             </div>
 
@@ -580,7 +590,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               {isBailedOut ? (
                 <button
                   onClick={() => setIsBailedOut(false)}
-                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl font-black text-xs shadow-lg shadow-emerald-600/40 border border-emerald-400/50 transition-all flex items-center justify-center gap-2 active:scale-95"
+                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg shadow-emerald-600/40 border border-emerald-400/50 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                 >
                   <RefreshCw className="w-4 h-4 text-white" />
                   <span>RE-OPEN POSITION LOCK</span>
@@ -588,19 +598,21 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               ) : (
                 <button
                   onClick={() => setIsBailedOut(true)}
-                  className="w-full sm:w-auto bg-gradient-to-r from-rose-600 via-red-600 to-rose-600 hover:from-rose-500 hover:to-red-500 text-white px-5 py-2.5 rounded-xl font-black text-xs shadow-xl shadow-rose-600/50 border border-rose-400/60 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer animate-pulse"
+                  className="w-full sm:w-auto bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white px-6 py-3.5 rounded-xl font-black text-xs shadow-2xl shadow-rose-600/90 border-2 border-rose-300 transition-all flex items-center justify-center gap-2.5 active:scale-95 cursor-pointer animate-pulse ring-4 ring-rose-500/50 tracking-wide"
                 >
-                  <ShieldCheck className="w-4 h-4 text-rose-200" />
-                  <span>BAIL OUT NOW / BUY OUT POSITION</span>
+                  <AlertTriangle className="w-4.5 h-4.5 text-amber-200 animate-bounce shrink-0" />
+                  <span className="text-sm tracking-wider uppercase font-black">🚨 BAIL OUT NOW / EXIT POSITION</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-rose-900/30 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-rose-800/40 text-xs">
             <div>
-              <span className="text-slate-400 text-[10px] block">REVERSAL RISK</span>
-              <span className="text-rose-400 font-black text-sm">{isBailedOut ? 'DEFENDED' : '90.0 RISK SCORE'}</span>
+              <span className="text-slate-400 text-[10px] block font-semibold">REVERSAL RISK</span>
+              <span className={`font-black text-sm ${isBailedOut ? 'text-emerald-400' : 'text-rose-400 font-mono text-base font-black'}`}>
+                {isBailedOut ? 'DEFENDED' : '90.0 CRITICAL RISK'}
+              </span>
             </div>
             <div>
               <span className="text-slate-400 text-[10px] block font-semibold">SUSTAINED BREAK</span>

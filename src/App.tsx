@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import {
   BTCTicker,
   Candle,
@@ -11,7 +12,7 @@ import {
   JournalEntry,
   ApiKey,
 } from './types';
-import { fetchBTCTicker, fetchBTCKlines } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -34,13 +35,16 @@ import { OneHourDeskView } from './components/OneHourDeskView';
 import { AIPatternEngine } from './components/AIPatternEngine';
 import { WhaleTrackerView } from './components/WhaleTrackerView';
 import { ExplainabilityVaultView } from './components/ExplainabilityVaultView';
+import { PerformanceLabView } from './components/PerformanceLabView';
+import { AICoachView } from './components/AICoachView';
+import { ReplayCenterView } from './components/ReplayCenterView';
+import { OpportunityScannerView } from './components/OpportunityScannerView';
 import { AuthView } from './components/AuthView';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [activeTab, setActiveTab] = useState<string>('terminal');
 
   // Multi-Asset State & Navigation
   const [selectedAsset, setSelectedAsset] = useState<string>('BTC');
@@ -51,22 +55,77 @@ export default function App() {
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
 
-  const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>('PRO');
+  const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.user?.email?.toLowerCase() === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN') {
+          return 'ADMIN';
+        }
+        return parsed?.user?.role || 'DEMO';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'DEMO';
+  });
 
   // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
 
-  // Auth State
-  const [authState, setAuthState] = useState<AuthState>({
-    isAuthenticated: true,
-    user: {
-      id: 'usr_89123',
-      email: 'quant.trader@vixyterminal.io',
-      name: 'Alex Mercer',
-      role: 'PRO',
-      createdAt: '2026-01-15',
-    },
+  // Auth State (persisted or defaults to unauthenticated)
+  const [authState, setAuthState] = useState<AuthState>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.isAuthenticated === 'boolean') {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      isAuthenticated: false,
+      user: null,
+    };
   });
+
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const savedAuth = localStorage.getItem('vixy_auth');
+      if (savedAuth) {
+        const parsed = JSON.parse(savedAuth);
+        if (parsed?.isAuthenticated) return 'terminal';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'landing';
+  });
+
+  // Sync authState to localStorage & userRole
+  useEffect(() => {
+    try {
+      if (authState.isAuthenticated && authState.user) {
+        if (
+          authState.user.email?.toLowerCase() === 'vixyvault0@gmail.com' ||
+          authState.user.role === 'ADMIN'
+        ) {
+          setUserRole('ADMIN');
+        } else if (authState.user.role) {
+          setUserRole(authState.user.role);
+        }
+        localStorage.setItem('vixy_auth', JSON.stringify(authState));
+      } else {
+        localStorage.removeItem('vixy_auth');
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, [authState]);
 
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
@@ -211,74 +270,113 @@ export default function App() {
   const [adminStats] = useState<AdminStats>(INITIAL_ADMIN_STATS);
   const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(INITIAL_SUPPORT_TICKETS);
 
-  // Fetch Live Ticker & Klines on Mount & Continuous Stream Interval
+  // Fetch Live Ticker & Klines for Selected Asset and Connect Live WebSocket Stream
   useEffect(() => {
     let isMounted = true;
 
     const loadData = async () => {
-      const liveTicker = await fetchBTCTicker();
-      const liveCandles = await fetchBTCKlines();
+      const liveTicker = await fetchCryptoTicker(selectedAsset);
+      const liveCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
 
       if (isMounted) {
-        if (selectedAsset === 'BTC' && liveTicker && liveTicker.price) setTicker(liveTicker);
+        if (liveTicker && liveTicker.price) setTicker(liveTicker);
         if (liveCandles && liveCandles.length > 0) setCandles(liveCandles);
       }
     };
 
     loadData();
 
-    // Fast 1.5s Auto-Update Ticker Stream
-    const interval = setInterval(async () => {
+    // Connect to Live Binance WebSocket Stream for Real Tick Updates
+    const unsubscribeWs = connectLiveCryptoStream(selectedAsset, (streamUpdate) => {
       if (!isMounted) return;
 
       setTicker((prev) => {
-        const delta = (Math.random() - 0.49) * (prev.price * 0.0003);
-        const newPrice = Math.max(0.0001, Math.round((prev.price + delta) * 100) / 100);
+        const updatedPrice = streamUpdate.price || prev.price;
         return {
           ...prev,
-          price: newPrice,
-          high24h: Math.max(prev.high24h, newPrice),
-          low24h: Math.min(prev.low24h, newPrice),
+          ...streamUpdate,
+          price: updatedPrice,
+          high24h: Math.max(prev.high24h, updatedPrice),
+          low24h: Math.min(prev.low24h > 0 ? prev.low24h : updatedPrice, updatedPrice),
           timestamp: Date.now(),
         };
       });
 
+      // Update active candle close with live stream tick
       setCandles((prevCandles) => {
         if (prevCandles.length === 0) return prevCandles;
         const updated = [...prevCandles];
         const lastCandle = { ...updated[updated.length - 1] };
 
-        setTicker((currentTicker) => {
-          const newPrice = currentTicker.price;
-          lastCandle.close = newPrice;
-          lastCandle.high = Math.max(lastCandle.high, newPrice);
-          lastCandle.low = Math.min(lastCandle.low, newPrice);
-          return currentTicker;
-        });
-
-        updated[updated.length - 1] = lastCandle;
+        if (streamUpdate.price) {
+          lastCandle.close = streamUpdate.price;
+          lastCandle.high = Math.max(lastCandle.high, streamUpdate.price);
+          lastCandle.low = Math.min(lastCandle.low, streamUpdate.price);
+          updated[updated.length - 1] = lastCandle;
+        }
         return updated;
       });
-    }, 1500);
+    });
+
+    // Periodic 10s candle refresh for live chart synchronization
+    const interval = setInterval(async () => {
+      if (!isMounted) return;
+      const refreshedCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
+      if (isMounted && refreshedCandles && refreshedCandles.length > 0) {
+        setCandles(refreshedCandles);
+      }
+    }, 10000);
 
     return () => {
       isMounted = false;
+      unsubscribeWs();
       clearInterval(interval);
     };
-  }, [selectedAsset]);
+  }, [selectedAsset, selectedTimeframe]);
 
   const handleOpenAuth = (mode: 'login' | 'register') => {
     setAuthModalMode(mode);
     setShowAuthModal(true);
   };
 
+  const handleStartFreeTrial = () => {
+    const trialUser = {
+      id: `usr_trial_${Math.random().toString(36).substring(2, 7)}`,
+      email: 'trial.user@vixysvault.com',
+      name: 'Free Trial User',
+      role: 'DEMO' as const,
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+    };
+    setAuthState({
+      isAuthenticated: true,
+      user: trialUser,
+    });
+    setUserRole('DEMO');
+    setTrialSeconds(10800);
+    setActiveTab('terminal');
+  };
+
   const handleLogout = () => {
+    try {
+      localStorage.removeItem('vixy_auth');
+    } catch (e) {
+      console.error(e);
+    }
     setAuthState({
       isAuthenticated: false,
       user: null,
     });
     setUserRole('DEMO');
+    setActiveTab('landing');
   };
+
+  const isSubscriptionActive =
+    subscription.status === 'active' ||
+    userRole === 'PRO' ||
+    userRole === 'ADMIN' ||
+    (userRole === 'DEMO' && trialSeconds > 0);
+
+  const isPublicRoute = ['landing', 'pricing', 'auth'].includes(activeTab);
 
   return (
     <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
@@ -306,113 +404,27 @@ export default function App() {
 
       {/* Main Layout Container (Sidebar + Content Area) */}
       <div className="flex-1 flex max-w-[1700px] w-full mx-auto">
-        {/* Left Sidebar */}
-        <Sidebar
-          activeTab={activeTab}
-          setActiveTab={setActiveTab}
-          isOpenMobile={isMobileSidebarOpen}
-          onCloseMobile={() => setIsMobileSidebarOpen(false)}
-          onOpenSearch={() => setIsSearchOpen(true)}
-        />
+        {/* Left Sidebar (Only visible inside terminal desks, hidden on public Landing Page) */}
+        {activeTab !== 'landing' && (
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            isOpenMobile={isMobileSidebarOpen}
+            onCloseMobile={() => setIsMobileSidebarOpen(false)}
+            onOpenSearch={() => setIsSearchOpen(true)}
+          />
+        )}
 
         {/* Main Content Workspace Area */}
-        <main className="flex-1 p-4 sm:p-6 overflow-x-hidden">
-          {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
-          {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
-            <TopNavControls
-              selectedAsset={selectedAsset}
-              onSelectAsset={(sym) => setSelectedAsset(sym)}
-              selectedTimeframe={selectedTimeframe}
-              onSelectTimeframe={(tf) => setSelectedTimeframe(tf)}
-              selectedVenues={selectedVenues}
-              onToggleVenue={handleToggleVenue}
-              favorites={favorites}
-              onToggleFavorite={handleToggleFavorite}
-              onOpenSearch={() => setIsSearchOpen(true)}
-            />
-          )}
-
-          {/* Active View Routing */}
-          {activeTab === 'terminal' && (
-            <LiveDashboard
+        <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
+          {/* 1. Public Pages always accessible */}
+          {activeTab === 'landing' && (
+            <LandingPage
               ticker={ticker}
-              candles={candles}
-              onOpenAlerts={() => setActiveTab('alerts')}
+              onLaunchTerminal={() => setActiveTab('terminal')}
               onOpenPricing={() => setActiveTab('pricing')}
-              onOpenJournal={() => setActiveTab('journal')}
-              userRole={userRole}
-              selectedAsset={selectedAsset}
-              selectedTimeframe={selectedTimeframe}
-              selectedVenues={selectedVenues}
+              onOpenAuth={handleOpenAuth}
             />
-          )}
-
-          {activeTab === 'markets' && (
-            <MarketCardsView
-              onSelectAssetAndNavigate={(sym) => {
-                setSelectedAsset(sym);
-                setActiveTab('terminal');
-              }}
-              favorites={favorites}
-              onToggleFavorite={handleToggleFavorite}
-            />
-          )}
-
-          {activeTab === 'compare' && <CompareView />}
-
-          {activeTab === 'scalping' && (
-            <ScalpingDeskView
-              ticker={ticker}
-              userRole={userRole}
-              onUpgradeToPro={handleUpgradeToPro}
-            />
-          )}
-
-          {activeTab === 'onehour' && (
-            <OneHourDeskView
-              ticker={ticker}
-              userRole={userRole}
-              onUpgradeToPro={handleUpgradeToPro}
-            />
-          )}
-
-          {activeTab === 'patterns' && (
-            <AIPatternEngine ticker={ticker} timeframe={selectedTimeframe as any} />
-          )}
-
-          {activeTab === 'whales' && (
-            <WhaleTrackerView
-              onSelectAssetAndNavigate={(sym) => {
-                setSelectedAsset(sym);
-                setActiveTab('terminal');
-              }}
-            />
-          )}
-
-          {activeTab === 'explainability' && (
-            <ExplainabilityVaultView
-              currentSymbol={selectedAsset}
-              onSelectAsset={(sym) => setSelectedAsset(sym)}
-            />
-          )}
-
-          {activeTab === 'auth' && (
-            <AuthView
-              authState={authState}
-              setAuthState={setAuthState}
-              setUserRole={setUserRole}
-              onSuccessNavigate={() => setActiveTab('terminal')}
-            />
-          )}
-
-          {activeTab === 'history' && <HistoricalAccuracy history={history} />}
-
-          {activeTab === 'journal' && (
-            <TradeJournalView entries={journalEntries} setEntries={setJournalEntries} />
-          )}
-
-          {activeTab === 'alerts' && (
-            <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
           )}
 
           {activeTab === 'pricing' && (
@@ -427,28 +439,233 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'settings' && (
-            <SettingsView
+          {activeTab === 'auth' && (
+            <AuthView
               authState={authState}
               setAuthState={setAuthState}
-              apiKeys={apiKeys}
-              setApiKeys={setApiKeys}
-              subscription={subscription}
-              onOpenPricing={() => setActiveTab('pricing')}
+              setUserRole={setUserRole}
+              onSuccessNavigate={() => setActiveTab('terminal')}
             />
           )}
 
-          {activeTab === 'admin' && (
-            <AdminPanel stats={adminStats} tickets={supportTickets} setTickets={setSupportTickets} />
-          )}
+          {/* 2. Protected Routes Logic */}
+          {!isPublicRoute && (
+            <>
+              {/* Not Logged In -> Show Login Prompt / Screen */}
+              {!authState.isAuthenticated ? (
+                <div className="max-w-2xl mx-auto my-12 p-8 rounded-3xl bg-[#0D071E] border-2 border-purple-500/40 text-center space-y-6 shadow-2xl font-mono animate-fadeIn">
+                  <div className="w-16 h-16 rounded-2xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center mx-auto text-purple-400 shadow-lg shadow-purple-600/30">
+                    <Lock className="w-8 h-8 text-purple-300" />
+                  </div>
 
-          {activeTab === 'landing' && (
-            <LandingPage
-              ticker={ticker}
-              onLaunchTerminal={() => setActiveTab('terminal')}
-              onOpenPricing={() => setActiveTab('pricing')}
-              onOpenAuth={handleOpenAuth}
-            />
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      <span>ACCOUNT CREATION REQUIRED</span>
+                    </div>
+                    <h2 className="text-2xl font-black text-white font-sans">
+                      Create an Account to Unlock Your Free Access
+                    </h2>
+                    <p className="text-sm text-purple-300/70 font-sans max-w-lg mx-auto leading-relaxed">
+                      Register your free Vixy's Vault account to activate your 3-Hour Free Access Pass and enter the live prediction terminal, order flow delta metrics, and AI signal engine.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 font-sans max-w-lg mx-auto">
+                    <button
+                      onClick={() => handleOpenAuth('register')}
+                      className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <span>Create Account & Start Pass</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenAuth('login')}
+                      className="px-6 py-3.5 rounded-2xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-500/40 text-white font-black text-sm shadow-xl transition-all flex items-center justify-center gap-2"
+                    >
+                      <Lock className="w-4 h-4" />
+                      <span>Log In To Account</span>
+                    </button>
+                  </div>
+
+                  <div className="pt-4 border-t border-purple-900/40 flex items-center justify-center gap-6 text-xs text-purple-300/60 font-sans">
+                    <button
+                      onClick={() => setActiveTab('landing')}
+                      className="hover:text-white transition-colors underline decoration-purple-500/40"
+                    >
+                      ← Return to Landing Page
+                    </button>
+                    <span>•</span>
+                    <button
+                      onClick={() => setActiveTab('pricing')}
+                      className="hover:text-white transition-colors underline decoration-purple-500/40"
+                    >
+                      View Pro Plans
+                    </button>
+                  </div>
+                </div>
+              ) : !isSubscriptionActive ? (
+                /* Logged in, BUT Subscription Inactive / Trial Expired -> Redirect to Pricing Page View */
+                <div className="space-y-6 animate-fadeIn">
+                  <div className="bg-gradient-to-r from-amber-950/80 via-[#180C04] to-amber-950/80 border-2 border-amber-500/60 rounded-2xl p-5 text-amber-200 font-mono text-xs flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-black text-sm text-white font-sans">
+                          STEP 2: ACTIVE SUBSCRIPTION REQUIRED
+                        </div>
+                        <p className="text-amber-300/80 text-xs font-sans">
+                          You are logged in, but your free trial pass has expired or your plan is inactive. Upgrade to a Pro or Elite plan below to unlock the live terminal.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleUpgradeToPro}
+                      className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 transition-all shadow-lg shadow-amber-500/20"
+                    >
+                      Instant Pro Upgrade ($29/mo)
+                    </button>
+                  </div>
+
+                  <SubscriptionView
+                    subscription={subscription}
+                    setSubscription={setSubscription}
+                    userRole={userRole}
+                    setUserRole={setUserRole}
+                    trialSeconds={trialSeconds}
+                    onResetTrial={handleResetTrial}
+                    onExpireTrial={handleExpireTrial}
+                  />
+                </div>
+              ) : (
+                /* Logged in AND Active Subscription -> Access Dashboard / Terminal Desks! */
+                <>
+                  {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
+                  {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
+                    <TopNavControls
+                      selectedAsset={selectedAsset}
+                      onSelectAsset={(sym) => setSelectedAsset(sym)}
+                      selectedTimeframe={selectedTimeframe}
+                      onSelectTimeframe={(tf) => setSelectedTimeframe(tf)}
+                      selectedVenues={selectedVenues}
+                      onToggleVenue={handleToggleVenue}
+                      favorites={favorites}
+                      onToggleFavorite={handleToggleFavorite}
+                      onOpenSearch={() => setIsSearchOpen(true)}
+                    />
+                  )}
+
+                  {activeTab === 'terminal' && (
+                    <LiveDashboard
+                      ticker={ticker}
+                      candles={candles}
+                      onOpenAlerts={() => setActiveTab('alerts')}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                      onOpenJournal={() => setActiveTab('journal')}
+                      userRole={userRole}
+                      selectedAsset={selectedAsset}
+                      onSelectAsset={(sym) => setSelectedAsset(sym)}
+                      selectedTimeframe={selectedTimeframe}
+                      selectedVenues={selectedVenues}
+                    />
+                  )}
+
+                  {activeTab === 'markets' && (
+                    <MarketCardsView
+                      onSelectAssetAndNavigate={(sym) => {
+                        setSelectedAsset(sym);
+                        setActiveTab('terminal');
+                      }}
+                      favorites={favorites}
+                      onToggleFavorite={handleToggleFavorite}
+                    />
+                  )}
+
+                  {activeTab === 'compare' && <CompareView />}
+
+                  {activeTab === 'scalping' && (
+                    <ScalpingDeskView
+                      ticker={ticker}
+                      userRole={userRole}
+                      onUpgradeToPro={handleUpgradeToPro}
+                      selectedAsset={selectedAsset}
+                      onSelectAsset={(sym) => setSelectedAsset(sym)}
+                    />
+                  )}
+
+                  {activeTab === 'onehour' && (
+                    <OneHourDeskView
+                      ticker={ticker}
+                      userRole={userRole}
+                      onUpgradeToPro={handleUpgradeToPro}
+                    />
+                  )}
+
+                  {activeTab === 'patterns' && (
+                    <AIPatternEngine ticker={ticker} timeframe={selectedTimeframe as any} />
+                  )}
+
+                  {activeTab === 'whales' && (
+                    <WhaleTrackerView
+                      onSelectAssetAndNavigate={(sym) => {
+                        setSelectedAsset(sym);
+                        setActiveTab('terminal');
+                      }}
+                    />
+                  )}
+
+                  {activeTab === 'explainability' && (
+                    <ExplainabilityVaultView
+                      currentSymbol={selectedAsset}
+                      onSelectAsset={(sym) => setSelectedAsset(sym)}
+                    />
+                  )}
+
+                  {activeTab === 'perflab' && <PerformanceLabView />}
+
+                  {activeTab === 'coach' && <AICoachView />}
+
+                  {activeTab === 'replay' && <ReplayCenterView />}
+
+                  {activeTab === 'scanner' && (
+                    <OpportunityScannerView
+                      onSelectAssetAndNavigate={(sym) => {
+                        setSelectedAsset(sym);
+                        setActiveTab('terminal');
+                      }}
+                    />
+                  )}
+
+                  {activeTab === 'history' && <HistoricalAccuracy history={history} />}
+
+                  {activeTab === 'journal' && (
+                    <TradeJournalView entries={journalEntries} setEntries={setJournalEntries} />
+                  )}
+
+                  {activeTab === 'alerts' && (
+                    <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
+                  )}
+
+                  {activeTab === 'settings' && (
+                    <SettingsView
+                      authState={authState}
+                      setAuthState={setAuthState}
+                      apiKeys={apiKeys}
+                      setApiKeys={setApiKeys}
+                      subscription={subscription}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                    />
+                  )}
+
+                  {activeTab === 'admin' && (
+                    <AdminPanel stats={adminStats} tickets={supportTickets} setTickets={setSupportTickets} />
+                  )}
+                </>
+              )}
+            </>
           )}
         </main>
       </div>

@@ -135,6 +135,64 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         </div>
       </div>
 
+      {/* 1-Hour Contract Strike Selector Matrix (Top Priority) */}
+      <div className="bg-[#120B28] rounded-2xl p-5 border border-purple-500/40 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Target className="w-5 h-5 text-amber-400" />
+            <h3 className="font-extrabold text-base text-white tracking-wide">1-HOUR STRIKE CONTRACT MATRIX</h3>
+            <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-400/30">
+              TOP DESK SELECTION
+            </span>
+          </div>
+          <span className="text-xs text-purple-300/70 font-sans">Select target strike to analyze model edge and odds</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { strike: 64000, yesOdds: 88, noOdds: 12, prob: 94, edge: 18.2, status: 'HIGH PROBABILITY' },
+            { strike: 64200, yesOdds: 72, noOdds: 28, prob: 88, edge: 14.2, status: 'OPTIMAL ENTRY' },
+            { strike: 64500, yesOdds: 34, noOdds: 66, prob: 42, edge: 8.5, status: 'STRETCH TARGET' },
+          ].map((item) => (
+            <button
+              key={item.strike}
+              onClick={() => {
+                setSelectedStrike(item.strike);
+                setKalshiYesCent(item.yesOdds);
+                setKalshiNoCent(item.noOdds);
+                setConfidenceScore(item.prob);
+                setModelEdge(item.edge);
+              }}
+              className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden ${
+                selectedStrike === item.strike
+                  ? 'bg-purple-950/80 border-purple-400 shadow-xl shadow-purple-600/30 ring-2 ring-purple-400/60'
+                  : 'bg-[#0B051A] border-purple-900/40 hover:border-purple-600/50'
+              }`}
+            >
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-purple-200 font-bold text-sm">${item.strike.toLocaleString()} Target</span>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded ${
+                    selectedStrike === item.strike ? 'bg-amber-400 text-slate-950' : 'bg-purple-900/60 text-purple-300'
+                  }`}
+                >
+                  {item.status}
+                </span>
+              </div>
+
+              <div className="text-xl font-black text-white my-1">
+                YES {item.yesOdds}¢ <span className="text-purple-400/60 text-xs font-normal">/ NO {item.noOdds}¢</span>
+              </div>
+
+              <div className="flex items-center justify-between text-xs text-purple-300/70 mt-2 pt-2 border-t border-purple-900/40">
+                <span>Model Win: <strong className="text-white">{item.prob}%</strong></span>
+                <span className="text-emerald-400 font-bold">Edge: +{item.edge}%</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Contract Horizon Countdown & Live Odds Header */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-[#120B28] rounded-2xl p-4 border border-purple-500/30 shadow-xl space-y-1">
@@ -213,61 +271,6 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               timeframe="1H"
             />
           </div>
-
-          {/* 1-Hour Contract Strike Selector Matrix */}
-          <div className="bg-[#120B28] rounded-2xl p-5 border border-purple-900/50 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Target className="w-4 h-4 text-amber-400" />
-                <h3 className="font-bold text-sm text-white">1-HOUR STRIKE CONTRACT MATRIX</h3>
-              </div>
-              <span className="text-xs text-purple-300/60">Select target strike to analyze</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[
-                { strike: 64000, yesOdds: 88, noOdds: 12, prob: 94, edge: 18.2, status: 'HIGH PROBABILITY' },
-                { strike: 64200, yesOdds: 72, noOdds: 28, prob: 88, edge: 14.2, status: 'OPTIMAL ENTRY' },
-                { strike: 64500, yesOdds: 34, noOdds: 66, prob: 42, edge: 8.5, status: 'STRETCH TARGET' },
-              ].map((item) => (
-                <button
-                  key={item.strike}
-                  onClick={() => {
-                    setSelectedStrike(item.strike);
-                    setKalshiYesCent(item.yesOdds);
-                    setKalshiNoCent(item.noOdds);
-                    setConfidenceScore(item.prob);
-                    setModelEdge(item.edge);
-                  }}
-                  className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden ${
-                    selectedStrike === item.strike
-                      ? 'bg-purple-950/80 border-purple-400 shadow-lg shadow-purple-600/30 ring-1 ring-purple-400'
-                      : 'bg-[#0B051A] border-purple-900/40 hover:border-purple-600/50'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <span className="text-purple-300 font-bold">${item.strike.toLocaleString()} Target</span>
-                    <span
-                      className={`text-[9px] font-black px-1.5 py-0.2 rounded ${
-                        selectedStrike === item.strike ? 'bg-amber-500 text-slate-950' : 'bg-purple-900/60 text-purple-300'
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-
-                  <div className="text-lg font-black text-white">
-                    YES {item.yesOdds}¢ <span className="text-purple-400/60 text-xs">/ NO {item.noOdds}¢</span>
-                  </div>
-
-                  <div className="flex items-center justify-between text-[11px] text-purple-300/70 mt-2 pt-2 border-t border-purple-900/40">
-                    <span>Model Win: {item.prob}%</span>
-                    <span className="text-emerald-400 font-bold">Edge: +{item.edge}%</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
 
         {/* Right Column: 1-Hour LATCHED ACTION ADVISOR */}
@@ -288,8 +291,8 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 60-MINUTE PREDICTION ADVISORY
               </div>
               <div className="text-xl font-black text-white uppercase tracking-tight flex items-center justify-center gap-2 text-amber-300">
-                <Zap className="w-5 h-5 text-amber-400 animate-pulse" />
-                <span>BUY YES @ {kalshiYesCent}¢</span>
+                <Zap className="w-5 h-5 text-amber-400" />
+                <span>MODEL SIGNAL: YES @ {kalshiYesCent}¢</span>
               </div>
               <p className="text-xs text-purple-200/80 font-sans">
                 Targeting BTC &gt; ${selectedStrike.toLocaleString()} by top of the hour. Net L2 volume delta (+2,840 BTC) favors upward drift.
@@ -329,13 +332,13 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
             {/* Quick Action Buttons */}
             <div className="grid grid-cols-2 gap-2">
-              <button className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-1.5">
-                <TrendingUp className="w-4 h-4" />
-                <span>BUY YES {kalshiYesCent}¢</span>
+              <button className="py-3 rounded-xl bg-purple-800 hover:bg-purple-700 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 border border-purple-600/50">
+                <TrendingUp className="w-4 h-4 text-emerald-300" />
+                <span>SIMULATE YES {kalshiYesCent}¢</span>
               </button>
-              <button className="py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs shadow-lg shadow-rose-600/30 transition-all flex items-center justify-center gap-1.5">
-                <TrendingDown className="w-4 h-4" />
-                <span>BUY NO {kalshiNoCent}¢</span>
+              <button className="py-3 rounded-xl bg-purple-800 hover:bg-purple-700 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-1.5 border border-purple-600/50">
+                <TrendingDown className="w-4 h-4 text-rose-300" />
+                <span>SIMULATE NO {kalshiNoCent}¢</span>
               </button>
             </div>
           </div>

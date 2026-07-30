@@ -18,6 +18,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   BrainCircuit,
+  Globe,
+  Award,
+  Compass,
+  History,
+  Target,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -56,20 +61,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
     localStorage.setItem('vixy_hide_search', String(nextState));
   };
 
-  const navItems = [
-    { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'AI' },
-    { id: 'markets', label: 'Markets', icon: TrendingUp },
-    { id: 'scalping', label: 'Signals Feed', icon: Zap, badge: '15S' },
-    { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
-    { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
-    { id: 'whales', label: 'Whale Tracker', icon: Layers },
-    { id: 'compare', label: 'Compare Mode', icon: Sliders, highlight: true },
-    { id: 'journal', label: 'Trade Journal', icon: BookOpen },
-    { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
-    { id: 'history', label: 'Analytics', icon: BarChart2 },
-    { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
-    { id: 'settings', label: 'Settings', icon: Settings },
+  const navSections = [
+    {
+      title: 'CORE DESKS',
+      items: [
+        { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'scalping', label: '15s Signals Feed', icon: Zap, badge: 'LIVE' },
+        { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
+        { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
+        { id: 'markets', label: 'Markets', icon: TrendingUp },
+      ],
+    },
+    {
+      title: 'QUANT INTEL',
+      items: [
+        { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'AI' },
+        { id: 'whales', label: 'Whale Tracker', icon: Layers },
+        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'AUDITED' },
+        { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
+        { id: 'replay', label: 'Replay Center', icon: History },
+      ],
+    },
+    {
+      title: 'TRADER TOOLS',
+      items: [
+        { id: 'journal', label: 'Trade Journal', icon: BookOpen },
+        { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
+        { id: 'history', label: 'Analytics', icon: BarChart2 },
+        { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
+        { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'landing', label: 'Landing Page', icon: Globe },
+      ],
+    },
   ];
 
   return (
@@ -159,54 +182,69 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* Navigation List */}
-        <nav className="flex-1 space-y-1 overflow-y-auto w-full">
-          {navItems.map((item) => {
-            const IconComponent = item.icon;
-            const isActive = activeTab === item.id;
-
-            if (isCollapsed) {
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => setActiveTab(item.id)}
-                  title={`${item.label} ${item.badge ? `(${item.badge})` : ''}`}
-                  className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${
-                    isActive
-                      ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
-                      : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
-                  }`}
-                >
-                  <IconComponent className="w-5 h-5" />
-                  {item.badge && (
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
-                  )}
-                </button>
-              );
-            }
-
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group ${
-                  isActive
-                    ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
-                    : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} />
-                  <span>{item.label}</span>
+        <nav className="flex-1 space-y-4 overflow-y-auto w-full pr-1">
+          {navSections.map((sec, secIdx) => (
+            <div key={secIdx} className="space-y-1">
+              {!isCollapsed && (
+                <div className="px-3 pt-2 pb-1 text-[10px] font-mono font-black text-purple-400/60 uppercase tracking-widest">
+                  {sec.title}
                 </div>
+              )}
+              <div className="space-y-1">
+                {sec.items.map((item) => {
+                  const IconComponent = item.icon;
+                  const isActive = activeTab === item.id;
 
-                {item.badge && (
-                  <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/30">
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                  if (isCollapsed) {
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setActiveTab(item.id)}
+                        title={`${item.label} ${item.badge ? `(${item.badge})` : ''}`}
+                        className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${
+                          isActive
+                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                            : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
+                        }`}
+                      >
+                        <IconComponent className="w-5 h-5" />
+                        {item.badge && (
+                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
+                        )}
+                        {/* Hover Tooltip Popup */}
+                        <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#130A2A] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                          {item.label} {item.badge && <span className="text-amber-300 font-mono text-[10px]">[{item.badge}]</span>}
+                        </div>
+                      </button>
+                    );
+                  }
+
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => setActiveTab(item.id)}
+                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group ${
+                        isActive
+                          ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                          : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} />
+                        <span>{item.label}</span>
+                      </div>
+
+                      {item.badge && (
+                        <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/30">
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
 
           {/* Institutional Badge Card - Positioned Directly Below Settings */}
           {!isCollapsed ? (
@@ -265,31 +303,40 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </kbd>
             </button>
 
-            <nav className="flex-1 space-y-1.5 overflow-y-auto">
-              {navItems.map((item) => {
-                const IconComponent = item.icon;
-                const isActive = activeTab === item.id;
+            <nav className="flex-1 space-y-4 overflow-y-auto">
+              {navSections.map((sec, secIdx) => (
+                <div key={secIdx} className="space-y-1">
+                  <div className="px-3 text-[10px] font-mono font-black text-purple-400/60 uppercase tracking-widest">
+                    {sec.title}
+                  </div>
+                  <div className="space-y-1">
+                    {sec.items.map((item) => {
+                      const IconComponent = item.icon;
+                      const isActive = activeTab === item.id;
 
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => {
-                      setActiveTab(item.id);
-                      onCloseMobile();
-                    }}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all ${
-                      isActive
-                        ? 'bg-purple-600 text-white shadow-lg'
-                        : 'text-purple-200 hover:bg-purple-900/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <IconComponent className="w-4 h-4 text-purple-400" />
-                      <span>{item.label}</span>
-                    </div>
-                  </button>
-                );
-              })}
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            onCloseMobile();
+                          }}
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all ${
+                            isActive
+                              ? 'bg-purple-600 text-white shadow-lg'
+                              : 'text-purple-200 hover:bg-purple-900/30'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <IconComponent className="w-4 h-4 text-purple-400" />
+                            <span>{item.label}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
 
               <div className="pt-3 border-t border-purple-900/40 mt-3">
                 <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/60 via-[#12082a] to-[#090417] border border-purple-500/30 space-y-2 shadow-lg shadow-purple-950/50">

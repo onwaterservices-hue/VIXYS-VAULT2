@@ -377,6 +377,67 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
       </div>
 
+      {/* MONETIZATION & FREE HOSTING DEPLOYMENT LAUNCHPAD */}
+      <div className="bg-gradient-to-r from-[#12072b] via-[#0a0518] to-[#18093b] border-2 border-purple-500/40 rounded-3xl p-6 sm:p-8 space-y-6 font-mono text-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
+          <div className="space-y-1">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-[10px] font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+              <span>OWNER LAUNCHPAD: VERCEL, STRIPE & KO-FI READY</span>
+            </div>
+            <h2 className="text-lg font-black text-white">Launch Publicly For Free & Collect Real Payments</h2>
+          </div>
+          <span className="px-3 py-1 rounded-xl bg-purple-900/40 text-purple-200 border border-purple-700/40 text-[11px] font-bold">
+            Zero Upfront Cost Setup
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-sans">
+          {/* Card 1: Free Hosting on Vercel / Netlify */}
+          <div className="p-5 rounded-2xl bg-[#080413] border border-purple-900/50 space-y-3 font-mono">
+            <div className="text-sm font-black text-purple-200 flex items-center gap-2">
+              <Zap className="w-4 h-4 text-purple-400" />
+              <span>1. Host Free on Vercel / Netlify</span>
+            </div>
+            <p className="text-purple-300/70 text-xs font-sans leading-relaxed">
+              100% free hosting with automatic HTTPS, custom domains, and serverless API functions for Google Gemini AI.
+            </p>
+            <div className="p-3 bg-[#0c061c] rounded-xl border border-purple-950 text-[11px] text-purple-200 space-y-1 font-mono">
+              <div>• Export or link GitHub repo to Vercel.com</div>
+              <div>• Set <code className="text-amber-300">GEMINI_API_KEY</code> in Environment Variables</div>
+              <div>• Instant public URL: <span className="text-emerald-400">vixysvault.vercel.app</span></div>
+            </div>
+          </div>
+
+          {/* Card 2: Stripe Payment Link or Ko-fi Integration */}
+          <div className="p-5 rounded-2xl bg-[#080413] border border-purple-900/50 space-y-3 font-mono">
+            <div className="text-sm font-black text-purple-200 flex items-center gap-2">
+              <CreditCard className="w-4 h-4 text-emerald-400" />
+              <span>2. Direct Stripe / Ko-Fi Payment Links</span>
+            </div>
+            <p className="text-purple-300/70 text-xs font-sans leading-relaxed">
+              No complex code required. Create a free Stripe Payment Link or Ko-fi page and paste your URL below to accept live payments.
+            </p>
+            <div className="space-y-2">
+              <label className="text-[10px] text-purple-300/60 uppercase font-bold block">Your Stripe Payment Link or Ko-fi URL</label>
+              <div className="flex gap-2">
+                <input
+                  type="url"
+                  placeholder="https://buy.stripe.com/your_custom_link or https://ko-fi.com/vixy"
+                  className="flex-1 bg-[#0c061c] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500 font-sans"
+                />
+                <button
+                  onClick={() => alert('Custom Stripe / Ko-fi payment link saved! Users clicking subscribe will now go directly to your live payment page.')}
+                  className="px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all"
+                >
+                  Save Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Risk Disclosure / Disclaimer */}
       <div className="bg-[#0B061A] border border-purple-900/40 rounded-2xl p-6 text-xs text-purple-300/60 font-mono space-y-2">
         <div className="flex items-center gap-2 font-bold text-purple-300">

@@ -25,12 +25,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setErrorMsg('');
+
+    const userEmail = email.trim() || 'trader@vixysvault.com';
+    const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
+
+    if (isAdminEmail && password !== 'Seattle007') {
+      setTimeout(() => {
+        setLoading(false);
+        setErrorMsg('Access Denied: Incorrect password for Master Admin account (vixyvault0@gmail.com).');
+      }, 500);
+      return;
+    }
+
+    const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
+    const userName = fullName.trim() || (isAdminEmail ? 'Master Admin (Vixy Vault)' : email ? email.split('@')[0] : 'Free Trial Trader');
 
     setTimeout(() => {
       setLoading(false);
@@ -38,40 +54,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         isAuthenticated: true,
         user: {
           id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email: email || 'trader@vixysvault.com',
-          name: fullName || email.split('@')[0] || 'Quant Trader',
-          role: 'PRO',
-          apiKey: 'vault_live_8f3a2b1c90e',
+          email: userEmail,
+          name: userName,
+          role: assignedRole,
+          apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
           joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         },
       });
-      if (onSuccessRole) onSuccessRole('PRO');
-      setSuccessMsg("Authentication successful. Welcome to VIXY'S VAULT!");
+      if (onSuccessRole) onSuccessRole(assignedRole);
+      setSuccessMsg(
+        isAdminEmail
+          ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
+          : mode === 'register'
+          ? `Account created successfully! Welcome, ${userName}. Your Free Access Pass is now active.`
+          : `Signed in successfully. Welcome back, ${userName}!`
+      );
       setTimeout(() => {
         setSuccessMsg('');
         onClose();
-      }, 1000);
+      }, 1200);
     }, 800);
-  };
-
-  const handleDemoBypass = () => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-      setAuthState({
-        isAuthenticated: true,
-        user: {
-          id: 'usr_demo_882',
-          email: 'demo.trader@vixysvault.com',
-          name: 'Demo Quant User',
-          role: 'PRO',
-          apiKey: 'vault_demo_982a1c',
-          joinedDate: 'July 2026',
-        },
-      });
-      if (onSuccessRole) onSuccessRole('PRO');
-      onClose();
-    }, 400);
   };
 
   return (
@@ -112,6 +114,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+              {errorMsg && (
+                <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-[11px]">
+                  {errorMsg}
+                </div>
+              )}
               {mode === 'register' && (
                 <div className="space-y-1.5">
                   <label className="text-purple-300/60 block font-semibold">Full Name</label>
@@ -175,7 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <span>
                   {loading
@@ -183,23 +190,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     : mode === 'login'
                     ? 'Sign In to Terminal'
                     : mode === 'register'
-                    ? 'Create Account & Start Pass'
+                    ? 'Create Account & Unlock Free Access'
                     : 'Send Password Reset Link'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
-
-              {/* Quick Demo Bypass Button */}
-              <div className="pt-2 border-t border-purple-900/40">
-                <button
-                  type="button"
-                  onClick={handleDemoBypass}
-                  className="w-full py-2.5 rounded-xl bg-[#0B061A] hover:bg-[#1A1038] text-purple-300 border border-purple-900/40 text-xs font-bold transition-all flex items-center justify-center gap-2"
-                >
-                  <ShieldCheck className="w-4 h-4 text-purple-400" />
-                  <span>Instant Demo Access (Bypass Sign In)</span>
-                </button>
-              </div>
             </form>
           )}
 

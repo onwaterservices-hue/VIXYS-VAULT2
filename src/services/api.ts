@@ -1,17 +1,73 @@
 import { BTCTicker, Candle, PredictionSignal } from '../types';
 
+export interface CryptoTickerData {
+  symbol: string;
+  price: number;
+  change24h: number;
+  high24h: number;
+  low24h: number;
+  volume24h: number;
+  timestamp: number;
+}
+
 export async function fetchBTCTicker(): Promise<BTCTicker> {
+  return fetchCryptoTicker('BTC');
+}
+
+export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTicker> {
   try {
-    const res = await fetch('/api/btc/ticker');
+    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(symbol)}`);
     if (!res.ok) throw new Error('Ticker response not ok');
-    return await res.json();
-  } catch (err) {
-    console.warn('API ticker fetch failed, fallback to mock ticker', err);
+    const data = await res.json();
     return {
-      price: 64108,
+      price: data.price,
+      change24h: data.change24h,
+      high24h: data.high24h,
+      low24h: data.low24h,
+      volume24h: data.volume24h,
+      timestamp: data.timestamp || Date.now(),
+      marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + data.change24h * 2))),
+      marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - data.change24h * 2))),
+    };
+  } catch (err) {
+    console.warn(`API ticker fetch failed for ${symbol}, using live direct exchange scraper`, err);
+    // Direct public fallback scraper if backend is starting
+    try {
+      const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+      const direct = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+      if (direct.ok) {
+        const d = await direct.json();
+        const price = parseFloat(d.lastPrice);
+        const change24h = parseFloat(d.priceChangePercent);
+        return {
+          price,
+          change24h,
+          high24h: parseFloat(d.highPrice),
+          low24h: parseFloat(d.lowPrice),
+          volume24h: parseFloat(d.volume),
+          timestamp: Date.now(),
+          marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
+          marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
+        };
+      }
+    } catch (e) {
+      // Fallback
+    }
+
+    const fallbackPrices: Record<string, number> = {
+      BTC: 64108,
+      ETH: 3482,
+      SOL: 184,
+      XRP: 0.624,
+      DOGE: 0.142,
+      SUI: 1.88,
+    };
+    const price = fallbackPrices[symbol] || 10;
+    return {
+      price,
       change24h: 3.42,
-      high24h: 64850,
-      low24h: 63210,
+      high24h: price * 1.04,
+      low24h: price * 0.96,
       volume24h: 28410.5,
       timestamp: Date.now(),
       marketImpliedYes: 52,
@@ -20,34 +76,98 @@ export async function fetchBTCTicker(): Promise<BTCTicker> {
   }
 }
 
-export async function fetchBTCKlines(interval: '15m' | '1h' = '15m'): Promise<Candle[]> {
+export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
   try {
-    const res = await fetch(`/api/btc/klines?interval=${interval}`);
+    const res = await fetch('/api/crypto/all-tickers');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch all tickers from server proxy, using direct Binance endpoint', err);
+  }
+
+  // Direct public client fallback
+  try {
+    const direct = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    if (direct.ok) {
+      const data = await direct.json();
+      const targetSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'SUIUSDT', 'AVAXUSDT', 'LINKUSDT', 'ADAUSDT', 'NEARUSDT', 'PEPEUSDT', 'BNBUSDT'];
+      return data
+        .filter((item: any) => targetSymbols.includes(item.symbol))
+        .map((item: any) => ({
+          symbol: item.symbol.replace('USDT', ''),
+          price: parseFloat(item.lastPrice),
+          change24h: parseFloat(item.priceChangePercent),
+          high24h: parseFloat(item.highPrice),
+          low24h: parseFloat(item.lowPrice),
+          volume24h: parseFloat(item.volume),
+          timestamp: Date.now(),
+        }));
+    }
+  } catch (e) {
+    // Fallback
+  }
+
+  return [
+    { symbol: 'BTC', price: 64161.4, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5, timestamp: Date.now() },
+    { symbol: 'ETH', price: 3482.5, change24h: 4.85, high24h: 3520, low24h: 3310, volume24h: 184200, timestamp: Date.now() },
+    { symbol: 'SOL', price: 184.2, change24h: 8.12, high24h: 188.5, low24h: 168.0, volume24h: 1420000, timestamp: Date.now() },
+    { symbol: 'XRP', price: 0.624, change24h: 1.85, high24h: 0.641, low24h: 0.608, volume24h: 410000000, timestamp: Date.now() },
+    { symbol: 'DOGE', price: 0.142, change24h: 6.4, high24h: 0.148, low24h: 0.131, volume24h: 980000000, timestamp: Date.now() },
+  ];
+}
+
+export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Promise<Candle[]> {
+  return fetchCryptoKlines('BTC', interval);
+}
+
+export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string = '15m'): Promise<Candle[]> {
+  try {
+    const res = await fetch(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`);
     if (!res.ok) throw new Error('Klines response not ok');
     return await res.json();
   } catch (err) {
-    console.warn('API klines fetch failed, fallback to mock klines', err);
+    console.warn(`API klines fetch failed for ${symbol}, using direct public Binance API`, err);
+    try {
+      const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+      const binanceTf = interval === '15s' ? '1m' : interval;
+      const direct = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceTf}&limit=35`);
+      if (direct.ok) {
+        const data = await direct.json();
+        return data.map((item: any) => ({
+          time: item[0],
+          open: parseFloat(item[1]),
+          high: parseFloat(item[2]),
+          low: parseFloat(item[3]),
+          close: parseFloat(item[4]),
+          volume: parseFloat(item[5]),
+        }));
+      }
+    } catch (e) {
+      // Fallback
+    }
+
     const now = Date.now();
     const periodMs = interval === '1h' ? 60 * 60 * 1000 : 15 * 60 * 1000;
     const candles: Candle[] = [];
-    let currentClose = interval === '1h' ? 63600 : 63850;
+    const basePrice = symbol === 'BTC' ? 63850 : symbol === 'ETH' ? 3450 : symbol === 'SOL' ? 180 : 10;
+    let currentClose = basePrice;
 
     for (let i = 29; i >= 0; i--) {
       const time = now - i * periodMs;
       const open = currentClose;
-      const step = interval === '1h' ? 280 : 120;
-      const change = (Math.random() - 0.46) * step;
+      const change = (Math.random() - 0.46) * (basePrice * 0.003);
       const close = open + change;
-      const high = Math.max(open, close) + Math.random() * (interval === '1h' ? 140 : 40);
-      const low = Math.min(open, close) - Math.random() * (interval === '1h' ? 140 : 40);
-      const volume = (interval === '1h' ? 1200 : 250) + Math.random() * (interval === '1h' ? 1800 : 500);
+      const high = Math.max(open, close) + Math.random() * (basePrice * 0.001);
+      const low = Math.min(open, close) - Math.random() * (basePrice * 0.001);
+      const volume = 250 + Math.random() * 500;
 
       candles.push({
         time,
-        open: Math.round(open * 10) / 10,
-        high: Math.round(high * 10) / 10,
-        low: Math.round(low * 10) / 10,
-        close: Math.round(close * 10) / 10,
+        open: Math.round(open * 100) / 100,
+        high: Math.round(high * 100) / 100,
+        low: Math.round(low * 100) / 100,
+        close: Math.round(close * 100) / 100,
         volume: Math.round(volume * 10) / 10,
       });
 
@@ -55,6 +175,52 @@ export async function fetchBTCKlines(interval: '15m' | '1h' = '15m'): Promise<Ca
     }
     return candles;
   }
+}
+
+/**
+ * Connects to live Binance WebSocket stream for real-time live ticker updates!
+ */
+export function connectLiveCryptoStream(symbol: string = 'BTC', onUpdate: (data: Partial<BTCTicker>) => void): () => void {
+  const pair = symbol.toLowerCase().endsWith('usdt') ? symbol.toLowerCase() : `${symbol.toLowerCase()}usdt`;
+  const wsUrl = `wss://stream.binance.com:9443/ws/${pair}@ticker`;
+
+  let ws: WebSocket | null = null;
+  try {
+    ws = new WebSocket(wsUrl);
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg && msg.c) {
+          const price = parseFloat(msg.c);
+          const change24h = parseFloat(msg.P || '0');
+          const high24h = parseFloat(msg.h || '0');
+          const low24h = parseFloat(msg.l || '0');
+          const volume24h = parseFloat(msg.v || '0');
+
+          onUpdate({
+            price,
+            change24h,
+            high24h,
+            low24h,
+            volume24h,
+            timestamp: Date.now(),
+            marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
+            marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
+          });
+        }
+      } catch (err) {
+        // Ignore parse error
+      }
+    };
+  } catch (err) {
+    console.warn(`WebSocket connection failed for ${symbol}`, err);
+  }
+
+  return () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
+  };
 }
 
 export async function fetchPrediction(

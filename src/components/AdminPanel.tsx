@@ -51,7 +51,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
                 <ShieldCheck className="w-4 h-4 text-purple-400" />
                 ADMIN VAULT CONTROL CENTER
               </span>
-              <span className="text-purple-300/50 text-xs">Only authorized platform admins</span>
+              <span className="text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 text-xs font-bold">
+                Master Admin: vixyvault0@gmail.com
+              </span>
             </div>
             <h2 className="text-2xl font-black font-mono text-white tracking-tight">VIXY'S VAULT SaaS Telemetry & Management</h2>
             <p className="text-purple-300/60 text-xs mt-1 font-sans">

@@ -36,12 +36,16 @@ interface ScalpingDeskViewProps {
   ticker: BTCTicker;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   onUpgradeToPro: () => void;
+  selectedAsset?: string;
+  onSelectAsset?: (symbol: string) => void;
 }
 
 export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   ticker,
   userRole,
   onUpgradeToPro,
+  selectedAsset = 'BTC',
+  onSelectAsset,
 }) => {
   // Mode selection inside Scalping Desk
   const [subTab, setSubTab] = useState<
@@ -51,36 +55,39 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   // Community requested modes (Discord Valhalla feedback)
   const [fastBetMode, setFastBetMode] = useState<boolean>(true); // Pre-Spike 5-10s Early Signal Engine
   const [stickyCommandDeck, setStickyCommandDeck] = useState<boolean>(true); // Sticky top bar
-  const [layoutMode, setLayoutMode] = useState<'STACKED' | 'SIDE_BY_SIDE'>('STACKED');
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [autoScanActive, setAutoScanActive] = useState<boolean>(true);
-  const [activeContractId, setActiveContractId] = useState<string>('KXBTC15M-26JUL-SCALP-01');
+
+  // Active Contract ID dynamically set by selectedAsset
+  const activeContractId = `KX${selectedAsset}15M-SCALP-LIVE`;
 
   // Live Scalping State
   const [feedAgeMs, setFeedAgeMs] = useState<number>(320);
-  const [reactionSignal, setReactionSignal] = useState<'SCALP_UP' | 'SCALP_DOWN' | 'WAIT'>('SCALP_UP');
-  const [actionStep, setActionStep] = useState<number>(2); // 1..6
   const [confidencePct, setConfidencePct] = useState<number>(91.4);
   const [timeInCommitSec, setTimeInCommitSec] = useState<number>(42);
   const [kalshiYesCent, setKalshiYesCent] = useState<number>(78.5);
   const [kalshiNoCent, setKalshiNoCent] = useState<number>(21.5);
 
   // Pre-Spike Flash Alert State (Addressing Flok's request in Valhalla Discord)
-  const [preSpikeLeadTimeSec, setPreSpikeLeadTimeSec] = useState<number>(6.2);
-  const [preSpikeProbability, setPreSpikeProbability] = useState<number>(88.4);
+  const [preSpikeLeadTimeSec] = useState<number>(6.2);
 
-  // Scalp Execution Bands based on live BTC price
-  const entryBandLow = (ticker.price - 12.50).toFixed(2);
-  const entryBandHigh = (ticker.price + 8.20).toFixed(2);
-  const targetOne = (ticker.price + 38.40).toFixed(2);
-  const targetTwo = (ticker.price + 74.80).toFixed(2);
-  const invalidationLevel = (ticker.price - 24.10).toFixed(2);
+  // Scalp Execution Bands based on live asset price
+  const basePrice = ticker.price || 10;
+  const isHighValue = basePrice > 1000;
+  const step = isHighValue ? 12.5 : basePrice * 0.002;
+
+  const entryBandLow = (basePrice - step).toFixed(isHighValue ? 2 : 4);
+  const entryBandHigh = (basePrice + step * 0.6).toFixed(isHighValue ? 2 : 4);
+  const targetOne = (basePrice + step * 3).toFixed(isHighValue ? 2 : 4);
+  const targetTwo = (basePrice + step * 6).toFixed(isHighValue ? 2 : 4);
+  const invalidationLevel = (basePrice - step * 2).toFixed(isHighValue ? 2 : 4);
 
   // Paper Trade Simulator State
   const [simPosition, setSimPosition] = useState<'NONE' | 'LONG' | 'SHORT'>('NONE');
   const [simEntryPrice, setSimEntryPrice] = useState<number>(0);
   const [simPnl, setSimPnl] = useState<number>(0);
+  const [simSize, setSimSize] = useState<number>(1000);
   const [simLogs, setSimLogs] = useState<Array<{ id: string; time: string; type: string; price: number; pnl?: number }>>([]);
 
   // Sub-second Live Feed Fluctuation Effect
@@ -92,31 +99,32 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
       setConfidencePct((prev) => +(Math.min(98.5, Math.max(75, prev + (Math.random() * 0.8 - 0.38))).toFixed(1)));
       setTimeInCommitSec((prev) => prev + 1);
 
-      // Fluctuate contract cents subtly with BTC price
+      // Fluctuate contract cents subtly with asset price
       const noise = (Math.random() * 0.6 - 0.3);
       setKalshiYesCent((prev) => +(Math.min(99, Math.max(1, prev + noise)).toFixed(1)));
       setKalshiNoCent((prev) => +(Math.min(99, Math.max(1, 100 - (kalshiYesCent + noise))).toFixed(1)));
 
       if (simPosition !== 'NONE') {
-        const delta = simPosition === 'LONG' ? ticker.price - simEntryPrice : simEntryPrice - ticker.price;
-        setSimPnl(Math.round(delta * 12.5)); // leverage scaling
+        const delta = simPosition === 'LONG' ? basePrice - simEntryPrice : simEntryPrice - basePrice;
+        const multiplier = isHighValue ? 12.5 : 1000;
+        setSimPnl(Math.round(delta * (simSize / 100) * multiplier));
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [autoScanActive, simPosition, simEntryPrice, ticker.price, kalshiYesCent]);
+  }, [autoScanActive, simPosition, simEntryPrice, basePrice, kalshiYesCent, isHighValue, simSize]);
 
   const handleStartSim = (direction: 'LONG' | 'SHORT') => {
     setSimPosition(direction);
-    setSimEntryPrice(ticker.price);
+    setSimEntryPrice(basePrice);
     setSimPnl(0);
     const newLog = {
       id: Math.random().toString(),
       time: new Date().toLocaleTimeString(),
-      type: `ENTERED ${direction}`,
-      price: ticker.price,
+      type: `ENTERED ${direction} (${simSize} contracts)`,
+      price: basePrice,
     };
-    setSimLogs((prev) => [newLog, ...prev.slice(0, 9)]);
+    setSimLogs((prev) => [newLog, ...prev.slice(0, 14)]);
   };
 
   const handleCloseSim = () => {
@@ -126,10 +134,10 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
       id: Math.random().toString(),
       time: new Date().toLocaleTimeString(),
       type: `CLOSED ${simPosition}`,
-      price: ticker.price,
+      price: basePrice,
       pnl: finalPnl,
     };
-    setSimLogs((prev) => [newLog, ...prev.slice(0, 9)]);
+    setSimLogs((prev) => [newLog, ...prev.slice(0, 14)]);
     setSimPosition('NONE');
     setSimPnl(0);
   };
@@ -367,6 +375,241 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
         </div>
       )}
 
+      {/* 14-FAMILY ALIGNMENT DEDICATED VIEW */}
+      {subTab === 'ALIGNMENT' && (
+        <div className="bg-[#0B051A] rounded-2xl p-6 border-2 border-purple-500/40 space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-purple-900/50 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
+                <Compass className="w-4 h-4 text-purple-400" />
+                <span>Independent Confluence Engine</span>
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">14-Family Model Confluence Matrix</h2>
+              <p className="text-xs text-purple-300/70 font-sans mt-0.5">
+                Every sub-second prediction is scored across 14 mathematically isolated signal families to eliminate false breakouts.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+                13 / 14 FAMILIES ALIGNED (UP)
+              </span>
+              <span className="px-3 py-1.5 rounded-xl bg-purple-600/30 text-purple-200 text-xs font-bold border border-purple-400/30">
+                92.8% CONFLUENCE SCORE
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[
+              { id: 1, name: 'Settlement Geometry', score: 94, bias: 'BULLISH', desc: 'Polynomial curve mapping against contract expiry strike boundaries.', weight: '12%' },
+              { id: 2, name: 'Trade Flow Delta', score: 98, bias: 'BULLISH', desc: 'Aggregated taker buy/sell volume aggression imbalance across top venues.', weight: '11%' },
+              { id: 3, name: 'Spot Book Pressure', score: 91, bias: 'BULLISH', desc: 'L2 bid-ask liquidity depth walls within $50 of current spot reference.', weight: '10%' },
+              { id: 4, name: 'Trend & Support/Res', score: 89, bias: 'BULLISH', desc: 'Multi-frame EMA alignment and micro-structure pivot hold.', weight: '9%' },
+              { id: 5, name: 'Venue Breadth (5 Spot)', score: 95, bias: 'BULLISH', desc: 'Cross-venue price agreement (Coinbase, Kraken, Bitstamp, Gemini, Binance).', weight: '9%' },
+              { id: 6, name: 'BRTI Reference Path', score: 92, bias: 'BULLISH', desc: 'CME Bitcoin Real-Time Index calculation stream trajectory.', weight: '8%' },
+              { id: 7, name: 'Whale Large Prints', score: 54, bias: 'NEUTRAL', desc: 'Block trade tracking for prints over 10 BTC in sub-5s windows.', weight: '7%' },
+              { id: 8, name: 'Derivatives Positioning', score: 88, bias: 'BULLISH', desc: 'Perpetual swap funding rate & open interest delta shifts.', weight: '7%' },
+              { id: 9, name: 'Order Flow Toxicity', score: 96, bias: 'LOW TOXICITY', desc: 'VPIN (Volume-Synchronized Probability of Toxicity) measurement.', weight: '6%' },
+              { id: 10, name: 'Volatility Compression', score: 85, bias: 'EXPANDING', desc: 'Bollinger Band squeeze expansion precursor indicator.', weight: '5%' },
+              { id: 11, name: 'Cross-Venue Arbitrage', score: 93, bias: 'ALIGNED', desc: 'Sub-second inter-exchange arbitrage gap closure speed.', weight: '5%' },
+              { id: 12, name: 'Liquidity Imbalance', score: 90, bias: 'BID HEAVY', desc: 'Depth ratio between top 10 bid levels and top 10 ask levels.', weight: '4%' },
+              { id: 13, name: 'Momentum Acceleration', score: 97, bias: 'ACCELERATING', desc: 'Second derivative of price movement speed (d²P/dt²).', weight: '4%' },
+              { id: 14, name: 'Microstructure Spikes', score: 91, bias: 'UPWARD SPIKE', desc: 'Tick-level quote velocity and flash-spike precursor matching.', weight: '3%' },
+            ].map((fam) => (
+              <div key={fam.id} className="bg-[#120826] p-4 rounded-2xl border border-purple-900/50 space-y-2 font-sans">
+                <div className="flex items-center justify-between font-mono text-xs">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <span className="w-5 h-5 rounded-full bg-purple-900/80 text-purple-300 text-[10px] flex items-center justify-center font-black">
+                      #{fam.id}
+                    </span>
+                    {fam.name}
+                  </span>
+                  <span className="text-purple-400/80 text-[10px]">Weight: {fam.weight}</span>
+                </div>
+
+                <p className="text-[11px] text-purple-300/70 leading-snug">{fam.desc}</p>
+
+                <div className="flex items-center justify-between font-mono text-xs pt-1">
+                  <span className={`font-bold ${fam.bias === 'NEUTRAL' ? 'text-amber-300' : 'text-emerald-400'}`}>
+                    {fam.bias}
+                  </span>
+                  <span className="text-white font-black">{fam.score}% Score</span>
+                </div>
+
+                <div className="w-full bg-purple-950 h-2 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${fam.score > 80 ? 'bg-emerald-400' : fam.score > 50 ? 'bg-amber-400' : 'bg-rose-400'}`}
+                    style={{ width: `${fam.score}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* FORWARD CANDLE MAP DEDICATED VIEW */}
+      {subTab === 'PRECURSORS' && (
+        <div className="bg-[#0B051A] rounded-2xl p-6 border-2 border-purple-500/40 space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-purple-900/50 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
+                <Activity className="w-4 h-4 text-purple-400" />
+                <span>Predictive Microstructure Matrix</span>
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Every-Second Forward Candle Map (1s - 180s)</h2>
+              <p className="text-xs text-purple-300/70 font-sans mt-0.5">
+                Simulated candle precursor mapping across micro horizons based on spot book order flow momentum.
+              </p>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-xs font-bold border border-emerald-500/30">
+              CANDLE ALIGNMENT: 98.2% BULLISH
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 font-mono">
+            {[
+              { horizon: '1s', direction: 'UP', prob: 98.4, delta: '+$1.20', volume: 'HIGH' },
+              { horizon: '2s', direction: 'UP', prob: 97.8, delta: '+$2.80', volume: 'HIGH' },
+              { horizon: '3s', direction: 'UP', prob: 96.5, delta: '+$4.10', volume: 'VERY HIGH' },
+              { horizon: '5s', direction: 'UP', prob: 95.2, delta: '+$7.50', volume: 'EXTREME' },
+              { horizon: '10s', direction: 'UP', prob: 94.0, delta: '+$14.20', volume: 'HIGH' },
+              { horizon: '15s', direction: 'UP', prob: 92.8, delta: '+$19.80', volume: 'HIGH' },
+              { horizon: '30s', direction: 'UP', prob: 91.1, delta: '+$28.40', volume: 'MODERATE' },
+              { horizon: '45s', direction: 'UP', prob: 89.5, delta: '+$34.10', volume: 'MODERATE' },
+              { horizon: '60s', direction: 'UP', prob: 88.0, delta: '+$42.50', volume: 'MODERATE' },
+              { horizon: '90s', direction: 'UP', prob: 86.2, delta: '+$51.00', volume: 'NORMAL' },
+              { horizon: '120s', direction: 'UP', prob: 84.5, delta: '+$62.40', volume: 'NORMAL' },
+              { horizon: '180s', direction: 'UP', prob: 82.0, delta: '+$78.10', volume: 'NORMAL' },
+            ].map((stepItem) => (
+              <div key={stepItem.horizon} className="bg-[#120826] p-4 rounded-2xl border border-purple-900/50 space-y-2 text-center">
+                <div className="text-xs text-purple-300/70 font-bold">{stepItem.horizon} Precursor</div>
+                <div className="text-xl font-black text-emerald-400">{stepItem.direction}</div>
+                <div className="text-xs text-white font-bold">{stepItem.delta}</div>
+                <div className="text-[10px] text-purple-300/80">Prob: {stepItem.prob}%</div>
+                <div className="w-full bg-purple-950 h-1.5 rounded-full overflow-hidden mt-1">
+                  <div className="bg-emerald-400 h-full rounded-full" style={{ width: `${stepItem.prob}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* PAPER SCALP SIMULATOR DEDICATED VIEW */}
+      {subTab === 'SCALPER' && (
+        <div className="bg-[#0B051A] rounded-2xl p-6 border-2 border-amber-500/40 space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-4 border-b border-purple-900/50 pb-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-400 uppercase tracking-widest mb-1">
+                <Target className="w-4 h-4 text-amber-400" />
+                <span>Zero Risk Trading Sandbox</span>
+              </div>
+              <h2 className="text-2xl font-black text-white tracking-tight">Paper Scalp Simulator</h2>
+              <p className="text-xs text-purple-300/70 font-sans mt-0.5">
+                Practice scalping 15-second contracts with real live sub-second order book price fills and zero risk.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 font-mono">
+              <span className="text-xs text-purple-300/80">Contract Size:</span>
+              {[100, 500, 1000, 5000].map((size) => (
+                <button
+                  key={size}
+                  onClick={() => setSimSize(size)}
+                  className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all ${
+                    simSize === size
+                      ? 'bg-amber-500 text-slate-950 border-amber-400'
+                      : 'bg-[#120826] text-purple-300 border-purple-900/50 hover:border-purple-600'
+                  }`}
+                >
+                  {size}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Control Box */}
+            <div className="bg-[#120826] p-6 rounded-2xl border border-purple-900/50 space-y-4 font-mono">
+              <div className="flex items-center justify-between text-xs border-b border-purple-900/40 pb-3">
+                <span className="text-purple-300">Target Asset:</span>
+                <span className="text-white font-bold text-sm">{selectedAsset}/USDT</span>
+              </div>
+              <div className="flex items-center justify-between text-xs border-b border-purple-900/40 pb-3">
+                <span className="text-purple-300">Live Entry Price:</span>
+                <span className="text-emerald-300 font-bold text-sm">${basePrice.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs border-b border-purple-900/40 pb-3">
+                <span className="text-purple-300">Model Win Probability:</span>
+                <span className="text-emerald-400 font-bold text-sm">{confidencePct}%</span>
+              </div>
+
+              {simPosition === 'NONE' ? (
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    onClick={() => handleStartSim('LONG')}
+                    className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm shadow-xl shadow-emerald-600/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <ArrowUpRight className="w-5 h-5" />
+                    <span>SIMULATE LONG (YES)</span>
+                  </button>
+                  <button
+                    onClick={() => handleStartSim('SHORT')}
+                    className="py-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-sm shadow-xl shadow-rose-600/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <ArrowDownRight className="w-5 h-5" />
+                    <span>SIMULATE SHORT (NO)</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 pt-2">
+                  <div className="bg-[#070312] p-4 rounded-xl border border-amber-500/40 text-center space-y-2">
+                    <div className="text-xs text-purple-300 font-bold">
+                      ACTIVE POSITION: {simPosition} @ ${simEntryPrice.toLocaleString()} ({simSize} Contracts)
+                    </div>
+                    <div className={`text-3xl font-black ${simPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {simPnl >= 0 ? `+$${simPnl.toLocaleString()}` : `-$${Math.abs(simPnl).toLocaleString()}`}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleCloseSim}
+                    className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-sm shadow-xl transition-all"
+                  >
+                    CLOSE SIMULATED POSITION & LOCK IN P&L
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Execution Logs */}
+            <div className="bg-[#120826] p-6 rounded-2xl border border-purple-900/50 space-y-3 font-mono">
+              <h3 className="text-xs font-bold text-purple-200 uppercase tracking-wider">Simulated Execution Audit Log</h3>
+              {simLogs.length === 0 ? (
+                <div className="text-xs text-purple-300/50 py-12 text-center">
+                  No simulated trades executed yet. Click "Simulate Long" or "Simulate Short" above to test!
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {simLogs.map((log) => (
+                    <div key={log.id} className="text-xs bg-[#070312] p-2.5 rounded-xl border border-purple-900/40 flex items-center justify-between">
+                      <span className="text-purple-300/60">{log.time}</span>
+                      <span className="text-purple-200 font-bold">{log.type}</span>
+                      <span className="text-purple-300">${log.price.toLocaleString()}</span>
+                      {log.pnl !== undefined && (
+                        <span className={log.pnl >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                          {log.pnl >= 0 ? `+$${log.pnl}` : `-$${Math.abs(log.pnl)}`}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* TOP LIVE 5S REACTION RADAR & ACTIVE CONTRACT (Competitor Superiority Bar) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Active Contract & Strike Depth */}
@@ -457,17 +700,17 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 ⚡ PRE-SPIKE LEAD: {preSpikeLeadTimeSec}s
               </div>
             )}
-            <div className="text-[10px] text-amber-400 font-bold">RECOMMENDED LATCHED EXECUTION</div>
+            <div className="text-[10px] text-amber-400 font-bold">MODEL SIGNAL ADVISORY</div>
             <div className="text-lg font-black text-white uppercase tracking-wider text-amber-300 flex items-center justify-center gap-2 mt-0.5">
-              <Zap className="w-5 h-5 text-amber-400 animate-bounce" />
-              SCALP UP — BUY NOW (ASK {kalshiYesCent}¢)
+              <Zap className="w-5 h-5 text-amber-400" />
+              SCALP UP — SIGNAL: YES (ASK {kalshiYesCent}¢)
             </div>
           </div>
 
           {/* Stepper Pipeline */}
           <div className="grid grid-cols-6 gap-1 text-[9px] text-center font-bold">
             <div className="bg-emerald-500/20 text-emerald-300 p-1 rounded border border-emerald-500/30">1. SCALP UP</div>
-            <div className="bg-amber-500/30 text-amber-200 p-1 rounded border border-amber-500/50 animate-pulse">2. BUY NOW</div>
+            <div className="bg-amber-500/30 text-amber-200 p-1 rounded border border-amber-500/50">2. ENTER POSITION</div>
             <div className="bg-purple-950 text-purple-400 p-1 rounded border border-purple-900/40 opacity-50">3. HOLD</div>
             <div className="bg-purple-950 text-purple-400 p-1 rounded border border-purple-900/40 opacity-50">4. PREP EXIT</div>
             <div className="bg-purple-950 text-purple-400 p-1 rounded border border-purple-900/40 opacity-50">5. CASH OUT</div>

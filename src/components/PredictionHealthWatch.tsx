@@ -167,7 +167,7 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
               {appMode === 'SIMPLE' ? 'Fake Order / Scam Check' : 'Spoofing / Wash Risk'}
             </span>
             <span className="text-emerald-400 font-bold text-[10px] bg-emerald-500/20 px-1.5 py-0.2 rounded border border-emerald-500/30">
-              LOW RISK
+              CLEAN LIQUIDITY
             </span>
           </div>
           <div className="text-lg font-black text-white">
@@ -254,11 +254,11 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExecuteBailOut}
-                className="bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white px-3 py-1.5 rounded-lg font-black text-xs shadow-lg shadow-rose-600/40 border border-rose-400/50 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white px-3.5 py-2 rounded-lg font-black text-xs shadow-xl shadow-rose-600/50 border border-rose-300 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer animate-pulse ring-2 ring-rose-500/40"
                 title="Immediately sell position at current bid/ask quote if setup degrades or breaks"
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-200" />
-                <span>{appMode === 'SIMPLE' ? 'CANCEL / EXIT TRADE NOW' : 'BUY OUT / EMERGENCY EXIT'}</span>
+                <AlertTriangle className="w-4 h-4 text-amber-200 animate-bounce shrink-0" />
+                <span className="font-mono tracking-wide">{appMode === 'SIMPLE' ? '🚨 CANCEL / EXIT TRADE NOW' : '🚨 EMERGENCY EXIT / BAIL OUT'}</span>
               </button>
 
               <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/40">
