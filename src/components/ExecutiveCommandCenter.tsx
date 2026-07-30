@@ -86,7 +86,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
 
   // Timeline Events ("What Changed?")
   const timelineEvents = [
-    { time: '04:03', title: 'Whale Buy Tracked', desc: 'Goliath Vault #02 swept +$2.8M in YES contracts', confDelta: '82 → 89', edgeDelta: '+7.0%' },
+    { time: '04:03', title: 'Volume Spike Tracked', desc: 'Net Volume Spike +$2.8M in YES contracts', confDelta: '82 → 89', edgeDelta: '+7.0%' },
     { time: '04:05', title: 'Order Flow Delta Flipped Positive', desc: 'Net Taker Delta shifted +1,420 BTC in 5m window', confDelta: '89 → 90', edgeDelta: '+1.5%' },
     { time: '04:08', title: 'Liquidity Sweep Completed', desc: 'Ask depth absorbed cleanly without price rejection', confDelta: '90 → 91', edgeDelta: '+2.0%' },
     { time: '04:09', title: 'Signal High Harmony Confirmed', desc: 'All 5 Confluence indicators aligned bullish', confDelta: '91% STABLE', edgeDelta: '+12.4% NET' },
@@ -559,7 +559,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold">✓</span>
-                  <span>Whale Goliath Vault #02 swept $2.8M in YES contracts.</span>
+                  <span>Net Volume Spike +$2.8M equivalent in YES contract buy flow.</span>
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-emerald-400 font-bold">✓</span>

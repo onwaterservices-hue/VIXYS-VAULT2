@@ -110,12 +110,21 @@ export interface JournalEntry {
 export interface AlertSettings {
   discordWebhook: string;
   discordEnabled: boolean;
+  discordUserId?: string;
+  discordUsername?: string;
+  discordLinked?: boolean;
+  discordSoundEnabled?: boolean;
+  discordNotificationSound?: 'discord_ping' | 'quant_chime' | 'subsecond_alert';
   telegramBotToken: string;
   telegramChatId: string;
   telegramEnabled: boolean;
   minConfidence: number; // e.g. 85%
+  minEdgePct?: number; // e.g. 5%
   minEdge: number; // e.g. 5%
-  notify1MinBeforeClose: boolean;
+  notify1MinBeforeClose?: boolean;
+  notifyNewSignal?: boolean;
+  notifyOutcome?: boolean;
+  onlyHighGrade?: boolean;
   emailAlerts: boolean;
   emailAddress: string;
 }
@@ -168,5 +177,22 @@ export interface ApiKey {
   createdAt: string;
   lastUsed: string;
   permissions: string[];
+}
+
+export interface ExchangeCredential {
+  connected: boolean;
+  apiKey: string;
+  apiSecret?: string;
+  passphraseOrWallet?: string;
+  environment: 'live' | 'paper' | 'sandbox';
+  status: 'CONNECTED' | 'DISCONNECTED' | 'TESTING';
+  latencyMs: number;
+  lastPing: string;
+}
+
+export interface ExchangeApiKeys {
+  kalshi: ExchangeCredential;
+  polymarket: ExchangeCredential;
+  draftkings: ExchangeCredential;
 }
 

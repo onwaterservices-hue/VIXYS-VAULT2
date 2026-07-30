@@ -49,11 +49,11 @@ export const PerformanceLabView: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
             <Award className="w-4 h-4 text-purple-400" />
-            <span>Audited Institutional Analytics</span>
+            <span>Historical Model Analytics & Backtests</span>
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">AI Performance Lab</h1>
           <p className="text-xs text-slate-400 font-sans mt-0.5">
-            Cryptographically verified model accuracy, expected value distribution, and Brier calibration scores.
+            Historical model accuracy, expected value distribution, and Brier calibration scores (Self-reported backtest).
           </p>
         </div>
 
@@ -78,9 +78,9 @@ export const PerformanceLabView: React.FC = () => {
       {/* Top Level Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 font-mono">
         <div className="bg-[#070410] p-4 rounded-2xl border border-slate-800 space-y-1">
-          <span className="text-[10px] text-slate-400 uppercase font-bold block">Audited Signals</span>
+          <span className="text-[10px] text-slate-400 uppercase font-bold block">Backtested Signals</span>
           <span className="text-2xl font-black text-white">{performanceStats.totalSignals.toLocaleString()}</span>
-          <span className="text-[10px] text-emerald-400 block font-bold">100% On-Chain Logs</span>
+          <span className="text-[10px] text-purple-400 block font-bold">Historical Sample</span>
         </div>
 
         <div className="bg-[#070410] p-4 rounded-2xl border border-slate-800 space-y-1">
@@ -157,15 +157,15 @@ export const PerformanceLabView: React.FC = () => {
           </div>
         </div>
 
-        {/* Audited Signal History Feed */}
+        {/* Backtested Signal History Feed */}
         <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider">
-                RECENT AUDITED SIGNAL RESOLUTIONS
+                RECENT HISTORICAL SIGNAL RESOLUTIONS
               </h3>
               <p className="text-xs text-slate-400 font-sans mt-0.5">
-                Every trade is recorded with SHA-256 state hashes.
+                Backtested trade resolution feed from OHLCV and feature history.
               </p>
             </div>
             <span className="text-xs text-slate-400 font-mono">Real-Time Log</span>

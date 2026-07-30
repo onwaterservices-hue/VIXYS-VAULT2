@@ -2,6 +2,16 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import Stripe from 'stripe';
+
+let stripeClient: Stripe | null = null;
+
+function getStripe(): Stripe | null {
+  if (!stripeClient && process.env.STRIPE_SECRET_KEY) {
+    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+  }
+  return stripeClient;
+}
 
 async function startServer() {
   const app = express();
@@ -28,7 +38,96 @@ async function startServer() {
       status: 'ok',
       timestamp: Date.now(),
       geminiConnected: !!ai,
+      stripeConnected: !!process.env.STRIPE_SECRET_KEY,
     });
+  });
+
+  // Stripe Status / Configuration Endpoint
+  app.get('/api/stripe/config', (req, res) => {
+    res.json({
+      configured: !!process.env.STRIPE_SECRET_KEY,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+    });
+  });
+
+  // Stripe Checkout Session Creation Endpoint
+  app.post('/api/stripe/create-checkout-session', async (req, res) => {
+    const { plan, interval, successUrl, cancelUrl } = req.body;
+    const stripe = getStripe();
+
+    if (!stripe) {
+      return res.status(400).json({
+        error: 'STRIPE_NOT_CONFIGURED',
+        message: 'Stripe Secret Key is not configured yet. You can provide your STRIPE_SECRET_KEY in environment secrets or use Stripe Payment Links.',
+      });
+    }
+
+    const planPrices: Record<string, { monthly: number; annual: number }> = {
+      STARTER: { monthly: 2900, annual: 2400 },
+      PRO: { monthly: 7900, annual: 6400 },
+      ELITE: { monthly: 19900, annual: 15900 },
+    };
+
+    const targetPlan = (plan || 'PRO').toUpperCase();
+    const priceInfo = planPrices[targetPlan] || planPrices.PRO;
+    const isAnnual = interval === 'annual';
+    const unitAmount = isAnnual ? priceInfo.annual * 12 : priceInfo.monthly;
+
+    try {
+      const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `VIXY'S VAULT - ${targetPlan} Tier`,
+                description: `Institutional 15m crypto prediction market intelligence (${isAnnual ? 'Annual' : 'Monthly'})`,
+              },
+              unit_amount: unitAmount,
+              recurring: {
+                interval: isAnnual ? 'year' : 'month',
+              },
+            },
+            quantity: 1,
+          },
+        ],
+        mode: 'subscription',
+        success_url: successUrl || `${origin}/?stripe_status=success&plan=${targetPlan}`,
+        cancel_url: cancelUrl || `${origin}/?stripe_status=cancelled`,
+      });
+
+      res.json({ url: session.url, sessionId: session.id });
+    } catch (err: any) {
+      console.error('Error creating Stripe checkout session:', err);
+      res.status(500).json({ error: 'STRIPE_ERROR', message: err.message });
+    }
+  });
+
+  // Stripe Webhook Endpoint
+  app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+    const sig = req.headers['stripe-signature'];
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret || !sig) {
+      return res.json({ received: true, note: 'Webhook payload received (verification skipped without webhook secret)' });
+    }
+
+    const stripe = getStripe();
+    if (!stripe) {
+      return res.status(400).send('Stripe not initialized');
+    }
+
+    try {
+      const event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+      console.log(`Stripe webhook event received: ${event.type}`);
+      // Handle checkout.session.completed, etc.
+      res.json({ received: true });
+    } catch (err: any) {
+      console.error(`Webhook Error: ${err.message}`);
+      res.status(400).send(`Webhook Error: ${err.message}`);
+    }
   });
 
   // Proxy / Fallback Binance Ticker for real live BTC prices

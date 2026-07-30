@@ -1,9 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect, useCallback } from 'react';
 import {
   Sparkles,
   TrendingUp,
   TrendingDown,
-  Eye,
   ZoomIn,
   ZoomOut,
   Maximize2,
@@ -11,6 +10,16 @@ import {
   X,
   Activity,
   Info,
+  RotateCcw,
+  ShieldCheck,
+  Zap,
+  Sliders,
+  Eye,
+  EyeOff,
+  Crosshair,
+  BarChart2,
+  Layers,
+  Flame,
 } from 'lucide-react';
 import { Candle } from '../types';
 
@@ -36,17 +45,48 @@ const THEME = {
   bg: '#0d0a1a',
   panel: '#150f28',
   border: '#2a2340',
-  bull: '#2dd4bf',
-  bear: '#f56565',
-  purple: '#8b5cf6',
-  purpleBright: '#a78bfa',
-  amber: '#f5b942',
+  bull: '#10b981', // Vivid Emerald
+  bullGlow: 'rgba(16, 185, 129, 0.25)',
+  bear: '#f43f5e', // Vivid Rose / Crimson
+  bearGlow: 'rgba(244, 63, 94, 0.25)',
+  amber: '#f59e0b', // Amber
+  purple: '#8b5cf6', // EMA9 / primary accent
+  purpleBright: '#c084fc',
+  blue: '#38bdf8', // EMA21 dashed
+  cyan: '#22d3ee', // VWAP
+  bbRibbon: 'rgba(139, 92, 246, 0.08)', // Bollinger Bands fill
   textDim: '#8b84a8',
   text: '#e5e0f5',
 };
 
-// ---------- Indicator math — all derived directly from the input data ----------
+const WIDE_BREAKPOINT = 760;
+const MIN_CANDLE_SLOT_PX = 12;
 
+// Container Width Hook
+function useContainerWidth() {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState<number>(800);
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) return;
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect && entry.contentRect.width > 0) {
+          setWidth(Math.floor(entry.contentRect.width));
+        }
+      }
+    });
+
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return { containerRef, width };
+}
+
+// Indicator Calculations
 function ema(values: number[], period: number): number[] {
   const k = 2 / (period + 1);
   const out: number[] = [];
@@ -92,82 +132,159 @@ function vwap(candles: Candle[]): number[] {
   });
 }
 
-function volumeZScore(volumes: number[], window = 20): number[] {
-  return volumes.map((v, i) => {
-    if (i < window) return 0;
-    const slice = volumes.slice(i - window, i);
-    const mean = slice.reduce((a, b) => a + b, 0) / window;
-    const variance = slice.reduce((a, b) => a + (b - mean) ** 2, 0) / window;
-    const std = Math.sqrt(variance);
-    return std === 0 ? 0 : (v - mean) / std;
-  });
+function bollingerBands(closes: number[], period = 20, multiplier = 2) {
+  const upper: (number | null)[] = [];
+  const middle: (number | null)[] = [];
+  const lower: (number | null)[] = [];
+
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      middle.push(null);
+      lower.push(null);
+    } else {
+      const slice = closes.slice(i - period + 1, i + 1);
+      const mean = slice.reduce((a, b) => a + b, 0) / period;
+      const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+      const stdDev = Math.sqrt(variance);
+      middle.push(mean);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
+    }
+  }
+  return { upper, middle, lower };
 }
 
-function isDoji(c: Candle, threshold = 0.1): boolean {
-  const range = c.high - c.low;
-  return range > 0 && Math.abs(c.close - c.open) / range < threshold;
-}
-
-export interface AnnotationItem {
+export interface ChartSignal {
   idx: number;
+  time: string;
   price: number;
-  kind: 'pattern' | 'crossover' | 'volume';
+  type: 'breakout' | 'breakdown' | 'doji' | 'doji_hold' | 'doji_reversal_bull' | 'doji_reversal_bear' | 'bb_squeeze';
   label: string;
   detail: string;
+  color: string;
+  symbol: string;
 }
 
-// ---------- Annotation building — derived strictly from stateable rules ----------
+function buildChartSignals(candles: Candle[], dataSource: string = 'mock'): ChartSignal[] {
+  const signals: ChartSignal[] = [];
 
-function buildAnnotations(
-  candles: Candle[],
-  ema9Val: number[],
-  ema21Val: number[],
-  volZ: number[]
-): AnnotationItem[] {
-  const anns: AnnotationItem[] = [];
   candles.forEach((c, i) => {
-    if (isDoji(c)) {
-      anns.push({
+    if (i < 3) return;
+
+    const windowSize = Math.min(10, i);
+    const slice = candles.slice(i - windowSize, i);
+    const trailingHigh = Math.max(...slice.map((x) => x.high));
+    const trailingLow = Math.min(...slice.map((x) => x.low));
+
+    if (c.close > trailingHigh) {
+      signals.push({
         idx: i,
+        time: String(c.time || `Bar #${i + 1}`),
         price: c.close,
-        kind: 'pattern',
-        label: `Candle #${i + 1}: Doji`,
-        detail:
-          'Open and close within 10% of high-low range — reflects indecision, not a directional directive by itself.',
+        type: 'breakout',
+        label: `Candle #${i + 1}: Resistance Break`,
+        detail: `Close ($${c.close.toFixed(1)}) crossed above 10-bar trailing resistance ($${trailingHigh.toFixed(1)}).`,
+        color: THEME.bull,
+        symbol: '▲',
+      });
+    } else if (c.close < trailingLow) {
+      signals.push({
+        idx: i,
+        time: String(c.time || `Bar #${i + 1}`),
+        price: c.close,
+        type: 'breakdown',
+        label: `Candle #${i + 1}: Support Break`,
+        detail: `Close ($${c.close.toFixed(1)}) broke below 10-bar trailing support ($${trailingLow.toFixed(1)}).`,
+        color: THEME.bear,
+        symbol: '▼',
       });
     }
-    if (i > 0 && ema9Val[i - 1] < ema21Val[i - 1] && ema9Val[i] >= ema21Val[i]) {
-      anns.push({
-        idx: i,
-        price: c.close,
-        kind: 'crossover',
-        label: `Candle #${i + 1}: EMA9 Bullish Crossover`,
-        detail:
-          'Short-term average moved above longer-term average — a commonly watched momentum shift.',
-      });
-    }
-    if (i > 0 && ema9Val[i - 1] > ema21Val[i - 1] && ema9Val[i] <= ema21Val[i]) {
-      anns.push({
-        idx: i,
-        price: c.close,
-        kind: 'crossover',
-        label: `Candle #${i + 1}: EMA9 Bearish Crossover`,
-        detail:
-          'Short-term average moved below longer-term average — a commonly watched bearish shift.',
-      });
-    }
-    if (volZ[i] > 2) {
-      anns.push({
-        idx: i,
-        price: c.close,
-        kind: 'volume',
-        label: `Candle #${i + 1}: Volume spike (z=${volZ[i].toFixed(1)})`,
-        detail:
-          'Traded volume >2 std dev above trailing 20-bar mean. Reflects feed volume delta, not identified whale entity.',
-      });
+
+    const range = c.high - c.low;
+    const isDoji = range > 0 && Math.abs(c.close - c.open) / range <= 0.10;
+
+    if (isDoji) {
+      const nearSupport =
+        Math.abs(c.close - trailingLow) / trailingLow <= 0.0015 ||
+        Math.abs(c.low - trailingLow) / trailingLow <= 0.0015;
+      const nearResistance =
+        Math.abs(c.close - trailingHigh) / trailingHigh <= 0.0015 ||
+        Math.abs(c.high - trailingHigh) / trailingHigh <= 0.0015;
+
+      const hasNext = i < candles.length - 1;
+      const nextCandle = hasNext ? candles[i + 1] : null;
+
+      if (nearSupport) {
+        if (hasNext && nextCandle && nextCandle.close > c.close) {
+          signals.push({
+            idx: i,
+            time: String(c.time || `Bar #${i + 1}`),
+            price: c.close,
+            type: 'doji_reversal_bull',
+            label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
+            detail: `Doji pause formed near support ($${trailingLow.toFixed(1)}) and next candle closed higher ($${nextCandle.close.toFixed(1)}).`,
+            color: THEME.bull,
+            symbol: '◈',
+          });
+        } else {
+          signals.push({
+            idx: i,
+            time: String(c.time || `Bar #${i + 1}`),
+            price: c.close,
+            type: 'doji_hold',
+            label:
+              dataSource === 'live' || !hasNext
+                ? `Candle #${i + 1}: Doji Hold at Support (Pending)`
+                : `Candle #${i + 1}: Doji Hold at Support`,
+            detail: `Doji indecision candle formed within 0.15% of support ($${trailingLow.toFixed(1)}). Outcome pending next bar.`,
+            color: THEME.amber,
+            symbol: '◆',
+          });
+        }
+      } else if (nearResistance) {
+        if (hasNext && nextCandle && nextCandle.close < c.close) {
+          signals.push({
+            idx: i,
+            time: String(c.time || `Bar #${i + 1}`),
+            price: c.close,
+            type: 'doji_reversal_bear',
+            label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
+            detail: `Doji pause formed near resistance ($${trailingHigh.toFixed(1)}) and next candle closed lower ($${nextCandle.close.toFixed(1)}).`,
+            color: THEME.bear,
+            symbol: '◈',
+          });
+        } else {
+          signals.push({
+            idx: i,
+            time: String(c.time || `Bar #${i + 1}`),
+            price: c.close,
+            type: 'doji_hold',
+            label:
+              dataSource === 'live' || !hasNext
+                ? `Candle #${i + 1}: Doji Hold at Resistance (Pending)`
+                : `Candle #${i + 1}: Doji Hold at Resistance`,
+            detail: `Doji indecision candle formed within 0.15% of resistance ($${trailingHigh.toFixed(1)}). Outcome pending next bar.`,
+            color: THEME.amber,
+            symbol: '◆',
+          });
+        }
+      } else {
+        signals.push({
+          idx: i,
+          time: String(c.time || `Bar #${i + 1}`),
+          price: c.close,
+          type: 'doji',
+          label: `Candle #${i + 1}: Doji Pivot`,
+          detail: `Open and close within 10% of total bar range ($${range.toFixed(1)}). Indecision inside range.`,
+          color: THEME.amber,
+          symbol: '◇',
+        });
+      }
     }
   });
-  return anns;
+
+  return signals;
 }
 
 export const CandleChart: React.FC<CandleChartProps> = ({
@@ -180,23 +297,45 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   dataSource = 'mock',
   modelSignal,
 }) => {
-  const [mode, setMode] = useState<'beginner' | 'pro'>('beginner');
-  const [hoveredAnnIdx, setHoveredAnnIdx] = useState<number | null>(null);
-  const [hoveredCandle, setHoveredCandle] = useState<Candle | null>(null);
+  const { containerRef, width: measuredWidth } = useContainerWidth();
+  const [hoveredSignalIdx, setHoveredSignalIdx] = useState<number | null>(null);
+  const [hoveredCandleIndex, setHoveredCandleIndex] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
-  if (!candles || candles.length === 0) {
-    return (
-      <div className="h-72 bg-[#0d0a1a] rounded-2xl border border-[#2a2340] flex items-center justify-center text-[#8b84a8] font-mono text-xs">
-        Loading {timeframe} Candlestick Data Feed...
-      </div>
-    );
-  }
+  // Indicator Toggles
+  const [showEMA, setShowEMA] = useState<boolean>(true);
+  const [showVWAP, setShowVWAP] = useState<boolean>(true);
+  const [showBollinger, setShowBollinger] = useState<boolean>(true);
+  const [showSRLevels, setShowSRLevels] = useState<boolean>(true);
+  const [showSignals, setShowSignals] = useState<boolean>(true);
+  const [showRSI, setShowRSI] = useState<boolean>(true);
+  const [showCrosshair, setShowCrosshair] = useState<boolean>(true);
 
-  // Handle zoom slicing
-  const visibleCount = Math.max(8, Math.round(candles.length / zoomLevel));
-  const visibleCandles = candles.slice(candles.length - visibleCount);
+  // Mouse Crosshair Position State
+  const [crosshairPos, setCrosshairPos] = useState<{ x: number; y: number; price: number; timeLabel: string } | null>(null);
+
+  const isWide = measuredWidth >= WIDE_BREAKPOINT;
+  const sidePanelWidth = isWide ? 260 : 0;
+  const paddingX = 32;
+  const chartSvgWidth = Math.max(300, measuredWidth - sidePanelWidth - paddingX);
+
+  const safeCandles = candles || [];
+  const rawVisibleCount =
+    safeCandles.length > 0 ? Math.max(6, Math.round(safeCandles.length / zoomLevel)) : 0;
+
+  const marginLeft = 65;
+  const marginRight = 80; // Extra room for right Y-axis tags & target badges
+  const plotWidth = Math.max(100, chartSvgWidth - marginLeft - marginRight);
+
+  const maxFitCandles = Math.max(6, Math.floor(plotWidth / MIN_CANDLE_SLOT_PX));
+  const autoThinned = rawVisibleCount > maxFitCandles;
+  const visibleCount = Math.min(rawVisibleCount, maxFitCandles);
+
+  const visibleCandles = useMemo(
+    () => safeCandles.slice(Math.max(0, safeCandles.length - visibleCount)),
+    [safeCandles, visibleCount]
+  );
 
   const activeSignal: ModelSignalInfo = modelSignal || {
     direction: predictedDirection,
@@ -205,28 +344,52 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     n: 120,
   };
 
-  const closes = visibleCandles.map((c) => c.close);
-  const volumes = visibleCandles.map((c) => c.volume);
+  const closes = useMemo(() => visibleCandles.map((c) => c.close), [visibleCandles]);
+  const volumes = useMemo(() => visibleCandles.map((c) => c.volume), [visibleCandles]);
 
-  const ema9Val = useMemo(() => ema(closes, 9), [closes]);
-  const ema21Val = useMemo(() => ema(closes, 21), [closes]);
-  const vwapLine = useMemo(() => vwap(visibleCandles), [visibleCandles]);
-  const rsiLine = useMemo(() => rsi(closes, 14), [closes]);
-  const volZ = useMemo(() => volumeZScore(volumes, 20), [volumes]);
+  // Indicator Math
+  const ema9Val = useMemo(() => (closes.length > 0 ? ema(closes, 9) : []), [closes]);
+  const ema21Val = useMemo(() => (closes.length > 0 ? ema(closes, 21) : []), [closes]);
+  const vwapLine = useMemo(() => (visibleCandles.length > 0 ? vwap(visibleCandles) : []), [visibleCandles]);
+  const rsiLine = useMemo(() => (closes.length > 0 ? rsi(closes, 14) : []), [closes]);
+  const bbData = useMemo(() => (closes.length > 0 ? bollingerBands(closes, 20, 2) : { upper: [], middle: [], lower: [] }), [closes]);
 
-  const annotations = useMemo(
-    () => buildAnnotations(visibleCandles, ema9Val, ema21Val, volZ),
-    [visibleCandles, ema9Val, ema21Val, volZ]
+  const signals = useMemo(
+    () => (visibleCandles.length > 0 ? buildChartSignals(visibleCandles, dataSource) : []),
+    [visibleCandles, dataSource]
   );
 
-  const width = 840;
-  const height = mode === 'pro' ? 520 : 340;
-  const chartHeight = mode === 'pro' ? 280 : 250;
-  const volumeHeight = mode === 'pro' ? 70 : 0;
-  const rsiHeight = mode === 'pro' ? 80 : 0;
-  const marginLeft = 60;
-  const marginRight = 16;
-  const marginTop = 16;
+  const { currentSupport, currentResistance } = useMemo(() => {
+    if (visibleCandles.length === 0) return { currentSupport: 0, currentResistance: 0 };
+    const windowSize = Math.min(10, visibleCandles.length);
+    const recent = visibleCandles.slice(visibleCandles.length - windowSize);
+    return {
+      currentSupport: Math.min(...recent.map((c) => c.low)),
+      currentResistance: Math.max(...recent.map((c) => c.high)),
+    };
+  }, [visibleCandles]);
+
+  const zoomIn = useCallback(() => setZoomLevel((z) => Math.min(z * 1.3, 3.5)), []);
+  const zoomOut = useCallback(() => setZoomLevel((z) => Math.max(z / 1.3, 0.5)), []);
+  const resetZoom = useCallback(() => setZoomLevel(1), []);
+
+  if (!candles || candles.length === 0) {
+    return (
+      <div
+        ref={containerRef}
+        className="h-72 bg-[#0d0a1a] rounded-2xl border border-[#2a2340] flex items-center justify-center text-[#8b84a8] font-mono text-xs"
+      >
+        <Activity className="w-4 h-4 animate-spin mr-2 text-purple-400" />
+        Loading {timeframe} Candlestick Data Feed...
+      </div>
+    );
+  }
+
+  const svgHeight = showRSI ? 510 : 410;
+  const chartHeight = 270;
+  const volumeHeight = 60;
+  const rsiHeight = 70;
+  const marginTop = 25;
 
   const lowPrices = visibleCandles.map((c) => c.low);
   const highPrices = visibleCandles.map((c) => c.high);
@@ -238,6 +401,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     priceMin = Math.min(priceMin, activeSignal.targetPrice);
     priceMax = Math.max(priceMax, activeSignal.targetPrice);
   }
+  if (currentSupport > 0) priceMin = Math.min(priceMin, currentSupport);
+  if (currentResistance > 0) priceMax = Math.max(priceMax, currentResistance);
   priceMin = Math.min(priceMin, refSpot);
   priceMax = Math.max(priceMax, refSpot);
 
@@ -245,7 +410,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const yMin = priceMin - pad;
   const yMax = priceMax + pad;
 
-  const plotWidth = width - marginLeft - marginRight;
   const candleSlot = plotWidth / visibleCandles.length;
   const candleWidth = Math.max(3, candleSlot * 0.65);
 
@@ -256,541 +420,865 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const maxVol = Math.max(...volumes) || 1;
   const yVol = (v: number) => (v / maxVol) * (volumeHeight - 8);
 
-  const rsiTop = marginTop + chartHeight + (mode === 'pro' ? volumeHeight + 20 : 0);
+  const rsiTop = marginTop + chartHeight + volumeHeight + 20;
   const yRsi = (v: number) => rsiTop + rsiHeight - (v / 100) * rsiHeight;
 
-  const linePath = (values: number[], yFn: (val: number) => number) =>
-    values.map((v, i) => `${i === 0 ? 'M' : 'L'} ${x(i)} ${yFn(v)}`).join(' ');
+  const linePath = (values: (number | null)[], yFn: (val: number) => number) => {
+    let started = false;
+    return values
+      .map((v, i) => {
+        if (v === null || isNaN(v)) return '';
+        const pt = `${started ? 'L' : 'M'} ${x(i)} ${yFn(v)}`;
+        started = true;
+        return pt;
+      })
+      .filter(Boolean)
+      .join(' ');
+  };
+
+  // Polygon area path for Bollinger Ribbon
+  const bbRibbonPath = () => {
+    const validPoints: { i: number; upper: number; lower: number }[] = [];
+    visibleCandles.forEach((_, i) => {
+      const u = bbData.upper[i];
+      const l = bbData.lower[i];
+      if (u !== null && l !== null) {
+        validPoints.push({ i, upper: u, lower: l });
+      }
+    });
+
+    if (validPoints.length === 0) return '';
+
+    const upperStr = validPoints.map((pt, idx) => `${idx === 0 ? 'M' : 'L'} ${x(pt.i)} ${y(pt.upper)}`).join(' ');
+    const lowerStr = validPoints
+      .slice()
+      .reverse()
+      .map((pt) => `L ${x(pt.i)} ${y(pt.lower)}`)
+      .join(' ');
+
+    return `${upperStr} ${lowerStr} Z`;
+  };
 
   const latestClose = closes[closes.length - 1] || refSpot;
+  const previousClose = closes[closes.length - 2] || latestClose;
+  const lastPriceChange = latestClose - previousClose;
+  const lastPriceChangePct = (lastPriceChange / previousClose) * 100;
 
-  const chartInner = (
-    <div
-      style={{
-        background: THEME.bg,
-        borderRadius: 16,
-        border: `1px solid ${THEME.border}`,
-        padding: 16,
-        fontFamily: "'JetBrains Mono', monospace",
-        color: THEME.text,
-      }}
-      className="shadow-2xl space-y-3"
+  // Active or hovered candle for Top HUD
+  const displayCandleIdx = hoveredCandleIndex !== null ? hoveredCandleIndex : visibleCandles.length - 1;
+  const displayCandle = visibleCandles[displayCandleIdx] || visibleCandles[visibleCandles.length - 1];
+  const displayOpen = displayCandle?.open || 0;
+  const displayHigh = displayCandle?.high || 0;
+  const displayLow = displayCandle?.low || 0;
+  const displayClose = displayCandle?.close || 0;
+  const displayVolume = displayCandle?.volume || 0;
+  const displayEma9 = ema9Val[displayCandleIdx] || 0;
+  const displayEma21 = ema21Val[displayCandleIdx] || 0;
+  const displayVwap = vwapLine[displayCandleIdx] || 0;
+  const displayRsi = rsiLine[displayCandleIdx] || 50;
+
+  // Handle SVG Mouse Navigation & Crosshair
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (!showCrosshair) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    if (
+      mouseX >= marginLeft &&
+      mouseX <= marginLeft + plotWidth &&
+      mouseY >= marginTop &&
+      mouseY <= marginTop + chartHeight + volumeHeight + 20
+    ) {
+      const relX = mouseX - marginLeft;
+      const candleIdx = Math.min(
+        visibleCandles.length - 1,
+        Math.max(0, Math.floor(relX / candleSlot))
+      );
+      const priceVal = yMax - ((mouseY - marginTop) / chartHeight) * (yMax - yMin);
+      const timeVal = String(visibleCandles[candleIdx]?.time || `Bar #${candleIdx + 1}`);
+
+      setCrosshairPos({
+        x: mouseX,
+        y: Math.min(marginTop + chartHeight, Math.max(marginTop, mouseY)),
+        price: Math.max(yMin, Math.min(yMax, priceVal)),
+        timeLabel: timeVal,
+      });
+      setHoveredCandleIndex(candleIdx);
+    } else {
+      setCrosshairPos(null);
+      setHoveredCandleIndex(null);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setCrosshairPos(null);
+    setHoveredCandleIndex(null);
+  };
+
+  const mainSvgContent = (
+    <svg
+      width={chartSvgWidth}
+      height={svgHeight}
+      className="overflow-visible select-none cursor-crosshair"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
     >
-      {/* Header controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[#2a2340]">
-        <div className="flex flex-wrap items-center gap-3 text-xs">
-          {/* Data Feed Source Badge */}
-          <span
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              fontSize: 11,
-              padding: '4px 10px',
-              borderRadius: 8,
-              background:
-                dataSource === 'live'
-                  ? 'rgba(45,212,191,0.12)'
-                  : 'rgba(245,185,66,0.12)',
-              color: dataSource === 'live' ? THEME.bull : THEME.amber,
-              border: `1px solid ${
-                dataSource === 'live'
-                  ? 'rgba(45,212,191,0.3)'
-                  : 'rgba(245,185,66,0.3)'
-              }`,
-            }}
-            title="Sample data stream from backtest database"
+      <defs>
+        {/* Subtle grid pattern */}
+        <pattern id="grid" width="40" height="20" patternUnits="userSpaceOnUse">
+          <path d="M 40 0 L 0 0 0 20" fill="none" stroke="#1f1838" strokeWidth="0.5" />
+        </pattern>
+
+        {/* RSI Gradient */}
+        <linearGradient id="rsiGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={THEME.purpleBright} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={THEME.purpleBright} stopOpacity="0.0" />
+        </linearGradient>
+
+        {/* Bullish Volume Gradient */}
+        <linearGradient id="bullVolGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={THEME.bull} stopOpacity="0.6" />
+          <stop offset="100%" stopColor={THEME.bull} stopOpacity="0.15" />
+        </linearGradient>
+
+        {/* Bearish Volume Gradient */}
+        <linearGradient id="bearVolGrad" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={THEME.bear} stopOpacity="0.6" />
+          <stop offset="100%" stopColor={THEME.bear} stopOpacity="0.15" />
+        </linearGradient>
+      </defs>
+
+      {/* Plot Background */}
+      <rect x={marginLeft} y={marginTop} width={plotWidth} height={chartHeight} fill="url(#grid)" />
+
+      {/* Bollinger Bands Fill Ribbon */}
+      {showBollinger && (
+        <>
+          <path d={bbRibbonPath()} fill={THEME.bbRibbon} stroke="none" />
+          <path d={linePath(bbData.upper, y)} fill="none" stroke={THEME.purple} strokeWidth="1" strokeDasharray="2 2" opacity="0.6" />
+          <path d={linePath(bbData.lower, y)} fill="none" stroke={THEME.purple} strokeWidth="1" strokeDasharray="2 2" opacity="0.6" />
+        </>
+      )}
+
+      {/* Support & Resistance Boundary Lines */}
+      {showSRLevels && currentSupport > 0 && (
+        <g>
+          <line
+            x1={marginLeft}
+            y1={y(currentSupport)}
+            x2={marginLeft + plotWidth}
+            y2={y(currentSupport)}
+            stroke={THEME.bull}
+            strokeWidth="1"
+            strokeDasharray="4 4"
+            strokeOpacity="0.7"
+          />
+          <text
+            x={marginLeft + 6}
+            y={y(currentSupport) - 4}
+            fill={THEME.bull}
+            fontSize="9"
+            fontWeight="bold"
           >
-            <span
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: '50%',
-                background: 'currentColor',
-              }}
-            />
-            {dataSource === 'live' ? 'Live venue feed' : 'Sample stream (Backtest)'}
-          </span>
+            SUPPORT ${currentSupport.toFixed(1)}
+          </text>
+        </g>
+      )}
 
-          <span className="text-[#8b84a8]">Spot:</span>
-          <span className="font-extrabold text-white text-sm bg-[#150f28] px-2.5 py-0.5 rounded border border-[#2a2340]">
-            ${latestClose.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
-          </span>
+      {showSRLevels && currentResistance > 0 && (
+        <g>
+          <line
+            x1={marginLeft}
+            y1={y(currentResistance)}
+            x2={marginLeft + plotWidth}
+            y2={y(currentResistance)}
+            stroke={THEME.bear}
+            strokeWidth="1"
+            strokeDasharray="4 4"
+            strokeOpacity="0.7"
+          />
+          <text
+            x={marginLeft + 6}
+            y={y(currentResistance) + 10}
+            fill={THEME.bear}
+            fontSize="9"
+            fontWeight="bold"
+          >
+            RESISTANCE ${currentResistance.toFixed(1)}
+          </text>
+        </g>
+      )}
 
-          {/* Timeframe selector if handler exists */}
-          {onTimeframeChange && (
-            <div className="flex items-center gap-1 bg-[#150f28] p-1 rounded-lg border border-[#2a2340]">
-              <button
-                onClick={() => onTimeframeChange('15M')}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                  timeframe === '15M'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-[#8b84a8] hover:text-white'
-                }`}
-              >
-                15M
-              </button>
-              <button
-                onClick={() => onTimeframeChange('1H')}
-                className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
-                  timeframe === '1H'
-                    ? 'bg-purple-600 text-white'
-                    : 'text-[#8b84a8] hover:text-white'
-                }`}
-              >
-                1H
-              </button>
-            </div>
-          )}
+      {/* Target Strike Line */}
+      {activeSignal.targetPrice && (
+        <g>
+          <line
+            x1={marginLeft}
+            y1={y(activeSignal.targetPrice)}
+            x2={marginLeft + plotWidth}
+            y2={y(activeSignal.targetPrice)}
+            stroke={THEME.amber}
+            strokeWidth="1.5"
+            strokeDasharray="6 3"
+          />
+          <rect
+            x={marginLeft + plotWidth + 4}
+            y={y(activeSignal.targetPrice) - 9}
+            width="70"
+            height="18"
+            rx="4"
+            fill="#261c08"
+            stroke={THEME.amber}
+            strokeWidth="1"
+          />
+          <text
+            x={marginLeft + plotWidth + 9}
+            y={y(activeSignal.targetPrice) + 3}
+            fill={THEME.amber}
+            fontSize="9"
+            fontWeight="bold"
+          >
+            STRIKE ${activeSignal.targetPrice.toFixed(0)}
+          </text>
+        </g>
+      )}
 
-          {/* Zoom controls */}
-          <div className="flex items-center gap-1 bg-[#150f28] p-1 rounded-lg border border-[#2a2340]">
-            <button
-              onClick={() => setZoomLevel((z) => Math.min(2.5, z + 0.25))}
-              className="p-1 rounded hover:bg-[#2a2340] text-[#8b84a8] hover:text-white"
-              title="Zoom In"
-            >
-              <ZoomIn className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setZoomLevel((z) => Math.max(1, z - 0.25))}
-              className="p-1 rounded hover:bg-[#2a2340] text-[#8b84a8] hover:text-white"
-              title="Zoom Out"
-            >
-              <ZoomOut className="w-3.5 h-3.5" />
-            </button>
-            {zoomLevel !== 1 && (
-              <button
-                onClick={() => setZoomLevel(1)}
-                className="px-1.5 py-0.5 rounded text-[9px] font-bold hover:bg-[#2a2340] text-purple-300"
-              >
-                Reset
-              </button>
+      {/* Indicator Overlay Lines */}
+      {showVWAP && (
+        <path
+          d={linePath(vwapLine, y)}
+          fill="none"
+          stroke={THEME.cyan}
+          strokeWidth="1.2"
+          strokeOpacity="0.85"
+        />
+      )}
+      {showEMA && (
+        <>
+          <path
+            d={linePath(ema21Val, y)}
+            fill="none"
+            stroke={THEME.blue}
+            strokeWidth="1.2"
+            strokeDasharray="3 3"
+          />
+          <path d={linePath(ema9Val, y)} fill="none" stroke={THEME.purpleBright} strokeWidth="1.5" />
+        </>
+      )}
+
+      {/* Candlesticks Rendering */}
+      {visibleCandles.map((c, i) => {
+        const cx = x(i);
+        const isBull = c.close >= c.open;
+        const color = isBull ? THEME.bull : THEME.bear;
+        const topY = y(Math.max(c.open, c.close));
+        const botY = y(Math.min(c.open, c.close));
+        const bodyH = Math.max(1.5, botY - topY);
+
+        const hasSignal = showSignals && signals.some((s) => s.idx === i);
+        const isHoveredSignal = hoveredSignalIdx !== null && signals[hoveredSignalIdx]?.idx === i;
+        const isHoveredCandle = hoveredCandleIndex === i;
+
+        return (
+          <g
+            key={i}
+            className="cursor-pointer"
+            onClick={() => {
+              const sigIndex = signals.findIndex((s) => s.idx === i);
+              if (sigIndex !== -1) setHoveredSignalIdx(sigIndex);
+            }}
+          >
+            {/* Highlight Pillar for hovered candle */}
+            {isHoveredCandle && (
+              <rect
+                x={cx - candleSlot / 2}
+                y={marginTop}
+                width={candleSlot}
+                height={chartHeight}
+                fill="#ffffff"
+                opacity="0.04"
+              />
             )}
-          </div>
-        </div>
 
-        {/* Mode Switcher + Fullscreen */}
-        <div className="flex items-center gap-2">
-          <div
-            style={{
-              display: 'inline-flex',
-              background: THEME.panel,
-              borderRadius: 8,
-              border: `1px solid ${THEME.border}`,
-              padding: 2,
-            }}
-          >
-            {(['beginner', 'pro'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setMode(m)}
-                style={{
-                  padding: '4px 12px',
-                  borderRadius: 6,
-                  border: 'none',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  background: mode === m ? THEME.purple : 'transparent',
-                  color: mode === m ? '#fff' : THEME.textDim,
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {m === 'beginner' ? 'Beginner Mode' : 'Pro Quant'}
-              </button>
-            ))}
-          </div>
+            {/* Wick */}
+            <line
+              x1={cx}
+              y1={y(c.high)}
+              x2={cx}
+              y2={y(c.low)}
+              stroke={color}
+              strokeWidth={isHoveredCandle ? "2" : "1"}
+              strokeOpacity="0.9"
+            />
+            {/* Body */}
+            <rect
+              x={cx - candleWidth / 2}
+              y={topY}
+              width={candleWidth}
+              height={bodyH}
+              fill={isBull ? color : THEME.bg}
+              stroke={color}
+              strokeWidth="1.2"
+              rx="1.5"
+              className="transition-all duration-100"
+            />
 
-          <button
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className="p-1.5 rounded-lg bg-[#150f28] hover:bg-[#2a2340] border border-[#2a2340] text-[#8b84a8] hover:text-white transition-all"
-            title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen Chart'}
-          >
-            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-
-      {/* Beginner plain-English read */}
-      {mode === 'beginner' && (
-        <div
-          style={{
-            background: THEME.panel,
-            border: `1px solid ${THEME.border}`,
-            borderRadius: 8,
-            padding: '10px 14px',
-            fontSize: 12,
-            lineHeight: 1.5,
-          }}
-          className="flex flex-wrap items-center justify-between gap-2"
-        >
-          <div>
-            <span style={{ color: THEME.textDim }}>Model Directional Lean: </span>
-            <span
-              style={{
-                color: activeSignal.direction === 'YES' ? THEME.bull : THEME.bear,
-                fontWeight: 800,
-                fontSize: 13,
-              }}
-            >
-              SIGNAL: {activeSignal.direction}
-            </span>
-            <span style={{ color: THEME.textDim }}>
-              {' '}&middot; Model Confidence: Math.round({Math.round(activeSignal.confidence * 100)}%)
-              {activeSignal.n && activeSignal.n < 100 && ` (n=${activeSignal.n} — early, treat as noisy)`}
-            </span>
-          </div>
-
-          <span className="text-[11px] text-[#8b84a8] flex items-center gap-1">
-            <Info className="w-3.5 h-3.5 text-purple-400" /> Single clean trend overview (EMA9)
-          </span>
-        </div>
-      )}
-
-      {/* Hover Inspection Bar */}
-      {hoveredCandle && (
-        <div className="bg-[#150f28] px-3 py-1.5 rounded-lg border border-[#2a2340] flex flex-wrap items-center gap-4 text-xs font-mono">
-          <span className="text-[#8b84a8]">Candle Detail:</span>
-          <span>O: <strong className="text-white">${hoveredCandle.open.toFixed(1)}</strong></span>
-          <span>H: <strong className="text-white">${hoveredCandle.high.toFixed(1)}</strong></span>
-          <span>L: <strong className="text-white">${hoveredCandle.low.toFixed(1)}</strong></span>
-          <span>
-            C:{' '}
-            <strong className={hoveredCandle.close >= hoveredCandle.open ? 'text-[#2dd4bf]' : 'text-[#f56565]'}>
-              ${hoveredCandle.close.toFixed(1)}
-            </strong>
-          </span>
-          <span>Vol: <strong className="text-purple-300">{hoveredCandle.volume.toFixed(1)} BTC</strong></span>
-        </div>
-      )}
-
-      {/* SVG Plot & Side Panel Layout */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start">
-        <div className="w-full flex-1 overflow-x-auto">
-          <svg width={width} height={height} className="w-full h-auto select-none">
-            {/* Price grid lines */}
-            {[0, 0.25, 0.5, 0.75, 1].map((f) => {
-              const price = yMin + f * (yMax - yMin);
-              return (
-                <g key={f}>
-                  <line
-                    x1={marginLeft}
-                    x2={width - marginRight}
-                    y1={y(price)}
-                    y2={y(price)}
-                    stroke={THEME.border}
-                    strokeDasharray="2,3"
-                  />
-                  <text
-                    x={marginLeft - 8}
-                    y={y(price) + 4}
-                    textAnchor="end"
-                    fontSize="10"
-                    fill={THEME.textDim}
-                    fontFamily="monospace"
-                  >
-                    ${price.toFixed(0)}
-                  </text>
-                </g>
-              );
-            })}
-
-            {/* Target Price Line */}
-            {activeSignal.targetPrice && (
+            {/* Signal Markers */}
+            {hasSignal && (
               <g>
-                <line
-                  x1={marginLeft}
-                  x2={width - marginRight}
-                  y1={y(activeSignal.targetPrice)}
-                  y2={y(activeSignal.targetPrice)}
-                  stroke={activeSignal.direction === 'YES' ? THEME.bull : THEME.bear}
+                <circle
+                  cx={cx}
+                  cy={isBull ? y(c.low) + 12 : y(c.high) - 12}
+                  r={isHoveredSignal ? "7" : "4.5"}
+                  fill={isHoveredSignal ? THEME.purpleBright : THEME.amber}
+                  stroke={THEME.bg}
                   strokeWidth="1.5"
-                  strokeDasharray="4 3"
+                  className={isHoveredSignal ? "animate-ping" : ""}
                 />
-                <rect
-                  x={width - marginRight - 120}
-                  y={y(activeSignal.targetPrice) - 9}
-                  width="120"
-                  height="18"
-                  rx="4"
-                  fill={activeSignal.direction === 'YES' ? '#042f2e' : '#450a0a'}
-                  stroke={activeSignal.direction === 'YES' ? THEME.bull : THEME.bear}
-                  strokeWidth="1"
+                <circle
+                  cx={cx}
+                  cy={isBull ? y(c.low) + 12 : y(c.high) - 12}
+                  r={isHoveredSignal ? "5" : "3"}
+                  fill={isHoveredSignal ? THEME.purpleBright : THEME.amber}
                 />
-                <text
-                  x={width - marginRight - 60}
-                  y={y(activeSignal.targetPrice) + 3}
-                  fill="#ffffff"
-                  fontSize="9"
-                  fontWeight="bold"
-                  textAnchor="middle"
-                  fontFamily="monospace"
-                >
-                  TARGET: ${Math.round(activeSignal.targetPrice)}
-                </text>
               </g>
             )}
+          </g>
+        );
+      })}
 
-            {/* Candlesticks */}
-            {visibleCandles.map((c, i) => {
-              const bull = c.close >= c.open;
-              const color = bull ? THEME.bull : THEME.bear;
-              const bodyTop = y(Math.max(c.open, c.close));
-              const bodyBottom = y(Math.min(c.open, c.close));
-              return (
-                <g
-                  key={i}
-                  onMouseEnter={() => setHoveredCandle(c)}
-                  onMouseLeave={() => setHoveredCandle(null)}
-                  className="cursor-pointer"
-                >
-                  <line
-                    x1={x(i)}
-                    x2={x(i)}
-                    y1={y(c.high)}
-                    y2={y(c.low)}
-                    stroke={color}
-                    strokeWidth="1"
-                  />
-                  <rect
-                    x={x(i) - candleWidth / 2}
-                    y={bodyTop}
-                    width={candleWidth}
-                    height={Math.max(1, bodyBottom - bodyTop)}
-                    fill={color}
-                  />
-                </g>
-              );
-            })}
+      {/* Live Price Tag Line */}
+      <g>
+        <line
+          x1={marginLeft}
+          y1={y(latestClose)}
+          x2={marginLeft + plotWidth}
+          y2={y(latestClose)}
+          stroke={lastPriceChange >= 0 ? THEME.bull : THEME.bear}
+          strokeWidth="1.5"
+          strokeDasharray="2 2"
+        />
+        <circle
+          cx={marginLeft + plotWidth}
+          cy={y(latestClose)}
+          r="4"
+          fill={lastPriceChange >= 0 ? THEME.bull : THEME.bear}
+          className="animate-pulse"
+        />
+        <rect
+          x={marginLeft + plotWidth + 4}
+          y={y(latestClose) - 9}
+          width="70"
+          height="18"
+          rx="4"
+          fill={lastPriceChange >= 0 ? '#064e3b' : '#881337'}
+          stroke={lastPriceChange >= 0 ? THEME.bull : THEME.bear}
+          strokeWidth="1"
+        />
+        <text
+          x={marginLeft + plotWidth + 9}
+          y={y(latestClose) + 3}
+          fill="#ffffff"
+          fontSize="9"
+          fontWeight="bold"
+        >
+          ${latestClose.toFixed(1)}
+        </text>
+      </g>
 
-            {/* EMA9 Trendline — shown in both modes */}
-            <path
-              d={linePath(ema9Val, y)}
-              stroke={THEME.purpleBright}
-              strokeWidth="1.5"
-              fill="none"
+      {/* Volume Sub-Chart */}
+      <g transform={`translate(0, ${marginTop + chartHeight + 10})`}>
+        <rect
+          x={marginLeft}
+          y="0"
+          width={plotWidth}
+          height={volumeHeight}
+          fill="none"
+          stroke="#1f1838"
+          strokeWidth="0.5"
+        />
+        <text x={marginLeft + 6} y="12" fill={THEME.textDim} fontSize="8" fontWeight="bold">
+          VOLUME (DELTA)
+        </text>
+        {visibleCandles.map((c, i) => {
+          const cx = x(i);
+          const vH = yVol(c.volume);
+          const isBull = c.close >= c.open;
+          return (
+            <rect
+              key={i}
+              x={cx - candleWidth / 2}
+              y={volumeHeight - vH}
+              width={candleWidth}
+              height={vH}
+              fill={isBull ? "url(#bullVolGrad)" : "url(#bearVolGrad)"}
+              stroke={isBull ? THEME.bull : THEME.bear}
+              strokeWidth="0.5"
+              opacity="0.8"
             />
+          );
+        })}
+      </g>
 
-            {/* Pro Quant Indicators */}
-            {mode === 'pro' && (
-              <>
-                {/* EMA21 Line */}
-                <path
-                  d={linePath(ema21Val, y)}
-                  stroke="#6ea8fe"
-                  strokeWidth="1.5"
-                  strokeDasharray="4,2"
-                  fill="none"
-                />
+      {/* RSI Sub-Chart */}
+      {showRSI && (
+        <g transform={`translate(0, 0)`}>
+          <rect
+            x={marginLeft}
+            y={rsiTop}
+            width={plotWidth}
+            height={rsiHeight}
+            fill="none"
+            stroke="#1f1838"
+            strokeWidth="0.5"
+          />
+          {/* Overbought line (70) */}
+          <line
+            x1={marginLeft}
+            y1={yRsi(70)}
+            x2={marginLeft + plotWidth}
+            y2={yRsi(70)}
+            stroke={THEME.bear}
+            strokeDasharray="2 2"
+            strokeOpacity="0.5"
+          />
+          {/* Oversold line (30) */}
+          <line
+            x1={marginLeft}
+            y1={yRsi(30)}
+            x2={marginLeft + plotWidth}
+            y2={yRsi(30)}
+            stroke={THEME.bull}
+            strokeDasharray="2 2"
+            strokeOpacity="0.5"
+          />
+          <text x={marginLeft + 6} y={rsiTop + 12} fill={THEME.textDim} fontSize="8" fontWeight="bold">
+            RSI(14)
+          </text>
+          <text x={marginLeft + plotWidth - 24} y={yRsi(70) - 2} fill={THEME.bear} fontSize="7" opacity="0.7">
+            70 OB
+          </text>
+          <text x={marginLeft + plotWidth - 24} y={yRsi(30) + 8} fill={THEME.bull} fontSize="7" opacity="0.7">
+            30 OS
+          </text>
 
-                {/* VWAP Line */}
-                <path
-                  d={linePath(vwapLine, y)}
-                  stroke={THEME.amber}
-                  strokeWidth="1.2"
-                  fill="none"
-                  opacity="0.8"
-                />
-
-                {/* Annotation markers on plot area — small dot only, details are in the side panel */}
-                {annotations.map((a, i) => (
-                  <circle
-                    key={i}
-                    cx={x(a.idx)}
-                    cy={y(a.price)}
-                    r={hoveredAnnIdx === i ? 6 : 3.5}
-                    fill={
-                      a.kind === 'pattern'
-                        ? THEME.amber
-                        : a.kind === 'volume'
-                        ? THEME.purpleBright
-                        : THEME.bull
-                    }
-                    stroke={THEME.bg}
-                    strokeWidth="1.5"
-                    style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
-                    onMouseEnter={() => setHoveredAnnIdx(i)}
-                    onMouseLeave={() => setHoveredAnnIdx(null)}
-                  />
-                ))}
-
-                {/* Volume panel */}
-                <g transform={`translate(0, ${marginTop + chartHeight + 12})`}>
-                  <line
-                    x1={marginLeft}
-                    x2={width - marginRight}
-                    y1="0"
-                    y2="0"
-                    stroke={THEME.border}
-                    strokeWidth="1"
-                  />
-                  {visibleCandles.map((c, i) => {
-                    const bull = c.close >= c.open;
-                    return (
-                      <rect
-                        key={i}
-                        x={x(i) - candleWidth / 2}
-                        y={volumeHeight - yVol(c.volume)}
-                        width={candleWidth}
-                        height={yVol(c.volume)}
-                        fill={bull ? THEME.bull : THEME.bear}
-                        opacity="0.45"
-                      />
-                    );
-                  })}
-                  <text
-                    x={marginLeft}
-                    y="12"
-                    fontSize="9"
-                    fill={THEME.textDim}
-                    fontFamily="monospace"
-                  >
-                    Volume (BTC)
-                  </text>
-                </g>
-
-                {/* RSI panel */}
-                <g>
-                  <line
-                    x1={marginLeft}
-                    x2={width - marginRight}
-                    y1={rsiTop}
-                    y2={rsiTop}
-                    stroke={THEME.border}
-                    strokeWidth="1"
-                  />
-                  <line
-                    x1={marginLeft}
-                    x2={width - marginRight}
-                    y1={yRsi(70)}
-                    y2={yRsi(70)}
-                    stroke={THEME.bear}
-                    strokeDasharray="2,3"
-                    opacity="0.4"
-                  />
-                  <line
-                    x1={marginLeft}
-                    x2={width - marginRight}
-                    y1={yRsi(30)}
-                    y2={yRsi(30)}
-                    stroke={THEME.bull}
-                    strokeDasharray="2,3"
-                    opacity="0.4"
-                  />
-                  <path
-                    d={rsiLine
-                      .map((v, i) =>
-                        v == null
-                          ? ''
-                          : `${i === 0 || rsiLine[i - 1] == null ? 'M' : 'L'} ${x(i)} ${yRsi(v)}`
-                      )
-                      .join(' ')}
-                    stroke={THEME.purpleBright}
-                    strokeWidth="1.5"
-                    fill="none"
-                  />
-                  <text
-                    x={marginLeft}
-                    y={rsiTop - 6}
-                    fontSize="10"
-                    fill={THEME.textDim}
-                    fontFamily="monospace"
-                  >
-                    RSI(14):{' '}
-                    <tspan fill={THEME.text}>
-                      {rsiLine[rsiLine.length - 1]?.toFixed(1) ?? '—'}
-                    </tspan>
-                  </text>
-                </g>
-              </>
+          {/* RSI Curve */}
+          <path
+            d={linePath(
+              rsiLine.map((r) => r ?? 50),
+              yRsi
             )}
-          </svg>
+            fill="none"
+            stroke={THEME.purpleBright}
+            strokeWidth="1.2"
+          />
+        </g>
+      )}
+
+      {/* Crosshair Overlay */}
+      {crosshairPos && (
+        <g>
+          {/* Vertical Crosshair Line */}
+          <line
+            x1={crosshairPos.x}
+            y1={marginTop}
+            x2={crosshairPos.x}
+            y2={svgHeight - 20}
+            stroke="#a78bfa"
+            strokeWidth="0.75"
+            strokeDasharray="3 3"
+            opacity="0.7"
+          />
+          {/* Horizontal Crosshair Line */}
+          <line
+            x1={marginLeft}
+            y1={crosshairPos.y}
+            x2={marginLeft + plotWidth}
+            y2={crosshairPos.y}
+            stroke="#a78bfa"
+            strokeWidth="0.75"
+            strokeDasharray="3 3"
+            opacity="0.7"
+          />
+          {/* Price Label on right axis */}
+          <rect
+            x={marginLeft + plotWidth + 4}
+            y={crosshairPos.y - 8}
+            width="70"
+            height="16"
+            rx="3"
+            fill="#3b0764"
+            stroke="#a78bfa"
+            strokeWidth="1"
+          />
+          <text
+            x={marginLeft + plotWidth + 8}
+            y={crosshairPos.y + 3}
+            fill="#ffffff"
+            fontSize="8"
+            fontWeight="bold"
+          >
+            ${crosshairPos.price.toFixed(1)}
+          </text>
+          {/* Timestamp Label at bottom */}
+          <rect
+            x={crosshairPos.x - 30}
+            y={marginTop + chartHeight + (showRSI ? volumeHeight + rsiHeight + 25 : volumeHeight + 15)}
+            width="60"
+            height="14"
+            rx="3"
+            fill="#3b0764"
+            stroke="#a78bfa"
+            strokeWidth="1"
+          />
+          <text
+            x={crosshairPos.x}
+            y={marginTop + chartHeight + (showRSI ? volumeHeight + rsiHeight + 35 : volumeHeight + 25)}
+            fill="#ffffff"
+            fontSize="8"
+            fontWeight="bold"
+            textAnchor="middle"
+          >
+            {crosshairPos.timeLabel}
+          </text>
+        </g>
+      )}
+
+      {/* Y-Axis Price Scale Labels */}
+      <g>
+        <text x={marginLeft - 8} y={y(yMax) + 8} fill={THEME.textDim} fontSize="8" textAnchor="end">
+          ${yMax.toFixed(0)}
+        </text>
+        <text
+          x={marginLeft - 8}
+          y={y((yMax + yMin) / 2)}
+          fill={THEME.textDim}
+          fontSize="8"
+          textAnchor="end"
+        >
+          ${((yMax + yMin) / 2).toFixed(0)}
+        </text>
+        <text x={marginLeft - 8} y={y(yMin) - 2} fill={THEME.textDim} fontSize="8" textAnchor="end">
+          ${yMin.toFixed(0)}
+        </text>
+      </g>
+    </svg>
+  );
+
+  const annotationPanel = (
+    <div className="flex flex-col h-full bg-[#150f28] rounded-xl border border-[#2a2340] p-3 text-xs font-mono space-y-3">
+      <div className="flex items-center justify-between border-b border-[#2a2340] pb-2">
+        <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+          <Zap className="w-3 h-3 text-amber-400" /> Pattern Detections ({signals.length})
+        </span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
+          Honest Rules
+        </span>
+      </div>
+
+      {signals.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center text-[#8b84a8] text-[11px] text-center p-4">
+          No pattern signals detected in visible range.
         </div>
-
-        {/* Annotation list panel — structurally moves labels off plot area to eliminate overlap collisions */}
-        {mode === 'pro' && (
-          <div className="w-full lg:w-60 flex-shrink-0 bg-[#150f28] rounded-xl border border-[#2a2340] p-3 space-y-2 max-h-[500px] overflow-y-auto">
-            <div className="text-[10px] font-bold text-[#8b84a8] uppercase tracking-wider flex items-center justify-between border-b border-[#2a2340] pb-2">
-              <span>Rule Annotations ({annotations.length})</span>
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            </div>
-
-            {annotations.length === 0 ? (
-              <p className="text-xs text-[#8b84a8] italic py-3 text-center">
-                No technical patterns matched mathematical detection criteria in this window.
-              </p>
-            ) : (
-              annotations.map((a, i) => (
-                <div
-                  key={i}
-                  onMouseEnter={() => setHoveredAnnIdx(i)}
-                  onMouseLeave={() => setHoveredAnnIdx(null)}
-                  style={{
-                    background:
-                      hoveredAnnIdx === i
-                        ? 'rgba(139,92,246,0.18)'
-                        : 'rgba(13,10,26,0.6)',
-                    border: `1px solid ${
-                      hoveredAnnIdx === i ? THEME.purple : THEME.border
-                    }`,
-                    borderRadius: 8,
-                    padding: '8px 10px',
-                    cursor: 'pointer',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div className="font-bold text-xs text-white mb-1 flex items-center justify-between">
-                    <span>{a.label}</span>
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{
-                        background:
-                          a.kind === 'pattern'
-                            ? THEME.amber
-                            : a.kind === 'volume'
-                            ? THEME.purpleBright
-                            : THEME.bull,
-                      }}
-                    />
-                  </div>
-                  <div className="text-[11px] text-[#8b84a8] leading-relaxed">
-                    {a.detail}
-                  </div>
+      ) : (
+        <div className="space-y-2 overflow-y-auto max-h-[380px] pr-1">
+          {signals.map((sig, sIdx) => {
+            const isSelected = hoveredSignalIdx === sIdx;
+            return (
+              <div
+                key={sIdx}
+                onClick={() => {
+                  setHoveredSignalIdx(sIdx);
+                  setHoveredCandleIndex(sig.idx);
+                }}
+                className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
+                  isSelected
+                    ? 'bg-purple-950/40 border-purple-500/50 shadow-lg ring-1 ring-purple-500/30'
+                    : 'bg-[#0d0a1a]/60 border-[#2a2340] hover:border-purple-500/30'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-bold text-[11px]" style={{ color: sig.color }}>
+                    {sig.symbol} {sig.label}
+                  </span>
+                  <span className="text-[9px] text-[#8b84a8]">{sig.time}</span>
                 </div>
-              ))
-            )}
-          </div>
+                <p className="text-[10px] text-purple-200/80 leading-relaxed">{sig.detail}</p>
+                <div className="mt-1.5 text-[9px] font-bold text-purple-300/60 flex items-center justify-between">
+                  <span>Price Level: ${sig.price.toFixed(1)}</span>
+                  <span className="text-[9px] text-teal-400">Bar #{sig.idx + 1}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
+  const controlsBar = (
+    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#150f28] rounded-xl border border-[#2a2340] font-mono text-xs mb-3">
+      {/* Timeframe selector */}
+      <div className="flex items-center gap-1">
+        {(['15M', '1H'] as const).map((tf) => (
+          <button
+            key={tf}
+            onClick={() => onTimeframeChange && onTimeframeChange(tf)}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${
+              timeframe === tf
+                ? 'bg-purple-600 text-white border-purple-400 shadow-md'
+                : 'bg-[#0d0a1a] text-[#8b84a8] border-[#2a2340] hover:text-white'
+            }`}
+          >
+            {tf}
+          </button>
+        ))}
+        {autoThinned && (
+          <span className="ml-2 text-[9px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            auto-thinned
+          </span>
         )}
       </div>
 
-      {/* Chart Footer Legend */}
-      <div className="pt-2 text-[11px] text-[#8b84a8] flex flex-wrap items-center justify-between gap-3 border-t border-[#2a2340]">
-        <div className="flex flex-wrap items-center gap-4">
-          <span className="flex items-center gap-1.5">
-            <span style={{ color: THEME.bull }}>●</span> Bullish
+      {/* Spot & Target summary */}
+      <div className="flex items-center gap-3 text-[11px]">
+        <div>
+          <span className="text-[#8b84a8]">SPOT: </span>
+          <span className="font-bold text-white">${latestClose.toFixed(1)}</span>
+          <span
+            className={`ml-1 text-[10px] font-bold ${
+              lastPriceChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
+            }`}
+          >
+            {lastPriceChange >= 0 ? '+' : ''}
+            {lastPriceChangePct.toFixed(2)}%
           </span>
-          <span className="flex items-center gap-1.5">
-            <span style={{ color: THEME.bear }}>●</span> Bearish
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span style={{ color: THEME.purpleBright }}>—</span> EMA9
-          </span>
-          {mode === 'pro' && (
-            <>
-              <span className="flex items-center gap-1.5">
-                <span style={{ color: '#6ea8fe' }}>--</span> EMA21
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span style={{ color: THEME.amber }}>—</span> VWAP
-              </span>
-            </>
+        </div>
+        {activeSignal.targetPrice && (
+          <div className="flex items-center gap-1">
+            <span className="text-[#8b84a8]">STRIKE: </span>
+            <span className="font-bold text-amber-400">${activeSignal.targetPrice.toFixed(1)}</span>
+            <span className="text-[9px] text-amber-300/70">
+              ({latestClose >= activeSignal.targetPrice ? 'Above Strike' : 'Below Strike'})
+            </span>
+          </div>
+        )}
+        <div className="hidden sm:block">
+          <span className="text-[#8b84a8]">CONF: </span>
+          <span className="font-bold text-teal-400">{(activeSignal.confidence * 100).toFixed(0)}%</span>
+        </div>
+      </div>
+
+      {/* Zoom & Controls */}
+      <div className="flex items-center gap-1">
+        <button
+          onClick={zoomIn}
+          title="Zoom In"
+          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
+        >
+          <ZoomIn className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={zoomOut}
+          title="Zoom Out"
+          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
+        >
+          <ZoomOut className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={resetZoom}
+          title="Reset Zoom"
+          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => setIsFullscreen(!isFullscreen)}
+          title="Toggle Fullscreen"
+          className="p-1.5 rounded bg-[#0d0a1a] text-purple-300 hover:text-white border border-purple-500/30 ml-1"
+        >
+          {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+
+  // Indicator Overlay Toolbar
+  const indicatorToolbar = (
+    <div className="flex flex-wrap items-center gap-2 p-2 bg-[#0d0a1a] rounded-lg border border-[#2a2340] mb-3 text-[10px] font-mono">
+      <span className="text-[#8b84a8] font-bold flex items-center gap-1 pr-1">
+        <Sliders className="w-3 h-3 text-purple-400" /> Overlays:
+      </span>
+
+      <button
+        onClick={() => setShowEMA(!showEMA)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showEMA
+            ? 'bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+        EMA 9/21
+      </button>
+
+      <button
+        onClick={() => setShowVWAP(!showVWAP)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showVWAP
+            ? 'bg-cyan-950/40 text-cyan-200 border-cyan-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+        VWAP
+      </button>
+
+      <button
+        onClick={() => setShowBollinger(!showBollinger)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showBollinger
+            ? 'bg-indigo-950/40 text-indigo-200 border-indigo-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+        Bollinger Bands
+      </button>
+
+      <button
+        onClick={() => setShowSRLevels(!showSRLevels)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showSRLevels
+            ? 'bg-teal-950/40 text-teal-200 border-teal-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+        Support/Resist
+      </button>
+
+      <button
+        onClick={() => setShowRSI(!showRSI)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showRSI
+            ? 'bg-amber-950/40 text-amber-200 border-amber-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+        RSI Subchart
+      </button>
+
+      <button
+        onClick={() => setShowCrosshair(!showCrosshair)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          showCrosshair
+            ? 'bg-slate-800 text-purple-300 border-purple-500/30 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <Crosshair className="w-3 h-3 text-purple-400" />
+        Laser Crosshair
+      </button>
+    </div>
+  );
+
+  // Top Dynamic OHLC HUD readout
+  const candleHudHeader = (
+    <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 bg-[#150f28] rounded-xl border border-[#2a2340] mb-3 font-mono text-[11px] text-purple-200/90">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-[#8b84a8] font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+          <Activity className="w-3 h-3 text-teal-400 animate-pulse" />
+          BAR READOUT:
+        </span>
+        <div>
+          <span className="text-[#8b84a8]">O: </span>
+          <span className="font-bold text-white">${displayOpen.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-[#8b84a8]">H: </span>
+          <span className="font-bold text-emerald-400">${displayHigh.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-[#8b84a8]">L: </span>
+          <span className="font-bold text-rose-400">${displayLow.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-[#8b84a8]">C: </span>
+          <span className="font-bold text-white">${displayClose.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-[#8b84a8]">VOL: </span>
+          <span className="font-bold text-purple-300">{displayVolume.toFixed(1)}</span>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-[10px]">
+        {showEMA && (
+          <div>
+            <span className="text-purple-400">EMA9: </span>
+            <span className="font-bold text-white">${displayEma9.toFixed(1)}</span>
+          </div>
+        )}
+        {showVWAP && (
+          <div>
+            <span className="text-cyan-400">VWAP: </span>
+            <span className="font-bold text-white">${displayVwap.toFixed(1)}</span>
+          </div>
+        )}
+        {showRSI && (
+          <div>
+            <span className="text-amber-400">RSI: </span>
+            <span className="font-bold text-white">{displayRsi.toFixed(1)}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const mainViewContent = (
+    <div
+      ref={containerRef}
+      className="w-full bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
+    >
+      {controlsBar}
+      {candleHudHeader}
+      {indicatorToolbar}
+
+      <div className={`grid gap-4 ${isWide ? 'grid-cols-[1fr_260px]' : 'grid-cols-1'}`}>
+        <div className="overflow-x-auto flex justify-center">{mainSvgContent}</div>
+        <div>{annotationPanel}</div>
+      </div>
+
+      {/* Legend Footer */}
+      <div className="mt-3 pt-3 border-t border-[#2a2340] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#8b84a8]">
+        <div className="flex items-center gap-3">
+          {showEMA && (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: THEME.purpleBright }} /> EMA9
+            </span>
+          )}
+          {showEMA && (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: THEME.blue }} /> EMA21
+            </span>
+          )}
+          {showVWAP && (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full" style={{ background: THEME.cyan }} /> VWAP
+            </span>
+          )}
+          {showBollinger && (
+            <span className="flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-indigo-500" /> Bollinger Bands (20,2)
+            </span>
           )}
         </div>
-
-        <div className="text-[10px] text-[#8b84a8]">
-          Hover annotation card to highlight candle position
+        <div className="flex items-center gap-1 text-purple-300/60">
+          <ShieldCheck className="w-3 h-3 text-teal-400" />
+          <span>Institutional Feed • Sub-second Live OHLC Validation</span>
         </div>
       </div>
     </div>
@@ -798,28 +1286,19 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
   if (isFullscreen) {
     return (
-      <div className="fixed inset-0 z-50 bg-[#070414]/95 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-fadeIn flex flex-col justify-between">
-        <div className="flex items-center justify-between mb-3 bg-[#150f28] p-3 rounded-2xl border border-[#2a2340]">
-          <div className="flex items-center gap-3 font-mono">
-            <span className="px-3 py-1 rounded-full bg-purple-600/30 border border-purple-400/40 text-purple-200 text-xs font-bold">
-              FULLSCREEN TERMINAL CHART
-            </span>
-            <h2 className="text-sm sm:text-base font-black text-white">
-              BTC/USDT {timeframe} PRO CANDLESTICK ENGINE
-            </h2>
-          </div>
+      <div className="fixed inset-0 z-50 bg-[#0d0a1a]/95 backdrop-blur-md p-6 overflow-y-auto flex flex-col items-center justify-center">
+        <div className="w-full max-w-6xl relative">
           <button
             onClick={() => setIsFullscreen(false)}
-            className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white transition-all border border-purple-400/50 flex items-center gap-2 text-xs font-bold shadow-lg"
+            className="absolute -top-10 right-0 p-2 rounded-lg bg-purple-600 text-white font-bold text-xs flex items-center gap-1"
           >
-            <X className="w-4 h-4" />
-            <span>CLOSE FULLSCREEN</span>
+            <X className="w-4 h-4" /> Exit Fullscreen
           </button>
+          {mainViewContent}
         </div>
-        <div className="flex-1">{chartInner}</div>
       </div>
     );
   }
 
-  return chartInner;
+  return mainViewContent;
 };

@@ -503,11 +503,11 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
             <div>
               <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-400 uppercase tracking-widest mb-1">
                 <Target className="w-4 h-4 text-amber-400" />
-                <span>Zero Risk Trading Sandbox</span>
+                <span>Simulated Paper Trading Sandbox</span>
               </div>
               <h2 className="text-2xl font-black text-white tracking-tight">Paper Scalp Simulator</h2>
               <p className="text-xs text-purple-300/70 font-sans mt-0.5">
-                Practice scalping 15-second contracts with real live sub-second order book price fills and zero risk.
+                Practice scalping 15-second contracts with real live sub-second order book price fills in a risk-free simulated sandbox.
               </p>
             </div>
 

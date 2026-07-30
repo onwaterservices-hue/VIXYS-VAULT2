@@ -11,6 +11,7 @@ import {
   AuthState,
   JournalEntry,
   ApiKey,
+  ExchangeApiKeys,
 } from './types';
 import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
@@ -27,6 +28,7 @@ import { AlertSettingsView } from './components/AlertSettingsView';
 import { SubscriptionView } from './components/SubscriptionView';
 import { AdminPanel } from './components/AdminPanel';
 import { LandingPage } from './components/LandingPage';
+import { CURRENT_DATA_SOURCE } from './utils/statGating';
 import { AuthModal } from './components/AuthModal';
 import { TradeJournalView } from './components/TradeJournalView';
 import { SettingsView } from './components/SettingsView';
@@ -223,12 +225,23 @@ export default function App() {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>({
     discordWebhook: 'https://discord.com/api/webhooks/123456789/vixy_terminal_signals',
     discordEnabled: true,
+    discordUserId: '9841203918230912',
+    discordUsername: 'QuantTrader#1337',
+    discordLinked: true,
+    discordSoundEnabled: true,
+    discordNotificationSound: 'discord_ping',
     telegramBotToken: '718293847:AAH...',
     telegramChatId: '-1001928374',
-    telegramEnabled: true,
+    telegramEnabled: false,
     minConfidence: 85,
     minEdge: 5,
+    minEdgePct: 5,
     notify1MinBeforeClose: true,
+    notifyNewSignal: true,
+    notifyOutcome: true,
+    onlyHighGrade: true,
+    emailAlerts: true,
+    emailAddress: 'trader@vixyvault.com',
   });
 
   // API Keys State
@@ -242,6 +255,36 @@ export default function App() {
       permissions: ['read', 'trade'],
     },
   ]);
+
+  // Direct Exchange API Credentials State (Elite Pass feature for Kalshi, Polymarket, DraftKings)
+  const [exchangeKeys, setExchangeKeys] = useState<ExchangeApiKeys>({
+    kalshi: {
+      connected: true,
+      apiKey: 'kalshi_sec_9810239102',
+      apiSecret: '••••••••••••••••••••••••',
+      environment: 'live',
+      status: 'CONNECTED',
+      latencyMs: 12,
+      lastPing: '2s ago',
+    },
+    polymarket: {
+      connected: true,
+      apiKey: 'poly_l2_0x892a71f02931',
+      passphraseOrWallet: '0x7129...8a19',
+      environment: 'live',
+      status: 'CONNECTED',
+      latencyMs: 18,
+      lastPing: '1s ago',
+    },
+    draftkings: {
+      connected: false,
+      apiKey: '',
+      environment: 'live',
+      status: 'DISCONNECTED',
+      latencyMs: 0,
+      lastPing: 'Never',
+    },
+  });
 
   // Trade Journal Entries
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([
@@ -391,6 +434,7 @@ export default function App() {
         setUserRole={setUserRole}
         subscription={subscription}
         authState={authState}
+        exchangeKeys={exchangeKeys}
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
         trialSeconds={trialSeconds}
@@ -424,6 +468,7 @@ export default function App() {
               onLaunchTerminal={() => setActiveTab('terminal')}
               onOpenPricing={() => setActiveTab('pricing')}
               onOpenAuth={handleOpenAuth}
+              dataSource={CURRENT_DATA_SOURCE}
             />
           )}
 
@@ -570,6 +615,8 @@ export default function App() {
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
                       selectedTimeframe={selectedTimeframe}
                       selectedVenues={selectedVenues}
+                      exchangeKeys={exchangeKeys}
+                      onOpenSettings={() => setActiveTab('settings')}
                     />
                   )}
 
@@ -655,6 +702,8 @@ export default function App() {
                       setAuthState={setAuthState}
                       apiKeys={apiKeys}
                       setApiKeys={setApiKeys}
+                      exchangeKeys={exchangeKeys}
+                      setExchangeKeys={setExchangeKeys}
                       subscription={subscription}
                       onOpenPricing={() => setActiveTab('pricing')}
                     />

@@ -16,7 +16,7 @@ import {
   BrainCircuit,
   Globe,
 } from 'lucide-react';
-import { BTCTicker, UserSubscription, AuthState } from '../types';
+import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys } from '../types';
 import { Logo } from './Logo';
 
 interface HeaderProps {
@@ -27,6 +27,7 @@ interface HeaderProps {
   setUserRole: (role: 'DEMO' | 'PRO' | 'ADMIN') => void;
   subscription: UserSubscription;
   authState: AuthState;
+  exchangeKeys?: ExchangeApiKeys;
   onOpenAuth: (mode: 'login' | 'register') => void;
   onLogout: () => void;
   trialSeconds?: number;
@@ -46,6 +47,7 @@ export const Header: React.FC<HeaderProps> = ({
   setUserRole,
   subscription,
   authState,
+  exchangeKeys,
   onOpenAuth,
   onLogout,
   trialSeconds = 10800,
@@ -204,6 +206,45 @@ export const Header: React.FC<HeaderProps> = ({
               Edge <strong className="text-emerald-300 font-extrabold">+12.2%</strong>
             </span>
           </div>
+
+          {/* Exchange API Key Feed Status Pill (Elite Pass Direct Connections) */}
+          <button
+            onClick={() => setActiveTab('settings')}
+            className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-[#130B2C] border border-amber-500/30 text-[10px] font-mono hover:border-amber-400/60 transition-all cursor-pointer"
+            title="Direct Exchange API Feed Status (Kalshi, Polymarket, DraftKings). Click to configure API Keys in Settings."
+          >
+            <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1">
+              <Zap className="w-3 h-3 text-amber-400 shrink-0" />
+              <span>EXCHANGE API:</span>
+            </span>
+            
+            <span className="flex items-center gap-1.5">
+              <span className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className={exchangeKeys?.kalshi.connected ? 'text-cyan-300 font-bold' : 'text-slate-400'}>
+                  Kalshi {exchangeKeys?.kalshi.connected ? `${exchangeKeys.kalshi.latencyMs}ms` : 'Off'}
+                </span>
+              </span>
+
+              <span className="text-purple-700">•</span>
+
+              <span className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className={exchangeKeys?.polymarket.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>
+                  Poly {exchangeKeys?.polymarket.connected ? `${exchangeKeys.polymarket.latencyMs}ms` : 'Off'}
+                </span>
+              </span>
+
+              <span className="text-purple-700">•</span>
+
+              <span className="flex items-center gap-1">
+                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.draftkings.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className={exchangeKeys?.draftkings.connected ? 'text-emerald-300 font-bold' : 'text-slate-400'}>
+                  DK {exchangeKeys?.draftkings.connected ? `${exchangeKeys.draftkings.latencyMs}ms` : 'Off'}
+                </span>
+              </span>
+            </span>
+          </button>
         </div>
 
         {/* Timezone & User Status */}

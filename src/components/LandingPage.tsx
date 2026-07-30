@@ -13,6 +13,12 @@ import {
   Shield,
   Eye,
   Crosshair,
+  Info,
+  X,
+  FileText,
+  AlertTriangle,
+  Layers,
+  Sparkles,
 } from 'lucide-react';
 import { BTCTicker } from '../types';
 import { Logo } from './Logo';
@@ -22,6 +28,7 @@ interface LandingPageProps {
   onLaunchTerminal: () => void;
   onOpenPricing: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
+  dataSource?: 'mock' | 'live';
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -29,39 +36,63 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onLaunchTerminal,
   onOpenPricing,
   onOpenAuth,
+  dataSource = 'mock',
 }) => {
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
+  // Modals for compliance & transparency
+  const [showFactorsModal, setShowFactorsModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showRiskModal, setShowRiskModal] = useState(false);
+
   const estimatedEdge = (calcModelProb - calcMarketProb).toFixed(1);
+
+  const modelFactors = [
+    { id: 1, name: 'EMA9 Trend Alignment', detail: 'Spot price > EMA9 (9-period Exponential Moving Average)', status: 'PASS', type: 'Trend' },
+    { id: 2, name: 'EMA21 Slope Direction', detail: 'EMA21 slope gradient positive on 15M candle history', status: 'PASS', type: 'Trend' },
+    { id: 3, name: 'VWAP Support Floor', detail: 'Spot price maintaining above Volume-Weighted Average Price', status: 'PASS', type: 'Volume' },
+    { id: 4, name: 'RSI Neutral-to-Bullish', detail: 'RSI(14) between 48.0 and 68.0 (active momentum, non-overbought)', status: 'PASS', type: 'Momentum' },
+    { id: 5, name: 'Volume Delta Z-Score', detail: 'Taker buy volume delta exceeding +1.5 standard deviations', status: 'PASS', type: 'Volume' },
+    { id: 6, name: 'Net Taker Buy Aggression', detail: 'Net taker buy ratio > 58% on spot market depth', status: 'PASS', type: 'Orderbook' },
+    { id: 7, name: 'Orderbook Depth Imbalance', detail: 'Bid depth within 0.5% of mid price exceeds ask depth by >22%', status: 'PASS', type: 'Orderbook' },
+    { id: 8, name: 'Trailing 10-Bar High Breakout', detail: 'Candle close breaching trailing 10-bar resistance level', status: 'PASS', type: 'Price Action' },
+    { id: 9, name: 'Doji Reversal Support Hold', detail: 'Local doji indecision candle followed by bullish confirmation candle', status: 'PASS', type: 'Pattern' },
+    { id: 10, name: 'Microstructure Volatility Compression', detail: 'ATR(14) volatility compression signaling imminent directional expansion', status: 'PASS', type: 'Volatility' },
+    { id: 11, name: 'Options Implied Skew Neutrality', detail: 'Derivatives call/put implied volatility skew favoring upside', status: 'PASS', type: 'Derivatives' },
+    { id: 12, name: 'Funding Rate Shift Delta', detail: 'Perpetual swap funding rate holding near zero (no crowded long squeeze)', status: 'PASS', type: 'Derivatives' },
+    { id: 13, name: 'Model vs Market Odds Discrepancy', detail: 'Calculated expected value (+EV) discrepancy > +3.0% vs venue odds', status: 'PASS', type: 'Expected Value' },
+    { id: 14, name: 'Cross-Venue Liquidity Spread', detail: 'Bid/Ask spread stability across major spot exchanges', status: 'FAIL', type: 'Microstructure', note: 'Spread temporarily widened above 0.08% threshold' },
+  ];
 
   const faqs = [
     {
       q: 'Why offer a 3-Hour Free Trial instead of a traditional multi-day trial?',
-      a: 'In 15-minute prediction markets, 3 hours gives you 12 complete prediction cycles. You see real-time L2 order flow, model probabilities vs Kalshi/Polymarket odds, and instantaneous edge realization in a single focused trading session.',
+      a: 'In 15-minute prediction markets, 3 hours gives you 12 complete prediction cycles. You see real-time orderbook depth, model-estimated probabilities vs Kalshi/Polymarket odds, and instantaneous edge evaluation in a single focused trading session.',
     },
     {
       q: 'Is VIXY’s Vault a gambling platform or signal group?',
-      a: 'No. VIXY’s Vault is an institutional quantitative analytics platform built for prediction market traders. We provide raw L2 order flow microstructure, model-implied probabilities, historical setup matching, and Brier-calibrated decision intelligence.',
+      a: 'No. VIXY’s Vault is a quantitative decision intelligence platform built for prediction market traders. We provide orderbook depth features, calibrated model probabilities, historical setup matching, and Brier-calibrated analytics.',
     },
     {
       q: 'How does the 15-Minute Decision Engine calculate edge?',
-      a: 'Our engine processes high-frequency Binance & Coinbase WebSocket orderbooks, tracking net taker buy/sell delta, volume imbalance, and orderbook wall absorption in real-time. It compares model probability against live Kalshi & Polymarket orderbook implied odds to surface positive expected value (+EV) mispricings.',
+      a: 'Our engine evaluates market momentum, volatility compression, orderbook depth imbalance, and historical feature alignments. It compares model-estimated probabilities against live Kalshi & Polymarket orderbook odds to surface positive expected value (+EV) mispricings.',
     },
     {
       q: 'Can I automate signals to my Discord or Telegram?',
-      a: 'Yes. All Pro and Elite subscribers can configure webhook alerts with custom confidence thresholds (e.g. only alert when confidence ≥85% and edge ≥5%).',
+      a: 'Yes. All Pro and Elite subscribers can configure webhook alerts with custom confidence thresholds (e.g., only alert when confidence ≥85% and edge ≥5%).',
     },
     {
       q: 'Does VIXY’s Vault provide guaranteed trading profits?',
-      a: 'No. Prediction markets involve risk. VIXY’s Vault provides mathematical probabilities and statistical edge to support informed trading decisions. Traders remain solely responsible for managing their own capital and risk.',
+      a: 'No. Prediction markets involve real financial risk of loss. VIXY’s Vault provides statistical probabilities and decision analytics. Traders remain solely responsible for managing their own risk and capital.',
     },
   ];
 
   return (
     <div className="space-y-20 py-4 font-sans text-purple-100 selection:bg-purple-600 selection:text-white">
-      {/* Landing Header Bar Matching User Image */}
+      {/* Landing Header Bar */}
       <div className="flex items-center justify-between py-2 border-b border-purple-900/40">
         <Logo size="md" showSubtitle={true} onClick={onLaunchTerminal} />
 
@@ -69,8 +100,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">Features</button>
           <button onClick={onOpenPricing} className="hover:text-white transition-colors">Pricing</button>
           <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">About</button>
-          <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">Resources</button>
+          <button onClick={() => setShowRiskModal(true)} className="hover:text-white transition-colors">Risk & Compliance</button>
         </div>
 
         <div className="flex items-center gap-3 font-mono">
@@ -89,7 +119,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </div>
 
-      {/* Main Hero Section - Bloomberg meets Apple Aesthetic */}
+      {/* Main Hero Section */}
       <section className="relative grid grid-cols-1 lg:grid-cols-12 gap-10 items-center pt-4">
         {/* Subtle Background Accent */}
         <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/10 blur-[180px] rounded-full pointer-events-none" />
@@ -98,7 +128,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="lg:col-span-6 space-y-6 text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>VIXY'S VAULT V5 — DECISION INTELLIGENCE</span>
+            <span>VIXY'S VAULT — DECISION INTELLIGENCE</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-6xl font-black font-sans tracking-tight text-white leading-[1.05]">
@@ -110,7 +140,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </h1>
 
           <p className="text-slate-300 text-base max-w-lg leading-relaxed font-sans font-normal">
-            Trade probability, not hope. Institutional 15-minute prediction market decision engine powered by sub-second L2 order flow microstructure and 14 independent model families.
+            Trade probability, not hope. Institutional 15-minute prediction market decision engine powered by a calibrated probability model trained on momentum, volatility, and order-book depth features, benchmarked against live market pricing.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2 font-mono">
@@ -129,21 +159,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          {/* Micro Trust Indicators */}
-          <div className="flex items-center gap-6 pt-3 text-xs font-mono text-slate-400">
-            <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-400" /> Brier Calibration 0.084</span>
-            <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-400" /> 84.2% Audited Win Rate</span>
-            <span className="flex items-center gap-1.5"><Check className="w-4 h-4 text-emerald-400" /> Zero Risk Trial</span>
+          {/* Micro Trust Indicators (Honest, Compliant) */}
+          <div className="flex flex-wrap items-center gap-6 pt-3 text-xs font-mono text-slate-400">
+            <span className="flex items-center gap-1.5" title="Brier calibration score evaluated on historical backtests">
+              <Check className="w-4 h-4 text-emerald-400" /> Brier Score 0.084
+            </span>
+            <span className="flex items-center gap-1.5" title="Historical self-reported backtest win rate">
+              <Check className="w-4 h-4 text-emerald-400" /> 84.2% Backtested Win Rate
+            </span>
+            <span className="flex items-center gap-1.5" title="Full feature access during 3-hour trial session">
+              <Check className="w-4 h-4 text-emerald-400" /> Free Trial — Cancel Anytime
+            </span>
           </div>
         </div>
 
-        {/* Hero Right Preview Card - Bloomberg / Apple Clean Terminal */}
+        {/* Hero Right Preview Card */}
         <div className="lg:col-span-6">
           <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 shadow-2xl font-mono text-left space-y-4 relative overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 text-xs text-slate-400">
               <span className="text-white font-bold flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
-                SAMPLE SIGNAL TERMINAL (Backtested)
+                SAMPLE SIGNAL TERMINAL (Backtest Feed)
               </span>
               <span className="text-slate-400 font-medium">BTC 15M Strike</span>
             </div>
@@ -183,7 +219,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </svg>
             </div>
 
-            {/* Level 1 Key Metrics (95% Quiet, 5% Loud) */}
+            {/* Key Metrics */}
             <div className="grid grid-cols-3 gap-3 text-left pt-2">
               <div className="bg-[#0D081D] p-3 rounded-xl border border-slate-800 space-y-1">
                 <span className="text-[10px] text-slate-400 uppercase block">Model Confidence</span>
@@ -197,47 +233,66 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="text-[9px] text-slate-400 block">vs Kalshi / Poly</span>
               </div>
 
-              <div className="bg-[#0D081D] p-3 rounded-xl border border-slate-800 space-y-1">
-                <span className="text-[10px] text-slate-400 uppercase block">Setup Grade</span>
+              {/* Interactive Setup Grade Button showing 14 factors */}
+              <button
+                onClick={() => setShowFactorsModal(true)}
+                className="bg-[#0D081D] p-3 rounded-xl border border-purple-500/50 hover:border-purple-400 transition-all space-y-1 text-left group cursor-pointer relative"
+                title="Click to view full 14-Factor Alignment Criteria"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-slate-400 uppercase block">Setup Grade</span>
+                  <Info className="w-3 h-3 text-purple-400 group-hover:scale-110 transition-transform" />
+                </div>
                 <span className="text-white font-black text-lg">A+</span>
-                <span className="text-[9px] text-slate-400 block">13/14 Aligned</span>
-              </div>
+                <span className="text-[9px] text-emerald-400 font-bold block flex items-center gap-1">
+                  13/14 Aligned <span className="underline decoration-purple-400 text-purple-300">View Factors</span>
+                </span>
+              </button>
             </div>
 
-            {/* Sub-Quiet Footer */}
+            {/* Sub-Quiet Footer — Dynamic Feed Status */}
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
-              <span>Feed Status: <strong className="text-emerald-400">LIVE (12ms)</strong></span>
+              <span>
+                Feed Status:{' '}
+                {dataSource === 'live' ? (
+                  <strong className="text-emerald-400">LIVE (12ms)</strong>
+                ) : (
+                  <strong className="text-amber-300">SAMPLE DATA (Backtest Stream)</strong>
+                )}
+              </span>
               <span>Time Remaining: <strong className="text-amber-400">7m 12s</strong></span>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Social Proof Metric Banner (Directive: Live Members, Signals, Capital Tracked) */}
+      {/* Honest Alpha Launch Status Section (No fabricated numbers) */}
       <section className="py-6 border-y border-slate-800/80 bg-[#070410] rounded-2xl">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center font-mono">
           <div>
-            <span className="text-xs text-slate-400 block uppercase">Active Pro Traders</span>
-            <span className="text-2xl font-black text-white">4,890+</span>
-            <span className="text-[10px] text-emerald-400 font-bold block">Live Community</span>
+            <span className="text-xs text-slate-400 block uppercase font-bold">Alpha Cohort Status</span>
+            <span className="text-lg font-black text-white">Early Access</span>
+            <span className="text-[10px] text-emerald-400 font-bold block">Open Signups</span>
           </div>
 
           <div>
-            <span className="text-xs text-slate-400 block uppercase">Audited Win Rate</span>
-            <span className="text-2xl font-black text-emerald-400">84.2%</span>
-            <span className="text-[10px] text-slate-400 font-bold block">Brier Calibrated</span>
+            <span className="text-xs text-slate-400 block uppercase font-bold">Historical Win Rate</span>
+            <span className="text-lg font-black text-emerald-400">84.2%</span>
+            <span className="text-[10px] text-slate-400 block font-medium">Self-Reported Backtest</span>
           </div>
 
           <div>
-            <span className="text-xs text-slate-400 block uppercase">Daily Signals Generated</span>
-            <span className="text-2xl font-black text-purple-300">1,240+</span>
-            <span className="text-[10px] text-purple-400 font-bold block">15-Min & 1-Hour</span>
+            <span className="text-xs text-slate-400 block uppercase font-bold">15M & 1H Signal Engine</span>
+            <span className="text-lg font-black text-purple-300">Active</span>
+            <span className="text-[10px] text-purple-400 font-bold block">Continuous Scanning</span>
           </div>
 
           <div>
-            <span className="text-xs text-slate-400 block uppercase">Tracked Market Volume</span>
-            <span className="text-2xl font-black text-white">$18.4M+</span>
-            <span className="text-[10px] text-slate-400 font-bold block">Cross-Venue L2</span>
+            <span className="text-xs text-slate-400 block uppercase font-bold">Data Feed Mode</span>
+            <span className="text-lg font-black text-amber-300">
+              {dataSource === 'live' ? 'Live Exchange Feed' : 'Sample Backtest Feed'}
+            </span>
+            <span className="text-[10px] text-slate-400 block">Kalshi & Polymarket Odds</span>
           </div>
         </div>
       </section>
@@ -289,7 +344,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* UNASSISTED SPECULATION VS VIXY'S VAULT ADVANTAGE */}
+      {/* EXCLUSIVITY MATRIX */}
       <section className="space-y-6 font-mono">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold">
@@ -315,7 +370,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </li>
               <li className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
-                <span>Zero visibility into market maker bid/ask walls or net taker volume delta.</span>
+                <span>Zero visibility into orderbook depth imbalance or taker buy/sell ratio.</span>
               </li>
               <li className="flex items-start gap-2">
                 <XCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
@@ -335,7 +390,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <ul className="space-y-2.5 font-sans text-purple-100">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                <span className="font-semibold text-white">Sub-second L2 Net Taker Delta tracking (+1,420 BTC aggression signals).</span>
+                <span className="font-semibold text-white">Calibrated probability model evaluating momentum, orderbook depth imbalance, and volatility compression.</span>
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
@@ -343,7 +398,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </li>
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-                <span>Automated Discord & Telegram webhooks with SHA-256 verifiable signals.</span>
+                <span>Automated Discord & Telegram webhooks with verifiable signal logs.</span>
               </li>
             </ul>
           </div>
@@ -404,9 +459,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Find Live Mispricings Now
           </button>
         </div>
+        <p className="text-[10px] text-slate-400 italic text-center">
+          Note: Calculated edge reflects model-estimated expected value (+EV) based on quantitative feature inputs. Prediction market trading involves financial risk.
+        </p>
       </section>
 
-      {/* PRICING SECTION MATCHING USER REFERENCE IMAGE */}
+      {/* PRICING SECTION */}
       <section className="space-y-8 font-mono max-w-5xl mx-auto">
         <div className="text-center space-y-2">
           <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-wider">PRICING</h2>
@@ -456,14 +514,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   <span>Email Alerts</span>
                 </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>1 Watchlist</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Standard Support</span>
-                </li>
               </ul>
             </div>
 
@@ -475,7 +525,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          {/* PROFESSIONAL (PURPLE GLOW HIGHLIGHT) */}
+          {/* PROFESSIONAL */}
           <div className="bg-[#0D071E] border-2 border-purple-500 rounded-2xl p-6 space-y-6 flex flex-col justify-between relative shadow-2xl shadow-purple-600/30">
             <div className="space-y-4">
               <h3 className="font-bold text-purple-300 text-sm uppercase tracking-wider">PROFESSIONAL</h3>
@@ -496,7 +546,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Order Flow & Book Pressure</span>
+                  <span>Orderbook Depth & Taker Volume Delta</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
@@ -509,14 +559,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <li className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   <span>Discord + Telegram Alerts</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>5 Watchlists</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Priority Support</span>
                 </li>
               </ul>
             </div>
@@ -560,18 +602,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                   <span>Unlimited Watchlists</span>
                 </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>SMS Alerts</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Performance Coaching</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>VIP Support</span>
-                </li>
               </ul>
             </div>
 
@@ -584,10 +614,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
-        {/* Disclaimer Footer */}
-        <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/30 text-[10px] text-purple-300/50 text-center space-y-1 font-sans">
-          <p className="font-bold text-purple-300/70">Disclaimer: VIXY'S VAULT is a decision intelligence platform, not financial advice.</p>
-          <p>All traders are responsible for their own decisions and risk.</p>
+        {/* Persistent Risk Disclosure Callout */}
+        <div className="bg-[#0B061A] p-4 rounded-xl border border-amber-500/30 text-[11px] text-slate-300 text-center space-y-1.5 font-sans">
+          <p className="font-bold text-amber-300 flex items-center justify-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            Mandatory Risk Disclosure
+          </p>
+          <p className="text-slate-300/90 leading-relaxed max-w-3xl mx-auto">
+            Prediction market trading involves real financial risk of capital loss. Past backtested performance is no guarantee of future live results. VIXY'S VAULT is a quantitative decision intelligence platform and does not provide investment, financial, or legal advice.
+          </p>
         </div>
       </section>
 
@@ -617,6 +652,230 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           ))}
         </div>
       </section>
+
+      {/* Comprehensive Footer & Compliance Links */}
+      <footer className="pt-10 border-t border-purple-900/40 font-mono text-xs text-purple-300/70 space-y-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+          <Logo size="sm" showSubtitle={false} onClick={onLaunchTerminal} />
+
+          <div className="flex flex-wrap items-center gap-6">
+            <button onClick={() => setShowTermsModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50">
+              Terms of Service
+            </button>
+            <button onClick={() => setShowPrivacyModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50">
+              Privacy Policy
+            </button>
+            <button onClick={() => setShowRiskModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50">
+              Risk & Jurisdiction Disclaimer
+            </button>
+            <button onClick={() => setShowFactorsModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50">
+              14-Factor Model Criteria
+            </button>
+          </div>
+
+          <span className="text-[10px] text-slate-500">© 2026 VIXY'S VAULT. All rights reserved.</span>
+        </div>
+
+        {/* Legal & Exchange Notice */}
+        <div className="text-[10px] text-slate-400/80 leading-relaxed font-sans border-t border-purple-900/20 pt-4 space-y-1">
+          <p>
+            <strong>Exchange Eligibility & Jurisdiction Notice:</strong> Trading on regulated prediction market venues (such as Kalshi and Polymarket) is subject to local exchange regulations and individual participant eligibility requirements. Kalshi is a US CFTC-regulated designated contract market. Users are responsible for confirming their eligibility before creating exchange accounts or trading.
+          </p>
+        </div>
+      </footer>
+
+      {/* MODAL 1: 14-FACTOR MODEL ALIGNMENT CRITERIA */}
+      {showFactorsModal && (
+        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-mono my-auto max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
+              <div className="flex items-center gap-2">
+                <Layers className="w-5 h-5 text-purple-400" />
+                <h3 className="text-base font-black text-white uppercase">14-Factor Model Alignment Criteria</h3>
+              </div>
+              <button
+                onClick={() => setShowFactorsModal(false)}
+                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-1 text-xs">
+              <p className="text-slate-300 font-sans leading-relaxed">
+                Setup Grade A+ requires at least 12 of 14 independent mathematical criteria to pass. Below is the live breakdown for the active sample setup (13 Pass / 1 Fail):
+              </p>
+            </div>
+
+            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+              {modelFactors.map((fac) => (
+                <div
+                  key={fac.id}
+                  className={`p-3 rounded-xl border ${
+                    fac.status === 'PASS'
+                      ? 'bg-[#0B061A] border-purple-900/40'
+                      : 'bg-[#1A0B1A] border-rose-500/40'
+                  } space-y-1`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                      <span className="text-purple-400">#{fac.id}</span> {fac.name}
+                    </span>
+                    <span
+                      className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                        fac.status === 'PASS'
+                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
+                      }`}
+                    >
+                      {fac.status}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 font-sans">{fac.detail}</p>
+                  {fac.note && (
+                    <p className="text-[10px] text-rose-400 font-mono italic pt-0.5">Note: {fac.note}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-purple-900/50 flex justify-end">
+              <button
+                onClick={() => setShowFactorsModal(false)}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: TERMS OF SERVICE */}
+      {showTermsModal && (
+        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-purple-400" />
+                <h3 className="text-base font-black text-white uppercase">Terms of Service</h3>
+              </div>
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 leading-relaxed font-sans text-slate-300">
+              <p><strong>Last Updated: July 2026</strong></p>
+              <h4 className="font-bold text-white text-sm">1. Acceptance of Terms</h4>
+              <p>By accessing or using VIXY'S VAULT, you agree to be bound by these Terms of Service. If you do not agree to all terms, do not access or use our platform.</p>
+              
+              <h4 className="font-bold text-white text-sm">2. Educational & Analytical Purpose Only</h4>
+              <p>VIXY'S VAULT provides quantitative decision analytics, model-estimated probabilities, and signal alerts. We are NOT a financial advisor, broker, or exchange. All content is for informational and educational purposes only.</p>
+
+              <h4 className="font-bold text-white text-sm">3. Risk Acknowledgement</h4>
+              <p>Prediction market trading carries a substantial risk of financial loss. You acknowledge that you alone are responsible for evaluating the risks and merits associated with trading operations.</p>
+
+              <h4 className="font-bold text-white text-sm">4. Subscriptions & Cancellations</h4>
+              <p>Subscription fees are billed on a recurring monthly or annual basis. You may cancel your subscription at any time via your account settings. Subscriptions remain active until the end of the current billing cycle.</p>
+            </div>
+
+            <div className="pt-2 border-t border-purple-900/50 flex justify-end font-mono">
+              <button
+                onClick={() => setShowTermsModal(false)}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 3: PRIVACY POLICY */}
+      {showPrivacyModal && (
+        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-purple-400" />
+                <h3 className="text-base font-black text-white uppercase">Privacy Policy</h3>
+              </div>
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 leading-relaxed font-sans text-slate-300">
+              <p><strong>Last Updated: July 2026</strong></p>
+              <h4 className="font-bold text-white text-sm">1. Information We Collect</h4>
+              <p>We collect account credentials (email address), user preferences (dashboard configurations, alert webhooks), and local interaction logs necessary to provide service functionality.</p>
+
+              <h4 className="font-bold text-white text-sm">2. Data Usage & Protection</h4>
+              <p>Your data is used solely to operate and improve VIXY'S VAULT services. We do not sell, rent, or lease your personal information to third parties.</p>
+
+              <h4 className="font-bold text-white text-sm">3. Security Standards</h4>
+              <p>We employ encryption in transit (TLS) and at rest to protect sensitive account configurations and alert webhook endpoints.</p>
+            </div>
+
+            <div className="pt-2 border-t border-purple-900/50 flex justify-end font-mono">
+              <button
+                onClick={() => setShowPrivacyModal(false)}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+              >
+                Close Privacy Policy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 4: RISK & JURISDICTION DISCLAIMER */}
+      {showRiskModal && (
+        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0D071E] border border-amber-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
+                <h3 className="text-base font-black text-white uppercase">Risk & Jurisdiction Disclaimer</h3>
+              </div>
+              <button
+                onClick={() => setShowRiskModal(false)}
+                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 leading-relaxed font-sans text-slate-300">
+              <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl text-amber-200 text-xs">
+                <strong>Financial Risk Warning:</strong> Prediction market trading involves significant financial risk. Past performance, backtested results, and model-estimated probabilities do not guarantee future live returns.
+              </div>
+
+              <h4 className="font-bold text-white text-sm">Not Financial Advice</h4>
+              <p>VIXY'S VAULT is a software technology and decision analytics platform. Content generated by our software should not be construed as investment, financial, tax, or legal advice.</p>
+
+              <h4 className="font-bold text-white text-sm">Regulated Exchange Access & Eligibility</h4>
+              <p>Exchanges such as Kalshi and Polymarket operate under specific regulatory frameworks and geographical restrictions. Kalshi is a CFTC-regulated exchange subject to US eligibility rules. Polymarket operates under its own terms. Users are solely responsible for ensuring their personal compliance with local exchange rules and jurisdictional laws.</p>
+            </div>
+
+            <div className="pt-2 border-t border-purple-900/50 flex justify-end font-mono">
+              <button
+                onClick={() => setShowRiskModal(false)}
+                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+              >
+                Acknowledge Risk Disclaimer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

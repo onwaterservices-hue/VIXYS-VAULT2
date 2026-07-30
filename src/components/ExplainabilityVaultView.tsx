@@ -74,7 +74,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       weight: +0.22,
       lean: 'BULLISH',
       confidence: 88,
-      observedFact: 'Goliath Capital Vault #02 swept $2.48M in YES contracts at $96,500.',
+      observedFact: 'Trailing volume z-score > 2.0 with +$2.48M net taker buys in YES contracts.',
       keyMetric: 'Whale Net Buy',
       keyMetricValue: '+$4.2M (15m)',
     },

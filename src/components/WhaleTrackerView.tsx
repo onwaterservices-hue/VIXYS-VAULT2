@@ -45,7 +45,7 @@ const INITIAL_WHALE_ORDERS: WhaleOrder[] = [
     contractPrice: '$96,500 Strike YES',
     venue: 'Kalshi',
     confidence: 94,
-    entityName: 'Goliath Capital Vault #02',
+    entityName: 'Institutional Volume Cluster #02',
     impact: 'CRITICAL',
   },
   {
@@ -119,10 +119,10 @@ const STRIKE_WALLS = [
 ];
 
 const TOP_WHALE_ENTITIES = [
-  { name: 'Goliath Capital Vault #02', winRate: '92.4%', activeSize: '$28.4M', bias: 'BULLISH', topAsset: 'BTC', accuracyScore: 98 },
+  { name: 'Institutional Volume Cluster #02', winRate: '92.4%', activeSize: '$28.4M', bias: 'BULLISH', topAsset: 'BTC', accuracyScore: 98 },
   { name: 'CME Block Router #08', winRate: '89.7%', activeSize: '$41.2M', bias: 'BULLISH', topAsset: 'NVDA / SPY', accuracyScore: 96 },
   { name: 'Apex Quant Liquidity #14', winRate: '87.1%', activeSize: '$19.8M', bias: 'NEUTRAL-BULL', topAsset: 'BTC', accuracyScore: 93 },
-  { name: 'Satoshi Era Whale #089', winRate: '94.0%', activeSize: '$15.5M', bias: 'BULLISH', topAsset: 'ETH', accuracyScore: 97 },
+  { name: 'Satoshi Era Cluster #089', winRate: '94.0%', activeSize: '$15.5M', bias: 'BULLISH', topAsset: 'ETH', accuracyScore: 97 },
 ];
 
 export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({

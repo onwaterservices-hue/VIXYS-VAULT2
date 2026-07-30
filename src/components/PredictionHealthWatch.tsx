@@ -254,11 +254,11 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
             <div className="flex items-center gap-2">
               <button
                 onClick={handleExecuteBailOut}
-                className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white px-3.5 py-2 rounded-lg font-black text-xs shadow-xl shadow-rose-600/50 border border-rose-300 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer animate-pulse ring-2 ring-rose-500/40"
-                title="Immediately sell position at current bid/ask quote if setup degrades or breaks"
+                className="bg-[#2a1320] hover:bg-rose-900/60 text-rose-200 px-3.5 py-2 rounded-lg font-bold text-xs border border-rose-500/40 flex items-center gap-1.5 transition-all active:scale-95 cursor-pointer"
+                title="Protect capital by liquidating position at current bid if setup degrades"
               >
-                <AlertTriangle className="w-4 h-4 text-amber-200 animate-bounce shrink-0" />
-                <span className="font-mono tracking-wide">{appMode === 'SIMPLE' ? '🚨 CANCEL / EXIT TRADE NOW' : '🚨 EMERGENCY EXIT / BAIL OUT'}</span>
+                <ShieldCheck className="w-4 h-4 text-rose-300 shrink-0" />
+                <span className="font-mono tracking-wide">{appMode === 'SIMPLE' ? 'PROTECT / EXIT TRADE NOW' : 'PROTECT POSITION / EXIT AT BID'}</span>
               </button>
 
               <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/40">

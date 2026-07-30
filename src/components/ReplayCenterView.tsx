@@ -9,13 +9,13 @@ export const ReplayCenterView: React.FC = () => {
   const scenarios = [
     {
       id: 'SCEN-01',
-      title: 'March 18 Goliath Whale Squeeze (+3.8% Expiry Rally)',
+      title: 'March 18 Volume Spike Squeeze (+3.8% Expiry Rally)',
       asset: 'BTC',
       date: 'March 18, 2026',
       totalSteps: 5,
       steps: [
         { time: 'T-15m', conf: 68, edge: '+3.2%', event: 'Orderbook balanced, low delta', status: 'WAIT' },
-        { time: 'T-12m', conf: 74, edge: '+5.8%', event: 'Goliath Vault buys $1.4M YES contracts', status: 'WATCH' },
+        { time: 'T-12m', conf: 74, edge: '+5.8%', event: 'Volume surge: +$1.4M YES contracts bought', status: 'WATCH' },
         { time: 'T-8m', conf: 84, edge: '+9.4%', event: 'Net CVD delta flips +840 BTC positive', status: 'SIGNAL: YES' },
         { time: 'T-4m', conf: 92, edge: '+14.1%', event: 'VWAP floor reclaimed with 3.4x bid depth', status: 'SIGNAL: YES (HIGH)' },
         { time: 'T-0m', conf: 96, edge: '+18.2%', event: 'Contract settled YES with +$380 price expansion', status: 'WIN RESOLVED' },

@@ -19,12 +19,13 @@ import {
   BrainCircuit,
   AlertTriangle,
 } from 'lucide-react';
-import { BTCTicker, Candle, PredictionSignal } from '../types';
+import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
 import { AIPatternEngine } from './AIPatternEngine';
 import { fetchPrediction } from '../services/api';
 import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
+import { CompactSignalChart } from './CompactSignalChart';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -37,6 +38,8 @@ interface LiveDashboardProps {
   onSelectAsset?: (symbol: string) => void;
   selectedTimeframe?: string;
   selectedVenues?: string[];
+  exchangeKeys?: ExchangeApiKeys;
+  onOpenSettings?: () => void;
 }
 
 export const LiveDashboard: React.FC<LiveDashboardProps> = ({
@@ -50,6 +53,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   onSelectAsset = () => {},
   selectedTimeframe = '15M',
   selectedVenues = ['Kalshi'],
+  exchangeKeys,
+  onOpenSettings,
 }) => {
   // Timeframe State
   const [timeframe, setTimeframe] = useState<'15M' | '1H'>(
@@ -391,9 +396,23 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-500/40 relative overflow-hidden space-y-3">
             <div className="flex justify-between items-start">
               <div>
-                <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black uppercase">
-                  PRIMARY LOCK
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black uppercase">
+                    PRIMARY LOCK
+                  </span>
+                  <button
+                    onClick={onOpenSettings}
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
+                      exchangeKeys?.kalshi.connected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
+                    }`}
+                    title="Kalshi API Key Status. Click to manage API in Settings."
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{exchangeKeys?.kalshi.connected ? `API ${exchangeKeys.kalshi.latencyMs}ms` : 'API Setup'}</span>
+                  </button>
+                </div>
                 <h3 className="text-sm font-black text-white mt-1">Kalshi 15M Market</h3>
                 <p className="text-[10px] text-purple-300/60 font-sans">CFTC Regulated Exchange • Direct Strike</p>
               </div>
@@ -413,9 +432,23 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
             <div className="flex justify-between items-start">
               <div>
-                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
-                  DECENTRALIZED
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
+                    DECENTRALIZED
+                  </span>
+                  <button
+                    onClick={onOpenSettings}
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
+                      exchangeKeys?.polymarket.connected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
+                    }`}
+                    title="Polymarket L2 API Key Status. Click to manage API in Settings."
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{exchangeKeys?.polymarket.connected ? `API ${exchangeKeys.polymarket.latencyMs}ms` : 'API Setup'}</span>
+                  </button>
+                </div>
                 <h3 className="text-sm font-black text-white mt-1">Polymarket 15M</h3>
                 <p className="text-[10px] text-purple-300/60 font-sans">Polygon On-Chain • USDC Liquidity</p>
               </div>
@@ -435,9 +468,23 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
             <div className="flex justify-between items-start">
               <div>
-                <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
-                  SPORTSBOOK MICRO
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
+                    SPORTSBOOK MICRO
+                  </span>
+                  <button
+                    onClick={onOpenSettings}
+                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
+                      exchangeKeys?.draftkings.connected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
+                    }`}
+                    title="DraftKings Micro API Key Status. Click to manage API in Settings."
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.draftkings.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{exchangeKeys?.draftkings.connected ? `API ${exchangeKeys.draftkings.latencyMs}ms` : 'API Setup'}</span>
+                  </button>
+                </div>
                 <h3 className="text-sm font-black text-white mt-1">DraftKings Micro</h3>
                 <p className="text-[10px] text-purple-300/60 font-sans">American Odds • Instant Payout</p>
               </div>
@@ -457,9 +504,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
       {/* Main Grid: Valhalla / OGERSHHH Style Buy Decision Deck & Locked Position Guide */}
       <div className="bg-[#0B1220] rounded-2xl border border-[#1E2E48] p-5 shadow-2xl relative overflow-hidden font-mono space-y-5">
-        {/* Top Decision Bar */}
+        {/* Top Decision Bar with Compact Signal Chart Companion */}
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-[#1E2E48] pb-4">
-          <div className="space-y-1">
+          <div className="space-y-1 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-black uppercase text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
                 LIVE BUY DECISION / PUBLISHES ON QUALIFIED CONVICTION
@@ -469,24 +516,36 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               </span>
             </div>
             
-            <div className="flex items-center gap-4">
-              <h1 className={`text-4xl sm:text-5xl font-black tracking-tight ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
-                BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
-              </h1>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
+              <div className="flex items-center gap-4">
+                <h1 className={`text-4xl sm:text-5xl font-black tracking-tight ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
+                </h1>
 
-              {/* Progress Checkpoint Badges */}
-              <div className="hidden md:flex items-center gap-2 bg-[#060B14] p-1.5 rounded-xl border border-[#18263E]">
-                <div className="px-2.5 py-1 rounded bg-cyan-950 text-cyan-300 text-[10px] font-bold border border-cyan-700/50">
-                  01 BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} / COMMITTED
+                {/* Progress Checkpoint Badges */}
+                <div className="hidden xl:flex items-center gap-2 bg-[#060B14] p-1.5 rounded-xl border border-[#18263E]">
+                  <div className="px-2.5 py-1 rounded bg-cyan-950 text-cyan-300 text-[10px] font-bold border border-cyan-700/50">
+                    01 BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} / COMMITTED
+                  </div>
+                  <span className="text-slate-600 text-xs">→</span>
+                  <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
+                    02 WAIT FOR VALUE
+                  </div>
+                  <span className="text-slate-600 text-xs">→</span>
+                  <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
+                    03 POSITION REVIEW
+                  </div>
                 </div>
-                <span className="text-slate-600 text-xs">→</span>
-                <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
-                  02 WAIT FOR VALUE
-                </div>
-                <span className="text-slate-600 text-xs">→</span>
-                <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
-                  03 POSITION REVIEW
-                </div>
+              </div>
+
+              {/* COMPACT SIGNAL CHART (Tight companion widget directly beside Buy Up / Down) */}
+              <div className="shrink-0">
+                <CompactSignalChart
+                  candles={candles}
+                  currentPrice={ticker.price}
+                  targetPrice={signal.targetPrice || ticker.price + 120}
+                  dataSource={ticker.isMock ? 'mock' : 'live'}
+                />
               </div>
             </div>
           </div>
@@ -544,7 +603,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
             <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
               <span className="text-[10px] text-slate-400 block font-semibold">PAYOUT</span>
-              <span className="text-xs font-bold text-emerald-400">500.00x</span>
+              <span className="text-xs font-bold text-emerald-400">1.85x</span>
             </div>
             <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
               <span className="text-[10px] text-slate-400 block font-semibold">SAFE EDGE</span>
@@ -557,40 +616,40 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
         </div>
 
-        {/* THE GUARDIAN / POST-LOCK REVERSAL WATCH (BAIL-OUT WINDOW IF THINGS GO SOUTH) */}
-        <div className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${
+        {/* THE GUARDIAN / POST-LOCK REVERSAL WATCH (REVERSAL RISK MONITORING) */}
+        <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
           isBailedOut
             ? 'bg-emerald-950/40 border-emerald-500/80 shadow-2xl shadow-emerald-950/60'
-            : 'bg-gradient-to-r from-rose-950/90 via-[#210719] to-rose-950/90 border-rose-500 shadow-2xl shadow-rose-950/90 ring-4 ring-rose-500/30'
+            : 'bg-[#180A22] border-amber-500/50 shadow-xl'
         }`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="space-y-1.5">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase flex items-center gap-1.5 ${
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 ${
                   isBailedOut
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                    : 'bg-rose-600 text-white border border-rose-300 shadow-md shadow-rose-600/60 animate-pulse'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                 }`}>
-                  <AlertTriangle className="w-4 h-4 text-white animate-bounce shrink-0" />
-                  {isBailedOut ? 'POSITION SAFELY EXITED' : '🚨 EMERGENCY EXIT / BAIL-OUT WINDOW ACTIVE'}
+                  <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
+                  {isBailedOut ? 'POSITION SAFELY EXITED' : 'ELEVATED REVERSAL RISK DETECTED'}
                 </span>
-                <span className="text-xs font-mono font-black text-white bg-black/40 px-2 py-0.5 rounded border border-rose-500/30">
-                  {isBailedOut ? 'CLOSED AT $0.54 YES' : 'CRITICAL REVERSAL RISK: 90.0 / 100'}
+                <span className="text-xs font-mono font-bold text-white bg-black/40 px-2 py-0.5 rounded border border-amber-500/30">
+                  {isBailedOut ? 'CLOSED AT $0.54 YES' : 'REVERSAL RISK INDEX: 68.0 / 100'}
                 </span>
               </div>
-              <p className="text-xs text-rose-100 font-sans leading-relaxed max-w-3xl">
+              <p className="text-xs text-purple-200/90 font-sans leading-relaxed max-w-3xl">
                 {isBailedOut
                   ? 'Your position has been safely liquidated / exited at the current bid quote ($0.54 YES). Capital protected from downside breakdown.'
-                  : 'Multiple order flow indicators detect aggressive downside sell volume breaking VWAP support. Click Emergency Bail Out immediately to liquidate position at current bid before expiration.'}
+                  : 'Order flow metrics show increased ask volume testing VWAP support. Consider protecting your position or reducing exposure at current bid quotes.'}
               </p>
             </div>
 
-            {/* Emergency Buy-Out / Bail Out Button */}
+            {/* Position Exit / Risk Control Button */}
             <div className="shrink-0 self-stretch sm:self-auto">
               {isBailedOut ? (
                 <button
                   onClick={() => setIsBailedOut(false)}
-                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-black text-xs shadow-lg shadow-emerald-600/40 border border-emerald-400/50 transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                 >
                   <RefreshCw className="w-4 h-4 text-white" />
                   <span>RE-OPEN POSITION LOCK</span>
@@ -598,20 +657,20 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               ) : (
                 <button
                   onClick={() => setIsBailedOut(true)}
-                  className="w-full sm:w-auto bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white px-6 py-3.5 rounded-xl font-black text-xs shadow-2xl shadow-rose-600/90 border-2 border-rose-300 transition-all flex items-center justify-center gap-2.5 active:scale-95 cursor-pointer animate-pulse ring-4 ring-rose-500/50 tracking-wide"
+                  className="w-full sm:w-auto bg-[#2e1428] hover:bg-rose-900/60 text-rose-200 border border-rose-500/40 px-5 py-3 rounded-xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                 >
-                  <AlertTriangle className="w-4.5 h-4.5 text-amber-200 animate-bounce shrink-0" />
-                  <span className="text-sm tracking-wider uppercase font-black">🚨 BAIL OUT NOW / EXIT POSITION</span>
+                  <ShieldCheck className="w-4 h-4 text-rose-300 shrink-0" />
+                  <span className="text-xs font-bold">PROTECT POSITION / REDUCE EXPOSURE</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-rose-800/40 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-purple-900/40 text-xs">
             <div>
               <span className="text-slate-400 text-[10px] block font-semibold">REVERSAL RISK</span>
-              <span className={`font-black text-sm ${isBailedOut ? 'text-emerald-400' : 'text-rose-400 font-mono text-base font-black'}`}>
-                {isBailedOut ? 'DEFENDED' : '90.0 CRITICAL RISK'}
+              <span className={`font-bold text-sm ${isBailedOut ? 'text-emerald-400' : 'text-amber-300 font-mono text-sm'}`}>
+                {isBailedOut ? 'DEFENDED' : '68.0 ELEVATED'}
               </span>
             </div>
             <div>
@@ -623,7 +682,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               <span className="text-cyan-300 font-bold">LIVE MONITORED</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] block font-semibold">VERIFIED WIN RATE</span>
+              <span className="text-slate-400 text-[10px] block font-semibold">BACKTESTED WIN RATE</span>
               <span className="text-emerald-400 font-bold">91.4% (314 SETUPS)</span>
             </div>
           </div>
@@ -667,16 +726,16 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               Order Flow Engine (+0.34)
             </span>
             <p className="text-purple-200 text-[11px] leading-tight">
-              +1,820 BTC net buy volume swallowing ask liquidity at $96,200.
+              +1,820 BTC net buy volume swallowing ask liquidity at ${ticker.price.toLocaleString()}.
             </p>
           </div>
 
           <div className="p-2.5 rounded-xl bg-[#080413] border border-purple-900/40 space-y-0.5">
             <span className="text-[10px] text-purple-300/60 font-mono uppercase font-bold block">
-              Whale Tracker Engine (+0.22)
+              Volume Delta Engine (+0.22)
             </span>
             <p className="text-purple-200 text-[11px] leading-tight">
-              Goliath Capital Vault #02 swept $2.48M YES contracts at $96.5k.
+              Trailing volume z-score outlier detected: +$2.48M net taker buys at ${ticker.price.toLocaleString()}.
             </p>
           </div>
 
@@ -685,7 +744,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               Liquidity Wall Engine (+0.14)
             </span>
             <p className="text-purple-200 text-[11px] leading-tight">
-              $18.4M stacked bid floor beneath $96,000 floor support.
+              $18.4M stacked bid floor beneath ${(ticker.price - 120).toLocaleString()} support level.
             </p>
           </div>
         </div>
@@ -828,14 +887,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             {/* Block Order Metrics Grid */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">LARGEST WHALE BUY</span>
-                <span className="font-extrabold text-emerald-400 block">$1,200,000 (18.4 BTC)</span>
+                <span className="text-[10px] text-purple-300/60 block">LARGEST BUY BLOCK (FEED)</span>
+                <span className="font-extrabold text-emerald-400 block">+18.4 BTC</span>
                 <span className="text-[9px] text-purple-300/50 block">Executed @ ${ticker.price.toLocaleString()}</span>
               </div>
 
               <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">LARGEST BLOCK SELL</span>
-                <span className="font-extrabold text-rose-400 block">$420,000 (6.5 BTC)</span>
+                <span className="text-[10px] text-purple-300/60 block">LARGEST SELL BLOCK (FEED)</span>
+                <span className="font-extrabold text-rose-400 block">-6.5 BTC</span>
                 <span className="text-[9px] text-purple-300/50 block">Executed @ ${(ticker.price + 70).toLocaleString()}</span>
               </div>
 

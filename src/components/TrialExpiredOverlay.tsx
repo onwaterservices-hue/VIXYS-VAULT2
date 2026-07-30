@@ -52,7 +52,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             AWAITS YOU
           </h1>
           <p className="text-xs sm:text-sm text-purple-200/80 font-sans max-w-md mx-auto leading-relaxed">
-            You've experienced 12 full 15-minute prediction cycles. To maintain continuous access to sub-second L2 order flow, model probabilities, and webhook automation, upgrade your account below.
+            You've experienced 12 full 15-minute prediction cycles. To maintain continuous access to orderbook depth features, calibrated model probabilities, and webhook automation, upgrade your account below.
           </p>
         </div>
 
