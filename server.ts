@@ -46,7 +46,7 @@ async function startServer() {
   app.get('/api/stripe/config', (req, res) => {
     res.json({
       configured: !!process.env.STRIPE_SECRET_KEY,
-      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || null,
+      publishableKey: process.env.STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF',
     });
   });
 

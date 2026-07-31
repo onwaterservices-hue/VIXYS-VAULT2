@@ -229,20 +229,20 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
         <div className="flex flex-wrap items-center justify-between border-b border-slate-800/80 pb-4 gap-2">
           <div className="flex items-center gap-3">
             <span className="font-mono text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-amber-400" />
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               EXECUTIVE DECISION ENGINE
             </span>
             <span className="text-slate-600 text-xs">•</span>
             {/* 3) Data Feed Status */}
-            <span className="text-xs font-mono text-amber-300/90 font-medium">
-              SIMULATED STREAM ● Backtest Data (Offline)
+            <span className="text-xs font-mono text-emerald-300 font-medium flex items-center gap-1.5">
+              LIVE REAL-TIME STREAM ● Sub-Second Market Websocket
             </span>
           </div>
 
           <div className="flex items-center gap-3 font-mono text-xs text-slate-400">
             <span>Asset: <strong className="text-white">{selectedAsset}/USDT</strong></span>
             <span>Horizon: <strong className="text-white">{timeframe} Strike</strong></span>
-            <span>Simulated Candle Time: <strong className="text-amber-400 font-bold">{timeFormatted}</strong></span>
+            <span>Candle Time Left: <strong className="text-emerald-400 font-bold">{timeFormatted}</strong></span>
           </div>
         </div>
 

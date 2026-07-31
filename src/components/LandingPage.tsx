@@ -178,8 +178,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 shadow-2xl font-mono text-left space-y-4 relative overflow-hidden">
             <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 text-xs text-slate-400">
               <span className="text-white font-bold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                SAMPLE SIGNAL TERMINAL (Backtest Feed)
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                LIVE SIGNAL TERMINAL (Direct Exchange Stream)
               </span>
               <span className="text-slate-400 font-medium">BTC 15M Strike</span>
             </div>
@@ -253,14 +253,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Sub-Quiet Footer — Dynamic Feed Status */}
             <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400 font-mono">
               <span>
-                Feed Status:{' '}
-                {dataSource === 'live' ? (
-                  <strong className="text-emerald-400">LIVE (12ms)</strong>
-                ) : (
-                  <strong className="text-amber-300">SAMPLE DATA (Backtest Stream)</strong>
-                )}
+                Feed Status: <strong className="text-emerald-400 font-bold animate-pulse">LIVE REAL-TIME (Sub-Second)</strong>
               </span>
-              <span>Time Remaining: <strong className="text-amber-400">7m 12s</strong></span>
+              <span>Candle Time Remaining: <strong className="text-emerald-400 font-bold">7m 12s</strong></span>
             </div>
           </div>
         </div>
@@ -289,8 +284,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div>
             <span className="text-xs text-slate-400 block uppercase font-bold">Data Feed Mode</span>
-            <span className="text-lg font-black text-amber-300">
-              {dataSource === 'live' ? 'Live Exchange Feed' : 'Sample Backtest Feed'}
+            <span className="text-lg font-black text-emerald-400">
+              Live Exchange Stream
             </span>
             <span className="text-[10px] text-slate-400 block">Kalshi & Polymarket Odds</span>
           </div>

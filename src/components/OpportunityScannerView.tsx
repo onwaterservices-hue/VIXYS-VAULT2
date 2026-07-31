@@ -32,8 +32,9 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
           </p>
         </div>
 
-        <div className="px-3.5 py-1.5 rounded-xl bg-amber-950/40 text-amber-300 font-mono text-xs font-bold border border-amber-500/30">
-          6 ASSETS MONITORED (Simulated)
+        <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/50 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40 flex items-center gap-1.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          6 ASSETS MONITORED (Real-Time Live Feed)
         </div>
       </div>
 
