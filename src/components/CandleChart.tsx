@@ -166,7 +166,7 @@ export interface ChartSignal {
   symbol: string;
 }
 
-function buildChartSignals(candles: Candle[], dataSource: string = 'mock'): ChartSignal[] {
+function buildChartSignals(candles: Candle[], dataSource: string = 'live'): ChartSignal[] {
   const signals: ChartSignal[] = [];
 
   candles.forEach((c, i) => {
@@ -294,7 +294,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   timeframe = '15M',
   onTimeframeChange,
   predictedDirection = 'YES',
-  dataSource = 'mock',
+  dataSource = 'live',
   modelSignal,
 }) => {
   const { containerRef, width: measuredWidth } = useContainerWidth();

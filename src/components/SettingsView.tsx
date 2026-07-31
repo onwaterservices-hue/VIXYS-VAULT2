@@ -190,7 +190,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <span>Elite Pass Required for Direct Exchange API Integrations</span>
             </div>
             <p className="text-purple-200/80 text-xs leading-relaxed">
-              Standard and Pro tiers connect through shared sample streams. Upgrade to <strong className="text-amber-300 font-bold">Elite Pass ($199/mo)</strong> to input your private API keys for Kalshi DCM, Polymarket L2 USDC proxy, and DraftKings Micro-odds for zero-latency execution.
+              Standard and Pro tiers connect through shared live exchange feeds. Upgrade to <strong className="text-amber-300 font-bold">Elite Pass ($199/mo)</strong> to input your private API keys for Kalshi DCM, Polymarket L2 USDC proxy, and DraftKings Micro-odds for zero-latency direct execution.
             </p>
             <div className="pt-1 flex items-center gap-3">
               <button

@@ -42,7 +42,7 @@ export const CompactSignalChart: React.FC<CompactSignalChartProps> = ({
   candles = [],
   currentPrice,
   targetPrice,
-  dataSource = 'mock',
+  dataSource = 'live',
 }) => {
   const [activeTooltip, setActiveTooltip] = useState<string | null>(null);
 

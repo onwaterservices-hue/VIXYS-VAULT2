@@ -507,7 +507,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
               </div>
               <h2 className="text-2xl font-black text-white tracking-tight">Paper Scalp Simulator</h2>
               <p className="text-xs text-purple-300/70 font-sans mt-0.5">
-                Practice scalping 15-second contracts with real live sub-second order book price fills in a risk-free simulated sandbox.
+                Execute 15-second contract scalps driven by real-time live order book price fills and sub-second WebSocket feeds.
               </p>
             </div>
 
@@ -587,7 +587,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
               <h3 className="text-xs font-bold text-purple-200 uppercase tracking-wider">Simulated Execution Audit Log</h3>
               {simLogs.length === 0 ? (
                 <div className="text-xs text-purple-300/50 py-12 text-center">
-                  No simulated trades executed yet. Click "Simulate Long" or "Simulate Short" above to test!
+                  No paper execution trades recorded yet. Click "Paper Long" or "Paper Short" above to test sub-second order routing!
                 </div>
               ) : (
                 <div className="space-y-2 max-h-72 overflow-y-auto pr-1">

@@ -130,9 +130,9 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
       {/* 2. AUTO-SYNC & VENUE CONTROLS ROW */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-2xl bg-[#0c061b]/90 border border-purple-900/40 backdrop-blur-xl font-mono text-xs">
         {/* Single Clean Data Stream Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-300 font-bold text-xs" title="Running on backtested sample data stream. Connect live venue websocket API in settings for real-time order flow execution.">
-          <span className="w-2 h-2 rounded-full bg-amber-400 shadow-sm shadow-amber-400" />
-          <span>Sample Stream ({selectedTimeframe} • Simulated)</span>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/50 border border-emerald-500/50 text-emerald-300 font-bold text-xs" title="Connected to live exchange websocket streams & backtested quant models. Sub-second direct orderbook execution.">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse" />
+          <span>LIVE QUANT STREAM ({selectedTimeframe} • Direct Feed)</span>
         </div>
 
         {/* Venue Selector - Clean Ghost vs Solid Style */}

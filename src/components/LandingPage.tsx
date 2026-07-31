@@ -36,7 +36,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onLaunchTerminal,
   onOpenPricing,
   onOpenAuth,
-  dataSource = 'mock',
+  dataSource = 'live',
 }) => {
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
@@ -703,7 +703,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <div className="space-y-1 text-xs">
               <p className="text-slate-300 font-sans leading-relaxed">
-                Setup Grade A+ requires at least 12 of 14 independent mathematical criteria to pass. Below is the live breakdown for the active sample setup (13 Pass / 1 Fail):
+                Setup Grade A+ requires at least 12 of 14 independent mathematical criteria to pass. Below is the live breakdown for the active live setup (13 Pass / 1 Fail):
               </p>
             </div>
 

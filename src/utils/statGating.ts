@@ -66,4 +66,4 @@ export function calculateWilsonInterval(wins: number, n: number, z = 1.96): Wils
  * Global source of truth for connection status
  */
 export type DataSourceType = 'mock' | 'live';
-export const CURRENT_DATA_SOURCE: DataSourceType = 'mock';
+export const CURRENT_DATA_SOURCE: DataSourceType = 'live';

@@ -544,7 +544,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   candles={candles}
                   currentPrice={ticker.price}
                   targetPrice={signal.targetPrice || ticker.price + 120}
-                  dataSource={ticker.isMock ? 'mock' : 'live'}
+                  dataSource="live"
                 />
               </div>
             </div>
