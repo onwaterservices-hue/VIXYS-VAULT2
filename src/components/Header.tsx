@@ -422,16 +422,17 @@ export const Header: React.FC<HeaderProps> = ({
           {authState.isAuthenticated ? (
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setActiveTab('settings')}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 transition-all"
+                onClick={() => setActiveTab(userRole === 'ADMIN' ? 'admin' : 'settings')}
+                title={userRole === 'ADMIN' ? 'Master Admin Control Center' : 'User Settings'}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 transition-all max-w-[160px] sm:max-w-[220px]"
               >
-                <User className="w-3.5 h-3.5 text-purple-400" />
-                <span className="hidden sm:inline">{authState.user?.name || 'Quant User'}</span>
+                <User className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                <span className="hidden sm:inline truncate whitespace-nowrap">{authState.user?.name || 'Quant User'}</span>
               </button>
               <button
                 onClick={onLogout}
                 title="Sign Out"
-                className="p-2 rounded-xl bg-[#120B24] border border-purple-900/40 text-purple-400 hover:text-rose-400 hover:border-rose-500/30 transition-all"
+                className="p-2 rounded-xl bg-[#120B24] border border-purple-900/40 text-purple-400 hover:text-rose-400 hover:border-rose-500/30 transition-all shrink-0"
               >
                 <LogOut className="w-4 h-4" />
               </button>

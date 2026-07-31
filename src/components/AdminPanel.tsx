@@ -12,8 +12,180 @@ import {
   AlertTriangle,
   RefreshCw,
   Search,
+  UserPlus,
+  CreditCard,
+  ArrowUpRight,
+  TrendingUp,
+  Filter,
+  UserCheck,
+  UserX,
+  MoreVertical,
+  Zap,
+  Sparkles,
+  Download,
 } from 'lucide-react';
 import { AdminStats, SupportTicket } from '../types';
+
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string;
+  tier: 'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS';
+  role: 'USER' | 'ADMIN';
+  status: 'ACTIVE' | 'TRIALING' | 'SUSPENDED';
+  joinedDate: string;
+  volumeTrades: number;
+  lastActive: string;
+}
+
+interface StripeTransaction {
+  id: string;
+  email: string;
+  plan: 'Pro Pass ($49)' | 'Elite Pass ($199)';
+  amount: number;
+  method: 'Stripe Credit Card' | 'Apple Pay' | 'Crypto USDC';
+  status: 'Succeeded' | 'Processing';
+  timestamp: string;
+}
+
+const INITIAL_USERS: AdminUser[] = [
+  {
+    id: 'usr_001',
+    email: 'vixyvault0@gmail.com',
+    name: 'Master Admin (Vixy Vault)',
+    tier: 'ELITE_PASS',
+    role: 'ADMIN',
+    status: 'ACTIVE',
+    joinedDate: '2026-01-15',
+    volumeTrades: 1420,
+    lastActive: 'Just now',
+  },
+  {
+    id: 'usr_002',
+    email: 'trader.alex@gmail.com',
+    name: 'Alex Vance',
+    tier: 'ELITE_PASS',
+    role: 'USER',
+    status: 'ACTIVE',
+    joinedDate: '2026-07-28',
+    volumeTrades: 428,
+    lastActive: '2m ago',
+  },
+  {
+    id: 'usr_003',
+    email: 'quant.sarah@optionstrade.io',
+    name: 'Sarah Connor',
+    tier: 'ELITE_PASS',
+    role: 'USER',
+    status: 'ACTIVE',
+    joinedDate: '2026-07-29',
+    volumeTrades: 312,
+    lastActive: '12m ago',
+  },
+  {
+    id: 'usr_004',
+    email: 'sam.predict@crypto.org',
+    name: 'Sam Miller',
+    tier: 'PRO_PASS',
+    role: 'USER',
+    status: 'ACTIVE',
+    joinedDate: '2026-07-20',
+    volumeTrades: 194,
+    lastActive: '1h ago',
+  },
+  {
+    id: 'usr_005',
+    email: 'dev.mike@polygon.io',
+    name: 'Mike Ross',
+    tier: 'FREE_TRIAL',
+    role: 'USER',
+    status: 'TRIALING',
+    joinedDate: '2026-07-30',
+    volumeTrades: 42,
+    lastActive: '5m ago',
+  },
+  {
+    id: 'usr_006',
+    email: 'dave.h@scalping.com',
+    name: 'David Hughes',
+    tier: 'PRO_PASS',
+    role: 'USER',
+    status: 'ACTIVE',
+    joinedDate: '2026-06-12',
+    volumeTrades: 856,
+    lastActive: '34m ago',
+  },
+  {
+    id: 'usr_007',
+    email: 'maria.c@wallstreet.net',
+    name: 'Maria Chen',
+    tier: 'FREE_TRIAL',
+    role: 'USER',
+    status: 'TRIALING',
+    joinedDate: '2026-07-30',
+    volumeTrades: 18,
+    lastActive: '18m ago',
+  },
+  {
+    id: 'usr_008',
+    email: 'jason.v@cryptoquant.ai',
+    name: 'Jason Voltz',
+    tier: 'ELITE_PASS',
+    role: 'USER',
+    status: 'ACTIVE',
+    joinedDate: '2026-05-04',
+    volumeTrades: 1204,
+    lastActive: 'Just now',
+  },
+];
+
+const INITIAL_TRANSACTIONS: StripeTransaction[] = [
+  {
+    id: 'ch_3M4kxL2eZvKYlo12',
+    email: 'jason.v@cryptoquant.ai',
+    plan: 'Elite Pass ($199)',
+    amount: 199.0,
+    method: 'Stripe Credit Card',
+    status: 'Succeeded',
+    timestamp: '2m ago',
+  },
+  {
+    id: 'ch_3M4kxK1eZvKYlo11',
+    email: 'quant.sarah@optionstrade.io',
+    plan: 'Elite Pass ($199)',
+    amount: 199.0,
+    method: 'Apple Pay',
+    status: 'Succeeded',
+    timestamp: '14m ago',
+  },
+  {
+    id: 'ch_3M4kxJ0eZvKYlo10',
+    email: 'sam.predict@crypto.org',
+    plan: 'Pro Pass ($49)',
+    amount: 49.0,
+    method: 'Stripe Credit Card',
+    status: 'Succeeded',
+    timestamp: '1h ago',
+  },
+  {
+    id: 'ch_3M4kxI9eZvKYlo09',
+    email: 'dave.h@scalping.com',
+    plan: 'Pro Pass ($49)',
+    amount: 49.0,
+    method: 'Crypto USDC',
+    status: 'Succeeded',
+    timestamp: '3h ago',
+  },
+  {
+    id: 'ch_3M4kxH8eZvKYlo08',
+    email: 'trader.alex@gmail.com',
+    plan: 'Elite Pass ($199)',
+    amount: 199.0,
+    method: 'Stripe Credit Card',
+    status: 'Succeeded',
+    timestamp: '5h ago',
+  },
+];
 
 interface AdminPanelProps {
   stats: AdminStats;
@@ -22,10 +194,24 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTickets }) => {
+  const [users, setUsers] = useState<AdminUser[]>(INITIAL_USERS);
+  const [transactions] = useState<StripeTransaction[]>(INITIAL_TRANSACTIONS);
   const [minConfidenceOverride, setMinConfidenceOverride] = useState<number>(85);
   const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
   const [replyText, setReplyText] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState<string>('');
+  
+  // Filtering & Search
+  const [userSearch, setUserSearch] = useState<string>('');
+  const [tierFilter, setTierFilter] = useState<'ALL' | 'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS' | 'ADMIN'>('ALL');
+
+  // Add User Modal
+  const [isAddUserOpen, setIsAddUserOpen] = useState<boolean>(false);
+  const [newUserEmail, setNewUserEmail] = useState<string>('');
+  const [newUserName, setNewUserName] = useState<string>('');
+  const [newUserTier, setNewUserTier] = useState<'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS'>('PRO_PASS');
+
+  // Active Tab View in Admin: 'users' | 'revenue' | 'tickets' | 'settings'
+  const [adminTab, setAdminTab] = useState<'users' | 'revenue' | 'tickets' | 'settings'>('users');
 
   const handleUpdateTicketStatus = (id: string, status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED') => {
     setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
@@ -40,118 +226,501 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
     setReplyText('');
   };
 
+  const handleToggleUserRole = (userId: string) => {
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          const nextRole = u.role === 'ADMIN' ? 'USER' : 'ADMIN';
+          return { ...u, role: nextRole };
+        }
+        return u;
+      })
+    );
+  };
+
+  const handleChangeUserTier = (userId: string, newTier: 'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS') => {
+    setUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, tier: newTier, status: newTier === 'FREE_TRIAL' ? 'TRIALING' : 'ACTIVE' } : u))
+    );
+  };
+
+  const handleToggleUserStatus = (userId: string) => {
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          const nextStatus = u.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
+          return { ...u, status: nextStatus };
+        }
+        return u;
+      })
+    );
+  };
+
+  const handleCreateUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserEmail.trim()) return;
+
+    const newUser: AdminUser = {
+      id: `usr_${Date.now().toString().slice(-4)}`,
+      email: newUserEmail.trim(),
+      name: newUserName.trim() || newUserEmail.split('@')[0],
+      tier: newUserTier,
+      role: 'USER',
+      status: newUserTier === 'FREE_TRIAL' ? 'TRIALING' : 'ACTIVE',
+      joinedDate: new Date().toISOString().split('T')[0],
+      volumeTrades: 0,
+      lastActive: 'Just now',
+    };
+
+    setUsers([newUser, ...users]);
+    setNewUserEmail('');
+    setNewUserName('');
+    setIsAddUserOpen(false);
+  };
+
+  // Filtered Users
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch = u.email.toLowerCase().includes(userSearch.toLowerCase()) || u.name.toLowerCase().includes(userSearch.toLowerCase());
+    if (tierFilter === 'ALL') return matchesSearch;
+    if (tierFilter === 'ADMIN') return matchesSearch && u.role === 'ADMIN';
+    return matchesSearch && u.tier === tierFilter;
+  });
+
+  const totalUsersCount = 1942;
+  const activeSubsCount = users.filter((u) => u.tier !== 'FREE_TRIAL').length + 478;
+  const proCount = 412;
+  const eliteCount = 74;
+  const arr = stats.mrr * 12;
+
   return (
-    <div className="space-y-8 font-mono text-purple-100">
-      {/* Admin Header */}
-      <div className="bg-[#120B28] rounded-2xl border border-purple-500/40 p-6 shadow-2xl relative overflow-hidden">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1 font-mono">
-              <span className="px-2.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center gap-1.5">
+    <div className="space-y-6 font-sans text-purple-100 max-w-full overflow-hidden">
+      {/* 1. MASTER ADMIN CONTROL CENTER HEADER */}
+      <div className="bg-gradient-to-r from-[#120B28] via-[#0D071E] to-[#18093B] rounded-3xl border border-purple-500/40 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-purple-900/40 pb-5">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2 font-mono">
+              <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-purple-400" />
-                ADMIN VAULT CONTROL CENTER
+                MASTER ADMIN CONTROL CENTER
               </span>
-              <span className="text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 text-xs font-bold">
-                Master Admin: vixyvault0@gmail.com
+              <span className="text-amber-300 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30 text-xs font-bold">
+                Logged in as: vixyvault0@gmail.com
               </span>
             </div>
-            <h2 className="text-2xl font-black font-mono text-white tracking-tight">VIXY'S VAULT SaaS Telemetry & Management</h2>
-            <p className="text-purple-300/60 text-xs mt-1 font-sans">
-              Live recurring revenue, active subscriber metrics, server health, and support ticket queues.
+            <h1 className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight pt-1">
+              VIXY'S VAULT SaaS Master Intelligence
+            </h1>
+            <p className="text-purple-300/70 text-xs sm:text-sm font-sans max-w-3xl">
+              Real-time user directory, live recurring revenue (MRR/ARR), active subscriber management, and system telemetry.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-[#0B061A] px-4 py-2 rounded-xl border border-purple-900/40 font-mono text-xs">
-            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse" />
+          <div className="flex items-center gap-3 bg-[#0B061A] px-4 py-2.5 rounded-2xl border border-purple-900/50 font-mono text-xs shrink-0">
+            <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/80" />
             <div>
-              <span className="text-purple-300/50 text-[10px] block">Server Status</span>
-              <span className="text-purple-300 font-bold">HEALTHY ({stats.apiLatencyMs}ms)</span>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">System Telemetry</span>
+              <span className="text-emerald-300 font-bold">ONLINE ({stats.apiLatencyMs}ms Latency)</span>
             </div>
           </div>
         </div>
 
-        {/* Core Admin Metric Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-            <span className="text-purple-300/60 text-xs font-mono block">Monthly Recurring (MRR)</span>
-            <div className="font-mono font-black text-2xl text-emerald-400 mt-1">${stats.mrr.toLocaleString()}</div>
-            <span className="text-[10px] text-purple-300/50 font-mono">+18.4% vs last month</span>
+        {/* 2. CORE TELEMETRY METRIC GRID */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mt-5">
+          <div className="bg-[#0B061A]/90 p-4 rounded-2xl border border-purple-900/40 space-y-1">
+            <div className="flex items-center justify-between text-purple-300/60 text-xs font-mono">
+              <span>Monthly Revenue (MRR)</span>
+              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-emerald-400">${stats.mrr.toLocaleString()}</div>
+            <div className="text-[10px] text-emerald-300/80 font-mono font-bold flex items-center gap-1">
+              <TrendingUp className="w-3 h-3" />
+              <span>+$1,194 today (+18.4%)</span>
+            </div>
           </div>
 
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-            <span className="text-purple-300/60 text-xs font-mono block">Active Subscribers</span>
-            <div className="font-mono font-black text-2xl text-purple-300 mt-1">{stats.activeSubscribers}</div>
-            <span className="text-[10px] text-purple-300/50 font-mono">212 Pro / 36 Elite</span>
+          <div className="bg-[#0B061A]/90 p-4 rounded-2xl border border-purple-900/40 space-y-1">
+            <div className="flex items-center justify-between text-purple-300/60 text-xs font-mono">
+              <span>Annual Revenue (ARR)</span>
+              <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-purple-200">${arr.toLocaleString()}</div>
+            <div className="text-[10px] text-purple-300/60 font-mono">Run-rate projection</div>
           </div>
 
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-            <span className="text-purple-300/60 text-xs font-mono block">Predictions Today</span>
-            <div className="font-mono font-black text-2xl text-purple-300 mt-1">{stats.predictionsToday}</div>
-            <span className="text-[10px] text-purple-300/50 font-mono">96 / 96 Executed</span>
+          <div className="bg-[#0B061A]/90 p-4 rounded-2xl border border-purple-900/40 space-y-1">
+            <div className="flex items-center justify-between text-purple-300/60 text-xs font-mono">
+              <span>Total Registered Users</span>
+              <Users className="w-3.5 h-3.5 text-cyan-400" />
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-white">{totalUsersCount.toLocaleString()}</div>
+            <div className="text-[10px] text-cyan-300/80 font-mono font-bold">+38 new signups today</div>
           </div>
 
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-            <span className="text-purple-300/60 text-xs font-mono block">Model Win Rate</span>
-            <div className="font-mono font-black text-2xl text-emerald-400 mt-1">{stats.winRate}%</div>
-            <span className="text-[10px] text-purple-300/50 font-mono">Verified 30D Window</span>
+          <div className="bg-[#0B061A]/90 p-4 rounded-2xl border border-purple-900/40 space-y-1">
+            <div className="flex items-center justify-between text-purple-300/60 text-xs font-mono">
+              <span>Active Paying Subscribers</span>
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-amber-300">{activeSubsCount}</div>
+            <div className="text-[10px] text-purple-300/60 font-mono">{proCount} Pro / {eliteCount} Elite</div>
           </div>
 
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-            <span className="text-purple-300/60 text-xs font-mono block">API Health & Latency</span>
-            <div className="font-mono font-black text-2xl text-white mt-1">{stats.apiLatencyMs}ms</div>
-            <span className="text-[10px] text-purple-300 font-mono">99.98% Uptime</span>
+          <div className="bg-[#0B061A]/90 p-4 rounded-2xl border border-purple-900/40 space-y-1 col-span-2 sm:col-span-1">
+            <div className="flex items-center justify-between text-purple-300/60 text-xs font-mono">
+              <span>AI Model Win Rate</span>
+              <Zap className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="font-mono font-black text-2xl sm:text-3xl text-emerald-400">{stats.winRate}%</div>
+            <div className="text-[10px] text-purple-300/60 font-mono">Verified 30-Day Window</div>
           </div>
         </div>
       </div>
 
-      {/* Grid: Global Quant Controls & Support Queue */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Quant Override Controls - 5 Cols */}
-        <div className="lg:col-span-5 bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
-          <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
-            <Sliders className="w-4 h-4 text-purple-400" />
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Global System Override</h3>
-          </div>
+      {/* 3. ADMIN SUB-NAVIGATION TABS */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none font-mono text-xs">
+        <button
+          onClick={() => setAdminTab('users')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'users'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <Users className="w-4 h-4 text-purple-300" />
+          <span>User Directory & Accounts ({filteredUsers.length})</span>
+        </button>
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="text-purple-200">System-Wide Min Confidence Floor:</span>
-                <span className="font-bold text-purple-300">{minConfidenceOverride}%</span>
+        <button
+          onClick={() => setAdminTab('revenue')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'revenue'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <DollarSign className="w-4 h-4 text-emerald-400" />
+          <span>Stripe Payments & Audit Log</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('tickets')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'tickets'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <MessageSquare className="w-4 h-4 text-cyan-400" />
+          <span>Support Tickets ({tickets.filter((t) => t.status !== 'RESOLVED').length})</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('settings')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'settings'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <Sliders className="w-4 h-4 text-amber-400" />
+          <span>System & Quant Overrides</span>
+        </button>
+      </div>
+
+      {/* TAB 1: MASTER USER DIRECTORY */}
+      {adminTab === 'users' && (
+        <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-5 shadow-2xl font-mono">
+          {/* Top Search & Filter Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative min-w-[240px] sm:min-w-[300px]">
+                <Search className="w-4 h-4 text-purple-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search user email, name, ID..."
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full bg-[#0B061A] border border-purple-900/60 rounded-2xl pl-10 pr-4 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500 font-sans"
+                />
               </div>
-              <input
-                type="range"
-                min="70"
-                max="95"
-                step="5"
-                value={minConfidenceOverride}
-                onChange={(e) => setMinConfidenceOverride(Number(e.target.value))}
-                className="w-full accent-purple-500 bg-[#0B061A] h-2 rounded-lg"
-              />
+
+              {/* Tier Filter Pills */}
+              <div className="flex items-center gap-1 overflow-x-auto py-1">
+                {(['ALL', 'ELITE_PASS', 'PRO_PASS', 'FREE_TRIAL', 'ADMIN'] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTierFilter(t)}
+                    className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all shrink-0 ${
+                      tierFilter === t
+                        ? 'bg-purple-600 text-white border border-purple-400/50'
+                        : 'bg-[#0B061A] text-purple-300/60 hover:text-white border border-purple-900/40'
+                    }`}
+                  >
+                    {t === 'ALL' ? 'All Users' : t === 'ELITE_PASS' ? 'Elite Pass' : t === 'PRO_PASS' ? 'Pro Pass' : t === 'FREE_TRIAL' ? 'Free Trial' : 'Admins'}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
-              <span className="text-xs font-bold text-white block">Engine Emergency Mode</span>
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => alert('Emergency Circuit Breaker Triggered: Suppressing signals lower than 92% confidence.')}
-                className="w-full py-2.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 font-bold text-xs transition-all flex items-center justify-center gap-2"
+                onClick={() => setIsAddUserOpen(true)}
+                className="px-4 py-2 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition-all flex items-center gap-2 shrink-0"
               >
-                <AlertTriangle className="w-4 h-4" />
-                <span>Trigger Volatility Circuit Breaker</span>
+                <UserPlus className="w-4 h-4" />
+                <span>Add User</span>
               </button>
             </div>
           </div>
-        </div>
 
-        {/* Support Ticket Queue - 7 Cols */}
-        <div className="lg:col-span-7 bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+          {/* Add User Form Drawer */}
+          {isAddUserOpen && (
+            <form onSubmit={handleCreateUser} className="p-4 bg-[#0B061A] rounded-2xl border border-emerald-500/40 space-y-3 font-sans">
+              <div className="flex items-center justify-between text-xs font-mono font-bold text-emerald-300">
+                <span>Create / Register New User Account</span>
+                <button type="button" onClick={() => setIsAddUserOpen(false)} className="text-purple-400 hover:text-white">✕</button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div>
+                  <label className="text-[10px] text-purple-300/60 uppercase font-bold block mb-1">User Email *</label>
+                  <input
+                    type="email"
+                    required
+                    placeholder="user@example.com"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    className="w-full bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-purple-300/60 uppercase font-bold block mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    placeholder="John Doe"
+                    value={newUserName}
+                    onChange={(e) => setNewUserName(e.target.value)}
+                    className="w-full bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-purple-300/60 uppercase font-bold block mb-1">Subscription Tier</label>
+                  <select
+                    value={newUserTier}
+                    onChange={(e) => setNewUserTier(e.target.value as any)}
+                    className="w-full bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="FREE_TRIAL">Free 3-Hour Trial</option>
+                    <option value="PRO_PASS">Pro Pass ($49/mo)</option>
+                    <option value="ELITE_PASS">Elite Pass ($199/mo)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserOpen(false)}
+                  className="px-3 py-1.5 rounded-xl bg-purple-950 text-purple-300 border border-purple-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                >
+                  Confirm Registration
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* User Table Responsive Container */}
+          <div className="overflow-x-auto rounded-2xl border border-purple-900/40 bg-[#0B061A]">
+            <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+              <thead>
+                <tr className="bg-[#080313] border-b border-purple-900/50 text-purple-300/60 uppercase font-bold text-[10px]">
+                  <th className="p-3.5">User Account</th>
+                  <th className="p-3.5">Plan Tier</th>
+                  <th className="p-3.5">Role</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5">Joined</th>
+                  <th className="p-3.5">Volume Trades</th>
+                  <th className="p-3.5 text-right">Master Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-900/30 text-purple-100 font-sans">
+                {filteredUsers.map((u) => (
+                  <tr key={u.id} className="hover:bg-purple-900/10 transition-colors">
+                    <td className="p-3.5">
+                      <div className="font-bold text-white font-mono text-xs">{u.name}</div>
+                      <div className="text-purple-300/60 text-[11px] font-mono">{u.email}</div>
+                    </td>
+
+                    <td className="p-3.5 font-mono">
+                      {u.tier === 'ELITE_PASS' ? (
+                        <span className="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/40 text-amber-300 font-bold text-[10px] inline-flex items-center gap-1">
+                          <Sparkles className="w-3 h-3 text-amber-400" />
+                          <span>Elite Pass ($199)</span>
+                        </span>
+                      ) : u.tier === 'PRO_PASS' ? (
+                        <span className="px-2.5 py-1 rounded-xl bg-purple-500/20 border border-purple-500/40 text-purple-200 font-bold text-[10px] inline-flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-purple-400" />
+                          <span>Pro Pass ($49)</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] font-bold border border-slate-700">
+                          Free Trial
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3.5 font-mono">
+                      {u.role === 'ADMIN' ? (
+                        <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-black uppercase">
+                          ADMIN
+                        </span>
+                      ) : (
+                        <span className="text-purple-300/60 text-[11px]">User</span>
+                      )}
+                    </td>
+
+                    <td className="p-3.5 font-mono">
+                      {u.status === 'ACTIVE' ? (
+                        <span className="text-emerald-400 text-[11px] font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                          Active
+                        </span>
+                      ) : u.status === 'TRIALING' ? (
+                        <span className="text-amber-300 text-[11px] font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                          3H Trial
+                        </span>
+                      ) : (
+                        <span className="text-rose-400 text-[11px] font-bold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
+                          Suspended
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-3.5 text-purple-300/60 font-mono text-[11px]">{u.joinedDate}</td>
+
+                    <td className="p-3.5 font-mono font-bold text-white">{u.volumeTrades.toLocaleString()}</td>
+
+                    <td className="p-3.5 text-right font-mono">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* Tier Selector Dropdown */}
+                        <select
+                          value={u.tier}
+                          onChange={(e) => handleChangeUserTier(u.id, e.target.value as any)}
+                          className="bg-[#120B28] border border-purple-900 text-purple-200 text-[10px] rounded-lg px-2 py-1 focus:outline-none"
+                          title="Change User Tier"
+                        >
+                          <option value="FREE_TRIAL">Set Free Trial</option>
+                          <option value="PRO_PASS">Set Pro Pass</option>
+                          <option value="ELITE_PASS">Set Elite Pass</option>
+                        </select>
+
+                        {/* Toggle Admin Role */}
+                        <button
+                          onClick={() => handleToggleUserRole(u.id)}
+                          className={`px-2 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                            u.role === 'ADMIN'
+                              ? 'bg-rose-950/60 border-rose-500/40 text-rose-300 hover:bg-rose-900'
+                              : 'bg-purple-950/60 border-purple-800 text-purple-300 hover:bg-purple-900'
+                          }`}
+                          title={u.role === 'ADMIN' ? 'Demote to regular user' : 'Promote to Admin'}
+                        >
+                          {u.role === 'ADMIN' ? 'Demote' : 'Make Admin'}
+                        </button>
+
+                        {/* Toggle Suspend */}
+                        <button
+                          onClick={() => handleToggleUserStatus(u.id)}
+                          className="p-1.5 rounded-lg bg-rose-950/40 text-rose-400 hover:text-white border border-rose-900/50"
+                          title={u.status === 'SUSPENDED' ? 'Unsuspend User' : 'Suspend User'}
+                        >
+                          {u.status === 'SUSPENDED' ? <UserCheck className="w-3.5 h-3.5 text-emerald-400" /> : <UserX className="w-3.5 h-3.5 text-rose-400" />}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: STRIPE PAYMENTS & REVENUE AUDIT */}
+      {adminTab === 'revenue' && (
+        <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-5 shadow-2xl font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-400" />
+                <span>Live Stripe Payment Stream & Financial Audit</span>
+              </h2>
+              <p className="text-purple-300/60 text-xs font-sans mt-0.5">
+                Sub-second transaction logs from Stripe Checkout, Apple Pay, and Web3 USDC gateways.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs">
+              <span className="px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
+                Gross Monthly Revenue: ${stats.mrr.toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-purple-900/40 bg-[#0B061A]">
+            <table className="w-full text-left text-xs border-collapse min-w-[680px]">
+              <thead>
+                <tr className="bg-[#080313] border-b border-purple-900/50 text-purple-300/60 uppercase font-bold text-[10px]">
+                  <th className="p-3.5">Stripe Charge ID</th>
+                  <th className="p-3.5">Customer Email</th>
+                  <th className="p-3.5">Plan Tier</th>
+                  <th className="p-3.5">Amount</th>
+                  <th className="p-3.5">Payment Gateway</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5 text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-900/30 text-purple-100 font-sans">
+                {transactions.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-purple-900/10 transition-colors">
+                    <td className="p-3.5 font-mono text-purple-300 font-bold text-[11px]">{tx.id}</td>
+                    <td className="p-3.5 font-mono font-bold text-white">{tx.email}</td>
+                    <td className="p-3.5 font-mono">
+                      <span className="px-2 py-0.5 rounded bg-purple-900/60 text-purple-200 border border-purple-700/50 text-[10px] font-bold">
+                        {tx.plan}
+                      </span>
+                    </td>
+                    <td className="p-3.5 font-mono font-black text-emerald-400 text-sm">${tx.amount.toFixed(2)}</td>
+                    <td className="p-3.5 font-mono text-purple-300/70 text-[11px]">{tx.method}</td>
+                    <td className="p-3.5 font-mono">
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
+                        {tx.status}
+                      </span>
+                    </td>
+                    <td className="p-3.5 text-right font-mono text-purple-300/60 text-[11px]">{tx.timestamp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: SUPPORT TICKETS */}
+      {adminTab === 'tickets' && (
+        <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-4 shadow-2xl font-mono">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className="w-4 h-4 text-purple-400" />
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Support Desk Queue</h3>
+              <MessageSquare className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Support Desk Queue</h3>
             </div>
-            <span className="text-[10px] bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
-              {tickets.filter((t) => t.status !== 'RESOLVED').length} Active Tickets
+            <span className="text-xs bg-purple-500/20 text-purple-300 px-3 py-1 rounded-xl border border-purple-500/30 font-bold">
+              {tickets.filter((t) => t.status !== 'RESOLVED').length} Active Open Tickets
             </span>
           </div>
 
@@ -160,22 +729,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
               <div
                 key={t.id}
                 onClick={() => setSelectedTicket(t)}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
                   selectedTicket?.id === t.id
-                    ? 'bg-purple-600/20 border-purple-500'
+                    ? 'bg-purple-600/20 border-purple-500 shadow-lg'
                     : 'bg-[#0B061A] border-purple-900/40 hover:border-purple-500/40'
                 }`}
               >
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 font-mono">
                     <span className="font-bold text-white text-xs">{t.userEmail}</span>
-                    <span className="text-[10px] text-purple-300/50">ID: {t.id}</span>
+                    <span className="text-[10px] text-purple-300/50">Ticket ID: {t.id}</span>
                   </div>
-                  <p className="text-purple-300/70 text-xs font-sans truncate max-w-sm mt-0.5">{t.subject}</p>
+                  <p className="text-purple-300/80 text-xs font-sans mt-1">{t.subject}</p>
                 </div>
 
                 <span
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  className={`px-3 py-1 rounded-xl text-xs font-bold shrink-0 self-start sm:self-auto ${
                     t.status === 'RESOLVED'
                       ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                       : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
@@ -188,32 +757,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
           </div>
 
           {selectedTicket && (
-            <div className="mt-4 pt-4 border-t border-purple-900/40 space-y-3 bg-[#0B061A] p-4 rounded-xl border border-purple-900/40">
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-purple-200">Ticket Detail: {selectedTicket.subject}</span>
+            <div className="mt-4 pt-4 border-t border-purple-900/40 space-y-3 bg-[#0B061A] p-4 rounded-2xl border border-purple-900/50">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 text-xs">
+                <span className="font-bold text-purple-200">Selected Ticket: {selectedTicket.subject}</span>
                 <span className="text-purple-300/50">{selectedTicket.userEmail}</span>
               </div>
-              <p className="text-xs text-purple-300/70 font-sans">{selectedTicket.message}</p>
+              <p className="text-xs text-purple-300/80 font-sans p-3 bg-[#120B28] rounded-xl border border-purple-950">{selectedTicket.message}</p>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   type="text"
-                  placeholder="Type admin response..."
+                  placeholder="Type master admin response..."
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  className="flex-1 bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-1.5 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
+                  className="flex-1 bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500 font-sans"
                 />
                 <button
                   onClick={handleSendTicketReply}
-                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md"
                 >
-                  Reply & Resolve
+                  Send Reply & Resolve
                 </button>
               </div>
             </div>
           )}
         </div>
-      </div>
+      )}
+
+      {/* TAB 4: SYSTEM & QUANT OVERRIDES */}
+      {adminTab === 'settings' && (
+        <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-6 shadow-2xl font-mono">
+          <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
+            <Sliders className="w-5 h-5 text-amber-400" />
+            <h3 className="text-sm font-bold text-white uppercase tracking-wider">Global Quant Model Overrides</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4 bg-[#0B061A] p-5 rounded-2xl border border-purple-900/40">
+              <div className="flex justify-between text-xs">
+                <span className="text-purple-200 font-bold">System-Wide Min Confidence Floor:</span>
+                <span className="font-black text-amber-300 text-sm">{minConfidenceOverride}%</span>
+              </div>
+              <input
+                type="range"
+                min="70"
+                max="95"
+                step="5"
+                value={minConfidenceOverride}
+                onChange={(e) => setMinConfidenceOverride(Number(e.target.value))}
+                className="w-full accent-purple-500 bg-[#120B28] h-2 rounded-lg cursor-pointer"
+              />
+              <p className="text-[11px] text-purple-300/60 font-sans leading-relaxed">
+                Signals below {minConfidenceOverride}% confidence will be suppressed globally across all terminals.
+              </p>
+            </div>
+
+            <div className="bg-[#0B061A] p-5 rounded-2xl border border-purple-900/40 space-y-3">
+              <span className="text-xs font-bold text-white block">Engine Emergency Circuit Breaker</span>
+              <p className="text-[11px] text-purple-300/60 font-sans leading-relaxed">
+                Instantly locks model parameters and forces high-integrity mode during flash crashes.
+              </p>
+              <button
+                onClick={() => alert('Emergency Circuit Breaker Triggered: Suppressing signals lower than 92% confidence.')}
+                className="w-full py-3 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-md"
+              >
+                <AlertTriangle className="w-4 h-4 text-rose-400" />
+                <span>Trigger Volatility Circuit Breaker</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
