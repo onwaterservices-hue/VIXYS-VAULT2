@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Star, ChevronDown, Zap, Layers, Globe } from 'lucide-react';
+import { Sparkles, Star, ChevronDown, Zap, Layers, Globe, Sliders } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
 
 interface TopNavControlsProps {
@@ -12,6 +12,7 @@ interface TopNavControlsProps {
   favorites: string[];
   onToggleFavorite: (symbol: string) => void;
   onOpenSearch: () => void;
+  onOpenCompare?: () => void;
 }
 
 export const TopNavControls: React.FC<TopNavControlsProps> = ({
@@ -24,6 +25,7 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
   favorites,
   onToggleFavorite,
   onOpenSearch,
+  onOpenCompare,
 }) => {
   const assets = Object.values(ASSET_DATABASE);
   const activeConfig = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;
@@ -117,6 +119,17 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
               </div>
             );
           })}
+
+          {onOpenCompare && (
+            <button
+              onClick={onOpenCompare}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-200 text-xs font-black transition-all shrink-0 shadow-lg shadow-purple-950/40"
+              title="Compare 2 Assets Side-by-Side (Predictions, Order Flow, Edge)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-300" />
+              <span>Split-Screen Compare</span>
+            </button>
+          )}
 
           <button
             onClick={onOpenSearch}

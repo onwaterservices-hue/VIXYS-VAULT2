@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { JournalEntry } from '../types';
 import {
   Trophy,
@@ -17,18 +17,42 @@ import {
   ArrowUpRight,
   UserCheck,
 } from 'lucide-react';
+import { fetchLeaderboard, LeaderboardUser } from '../services/api';
 
 interface LeaderboardViewProps {
-  entries: JournalEntry[];
+  entries?: JournalEntry[];
   onOpenJournal?: () => void;
 }
 
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
-  entries,
+  entries = [],
   onOpenJournal,
 }) => {
   const [filterTab, setFilterTab] = useState<'ALL' | 'MY_LOGS' | 'COMMUNITY'>('ALL');
   const [searchTerm, setSearchTerm] = useState<string>('');
+
+  const [leaderboardData, setLeaderboardData] = useState<LeaderboardUser[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let active = true;
+    const loadBoard = async () => {
+      try {
+        const data = await fetchLeaderboard();
+        if (active) setLeaderboardData(data);
+      } catch (e) {
+        console.warn('Failed to load leaderboard', e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    loadBoard();
+    const timer = setInterval(loadBoard, 15000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, []);
 
   // Calculate local user stats from real journal entries
   const userTotalTrades = entries.length;
@@ -223,56 +247,86 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-900/30">
-              {filteredTraders.map((trd, index) => (
-                <tr
-                  key={trd.id}
-                  className={`hover:bg-purple-950/20 transition-colors ${
-                    trd.isCurrentUser ? 'bg-purple-950/30 font-bold border-l-2 border-purple-500' : ''
-                  }`}
-                >
-                  <td className="py-3 px-3">
-                    <span className="flex items-center gap-1.5 text-white font-black">
-                      {index === 0 ? (
-                        <Trophy className="w-4 h-4 text-amber-400" />
-                      ) : index === 1 ? (
-                        <Award className="w-4 h-4 text-slate-300" />
-                      ) : index === 2 ? (
-                        <Award className="w-4 h-4 text-amber-700" />
-                      ) : null}
-                      #{index + 1}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-white font-bold">{trd.traderName}</span>
-                      {trd.isCurrentUser && (
-                        <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px]">
-                          YOU
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-slate-400 block">{trd.emailMasked}</span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${trd.badgeColor}`}>
-                      {trd.badge}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-300">{trd.totalTrades} Trades</td>
-                  <td className="py-3 px-3 text-emerald-400 font-extrabold">{trd.winRate}</td>
-                  <td className="py-3 px-3 font-extrabold text-emerald-400">{trd.netPnl}</td>
-                  <td className="py-3 px-3">
-                    <span
-                      title="Client-side SHA-256 hash"
-                      className="px-2 py-1 rounded bg-[#110726] border border-purple-900/40 text-[10px] text-purple-300 font-mono flex items-center gap-1.5 w-max hover:border-purple-500/40 cursor-pointer"
-                      onClick={() => navigator.clipboard.writeText(trd.lastHash)}
+              {leaderboardData && leaderboardData.length > 0 ? (
+                leaderboardData
+                  .filter((trd) => {
+                    const nameStr = (trd.traderName || (trd as any).name || '').toLowerCase();
+                    const idStr = (trd.userId || '').toLowerCase();
+                    const term = (searchTerm || '').toLowerCase();
+                    if (term && !nameStr.includes(term) && !idStr.includes(term)) {
+                      return false;
+                    }
+                    return true;
+                  })
+                  .map((trd, index) => {
+                    const nameStr = trd.traderName || (trd as any).name || 'Trader';
+                    const isUser = nameStr.includes('You') || nameStr.includes('Quantum') || nameStr.includes('Master Admin');
+                    return (
+                    <tr
+                      key={trd.rank || index}
+                      className={`hover:bg-purple-950/20 transition-colors ${
+                        isUser ? 'bg-purple-950/30 font-bold border-l-2 border-purple-500' : ''
+                      }`}
                     >
-                      <Hash className="w-3 h-3 text-purple-400" />
-                      {trd.lastHash.substring(0, 10)}...
-                    </span>
+                      <td className="py-3 px-3">
+                        <span className="flex items-center gap-1.5 text-white font-black">
+                          {trd.rank === 1 ? (
+                            <Trophy className="w-4 h-4 text-amber-400" />
+                          ) : trd.rank === 2 ? (
+                            <Award className="w-4 h-4 text-slate-300" />
+                          ) : trd.rank === 3 ? (
+                            <Award className="w-4 h-4 text-amber-700" />
+                          ) : null}
+                          #{trd.rank || index + 1}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-bold">{nameStr}</span>
+                          {isUser && (
+                            <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px]">
+                              YOU
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-[10px] text-slate-400 block">vixy...0@gmail.com</span>
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                            trd.badge === 'MASTER ADMIN'
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                          }`}
+                        >
+                          {trd.badge}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-slate-300">{trd.totalTrades} Trades</td>
+                      <td className="py-3 px-3 text-emerald-400 font-extrabold">{trd.winRate}%</td>
+                      <td className="py-3 px-3 font-extrabold text-emerald-400">
+                        ${(trd.realizedPnl || 0) >= 0 ? '+' : ''}
+                        {(trd.realizedPnl || 0).toFixed(2)}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span
+                          title="Client-side SHA-256 hash"
+                          className="px-2 py-0.5 rounded bg-[#070312] border border-purple-900/60 text-purple-300 font-mono text-[10px] flex items-center gap-1 w-fit"
+                        >
+                          <Hash className="w-3 h-3 text-purple-400" />
+                          {trd.lastHash ? `${trd.lastHash.substring(0, 10)}...` : '0x7e...'}
+                        </span>
+                      </td>
+                    </tr>
+                    );
+                  })
+              ) : (
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-purple-300/60 text-xs">
+                    No leaderboard entries yet. Log a trade in your Journal to claim #1 rank!
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

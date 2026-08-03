@@ -1,52 +1,26 @@
-import React, { useState } from 'react';
-import { BookOpen, Plus, TrendingUp, TrendingDown, DollarSign, Tag, Check, Trash2, Zap, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { BookOpen, Plus, TrendingUp, TrendingDown, DollarSign, Tag, Check, Trash2, Zap, ArrowUpRight, ShieldCheck, Key } from 'lucide-react';
 import { JournalEntry } from '../types';
+import { fetchJournal, createJournalEntry, deleteJournalEntry } from '../services/api';
 
 export const TradeJournalView: React.FC = () => {
-  const [entries, setEntries] = useState<JournalEntry[]>([
-    {
-      id: 'jnl_101',
-      timestamp: Date.now() - 45 * 60 * 1000,
-      market: 'BTC 15M Kalshi #9284',
-      direction: 'YES',
-      entryOdds: 0.52,
-      exitOdds: 0.94,
-      stakeUSD: 500,
-      pnlUSD: 403.8,
-      confidence: 91,
-      edge: 12.2,
-      notes: 'L2 Net Delta was +1,420 BTC. Entered at 52c when market underpriced orderbook pressure.',
-      tags: ['Kalshi', 'OrderBook Imbalance', 'Win'],
-    },
-    {
-      id: 'jnl_100',
-      timestamp: Date.now() - 120 * 60 * 1000,
-      market: 'BTC 15M Polymarket #4812',
-      direction: 'NO',
-      entryOdds: 0.48,
-      exitOdds: 0.0,
-      stakeUSD: 300,
-      pnlUSD: -300,
-      confidence: 79,
-      edge: 3.1,
-      notes: 'Low edge signal taken during quiet Asia session. Slipped past confidence filter.',
-      tags: ['Polymarket', 'Low Edge', 'Loss'],
-    },
-    {
-      id: 'jnl_099',
-      timestamp: Date.now() - 180 * 60 * 1000,
-      market: 'BTC 15M Kalshi #9281',
-      direction: 'YES',
-      entryOdds: 0.55,
-      exitOdds: 0.98,
-      stakeUSD: 1000,
-      pnlUSD: 781.8,
-      confidence: 94,
-      edge: 14.5,
-      notes: 'High confidence Grade A+ signal. VWAP support retest aligned with model prediction.',
-      tags: ['Kalshi', 'Grade A+', 'Win'],
-    },
-  ]);
+  const [entries, setEntries] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  const loadJournal = async () => {
+    try {
+      const data = await fetchJournal('usr_owner_01');
+      setEntries(data);
+    } catch (e) {
+      console.warn('Error fetching journal', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadJournal();
+  }, []);
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [market, setMarket] = useState('BTC 15M Kalshi');
@@ -56,42 +30,40 @@ export const TradeJournalView: React.FC = () => {
   const [stakeUSD, setStakeUSD] = useState('500');
   const [notes, setNotes] = useState('');
 
-  const totalPnL = entries.reduce((acc, curr) => acc + curr.pnlUSD, 0);
+  const totalPnL = entries.reduce((acc, curr) => acc + (curr.pnlUSD || 0), 0);
   const totalTrades = entries.length;
-  const winCount = entries.filter((e) => e.pnlUSD > 0).length;
+  const winCount = entries.filter((e) => (e.pnlUSD || 0) > 0).length;
   const winRate = totalTrades > 0 ? (winCount / totalTrades) * 100 : 0;
 
-  const handleAddEntry = (e: React.FormEvent) => {
+  const handleAddEntry = async (e: React.FormEvent) => {
     e.preventDefault();
     const entry = parseFloat(entryOdds) || 0.5;
     const exit = parseFloat(exitOdds) || 0.0;
     const stake = parseFloat(stakeUSD) || 100;
-
-    // PnL calculation based on binary odds
     const pnl = exit > 0 ? (exit - entry) * (stake / entry) : -stake;
 
-    const newEntry: JournalEntry = {
-      id: `jnl_${Math.random().toString(36).substring(2, 7)}`,
-      timestamp: Date.now(),
-      market,
+    await createJournalEntry({
+      userId: 'usr_owner_01',
+      ticker: market,
       direction,
-      entryOdds: entry,
-      exitOdds: exit,
-      stakeUSD: stake,
-      pnlUSD: Math.round(pnl * 100) / 100,
-      confidence: 90,
-      edge: 10.5,
+      entryPrice: entry * 100,
+      targetPrice: exit * 100,
+      stopLoss: 0,
+      stake,
+      edgeAtEntry: 10.5,
       notes,
-      tags: [market.includes('Kalshi') ? 'Kalshi' : 'Polymarket', pnl > 0 ? 'Win' : 'Loss'],
-    };
+      outcome: pnl > 0 ? 'WIN' : 'LOSS',
+      pnlUSD: Math.round(pnl * 100) / 100,
+    });
 
-    setEntries([newEntry, ...entries]);
+    await loadJournal();
     setShowAddModal(false);
     setNotes('');
   };
 
-  const handleDelete = (id: string) => {
-    setEntries(entries.filter((e) => e.id !== id));
+  const handleDelete = async (id: string) => {
+    await deleteJournalEntry(id);
+    await loadJournal();
   };
 
   return (
@@ -174,7 +146,13 @@ export const TradeJournalView: React.FC = () => {
                 <p className="text-xs text-purple-200/80 font-sans">{entry.notes}</p>
 
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  {entry.tags.map((tag, i) => (
+                  {entry.entryHash && (
+                    <span className="px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-300 border border-purple-500/30 text-[10px] font-mono flex items-center gap-1">
+                      <Key className="w-3 h-3 text-purple-400" />
+                      SHA256: {entry.entryHash.substring(0, 12)}...
+                    </span>
+                  )}
+                  {entry.tags && entry.tags.map((tag: string, i: number) => (
                     <span key={i} className="px-2 py-0.5 rounded-full bg-[#0B061A] text-purple-300/70 border border-purple-900/40 text-[10px]">
                       #{tag}
                     </span>

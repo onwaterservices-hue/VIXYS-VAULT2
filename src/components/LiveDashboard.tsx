@@ -33,6 +33,7 @@ interface LiveDashboardProps {
   onOpenAlerts: () => void;
   onOpenPricing: () => void;
   onOpenJournal: () => void;
+  onOpenCompare?: () => void;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
@@ -48,6 +49,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   onOpenAlerts,
   onOpenPricing,
   onOpenJournal,
+  onOpenCompare,
   userRole,
   selectedAsset = 'BTC',
   onSelectAsset = () => {},
@@ -349,6 +351,17 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          {onOpenCompare && (
+            <button
+              onClick={onOpenCompare}
+              className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/50 text-purple-100 font-extrabold text-xs transition-all shadow-md active:scale-95 cursor-pointer"
+              title="Compare 2 Assets Side-by-Side (Predictions, Order Flow, Edge)"
+            >
+              <Sliders className="w-3.5 h-3.5 text-purple-300" />
+              <span>Split-Screen Compare →</span>
+            </button>
+          )}
+
           <span className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${
             appMode === 'SIMPLE' 
               ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 

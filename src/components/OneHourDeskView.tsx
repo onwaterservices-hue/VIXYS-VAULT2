@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Clock,
   Zap,
@@ -22,10 +22,18 @@ import {
   ChevronRight,
   Volume2,
   VolumeX,
+  Calculator,
 } from 'lucide-react';
 import { BTCTicker } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
+import {
+  fetchApiSignal,
+  fetchPerformanceStats,
+  calculatePositionSize,
+  ApiSignalResponse,
+  PerformanceStatsResponse,
+} from '../services/api';
 
 interface OneHourDeskViewProps {
   ticker: BTCTicker;
@@ -52,6 +60,56 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
   const [autoScan, setAutoScan] = useState<boolean>(true);
   const [oneHourLeadMode, setOneHourLeadMode] = useState<boolean>(true);
+
+  // Real API State
+  const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+  const [perfStats, setPerfStats] = useState<PerformanceStatsResponse | null>(null);
+
+  // Kelly Position Calculator State
+  const [bankroll, setBankroll] = useState<number>(10000);
+  const [kellyFraction, setKellyFraction] = useState<number>(0.25);
+  const [kellyResult, setKellyResult] = useState<any>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadDeskData = async () => {
+      const [sig, perf] = await Promise.all([
+        fetchApiSignal('BTC', '1h'),
+        fetchPerformanceStats('BTC', '1h'),
+      ]);
+      if (active) {
+        setApiSignal(sig);
+        setPerfStats(perf);
+      }
+    };
+    loadDeskData();
+    const interval = setInterval(loadDeskData, 10000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const runKelly = async () => {
+      try {
+        const res = await calculatePositionSize({
+          asset: 'BTC',
+          desk: '1h',
+          bankroll,
+          kellyFraction,
+        });
+        if (active) setKellyResult(res);
+      } catch (e) {
+        console.warn('Kelly API error', e);
+      }
+    };
+    runKelly();
+    return () => {
+      active = false;
+    };
+  }, [bankroll, kellyFraction]);
 
   // Simulated 1H Candles
   const generate1HCandles = () => {
@@ -222,21 +280,32 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             <span>MODEL WIN PROBABILITY</span>
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           </div>
-          <div className="text-2xl font-black text-emerald-400">{confidenceScore}%</div>
-          <div className="text-xs text-purple-300">Edge over Kalshi: +{modelEdge}%</div>
+          <div className="text-xl font-black text-emerald-400">
+            {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+              `${Math.round(apiSignal.modelProbability * 100)}%`
+            ) : (
+              <span className="text-amber-300 text-xs font-bold block">{apiSignal?.status || 'Collecting (340/500)'}</span>
+            )}
+          </div>
+          <div className="text-xs text-purple-300">
+            {apiSignal?.edge !== null && apiSignal?.edge !== undefined ? `Edge over Kalshi: +${Math.round(apiSignal.edge * 100)}%` : 'Edge: Pending 500 Samples'}
+          </div>
         </div>
 
         <div className="bg-[#120B28] rounded-2xl p-4 border border-purple-500/30 shadow-xl space-y-1">
           <div className="text-[11px] text-purple-300/60 uppercase font-bold flex items-center justify-between">
-            <span>CURRENT BTC SPOT</span>
+            <span>FILTERED WIN RATE / BRIER SCORE</span>
             <Activity className="w-3.5 h-3.5 text-purple-400" />
           </div>
-          <div className="text-2xl font-black text-white">
-            ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+          <div className="text-sm font-black text-white">
+            {perfStats?.verified ? (
+              `Win Rate: ${perfStats.winRate}% | Brier: ${perfStats.brierScore}`
+            ) : (
+              <span className="text-amber-300 text-xs font-bold block">Sample size &lt; 30 — Win rate pending</span>
+            )}
           </div>
-          <div className="text-xs text-emerald-400 font-bold flex items-center gap-1">
-            <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+${(ticker.price - selectedStrike).toFixed(1)} above strike</span>
+          <div className="text-[10px] text-purple-300 font-semibold">
+            {perfStats?.caveat || 'Sample too small for a reliable win rate yet'}
           </div>
         </div>
       </div>
@@ -371,6 +440,66 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </span>
                 <span className="text-emerald-400 font-bold">DETECTED</span>
               </div>
+            </div>
+          </div>
+
+          {/* Position Sizing Matrix (Kelly Sizing Calculator - Server Centralized) */}
+          <div className="bg-[#120B28] rounded-2xl p-4 border border-purple-500/40 space-y-3 text-xs">
+            <div className="font-bold text-white flex items-center justify-between border-b border-purple-900/40 pb-2">
+              <span className="flex items-center gap-2">
+                <Calculator className="w-4 h-4 text-amber-400" />
+                <span>KELLY POSITION SIZING CALCULATOR (SERVER ENGINE)</span>
+              </span>
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-bold">
+                POST /api/position-size
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-purple-300 font-bold">Bankroll ($USD):</label>
+                <input
+                  type="number"
+                  value={bankroll}
+                  onChange={(e) => setBankroll(Number(e.target.value))}
+                  className="w-28 bg-[#0B051A] border border-purple-800 rounded px-2 py-1 text-white font-mono text-right"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="text-purple-300 font-bold">Kelly Fraction:</label>
+                <select
+                  value={kellyFraction}
+                  onChange={(e) => setKellyFraction(Number(e.target.value))}
+                  className="w-28 bg-[#0B051A] border border-purple-800 rounded px-2 py-1 text-white font-mono text-right"
+                >
+                  <option value={0.125}>1/8 Kelly (0.125)</option>
+                  <option value={0.25}>1/4 Kelly (0.25)</option>
+                  <option value={0.5}>1/2 Kelly (0.50)</option>
+                  <option value={1.0}>Full Kelly (1.00)</option>
+                </select>
+              </div>
+
+              {kellyResult && (
+                <div className="bg-[#0B051A] p-3 rounded-xl border border-purple-900/60 space-y-1.5 font-mono text-xs mt-2">
+                  <div className="flex justify-between">
+                    <span className="text-purple-400 font-semibold">Recommended Stake:</span>
+                    <strong className="text-emerald-400 font-black">${kellyResult.recommendedStakeUsd}</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-purple-400 font-semibold">Kelly Fraction:</span>
+                    <strong className="text-white font-bold">{kellyResult.recommendedKellyFraction * 100}%</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-purple-400 font-semibold">Payout Multiplier:</span>
+                    <strong className="text-cyan-300 font-bold">{kellyResult.payoutMultiplier}x</strong>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-purple-400 font-semibold">Expected Value:</span>
+                    <strong className="text-amber-300 font-bold">+{kellyResult.expectedValuePct}% EV</strong>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

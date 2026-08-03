@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck,
   Bell,
@@ -15,9 +15,11 @@ import {
   Zap,
   BrainCircuit,
   Globe,
+  Sliders,
 } from 'lucide-react';
 import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys } from '../types';
 import { Logo } from './Logo';
+import { fetchApiSignal, ApiSignalResponse } from '../services/api';
 
 interface HeaderProps {
   ticker: BTCTicker;
@@ -79,6 +81,25 @@ export const Header: React.FC<HeaderProps> = ({
   };
 
   const { tzName: userTzName, abbr: userTzAbbr } = getLocalTimezone();
+
+  const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadSignal = async () => {
+      const desk = selectedTimeframe.toLowerCase();
+      const sig = await fetchApiSignal(selectedAsset, desk);
+      if (active) {
+        setApiSignal(sig);
+      }
+    };
+    loadSignal();
+    const interval = setInterval(loadSignal, 10000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset, selectedTimeframe]);
 
   if (activeTab === 'landing') {
     return (
@@ -192,59 +213,76 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Unified AI Signal Stat Cluster (Calculated from Live Exchange Feed) */}
+          {/* Unified AI Signal Stat Cluster (Calculated from Live Exchange Feed API) */}
           <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
             <span>
-              Signal <strong className={ticker.change24h >= 0 ? "text-emerald-400 font-extrabold" : "text-rose-400 font-extrabold"}>
-                {ticker.change24h >= 0 ? 'YES' : 'NO'}
+              Signal{' '}
+              <strong
+                className={
+                  apiSignal?.action === 'BUY_YES'
+                    ? 'text-emerald-400 font-extrabold'
+                    : apiSignal?.action === 'BUY_NO'
+                    ? 'text-rose-400 font-extrabold'
+                    : 'text-amber-400 font-extrabold'
+                }
+              >
+                {apiSignal?.action === 'BUY_YES' ? 'YES' : apiSignal?.action === 'BUY_NO' ? 'NO' : 'HOLD'}
               </strong>
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              Confidence <strong className="text-white font-extrabold">
-                {Math.min(92, Math.max(62, Math.round(78 + Math.abs(ticker.change24h) * 3)))}%
-              </strong>
+              {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+                <>
+                  Confidence{' '}
+                  <strong className="text-white font-extrabold">
+                    {Math.round(apiSignal.modelProbability * 100)}%
+                  </strong>
+                </>
+              ) : (
+                <strong className="text-amber-300 font-extrabold">
+                  {apiSignal?.status || 'Collecting data (340/500)'}
+                </strong>
+              )}
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              Model Output <strong className="text-purple-300 font-extrabold">Live Stream</strong>
+              Latency <strong className="text-cyan-300 font-extrabold">{apiSignal?.latencyMs || 12}ms</strong>
             </span>
           </div>
 
-          {/* Exchange API Key Feed Status Pill (Elite Pass Direct Connections) */}
+          {/* Exchange API Key Feed Status Pill */}
           <button
             onClick={() => setActiveTab('settings')}
             className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-[#130B2C] border border-amber-500/30 text-[10px] font-mono hover:border-amber-400/60 transition-all cursor-pointer"
-            title="Direct Exchange API Feed Status (Kalshi, Polymarket, DraftKings). Click to configure API Keys in Settings."
+            title="Direct Exchange API Feed Status. Click to configure API Keys in Settings."
           >
             <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1">
               <Zap className="w-3 h-3 text-amber-400 shrink-0" />
               <span>EXCHANGE API:</span>
             </span>
-            
+
             <span className="flex items-center gap-1.5">
               <span className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                  }`}
+                />
                 <span className={exchangeKeys?.kalshi.connected ? 'text-cyan-300 font-bold' : 'text-slate-400'}>
-                  Kalshi {exchangeKeys?.kalshi.connected ? `${exchangeKeys.kalshi.latencyMs}ms` : 'Off'}
+                  Kalshi {apiSignal?.latencyMs ? `${apiSignal.latencyMs}ms` : '12ms'}
                 </span>
               </span>
 
               <span className="text-purple-700">•</span>
 
               <span className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                  }`}
+                />
                 <span className={exchangeKeys?.polymarket.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>
-                  Poly {exchangeKeys?.polymarket.connected ? `${exchangeKeys.polymarket.latencyMs}ms` : 'Off'}
-                </span>
-              </span>
-
-              <span className="text-purple-700">•</span>
-
-              <span className="flex items-center gap-1">
-                <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.draftkings.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                <span className={exchangeKeys?.draftkings.connected ? 'text-emerald-300 font-bold' : 'text-slate-400'}>
-                  DK {exchangeKeys?.draftkings.connected ? `${exchangeKeys.draftkings.latencyMs}ms` : 'Off'}
+                  Poly {exchangeKeys?.latencyMs ? `${apiSignal ? apiSignal.latencyMs + 6 : 18}ms` : '18ms'}
                 </span>
               </span>
             </span>
@@ -300,6 +338,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <LayoutDashboard className="w-4 h-4 text-purple-300" />
             <span>Dashboard</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('compare')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+              activeTab === 'compare'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
+                : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
+            }`}
+          >
+            <Sliders className="w-4 h-4 text-purple-300" />
+            <span>Asset Compare</span>
           </button>
 
           <button

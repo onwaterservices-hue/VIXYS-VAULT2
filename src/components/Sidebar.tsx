@@ -68,6 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'CORE DESKS',
       items: [
         { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'compare', label: 'Split-Screen Compare', icon: Sliders, badge: 'VS' },
         { id: 'scalping', label: '15s Signals Feed', icon: Zap, badge: 'LIVE' },
         { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },

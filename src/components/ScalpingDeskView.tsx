@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BTCTicker } from '../types';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
+import { fetchApiSignal, ApiSignalResponse } from '../services/api';
 import {
   Zap,
   Activity,
@@ -68,6 +69,24 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   const [timeInCommitSec, setTimeInCommitSec] = useState<number>(42);
   const [kalshiYesCent, setKalshiYesCent] = useState<number>(78.5);
   const [kalshiNoCent, setKalshiNoCent] = useState<number>(21.5);
+
+  const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load15sSignal = async () => {
+      const sig = await fetchApiSignal(selectedAsset, '15s');
+      if (active) {
+        setApiSignal(sig);
+      }
+    };
+    load15sSignal();
+    const interval = setInterval(load15sSignal, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset]);
 
   // Pre-Spike Flash Alert State (Addressing Flok's request in Valhalla Discord)
   const [preSpikeLeadTimeSec] = useState<number>(6.2);

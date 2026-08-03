@@ -612,6 +612,7 @@ export default function App() {
                       favorites={favorites}
                       onToggleFavorite={handleToggleFavorite}
                       onOpenSearch={() => setIsSearchOpen(true)}
+                      onOpenCompare={() => setActiveTab('compare')}
                     />
                   )}
 
@@ -622,6 +623,7 @@ export default function App() {
                       onOpenAlerts={() => setActiveTab('alerts')}
                       onOpenPricing={() => setActiveTab('pricing')}
                       onOpenJournal={() => setActiveTab('journal')}
+                      onOpenCompare={() => setActiveTab('compare')}
                       userRole={userRole}
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
@@ -643,7 +645,14 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === 'compare' && <CompareView />}
+                  {activeTab === 'compare' && (
+                    <CompareView
+                      onSelectAssetAndNavigate={(sym) => {
+                        setSelectedAsset(sym);
+                        setActiveTab('terminal');
+                      }}
+                    />
+                  )}
 
                   {activeTab === 'scalping' && (
                     <ScalpingDeskView

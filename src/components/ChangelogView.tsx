@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Activity,
   CheckCircle2,
@@ -17,6 +17,7 @@ import {
   BarChart3,
   Lock,
 } from 'lucide-react';
+import { fetchSystemStatus, SystemStatusResponse } from '../services/api';
 
 interface ChangelogViewProps {
   onOpenTerminal?: () => void;
@@ -28,6 +29,21 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
   onOpenPricing,
 }) => {
   const [filterCategory, setFilterCategory] = useState<string>('ALL');
+  const [systemData, setSystemData] = useState<SystemStatusResponse | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const loadStatus = async () => {
+      const data = await fetchSystemStatus();
+      if (active) setSystemData(data);
+    };
+    loadStatus();
+    const interval = setInterval(loadStatus, 10000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Real-time System Operational Status Data
   const systemServices = [
