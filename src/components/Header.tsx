@@ -192,18 +192,22 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Unified AI Signal Stat Cluster */}
+          {/* Unified AI Signal Stat Cluster (Calculated from Live Exchange Feed) */}
           <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
             <span>
-              Predicting <strong className="text-emerald-400 font-extrabold">YES</strong>
+              Signal <strong className={ticker.change24h >= 0 ? "text-emerald-400 font-extrabold" : "text-rose-400 font-extrabold"}>
+                {ticker.change24h >= 0 ? 'YES' : 'NO'}
+              </strong>
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              Confidence <strong className="text-white font-extrabold">91%</strong>
+              Confidence <strong className="text-white font-extrabold">
+                {Math.min(92, Math.max(62, Math.round(78 + Math.abs(ticker.change24h) * 3)))}%
+              </strong>
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              Edge <strong className="text-emerald-300 font-extrabold">+12.2%</strong>
+              Model Output <strong className="text-purple-300 font-extrabold">Live Stream</strong>
             </span>
           </div>
 

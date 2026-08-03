@@ -23,6 +23,8 @@ import {
   Compass,
   History,
   Target,
+  Trophy,
+  Activity,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -77,7 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'AI' },
         { id: 'whales', label: 'Whale Tracker', icon: Layers },
-        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'AUDITED' },
+        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'BACKTEST' },
         { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
         { id: 'replay', label: 'Replay Center', icon: History },
       ],
@@ -85,6 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'TRADER TOOLS',
       items: [
+        { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'VERIFIED' },
+        { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
         { id: 'journal', label: 'Trade Journal', icon: BookOpen },
         { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
         { id: 'history', label: 'Analytics', icon: BarChart2 },

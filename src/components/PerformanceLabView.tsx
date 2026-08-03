@@ -34,7 +34,7 @@ export const PerformanceLabView: React.FC = () => {
     { range: '60% - 69%', count: 350, winRate: 63.8, avgReturn: '+0.21%', ev: '+1.1%' },
   ];
 
-  const recentAuditedTrades = [
+  const recentBacktestedTrades = [
     { id: 'TRD-9041', time: '10m ago', asset: 'BTC', signal: 'SIGNAL: YES', conf: 94, outcome: 'WIN', ev: '+14.5%', delta: '+$182.00' },
     { id: 'TRD-9040', time: '25m ago', asset: 'ETH', signal: 'SIGNAL: YES', conf: 88, outcome: 'WIN', ev: '+10.2%', delta: '+$24.50' },
     { id: 'TRD-9039', time: '40m ago', asset: 'SOL', signal: 'SIGNAL: YES', conf: 91, outcome: 'WIN', ev: '+12.8%', delta: '+$3.80' },
@@ -172,7 +172,7 @@ export const PerformanceLabView: React.FC = () => {
           </div>
 
           <div className="space-y-2.5 font-mono text-xs">
-            {recentAuditedTrades.map((trd) => (
+            {recentBacktestedTrades.map((trd) => (
               <div key={trd.id} className="bg-[#0D081D] p-3 rounded-xl border border-slate-800 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${

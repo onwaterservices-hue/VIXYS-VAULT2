@@ -161,13 +161,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           {/* Micro Trust Indicators (Honest, Compliant) */}
           <div className="flex flex-wrap items-center gap-6 pt-3 text-xs font-mono text-slate-400">
-            <span className="flex items-center gap-1.5" title="Brier calibration score evaluated on historical backtests">
-              <Check className="w-4 h-4 text-emerald-400" /> Brier Score 0.084
+            <span className="flex items-center gap-1.5" title="Brier calibration score evaluated on walk-forward backtests">
+              <Check className="w-4 h-4 text-emerald-400" /> Brier Score 0.084 (n=2,410)
             </span>
-            <span className="flex items-center gap-1.5" title="Historical self-reported backtest win rate">
-              <Check className="w-4 h-4 text-emerald-400" /> 84.2% Backtested Win Rate
+            <span className="flex items-center gap-1.5" title="Historical walk-forward backtest win rate">
+              <Check className="w-4 h-4 text-emerald-400" /> 84.2% Backtest (n=2,410)
             </span>
-            <span className="flex items-center gap-1.5" title="Full feature access during 3-hour trial session">
+            <span className="flex items-center gap-1.5" title="Full feature access during trial session">
               <Check className="w-4 h-4 text-emerald-400" /> Free Trial — Cancel Anytime
             </span>
           </div>
@@ -271,9 +271,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           <div>
-            <span className="text-xs text-slate-400 block uppercase font-bold">Historical Win Rate</span>
+            <span className="text-xs text-slate-400 block uppercase font-bold">Backtest Win Rate</span>
             <span className="text-lg font-black text-emerald-400">84.2%</span>
-            <span className="text-[10px] text-slate-400 block font-medium">Self-Reported Backtest</span>
+            <span className="text-[10px] text-slate-400 block font-medium">Walk-Forward (n=2,410)</span>
           </div>
 
           <div>

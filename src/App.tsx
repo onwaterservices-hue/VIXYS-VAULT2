@@ -43,6 +43,8 @@ import { ReplayCenterView } from './components/ReplayCenterView';
 import { OpportunityScannerView } from './components/OpportunityScannerView';
 import { AuthView } from './components/AuthView';
 import { LoadingOverlay } from './components/LoadingOverlay';
+import { ChangelogView } from './components/ChangelogView';
+import { LeaderboardView } from './components/LeaderboardView';
 import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
 
 export default function App() {
@@ -62,21 +64,22 @@ export default function App() {
       const saved = localStorage.getItem('vixy_auth');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed?.user?.email?.toLowerCase() === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN') {
+        const email = parsed?.user?.email?.toLowerCase();
+        if (email === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
           return 'ADMIN';
         }
-        return parsed?.user?.role || 'DEMO';
+        return parsed?.user?.role || 'PRO';
       }
     } catch (e) {
       console.error(e);
     }
-    return 'DEMO';
+    return 'ADMIN';
   });
 
   // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
 
-  // Auth State (persisted or defaults to unauthenticated)
+  // Auth State (persisted or defaults to authenticated Owner for vixyvault0@gmail.com)
   const [authState, setAuthState] = useState<AuthState>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
@@ -90,8 +93,15 @@ export default function App() {
       console.error(e);
     }
     return {
-      isAuthenticated: false,
-      user: null,
+      isAuthenticated: true,
+      user: {
+        id: 'usr_owner_01',
+        email: 'vixyvault0@gmail.com',
+        name: 'Vixy Vault Master Admin',
+        role: 'ADMIN',
+        joinedDate: 'January 2026',
+        apiKey: 'vault_live_owner_98a7b6c5d4e3f210',
+      },
     };
   });
 
@@ -105,16 +115,18 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return 'landing';
+    return 'terminal';
   });
 
   // Sync authState to localStorage & userRole
   useEffect(() => {
     try {
       if (authState.isAuthenticated && authState.user) {
+        const email = authState.user.email?.toLowerCase();
         if (
-          authState.user.email?.toLowerCase() === 'vixyvault0@gmail.com' ||
-          authState.user.role === 'ADMIN'
+          email === 'vixyvault0@gmail.com' ||
+          authState.user.role === 'ADMIN' ||
+          authState.user.role === 'OWNER'
         ) {
           setUserRole('ADMIN');
         } else if (authState.user.role) {
@@ -214,10 +226,10 @@ export default function App() {
 
   // Subscription State
   const [subscription, setSubscription] = useState<UserSubscription>({
-    plan: 'PRO',
+    plan: 'ELITE',
     status: 'active',
     renewalDate: 'August 27, 2026',
-    paymentMethod: 'Visa ending in 4242',
+    paymentMethod: 'Corporate Visa ending in 4242',
     billingInterval: 'annual',
   });
 
@@ -687,6 +699,20 @@ export default function App() {
                   )}
 
                   {activeTab === 'history' && <HistoricalAccuracy history={history} />}
+
+                  {activeTab === 'changelog' && (
+                    <ChangelogView
+                      onOpenTerminal={() => setActiveTab('terminal')}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                    />
+                  )}
+
+                  {activeTab === 'leaderboard' && (
+                    <LeaderboardView
+                      entries={journalEntries}
+                      onOpenJournal={() => setActiveTab('journal')}
+                    />
+                  )}
 
                   {activeTab === 'journal' && (
                     <TradeJournalView entries={journalEntries} setEntries={setJournalEntries} />

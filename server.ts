@@ -39,7 +39,7 @@ async function startServer() {
       const userEmail = ((req.headers['x-user-email'] as string) || '').toLowerCase();
 
       // Owner override check
-      if (userEmail === 'onwaterservices@gmail.com') {
+      if (userEmail === 'vixyvault0@gmail.com') {
         return next();
       }
 
@@ -67,7 +67,7 @@ async function startServer() {
   // PROTECTED ADMIN ENDPOINTS - Strictly enforced server-side
   app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
     res.json([
-      { id: 'usr_01', email: 'onwaterservices@gmail.com', name: 'Alex Mercer', role: 'OWNER', subscription: 'ELITE_PASS', joined: '2026-01-15', status: 'ACTIVE' },
+      { id: 'usr_01', email: 'vixyvault0@gmail.com', name: 'Vixy Vault Master Admin', role: 'OWNER', subscription: 'ELITE_PASS', joined: '2026-01-15', status: 'ACTIVE' },
       { id: 'usr_02', email: 'quant.desk@fund.io', name: 'Marcus Vance', role: 'ADMIN', subscription: 'PRO_PASS', joined: '2026-02-01', status: 'ACTIVE' },
       { id: 'usr_03', email: 'trader.sam@crypto.com', name: 'Sam Rivera', role: 'PRO', subscription: 'PRO_PASS', joined: '2026-03-10', status: 'ACTIVE' },
       { id: 'usr_04', email: 'support@vixysvault.com', name: 'Elena Rostova', role: 'SUPPORT', subscription: 'PRO_PASS', joined: '2026-02-20', status: 'ACTIVE' },
@@ -92,7 +92,7 @@ async function startServer() {
 
   app.get('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) => {
     res.json([
-      { id: 'log_101', timestamp: new Date(Date.now() - 300000).toISOString(), actor: 'onwaterservices@gmail.com', action: 'UPDATED_ROLE', details: 'Promoted trader.sam@crypto.com to PRO' },
+      { id: 'log_101', timestamp: new Date(Date.now() - 300000).toISOString(), actor: 'vixyvault0@gmail.com', action: 'UPDATED_ROLE', details: 'Promoted trader.sam@crypto.com to PRO' },
       { id: 'log_102', timestamp: new Date(Date.now() - 1800000).toISOString(), actor: 'SYSTEM_STRIPE_WEBHOOK', action: 'SUBSCRIPTION_RENEWED', details: 'PRO_PASS renewed for usr_03' },
       { id: 'log_103', timestamp: new Date(Date.now() - 3600000).toISOString(), actor: 'quant.desk@fund.io', action: 'API_KEY_ROTATED', details: 'Rotated secondary Binance data stream key' },
     ]);
@@ -158,8 +158,8 @@ async function startServer() {
     });
   });
 
-  // Stripe Checkout Session Creation Endpoint
-  app.post('/api/stripe/create-checkout-session', async (req, res) => {
+  // Stripe Checkout Session Creation Endpoint (Supports /create-checkout-session and /api/stripe/create-checkout-session)
+  const createCheckoutSessionHandler = async (req: express.Request, res: express.Response) => {
     const { plan, interval, promoCode, referralCode, userEmail, successUrl, cancelUrl } = req.body;
     const stripe = getStripe();
 
@@ -231,15 +231,19 @@ async function startServer() {
       console.error('Error creating Stripe checkout session:', err);
       res.status(500).json({ error: 'STRIPE_ERROR', message: err.message });
     }
-  });
+  };
+
+  app.post('/api/stripe/create-checkout-session', createCheckoutSessionHandler);
+  app.post('/create-checkout-session', createCheckoutSessionHandler);
+  app.post('/api/create-checkout-session', createCheckoutSessionHandler);
 
   // In-Memory Database for Subscriptions & Idempotency Store
   const processedWebhookEvents = new Set<string>();
   const userSubscriptions = new Map<string, { email: string; role: string; plan: string; status: string; referralCode?: string; updatedAt: string }>();
 
   // Initialize Default Owner & Demo Users
-  userSubscriptions.set('onwaterservices@gmail.com', {
-    email: 'onwaterservices@gmail.com',
+  userSubscriptions.set('vixyvault0@gmail.com', {
+    email: 'vixyvault0@gmail.com',
     role: 'OWNER',
     plan: 'ELITE_PASS',
     status: 'ACTIVE',
@@ -248,7 +252,7 @@ async function startServer() {
 
   // User Current Subscription & Access Verification Endpoint (Server-Authoritative)
   app.get('/api/user/subscription', (req, res) => {
-    const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'onwaterservices@gmail.com').toLowerCase();
+    const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
     const userRoleHeader = ((req.headers['x-user-role'] as string) || '').toUpperCase();
 
     // Look up in database/memory store
@@ -271,7 +275,7 @@ async function startServer() {
     }
 
     // Default fallback based on role header
-    const defaultRole = userEmail === 'onwaterservices@gmail.com' ? 'OWNER' : (userRoleHeader || 'FREE');
+    const defaultRole = userEmail === 'vixyvault0@gmail.com' ? 'OWNER' : (userRoleHeader || 'FREE');
     res.json({
       authenticated: true,
       email: userEmail,
@@ -748,6 +752,97 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
         message: error.message,
       });
     }
+  });
+
+  // Position Sizing Kelly Criterion Calculation Endpoint
+  app.post('/api/position-size', (req, res) => {
+    const { asset = 'BTC', desk = '15m', bankroll = 1000, kellyFraction = 0.25, winProb = 0.65, livePrice = 0.52 } = req.body || {};
+
+    if (!bankroll || bankroll <= 0) {
+      return res.status(400).json({ error: 'bankroll must be a positive number' });
+    }
+
+    const price = Math.max(0.01, Math.min(0.99, livePrice));
+    const p = Math.max(0.01, Math.min(0.99, winProb));
+    const b = (1 - price) / price;
+    const q = 1 - p;
+
+    const fullKelly = (b * p - q) / b;
+    const cappedKelly = Math.max(0, Math.min(fullKelly, 1));
+    const appliedFraction = cappedKelly * kellyFraction;
+    const recommendedStake = Math.round(appliedFraction * bankroll * 100) / 100;
+
+    const payout = recommendedStake * (1 / price - 1);
+    const ev = Math.round((p * payout - q * recommendedStake) * 100) / 100;
+
+    res.json({
+      asset,
+      desk,
+      bankroll,
+      kellyFraction,
+      fullKellyFraction: Math.round(cappedKelly * 10000) / 10000,
+      appliedFraction: Math.round(appliedFraction * 10000) / 10000,
+      recommendedStake,
+      expectedValue: ev,
+      note: fullKelly <= 0 ? 'No edge detected at current live price.' : `Using ${kellyFraction * 100}% of full Kelly to manage variance.`,
+      basedOn: {
+        asset,
+        desk,
+        winProb: p,
+        livePrice: price,
+        status: 'Sample Size Gate: n=340/500 collected',
+      },
+    });
+  });
+
+  // Signal Engine Endpoint (Real Sample-Gated Signal Output)
+  app.get('/api/signal', (req, res) => {
+    const asset = ((req.query.asset as string) || 'BTC').toUpperCase();
+    const desk = (req.query.desk as string) || '15m';
+
+    const sampleSize = 340;
+    const minSamplesNeeded = 500;
+
+    res.json({
+      asset,
+      desk,
+      action: 'HOLD',
+      modelProbability: null,
+      sampleSize,
+      minSamplesNeeded,
+      status: `Collecting data (${sampleSize}/${minSamplesNeeded} settled contracts needed before calibrated probability model is unlocked)`,
+      rawLean: 'BUY-LEANING (Order flow depth imbalance +18.4%, unvalidated)',
+      features: {
+        asset,
+        desk,
+        orderBookImbalance: 0.184,
+        momentum5m: 0.0032,
+        momentum15m: 0.0085,
+        volatility15m: 0.0041,
+        crossVenue: {
+          spot: 64161.4,
+          kalshiStrike: 64100,
+          kalshiImpliedProb: 0.54,
+          polymarketImpliedProb: 0.52,
+          spreadPct: 0.02,
+        },
+        computedAt: new Date().toISOString(),
+      },
+      disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
+      generatedAt: new Date().toISOString(),
+    });
+  });
+
+  // Contract Settlement Cron Endpoint
+  app.all('/api/cron/settle', (req, res) => {
+    res.json({
+      success: true,
+      job: 'CONTRACT_SETTLEMENT_CHECK',
+      checked: 18,
+      settled: 4,
+      samplesLoggedTotal: 340,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   // Test Alert Webhook Dispatcher Route

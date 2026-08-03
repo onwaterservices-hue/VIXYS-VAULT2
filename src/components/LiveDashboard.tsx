@@ -488,43 +488,56 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       </div>
 
       {/* Main Grid: Valhalla / OGERSHHH Style Buy Decision Deck & Locked Position Guide */}
-      <div className="bg-[#0B1220] rounded-2xl border border-[#1E2E48] p-5 shadow-2xl relative overflow-hidden font-mono space-y-5">
+      <div className="bg-gradient-to-br from-[#12072b] via-[#0d0621] to-[#160a36] rounded-3xl border border-purple-500/30 p-6 sm:p-7 shadow-2xl relative overflow-hidden font-mono space-y-6">
         {/* Top Decision Bar with Compact Signal Chart Companion */}
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-[#1E2E48] pb-4">
-          <div className="space-y-1 flex-1">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-b border-purple-900/40 pb-5">
+          <div className="space-y-3 flex-1 w-full">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-black uppercase text-cyan-400 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800/60">
+              <span className="text-xs font-black uppercase text-cyan-300 bg-cyan-950/90 px-3 py-1 rounded-lg border border-cyan-500/40 shadow-sm flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
                 LIVE BUY DECISION / PUBLISHES ON QUALIFIED CONVICTION
               </span>
-              <span className="text-[10px] text-slate-400">
-                COVERAGE PREDICTION BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} | HIGH VOLATILITY MARKET | LOCK DATA MEDIUM
+              <span className="text-xs text-purple-300/60 font-sans">
+                COVERAGE PREDICTION BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} | HIGH VOLATILITY MARKET
               </span>
             </div>
             
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pt-1">
-              <div className="flex items-center gap-4">
-                <h1 className={`text-4xl sm:text-5xl font-black tracking-tight ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
-                </h1>
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 pt-1">
+              <div className="space-y-2">
+                <div className="flex items-center gap-4">
+                  {/* BUY UP / BUY DOWN -- Prominent, large & glowing for instant readability */}
+                  <h1 className={`text-5xl sm:text-6xl font-black tracking-wider uppercase drop-shadow-[0_0_25px_rgba(52,211,153,0.35)] ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
+                  </h1>
 
-                {/* Progress Checkpoint Badges */}
-                <div className="hidden xl:flex items-center gap-2 bg-[#060B14] p-1.5 rounded-xl border border-[#18263E]">
-                  <div className="px-2.5 py-1 rounded bg-cyan-950 text-cyan-300 text-[10px] font-bold border border-cyan-700/50">
-                    01 BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} / COMMITTED
+                  {/* Status Indicator Pill */}
+                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    LIVE SIGNAL ACTIVE
+                  </span>
+                </div>
+
+                {/* Progress Checkpoint Badges -- Made larger, prominent & clean */}
+                <div className="flex flex-wrap items-center gap-2 bg-[#080315] p-2 rounded-2xl border border-purple-900/50 shadow-inner">
+                  <div className="px-3.5 py-1.5 rounded-xl bg-cyan-950 text-cyan-200 text-xs font-black border border-cyan-600/60 shadow-md flex items-center gap-1.5">
+                    <span className="text-cyan-400">01</span>
+                    <span>BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} / COMMITTED</span>
                   </div>
-                  <span className="text-slate-600 text-xs">→</span>
-                  <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
-                    02 WAIT FOR VALUE
+                  <span className="text-purple-400/60 font-black text-sm px-1">→</span>
+                  <div className="px-4 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-black border border-amber-500/50 ring-2 ring-amber-500/30 shadow-lg animate-pulse flex items-center gap-1.5">
+                    <span className="text-amber-400">02</span>
+                    <span className="text-sm font-extrabold uppercase tracking-wide">WAIT FOR VALUE</span>
                   </div>
-                  <span className="text-slate-600 text-xs">→</span>
-                  <div className="px-2.5 py-1 rounded bg-[#0B1526] text-slate-400 text-[10px] font-bold">
-                    03 POSITION REVIEW
+                  <span className="text-purple-400/60 font-black text-sm px-1">→</span>
+                  <div className="px-3.5 py-1.5 rounded-xl bg-[#0f0724] text-purple-300/60 text-xs font-bold border border-purple-900/40 flex items-center gap-1.5">
+                    <span>03</span>
+                    <span>POSITION REVIEW</span>
                   </div>
                 </div>
               </div>
 
               {/* COMPACT SIGNAL CHART (Tight companion widget directly beside Buy Up / Down) */}
-              <div className="shrink-0">
+              <div className="shrink-0 self-stretch md:self-auto">
                 <CompactSignalChart
                   candles={candles}
                   currentPrice={ticker.price}
@@ -536,28 +549,28 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
 
           {/* Decision Core Dial & Signal Vector */}
-          <div className="flex items-center gap-3 self-stretch lg:self-auto justify-between lg:justify-end">
-            <div className="bg-[#060C18] p-3 rounded-xl border border-[#1A2A42] flex items-center gap-3 text-xs">
-              <div className="w-10 h-10 rounded-full border-2 border-emerald-500/80 flex items-center justify-center font-black text-emerald-300 text-sm bg-emerald-950/40">
+          <div className="flex flex-row lg:flex-col sm:flex-row items-center gap-3 self-stretch lg:self-auto justify-between shrink-0">
+            <div className="bg-[#080315] p-4 rounded-2xl border border-purple-900/50 flex items-center gap-3 text-xs shadow-md">
+              <div className="w-12 h-12 rounded-2xl border-2 border-emerald-400 flex items-center justify-center font-black text-emerald-300 text-base bg-emerald-950/60 shadow-[0_0_15px_rgba(52,211,153,0.3)]">
                 V
               </div>
               <div>
-                <span className="text-[10px] text-slate-400 uppercase font-extrabold block">DECISION CORE</span>
-                <span className="text-emerald-400 font-bold block text-sm">77.0% CONFIDENCE</span>
-                <span className="text-[10px] text-cyan-300/80">71.5% EXECUTION</span>
+                <span className="text-[10px] text-purple-300/60 uppercase font-black block tracking-wider">DECISION CORE</span>
+                <span className="text-emerald-400 font-black block text-base">77.0% CONFIDENCE</span>
+                <span className="text-xs text-cyan-300 font-bold">71.5% EXECUTION</span>
               </div>
             </div>
 
-            <div className="bg-[#060C18] p-3 rounded-xl border border-[#1A2A42] text-xs space-y-1">
-              <div className="flex justify-between text-[10px] font-bold">
-                <span className="text-slate-400">SIGNAL VECTOR</span>
+            <div className="bg-[#080315] p-4 rounded-2xl border border-purple-900/50 text-xs space-y-1.5 shadow-md">
+              <div className="flex justify-between text-xs font-bold gap-4">
+                <span className="text-purple-300/70">SIGNAL VECTOR</span>
                 <span className="text-emerald-400 font-black">EDGE {signal.edgePct}%</span>
               </div>
-              <div className="w-32 sm:w-40 bg-slate-900 h-2.5 rounded-full overflow-hidden flex border border-slate-800">
-                <div className="bg-emerald-500 h-full w-[85%]" />
-                <div className="bg-rose-500 h-full w-[15%]" />
+              <div className="w-36 sm:w-44 bg-slate-950 h-3 rounded-full overflow-hidden flex border border-purple-900/40 p-0.5">
+                <div className="bg-emerald-400 h-full rounded-full w-[85%]" />
+                <div className="bg-rose-500 h-full rounded-full w-[15%]" />
               </div>
-              <div className="flex justify-between text-[9px] text-slate-400">
+              <div className="flex justify-between text-[10px] text-slate-400 font-bold">
                 <span>85% UP</span>
                 <span>15% DOWN</span>
               </div>
@@ -566,51 +579,60 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
 
         {/* Live Entry Advisor + Locked Call Position Guide */}
-        <div className="bg-[#060B14] p-4 rounded-xl border border-[#18263E] space-y-3">
-          <div className="flex items-center justify-between text-xs border-b border-[#142034] pb-2">
-            <span className="text-cyan-300 font-extrabold flex items-center gap-2">
-              <Zap className="w-4 h-4 text-cyan-400" />
+        <div className="bg-[#080315] p-5 rounded-2xl border border-purple-900/50 space-y-4 shadow-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
+            <span className="text-cyan-300 font-black text-xs sm:text-sm tracking-wide flex items-center gap-2">
+              <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
               LIVE ENTRY ADVISOR + LOCKED CALL POSITION GUIDE / DIRECTION STAYS FROZEN
             </span>
-            <span className="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-black uppercase">
+            <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black uppercase tracking-wider shadow-sm">
               WAITING FOR LOCK
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
-              <span className="text-[10px] text-slate-400 block font-semibold">NEW ENTRY LANE</span>
-              <span className="text-xs font-bold text-amber-300">WAIT FOR VALUE</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* NEW ENTRY LANE -- HIGHLIGHTED & LARGER AS REQUESTED */}
+            <div className="bg-[#120726] p-4 rounded-2xl border border-amber-500/40 shadow-lg space-y-1.5 hover:border-amber-400/60 transition-all">
+              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">NEW ENTRY LANE</span>
+              <div className="pt-0.5">
+                <span className="text-sm sm:text-base font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-3 py-1 rounded-xl inline-block shadow-md tracking-wider">
+                  WAIT FOR VALUE
+                </span>
+              </div>
             </div>
-            <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
-              <span className="text-[10px] text-slate-400 block font-semibold">LIVE ASK</span>
-              <span className="text-xs font-bold text-white">$0.54 YES</span>
+
+            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">LIVE ASK</span>
+              <span className="text-base sm:text-lg font-black text-white block">$0.54 YES</span>
             </div>
-            <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
-              <span className="text-[10px] text-slate-400 block font-semibold">PAYOUT</span>
-              <span className="text-xs font-bold text-emerald-400">1.85x</span>
+
+            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">PAYOUT</span>
+              <span className="text-base sm:text-lg font-black text-emerald-400 block">1.85x</span>
             </div>
-            <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
-              <span className="text-[10px] text-slate-400 block font-semibold">SAFE EDGE</span>
-              <span className="text-xs font-bold text-cyan-300">+{signal.edgePct}%</span>
+
+            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">SAFE EDGE</span>
+              <span className="text-base sm:text-lg font-black text-cyan-300 block">+{signal.edgePct}%</span>
             </div>
-            <div className="bg-[#0B1526] p-2.5 rounded-lg border border-[#1A2A42]">
-              <span className="text-[10px] text-slate-400 block font-semibold">EXECUTABLE EXIT BID</span>
-              <span className="text-xs font-bold text-amber-400">$0.52 YES</span>
+
+            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">EXECUTABLE EXIT BID</span>
+              <span className="text-base sm:text-lg font-black text-amber-400 block">$0.52 YES</span>
             </div>
           </div>
         </div>
 
         {/* THE GUARDIAN / POST-LOCK REVERSAL WATCH (REVERSAL RISK MONITORING) */}
-        <div className={`p-4 sm:p-5 rounded-2xl border transition-all ${
+        <div className={`p-5 sm:p-6 rounded-2xl border transition-all ${
           isBailedOut
             ? 'bg-emerald-950/40 border-emerald-500/80 shadow-2xl shadow-emerald-950/60'
-            : 'bg-[#180A22] border-amber-500/50 shadow-xl'
+            : 'bg-[#15092c] border-amber-500/50 shadow-xl'
         }`}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex items-center gap-2.5 flex-wrap">
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase flex items-center gap-1.5 ${
+                <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase flex items-center gap-1.5 shadow-sm ${
                   isBailedOut
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                     : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
@@ -618,7 +640,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
                   {isBailedOut ? 'POSITION SAFELY EXITED' : 'ELEVATED REVERSAL RISK DETECTED'}
                 </span>
-                <span className="text-xs font-mono font-bold text-white bg-black/40 px-2 py-0.5 rounded border border-amber-500/30">
+                <span className="text-xs font-mono font-bold text-white bg-black/50 px-3 py-1 rounded-xl border border-amber-500/40">
                   {isBailedOut ? 'CLOSED AT $0.54 YES' : 'REVERSAL RISK INDEX: 68.0 / 100'}
                 </span>
               </div>
@@ -642,7 +664,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               ) : (
                 <button
                   onClick={() => setIsBailedOut(true)}
-                  className="w-full sm:w-auto bg-[#2e1428] hover:bg-rose-900/60 text-rose-200 border border-rose-500/40 px-5 py-3 rounded-xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  className="w-full sm:w-auto bg-rose-950/80 hover:bg-rose-900 text-rose-200 border border-rose-500/50 px-5 py-3 rounded-xl font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
                 >
                   <ShieldCheck className="w-4 h-4 text-rose-300 shrink-0" />
                   <span className="text-xs font-bold">PROTECT POSITION / REDUCE EXPOSURE</span>
@@ -651,46 +673,46 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-purple-900/40 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-4 border-t border-purple-900/40 text-xs">
             <div>
-              <span className="text-slate-400 text-[10px] block font-semibold">REVERSAL RISK</span>
-              <span className={`font-bold text-sm ${isBailedOut ? 'text-emerald-400' : 'text-amber-300 font-mono text-sm'}`}>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">REVERSAL RISK</span>
+              <span className={`font-black text-sm ${isBailedOut ? 'text-emerald-400' : 'text-amber-300 font-mono text-sm'}`}>
                 {isBailedOut ? 'DEFENDED' : '68.0 ELEVATED'}
               </span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] block font-semibold">SUSTAINED BREAK</span>
-              <span className="text-amber-300 font-bold">30s TIMEFRAME</span>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">SUSTAINED BREAK</span>
+              <span className="text-amber-300 font-bold text-sm">30s TIMEFRAME</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] block font-semibold">APPROACH ETA</span>
-              <span className="text-cyan-300 font-bold">LIVE MONITORED</span>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">APPROACH ETA</span>
+              <span className="text-cyan-300 font-bold text-sm">LIVE MONITORED</span>
             </div>
             <div>
-              <span className="text-slate-400 text-[10px] block font-semibold">BACKTESTED WIN RATE</span>
-              <span className="text-emerald-400 font-bold">91.4% (314 SETUPS)</span>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">MODEL DATASET SAMPLES</span>
+              <span className="text-emerald-400 font-bold text-sm">340 SAMPLES (LIVE LOGGED)</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* EXPLAINABILITY & CONFIDENCE STABILITY BAR (VIXY'S VAULT EVIDENCE ENGINE) */}
-      <div className="bg-gradient-to-r from-[#12072b] via-[#0e0720] to-[#150a33] rounded-2xl border border-purple-500/40 p-4 shadow-xl font-mono text-purple-100 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-2.5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-600/30 border border-purple-500/40 flex items-center justify-center text-purple-200">
-              <BrainCircuit className="w-4 h-4 text-purple-300" />
+      <div className="bg-gradient-to-r from-[#12072b] via-[#0e0720] to-[#150a33] rounded-3xl border border-purple-500/30 p-5 shadow-2xl font-mono text-purple-100 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-200 shadow-md">
+              <BrainCircuit className="w-5 h-5 text-purple-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-black text-white uppercase tracking-wide">
+              <div className="flex items-center gap-2.5">
+                <span className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
                   Model Explainability & Confidence Stability
                 </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-500/30 shadow-sm">
                   78.4% CALIBRATED
                 </span>
               </div>
-              <p className="text-[11px] text-purple-300/60 font-sans">
+              <p className="text-xs text-purple-300/70 font-sans mt-0.5">
                 Evidence Aggregator across 6 independent engines • Low Conflict (12%)
               </p>
             </div>
@@ -699,36 +721,36 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           <div className="flex items-center gap-2">
             <div className="text-right font-mono">
               <div className="text-xs font-black text-emerald-400">Stable ↑ (+3.2% 5m)</div>
-              <div className="text-[9px] text-purple-300/50">Raw: 84.0% → Calibrated: 78.4%</div>
+              <div className="text-[10px] text-purple-300/60">Raw: 84.0% → Calibrated: 78.4%</div>
             </div>
           </div>
         </div>
 
         {/* 3 Evidence Engine Highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-sans">
-          <div className="p-2.5 rounded-xl bg-[#080413] border border-purple-900/40 space-y-0.5">
-            <span className="text-[10px] text-purple-300/60 font-mono uppercase font-bold block">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-sans">
+          <div className="p-3.5 rounded-2xl bg-[#0b051b] border border-purple-900/50 hover:border-purple-500/40 space-y-1 transition-all shadow-sm">
+            <span className="text-[10px] text-purple-300/70 font-mono uppercase font-bold block">
               Order Flow Engine (+0.34)
             </span>
-            <p className="text-purple-200 text-[11px] leading-tight">
+            <p className="text-purple-200 text-xs leading-relaxed">
               +1,820 BTC net buy volume swallowing ask liquidity at ${ticker.price.toLocaleString()}.
             </p>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-[#080413] border border-purple-900/40 space-y-0.5">
-            <span className="text-[10px] text-purple-300/60 font-mono uppercase font-bold block">
+          <div className="p-3.5 rounded-2xl bg-[#0b051b] border border-purple-900/50 hover:border-purple-500/40 space-y-1 transition-all shadow-sm">
+            <span className="text-[10px] text-purple-300/70 font-mono uppercase font-bold block">
               Volume Delta Engine (+0.22)
             </span>
-            <p className="text-purple-200 text-[11px] leading-tight">
+            <p className="text-purple-200 text-xs leading-relaxed">
               Trailing volume z-score outlier detected: +$2.48M net taker buys at ${ticker.price.toLocaleString()}.
             </p>
           </div>
 
-          <div className="p-2.5 rounded-xl bg-[#080413] border border-purple-900/40 space-y-0.5">
-            <span className="text-[10px] text-purple-300/60 font-mono uppercase font-bold block">
+          <div className="p-3.5 rounded-2xl bg-[#0b051b] border border-purple-900/50 hover:border-purple-500/40 space-y-1 transition-all shadow-sm">
+            <span className="text-[10px] text-purple-300/70 font-mono uppercase font-bold block">
               Liquidity Wall Engine (+0.14)
             </span>
-            <p className="text-purple-200 text-[11px] leading-tight">
+            <p className="text-purple-200 text-xs leading-relaxed">
               $18.4M stacked bid floor beneath ${(ticker.price - 120).toLocaleString()} support level.
             </p>
           </div>
@@ -744,13 +766,13 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       />
 
       {/* REVERSAL ENGINE PROBABILITIES, WHALE MAP & BLOCK ORDERS (POSITIONED ABOVE CHART & BELOW PREDICTION HEALTH) */}
-      <div className="bg-gradient-to-r from-[#0C061E] via-[#140A30] to-[#0B051B] rounded-2xl border border-purple-500/40 p-5 shadow-2xl space-y-4 font-mono text-purple-100 relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#12072b] via-[#0e0622] to-[#150a32] rounded-3xl border border-purple-500/30 p-5 sm:p-6 shadow-2xl space-y-5 font-mono text-purple-100 relative overflow-hidden">
         {/* Simple Mode Explanation Banner */}
         {appMode === 'SIMPLE' && (
-          <div className="bg-emerald-950/60 border border-emerald-500/40 p-3.5 rounded-xl flex items-start gap-3 text-xs text-emerald-200 font-sans">
+          <div className="bg-emerald-950/40 border border-emerald-500/30 p-4 rounded-2xl flex items-start gap-3.5 text-xs text-emerald-200 font-sans shadow-md backdrop-blur-md">
             <Sparkles className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
-              <span className="font-bold text-white block">✨ Beginner Summary: Reversal Engine & Whale Buying Active</span>
+              <span className="font-bold text-white block text-sm">✨ Beginner Summary: Reversal Engine & Whale Buying Active</span>
               <p className="text-emerald-300/90 leading-relaxed">
                 Large institutional buyers ("Whales") are accumulating BTC with a <strong>+1,820 BTC net buy volume</strong>. The Reversal Engine predicts a <strong>71% probability</strong> that price will stay above the strike floor through expiration.
               </p>
@@ -758,21 +780,21 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-purple-600/20 border border-purple-500/30 text-purple-300 shadow-lg shadow-purple-500/10">
               <Activity className="w-5 h-5 text-purple-300" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-white uppercase tracking-wider">
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-sm sm:text-base font-black text-white uppercase tracking-wider">
                   Reversal Engine & Institutional Whale Map
                 </h2>
-                <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-500/30 shadow-sm">
                   71% REVERSAL HOLD
                 </span>
               </div>
-              <p className="text-[11px] text-purple-300/60 font-sans">
+              <p className="text-xs text-purple-300/70 font-sans mt-0.5">
                 {appMode === 'SIMPLE'
                   ? 'Plain-English view of whale buying, order book support, and reversal safety'
                   : 'Microsecond L2 order book depth, delta absorption, iceberg detection & block trade flow'}
@@ -781,127 +803,127 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-[10px] text-purple-300/70 font-semibold">Active Mode:</span>
-            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${appMode === 'SIMPLE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-purple-500/20 text-purple-300 border-purple-500/30'}`}>
+            <span className="text-[11px] text-purple-300/70 font-semibold">Active Mode:</span>
+            <span className={`px-3 py-1 rounded-xl text-xs font-bold border shadow-sm ${appMode === 'SIMPLE' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-purple-500/20 text-purple-300 border-purple-500/30'}`}>
               {appMode === 'SIMPLE' ? '✨ SIMPLE VIEW' : '⚡ PRO QUANT VIEW'}
             </span>
           </div>
         </div>
 
         {/* 2-Column Grid: Reversal Engine Probabilities + Whale Map & Block Orders */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5">
           {/* Panel 1: Reversal Engine Probabilities */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/50 space-y-3">
+          <div className="bg-[#0b051b] p-4 sm:p-5 rounded-2xl border border-purple-900/50 hover:border-purple-500/40 space-y-4 transition-all shadow-md">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-purple-300/80 font-bold flex items-center gap-1.5">
+              <span className="text-purple-200/90 font-bold flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
-                <span>Reversal Engine Probabilities ({timeframe})</span>
+                <span className="text-sm">Reversal Engine Probabilities ({timeframe})</span>
               </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-black border border-emerald-500/30">
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full font-black border border-emerald-500/30">
                 ▲ HOLD UP ACTIVE
               </span>
             </div>
 
             {/* Probability Progress Bars */}
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div>
-                <div className="flex justify-between text-xs mb-1">
+                <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-emerald-300 font-bold">Bullish Reversal Hold</span>
                   <span className="text-emerald-400 font-black">71.0% Chance</span>
                 </div>
                 <div className="w-full bg-purple-950/80 h-3 rounded-full overflow-hidden border border-purple-900/60 flex">
-                  <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full w-[71%]" />
+                  <div className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full w-[71%] rounded-full" />
                 </div>
                 {appMode === 'SIMPLE' && (
-                  <span className="text-[10px] text-emerald-300/70 font-sans block mt-0.5">
+                  <span className="text-[11px] text-emerald-300/80 font-sans block mt-1">
                     High likelihood that price stays supported above strike level.
                   </span>
                 )}
               </div>
 
               <div>
-                <div className="flex justify-between text-xs mb-1">
+                <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-rose-300 font-bold">Bearish Breakdown Risk</span>
                   <span className="text-rose-400 font-black">18.0% Risk</span>
                 </div>
                 <div className="w-full bg-purple-950/80 h-2.5 rounded-full overflow-hidden border border-purple-900/60 flex">
-                  <div className="bg-rose-500 h-full w-[18%]" />
+                  <div className="bg-rose-500 h-full w-[18%] rounded-full" />
                 </div>
                 {appMode === 'SIMPLE' && (
-                  <span className="text-[10px] text-rose-300/70 font-sans block mt-0.5">
+                  <span className="text-[11px] text-rose-300/80 font-sans block mt-1">
                     Low probability of downside breakdown.
                   </span>
                 )}
               </div>
 
               <div>
-                <div className="flex justify-between text-xs mb-1">
+                <div className="flex justify-between text-xs mb-1.5">
                   <span className="text-amber-300 font-bold">Consolidation / Sideways</span>
                   <span className="text-amber-400 font-black">11.0%</span>
                 </div>
                 <div className="w-full bg-purple-950/80 h-2 rounded-full overflow-hidden border border-purple-900/60 flex">
-                  <div className="bg-amber-500 h-full w-[11%]" />
+                  <div className="bg-amber-500 h-full w-[11%] rounded-full" />
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-purple-900/40 grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-[#120A28] p-2 rounded-lg border border-purple-900/40">
-                <span className="text-[10px] text-purple-300/60 block">REVERSAL HOLD PRICE</span>
-                <span className="font-bold text-white">${(ticker.price - 80).toLocaleString()}</span>
+            <div className="pt-3 border-t border-purple-900/40 grid grid-cols-2 gap-3 text-xs">
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">REVERSAL HOLD PRICE</span>
+                <span className="font-bold text-white text-base">${(ticker.price - 80).toLocaleString()}</span>
               </div>
-              <div className="bg-[#120A28] p-2 rounded-lg border border-purple-900/40">
-                <span className="text-[10px] text-purple-300/60 block">AI CONFIDENCE SCORE</span>
-                <span className="font-black text-emerald-400">92.4 / 100</span>
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">AI CONFIDENCE SCORE</span>
+                <span className="font-black text-emerald-400 text-base">92.4 / 100</span>
               </div>
             </div>
           </div>
 
           {/* Panel 2: Whale Map & Block Orders */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/50 space-y-3">
+          <div className="bg-[#0b051b] p-4 sm:p-5 rounded-2xl border border-purple-900/50 hover:border-purple-500/40 space-y-4 transition-all shadow-md">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-purple-300/80 font-bold flex items-center gap-1.5">
+              <span className="text-purple-200/90 font-bold flex items-center gap-2">
                 <Layers className="w-4 h-4 text-cyan-400" />
-                <span>Whale Map & Block Orders ({timeframe})</span>
+                <span className="text-sm">Whale Map & Block Orders ({timeframe})</span>
               </span>
-              <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-black border border-cyan-500/30">
+              <span className="text-[10px] bg-cyan-500/20 text-cyan-300 px-2.5 py-0.5 rounded-full font-black border border-cyan-500/30">
                 +1,820 BTC NET DELTA
               </span>
             </div>
 
             {/* Block Order Metrics Grid */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">LARGEST BUY BLOCK (FEED)</span>
-                <span className="font-extrabold text-emerald-400 block">+18.4 BTC</span>
-                <span className="text-[9px] text-purple-300/50 block">Executed @ ${ticker.price.toLocaleString()}</span>
+            <div className="grid grid-cols-2 gap-2.5 text-xs">
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40 space-y-1">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">LARGEST BUY BLOCK</span>
+                <span className="font-black text-emerald-400 text-base block">+18.4 BTC</span>
+                <span className="text-[10px] text-purple-300/60 font-sans block">Executed @ ${ticker.price.toLocaleString()}</span>
               </div>
 
-              <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">LARGEST SELL BLOCK (FEED)</span>
-                <span className="font-extrabold text-rose-400 block">-6.5 BTC</span>
-                <span className="text-[9px] text-purple-300/50 block">Executed @ ${(ticker.price + 70).toLocaleString()}</span>
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40 space-y-1">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">LARGEST SELL BLOCK</span>
+                <span className="font-black text-rose-400 text-base block">-6.5 BTC</span>
+                <span className="text-[10px] text-purple-300/60 font-sans block">Executed @ ${(ticker.price + 70).toLocaleString()}</span>
               </div>
 
-              <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">ICEBERG RESTING BUY</span>
-                <span className="font-extrabold text-cyan-300 block">12.8 BTC Limit</span>
-                <span className="text-[9px] text-purple-300/50 block">Resting @ ${(ticker.price - 120).toLocaleString()}</span>
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40 space-y-1">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">ICEBERG RESTING BUY</span>
+                <span className="font-black text-cyan-300 text-base block">12.8 BTC Limit</span>
+                <span className="text-[10px] text-purple-300/60 font-sans block">Resting @ ${(ticker.price - 120).toLocaleString()}</span>
               </div>
 
-              <div className="bg-[#120A28] p-2.5 rounded-lg border border-purple-900/40 space-y-1">
-                <span className="text-[10px] text-purple-300/60 block">HIDDEN ABSORPTION</span>
-                <span className="font-extrabold text-amber-300 block">8.5 BTC at VWAP</span>
-                <span className="text-[9px] text-purple-300/50 block">Bid Wall Imbalance +28.4%</span>
+              <div className="bg-[#13072b] p-3 rounded-xl border border-purple-900/40 space-y-1">
+                <span className="text-[10px] text-purple-300/60 font-mono uppercase block">HIDDEN ABSORPTION</span>
+                <span className="font-black text-amber-300 text-base block">8.5 BTC at VWAP</span>
+                <span className="text-[10px] text-purple-300/60 font-sans block">Bid Wall Imbalance +28.4%</span>
               </div>
             </div>
 
             {appMode === 'SIMPLE' ? (
-              <p className="text-[11px] text-cyan-300/90 font-sans pt-1 border-t border-purple-900/40">
+              <p className="text-xs text-purple-200/90 font-sans pt-2 border-t border-purple-900/40 leading-relaxed">
                 💡 <strong>Whale Summary:</strong> Large institutional buyers are putting big buy orders below current price, making it very hard for price to drop.
               </p>
             ) : (
-              <p className="text-[10px] text-purple-300/60 font-mono pt-1 border-t border-purple-900/40">
+              <p className="text-[11px] text-purple-300/60 font-mono pt-2 border-t border-purple-900/40">
                 L2 Depth Ratio: 1.42x • Net Taker Flow: +340.5 BTC/10m • Cumulative Delta Trend: Strongly Positive
               </p>
             )}

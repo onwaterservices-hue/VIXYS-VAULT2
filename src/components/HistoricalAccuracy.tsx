@@ -141,9 +141,9 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
             <div className="flex items-center gap-2 mb-1">
               <span className="px-2.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-mono font-bold flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-purple-400" />
-                AUDITED PERFORMANCE TRACK RECORD
+                WALK-FORWARD BACKTEST TRACK RECORD
               </span>
-              <span className="text-purple-300/60 text-xs font-mono">Tamper-Evident SHA-256 Signal Hashes</span>
+              <span className="text-purple-300/60 text-xs font-mono">Recorded Historical Signals Log</span>
             </div>
             <h2 className="text-2xl font-black text-white font-mono tracking-tight">
               Backtested Analytics & Performance Engine

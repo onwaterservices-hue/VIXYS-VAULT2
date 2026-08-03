@@ -30,7 +30,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [testingVenue, setTestingVenue] = useState<'kalshi' | 'polymarket' | 'draftkings' | null>(null);
   const [testSuccessMessage, setTestSuccessMessage] = useState<string | null>(null);
 
-  const isElite = subscription.plan === 'ELITE';
+  const isElite =
+    subscription.plan === 'ELITE' ||
+    subscription.plan === 'ELITE_PASS' ||
+    authState.user?.role === 'ADMIN' ||
+    authState.user?.role === 'OWNER' ||
+    authState.user?.email?.toLowerCase() === 'vixyvault0@gmail.com';
 
   const handleCopyKey = () => {
     navigator.clipboard.writeText(apiKey);
