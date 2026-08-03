@@ -46,6 +46,49 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const [stripeError, setStripeError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [customStripeUrl, setCustomStripeUrl] = useState<string>('');
+  const [promoCodeInput, setPromoCodeInput] = useState<string>('PROMOTER20');
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPct: number; promoterName: string; desc: string } | null>({
+    code: 'PROMOTER20',
+    discountPct: 20,
+    promoterName: 'Alpha Promoter Network',
+    desc: '20% Off Subscription + Promoter Commission Tracked',
+  });
+  const [promoStatusMsg, setPromoStatusMsg] = useState<string>('Default Promoter Tag Active: 20% Off + Promoter Commission Logged');
+  const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
+
+  const handleValidatePromo = async () => {
+    if (!promoCodeInput.trim()) return;
+    setIsValidatingPromo(true);
+    setPromoStatusMsg('');
+    setStripeError('');
+
+    try {
+      const res = await fetch('/api/stripe/validate-promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: promoCodeInput }),
+      });
+      const data = await res.json();
+      setIsValidatingPromo(false);
+
+      if (res.ok && data.valid) {
+        setAppliedPromo({
+          code: data.code,
+          discountPct: data.discountPct,
+          promoterName: data.promoterName,
+          desc: data.desc,
+        });
+        setPromoStatusMsg(`Code Applied! ${data.desc} (${data.promoterName})`);
+      } else {
+        setAppliedPromo(null);
+        setPromoStatusMsg(data.message || 'Invalid or expired code.');
+      }
+    } catch (err) {
+      setIsValidatingPromo(false);
+      setAppliedPromo(null);
+      setPromoStatusMsg('Error validating code.');
+    }
+  };
 
   const formatTrialTime = (totalSecs: number) => {
     const h = Math.floor(totalSecs / 3600);
@@ -144,6 +187,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         body: JSON.stringify({
           plan: selectedPlanToBuy,
           interval: billingInterval,
+          promoCode: appliedPromo?.code || promoCodeInput,
+          referralCode: appliedPromo?.code || promoCodeInput,
         }),
       });
 
@@ -198,6 +243,13 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
   const priceFor = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
     return billingInterval === 'annual' ? plans[planKey].annualPrice : plans[planKey].monthlyPrice;
+  };
+
+  const finalPriceFor = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
+    const base = priceFor(planKey);
+    if (!appliedPromo) return base;
+    const discounted = Math.max(1, Math.round(base * (1 - appliedPromo.discountPct / 100)));
+    return discounted;
   };
 
   return (
@@ -485,9 +537,53 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <form onSubmit={handleSimulateStripePayment} className="space-y-4">
                 <div className="bg-[#0B061A] p-3 rounded-xl border border-purple-900/40 flex justify-between items-center text-xs">
                   <span className="text-purple-300/60">Selected Tier:</span>
-                  <span className="text-purple-300 font-bold">
-                    VIXY {selectedPlanToBuy} (${priceFor(selectedPlanToBuy)}/mo)
-                  </span>
+                  <div className="text-right font-bold">
+                    <span className="text-purple-300 block">VIXY {selectedPlanToBuy}</span>
+                    {appliedPromo ? (
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <span className="text-purple-400/50 line-through text-[11px]">${priceFor(selectedPlanToBuy)}</span>
+                        <span className="text-emerald-400 font-mono font-black text-xs">${finalPriceFor(selectedPlanToBuy)}/mo</span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded border border-emerald-500/30">
+                          -{appliedPromo.discountPct}% OFF
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-purple-200 text-xs">${priceFor(selectedPlanToBuy)}/mo</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Promo Code / Referral Code Input Field */}
+                <div className="space-y-1.5 bg-[#0B061A] p-3 rounded-xl border border-purple-900/50">
+                  <div className="flex justify-between items-center">
+                    <label className="text-purple-300/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Discount or Referral Code</span>
+                    </label>
+                    <span className="text-[10px] text-purple-300/60 font-sans">Promoter Commission Tagged</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. PROMOTER20, REF-ALEX, VIXY50"
+                      value={promoCodeInput}
+                      onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
+                      className="flex-1 bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleValidatePromo}
+                      disabled={isValidatingPromo}
+                      className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all disabled:opacity-50"
+                    >
+                      {isValidatingPromo ? 'Checking...' : 'Apply Code'}
+                    </button>
+                  </div>
+                  {promoStatusMsg && (
+                    <p className={`text-[10.5px] font-sans font-medium mt-1 ${appliedPromo ? 'text-emerald-300' : 'text-amber-300'}`}>
+                      {promoStatusMsg}
+                    </p>
+                  )}
                 </div>
 
                 {stripeError && (

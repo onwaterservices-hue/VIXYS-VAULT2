@@ -210,8 +210,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
   const [newUserName, setNewUserName] = useState<string>('');
   const [newUserTier, setNewUserTier] = useState<'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS'>('PRO_PASS');
 
-  // Active Tab View in Admin: 'users' | 'revenue' | 'tickets' | 'settings'
-  const [adminTab, setAdminTab] = useState<'users' | 'revenue' | 'tickets' | 'settings'>('users');
+  // Active Tab View in Admin: 'users' | 'revenue' | 'referrals' | 'tickets' | 'settings'
+  const [adminTab, setAdminTab] = useState<'users' | 'revenue' | 'referrals' | 'tickets' | 'settings'>('users');
+
+  const referralPromoters = [
+    {
+      code: 'PROMOTER20',
+      name: 'Alpha Promoter Network',
+      email: 'affiliates@alphapromoter.com',
+      referredCount: 148,
+      discountGiven: '20% Off',
+      commissionRate: '20%',
+      totalVolumeGenerated: '$18,420',
+      commissionOwed: '$3,684.00',
+      payoutStatus: 'Paid (Stripe Connect)',
+    },
+    {
+      code: 'REF-ALEX',
+      name: 'Alex Mercer (Top Trader)',
+      email: 'trader.alex@gmail.com',
+      referredCount: 62,
+      discountGiven: '15% Off',
+      commissionRate: '25%',
+      totalVolumeGenerated: '$8,940',
+      commissionOwed: '$2,235.00',
+      payoutStatus: 'Paid (Stripe Connect)',
+    },
+    {
+      code: 'VIXY50',
+      name: 'Vixy Founding Vault Partners',
+      email: 'partners@vixysvault.com',
+      referredCount: 94,
+      discountGiven: '50% Off 1st Mo',
+      commissionRate: '15%',
+      totalVolumeGenerated: '$9,110',
+      commissionOwed: '$1,366.50',
+      payoutStatus: 'Processing Payout',
+    },
+    {
+      code: 'ALPHA10',
+      name: 'Crypto Twitter Affiliate',
+      email: 'socials@cryptotwitter.io',
+      referredCount: 38,
+      discountGiven: '10% Off',
+      commissionRate: '15%',
+      totalVolumeGenerated: '$3,420',
+      commissionOwed: '$513.00',
+      payoutStatus: 'Paid (USDC)',
+    },
+    {
+      code: 'VIP2026',
+      name: 'Institutional VIP Desk',
+      email: 'institutional@vixysvault.com',
+      referredCount: 19,
+      discountGiven: '25% Off',
+      commissionRate: '20%',
+      totalVolumeGenerated: '$12,800',
+      commissionOwed: '$2,560.00',
+      payoutStatus: 'Paid (Bank Wire)',
+    },
+  ];
 
   const handleUpdateTicketStatus = (id: string, status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED') => {
     setTickets((prev) => prev.map((t) => (t.id === id ? { ...t, status } : t)));
@@ -400,6 +458,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
         >
           <DollarSign className="w-4 h-4 text-emerald-400" />
           <span>Stripe Payments & Audit Log</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('referrals')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'referrals'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-400" />
+          <span>Referrals & Promoter Commissions ({referralPromoters.length})</span>
         </button>
 
         <button
@@ -703,6 +773,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
                       </span>
                     </td>
                     <td className="p-3.5 text-right font-mono text-purple-300/60 text-[11px]">{tx.timestamp}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: REFERRALS & PROMOTER COMMISSION TRACKER */}
+      {adminTab === 'referrals' && (
+        <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-5 shadow-2xl font-mono">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
+            <div>
+              <h2 className="text-lg font-black text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-amber-400" />
+                <span>Promoter & Referral Commission Tracking System</span>
+              </h2>
+              <p className="text-purple-300/60 text-xs font-sans mt-0.5">
+                Every customer signing up or subscribing with a referral code automatically tags their promoter for commission payouts.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-3 py-1 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 font-bold">
+                Total Referred Users: 361
+              </span>
+              <span className="px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
+                Total Referral Volume: $52,690
+              </span>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-purple-900/40 bg-[#0B061A]">
+            <table className="w-full text-left text-xs border-collapse min-w-[760px]">
+              <thead>
+                <tr className="bg-[#080313] border-b border-purple-900/50 text-purple-300/60 uppercase font-bold text-[10px]">
+                  <th className="p-3.5">Promoter Code</th>
+                  <th className="p-3.5">Promoter Name / Partner</th>
+                  <th className="p-3.5">User Discount</th>
+                  <th className="p-3.5">Referred Users</th>
+                  <th className="p-3.5">Volume Generated</th>
+                  <th className="p-3.5">Commission Rate</th>
+                  <th className="p-3.5">Commission Owed</th>
+                  <th className="p-3.5 text-right">Payout Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-purple-900/30 text-purple-100 font-sans">
+                {referralPromoters.map((p) => (
+                  <tr key={p.code} className="hover:bg-purple-900/10 transition-colors">
+                    <td className="p-3.5 font-mono text-amber-300 font-black text-xs">{p.code}</td>
+                    <td className="p-3.5 font-mono">
+                      <span className="text-white font-bold block">{p.name}</span>
+                      <span className="text-[10px] text-purple-300/60">{p.email}</span>
+                    </td>
+                    <td className="p-3.5 font-mono text-emerald-400 font-bold">{p.discountGiven}</td>
+                    <td className="p-3.5 font-mono font-bold text-white">{p.referredCount} Users</td>
+                    <td className="p-3.5 font-mono font-bold text-purple-200">{p.totalVolumeGenerated}</td>
+                    <td className="p-3.5 font-mono font-bold text-amber-300">{p.commissionRate}</td>
+                    <td className="p-3.5 font-mono font-black text-emerald-400 text-sm">{p.commissionOwed}</td>
+                    <td className="p-3.5 text-right font-mono">
+                      <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                        {p.payoutStatus}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

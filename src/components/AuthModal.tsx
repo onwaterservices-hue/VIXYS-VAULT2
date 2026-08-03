@@ -23,6 +23,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [referralCode, setReferralCode] = useState('PROMOTER20');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -120,20 +121,38 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               )}
               {mode === 'register' && (
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/60 block font-semibold">Full Name</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-purple-300/60 block font-semibold">Full Name</label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Alex Mercer"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-purple-300/60 block font-semibold text-[11px] uppercase tracking-wider">
+                        Discount / Referral Code
+                      </label>
+                      <span className="text-[10px] text-emerald-400 font-bold">20% Off Active</span>
+                    </div>
                     <input
                       type="text"
-                      required
-                      placeholder="Alex Mercer"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      placeholder="PROMOTER20, REF-ALEX, VIXY50"
+                      value={referralCode}
+                      onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 uppercase font-mono text-xs placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                     />
                   </div>
-                </div>
+                </>
               )}
 
               <div className="space-y-1.5">

@@ -335,10 +335,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         onSelectAsset={onSelectAsset}
         onOpenJournal={onOpenJournal}
         timeframe={timeframe}
+        appMode={appMode}
+        setAppMode={setAppMode}
       />
 
-      {/* Active Market & UX Mode Switcher */}
-      <div className="bg-[#120B28] p-3 rounded-2xl border border-purple-900/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+      {/* Active Market Contract Bar */}
+      <div className="bg-[#120B28] p-3.5 rounded-2xl border border-purple-900/40 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-purple-300/80 font-extrabold uppercase font-mono text-xs flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse" />
@@ -346,31 +348,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </span>
         </div>
 
-        {/* User Experience Mode Switcher (Simple vs Pro Quant) */}
-
-        <div className="flex items-center gap-2 bg-[#0B061A] p-1 rounded-xl border border-purple-500/30">
-          <button
-            onClick={() => setAppMode('SIMPLE')}
-            className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1.5 ${
-              appMode === 'SIMPLE'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md shadow-emerald-600/40 font-black'
-                : 'text-purple-300/60 hover:text-white'
-            }`}
-          >
-            <span>✨ SIMPLE MODE</span>
-            <span className="text-[9px] bg-emerald-950 px-1.5 py-0.2 rounded text-emerald-300 font-normal">Beginner Friendly</span>
-          </button>
-          <button
-            onClick={() => setAppMode('PRO')}
-            className={`px-3 py-1 rounded-lg font-bold text-[11px] transition-all flex items-center gap-1.5 ${
-              appMode === 'PRO'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/40 font-black'
-                : 'text-purple-300/60 hover:text-white'
-            }`}
-          >
-            <span>⚡ PRO QUANT MODE</span>
-            <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300 font-normal">Institutional</span>
-          </button>
+        <div className="flex items-center gap-2">
+          <span className={`px-2.5 py-1 rounded-lg text-xs font-bold font-mono border ${
+            appMode === 'SIMPLE' 
+              ? 'bg-amber-500/15 text-amber-300 border-amber-500/30' 
+              : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+          }`}>
+            {appMode === 'SIMPLE' ? '✨ Beginner Mode' : '⚡ Pro Quant Mode'}
+          </span>
         </div>
       </div>
 

@@ -34,6 +34,8 @@ interface ExecutiveCommandCenterProps {
   onSelectAsset: (symbol: string) => void;
   onOpenJournal?: () => void;
   timeframe?: string;
+  appMode?: 'SIMPLE' | 'PRO';
+  setAppMode?: (mode: 'SIMPLE' | 'PRO') => void;
 }
 
 export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
@@ -43,9 +45,11 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
   onSelectAsset,
   onOpenJournal,
   timeframe = '15M',
+  appMode = 'SIMPLE',
+  setAppMode,
 }) => {
-  // Mode Switcher: Beginner Mode vs Institutional Mode
-  const [mode, setMode] = useState<'BEGINNER' | 'INSTITUTIONAL'>('BEGINNER');
+  // Mode derived from unified appMode prop (SIMPLE = BEGINNER, PRO = INSTITUTIONAL)
+  const mode = appMode === 'SIMPLE' ? 'BEGINNER' : 'INSTITUTIONAL';
 
   // Daily AI Executive Briefing Banner Toggle
   const [showDailyReport, setShowDailyReport] = useState<boolean>(true);
@@ -198,10 +202,10 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
 
           <div className="flex items-center gap-1 bg-[#120B24] p-1 rounded-xl border border-purple-900/50">
             <button
-              onClick={() => setMode('BEGINNER')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+              onClick={() => setAppMode?.('SIMPLE')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 mode === 'BEGINNER'
-                  ? 'bg-amber-500 text-slate-950 font-black shadow-sm'
+                  ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
                   : 'text-purple-300/70 hover:text-white'
               }`}
             >
@@ -209,10 +213,10 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <span>Beginner</span>
             </button>
             <button
-              onClick={() => setMode('INSTITUTIONAL')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+              onClick={() => setAppMode?.('PRO')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                 mode === 'INSTITUTIONAL'
-                  ? 'bg-purple-600 text-white font-black shadow-sm'
+                  ? 'bg-purple-600 text-white font-black shadow-md shadow-purple-600/30'
                   : 'text-purple-300/70 hover:text-white'
               }`}
             >

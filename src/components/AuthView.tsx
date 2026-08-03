@@ -33,6 +33,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
+  const [referralCode, setReferralCode] = useState('PROMOTER20');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
@@ -203,20 +204,48 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
               )}
               {mode === 'register' && (
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/70 block font-semibold">Full Name</label>
-                  <div className="relative">
-                    <User className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
-                    <input
-                      type="text"
-                      required
-                      placeholder="Alex Mercer"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                    />
+                <>
+                  <div className="space-y-1.5">
+                    <label className="text-purple-300/70 block font-semibold">Full Name</label>
+                    <div className="relative">
+                      <User className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        required
+                        placeholder="Alex Mercer"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
                   </div>
-                </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-purple-300/70 block font-semibold flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Discount / Referral Code (Optional)</span>
+                      </label>
+                      <span className="text-[10px] text-emerald-400 font-bold">20% Off Tag Active</span>
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
+                      <input
+                        type="text"
+                        placeholder="PROMOTER20, REF-ALEX, VIXY50"
+                        value={referralCode}
+                        onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 uppercase font-mono placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                    {referralCode && (
+                      <p className="text-[10.5px] text-emerald-300 font-sans flex items-center gap-1 mt-1">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        <span>Promoter Tag <strong>{referralCode}</strong> attached! 20% discount + commission logged for your referrer.</span>
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
 
               <div className="space-y-1.5">
