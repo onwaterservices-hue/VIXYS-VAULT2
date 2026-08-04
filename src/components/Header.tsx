@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys } from '../types';
 import { Logo } from './Logo';
-import { fetchApiSignal, ApiSignalResponse } from '../services/api';
+import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 
 interface HeaderProps {
   ticker: BTCTicker;
@@ -83,14 +83,19 @@ export const Header: React.FC<HeaderProps> = ({
   const { tzName: userTzName, abbr: userTzAbbr } = getLocalTimezone();
 
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
 
   useEffect(() => {
     let active = true;
     const loadSignal = async () => {
       const desk = selectedTimeframe.toLowerCase();
-      const sig = await fetchApiSignal(selectedAsset, desk);
+      const [sig, status] = await Promise.all([
+        fetchApiSignal(selectedAsset, desk),
+        fetchModelStatus(selectedAsset, desk),
+      ]);
       if (active) {
         setApiSignal(sig);
+        setModelStatus(status);
       }
     };
     loadSignal();
@@ -188,7 +193,7 @@ export const Header: React.FC<HeaderProps> = ({
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-[#0A0518]/95 backdrop-blur-md border-b border-purple-900/40 text-purple-100">
+    <header className="sticky top-0 z-40 bg-[#06030d]/95 backdrop-blur-xl border-b border-purple-500/30 shadow-[0_4px_25px_rgba(147,51,234,0.15)] text-purple-100">
       {/* Top Real-time Ticker & Institutional Context Bar */}
       <div className="bg-[#0E0822]/90 px-4 py-1 text-xs border-b border-purple-900/30 flex flex-wrap items-center justify-between gap-2 font-mono">
         <div className="flex items-center gap-3 overflow-x-auto py-0.5">
@@ -231,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+              {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
                 <>
                   Confidence{' '}
                   <strong className="text-white font-extrabold">
@@ -240,7 +245,9 @@ export const Header: React.FC<HeaderProps> = ({
                 </>
               ) : (
                 <strong className="text-amber-300 font-extrabold">
-                  {apiSignal?.status || 'Collecting data (340/500)'}
+                  {modelStatus?.hasActiveModel
+                    ? `Active Model (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
+                    : `Collecting data (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
                 </strong>
               )}
             </span>

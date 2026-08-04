@@ -26,6 +26,9 @@ import { AIPatternEngine } from './AIPatternEngine';
 import { fetchPrediction } from '../services/api';
 import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
 import { CompactSignalChart } from './CompactSignalChart';
+import { ModelStatusBadge } from './ModelStatusBadge';
+import { AIBrainMemoryVault } from './AIBrainMemoryVault';
+import { NeuralRibbonChart } from './NeuralRibbonChart';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -702,8 +705,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               <span className="text-cyan-300 font-bold text-sm">LIVE MONITORED</span>
             </div>
             <div>
-              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">MODEL DATASET SAMPLES</span>
-              <span className="text-emerald-400 font-bold text-sm">340 SAMPLES (LIVE LOGGED)</span>
+              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">MODEL STATUS</span>
+              <ModelStatusBadge asset={selectedAsset} desk={selectedTimeframe.toLowerCase()} />
             </div>
           </div>
         </div>
@@ -769,6 +772,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
         </div>
       </div>
+
+      {/* AI BRAIN & LIFETIME MEMORY LEARNING ENGINE */}
+      <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
 
       {/* PREDICTION SETUP HEALTH & RISK WATCH (SAFE ENTRY & EMERGENCY BUY-OUT / BAIL-OUT) */}
       <PredictionHealthWatch
@@ -945,7 +951,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       </div>
 
       {/* LIVE CANDLESTICK CHART & ORDER FLOW SECTION */}
-      <div>
+      <div className="space-y-6">
+        <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
         <CandleChart
           candles={displayCandles}
           targetPrice={signal.targetPrice}

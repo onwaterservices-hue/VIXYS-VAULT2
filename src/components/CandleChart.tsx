@@ -20,8 +20,11 @@ import {
   BarChart2,
   Layers,
   Flame,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import { Candle } from '../types';
+import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 
 export interface ModelSignalInfo {
   direction: 'YES' | 'NO';
@@ -304,6 +307,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
   // Indicator Toggles
+  const [showTikTokAiOverlay, setShowTikTokAiOverlay] = useState<boolean>(true);
+  const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [showEMA, setShowEMA] = useState<boolean>(true);
   const [showVWAP, setShowVWAP] = useState<boolean>(true);
   const [showBollinger, setShowBollinger] = useState<boolean>(true);
@@ -547,6 +552,20 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           <stop offset="0%" stopColor={THEME.bear} stopOpacity="0.6" />
           <stop offset="100%" stopColor={THEME.bear} stopOpacity="0.15" />
         </linearGradient>
+
+        {/* Glow Filters for Explosive TikTok BUY UP / BUY DOWN AI Indicator */}
+        <filter id="glow-green" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <filter id="glow-red" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
+        <filter id="glow-purple" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
       </defs>
 
       {/* Plot Background */}
@@ -742,6 +761,63 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                   r={isHoveredSignal ? "5" : "3"}
                   fill={isHoveredSignal ? THEME.purpleBright : THEME.amber}
                 />
+              </g>
+            )}
+
+            {/* TikTok Style AI Indicator Floating Badges (BUY UP / BUY DOWN) */}
+            {showTikTokAiOverlay && (hasSignal || i % 3 === 0 || i === visibleCandles.length - 1) && (
+              <g className="transition-all duration-300">
+                {isBull ? (
+                  <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); if (audioEnabled) playBuyUpSound(); }}>
+                    <rect
+                      x={cx - 28}
+                      y={y(c.low) + 10}
+                      width="56"
+                      height="16"
+                      rx="8"
+                      fill="#042f2e"
+                      stroke="#10b981"
+                      strokeWidth="1.5"
+                      filter="url(#glow-green)"
+                    />
+                    <text
+                      x={cx}
+                      y={y(c.low) + 21}
+                      fill="#34d399"
+                      fontSize="8.5"
+                      fontWeight="900"
+                      textAnchor="middle"
+                      className="font-mono tracking-wider pointer-events-none"
+                    >
+                      BUY UP ▲
+                    </text>
+                  </g>
+                ) : (
+                  <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); if (audioEnabled) playBuyDownSound(); }}>
+                    <rect
+                      x={cx - 34}
+                      y={y(c.high) - 24}
+                      width="68"
+                      height="16"
+                      rx="8"
+                      fill="#4c0519"
+                      stroke="#f43f5e"
+                      strokeWidth="1.5"
+                      filter="url(#glow-red)"
+                    />
+                    <text
+                      x={cx}
+                      y={y(c.high) - 13}
+                      fill="#fb7185"
+                      fontSize="8.5"
+                      fontWeight="900"
+                      textAnchor="middle"
+                      className="font-mono tracking-wider pointer-events-none"
+                    >
+                      BUY DOWN ▼
+                    </text>
+                  </g>
+                )}
               </g>
             )}
           </g>
@@ -1110,6 +1186,31 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       <span className="text-[#8b84a8] font-bold flex items-center gap-1 pr-1">
         <Sliders className="w-3 h-3 text-purple-400" /> Overlays:
       </span>
+
+      <button
+        onClick={() => setShowTikTokAiOverlay(!showTikTokAiOverlay)}
+        className={`px-2.5 py-1 rounded-md border transition-all flex items-center gap-1.5 font-extrabold ${
+          showTikTokAiOverlay
+            ? 'bg-gradient-to-r from-emerald-950 via-purple-950 to-rose-950 text-emerald-300 border-emerald-400 shadow-lg shadow-emerald-500/20'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+      >
+        <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+        <span>⚡ TIKTOK AI PILOT (BUY UP / DOWN)</span>
+      </button>
+
+      <button
+        onClick={() => setAudioEnabled(!audioEnabled)}
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+          audioEnabled
+            ? 'bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold'
+            : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
+        }`}
+        title="Toggle TikTok Cyber Audio Chimes on Buy Up/Down Signals"
+      >
+        {audioEnabled ? <Volume2 className="w-3 h-3 text-purple-300" /> : <VolumeX className="w-3 h-3 text-slate-500" />}
+        <span>CHIMES</span>
+      </button>
 
       <button
         onClick={() => setShowEMA(!showEMA)}

@@ -1,1 +1,96 @@
 @import "tailwindcss";
+
+@layer utilities {
+  /* Near-black canvas background with radial glow */
+  body {
+    background-color: #06030d;
+    color: #e2d8f5;
+  }
+
+  /* Glassmorphism card panels */
+  .glass-panel {
+    background: rgba(13, 7, 30, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  }
+
+  .glass-panel-hover {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .glass-panel-hover:hover {
+    border-color: rgba(168, 85, 247, 0.55);
+    box-shadow: 0 12px 40px -10px rgba(168, 85, 247, 0.35), inset 0 0 20px rgba(168, 85, 247, 0.12);
+    transform: translateY(-2px);
+  }
+
+  /* Outer glow blooms for terminal metrics */
+  .glow-green {
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.55);
+  }
+
+  .glow-red {
+    box-shadow: 0 0 16px rgba(244, 63, 94, 0.55);
+  }
+
+  .glow-purple {
+    box-shadow: 0 0 22px rgba(168, 85, 247, 0.45);
+  }
+
+  .glow-amber {
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.45);
+  }
+
+  /* Animated Gradient Sweep for headers & recommended tier cards */
+  @keyframes gradientSweep {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  .animate-gradient-sweep {
+    background: linear-gradient(90deg, #13072b, #2a0e5c, #4c1d95, #220948, #13072b);
+    background-size: 300% 300%;
+    animation: gradientSweep 10s ease infinite;
+  }
+
+  /* Pulse Glow for live indicators */
+  @keyframes pulseGlow {
+    0%, 100% {
+      opacity: 0.85;
+      box-shadow: 0 0 12px rgba(168, 85, 247, 0.35);
+    }
+    50% {
+      opacity: 1;
+      box-shadow: 0 0 28px rgba(168, 85, 247, 0.75);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 3s infinite ease-in-out;
+  }
+}
+
+/* Custom terminal scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #06030d;
+}
+::-webkit-scrollbar-thumb {
+  background: #251242;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4c228a;
+}
+

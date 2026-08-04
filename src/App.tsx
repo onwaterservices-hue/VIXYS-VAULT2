@@ -745,7 +745,25 @@ export default function App() {
                   )}
 
                   {activeTab === 'admin' && (
-                    <AdminPanel stats={adminStats} tickets={supportTickets} setTickets={setSupportTickets} />
+                    userRole === 'ADMIN' || authState.user?.role === 'ADMIN' || authState.user?.role === 'OWNER' ? (
+                      <AdminPanel stats={adminStats} tickets={supportTickets} setTickets={setSupportTickets} />
+                    ) : (
+                      <div className="bg-[#070410] border-2 border-rose-500/40 rounded-2xl p-8 text-center space-y-4 max-w-lg mx-auto my-12 shadow-2xl">
+                        <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
+                          <Lock className="w-6 h-6" />
+                        </div>
+                        <h2 className="text-xl font-black text-white">403 — Restricted Master Admin Area</h2>
+                        <p className="text-xs text-slate-400 font-sans leading-relaxed">
+                          Your account role (<strong className="text-purple-300">{authState.user?.role || 'FREE'}</strong>) does not have server-side clearance to inspect system audit logs or alter global risk parameters.
+                        </p>
+                        <button
+                          onClick={() => setActiveTab('terminal')}
+                          className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold transition-all shadow-lg"
+                        >
+                          Return to Live Executive Terminal
+                        </button>
+                      </div>
+                    )
                   )}
                 </>
               )}

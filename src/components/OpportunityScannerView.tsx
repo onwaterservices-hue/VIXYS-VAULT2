@@ -1,5 +1,6 @@
-import React from 'react';
-import { Target, ArrowUpRight, ArrowDownRight, Zap, Sparkles, Filter, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Target, ArrowUpRight, ArrowDownRight, Zap, Sparkles, Filter, ChevronRight, ShieldAlert } from 'lucide-react';
+import { fetchModelStatus, ModelStatusResponse } from '../services/api';
 
 interface OpportunityScannerViewProps {
   onSelectAssetAndNavigate: (symbol: string) => void;
@@ -8,6 +9,16 @@ interface OpportunityScannerViewProps {
 export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
   onSelectAssetAndNavigate,
 }) => {
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
+
+  useEffect(() => {
+    fetchModelStatus('BTC', '15m')
+      .then((res) => setModelStatus(res))
+      .catch(() => setModelStatus(null));
+  }, []);
+
+  const isUncalibrated = !modelStatus?.hasActiveModel;
+
   const assets = [
     { rank: '🥇', symbol: 'BTC', name: 'Bitcoin', confidence: 95, edge: '+14.2%', harmony: '95%', bias: 'SIGNAL: YES', price: '$64,120.50', vol: 'HIGH' },
     { rank: '🥈', symbol: 'SOL', name: 'Solana', confidence: 92, edge: '+11.1%', harmony: '92%', bias: 'SIGNAL: YES', price: '$184.20', vol: 'VERY HIGH' },
@@ -32,9 +43,17 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
           </p>
         </div>
 
-        <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/50 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40 flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          6 ASSETS MONITORED (Real-Time Live Feed)
+        <div className="flex items-center gap-3">
+          {isUncalibrated && (
+            <div className="px-3.5 py-1.5 rounded-xl bg-amber-950/60 text-amber-300 font-mono text-xs font-bold border border-amber-500/40 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>UNCALIBRATED ({modelStatus?.settledCount || 0}/500) — HISTORICAL BACKTEST MODE</span>
+            </div>
+          )}
+          <div className="px-3.5 py-1.5 rounded-xl bg-emerald-950/50 text-emerald-300 font-mono text-xs font-bold border border-emerald-500/40 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            6 ASSETS MONITORED
+          </div>
         </div>
       </div>
 
@@ -50,8 +69,13 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
               <div className="flex items-center gap-2">
                 <span className="text-lg">{asset.rank}</span>
                 <div>
-                  <h3 className="text-base font-extrabold text-white group-hover:text-purple-300 transition-colors">
+                  <h3 className="text-base font-extrabold text-white group-hover:text-purple-300 transition-colors flex items-center gap-2">
                     {asset.symbol}
+                    {isUncalibrated && (
+                      <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-normal">
+                        DEMO BACKTEST
+                      </span>
+                    )}
                   </h3>
                   <span className="text-[10px] text-slate-400">{asset.name}</span>
                 </div>
@@ -63,8 +87,12 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
               <div>
-                <span className="text-[10px] text-slate-400 block uppercase">Confidence</span>
-                <span className="text-2xl font-black text-white">{asset.confidence}%</span>
+                <span className="text-[10px] text-slate-400 block uppercase">
+                  {isUncalibrated ? 'Backtest Conf.' : 'Confidence'}
+                </span>
+                <span className={`text-2xl font-black ${isUncalibrated ? 'text-amber-200' : 'text-white'}`}>
+                  {isUncalibrated ? `${asset.confidence}%` : `${asset.confidence}%`}
+                </span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 block uppercase">Expected Edge</span>

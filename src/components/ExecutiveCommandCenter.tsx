@@ -317,9 +317,9 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <span className="text-[11px] font-mono font-bold text-slate-400 uppercase tracking-widest block">
                 MODEL DIRECTIONAL LEAN
               </span>
-              <div className="flex items-baseline justify-between">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h1
-                  className={`text-3xl font-black tracking-tight ${
+                  className={`text-2xl sm:text-3xl font-black tracking-tight ${
                     modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_YES'
                       ? 'text-emerald-400'
                       : modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_NO'
@@ -329,7 +329,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                 >
                   SIGNAL: {modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_YES' ? 'YES' : modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_NO' ? 'NO' : 'HOLD'}
                 </h1>
-                <span className="text-xs font-mono font-extrabold px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                <span className="text-xs font-mono font-extrabold px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
                   {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `CONFLUENCE: ${Math.round(apiSignal.modelProbability * 100)}%`
                     : 'UNCALIBRATED'}
@@ -357,36 +357,36 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
 
             {/* Quick Metrics Grid */}
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-slate-800/80 font-mono">
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Confidence</span>
-                <span className="text-2xl font-black text-white">
+              <div className="min-w-0">
+                <span className="text-[10px] text-slate-400 uppercase block truncate">Confidence</span>
+                <span className="text-xl font-black text-white truncate block">
                   {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `${Math.round(apiSignal.modelProbability * 100)}%`
-                    : 'Collecting...'}
+                    : 'Collecting'}
                 </span>
-                <span className="text-[10px] text-amber-400 block font-bold">
+                <span className="text-[10px] text-amber-400 block font-bold truncate">
                   {modelStatus?.hasActiveModel
-                    ? `Active Model (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
-                    : `Collecting data (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
+                    ? `Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'}`
+                    : `n=${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/500`}
                 </span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Model Edge</span>
-                <span className="text-2xl font-black text-emerald-400">
+              <div className="min-w-0">
+                <span className="text-[10px] text-slate-400 uppercase block truncate">Model Edge</span>
+                <span className="text-xl font-black text-emerald-400 truncate block">
                   {modelStatus?.hasActiveModel && apiSignal?.edge !== null && apiSignal?.edge !== undefined
                     ? `+${Math.round(apiSignal.edge * 100)}%`
                     : 'N/A'}
                 </span>
-                <span className="text-[10px] text-slate-400 block">vs Kalshi / Poly</span>
+                <span className="text-[10px] text-slate-400 block truncate">vs Kalshi / Poly</span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Disagreement</span>
-                <span className="text-sm font-black text-purple-300">LOW (9%)</span>
+              <div className="min-w-0">
+                <span className="text-[10px] text-slate-400 uppercase block truncate">Disagreement</span>
+                <span className="text-sm font-black text-purple-300 block truncate">LOW (9%)</span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase block">Market Regime</span>
-                <span className="text-sm font-black text-purple-300">
-                  {apiSignal?.rawLean || 'BUY-LEANING (Order flow depth imbalance +18.4%)'}
+              <div className="min-w-0">
+                <span className="text-[10px] text-slate-400 uppercase block truncate">Market Regime</span>
+                <span className="text-xs font-black text-purple-300 block truncate">
+                  BUY-LEANING (+18.4%)
                 </span>
               </div>
             </div>
@@ -404,7 +404,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
           {/* 4) AI Explainability ("Why?") & Main Risk */}
           <div className="lg:col-span-2 bg-[#0D081D] p-6 rounded-2xl border border-slate-800 space-y-4 font-sans flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3 mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800/80 pb-3 mb-4">
                 <div className="flex items-center gap-2">
                   <Brain className="w-4 h-4 text-purple-400" />
                   <h3 className="text-sm font-extrabold text-white uppercase tracking-wider font-mono">
@@ -423,7 +423,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                         </React.Fragment>
                       ))
                     ) : (
-                      <span className="text-amber-300 font-bold">Building confidence history...</span>
+                      <span className="text-amber-300 font-bold text-[11px]">Building history...</span>
                     )}
                   </div>
                 </div>

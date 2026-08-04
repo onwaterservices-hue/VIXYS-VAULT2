@@ -27,6 +27,10 @@ import {
 import { BTCTicker } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
+import { LiveScalpChart } from './LiveScalpChart';
+import { ModelStatusBadge } from './ModelStatusBadge';
+import { NeuralRibbonChart } from './NeuralRibbonChart';
+import { AIBrainMemoryVault } from './AIBrainMemoryVault';
 import {
   fetchApiSignal,
   fetchPerformanceStats,
@@ -163,6 +167,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-bold">
                 KALSHI & POLYMARKET 1H
               </span>
+              <ModelStatusBadge asset="BTC" desk="1h" />
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-2">
               <span>1-HOUR DECISION DESK</span>
@@ -319,10 +324,19 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         </div>
       </div>
 
+      {/* AI BRAIN & LIFETIME MEMORY LEARNING ENGINE */}
+      <AIBrainMemoryVault asset="BTC" desk="1h" />
+
       {/* Main Grid: 1-Hour Chart + 1H Execution Panel */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols): 1-Hour Chart & Technical Indicators */}
         <div className="lg:col-span-2 space-y-6">
+          {/* AI Neural Ribbon Chart */}
+          <NeuralRibbonChart asset="BTC" desk="1h" title="1-Hour AI Neural Ribbon & Order Flow" />
+
+          {/* Real-time Lightweight-Charts Live Scalp & Kline Terminal */}
+          <LiveScalpChart asset="BTC" desk="1h" title="1-Hour Live Taker Flow & Kline Terminal" />
+
           <div className="bg-[#120B28] rounded-2xl p-4 border border-purple-500/30 shadow-2xl space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-purple-900/40">
               <div className="flex items-center gap-2">

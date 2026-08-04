@@ -100,6 +100,56 @@ export function playSubsecondAlert() {
   }
 }
 
+export function playBuyUpSound() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(1760, now + 0.2);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (err) {
+    console.warn('Audio playback not allowed or supported', err);
+  }
+}
+
+export function playBuyDownSound() {
+  try {
+    const ctx = getAudioContext();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.2);
+
+    gain.gain.setValueAtTime(0.25, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (err) {
+    console.warn('Audio playback not allowed or supported', err);
+  }
+}
+
 export function playAlertSound(soundType: 'discord_ping' | 'quant_chime' | 'subsecond_alert' = 'discord_ping') {
   if (soundType === 'discord_ping') playDiscordPing();
   else if (soundType === 'quant_chime') playQuantChime();

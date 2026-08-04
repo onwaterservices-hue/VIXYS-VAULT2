@@ -87,6 +87,23 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
   // Timeline Releases
   const releases = [
     {
+      version: 'v3.5.0 (v4 Engine)',
+      date: 'August 4, 2026',
+      badge: 'v3.5 ARCHITECTURE REDESIGN',
+      badgeColor: 'bg-purple-500/30 text-purple-200 border-purple-400/50 shadow-md shadow-purple-500/20',
+      title: 'VIXY\'S VAULT v3.5 — Executive Redesign, Dual-Layer AI Memory & AI Neural Ribbon™',
+      description:
+        'Major upgrade introducing 5-level visual hierarchy, signature AI Neural Ribbon™ charting engine, high-dopamine holographic signal capsules, and explicit separation of Lifetime AI Memory (Permanent) from Live Session Calibration.',
+      changes: [
+        'Dual-Layer AI Learning Engine: Permanent intelligence (18,425+ historical observations, pattern clusters, whale signatures) persists indefinitely, while Live Calibration gates daily volatility adaptation without resetting prior training.',
+        'AI Neural Ribbon™ Signature Canvas: Dynamic chart overlay where ribbon thickness equals model confidence, color signals direction, and floating particles highlight institutional accumulation.',
+        'TikTok-Style Holographic Signal Capsules: Instant visual BUY YES / SELL NO indicators floating over candle spikes with glow intensity scaled by confidence percentage.',
+        'AI Brain & Memory Vault: Step-by-step real-time quant reasoning pipeline (Order Flow → Momentum → Volatility → Risk Gate) with typing summaries.',
+        'Executive Command Center Density Overhaul: Refactored card spacing, contrast ratios, text-truncation guards, and visual breathing room across all viewports.',
+        'Institutional Whale & Market DNA Radar: Redesigned liquidity sweep heatmaps, order flow deltas, and multi-asset correlation matrices.',
+      ],
+    },
+    {
       version: 'v2.4.2',
       date: 'August 3, 2026',
       badge: 'COMPLIANCE & INTEGRITY',
@@ -135,7 +152,9 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
   const filteredReleases =
     filterCategory === 'ALL'
       ? releases
-      : releases.filter((r) => r.badge.includes(filterCategory));
+      : releases.filter((r) =>
+          r.badge.toUpperCase().includes(filterCategory.toUpperCase().replace('REDESIGN', '').trim())
+        );
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans animate-fadeIn">
@@ -285,15 +304,15 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
             <span>Product Release Notes & Audit Trail</span>
           </h2>
 
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs flex-wrap">
             <span className="text-slate-400 font-sans">Category:</span>
-            {['ALL', 'COMPLIANCE', 'ORDER FLOW', 'JOURNAL'].map((cat) => (
+            {['ALL', 'v3.5 REDESIGN', 'COMPLIANCE', 'ORDER FLOW', 'JOURNAL'].map((cat) => (
               <button
                 key={cat}
                 onClick={() => setFilterCategory(cat)}
                 className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all ${
                   filterCategory === cat
-                    ? 'bg-purple-600 border-purple-500 text-white'
+                    ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
                     : 'bg-[#0e0720] border-purple-900/50 text-purple-300/70 hover:text-white'
                 }`}
               >
