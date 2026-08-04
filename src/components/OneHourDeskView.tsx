@@ -31,8 +31,10 @@ import {
   fetchApiSignal,
   fetchPerformanceStats,
   calculatePositionSize,
+  fetchModelStatus,
   ApiSignalResponse,
   PerformanceStatsResponse,
+  ModelStatusResponse,
 } from '../services/api';
 
 interface OneHourDeskViewProps {
@@ -63,6 +65,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
   // Real API State
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
   const [perfStats, setPerfStats] = useState<PerformanceStatsResponse | null>(null);
 
   // Kelly Position Calculator State
@@ -73,12 +76,14 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   useEffect(() => {
     let active = true;
     const loadDeskData = async () => {
-      const [sig, perf] = await Promise.all([
+      const [sig, status, perf] = await Promise.all([
         fetchApiSignal('BTC', '1h'),
+        fetchModelStatus('BTC', '1h'),
         fetchPerformanceStats('BTC', '1h'),
       ]);
       if (active) {
         setApiSignal(sig);
+        setModelStatus(status);
         setPerfStats(perf);
       }
     };
@@ -281,14 +286,18 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           </div>
           <div className="text-xl font-black text-emerald-400">
-            {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+            {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
               `${Math.round(apiSignal.modelProbability * 100)}%`
             ) : (
-              <span className="text-amber-300 text-xs font-bold block">{apiSignal?.status || 'Collecting (340/500)'}</span>
+              <span className="text-amber-300 text-xs font-bold block">
+                Collecting data ({modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/{modelStatus?.minRequired ?? 500})
+              </span>
             )}
           </div>
           <div className="text-xs text-purple-300">
-            {apiSignal?.edge !== null && apiSignal?.edge !== undefined ? `Edge over Kalshi: +${Math.round(apiSignal.edge * 100)}%` : 'Edge: Pending 500 Samples'}
+            {modelStatus?.hasActiveModel && apiSignal?.edge !== null && apiSignal?.edge !== undefined
+              ? `Edge over Kalshi: +${Math.round(apiSignal.edge * 100)}%`
+              : 'Edge: Pending Active Calibrated Model'}
           </div>
         </div>
 

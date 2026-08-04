@@ -319,7 +319,34 @@ export interface ApiSignalResponse {
     };
     computedAt?: string;
   };
+  hasActiveModel?: boolean;
   latencyMs?: number;
+}
+
+export interface ModelStatusResponse {
+  settledCount: number;
+  minRequired: number;
+  hasActiveModel: boolean;
+  activeModelBrier: number | null;
+  activeModelTrainedAt: string | null;
+}
+
+export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15m'): Promise<ModelStatusResponse> {
+  try {
+    const res = await fetch(`/api/model-status?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Failed to fetch model status', e);
+  }
+  return {
+    settledCount: 0,
+    minRequired: 500,
+    hasActiveModel: false,
+    activeModelBrier: null,
+    activeModelTrainedAt: null,
+  };
 }
 
 export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m', validated: boolean = false): Promise<ApiSignalResponse> {
@@ -335,15 +362,16 @@ export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m'
     return {
       asset,
       desk,
-      sampleSize: 340,
+      sampleSize: 0,
       minSamplesNeeded: 500,
+      hasActiveModel: false,
       generatedAt: new Date().toISOString(),
       disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
       action: 'HOLD',
       modelProbability: null,
       kalshiImpliedProbability: 0.54,
       edge: null,
-      status: 'Collecting data (340/500 settled contracts needed)',
+      status: 'Collecting data (0/500 settled contracts needed)',
       features: {
         asset,
         desk,

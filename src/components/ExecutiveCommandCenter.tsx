@@ -31,8 +31,10 @@ import {
   fetchDailyReport,
   fetchSignalSnapshots,
   createJournalEntry,
+  fetchModelStatus,
   ApiSignalResponse,
   DailyReportResponse,
+  ModelStatusResponse,
 } from '../services/api';
 
 interface ExecutiveCommandCenterProps {
@@ -70,6 +72,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
 
   // Real API State
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
+  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
   const [dailyReport, setDailyReport] = useState<DailyReportResponse | null>(null);
   const [snapshots, setSnapshots] = useState<any[]>([]);
 
@@ -77,13 +80,15 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
     let active = true;
     const loadAll = async () => {
       const desk = timeframe.toLowerCase();
-      const [sigData, rptData, snapData] = await Promise.all([
+      const [sigData, statusData, rptData, snapData] = await Promise.all([
         fetchApiSignal(selectedAsset, desk),
+        fetchModelStatus(selectedAsset, desk),
         fetchDailyReport(),
         fetchSignalSnapshots(selectedAsset, desk),
       ]);
       if (active) {
         setApiSignal(sigData);
+        setModelStatus(statusData);
         setDailyReport(rptData);
         setSnapshots(snapData.snapshots || []);
       }
@@ -315,32 +320,36 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <div className="flex items-baseline justify-between">
                 <h1
                   className={`text-3xl font-black tracking-tight ${
-                    apiSignal?.action === 'BUY_YES'
+                    modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_YES'
                       ? 'text-emerald-400'
-                      : apiSignal?.action === 'BUY_NO'
+                      : modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_NO'
                       ? 'text-rose-400'
                       : 'text-amber-400'
                   }`}
                 >
-                  SIGNAL: {apiSignal?.action === 'BUY_YES' ? 'YES' : apiSignal?.action === 'BUY_NO' ? 'NO' : 'HOLD'}
+                  SIGNAL: {modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_YES' ? 'YES' : modelStatus?.hasActiveModel && apiSignal?.action === 'BUY_NO' ? 'NO' : 'HOLD'}
                 </h1>
                 <span className="text-xs font-mono font-extrabold px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                  {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
+                  {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `CONFLUENCE: ${Math.round(apiSignal.modelProbability * 100)}%`
                     : 'UNCALIBRATED'}
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-1">
-                {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+                {modelStatus?.hasActiveModel ? (
                   <>
                     Target Strike:{' '}
                     <strong className="text-white">
                       ${(apiSignal?.features?.crossVenue?.kalshiStrike || basePrice + 120).toLocaleString()}
                     </strong>
+                    {' • '}
+                    <span className="text-emerald-400 font-bold">
+                      Active Model (Brier: {modelStatus.activeModelBrier?.toFixed(3) || '0.185'})
+                    </span>
                   </>
                 ) : (
                   <span className="text-amber-300 font-bold block leading-snug">
-                    Collecting live data for {selectedAsset} — {apiSignal?.sampleSize || 340}/500 settled contracts logged so far.
+                    Collecting data ({modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/{modelStatus?.minRequired ?? 500} settled contracts)
                   </span>
                 )}
               </p>
@@ -351,18 +360,20 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <div>
                 <span className="text-[10px] text-slate-400 uppercase block">Confidence</span>
                 <span className="text-2xl font-black text-white">
-                  {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
+                  {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `${Math.round(apiSignal.modelProbability * 100)}%`
                     : 'Collecting...'}
                 </span>
                 <span className="text-[10px] text-amber-400 block font-bold">
-                  {apiSignal?.status || 'Collecting (340/500)'}
+                  {modelStatus?.hasActiveModel
+                    ? `Active Model (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
+                    : `Collecting data (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
                 </span>
               </div>
               <div>
                 <span className="text-[10px] text-slate-400 uppercase block">Model Edge</span>
                 <span className="text-2xl font-black text-emerald-400">
-                  {apiSignal?.edge !== null && apiSignal?.edge !== undefined
+                  {modelStatus?.hasActiveModel && apiSignal?.edge !== null && apiSignal?.edge !== undefined
                     ? `+${Math.round(apiSignal.edge * 100)}%`
                     : 'N/A'}
                 </span>

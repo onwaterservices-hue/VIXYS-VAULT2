@@ -833,15 +833,83 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
     });
   });
 
+  // Model Status Endpoint (Queries Real Database for settled_contracts count & active model)
+  app.get('/api/model-status', async (req, res) => {
+    const asset = ((req.query.asset as string) || 'BTC').toUpperCase();
+    const desk = (req.query.desk as string) || '15m';
+
+    let settledCount = 0;
+    let hasActiveModel = false;
+    let activeModelBrier: number | null = null;
+    let activeModelTrainedAt: string | null = null;
+
+    try {
+      const { pool } = await import('./lib/db.js');
+      const countRes = await pool.query(
+        'SELECT count(*) FROM settled_contracts WHERE asset = $1 AND desk = $2',
+        [asset, desk]
+      );
+      settledCount = parseInt(countRes.rows[0]?.count || '0', 10);
+
+      const modelRes = await pool.query(
+        'SELECT * FROM models WHERE asset = $1 AND desk = $2 AND is_active = true ORDER BY trained_at DESC LIMIT 1',
+        [asset, desk]
+      );
+      if (modelRes.rows.length > 0) {
+        const m = modelRes.rows[0];
+        hasActiveModel = true;
+        activeModelBrier = m.validation_brier != null ? parseFloat(m.validation_brier) : null;
+        activeModelTrainedAt = m.trained_at ? new Date(m.trained_at).toISOString() : null;
+      }
+    } catch (err) {
+      // If DB is uninitialized or table doesn't exist yet, return settledCount: 0 and hasActiveModel: false safely
+      console.warn(`[api/model-status] DB check for ${asset}/${desk}:`, (err as Error).message);
+    }
+
+    res.json({
+      settledCount,
+      minRequired: 500,
+      hasActiveModel,
+      activeModelBrier,
+      activeModelTrainedAt,
+    });
+  });
+
   // Signal Engine Endpoint (Real Sample-Gated Signal Output)
-  app.get('/api/signal', (req, res) => {
+  app.get('/api/signal', async (req, res) => {
     const asset = ((req.query.asset as string) || 'BTC').toUpperCase();
     const desk = (req.query.desk as string) || '15m';
     const validated = req.query.validated === 'true';
 
-    const sampleSize = 340;
+    let settledCount = 0;
+    let hasActiveModel = false;
+    let activeModelBrier: number | null = null;
+    let activeModelTrainedAt: string | null = null;
+
+    try {
+      const { pool } = await import('./lib/db.js');
+      const countRes = await pool.query(
+        'SELECT count(*) FROM settled_contracts WHERE asset = $1 AND desk = $2',
+        [asset, desk]
+      );
+      settledCount = parseInt(countRes.rows[0]?.count || '0', 10);
+
+      const modelRes = await pool.query(
+        'SELECT * FROM models WHERE asset = $1 AND desk = $2 AND is_active = true ORDER BY trained_at DESC LIMIT 1',
+        [asset, desk]
+      );
+      if (modelRes.rows.length > 0) {
+        const m = modelRes.rows[0];
+        hasActiveModel = true;
+        activeModelBrier = m.validation_brier != null ? parseFloat(m.validation_brier) : null;
+        activeModelTrainedAt = m.trained_at ? new Date(m.trained_at).toISOString() : null;
+      }
+    } catch (err) {
+      console.warn(`[api/signal] DB query for ${asset}/${desk}:`, (err as Error).message);
+    }
+
     const minSamplesNeeded = 500;
-    const isValidated = validated || sampleSize >= minSamplesNeeded;
+    const isValidated = hasActiveModel || validated;
 
     const spotPrices: Record<string, number> = {
       BTC: 64161.4,
@@ -857,24 +925,25 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
     res.json({
       asset,
       desk,
-      sampleSize,
+      sampleSize: settledCount,
       minSamplesNeeded,
+      hasActiveModel,
       generatedAt: new Date().toISOString(),
       disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
       action: isValidated ? 'BUY_YES' : 'HOLD',
       modelProbability: isValidated ? 0.71 : null,
       kalshiImpliedProbability: kalshiImpliedProb,
       edge: isValidated ? 0.17 : null,
-      modelValidation: isValidated
+      modelValidation: hasActiveModel
         ? {
-            trainedAt: '2026-08-01T00:00:00.000Z',
-            brierScore: 0.185,
+            trainedAt: activeModelTrainedAt,
+            brierScore: activeModelBrier,
             validationSampleSize: 150,
           }
         : undefined,
-      status: isValidated
+      status: hasActiveModel
         ? 'Live'
-        : `Collecting data (${sampleSize}/${minSamplesNeeded} settled contracts needed)`,
+        : `Collecting data (${settledCount}/${minSamplesNeeded} settled contracts needed)`,
       rawLean: 'BUY-LEANING (Order flow depth imbalance +18.4%, unvalidated)',
       features: {
         asset,
