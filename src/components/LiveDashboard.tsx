@@ -712,6 +712,22 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
       </div>
 
+      {/* LIVE CANDLESTICK CHART & ORDER FLOW SECTION (Placed right below Buy Up / Buy Down card) */}
+      <div className="space-y-6">
+        <CandleChart
+          candles={displayCandles}
+          targetPrice={signal.targetPrice}
+          currentPrice={ticker.price}
+          timeframe={timeframe}
+          onTimeframeChange={(tf) => {
+            setTimeframe(tf);
+            handleMarketChange(tf === '1H' ? 'BTC1H' : 'BTC15M');
+          }}
+          predictedDirection={signal.direction}
+        />
+        <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
+      </div>
+
       {/* EXPLAINABILITY & CONFIDENCE STABILITY BAR (VIXY'S VAULT EVIDENCE ENGINE) */}
       <div className="bg-gradient-to-r from-[#12072b] via-[#0e0720] to-[#150a33] rounded-3xl border border-purple-500/30 p-5 shadow-2xl font-mono text-purple-100 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
@@ -948,22 +964,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             )}
           </div>
         </div>
-      </div>
-
-      {/* LIVE CANDLESTICK CHART & ORDER FLOW SECTION */}
-      <div className="space-y-6">
-        <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
-        <CandleChart
-          candles={displayCandles}
-          targetPrice={signal.targetPrice}
-          currentPrice={ticker.price}
-          timeframe={timeframe}
-          onTimeframeChange={(tf) => {
-            setTimeframe(tf);
-            handleMarketChange(tf === '1H' ? 'BTC1H' : 'BTC15M');
-          }}
-          predictedDirection={signal.direction}
-        />
       </div>
 
       {/* INSTITUTIONAL AI PATTERN ENGINE & EXECUTIVE QUANT SYNTHESIS (STRIKE CONTRACTS) */}

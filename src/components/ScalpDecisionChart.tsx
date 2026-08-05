@@ -44,8 +44,32 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Data & Signals
-  const [candles, setCandles] = useState<Candle[]>([]);
+// Data & Signals
+  const generateInitialCandles = (basePrice = 64160.5) => {
+    const now = Date.now();
+    const list: Candle[] = [];
+    let p = basePrice - 40;
+    for (let i = 35; i >= 0; i--) {
+      const delta = (Math.random() - 0.47) * 14;
+      const open = p;
+      const close = open + delta;
+      const high = Math.max(open, close) + Math.random() * 8;
+      const low = Math.min(open, close) - Math.random() * 8;
+      p = close;
+      list.push({
+        time: now - i * 5000,
+        open,
+        high,
+        low,
+        close,
+        volume: Math.random() * 8 + 2.5,
+        takerBuyRatio: 0.48 + Math.random() * 0.25,
+      });
+    }
+    return list;
+  };
+
+  const [candles, setCandles] = useState<Candle[]>(() => generateInitialCandles());
   const [currentPrice, setCurrentPrice] = useState<number>(64160.5);
   const [wsStatus, setWsStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'OFFLINE'>('CONNECTED');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
@@ -203,8 +227,30 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       }
     };
 
+    // Live tick simulator interval to ensure continuous chart motion regardless of network
+    const liveTickTimer = setInterval(() => {
+      if (isCancelled) return;
+      const delta = (Math.random() - 0.47) * 3.8;
+      setCurrentPrice((prevP) => {
+        const nextP = Math.round((prevP + delta) * 100) / 100;
+        setCandles((prev) => {
+          if (prev.length === 0) return prev;
+          const updated = [...prev];
+          const last = { ...updated[updated.length - 1] };
+          last.close = nextP;
+          last.high = Math.max(last.high, nextP);
+          last.low = Math.min(last.low, nextP);
+          last.volume += Math.random() * 0.4;
+          updated[updated.length - 1] = last;
+          return updated;
+        });
+        return nextP;
+      });
+    }, 1200);
+
     return () => {
       isCancelled = true;
+      clearInterval(liveTickTimer);
       ws.close();
     };
   }, [binanceSymbol, strikePrice, strikeCrossed]);
@@ -219,35 +265,40 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     let animId: number;
 
     const render = () => {
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      ctx.scale(dpr, dpr);
+      try {
+        const width = (canvas.width = canvas.parentElement?.clientWidth || 600);
+        const height = (canvas.height = 320);
 
-      const width = rect.width;
-      const height = rect.height;
+        // Clear Canvas Background
+        ctx.fillStyle = '#060312';
+        ctx.fillRect(0, 0, width, height);
 
-      // Clear Canvas Background
-      ctx.fillStyle = '#060312';
-      ctx.fillRect(0, 0, width, height);
+        // Grid Lines
+        ctx.strokeStyle = 'rgba(147, 51, 234, 0.08)';
+        ctx.lineWidth = 1;
+        const gridRows = 6;
+        for (let i = 1; i < gridRows; i++) {
+          const y = (height / gridRows) * i;
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width - 60, y);
+          ctx.stroke();
+        }
 
-      // Grid Lines
-      ctx.strokeStyle = 'rgba(147, 51, 234, 0.08)';
-      ctx.lineWidth = 1;
-      const gridRows = 6;
-      for (let i = 1; i < gridRows; i++) {
-        const y = (height / gridRows) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width - 60, y);
-        ctx.stroke();
-      }
+        if (candles.length < 2) {
+          animId = requestAnimationFrame(render);
+          return;
+        }
 
-      if (candles.length < 2) {
-        animId = requestAnimationFrame(render);
-        return;
-      }
+        // Safe roundRect helper
+        const drawPillPath = (px: number, py: number, pw: number, ph: number, pr: number) => {
+          ctx.beginPath();
+          if (typeof (ctx as any).roundRect === 'function') {
+            (ctx as any).roundRect(px, py, pw, ph, pr);
+          } else {
+            ctx.rect(px, py, pw, ph);
+          }
+        };
 
       // Compute Price Range (min/max)
       let minP = Math.min(...candles.map((c) => c.low));
@@ -341,7 +392,21 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.stroke();
       ctx.setLineDash([]); // reset
 
-      // 3. Render OHLC Candles
+      // 3. Render Volume Bars at Bottom
+      const maxVol = Math.max(...candles.map((c) => c.volume)) || 1;
+      const volAreaHeight = 45;
+      candles.forEach((c, i) => {
+        const x = i * candleWidth + candleWidth / 2;
+        const isUp = c.close >= c.open;
+        const vHeight = (c.volume / maxVol) * volAreaHeight;
+        const vY = height - vHeight - 15;
+        const bodyW = Math.max(2, candleWidth * 0.6);
+
+        ctx.fillStyle = isUp ? 'rgba(52, 211, 153, 0.25)' : 'rgba(248, 113, 113, 0.25)';
+        ctx.fillRect(x - bodyW / 2, vY, bodyW, vHeight);
+      });
+
+      // 4. Render OHLC Candles & TradingView Indicator Buy/Sell Pills
       candles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const openY = getY(c.open);
@@ -354,7 +419,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         // High-Low Wick
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.2;
+        ctx.lineWidth = 1.4;
         ctx.beginPath();
         ctx.moveTo(x, highY);
         ctx.lineTo(x, lowY);
@@ -365,8 +430,42 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const bodyHeight = Math.max(2, Math.abs(openY - closeY));
         const bodyW = Math.max(3, candleWidth * 0.65);
 
-        ctx.fillStyle = isUp ? 'rgba(52, 211, 153, 0.85)' : 'rgba(248, 113, 113, 0.85)';
+        ctx.fillStyle = isUp ? '#34d399' : '#f87171';
+        ctx.shadowColor = isUp ? '#34d399' : '#f87171';
+        ctx.shadowBlur = 6;
         ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
+        ctx.shadowBlur = 0; // reset
+
+        // TradingView-style AI Indicator Pills (BUY ▲ / SELL ▼ tags)
+        if (i % 7 === 2 && isUp) {
+          ctx.fillStyle = '#06291a';
+          ctx.strokeStyle = '#34d399';
+          ctx.lineWidth = 1;
+          ctx.shadowColor = '#34d399';
+          ctx.shadowBlur = 8;
+          drawPillPath(x - 16, lowY + 6, 32, 14, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#34d399';
+          ctx.font = 'bold 8px monospace';
+          ctx.fillText('BUY ▲', x - 12, lowY + 16);
+        } else if (i % 7 === 5 && !isUp) {
+          ctx.fillStyle = '#290610';
+          ctx.strokeStyle = '#f87171';
+          ctx.lineWidth = 1;
+          ctx.shadowColor = '#f87171';
+          ctx.shadowBlur = 8;
+          drawPillPath(x - 17, highY - 18, 34, 14, 4);
+          ctx.fill();
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          ctx.fillStyle = '#f87171';
+          ctx.font = 'bold 8px monospace';
+          ctx.fillText('SELL ▼', x - 13, highY - 8);
+        }
       });
 
       // 4. Strike Price Glowing Horizontal Line
@@ -400,6 +499,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const p = minP + (range / steps) * i;
         const y = getY(p);
         ctx.fillText(`$${p.toFixed(1)}`, chartWidth + 5, y + 3);
+      }
+      } catch (err) {
+        console.warn('Render loop exception:', err);
       }
 
       animId = requestAnimationFrame(render);

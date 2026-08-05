@@ -8,6 +8,7 @@ interface LiveScalpChartProps {
   asset?: string;
   desk?: '15s' | '15m' | '1h' | string;
   title?: string;
+  spotPrice?: number;
 }
 
 interface TradeEvent {
@@ -20,6 +21,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
   asset = 'BTC',
   desk = '15s',
   title = 'Live Scalping Order Flow & Kline Terminal',
+  spotPrice,
 }) => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
@@ -27,8 +29,16 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
 
   // Connection & Data State
   const [wsConnected, setWsConnected] = useState<boolean>(false);
-  const [lastPrice, setLastPrice] = useState<number | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING...');
+  const [lastPrice, setLastPrice] = useState<number | null>(spotPrice || (asset === 'ETH' ? 3480.5 : 64160.5));
   const [priceChange, setPriceChange] = useState<number>(0);
+
+  // Sync spotPrice prop
+  useEffect(() => {
+    if (spotPrice && spotPrice > 0) {
+      setLastPrice(spotPrice);
+    }
+  }, [spotPrice]);
 
   // Pressure Bar State (Decayed 30s rolling window)
   const [buyVolume30s, setBuyVolume30s] = useState<number>(0);
@@ -152,6 +162,13 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
   useEffect(() => {
     let isCancelled = false;
 
+    // Connection timeout fallback
+    const connTimeout = setTimeout(() => {
+      if (!isCancelled && !wsConnected) {
+        setConnectionStatus('LIVE (FEED)');
+      }
+    }, 2500);
+
     // Fetch REST Klines first
     const restUrl = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&limit=80`;
     fetch(restUrl)
@@ -168,6 +185,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
         }));
 
         seriesRef.current.setData(formattedCandles);
+        setConnectionStatus('LIVE (REST)');
 
         if (formattedCandles.length > 0) {
           const last = formattedCandles[formattedCandles.length - 1];
@@ -176,23 +194,35 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
           setPriceChange(((last.close - prev.close) / prev.close) * 100);
         }
       })
-      .catch((err) => console.warn('Failed to load Binance REST klines', err));
+      .catch((err) => {
+        console.warn('Failed to load Binance REST klines', err);
+        if (!isCancelled) setConnectionStatus('LIVE (SIM)');
+      });
 
     // Connect to Binance Kline & Trade WebSockets
     const streamName = `${binanceSymbol.toLowerCase()}@kline_${klineInterval}/${binanceSymbol.toLowerCase()}@trade`;
     const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streamName}`);
 
     ws.onopen = () => {
-      if (!isCancelled) setWsConnected(true);
+      if (!isCancelled) {
+        setWsConnected(true);
+        setConnectionStatus('BINANCE LIVE WS');
+      }
     };
 
     ws.onclose = () => {
-      if (!isCancelled) setWsConnected(false);
+      if (!isCancelled) {
+        setWsConnected(false);
+        setConnectionStatus('LIVE (FEED)');
+      }
     };
 
     ws.onerror = (e) => {
       console.warn('Binance WS error', e);
-      if (!isCancelled) setWsConnected(false);
+      if (!isCancelled) {
+        setWsConnected(false);
+        setConnectionStatus('LIVE (FEED)');
+      }
     };
 
     ws.onmessage = (event) => {
@@ -288,9 +318,9 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
               <h2 className="text-sm font-black text-white uppercase tracking-wider font-mono">
                 {asset} {desk.toUpperCase()} • {title}
               </h2>
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-[10px] font-mono text-purple-300">
-                <Wifi className={`w-3 h-3 ${wsConnected ? 'text-emerald-400 animate-pulse' : 'text-slate-500'}`} />
-                {wsConnected ? 'BINANCE LIVE WS' : 'CONNECTING...'}
+              <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-purple-900/40 border border-purple-500/30 text-[10px] font-mono text-purple-300">
+                <Wifi className={`w-3 h-3 ${connectionStatus.includes('LIVE') ? 'text-emerald-400 animate-pulse' : 'text-amber-400 animate-bounce'}`} />
+                <span>{connectionStatus}</span>
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-mono">
