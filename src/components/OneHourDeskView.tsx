@@ -46,12 +46,16 @@ import {
 
 interface OneHourDeskViewProps {
   ticker: BTCTicker;
+  spotPrices?: Record<string, number>;
+  selectedAsset?: string;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   onUpgradeToPro: () => void;
 }
 
 export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   ticker,
+  spotPrices = {},
+  selectedAsset = 'BTC',
   userRole,
   onUpgradeToPro,
 }) => {
@@ -106,19 +110,23 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
     };
   }, []);
 
+  const spotPrice = spotPrices?.[selectedAsset] || spotPrices?.['BTC'] || ticker?.price || 64160.5;
+
   useEffect(() => {
     let active = true;
     const runKelly = async () => {
       try {
+        const winP = Math.max(0.01, Math.min(0.99, (confidenceScore || 88) / 100));
+        const priceP = Math.max(0.01, Math.min(0.99, (kalshiYesCent || 72) / 100));
         const res = await calculatePositionSize({
-          asset: 'BTC',
+          asset: selectedAsset || 'BTC',
           desk: '1h',
-          bankroll,
-          kellyFraction,
-          winProb: (confidenceScore || 88) / 100,
-          livePrice: (kalshiYesCent || 72) / 100,
+          bankroll: bankroll || 10000,
+          kellyFraction: kellyFraction || 0.25,
+          winProb: winP,
+          livePrice: priceP,
         });
-        if (active) setKellyResult(res);
+        if (active && res) setKellyResult(res);
       } catch (e) {
         console.warn('Kelly API error', e);
       }
@@ -127,7 +135,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
     return () => {
       active = false;
     };
-  }, [bankroll, kellyFraction, confidenceScore, kalshiYesCent]);
+  }, [bankroll, kellyFraction, confidenceScore, kalshiYesCent, selectedAsset]);
 
   // Countdown clock effect
   useEffect(() => {
@@ -337,8 +345,8 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column (2 Cols): Neural Ribbon & Live Taker Terminal */}
         <div className="lg:col-span-2 space-y-6">
-          <NeuralRibbonChart asset="BTC" desk="1h" title="1-Hour AI Neural Ribbon & Order Flow" spotPrice={ticker.price} />
-          <LiveScalpChart asset="BTC" desk="1h" title="1-Hour Live Taker Flow & Kline Terminal" spotPrice={ticker.price} />
+          <NeuralRibbonChart asset={selectedAsset} desk="1h" title="1-Hour AI Neural Ribbon & Order Flow" spotPrice={spotPrice} />
+          <LiveScalpChart asset={selectedAsset} desk="1h" title="1-Hour Live Taker Flow & Kline Terminal" spotPrice={spotPrice} />
         </div>
 
         {/* Right Column: Server Position Sizing & Quant Confirmation */}
@@ -383,18 +391,27 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
               {/* Position Calculation Output */}
               {(() => {
-                const stake = kellyResult?.recommendedStake !== undefined
-                  ? kellyResult.recommendedStake
-                  : Math.round(bankroll * kellyFraction * 0.14);
-                const appliedFrac = kellyResult?.appliedFraction !== undefined
-                  ? (kellyResult.appliedFraction * 100).toFixed(1)
-                  : ((stake / bankroll) * 100).toFixed(1);
+                const rawStake = kellyResult?.recommendedStake;
+                const stake = typeof rawStake === 'number' && !isNaN(rawStake) && rawStake >= 0
+                  ? rawStake
+                  : Math.round((bankroll || 10000) * (kellyFraction || 0.25) * 0.14);
+
+                const rawApplied = kellyResult?.appliedFraction;
+                const appliedFracNum = typeof rawApplied === 'number' && !isNaN(rawApplied)
+                  ? rawApplied * 100
+                  : (bankroll > 0 ? (stake / bankroll) * 100 : 0);
+                const appliedFrac = appliedFracNum.toFixed(1);
+
                 const priceRatio = (kalshiYesCent || 72) / 100;
-                const payoutMult = priceRatio > 0 ? (1 / priceRatio).toFixed(2) : '1.39';
-                const evValue = kellyResult?.expectedValue !== undefined
-                  ? kellyResult.expectedValue
+                const payoutMult = priceRatio > 0 && !isNaN(priceRatio) ? (1 / priceRatio).toFixed(2) : '1.39';
+
+                const rawEv = kellyResult?.expectedValue;
+                const evValue = typeof rawEv === 'number' && !isNaN(rawEv)
+                  ? rawEv
                   : Math.round(stake * 0.18);
-                const evPct = Math.max(0.1, Math.round((evValue / bankroll) * 100 * 10) / 10);
+                
+                const evPctNum = bankroll > 0 && !isNaN(evValue) ? (evValue / bankroll) * 100 : 1.8;
+                const evPct = Math.max(0.1, Math.round(evPctNum * 10) / 10);
 
                 return (
                   <div className="bg-[#060312] p-4 rounded-xl border border-purple-500/30 space-y-2.5 font-mono text-xs mt-2 shadow-[0_0_20px_rgba(16,185,129,0.08)]">

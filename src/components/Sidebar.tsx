@@ -25,6 +25,11 @@ import {
   Target,
   Trophy,
   Activity,
+  FileText,
+  ShieldCheck,
+  AlertTriangle,
+  LifeBuoy,
+  Info,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -96,6 +101,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
         { id: 'settings', label: 'Settings', icon: Settings },
         { id: 'landing', label: 'Landing Page', icon: Globe },
+      ],
+    },
+    {
+      title: 'LEGAL & SUPPORT',
+      items: [
+        { id: 'contact', label: 'Contact & Support', icon: LifeBuoy },
+        { id: 'about', label: 'About Vixy Vault', icon: Info },
+        { id: 'terms', label: 'Terms of Service', icon: FileText },
+        { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck },
+        { id: 'risk', label: 'Risk Disclosure', icon: AlertTriangle, badge: 'NOTICE' },
+        { id: 'refunds', label: 'Refund Policy', icon: CreditCard },
       ],
     },
   ];

@@ -52,6 +52,9 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   useEffect(() => {
     if (spotPrice && spotPrice > 0) {
       setLastPrice(spotPrice);
+      if (connectionStatus === 'CONNECTING...') {
+        setConnectionStatus('LIVE (FEED)');
+      }
     }
   }, [spotPrice]);
 

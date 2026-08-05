@@ -46,6 +46,13 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { ChangelogView } from './components/ChangelogView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
+import { TermsView } from './components/TermsView';
+import { PrivacyView } from './components/PrivacyView';
+import { RiskDisclosureView } from './components/RiskDisclosureView';
+import { RefundPolicyView } from './components/RefundPolicyView';
+import { ContactView } from './components/ContactView';
+import { AboutView } from './components/AboutView';
+import { NotFoundView } from './components/NotFoundView';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -105,7 +112,32 @@ export default function App() {
     };
   });
 
-  const [activeTab, setActiveTab] = useState<string>(() => {
+  const VALID_ROUTES = [
+    'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
+    'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
+    'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
+    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about'
+  ];
+
+  const getTabFromLocation = (): string => {
+    try {
+      const hash = window.location.hash.replace(/^#\/?/, '').trim();
+      if (hash && VALID_ROUTES.includes(hash)) return hash;
+      if (hash && !VALID_ROUTES.includes(hash)) return '404';
+
+      const path = window.location.pathname.replace(/^\//, '').trim();
+      if (path && VALID_ROUTES.includes(path)) return path;
+      if (path && !VALID_ROUTES.includes(path)) return '404';
+    } catch (e) {
+      console.error(e);
+    }
+    return 'terminal';
+  };
+
+  const [activeTab, setActiveTabState] = useState<string>(() => {
+    const locTab = getTabFromLocation();
+    if (locTab && locTab !== 'terminal') return locTab;
+
     try {
       const savedAuth = localStorage.getItem('vixy_auth');
       if (savedAuth) {
@@ -117,6 +149,30 @@ export default function App() {
     }
     return 'terminal';
   });
+
+  const setActiveTab = (tab: string) => {
+    setActiveTabState(tab);
+    if (VALID_ROUTES.includes(tab)) {
+      window.location.hash = tab;
+    }
+  };
+
+  // Sync with browser back/forward and location hash changes
+  useEffect(() => {
+    const handleHashChange = () => {
+      const newTab = getTabFromLocation();
+      if (newTab) {
+        setActiveTabState(newTab);
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('popstate', handleHashChange);
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleHashChange);
+    };
+  }, []);
 
   // Sync authState to localStorage & userRole
   useEffect(() => {
@@ -431,7 +487,7 @@ export default function App() {
     userRole === 'ADMIN' ||
     (userRole === 'DEMO' && trialSeconds > 0);
 
-  const isPublicRoute = ['landing', 'pricing', 'auth'].includes(activeTab);
+  const isPublicRoute = ['landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
     <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
@@ -502,6 +558,43 @@ export default function App() {
               setAuthState={setAuthState}
               setUserRole={setUserRole}
               onSuccessNavigate={() => setActiveTab('terminal')}
+            />
+          )}
+
+          {activeTab === 'terms' && (
+            <TermsView onReturnToTerminal={() => setActiveTab('terminal')} />
+          )}
+
+          {activeTab === 'privacy' && (
+            <PrivacyView onReturnToTerminal={() => setActiveTab('terminal')} />
+          )}
+
+          {activeTab === 'risk' && (
+            <RiskDisclosureView onReturnToTerminal={() => setActiveTab('terminal')} />
+          )}
+
+          {activeTab === 'refunds' && (
+            <RefundPolicyView
+              onReturnToTerminal={() => setActiveTab('terminal')}
+              onOpenPricing={() => setActiveTab('pricing')}
+            />
+          )}
+
+          {activeTab === 'contact' && (
+            <ContactView onReturnToTerminal={() => setActiveTab('terminal')} />
+          )}
+
+          {activeTab === 'about' && (
+            <AboutView
+              onReturnToTerminal={() => setActiveTab('terminal')}
+              onOpenPricing={() => setActiveTab('pricing')}
+            />
+          )}
+
+          {activeTab === '404' && (
+            <NotFoundView
+              onReturnToTerminal={() => setActiveTab('terminal')}
+              onReturnToLanding={() => setActiveTab('landing')}
             />
           )}
 
@@ -667,6 +760,8 @@ export default function App() {
                   {activeTab === 'onehour' && (
                     <OneHourDeskView
                       ticker={ticker}
+                      spotPrices={spotPrices}
+                      selectedAsset={selectedAsset}
                       userRole={userRole}
                       onUpgradeToPro={handleUpgradeToPro}
                     />
@@ -799,19 +894,26 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-purple-900/30 bg-[#040208] py-6 text-purple-300/60 text-xs font-mono space-y-3">
+      <footer className="border-t border-purple-900/30 bg-[#040208] py-8 text-purple-300/60 text-xs font-mono space-y-4">
         <div className="max-w-[1700px] mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-purple-500 shadow-sm shadow-purple-500/80 animate-pulse" />
-            <span className="text-white font-black tracking-tight">VIXY'S VAULT</span>
+            <span className="text-white font-black tracking-tight cursor-pointer" onClick={() => setActiveTab('terminal')}>VIXY'S VAULT</span>
             <span className="text-purple-400/80">— AI Prediction Market Decision Intelligence</span>
           </div>
-          <div className="flex items-center gap-4 text-purple-300/60 text-[11px]">
-            <span>L2 Microstructure Delta</span>
+
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-purple-300/70 text-xs">
+            <button onClick={() => setActiveTab('about')} className="hover:text-white transition-colors">About Us</button>
             <span>•</span>
-            <span>Cross-Venue Liquidity Bridges</span>
+            <button onClick={() => setActiveTab('terms')} className="hover:text-white transition-colors">Terms of Service</button>
             <span>•</span>
-            <span>SHA-256 Verifiable Logs</span>
+            <button onClick={() => setActiveTab('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
+            <span>•</span>
+            <button onClick={() => setActiveTab('risk')} className="hover:text-rose-300 text-rose-400/90 font-bold transition-colors">Risk Disclosure</button>
+            <span>•</span>
+            <button onClick={() => setActiveTab('refunds')} className="hover:text-white transition-colors">Refund Policy</button>
+            <span>•</span>
+            <button onClick={() => setActiveTab('contact')} className="hover:text-white transition-colors">Contact & Support</button>
           </div>
         </div>
 

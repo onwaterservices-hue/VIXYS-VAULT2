@@ -37,6 +37,9 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
   useEffect(() => {
     if (spotPrice && spotPrice > 0) {
       setLastPrice(spotPrice);
+      if (connectionStatus === 'CONNECTING...') {
+        setConnectionStatus('LIVE (FEED)');
+      }
     }
   }, [spotPrice]);
 

@@ -1,10 +1,70 @@
 @import "tailwindcss";
 
 @layer utilities {
-  /* Near-black canvas background with radial glow */
+  /* Near-black canvas background with moving nebula glow & particle drift */
   body {
     background-color: #06030d;
     color: #e2d8f5;
+    position: relative;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -2;
+    background: 
+      radial-gradient(circle at 20% 20%, rgba(126, 34, 206, 0.22) 0%, transparent 45%),
+      radial-gradient(circle at 80% 30%, rgba(59, 130, 246, 0.16) 0%, transparent 50%),
+      radial-gradient(circle at 50% 80%, rgba(168, 85, 247, 0.18) 0%, transparent 50%),
+      radial-gradient(circle at 10% 85%, rgba(16, 185, 129, 0.1) 0%, transparent 40%);
+    background-size: 180% 180%;
+    animation: nebulaFloat 24s ease-in-out infinite alternate;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    opacity: 0.5;
+    background-image: 
+      radial-gradient(1.5px 1.5px at 15px 25px, rgba(255, 255, 255, 0.65), transparent),
+      radial-gradient(1.5px 1.5px at 85px 145px, rgba(168, 85, 247, 0.75), transparent),
+      radial-gradient(2px 2px at 240px 90px, rgba(52, 211, 153, 0.7), transparent),
+      radial-gradient(1.2px 1.2px at 320px 280px, rgba(255, 255, 255, 0.55), transparent),
+      radial-gradient(1.8px 1.8px at 450px 180px, rgba(192, 132, 252, 0.65), transparent),
+      radial-gradient(1.5px 1.5px at 580px 340px, rgba(56, 189, 248, 0.65), transparent);
+    background-size: 600px 400px;
+    animation: particleDrift 45s linear infinite;
+  }
+
+  @keyframes nebulaFloat {
+    0% {
+      background-position: 0% 0%, 100% 0%, 50% 100%, 0% 100%;
+      filter: hue-rotate(0deg);
+    }
+    50% {
+      background-position: 50% 40%, 40% 60%, 80% 20%, 30% 70%;
+      filter: hue-rotate(12deg);
+    }
+    100% {
+      background-position: 100% 100%, 0% 80%, 20% 0%, 80% 30%;
+      filter: hue-rotate(25deg);
+    }
+  }
+
+  @keyframes particleDrift {
+    0% {
+      background-position: 0px 0px;
+    }
+    100% {
+      background-position: 600px 800px;
+    }
   }
 
   /* Glassmorphism card panels */
