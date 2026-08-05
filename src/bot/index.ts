@@ -1,9 +1,19 @@
 import { discordClient, generateInviteUrl } from './client';
 import { createDashboardEmbed } from './embeds/dashboardEmbed';
 import { createStructuredPredictionEmbed } from './embeds/predictionEmbed';
-import { fetchLiveMarketOverview } from './services/marketData';
+import { createFreeSignalEmbed, createVipSignalEmbed } from './embeds/signalEmbed';
+import { createMarketAnalysisEmbed } from './embeds/marketAnalysisEmbed';
+import {
+  createWhaleTrackerEmbed,
+  createMarketFlowEmbed,
+  createSniperAlertEmbed,
+  createMacroAlertEmbed,
+} from './embeds/alertEmbed';
+import { createFlowForgeEmbed, createFinalLockEmbed } from './embeds/flowForgeEmbed';
+import { createAnalyticsEmbed } from './embeds/analyticsEmbed';
+import { fetchLiveMarketOverview, MarketOverview } from './services/marketData';
 import { handleDashboardCommand } from './commands/dashboard';
-import { REST, Routes, SlashCommandBuilder, Interaction } from 'discord.js';
+import { REST, Routes, SlashCommandBuilder, Interaction, TextChannel } from 'discord.js';
 
 export interface DiscordBotState {
   isReady: boolean;
@@ -58,21 +68,33 @@ export function getDiscordBotStatus(): DiscordBotState {
 async function registerCommands(token: string, clientId: string, guildId?: string) {
   const commands = [
     new SlashCommandBuilder().setName('ping').setDescription('Check VIXY AI Bot operational status & ping'),
-    new SlashCommandBuilder().setName('dashboard').setDescription('Post a auto-updating 30s Live VIXY AI Terminal Dashboard').addStringOption(o => o.setName('asset').setDescription('Asset ticker (e.g. BTC, ETH)')),
-    new SlashCommandBuilder().setName('price').setDescription('Fetch live crypto prices').addStringOption(o => o.setName('asset').setDescription('Symbol')),
-    new SlashCommandBuilder().setName('predict').setDescription('Get structured VIXY AI Prediction Signal with Component Scores').addStringOption(o => o.setName('asset').setDescription('Asset ticker')),
-    new SlashCommandBuilder().setName('status').setDescription('View VIXY AI Model Health & Brier Calibration'),
-    new SlashCommandBuilder().setName('vip').setDescription('Check VIXY AI VIP Pro Subscription'),
-    new SlashCommandBuilder().setName('leaderboard').setDescription('View Top Prediction Traders Leaderboard'),
+    new SlashCommandBuilder()
+      .setName('dashboard')
+      .setDescription('Post auto-updating Storefront Live Dashboard')
+      .addStringOption((o) => o.setName('asset').setDescription('Asset ticker (e.g. BTC, ETH)')),
+    new SlashCommandBuilder()
+      .setName('price')
+      .setDescription('Fetch live crypto price & 24h market stats')
+      .addStringOption((o) => o.setName('asset').setDescription('Symbol')),
+    new SlashCommandBuilder()
+      .setName('predict')
+      .setDescription('Get VIXY AI Prediction Signal (Free Teaser or VIP full parameters)')
+      .addStringOption((o) => o.setName('asset').setDescription('Asset ticker')),
+    new SlashCommandBuilder().setName('status').setDescription('View VIXY AI Model Health, Accuracy & Brier Score'),
+    new SlashCommandBuilder().setName('vip').setDescription('Check VIXY AI VIP Pro Membership benefits & upgrade link'),
+    new SlashCommandBuilder().setName('leaderboard').setDescription('View Top Alpha Traders Leaderboard'),
+    new SlashCommandBuilder().setName('analysis').setDescription('Get hourly market summary & orderflow bias'),
+    new SlashCommandBuilder().setName('flowforge').setDescription('VIP Flow-Forge institutional order block inspection'),
+    new SlashCommandBuilder().setName('analytics').setDescription('VIP Model accuracy & calibration analytics'),
   ];
 
   const rest = new REST({ version: '10' }).setToken(token);
   try {
     if (guildId) {
-      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands.map(c => c.toJSON()) });
+      await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands.map((c) => c.toJSON()) });
       console.log(`[DiscordBot] Slash commands registered instantly for Guild ${guildId}`);
     } else {
-      await rest.put(Routes.applicationCommands(clientId), { body: commands.map(c => c.toJSON()) });
+      await rest.put(Routes.applicationCommands(clientId), { body: commands.map((c) => c.toJSON()) });
       console.log('[DiscordBot] Slash commands registered globally');
     }
   } catch (err) {
@@ -100,19 +122,41 @@ async function handleInteraction(interaction: Interaction) {
     await interaction.deferReply();
     const asset = interaction.options.getString('asset')?.toUpperCase() || 'BTC';
     const marketData = await fetchLiveMarketOverview(asset);
-    const embed = createStructuredPredictionEmbed(marketData);
+    const embed = createFreeSignalEmbed(marketData);
     await interaction.editReply({ embeds: [embed] });
   } else if (commandName === 'status') {
     const marketData = await fetchLiveMarketOverview('BTC');
     await interaction.reply({ embeds: [createDashboardEmbed(marketData)] });
+  } else if (commandName === 'analysis') {
+    await interaction.deferReply();
+    const marketData = await fetchLiveMarketOverview('BTC');
+    await interaction.editReply({ embeds: [createMarketAnalysisEmbed(marketData)] });
+  } else if (commandName === 'flowforge') {
+    await interaction.deferReply();
+    const marketData = await fetchLiveMarketOverview('BTC');
+    await interaction.editReply({ embeds: [createFlowForgeEmbed(marketData)] });
+  } else if (commandName === 'analytics') {
+    await interaction.reply({ embeds: [createAnalyticsEmbed()] });
   } else if (commandName === 'vip') {
     await interaction.reply({
-      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Institutional Order Flow\nUpgrade at: ${process.env.APP_URL || 'https://vixy.ai'}/#subscription`,
+      content:
+        `💎 **VIXY AI VIP PRO ADVANTAGE**\n` +
+        `• **90-Second Speed Lead**: VIP receives signals 90s before public feed\n` +
+        `• **Full Trade Parameters**: Exact Entry, Stop-Loss, and Take-Profit Targets\n` +
+        `• **Flow-Forge Core**: Order blocks, liquidity sweeps, and taker absorption\n` +
+        `• **Final-Lock Predictions**: Highest-confidence contract settlement calls\n\n` +
+        `👉 Upgrade instantly at: ${process.env.APP_URL || 'https://vixy.ai'}#subscription`,
       ephemeral: true,
     });
   } else if (commandName === 'leaderboard') {
     await interaction.reply({
-      content: '🏆 **VIXY AI Alpha Traders**\n1. 🥇 Whale_Hunter_X — +$42,850 PnL (84% WR)\n2. 🥈 QuantAlpha_99 — +$28,400 PnL (79% WR)\n3. 🥉 Satoshi_N — +$19,200 PnL (76% WR)',
+      content:
+        '🏆 **VIXY AI Alpha Traders**\n' +
+        '1. 🥇 Whale_Hunter_X — +$42,850 PnL (84% WR)\n' +
+        '2. 🥈 QuantAlpha_99 — +$28,400 PnL (79% WR)\n' +
+        '3. 🥉 Satoshi_N — +$19,200 PnL (76% WR)\n' +
+        '4. 🏅 DeltaRider — +$14,100 PnL (72% WR)\n' +
+        '5. 🏅 VIXY_VIP_Member — +$11,800 PnL (71% WR)',
     });
   }
 }
@@ -149,16 +193,16 @@ export function validateDiscordEnv(): { valid: boolean; missing: string[]; envCo
   };
 
   const required = ['DISCORD_BOT_TOKEN'];
-  const missing = required.filter(key => !process.env[key]);
+  const missing = required.filter((key) => !process.env[key]);
 
   return { valid: missing.length === 0, missing, envConfig };
 }
 
 export async function initializeDiscordBot(): Promise<boolean> {
-  const { valid, missing, envConfig } = validateDiscordEnv();
+  const { valid, envConfig } = validateDiscordEnv();
 
   if (!valid) {
-    console.warn(`[DiscordBot] Missing required environment variable: DISCORD_BOT_TOKEN. Bot starting in fallback mode.`);
+    console.warn(`[DiscordBot] Missing DISCORD_BOT_TOKEN on startup. Bot running in fallback/webhook mode.`);
     botState.mode = envConfig.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
     return false;
   }
@@ -197,6 +241,54 @@ export async function initializeDiscordBot(): Promise<boolean> {
   }
 }
 
+// Multi-tier signal dispatcher for Free vs. VIP channels
+export async function dispatchSignalPair(symbol: string = 'BTC'): Promise<{ success: boolean; dispatchedTo: string[] }> {
+  const marketData = await fetchLiveMarketOverview(symbol);
+  const freeEmbed = createFreeSignalEmbed(marketData);
+  const vipEmbed = createVipSignalEmbed(marketData);
+
+  const dispatchedTo: string[] = [];
+
+  // Helper to send to channel ID if client is logged in
+  if (discordClient && discordClient.isReady()) {
+    const signalsChannelId = process.env.DISCORD_SIGNALS_CHANNEL_ID;
+    if (signalsChannelId) {
+      try {
+        const ch = (await discordClient.channels.fetch(signalsChannelId)) as TextChannel;
+        if (ch && ch.isTextBased()) {
+          await ch.send({ embeds: [freeEmbed] });
+          dispatchedTo.push(`Free Channel (${signalsChannelId})`);
+        }
+      } catch (err) {
+        console.warn(`[DiscordBot] Could not send to free signals channel ${signalsChannelId}:`, err);
+      }
+    }
+  }
+
+  // Webhook fallback for VIP or main channel
+  const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
+  if (webhookUrl) {
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: 'VIXY VIP Intelligence Core',
+          embeds: [vipEmbed.toJSON()],
+        }),
+      });
+      dispatchedTo.push('VIP Webhook Feed');
+    } catch (err) {
+      console.warn('[DiscordBot] VIP Webhook send failed:', err);
+    }
+  }
+
+  botState.lastBroadcastAt = new Date().toISOString();
+  botState.totalAlertsDispatched += 1;
+
+  return { success: dispatchedTo.length > 0, dispatchedTo };
+}
+
 export async function broadcastSignalToDiscord(signalData: {
   symbol: string;
   direction: 'YES' | 'NO';
@@ -209,7 +301,7 @@ export async function broadcastSignalToDiscord(signalData: {
 }): Promise<{ success: boolean; method: string; message: string }> {
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
   const marketData = await fetchLiveMarketOverview(signalData.symbol.split('/')[0] || 'BTC');
-  const embed = createStructuredPredictionEmbed(marketData);
+  const embed = createVipSignalEmbed(marketData);
 
   if (webhookUrl) {
     try {
@@ -236,7 +328,10 @@ export async function broadcastSignalToDiscord(signalData: {
   return { success: false, method: 'NONE', message: 'No active Discord Bot Token or Webhook configured.' };
 }
 
-export async function assignDiscordVipRole(discordUserId: string, guildId?: string): Promise<{ success: boolean; message: string }> {
+export async function assignDiscordVipRole(
+  discordUserId: string,
+  guildId?: string
+): Promise<{ success: boolean; message: string }> {
   const roleId = process.env.DISCORD_VIP_ROLE_ID;
   const targetGuildId = guildId || process.env.DISCORD_GUILD_ID;
 

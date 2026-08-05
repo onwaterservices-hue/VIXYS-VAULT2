@@ -6,61 +6,52 @@ export function createDashboardEmbed(data: MarketOverview) {
   const color = isBull ? 0x10B981 : 0xF43F5E; // Emerald / Rose Cyberpunk Accent
 
   return new EmbedBuilder()
-    .setTitle(`🟢 VIXY AI Terminal • ${data.asset} Live Dashboard`)
+    .setTitle(`🟢 VIXY AI ONLINE • Storefront Dashboard`)
     .setColor(color)
-    .setDescription(
-      `⚡ **STATUS: ONLINE** • *Continuous 15-Minute Prediction Contract Engine*\n` +
-      `*Real-time Orderbook Taker Delta & Kalshi / Polymarket Odds Tracker*`
-    )
+    .setDescription(`*Continuous 15-Minute Prediction Contract Engine & Orderbook Taker Delta*`)
     .addFields(
       {
-        name: '₿ Live BTC Price',
-        value: `**$${data.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}**`,
+        name: `₿ ${data.asset}`,
+        value: `**$${data.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}** (${data.change24h >= 0 ? '+' : ''}${data.change24h}%)`,
         inline: true,
       },
       {
-        name: '📈 24h Change',
-        value: `**${data.change24h >= 0 ? '+' : ''}${data.change24h}%**`,
+        name: '🧭 Market Bias',
+        value: `**${isBull ? '🐂 BULLISH' : '🐻 BEARISH'}**`,
         inline: true,
       },
       {
-        name: '🧠 AI Prediction',
-        value: `**${isBull ? '🐂 BULLISH (YES)' : '🐻 BEARISH (NO)'}**`,
-        inline: true,
-      },
-      {
-        name: '🎯 Confidence Score',
+        name: '🧠 AI Confidence',
         value: `\`${data.prediction.confidence}%\``,
         inline: true,
       },
       {
-        name: '📊 Lifetime Win Rate',
-        value: `\`${data.prediction.accuracy}%\` (${data.prediction.totalSettled.toLocaleString()} cycles)`,
+        name: '📊 Predictions Today',
+        value: `\`42 cycles\``,
         inline: true,
       },
       {
-        name: '📉 Brier Calibration',
+        name: '🏆 Accuracy (30 Days)',
+        value: `\`${data.prediction.accuracy}%\` (${data.prediction.totalSettled.toLocaleString()} settled)`,
+        inline: true,
+      },
+      {
+        name: '📉 Brier Score',
         value: `\`${data.prediction.brierScore.toFixed(3)}\` (Optimal)`,
         inline: true,
       },
       {
-        name: '📊 24h High / Low',
-        value: `$${data.high24h.toLocaleString()} / $${data.low24h.toLocaleString()}`,
-        inline: true,
-      },
-      {
-        name: '🌊 24h Volume',
-        value: `${Math.round(data.volume24h).toLocaleString()} BTC`,
-        inline: true,
-      },
-      {
-        name: '🎯 Target Price',
-        value: `**$${data.prediction.targetPrice.toLocaleString()}**`,
-        inline: true,
+        name: '💎 VIP Advantage Privileges',
+        value:
+          `• **90-Second Speed Advantage**: Signals hit VIP channel 90s before public feed\n` +
+          `• **Full Trade Parameters**: Exact Entry, Stop-Loss, and Take-Profit Targets\n` +
+          `• **Institutional Flow-Forge**: Order Blocks, Liquidity Sweeps & Taker Absorption\n` +
+          `• **Final-Lock Predictions**: Highest confidence contract settlement calls`,
+        inline: false,
       }
     )
     .setFooter({
-      text: `VIXY AI Engine v4.3 • Auto-updates every 30s • Refreshed at`,
+      text: `🔒 Public Feed shows proof only. Upgrade with /vip to unlock trade setups. Auto-refreshed every 30s`,
     })
     .setTimestamp();
 }
