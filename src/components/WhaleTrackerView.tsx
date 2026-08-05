@@ -135,47 +135,35 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Live order simulator effect
+  // Real live whale order feed effect from /api/whales
   useEffect(() => {
     if (!isLiveStreaming) return;
 
-    const interval = setInterval(() => {
-      const assets = ['BTC', 'ETH', 'SOL', 'NVDA', 'SPY', 'TSLA'];
-      const actions: WhaleOrder['action'][] = ['BUY_SWEEP', 'STRIKE_DEFENSE', 'ICEBERG_ACCUMULATION', 'BUY_SWEEP'];
-      const venues: WhaleOrder['venue'][] = ['Kalshi', 'Polymarket', 'Derive', 'Coinbase Pro'];
-      const entities = [
-        'Goliath Capital Vault #02',
-        'Apex Quant Liquidity #14',
-        'Citadel Block Router #01',
-        'Satoshi Era Whale #089',
-        'Fidelity Digital Custody',
-      ];
+    let isSubscribed = true;
+    const fetchWhaleData = async () => {
+      try {
+        const assetParam = selectedAssetFilter === 'ALL' ? 'BTC' : selectedAssetFilter;
+        const res = await fetch(`/api/whales?asset=${assetParam}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isSubscribed && Array.isArray(data.orders) && data.orders.length > 0) {
+            setOrders(data.orders);
+            setLastUpdated(new Date().toLocaleTimeString());
+          }
+        }
+      } catch (err) {
+        console.warn('Live whale stream update failed', err);
+      }
+    };
 
-      const randomAsset = assets[Math.floor(Math.random() * assets.length)];
-      const randomAction = actions[Math.floor(Math.random() * actions.length)];
-      const randomSize = Math.floor(Math.random() * 3500000) + 250000;
-      const randomVenue = venues[Math.floor(Math.random() * venues.length)];
-      const randomEntity = entities[Math.floor(Math.random() * entities.length)];
+    fetchWhaleData();
+    const interval = setInterval(fetchWhaleData, 5000);
 
-      const newOrder: WhaleOrder = {
-        id: `wh-${Math.floor(Math.random() * 9000) + 1000}`,
-        time: 'Just now',
-        asset: randomAsset,
-        action: randomAction,
-        sizeUSD: randomSize,
-        contractPrice: `${randomAsset} Strike YES`,
-        venue: randomVenue,
-        confidence: Math.floor(Math.random() * 12) + 87,
-        entityName: randomEntity,
-        impact: randomSize > 2000000 ? 'CRITICAL' : randomSize > 1000000 ? 'EXTREME' : 'HIGH',
-      };
-
-      setOrders((prev) => [newOrder, ...prev.slice(0, 19)]);
-      setLastUpdated(new Date().toLocaleTimeString());
-    }, 4500);
-
-    return () => clearInterval(interval);
-  }, [isLiveStreaming]);
+    return () => {
+      isSubscribed = false;
+      clearInterval(interval);
+    };
+  }, [isLiveStreaming, selectedAssetFilter]);
 
   const filteredOrders = orders.filter((o) => {
     const matchesAsset = selectedAssetFilter === 'ALL' || o.asset === selectedAssetFilter;

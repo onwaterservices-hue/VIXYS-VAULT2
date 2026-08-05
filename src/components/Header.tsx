@@ -198,25 +198,34 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="bg-[#0E0822]/90 px-4 py-1 text-xs border-b border-purple-900/30 flex flex-wrap items-center justify-between gap-2 font-mono">
         <div className="flex items-center gap-3 overflow-x-auto py-0.5">
           {/* Active Market Chip */}
-          <div className="flex items-center gap-2 font-bold text-purple-200 bg-[#140C2E] px-2.5 py-1 rounded-xl border border-purple-800/40">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80" />
-            <span className="text-white font-black">{selectedAsset}</span>
-            <span className="text-purple-400/80">({selectedVenue})</span>
-            <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] font-bold border border-purple-800/40">
-              {selectedTimeframe}
-            </span>
-            <span className="text-white font-black text-xs ml-1">
-              ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span
-              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                isPositive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-              }`}
-            >
-              {isPositive ? '+' : ''}
-              {ticker.change24h.toFixed(2)}%
-            </span>
-          </div>
+          {(() => {
+            const ageSec = ticker.timestamp ? Math.max(0, Math.floor((Date.now() - ticker.timestamp) / 1000)) : 0;
+            const isStale = ageSec > 10;
+            return (
+              <div className="flex items-center gap-2 font-bold text-purple-200 bg-[#140C2E] px-2.5 py-1 rounded-xl border border-purple-800/40">
+                <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80'}`} />
+                <span className="text-white font-black">{selectedAsset}</span>
+                <span className="text-purple-400/80">({selectedVenue})</span>
+                <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] font-bold border border-purple-800/40">
+                  {selectedTimeframe}
+                </span>
+                <span className="text-white font-black text-xs ml-1">
+                  ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                <span
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                    isPositive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  }`}
+                >
+                  {isPositive ? '+' : ''}
+                  {ticker.change24h.toFixed(2)}%
+                </span>
+                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${isStale ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold' : 'text-purple-400/80'}`}>
+                  {isStale ? 'STALE (10s+)' : `${ageSec}s ago`}
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Unified AI Signal Stat Cluster (Calculated from Live Exchange Feed API) */}
           <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">

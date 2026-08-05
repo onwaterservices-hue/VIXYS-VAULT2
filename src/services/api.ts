@@ -15,65 +15,50 @@ export async function fetchBTCTicker(): Promise<BTCTicker> {
 }
 
 export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTicker> {
+  const cleanSymbol = symbol.toUpperCase().replace('USDT', '').replace('-USD', '');
   try {
-    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(symbol)}`);
-    if (!res.ok) throw new Error('Ticker response not ok');
-    const data = await res.json();
-    return {
-      price: data.price,
-      change24h: data.change24h,
-      high24h: data.high24h,
-      low24h: data.low24h,
-      volume24h: data.volume24h,
-      timestamp: data.timestamp || Date.now(),
-      marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + data.change24h * 2))),
-      marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - data.change24h * 2))),
-    };
-  } catch (err) {
-    console.warn(`API ticker fetch failed for ${symbol}, using live direct exchange scraper`, err);
-    // Direct public fallback scraper if backend is starting
-    try {
-      const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-      const direct = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
-      if (direct.ok) {
-        const d = await direct.json();
-        const price = parseFloat(d.lastPrice);
-        const change24h = parseFloat(d.priceChangePercent);
-        return {
-          price,
-          change24h,
-          high24h: parseFloat(d.highPrice),
-          low24h: parseFloat(d.lowPrice),
-          volume24h: parseFloat(d.volume),
-          timestamp: Date.now(),
-          marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
-          marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
-        };
-      }
-    } catch (e) {
-      // Fallback
+    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(cleanSymbol)}`);
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        price: data.price,
+        change24h: data.change24h,
+        high24h: data.high24h,
+        low24h: data.low24h,
+        volume24h: data.volume24h,
+        timestamp: data.timestamp || Date.now(),
+        marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + data.change24h * 2))),
+        marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - data.change24h * 2))),
+      };
     }
-
-    const fallbackPrices: Record<string, number> = {
-      BTC: 64108,
-      ETH: 3482,
-      SOL: 184,
-      XRP: 0.624,
-      DOGE: 0.142,
-      SUI: 1.88,
-    };
-    const price = fallbackPrices[symbol] || 10;
-    return {
-      price,
-      change24h: 3.42,
-      high24h: price * 1.04,
-      low24h: price * 0.96,
-      volume24h: 28410.5,
-      timestamp: Date.now(),
-      marketImpliedYes: 52,
-      marketImpliedNo: 48,
-    };
+  } catch (err) {
+    console.warn(`API ticker fetch failed for ${cleanSymbol}, using direct exchange fallback`, err);
   }
+
+  // Direct public fallback to Coinbase Pro stats
+  try {
+    const cbRes = await fetch(`https://api.exchange.coinbase.com/products/${cleanSymbol}-USD/stats`);
+    if (cbRes.ok) {
+      const stats = await cbRes.json();
+      const price = parseFloat(stats.last);
+      const open = parseFloat(stats.open);
+      const change24h = open > 0 ? ((price - open) / open) * 100 : 0;
+      return {
+        price,
+        change24h: Math.round(change24h * 100) / 100,
+        high24h: parseFloat(stats.high),
+        low24h: parseFloat(stats.low),
+        volume24h: parseFloat(stats.volume),
+        timestamp: Date.now(),
+        marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
+        marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
+      };
+    }
+  } catch (e) {
+    // Fallthrough
+  }
+
+  throw new Error(`Unable to fetch real live ticker data for ${cleanSymbol}`);
 }
 
 export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {

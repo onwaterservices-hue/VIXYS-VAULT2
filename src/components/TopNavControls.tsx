@@ -154,19 +154,24 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
             Venues:
           </span>
           {venues.map((v) => {
-            const isSelected = selectedVenues.includes(v);
+            const isDisabled = v === 'DraftKings';
+            const isSelected = selectedVenues.includes(v) && !isDisabled;
             return (
               <button
                 key={v}
-                onClick={() => onToggleVenue(v)}
+                onClick={() => !isDisabled && onToggleVenue(v)}
+                disabled={isDisabled}
+                title={isDisabled ? 'DraftKings Sportsbook API integration coming soon' : undefined}
                 className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
-                  isSelected
+                  isDisabled
+                    ? 'bg-purple-950/40 text-purple-400/40 border border-purple-900/20 cursor-not-allowed opacity-60'
+                    : isSelected
                     ? 'bg-purple-600 text-white shadow-md border border-purple-400/50 font-black'
                     : 'bg-transparent text-purple-300/70 border border-purple-900/40 hover:border-purple-500/40 hover:text-white'
                 }`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-emerald-300 animate-pulse' : 'bg-purple-700/50'}`} />
-                <span>{v}</span>
+                <div className={`w-1.5 h-1.5 rounded-full ${isDisabled ? 'bg-purple-800' : isSelected ? 'bg-emerald-300 animate-pulse' : 'bg-purple-700/50'}`} />
+                <span>{isDisabled ? 'DraftKings (Soon)' : v}</span>
               </button>
             );
           })}

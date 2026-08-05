@@ -465,39 +465,30 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
           </div>
 
-          {/* DraftKings Sportsbook Micro Card */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
+          {/* DraftKings Sportsbook Micro Card (Disabled / Pending Public API) */}
+          <div className="bg-[#0B061A]/60 p-4 rounded-xl border border-purple-900/20 space-y-3 opacity-60">
             <div className="flex justify-between items-start">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
+                  <span className="px-2 py-0.5 rounded bg-purple-900/30 text-purple-400 text-[10px] font-bold uppercase">
                     SPORTSBOOK MICRO
                   </span>
-                  <button
-                    onClick={onOpenSettings}
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
-                      exchangeKeys?.draftkings.connected
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
-                    }`}
-                    title="DraftKings Micro API Key Status. Click to manage API in Settings."
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.draftkings.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                    <span>{exchangeKeys?.draftkings.connected ? `API ${exchangeKeys.draftkings.latencyMs}ms` : 'API Setup'}</span>
-                  </button>
+                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold">
+                    COMING SOON
+                  </span>
                 </div>
-                <h3 className="text-sm font-black text-white mt-1">DraftKings Micro</h3>
-                <p className="text-[10px] text-purple-300/60 font-sans">American Odds • Instant Payout</p>
+                <h3 className="text-sm font-black text-purple-200 mt-1">DraftKings Micro</h3>
+                <p className="text-[10px] text-purple-400/60 font-sans">API Integration Pending</p>
               </div>
               <div className="text-right">
-                <span className="text-base font-black text-emerald-400 block">53.5% Implied</span>
-                <span className="text-[10px] text-purple-300/80 font-mono block">-115 YES / +105 NO</span>
+                <span className="text-sm font-bold text-purple-400/60 block">UNAVAILABLE</span>
+                <span className="text-[10px] text-purple-400/40 font-mono block">Odds Pending</span>
               </div>
             </div>
 
-            <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Vault Model Edge:</span>
-              <span className="font-black text-emerald-400">+10.7% EDGE</span>
+            <div className="pt-2 border-t border-purple-900/20 flex justify-between items-center text-xs">
+              <span className="text-purple-400/50">Status:</span>
+              <span className="font-bold text-purple-400/60">API Integration In Progress</span>
             </div>
           </div>
         </div>
