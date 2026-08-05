@@ -524,21 +524,31 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   </span>
                 </div>
 
-                {/* Progress Checkpoint Badges -- Made larger, prominent & clean */}
+                {/* Progress Checkpoint Badges -- Clear single active state sequence */}
                 <div className="flex flex-wrap items-center gap-2 bg-[#080315] p-2 rounded-2xl border border-purple-900/50 shadow-inner">
-                  <div className="px-3.5 py-1.5 rounded-xl bg-cyan-950 text-cyan-200 text-xs font-black border border-cyan-600/60 shadow-md flex items-center gap-1.5">
-                    <span className="text-cyan-400">01</span>
-                    <span>BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} / COMMITTED</span>
+                  <div className={`px-3.5 py-1.5 rounded-xl text-xs font-black border flex items-center gap-1.5 ${
+                    isBailedOut
+                      ? 'bg-rose-950/60 text-rose-300 border-rose-800/60'
+                      : 'bg-emerald-950/80 text-emerald-200 border-emerald-600/60 shadow-md'
+                  }`}>
+                    <span className="text-emerald-400">01</span>
+                    <span>SIGNAL {signal.direction === 'YES' ? 'BUY UP' : 'BUY DOWN'}</span>
                   </div>
                   <span className="text-purple-400/60 font-black text-sm px-1">→</span>
-                  <div className="px-4 py-1.5 rounded-xl bg-amber-500/20 text-amber-300 text-xs font-black border border-amber-500/50 ring-2 ring-amber-500/30 shadow-lg animate-pulse flex items-center gap-1.5">
+                  <div className={`px-4 py-1.5 rounded-xl text-xs font-black border ring-2 shadow-lg flex items-center gap-1.5 ${
+                    isBailedOut
+                      ? 'bg-rose-900/40 text-rose-300 border-rose-600/50 ring-rose-500/30'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/50 ring-amber-500/30 animate-pulse'
+                  }`}>
                     <span className="text-amber-400">02</span>
-                    <span className="text-sm font-extrabold uppercase tracking-wide">WAIT FOR VALUE</span>
+                    <span className="text-sm font-extrabold uppercase tracking-wide">
+                      {isBailedOut ? 'BAILOUT EXECUTED' : 'AWAITING LOCK VALUE'}
+                    </span>
                   </div>
                   <span className="text-purple-400/60 font-black text-sm px-1">→</span>
                   <div className="px-3.5 py-1.5 rounded-xl bg-[#0f0724] text-purple-300/60 text-xs font-bold border border-purple-900/40 flex items-center gap-1.5">
                     <span>03</span>
-                    <span>POSITION REVIEW</span>
+                    <span>SETTLEMENT REVIEW</span>
                   </div>
                 </div>
               </div>

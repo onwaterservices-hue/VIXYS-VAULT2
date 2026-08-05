@@ -264,6 +264,36 @@ export default function App() {
     timestamp: Date.now(),
   });
 
+  // Spot prices map across assets
+  const [spotPrices, setSpotPrices] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    let isMounted = true;
+    const updateAllPrices = async () => {
+      try {
+        const tickers = await fetchAllCryptoTickers();
+        if (isMounted && Array.isArray(tickers) && tickers.length > 0) {
+          const map: Record<string, number> = {};
+          tickers.forEach((t) => {
+            if (t.symbol && t.price) {
+              map[t.symbol] = t.price;
+            }
+          });
+          setSpotPrices((prev) => ({ ...prev, ...map }));
+        }
+      } catch (e) {
+        // Ignore
+      }
+    };
+
+    updateAllPrices();
+    const interval = setInterval(updateAllPrices, 10000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   // When selectedAsset changes, sync Ticker
   useEffect(() => {
     const config = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;

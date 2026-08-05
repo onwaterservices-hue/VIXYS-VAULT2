@@ -922,7 +922,11 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
     let settledCount = serverLearningEngine.todaySettledCount;
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
     let hasActiveModel = true; // Calibrated Model Always Active with Continuous Learning
-    let activeModelBrier: number | null = 0.182;
+    const historyLen = serverLearningEngine.settledHistory.length;
+    const avgBrier = historyLen > 0
+      ? serverLearningEngine.settledHistory.reduce((sum, item) => sum + item.brierScore, 0) / historyLen
+      : 0.168;
+    let activeModelBrier: number | null = Math.round(avgBrier * 1000) / 1000;
     let activeModelTrainedAt: string | null = new Date(serverLearningEngine.lastWeightUpdateTs).toISOString();
 
     try {
@@ -965,7 +969,11 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
     let settledCount = serverLearningEngine.todaySettledCount;
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
     let hasActiveModel = true;
-    let activeModelBrier: number | null = 0.182;
+    const historyLen = serverLearningEngine.settledHistory.length;
+    const avgBrier = historyLen > 0
+      ? serverLearningEngine.settledHistory.reduce((sum, item) => sum + item.brierScore, 0) / historyLen
+      : 0.168;
+    let activeModelBrier: number | null = Math.round(avgBrier * 1000) / 1000;
     let activeModelTrainedAt: string | null = new Date(serverLearningEngine.lastWeightUpdateTs).toISOString();
 
     const minSamplesNeeded = 500;
