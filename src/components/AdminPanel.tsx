@@ -23,8 +23,10 @@ import {
   Zap,
   Sparkles,
   Download,
+  Bot,
 } from 'lucide-react';
 import { AdminStats, SupportTicket } from '../types';
+import { DiscordBotHubView } from './DiscordBotHubView';
 
 interface AdminUser {
   id: string;
@@ -210,8 +212,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
   const [newUserName, setNewUserName] = useState<string>('');
   const [newUserTier, setNewUserTier] = useState<'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS'>('PRO_PASS');
 
-  // Active Tab View in Admin: 'users' | 'revenue' | 'referrals' | 'tickets' | 'settings'
-  const [adminTab, setAdminTab] = useState<'users' | 'revenue' | 'referrals' | 'tickets' | 'settings'>('users');
+  // Active Tab View in Admin: 'users' | 'revenue' | 'referrals' | 'tickets' | 'settings' | 'discord'
+  const [adminTab, setAdminTab] = useState<'users' | 'revenue' | 'referrals' | 'tickets' | 'settings' | 'discord'>('users');
 
   const referralPromoters = [
     {
@@ -494,6 +496,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
         >
           <Sliders className="w-4 h-4 text-amber-400" />
           <span>System & Quant Overrides</span>
+        </button>
+
+        <button
+          onClick={() => setAdminTab('discord')}
+          className={`px-4 py-2.5 rounded-2xl font-bold transition-all flex items-center gap-2 shrink-0 ${
+            adminTab === 'discord'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30 border border-purple-400/40 font-black'
+              : 'bg-[#0D071E] text-purple-300/70 hover:text-white border border-purple-900/40'
+          }`}
+        >
+          <Bot className="w-4 h-4 text-indigo-400" />
+          <span>Discord Bot Integration</span>
         </button>
       </div>
 
@@ -960,6 +974,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
             </div>
           </div>
         </div>
+      )}
+      {/* TAB 5: DISCORD BOT INTEGRATION */}
+      {adminTab === 'discord' && (
+        <DiscordBotHubView />
       )}
     </div>
   );

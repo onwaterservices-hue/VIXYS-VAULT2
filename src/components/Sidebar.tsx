@@ -30,6 +30,7 @@ import {
   AlertTriangle,
   LifeBuoy,
   Info,
+  Bot,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -96,6 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'VERIFIED' },
         { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
         { id: 'journal', label: 'Trade Journal', icon: BookOpen },
+        { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'BOT' },
         { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
         { id: 'history', label: 'Analytics', icon: BarChart2 },
         { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },

@@ -15,6 +15,7 @@ import {
   Link2,
   Music,
   UserCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { AlertSettings } from '../types';
 import { sendTestAlert } from '../services/api';
@@ -149,7 +150,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
             <div className="flex items-center gap-2">
               <Send className="w-4 h-4 text-purple-400" />
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Discord Account & Webhook Integration</h3>
+              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Discord Bot & Webhook Service</h3>
             </div>
             <span
               className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
@@ -160,6 +161,28 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
             >
               {settings.discordLinked ? 'DISCORD LINKED' : 'NOT LINKED'}
             </span>
+          </div>
+
+          {/* Embedded Bot Quick Plug Card */}
+          <div className="p-4 bg-gradient-to-r from-indigo-950/60 to-purple-950/60 rounded-xl border border-indigo-800/40 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-black text-white">VIXY AI Embedded Discord Bot</span>
+              </div>
+              <a
+                href="https://discord.com/api/oauth2/authorize?client_id=123456789012345678&permissions=268435456&scope=bot%20applications.commands"
+                target="_blank"
+                rel="noreferrer"
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold transition-all shadow-md flex items-center gap-1.5"
+              >
+                <span>Plug Bot into Server</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            <p className="text-[11px] text-purple-200/80 leading-relaxed">
+              Instant slash commands (<code className="text-emerald-300">/predict</code>, <code className="text-emerald-300 font-mono">/price</code>, <code className="text-emerald-300 font-mono">/status</code>, <code className="text-emerald-300 font-mono">/vip</code>) and automatic VIP subscriber role assignment.
+            </p>
           </div>
 
           {/* Account Linking Section */}

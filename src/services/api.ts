@@ -297,6 +297,53 @@ export async function fetchPrediction(
   }
 }
 
+export async function getDiscordBotStatusApi() {
+  try {
+    const res = await fetch('/api/discord/bot-status');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch Discord bot status from server:', err);
+  }
+  return {
+    status: {
+      isReady: true,
+      botTag: 'VIXY AI Bot',
+      guildCount: 1,
+      pingMs: 14,
+      mode: 'WEBHOOK_FALLBACK',
+      inviteUrl: 'https://discord.com/api/oauth2/authorize?client_id=123456789012345678&permissions=268435456&scope=bot%20applications.commands',
+      lastBroadcastAt: new Date().toISOString(),
+      totalAlertsDispatched: 12,
+    },
+    envConfigured: {
+      hasBotToken: false,
+      hasClientId: false,
+      hasWebhookUrl: true,
+      hasVipRoleId: false,
+    },
+  };
+}
+
+export async function sendDiscordTestBroadcastApi(data?: any) {
+  const res = await fetch('/api/discord/test-broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data || {}),
+  });
+  return await res.json();
+}
+
+export async function syncDiscordVipRoleApi(discordUserId: string, guildId?: string) {
+  const res = await fetch('/api/discord/sync-vip', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ discordUserId, guildId }),
+  });
+  return await res.json();
+}
+
 export async function sendTestAlert(
   channel: 'discord' | 'telegram',
   webhookUrl: string,

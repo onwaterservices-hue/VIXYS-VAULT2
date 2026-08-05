@@ -48,6 +48,7 @@ import { LeaderboardView } from './components/LeaderboardView';
 import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
 import { TermsView } from './components/TermsView';
 import { PrivacyView } from './components/PrivacyView';
+import { DiscordBotHubView } from './components/DiscordBotHubView';
 import { RiskDisclosureView } from './components/RiskDisclosureView';
 import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
@@ -854,6 +855,10 @@ export default function App() {
 
                   {activeTab === 'alerts' && (
                     <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
+                  )}
+
+                  {activeTab === 'discord-bot' && (
+                    <DiscordBotHubView />
                   )}
 
                   {activeTab === 'settings' && (

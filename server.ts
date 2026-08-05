@@ -1,9 +1,17 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+import {
+  initializeDiscordBot,
+  getDiscordBotStatus,
+  broadcastSignalToDiscord,
+  assignDiscordVipRole,
+  validateDiscordEnv,
+} from './src/bot';
 
 let stripeClient: Stripe | null = null;
 
@@ -1386,6 +1394,50 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
     });
   });
 
+  // Discord Bot Status & Health Endpoint
+  app.get('/api/discord/bot-status', (req, res) => {
+    const status = getDiscordBotStatus();
+    const envValidation = validateDiscordEnv();
+    res.json({
+      status,
+      envConfigured: envValidation.envConfig,
+      missingRequired: envValidation.missing,
+      isValid: envValidation.valid,
+      timestamp: Date.now(),
+    });
+  });
+
+  // Discord Bot Test Broadcast Endpoint
+  app.post('/api/discord/test-broadcast', async (req, res) => {
+    const { symbol, direction, confidence, currentPrice, targetPrice, reasoning, webhookUrl } = req.body;
+    const result = await broadcastSignalToDiscord({
+      symbol: symbol || 'BTC/USDT 15M',
+      direction: direction || 'YES',
+      confidence: confidence || 88,
+      edgePct: 8.4,
+      currentPrice: currentPrice || 64821.5,
+      targetPrice: targetPrice || 65100,
+      reasoning: reasoning || 'Taker buy delta spike & Kalshi odds underpriced',
+      webhookUrl,
+    });
+    res.json(result);
+  });
+
+  // Discord VIP Role Sync Endpoint
+  app.post('/api/discord/sync-vip', async (req, res) => {
+    const { discordUserId, guildId } = req.body;
+    if (!discordUserId) {
+      return res.status(400).json({ success: false, message: 'discordUserId is required' });
+    }
+    const result = await assignDiscordVipRole(discordUserId, guildId);
+    res.json(result);
+  });
+
+  // Initialize Discord Bot Service asynchronously
+  initializeDiscordBot().catch((err) => {
+    console.warn('[Server] Discord bot initialization warning:', err);
+  });
+
   // Test Alert Webhook Dispatcher Route
   app.post('/api/alerts/send', async (req, res) => {
     const { channel, webhookUrl, botToken, chatId, signalData } = req.body;
@@ -1455,6 +1507,10 @@ Generate an objective, evidence-grounded 15-minute binary prediction in JSON for
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
+    initializeDiscordBot().then((success) => {
+      if (success) console.log('🤖 [DiscordBot] Discord Bot started successfully!');
+      else console.log('ℹ️ [DiscordBot] Bot running in fallback/webhook mode or disabled.');
+    }).catch(err => console.error('❌ [DiscordBot] Initialization error:', err));
   });
 }
 

@@ -16,6 +16,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^5.0.4",
+    "discord.js": "^14.27.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "lightweight-charts": "^5.2.0",
