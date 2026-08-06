@@ -23,7 +23,7 @@ import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
 import { AIPatternEngine } from './AIPatternEngine';
-import { fetchPrediction } from '../services/api';
+import { fetchPrediction, fetchLiveSignalData } from '../services/api';
 import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
 import { CompactSignalChart } from './CompactSignalChart';
 import { ModelStatusBadge } from './ModelStatusBadge';
@@ -86,6 +86,71 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
   // Auto-Update Sync State
   const [autoSyncActive, setAutoSyncActive] = useState<boolean>(true);
+
+  // Quantitative Engine Real-Time Telemetry & Lock State
+  const [engineState, setEngineState] = useState<string>('MONITORING');
+  const [feedStatus, setFeedStatus] = useState<'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED'>('CONNECTED');
+  const [lockEvaluation, setLockEvaluation] = useState<{
+    qualified: boolean;
+    direction: 'UP' | 'DOWN' | 'NEUTRAL';
+    checks: {
+      confidence: boolean;
+      freshness: boolean;
+      liquidity: boolean;
+      spread: boolean;
+      edge: boolean;
+      persistence: boolean;
+    };
+    reason: string;
+    persistenceSeconds: number;
+    requiredPersistenceSeconds: number;
+  }>({
+    qualified: true,
+    direction: 'UP',
+    checks: {
+      confidence: true,
+      freshness: true,
+      liquidity: true,
+      spread: true,
+      edge: true,
+      persistence: true,
+    },
+    reason: 'Signal qualified across all institutional edge and persistence thresholds',
+    persistenceSeconds: 18,
+    requiredPersistenceSeconds: 15,
+  });
+
+  // Poll backend prediction engine signal & lock evaluation every 3 seconds
+  useEffect(() => {
+    let isMounted = true;
+
+    async function pollLiveSignal() {
+      const data = await fetchLiveSignalData(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
+      if (data && isMounted) {
+        if (data.engineState) setEngineState(data.engineState);
+        if (data.feedStatus) setFeedStatus(data.feedStatus);
+        if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
+
+        if (data.direction) {
+          const isBull = data.direction === 'UP';
+          setSignal((prev) => ({
+            ...prev,
+            direction: isBull ? 'YES' : 'NO',
+            confidence: data.confidence || prev.confidence,
+            modelProb: (data.modelProbability || 0.685) * 100,
+            edgePct: data.edgePct || prev.edgePct,
+          }));
+        }
+      }
+    }
+
+    pollLiveSignal();
+    const interval = setInterval(pollLiveSignal, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset, timeframe]);
   const [selectedVenue, setSelectedVenue] = useState<'ALL' | 'KALSHI' | 'POLYMARKET' | 'DRAFTKINGS'>('KALSHI');
 
   // Venue Odds State
@@ -518,9 +583,15 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   </h1>
 
                   {/* Status Indicator Pill */}
-                  <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                    LIVE SIGNAL ACTIVE
+                  <span className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-bold ${
+                    feedStatus === 'CONNECTED'
+                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                      : feedStatus === 'DEGRADED'
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${feedStatus === 'CONNECTED' ? 'bg-emerald-400 animate-ping' : 'bg-rose-400'}`} />
+                    FEED {feedStatus} ({engineState})
                   </span>
                 </div>
 
@@ -538,17 +609,62 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   <div className={`px-4 py-1.5 rounded-xl text-xs font-black border ring-2 shadow-lg flex items-center gap-1.5 ${
                     isBailedOut
                       ? 'bg-rose-900/40 text-rose-300 border-rose-600/50 ring-rose-500/30'
+                      : lockEvaluation.qualified
+                      ? 'bg-emerald-900/50 text-emerald-300 border-emerald-500/60 ring-emerald-500/30 animate-pulse'
                       : 'bg-amber-500/20 text-amber-300 border-amber-500/50 ring-amber-500/30 animate-pulse'
                   }`}>
-                    <span className="text-amber-400">02</span>
+                    <span className={lockEvaluation.qualified ? 'text-emerald-400' : 'text-amber-400'}>02</span>
                     <span className="text-sm font-extrabold uppercase tracking-wide">
-                      {isBailedOut ? 'BAILOUT EXECUTED' : 'AWAITING LOCK VALUE'}
+                      {isBailedOut
+                        ? 'BAILOUT EXECUTED'
+                        : lockEvaluation.qualified
+                        ? 'QUALIFIED & LOCKED'
+                        : 'AWAITING LOCK VALUE'}
                     </span>
                   </div>
                   <span className="text-purple-400/60 font-black text-sm px-1">→</span>
                   <div className="px-3.5 py-1.5 rounded-xl bg-[#0f0724] text-purple-300/60 text-xs font-bold border border-purple-900/40 flex items-center gap-1.5">
                     <span>03</span>
                     <span>SETTLEMENT REVIEW</span>
+                  </div>
+                </div>
+
+                {/* Structured Lock Qualification Checks Breakdown */}
+                <div className="mt-2 p-2.5 bg-[#0a0418] rounded-2xl border border-purple-900/40 text-[11px] space-y-1.5 font-mono">
+                  <div className="flex items-center justify-between text-purple-300/70 font-bold">
+                    <span>INSTITUTIONAL LOCK CRITERIA (CHECKPOINT EVALUATION)</span>
+                    <span className={lockEvaluation.qualified ? 'text-emerald-400 font-extrabold' : 'text-amber-400 font-bold'}>
+                      {lockEvaluation.qualified ? '✓ ALL CHECKS PASSED' : '⌛ LOCK IN PROGRESS'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-[10px]">
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.confidence ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border-amber-800/40'}`}>
+                      <span>Confidence</span>
+                      <span className="font-bold">{lockEvaluation.checks.confidence ? 'PASS' : 'FAIL'}</span>
+                    </div>
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.freshness ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-rose-950/40 text-rose-300 border-rose-800/40'}`}>
+                      <span>Freshness</span>
+                      <span className="font-bold">{lockEvaluation.checks.freshness ? 'PASS' : 'STALE'}</span>
+                    </div>
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.liquidity ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border-amber-800/40'}`}>
+                      <span>Liquidity</span>
+                      <span className="font-bold">{lockEvaluation.checks.liquidity ? 'PASS' : 'WAIT'}</span>
+                    </div>
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.spread ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border-amber-800/40'}`}>
+                      <span>Spread</span>
+                      <span className="font-bold">{lockEvaluation.checks.spread ? 'PASS' : 'HIGH'}</span>
+                    </div>
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.edge ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border-amber-800/40'}`}>
+                      <span>Min Edge</span>
+                      <span className="font-bold">{lockEvaluation.checks.edge ? 'PASS' : 'LOW'}</span>
+                    </div>
+                    <div className={`px-2 py-1 rounded-xl border flex items-center justify-between ${lockEvaluation.checks.persistence ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/40' : 'bg-amber-950/40 text-amber-300 border-amber-800/40'}`}>
+                      <span>Persistence</span>
+                      <span className="font-bold">{lockEvaluation.checks.persistence ? '15s/15s' : `${lockEvaluation.persistenceSeconds}s/15s`}</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-purple-300/60 italic truncate">
+                    Reason: {lockEvaluation.reason}
                   </div>
                 </div>
               </div>

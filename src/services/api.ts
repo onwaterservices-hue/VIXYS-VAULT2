@@ -635,3 +635,85 @@ export async function calculatePositionSize(body: any) {
   });
   return await res.json();
 }
+
+export interface AdminDiagnosticsResponse {
+  marketFeed: {
+    status: 'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED';
+    latencyMs: number;
+    lastUpdateSecAgo: number;
+  };
+  predictionEngine: {
+    status: string;
+    lastModelRunSecAgo: number;
+    state: string;
+    cycleId: number;
+    direction: 'UP' | 'DOWN' | 'NEUTRAL';
+    confidence: number;
+    edgePct: number;
+  };
+  activeContract: string;
+  lockStatus: {
+    qualified: boolean;
+    label: string;
+    reason: string;
+    checks: {
+      confidence: boolean;
+      freshness: boolean;
+      liquidity: boolean;
+      spread: boolean;
+      edge: boolean;
+      persistence: boolean;
+    };
+    persistenceSeconds: number;
+    requiredPersistenceSeconds: number;
+  };
+  database: {
+    status: string;
+  };
+  discord: {
+    status: string;
+  };
+  errorsCount: number;
+  recentLogs: Array<{
+    id: string;
+    timestamp: string;
+    level: 'INFO' | 'WARN' | 'ERROR';
+    message: string;
+  }>;
+}
+
+export async function fetchAdminDiagnostics(): Promise<AdminDiagnosticsResponse | null> {
+  try {
+    const res = await fetch('/api/admin/diagnostics');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch admin diagnostics', err);
+  }
+  return null;
+}
+
+export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = '15m') {
+  try {
+    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch live signal data from server', err);
+  }
+  return null;
+}
+
+export async function fetchAdminUsers() {
+  try {
+    const res = await fetch('/api/admin/users');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch admin users from server', err);
+  }
+  return null;
+}
