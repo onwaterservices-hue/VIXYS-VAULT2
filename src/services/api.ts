@@ -1,5 +1,17 @@
 import { BTCTicker, Candle, PredictionSignal } from '../types';
 
+export async function safeFetchJson<T>(url: string, options?: RequestInit): Promise<T | null> {
+  try {
+    const res = await fetch(url, options);
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export interface CryptoTickerData {
   symbol: string;
   price: number;
@@ -17,12 +29,11 @@ export async function fetchBTCTicker(): Promise<BTCTicker> {
 export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTicker> {
   const cleanSymbol = symbol.toUpperCase().replace('USDT', '').replace('-USD', '');
   try {
-    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(cleanSymbol)}&_t=${Date.now()}`, {
+    const data = await safeFetchJson<any>(`/api/crypto/ticker?symbol=${encodeURIComponent(cleanSymbol)}&_t=${Date.now()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
-    if (res.ok) {
-      const data = await res.json();
+    if (data && data.price !== undefined) {
       return {
         price: data.price,
         change24h: data.change24h,
@@ -89,15 +100,15 @@ export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTick
 
 export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
   try {
-    const res = await fetch(`/api/crypto/all-tickers?_t=${Date.now()}`, {
+    const data = await safeFetchJson<CryptoTickerData[]>(`/api/crypto/all-tickers?_t=${Date.now()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
-    if (res.ok) {
-      return await res.json();
+    if (data && Array.isArray(data)) {
+      return data;
     }
   } catch (err) {
-    console.warn('Failed to fetch all tickers from server proxy, using direct Binance endpoint', err);
+    // Fallthrough to direct public endpoint
   }
 
   // Direct public client fallback
@@ -105,7 +116,7 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
     const direct = await fetch(`https://api.binance.com/api/v3/ticker/24hr?_t=${Date.now()}`, {
       cache: 'no-store',
     });
-    if (direct.ok) {
+    if (direct.ok && direct.headers.get('content-type')?.includes('application/json')) {
       const data = await direct.json();
       const targetSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'SUIUSDT', 'AVAXUSDT', 'LINKUSDT', 'ADAUSDT', 'NEARUSDT', 'PEPEUSDT', 'BNBUSDT'];
       return data
@@ -139,63 +150,63 @@ export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Pr
 
 export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string = '15m'): Promise<Candle[]> {
   try {
-    const res = await fetch(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&_t=${Date.now()}`, {
+    const data = await safeFetchJson<Candle[]>(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&_t=${Date.now()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
-    if (!res.ok) throw new Error('Klines response not ok');
-    return await res.json();
+    if (data && Array.isArray(data)) return data;
   } catch (err) {
-    console.warn(`API klines fetch failed for ${symbol}, using direct public Binance API`, err);
-    try {
-      const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
-      const binanceTf = interval === '15s' ? '1m' : interval;
-      const direct = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceTf}&limit=35&_t=${Date.now()}`, {
-        cache: 'no-store',
-      });
-      if (direct.ok) {
-        const data = await direct.json();
-        return data.map((item: any) => ({
-          time: item[0],
-          open: parseFloat(item[1]),
-          high: parseFloat(item[2]),
-          low: parseFloat(item[3]),
-          close: parseFloat(item[4]),
-          volume: parseFloat(item[5]),
-        }));
-      }
-    } catch (e) {
-      // Fallback
-    }
-
-    const now = Date.now();
-    const periodMs = interval === '1h' ? 60 * 60 * 1000 : 15 * 60 * 1000;
-    const candles: Candle[] = [];
-    const basePrice = symbol === 'BTC' ? 63850 : symbol === 'ETH' ? 3450 : symbol === 'SOL' ? 180 : 10;
-    let currentClose = basePrice;
-
-    for (let i = 29; i >= 0; i--) {
-      const time = now - i * periodMs;
-      const open = currentClose;
-      const change = (Math.random() - 0.46) * (basePrice * 0.003);
-      const close = open + change;
-      const high = Math.max(open, close) + Math.random() * (basePrice * 0.001);
-      const low = Math.min(open, close) - Math.random() * (basePrice * 0.001);
-      const volume = 250 + Math.random() * 500;
-
-      candles.push({
-        time,
-        open: Math.round(open * 100) / 100,
-        high: Math.round(high * 100) / 100,
-        low: Math.round(low * 100) / 100,
-        close: Math.round(close * 100) / 100,
-        volume: Math.round(volume * 10) / 10,
-      });
-
-      currentClose = close;
-    }
-    return candles;
+    // Fallthrough to public fallback
   }
+
+  try {
+    const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
+    const binanceTf = interval === '15s' ? '1m' : interval;
+    const direct = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceTf}&limit=35&_t=${Date.now()}`, {
+      cache: 'no-store',
+    });
+    if (direct.ok && direct.headers.get('content-type')?.includes('application/json')) {
+      const data = await direct.json();
+      return data.map((item: any) => ({
+        time: item[0],
+        open: parseFloat(item[1]),
+        high: parseFloat(item[2]),
+        low: parseFloat(item[3]),
+        close: parseFloat(item[4]),
+        volume: parseFloat(item[5]),
+      }));
+    }
+  } catch (e) {
+    // Fallback
+  }
+
+  const now = Date.now();
+  const periodMs = interval === '1h' ? 60 * 60 * 1000 : 15 * 60 * 1000;
+  const candles: Candle[] = [];
+  const basePrice = symbol === 'BTC' ? 63850 : symbol === 'ETH' ? 3450 : symbol === 'SOL' ? 180 : 10;
+  let currentClose = basePrice;
+
+  for (let i = 29; i >= 0; i--) {
+    const time = now - i * periodMs;
+    const open = currentClose;
+    const change = (Math.random() - 0.46) * (basePrice * 0.003);
+    const close = open + change;
+    const high = Math.max(open, close) + Math.random() * (basePrice * 0.001);
+    const low = Math.min(open, close) - Math.random() * (basePrice * 0.001);
+    const volume = 250 + Math.random() * 500;
+
+    candles.push({
+      time,
+      open: Math.round(open * 100) / 100,
+      high: Math.round(high * 100) / 100,
+      low: Math.round(low * 100) / 100,
+      close: Math.round(close * 100) / 100,
+      volume: Math.round(volume * 10) / 10,
+    });
+
+    currentClose = close;
+  }
+  return candles;
 }
 
 /**
@@ -314,39 +325,35 @@ export async function fetchPrediction(
         takerBuyRatio,
       }),
     });
-    if (!res.ok) throw new Error('Predict API returned error');
-    return await res.json();
-  } catch (err) {
-    console.warn('Predict API error, using local quantitative signal', err);
-    const direction = bullVolumePct >= 50 ? 'YES' : 'NO';
-    const target = direction === 'YES' ? currentPrice + 120 : currentPrice - 120;
-    return {
-      direction,
-      targetPrice: Math.round(target),
-      confidence: 91,
-      edgePct: 7.4,
-      reasoning: `15m candle opened with elevated taker buy volume (${takerBuyRatio} ratio) and net delta (+${netDelta} BTC). Order book depth shows clear bid side absorption at $${Math.round(
-        currentPrice - 80
-      )}, creating a high probability for close above $${Math.round(target)}.`,
-      keyFactors: [
-        'Net Taker Delta +1,420 BTC in last 10m',
-        'VWAP support holding with high volume confluence',
-        'Kalshi / Polymarket odds underpricing continuation',
-        'Order book bid depth imbalance +18.4%',
-      ],
-    };
-  }
-}
-
-export async function getDiscordBotStatusApi() {
-  try {
-    const res = await fetch('/api/discord/bot-status');
-    if (res.ok) {
+    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
     }
   } catch (err) {
-    console.warn('Failed to fetch Discord bot status from server:', err);
+    // Fallback
   }
+  const direction = bullVolumePct >= 50 ? 'YES' : 'NO';
+  const target = direction === 'YES' ? currentPrice + 120 : currentPrice - 120;
+  return {
+    direction,
+    targetPrice: Math.round(target),
+    confidence: 91,
+    edgePct: 7.4,
+    reasoning: `15m candle opened with elevated taker buy volume (${takerBuyRatio} ratio) and net delta (+${netDelta} BTC). Order book depth shows clear bid side absorption at $${Math.round(
+      currentPrice - 80
+    )}, creating a high probability for close above $${Math.round(target)}.`,
+    keyFactors: [
+      'Net Taker Delta +1,420 BTC in last 10m',
+      'VWAP support holding with high volume confluence',
+      'Kalshi / Polymarket odds underpricing continuation',
+      'Order book bid depth imbalance +18.4%',
+    ],
+  };
+}
+
+export async function getDiscordBotStatusApi() {
+  const data = await safeFetchJson<any>('/api/discord/bot-status');
+  if (data) return data;
+
   return {
     status: {
       isReady: true,
@@ -368,21 +375,29 @@ export async function getDiscordBotStatusApi() {
 }
 
 export async function sendDiscordTestBroadcastApi(data?: any) {
-  const res = await fetch('/api/discord/test-broadcast', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data || {}),
-  });
-  return await res.json();
+  try {
+    const res = await fetch('/api/discord/test-broadcast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data || {}),
+    });
+    return await safeParseJson(res);
+  } catch {
+    return { success: false, message: 'Server connection error' };
+  }
 }
 
 export async function syncDiscordVipRoleApi(discordUserId: string, guildId?: string) {
-  const res = await fetch('/api/discord/sync-vip', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ discordUserId, guildId }),
-  });
-  return await res.json();
+  try {
+    const res = await fetch('/api/discord/sync-vip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discordUserId, guildId }),
+    });
+    return await safeParseJson(res);
+  } catch {
+    return { success: false, message: 'Server connection error' };
+  }
 }
 
 export async function sendTestAlert(
@@ -392,18 +407,22 @@ export async function sendTestAlert(
   chatId: string,
   signalData: any
 ) {
-  const res = await fetch('/api/alerts/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      channel,
-      webhookUrl,
-      botToken,
-      chatId,
-      signalData,
-    }),
-  });
-  return await res.json();
+  try {
+    const res = await fetch('/api/alerts/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        channel,
+        webhookUrl,
+        botToken,
+        chatId,
+        signalData,
+      }),
+    });
+    return await safeParseJson(res);
+  } catch {
+    return { success: false, message: 'Server connection error' };
+  }
 }
 
 export interface ApiSignalResponse {
@@ -463,17 +482,12 @@ export interface ModelStatusResponse {
 }
 
 export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15m'): Promise<ModelStatusResponse> {
-  try {
-    const res = await fetch(`/api/model-status?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-    });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (e) {
-    console.warn('Failed to fetch model status', e);
-  }
+  const data = await safeFetchJson<ModelStatusResponse>(`/api/model-status?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  if (data) return data;
+
   return {
     settledCount: 148,
     minRequired: 500,
@@ -492,21 +506,20 @@ export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15
 
 export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m', validated: boolean = false): Promise<ApiSignalResponse> {
   const start = performance.now();
-  try {
-    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}${validated ? '&validated=true' : ''}&_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-    });
-    const elapsed = Math.round(performance.now() - start);
-    if (!res.ok) throw new Error('Signal response not ok');
-    const data = await res.json();
+  const data = await safeFetchJson<any>(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}${validated ? '&validated=true' : ''}&_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  const elapsed = Math.round(performance.now() - start);
+
+  if (data) {
     return { ...data, latencyMs: elapsed };
-  } catch (e) {
-    const elapsed = Math.round(performance.now() - start);
-    return {
-      asset,
-      desk,
-      sampleSize: 0,
+  }
+
+  return {
+    asset,
+    desk,
+    sampleSize: 0,
       minSamplesNeeded: 500,
       hasActiveModel: false,
       generatedAt: new Date().toISOString(),
@@ -533,7 +546,6 @@ export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m'
       },
       latencyMs: elapsed || 12,
     };
-  }
 }
 
 export interface DailyReportResponse {
@@ -545,15 +557,12 @@ export interface DailyReportResponse {
 }
 
 export async function fetchDailyReport(): Promise<DailyReportResponse> {
-  try {
-    const res = await fetch(`/api/daily-report?_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-    });
-    if (res.ok) return await res.json();
-  } catch (e) {
-    console.warn('Failed to fetch daily report', e);
-  }
+  const data = await safeFetchJson<DailyReportResponse>(`/api/daily-report?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  if (data) return data;
+
   return {
     date: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
     wins: 0,
@@ -572,16 +581,13 @@ export interface PerformanceStatsResponse {
 }
 
 export async function fetchPerformanceStats(asset?: string, desk?: string, confidenceMin?: number): Promise<PerformanceStatsResponse> {
-  try {
-    const query = new URLSearchParams();
-    if (asset) query.set('asset', asset);
-    if (desk) query.set('desk', desk);
-    if (confidenceMin) query.set('confidenceMin', String(confidenceMin));
-    const res = await fetch(`/api/performance-stats?${query.toString()}`);
-    if (res.ok) return await res.json();
-  } catch (e) {
-    console.warn('Failed to fetch performance stats', e);
-  }
+  const query = new URLSearchParams();
+  if (asset) query.set('asset', asset);
+  if (desk) query.set('desk', desk);
+  if (confidenceMin) query.set('confidenceMin', String(confidenceMin));
+  const data = await safeFetchJson<PerformanceStatsResponse>(`/api/performance-stats?${query.toString()}`);
+  if (data) return data;
+
   return {
     winRate: null,
     brierScore: null,
@@ -601,12 +607,9 @@ export interface SystemStatusResponse {
 }
 
 export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
-  try {
-    const res = await fetch('/api/system-status');
-    if (res.ok) return await res.json();
-  } catch (e) {
-    console.warn('Failed to fetch system status', e);
-  }
+  const data = await safeFetchJson<SystemStatusResponse>('/api/system-status');
+  if (data) return data;
+
   return {
     binanceWs: { status: 'CONNECTED', lastMessageTs: Date.now(), latencyMs: 8 },
     kalshiPoller: { status: 'ACTIVE', lastFetchTs: Date.now(), latencyMs: 12 },
@@ -620,12 +623,9 @@ export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
 }
 
 export async function fetchJournal(userId: string = 'usr_owner_01') {
-  try {
-    const res = await fetch(`/api/journal?userId=${encodeURIComponent(userId)}`);
-    if (res.ok) return await res.json();
-  } catch (e) {
-    console.warn('Failed to fetch journal', e);
-  }
+  const data = await safeFetchJson<any>(`/api/journal?userId=${encodeURIComponent(userId)}`);
+  if (data) return data;
+
   return { entries: [], cumulativeNetPnl: 0, journaledWinRate: null, modelEdgeCapture: null, totalEntries: 0 };
 }
 
@@ -655,25 +655,16 @@ export interface LeaderboardUser {
 }
 
 export async function fetchLeaderboard(): Promise<LeaderboardUser[]> {
-  try {
-    const res = await fetch('/api/leaderboard');
-    if (res.ok) {
-      const data = await res.json();
-      return data.leaderboard || [];
-    }
-  } catch (e) {
-    console.warn('Failed to fetch leaderboard', e);
-  }
+  const data = await safeFetchJson<any>('/api/leaderboard');
+  if (data && Array.isArray(data.leaderboard)) return data.leaderboard;
+
   return [];
 }
 
 export async function fetchSignalSnapshots(asset: string, desk: string) {
-  try {
-    const res = await fetch(`/api/signal-snapshots?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
-    if (res.ok) return await res.json();
-  } catch (e) {
-    console.warn('Failed to fetch signal snapshots', e);
-  }
+  const data = await safeFetchJson<any>(`/api/signal-snapshots?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
+  if (data) return data;
+
   return { snapshots: [], message: 'Building confidence history...' };
 }
 
@@ -733,33 +724,17 @@ export interface AdminDiagnosticsResponse {
 }
 
 export async function fetchAdminDiagnostics(): Promise<AdminDiagnosticsResponse | null> {
-  try {
-    const res = await fetch(`/api/admin/diagnostics?_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-    });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Failed to fetch admin diagnostics', err);
-  }
-  return null;
+  return await safeFetchJson<AdminDiagnosticsResponse>(`/api/admin/diagnostics?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
 }
 
 export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = '15m') {
-  try {
-    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
-    });
-    if (res.ok) {
-      return await res.json();
-    }
-  } catch (err) {
-    console.warn('Failed to fetch live signal data from server', err);
-  }
-  return null;
+  return await safeFetchJson<any>(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
 }
 
 async function safeParseJson(res: Response) {

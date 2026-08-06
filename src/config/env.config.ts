@@ -103,11 +103,6 @@ export const EnvSchema = z.object({
   // 10. Security & External Services
   OPENAI_API_KEY: z.string().optional().default(''),
   GEMINI_API_KEY: z.string().optional().default(''),
-  COINGECKO_API_KEY: z.string().optional().default(''),
-  BINANCE_API_KEY: z.string().optional().default(''),
-  BINANCE_SECRET_KEY: z.string().optional().default(''),
-  COINBASE_API_KEY: z.string().optional().default(''),
-  TRADINGVIEW_WEBHOOK_SECRET: z.string().optional().default(''),
   JWT_SECRET: z.string().default('vixy-ai-super-secret-jwt-key-32chars'),
   ENCRYPTION_KEY: z.string().default('vixy-ai-aes-256-encryption-key-passphrase'),
   FIREBASE_PROJECT_ID: z.string().optional().default(''),
@@ -122,7 +117,19 @@ export type EnvConfig = z.infer<typeof EnvSchema>;
  * Validates process.env at startup with human-readable error reports.
  */
 export function parseEnv(): EnvConfig {
-  const result = EnvSchema.safeParse(process.env);
+  const mergedProcessEnv = {
+    ...process.env,
+    DISCORD_BOT_TOKEN: process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN || '',
+    DISCORD_CHANNEL_MARKET_ANALYSIS: process.env.DISCORD_CHANNEL_MARKET_ANALYSIS || process.env.DISCORD_ANALYSIS_CHANNEL || '',
+    DISCORD_CHANNEL_AI_SIGNALS: process.env.DISCORD_CHANNEL_AI_SIGNALS || process.env.DISCORD_SIGNALS_CHANNEL || '',
+    DISCORD_CHANNEL_BREAKING_NEWS: process.env.DISCORD_CHANNEL_BREAKING_NEWS || process.env.DISCORD_ALERTS_CHANNEL || '',
+    DISCORD_CHANNEL_AUDIT_LOGS: process.env.DISCORD_CHANNEL_AUDIT_LOGS || process.env.DISCORD_LOGS_CHANNEL_ID || '',
+    DISCORD_ROLE_VERIFIED: process.env.DISCORD_ROLE_VERIFIED || process.env.DISCORD_FREE_ROLE_ID || '',
+    DISCORD_ROLE_ELITE: process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_ROLE_VIP || process.env.DISCORD_VIP_ROLE_ID || '',
+    DISCORD_ROLE_ADMINISTRATOR: process.env.DISCORD_ROLE_ADMINISTRATOR || process.env.DISCORD_ADMIN_ROLE_ID || '',
+  };
+
+  const result = EnvSchema.safeParse(mergedProcessEnv);
 
   if (!result.success) {
     console.error('❌ Invalid environment variables detected:');

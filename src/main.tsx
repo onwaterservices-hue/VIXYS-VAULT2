@@ -5,17 +5,28 @@ import App from './App.tsx';
 import './index.css';
 
 if (typeof window !== 'undefined') {
+  const isWebSocketError = (err: any) => {
+    if (!err) return false;
+    const str = String(err.message || err.reason || err || '').toLowerCase();
+    return (
+      str.includes('websocket') ||
+      str.includes('vite') ||
+      str.includes('closed without opened') ||
+      str.includes('hmr')
+    );
+  };
+
   window.addEventListener('unhandledrejection', (event) => {
-    const reasonStr = String(event.reason?.message || event.reason || '');
-    if (reasonStr.includes('WebSocket') || reasonStr.includes('vite')) {
+    if (isWebSocketError(event.reason)) {
       event.preventDefault();
+      event.stopPropagation();
     }
   });
 
   window.addEventListener('error', (event) => {
-    const msg = String(event.message || '');
-    if (msg.includes('WebSocket') || msg.includes('vite')) {
+    if (isWebSocketError(event.error) || isWebSocketError(event.message)) {
       event.preventDefault();
+      event.stopPropagation();
     }
   });
 }

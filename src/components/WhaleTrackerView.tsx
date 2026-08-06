@@ -144,7 +144,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
       try {
         const assetParam = selectedAssetFilter === 'ALL' ? 'BTC' : selectedAssetFilter;
         const res = await fetch(`/api/whales?asset=${assetParam}`);
-        if (res.ok) {
+        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
           const data = await res.json();
           if (isSubscribed && Array.isArray(data.orders) && data.orders.length > 0) {
             setOrders(data.orders);

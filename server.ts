@@ -1899,6 +1899,15 @@ async function startServer() {
 
   AutomationScheduler.startScheduler();
 
+  // Ensure unmatched /api routes return a clean JSON 404 instead of Vite SPA index.html
+  app.all('/api/*', (req, res) => {
+    res.status(404).json({
+      success: false,
+      error: 'API endpoint not found',
+      path: req.path,
+    });
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({

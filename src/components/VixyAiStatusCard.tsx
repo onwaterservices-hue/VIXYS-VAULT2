@@ -32,8 +32,42 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
   className = '',
 }) => {
   const isPro = userRole === 'PRO' || userRole === 'ADMIN';
-  const [activeTab, setActiveTab] = useState<'STATUS' | 'PULSE' | 'BREAKING' | 'WHALE' | 'LESSON'>('STATUS');
+  const [activeTab, setActiveTab] = useState<'STATUS' | 'PULSE' | 'BREAKING' | 'WHALE' | 'LESSON' | 'RECAP'>('STATUS');
+  const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [secondsToScan, setSecondsToScan] = useState(842); // 14 mins 02s
+
+  const lessons = [
+    {
+      title: 'What is Liquidity?',
+      concept: 'Liquidity is where large institutions need orders filled.',
+      body: 'Price is attracted toward liquidity, not because markets are random, but because banks require counterparties to fill massive positions.',
+      detail: "Today's chart contains 3 major liquidity pools. Elite members can see exactly where.",
+    },
+    {
+      title: 'What is an Order Block?',
+      concept: 'Order blocks represent institutional supply and demand footprint zones.',
+      body: 'When banks enter large positions, they leave unfilled limit orders. When price returns to an order block, it often reacts violently.',
+      detail: 'Elite AI automatically draws live order block heatmaps across 15m and 1h desks.',
+    },
+    {
+      title: 'How Smart Money Hunts Stops',
+      concept: 'Institutions purposefully drive price past obvious support/resistance levels.',
+      body: 'Triggering retail stop-loss orders creates the massive counterparty volume institutions need to buy low or sell high.',
+      detail: 'VIXY AI detects stop sweep absorption in sub-second intervals before price reverses.',
+    },
+    {
+      title: 'What is Delta?',
+      concept: 'Cumulative Volume Delta (CVD) measures net market buy vs sell aggression.',
+      body: 'When price declines while Cumulative Delta rises, aggressive buyers are absorbing ask walls—a strong bullish divergence.',
+      detail: 'Elite members monitor live taker volume delta overlays directly on the chart.',
+    },
+    {
+      title: 'How AI Scores Trades',
+      concept: 'VIXY AI cross-evaluates 24 quantitative features before signaling.',
+      body: 'By matching Binance L2 depth, Polymarket prediction odds, Kalshi binary strikes, and order flow velocity, bad setups get filtered out.',
+      detail: 'Only setups with >80% calibrated confluence generate Elite actionable alerts.',
+    },
+  ];
 
   // Real-time ticking timer for Next Scan
   useEffect(() => {
@@ -100,20 +134,10 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
             MARKET PULSE
           </button>
           <button
-            onClick={() => setActiveTab('BREAKING')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
-              activeTab === 'BREAKING'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-purple-300/70 hover:text-white hover:bg-purple-950/50'
-            }`}
-          >
-            BREAKING NEWS
-          </button>
-          <button
             onClick={() => setActiveTab('WHALE')}
             className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
               activeTab === 'WHALE'
-                ? 'bg-purple-600 text-white shadow-md'
+                ? 'bg-cyan-600 text-white shadow-md'
                 : 'text-purple-300/70 hover:text-white hover:bg-purple-950/50'
             }`}
           >
@@ -123,11 +147,31 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
             onClick={() => setActiveTab('LESSON')}
             className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
               activeTab === 'LESSON'
-                ? 'bg-purple-600 text-white shadow-md'
+                ? 'bg-indigo-600 text-white shadow-md'
                 : 'text-purple-300/70 hover:text-white hover:bg-purple-950/50'
             }`}
           >
             AI LESSON
+          </button>
+          <button
+            onClick={() => setActiveTab('RECAP')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+              activeTab === 'RECAP'
+                ? 'bg-emerald-600 text-white shadow-md'
+                : 'text-purple-300/70 hover:text-white hover:bg-purple-950/50'
+            }`}
+          >
+            🔥 DAILY RECAP
+          </button>
+          <button
+            onClick={() => setActiveTab('BREAKING')}
+            className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+              activeTab === 'BREAKING'
+                ? 'bg-rose-600 text-white shadow-md'
+                : 'text-purple-300/70 hover:text-white hover:bg-purple-950/50'
+            }`}
+          >
+            BREAKING NEWS
           </button>
         </div>
       </div>
@@ -374,36 +418,105 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
             <span className="text-xs text-purple-300/60">3 mins ago</span>
           </div>
 
-          <div className="space-y-3 font-sans">
-            <div className="flex items-center gap-3 bg-[#0d0522] p-3 rounded-xl border border-purple-800/40">
-              <div className="text-2xl">🐋</div>
+          <div className="space-y-4 font-sans">
+            {/* Amount Banner */}
+            <div className="p-3.5 bg-[#0b041a] rounded-xl border border-cyan-500/30 flex items-center gap-3">
+              <div className="text-3xl">🐋</div>
               <div>
-                <span className="text-sm font-black text-white font-mono">$42,000,000 BTC Withdrawn from Binance</span>
-                <p className="text-xs text-purple-300/80">Historically this net outflow represents heavy spot accumulation.</p>
+                <h3 className="text-base font-black text-white font-mono">$42,000,000 BTC withdrawn</h3>
+                <p className="text-xs text-purple-300/70">Binance → Cold Storage Outflow Detected</p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between bg-[#12072e] p-3 rounded-xl border border-purple-800/40 font-mono">
-              <span className="text-xs text-purple-300/70">VIXY AI Confidence Shift:</span>
-              <span className="text-sm font-black text-emerald-400">72% → 79% (Bullish Delta)</span>
+            {/* Metrics Bar */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-xs">
+              <div className="bg-[#12072e] p-2.5 rounded-lg border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block uppercase">Institutional Confidence</span>
+                <span className="text-cyan-300 font-bold">████████░░ 79%</span>
+              </div>
+              <div className="bg-[#12072e] p-2.5 rounded-lg border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block uppercase">Bullish Bias</span>
+                <span className="text-emerald-400 font-bold">+7 (Strong Delta)</span>
+              </div>
+              <div className="bg-[#12072e] p-2.5 rounded-lg border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block uppercase">AI Confidence</span>
+                <span className="text-amber-300 font-bold">78%</span>
+              </div>
             </div>
 
-            <div className="bg-[#0b031c] p-4 rounded-xl border border-amber-500/50 flex flex-col md:flex-row items-center justify-between gap-3">
-              <div className="space-y-1 text-center md:text-left">
-                <span className="text-xs font-bold text-amber-300 font-mono flex items-center justify-center md:justify-start gap-1">
+            {/* FREE AI SUMMARY */}
+            <div className="bg-[#0e0624] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
+              <span className="text-xs font-bold text-purple-200 font-mono block">FREE AI Summary:</span>
+              <ul className="text-xs text-slate-300 space-y-1 pl-1">
+                <li className="flex items-center gap-2">
+                  <span className="text-cyan-400">•</span> Large exchange outflow detected
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-cyan-400">•</span> Spot accumulation increasing
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-cyan-400">•</span> Buyers absorbing liquidity
+                </li>
+              </ul>
+            </div>
+
+            {/* LOCKED ELITE BOX */}
+            <div className="p-4 rounded-xl bg-gradient-to-br from-amber-950/40 via-[#13072e] to-[#080214] border border-amber-500/50 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-amber-300 font-mono flex items-center gap-1.5">
                   <Lock className="w-3.5 h-3.5 text-amber-400" />
-                  Elite Trade Plan Dispatched
+                  🔒 Elite Members received:
                 </span>
-                <p className="text-xs text-slate-300">
-                  🔒 VIXY ELITE members received the updated strike target, execution stop, and take-profit levels.
-                </p>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                  UNLOCKED IN VIP
+                </span>
               </div>
-              {onOpenPricing && (
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono">
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Entry Zone
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Stop Loss
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Take Profit
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Position Size
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Risk %
+                </div>
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold bg-[#1a0c3b] p-2 rounded border border-purple-800/40">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Probability Score
+                </div>
+              </div>
+
+              {onOpenPricing && !isPro && (
                 <button
                   onClick={onOpenPricing}
-                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs uppercase tracking-wider whitespace-nowrap shadow-md"
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-purple-600 to-indigo-600 hover:from-amber-400 hover:to-indigo-500 text-slate-950 font-black text-xs font-mono uppercase tracking-wider shadow-lg transition-transform active:scale-95 cursor-pointer"
                 >
-                  Unlock Trade Plan
+                  [ UNLOCK ELITE AI ] →
+                </button>
+              )}
+            </div>
+
+            {/* TEASER FOOTER */}
+            <div className="p-3 bg-[#080215] rounded-xl border border-purple-900/50 text-center space-y-1 font-mono text-xs">
+              <p className="text-purple-300/80 font-bold">
+                🔒 Elite Analysis Hidden — Upgrade to unlock:
+              </p>
+              <p className="text-[11px] text-purple-400/80">
+                • Exact Entry • Exact TP • Risk Score • AI Confidence • Live Updates
+              </p>
+              {onOpenPricing && !isPro && (
+                <button
+                  onClick={onOpenPricing}
+                  className="mt-1 text-amber-300 font-bold hover:underline cursor-pointer"
+                >
+                  🚀 Join VIXY ELITE Now
                 </button>
               )}
             </div>
@@ -418,34 +531,126 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-base font-black text-indigo-300 flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo-400" />
-                📚 AI LESSON: Why Funding Rate Matters
+                🧠 AI LESSON: {lessons[activeLessonIndex].title}
               </span>
             </div>
             <span className="text-xs text-purple-300/60">Community Education</span>
           </div>
 
+          {/* Lesson Topic Selector Pills */}
+          <div className="flex flex-wrap gap-1.5 pb-2 border-b border-purple-900/40 font-mono text-xs">
+            {lessons.map((item, idx) => (
+              <button
+                key={idx}
+                onClick={() => setActiveLessonIndex(idx)}
+                className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  activeLessonIndex === idx
+                    ? 'bg-indigo-600 text-white shadow-md'
+                    : 'bg-[#12072e] text-purple-300/70 hover:text-white'
+                }`}
+              >
+                {item.title}
+              </button>
+            ))}
+          </div>
+
           <div className="space-y-3 font-sans text-xs text-slate-200">
-            <p>
-              Funding rates reflect whether longs or shorts are paying a premium to hold leveraged positions. When funding flips negative during an uptrend, retail shorts are overcrowded—historically favoring strong upside short squeezes.
-            </p>
-            <div className="bg-[#12072e] p-3 rounded-xl border border-purple-800/40 font-mono text-purple-200">
-              💡 Today perpetual funding flipped <strong>-0.014%</strong>, signaling an asymmetric long opportunity.
+            <div className="p-3 bg-[#12072e] rounded-xl border border-purple-800/40 space-y-1">
+              <span className="text-xs font-black text-indigo-300 font-mono block">Core Concept:</span>
+              <p className="text-sm font-bold text-white">{lessons[activeLessonIndex].concept}</p>
             </div>
 
-            <div className="bg-[#0a031a] p-4 rounded-xl border border-purple-500/50 space-y-2 font-mono">
+            <p className="text-xs leading-relaxed text-purple-200/90 font-sans">
+              {lessons[activeLessonIndex].body}
+            </p>
+
+            <div className="bg-[#0d0522] p-3 rounded-xl border border-purple-700/40 font-mono text-purple-200 text-xs">
+              💡 {lessons[activeLessonIndex].detail}
+            </div>
+
+            <div className="bg-[#0a031a] p-4 rounded-xl border border-amber-500/50 space-y-2 font-mono">
               <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
-                Want to see how VIXY AI incorporates funding in live trades?
+                Want to see how VIXY AI incorporates this in live trades?
               </span>
               <p className="text-xs text-slate-300 font-sans">
-                VIXY ELITE members view real-time funding rate overlays integrated directly into high-frequency scalping signals.
+                VIXY ELITE members receive automated order block heatmaps, sub-second volume delta overlays, and full execution plans.
               </p>
-              {onOpenPricing && (
+              {onOpenPricing && !isPro && (
                 <button
                   onClick={onOpenPricing}
-                  className="mt-1 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md"
+                  className="mt-1 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-extrabold text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md hover:brightness-110 cursor-pointer"
                 >
-                  View Complete Model Output in VIXY ELITE AI
+                  View Complete Model Output in VIXY ELITE AI →
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 6: 🔥 DAILY RECAP & SOCIAL PROOF */}
+      {activeTab === 'RECAP' && (
+        <div className="bg-[#070212] p-5 rounded-2xl border border-emerald-800/50 font-mono space-y-4 relative z-10">
+          <div className="flex items-center justify-between border-b border-emerald-900/40 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-black text-emerald-400 flex items-center gap-2">
+                <Flame className="w-5 h-5 text-amber-400 animate-bounce" />
+                🔥 VIXY AI DAILY RECAP
+              </span>
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold">100% AUDITED</span>
+            </div>
+            <span className="text-xs text-purple-300/60">Today's Performance</span>
+          </div>
+
+          <div className="space-y-4 font-sans">
+            {/* Accuracy Scoreboard */}
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div className="p-3 bg-[#0d0522] rounded-xl border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block font-mono uppercase">AI Calls Today</span>
+                <span className="text-xl font-black font-mono text-white">18</span>
+              </div>
+              <div className="p-3 bg-[#0d0522] rounded-xl border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block font-mono uppercase">Correct Calls</span>
+                <span className="text-xl font-black font-mono text-emerald-400">16</span>
+              </div>
+              <div className="p-3 bg-[#0d0522] rounded-xl border border-purple-800/40">
+                <span className="text-[10px] text-purple-300/60 block font-mono uppercase">Accuracy</span>
+                <span className="text-xl font-black font-mono text-amber-300">88.9%</span>
+              </div>
+            </div>
+
+            {/* Top Highlights */}
+            <div className="space-y-2 font-mono text-xs">
+              <div className="flex items-center justify-between bg-[#12072e] p-3 rounded-xl border border-purple-800/40">
+                <span className="text-purple-300/80">🚀 Largest Move:</span>
+                <span className="text-emerald-400 font-bold">BTC +3.6%</span>
+              </div>
+              <div className="flex items-center justify-between bg-[#12072e] p-3 rounded-xl border border-purple-800/40">
+                <span className="text-purple-300/80">🎯 Best Call:</span>
+                <span className="text-cyan-300 font-bold">BTC Long (+214 pips)</span>
+              </div>
+              <div className="flex items-center justify-between bg-[#12072e] p-3 rounded-xl border border-purple-800/40">
+                <span className="text-purple-300/80">🐋 Top Whale:</span>
+                <span className="text-amber-300 font-bold">$118M Coinbase Withdrawal</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-emerald-950/60 via-[#12082e] to-purple-950/60 rounded-xl border border-emerald-500/40 space-y-2 text-center md:text-left flex flex-col md:flex-row items-center justify-between gap-3 font-mono">
+              <div>
+                <span className="text-xs font-black text-emerald-300 block">
+                  ⭐ Elite Members received 5 complete trade plans today.
+                </span>
+                <p className="text-xs text-purple-200/80 font-sans">
+                  Don't miss tomorrow's early Asian session order flow signals.
+                </p>
+              </div>
+              {onOpenPricing && !isPro && (
+                <button
+                  onClick={onOpenPricing}
+                  className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider shadow-md whitespace-nowrap cursor-pointer"
+                >
+                  Unlock Tomorrow's Signals
                 </button>
               )}
             </div>

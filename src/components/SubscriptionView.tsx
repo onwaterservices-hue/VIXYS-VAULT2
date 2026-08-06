@@ -68,7 +68,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: promoCodeInput }),
       });
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : {};
       setIsValidatingPromo(false);
 
       if (res.ok && data.valid) {
@@ -192,7 +192,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         }),
       });
 
-      const data = await res.json();
+      const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : {};
       if (res.ok && data.url) {
         window.location.href = data.url;
       } else if (data.error === 'STRIPE_NOT_CONFIGURED') {

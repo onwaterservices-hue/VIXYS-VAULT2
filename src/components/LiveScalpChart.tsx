@@ -175,9 +175,14 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
     // Fetch REST Klines first
     const restUrl = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&limit=80`;
     fetch(restUrl)
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+          return res.json();
+        }
+        return null;
+      })
       .then((data) => {
-        if (isCancelled || !seriesRef.current || !Array.isArray(data)) return;
+        if (isCancelled || !seriesRef.current || !data || !Array.isArray(data)) return;
 
         const formattedCandles = data.map((d: any) => ({
           time: Math.floor(d[0] / 1000) as any,
