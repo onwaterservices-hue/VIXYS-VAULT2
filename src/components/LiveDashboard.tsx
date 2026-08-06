@@ -586,213 +586,251 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       </div>
 
       {/* PALANTIR/BLOOMBERG-GRADE EXECUTIVE DECISION DECK */}
-      <div className="bg-gradient-to-br from-[#12072b] via-[#0d0621] to-[#160a36] rounded-3xl border border-purple-500/30 p-5 sm:p-6 shadow-2xl font-mono text-purple-100 space-y-5">
+      <div className="bg-gradient-to-br from-[#12072b] via-[#0d0621] to-[#160a36] rounded-3xl border border-purple-500/40 p-5 sm:p-6 shadow-[0_0_50px_rgba(139,92,246,0.15)] font-mono text-purple-100 space-y-5">
         
         {/* 1. TOP OPERATIONAL SYSTEM HEALTH STATUS BAR */}
-        <div className="bg-[#080315] px-4 py-2.5 rounded-xl border border-purple-900/50 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
+        <div className="bg-[#080315] px-4 py-2.5 rounded-xl border border-purple-800/60 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
           <div className="flex flex-wrap items-center gap-4 text-[11px]">
-            <span className="flex items-center gap-1.5 font-bold text-cyan-300">
-              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-              MARKET LIVE <span className="text-white font-extrabold">(0.4s)</span>
+            <span className="flex items-center gap-1.5 font-black text-cyan-300">
+              <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping shrink-0" />
+              ● LIVE
             </span>
-            <span className="text-purple-400/30">•</span>
-            <span className="text-purple-300/80">MODEL RUN <strong className="text-white font-bold">0.8s AGO</strong></span>
-            <span className="text-purple-400/30">•</span>
-            <span className="text-purple-300/80">PREDICTION CYCLE <strong className="text-white font-mono">#291</strong></span>
+            <span className="text-purple-400/40">•</span>
+            <span className="text-purple-300/80">Market Feed <strong className="text-white font-mono">0.41s</strong></span>
+            <span className="text-purple-400/40">•</span>
+            <span className="text-purple-300/80">Model Updated <strong className="text-emerald-400 font-mono">0.7s ago</strong></span>
+            <span className="text-purple-400/40">•</span>
+            <span className="text-purple-300/80">Prediction <strong className="text-cyan-300 font-mono">#291</strong></span>
+            <span className="text-purple-400/40">•</span>
+            <span className="text-purple-300/80">Inference <strong className="text-white font-mono">347ms</strong></span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono text-purple-300/80">
-            <span className="text-purple-200">
-              <strong className="text-cyan-300 font-extrabold">{selectedAsset} {timeframe}</strong> • KALSHI • CONTRACT #48391 • LATENCY <strong className="text-emerald-400 font-bold">351ms</strong>
+            <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-bold text-[10px]">
+              API HEALTHY
             </span>
-            <span className="text-purple-400/30">•</span>
-            <span className="text-emerald-400 font-bold">{lastUpdateUtc}</span>
+            <span className="px-2 py-0.5 rounded bg-purple-950 border border-purple-700/50 text-cyan-300 font-bold text-[10px]">
+              EXCHANGE CONNECTED
+            </span>
+            <span className="text-purple-400/40">•</span>
+            <span className="text-emerald-400 font-bold font-mono">{lastUpdateUtc}</span>
           </div>
         </div>
 
         {/* 2. MAIN HERO DECK GRID: Center Hero Prediction + Lock Engine Checklist + AI Reasoning Engine */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
           
-          {/* CENTER HERO CARD: Primary Prediction & Qualification Progress (5 Cols) */}
-          <div className="lg:col-span-5 bg-gradient-to-b from-[#100628] to-[#070214] p-6 rounded-2xl border border-purple-500/40 shadow-2xl flex flex-col justify-between space-y-4 relative overflow-hidden group">
-            {/* Subtle Background Glow */}
-            <div className={`absolute -right-12 -top-12 w-48 h-48 rounded-full blur-3xl opacity-25 pointer-events-none ${isBullish ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+          {/* CENTER HERO CARD: Primary Prediction & Institutional Conviction Centerpiece (5 Cols) */}
+          <div className={`lg:col-span-5 bg-gradient-to-b from-[#100628] to-[#070214] p-6 rounded-2xl border ${
+            isBullish ? 'border-emerald-500/50 shadow-[0_0_40px_rgba(52,211,153,0.2)]' : 'border-rose-500/50 shadow-[0_0_40px_rgba(244,63,94,0.2)]'
+          } flex flex-col justify-between space-y-4 relative overflow-hidden group transition-all duration-500`}>
+            {/* Animated Edge Glow */}
+            <div className={`absolute -right-12 -top-12 w-56 h-56 rounded-full blur-3xl opacity-30 pointer-events-none animate-pulse ${isBullish ? 'bg-emerald-500' : 'bg-rose-500'}`} />
 
-            <div className="space-y-2">
+            <div className="space-y-3 relative z-10">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-purple-300/70 uppercase font-bold tracking-widest text-[10px] flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                  PRIMARY SIGNAL PREDICTION
+                <span className="text-purple-300/80 uppercase font-bold tracking-widest text-[10px] flex items-center gap-2">
+                  <span className={`w-2.5 h-2.5 rounded-full animate-ping ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                  INSTITUTIONAL SIGNAL CENTERPIECE
                 </span>
-                <span className="px-2 py-0.5 rounded bg-purple-900/40 text-purple-200 border border-purple-700/40 text-[10px] font-bold">
+                <span className="px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-200 border border-purple-500/40 text-[10px] font-black tracking-wider">
                   {selectedVenue} VENUE
                 </span>
               </div>
 
               {/* Huge Single Focal Prediction Title */}
               <div className="py-2">
-                <h1 className={`text-5xl sm:text-6xl font-black tracking-tight uppercase drop-shadow-[0_0_30px_rgba(52,211,153,0.3)] ${
+                <h1 className={`text-5xl sm:text-6xl font-black tracking-tight uppercase drop-shadow-[0_0_35px_rgba(139,92,246,0.5)] ${
                   isBullish ? 'text-emerald-400' : 'text-rose-400'
                 }`}>
                   BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
                 </h1>
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xs text-purple-300/80 font-sans uppercase font-medium tracking-wider">INSTITUTIONAL CONVICTION</span>
-                  <span className="text-lg font-extrabold text-white font-mono bg-purple-950/80 px-2.5 py-0.5 rounded border border-purple-700/50">
-                    {signal.confidence.toFixed(1)}% CONFIDENCE
-                  </span>
+                
+                <div className="space-y-1.5 mt-3">
+                  <div className="text-xs text-purple-300/80 font-sans uppercase font-bold tracking-wider">INSTITUTIONAL CONVICTION</div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl font-black text-white font-mono bg-purple-950/90 px-3.5 py-1 rounded-xl border border-purple-500/60 shadow-lg">
+                      {signal.confidence.toFixed(1)}%
+                    </span>
+                    <div className="flex flex-col">
+                      <div className="text-amber-400 text-sm tracking-widest">★★★★★</div>
+                      <span className="text-[10px] text-purple-300/70 uppercase font-extrabold tracking-wider">MODEL CONFIDENCE</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Qualification Progress Bar */}
-            <div className="bg-[#080315] p-3.5 rounded-xl border border-purple-900/60 space-y-2 font-mono">
+            {/* QUALIFICATION PROGRESS BAR - Segmented & Live */}
+            <div className="bg-[#080315] p-4 rounded-xl border border-purple-800/60 space-y-3 font-mono relative z-10">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-purple-300 font-bold uppercase text-[11px] tracking-wide">SIGNAL QUALIFICATION</span>
-                <span className={`font-black text-xs px-2 py-0.5 rounded ${
-                  lockEvaluation.qualified ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' : 'bg-amber-950 text-amber-300 border border-amber-500/50'
+                <span className="text-cyan-300 font-extrabold uppercase text-[11px] tracking-wide flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> QUALIFICATION BAR
+                </span>
+                <span className={`font-black text-xs px-2.5 py-0.5 rounded-md border ${
+                  lockEvaluation.qualified 
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60 shadow-[0_0_10px_rgba(52,211,153,0.4)]' 
+                    : 'bg-amber-950 text-amber-300 border-amber-500/60 animate-pulse'
                 }`}>
-                  {lockEvaluation.qualified ? '100% LOCKED' : `${Math.min(95, Math.round((Object.values(lockEvaluation.checks).filter(Boolean).length / 6) * 100))}%`}
+                  {lockEvaluation.qualified ? '100% LOCKED' : `${Math.min(95, Math.round((Object.values(lockEvaluation.checks).filter(Boolean).length / 6) * 100))}% OVERALL QUALIFICATION`}
                 </span>
               </div>
 
-              <div className="w-full bg-[#13092b] h-2.5 rounded-full overflow-hidden border border-purple-900/50 p-0.5">
+              {/* Segmented Progress Bars */}
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex justify-between items-center text-purple-200">
+                  <span>Confidence ({signal.confidence.toFixed(1)}%)</span>
+                  <span className="font-mono text-cyan-300">██████░░░</span>
+                </div>
+                <div className="flex justify-between items-center text-purple-200">
+                  <span>Edge (+{signal.edgePct.toFixed(1)}%)</span>
+                  <span className="font-mono text-cyan-300">████░░░░</span>
+                </div>
+                <div className="flex justify-between items-center text-purple-200">
+                  <span>Persistence ({lockEvaluation.persistenceSeconds}/15s)</span>
+                  <span className="font-mono text-amber-400">██░░░░░░</span>
+                </div>
+              </div>
+
+              <div className="w-full bg-[#13092b] h-3 rounded-full overflow-hidden border border-purple-800/60 p-0.5">
                 <div 
                   className={`h-full rounded-full transition-all duration-700 ease-out ${
                     lockEvaluation.qualified 
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]' 
+                      ? 'bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-[0_0_15px_rgba(52,211,153,0.8)]' 
                       : 'bg-gradient-to-r from-amber-500 to-orange-400'
                   }`}
                   style={{ width: `${lockEvaluation.qualified ? 100 : Math.min(95, Math.max(15, Math.round((Object.values(lockEvaluation.checks).filter(Boolean).length / 6) * 100)))}%` }}
                 />
               </div>
-
-              {!lockEvaluation.qualified && (
-                <div className="text-[10px] text-amber-300/80 font-sans flex items-center gap-1 mt-1">
-                  <span className="font-bold text-amber-400">WAITING FOR:</span>
-                  <span>
-                    {!lockEvaluation.checks.confidence && '• Confidence '}
-                    {!lockEvaluation.checks.edge && '• Min Edge '}
-                    {!lockEvaluation.checks.persistence && '• Persistence '}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
 
           {/* LOCK ENGINE CHECKLIST (3 Cols) */}
-          <div className="lg:col-span-3 bg-[#0a0418] p-4 rounded-2xl border border-purple-900/60 shadow-xl flex flex-col justify-between space-y-2.5">
-            <div className="flex items-center justify-between border-b border-purple-900/40 pb-2 text-xs font-bold text-purple-200">
-              <span className="flex items-center gap-1.5 text-cyan-300">
+          <div className="lg:col-span-3 bg-[#0a0418] p-4.5 rounded-2xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5 text-xs font-bold text-purple-200">
+              <span className="flex items-center gap-1.5 text-cyan-300 font-extrabold uppercase tracking-wider">
                 <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" /> LOCK ENGINE
               </span>
-              <span className="text-[10px] text-purple-300/60 font-mono">6 CHECKS</span>
+              <span className="text-[10px] bg-purple-900/60 text-purple-300 px-2 py-0.5 rounded border border-purple-700/50 font-mono">CHECKLIST</span>
             </div>
 
-            <div className="space-y-1.5 text-xs font-mono">
-              {/* Freshness */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.freshness ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
-              }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.freshness ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />}
-                  Freshness
-                </span>
-                <span className="font-extrabold text-white">0.4s</span>
-              </div>
-
-              {/* Liquidity */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.liquidity ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
-              }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.liquidity ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
-                  Liquidity
-                </span>
-                <span className="font-extrabold text-white">HIGH</span>
-              </div>
-
-              {/* Spread */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.spread ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
-              }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.spread ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
-                  Spread
-                </span>
-                <span className="font-extrabold text-white">0.18%</span>
-              </div>
-
+            <div className="space-y-2 text-xs font-mono">
               {/* Confidence */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.confidence ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+              <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                lockEvaluation.checks.confidence 
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-amber-950/40 border-amber-500/50 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
               }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.confidence ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
+                <span className="flex items-center gap-2 font-bold">
+                  {lockEvaluation.checks.confidence 
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 animate-bounce" /> 
+                    : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />}
                   Confidence
                 </span>
-                <span className="font-extrabold text-white">{signal.confidence.toFixed(1)}% <span className="text-[10px] text-purple-300/50 font-normal">/ 75%</span></span>
+                <span className="font-extrabold">{signal.confidence.toFixed(1)}% <span className="text-[10px] text-purple-300/60">/ PASS</span></span>
               </div>
 
               {/* Edge */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.edge ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+              <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                lockEvaluation.checks.edge 
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-amber-950/40 border-amber-500/50 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
               }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.edge ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
-                  Min Edge
+                <span className="flex items-center gap-2 font-bold">
+                  {lockEvaluation.checks.edge 
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 animate-bounce" /> 
+                    : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />}
+                  Edge
                 </span>
-                <span className="font-extrabold text-white">+{signal.edgePct.toFixed(1)}% <span className="text-[10px] text-purple-300/50 font-normal">/ 3%</span></span>
+                <span className="font-extrabold">+{signal.edgePct.toFixed(1)}% <span className="text-[10px] text-purple-300/60">/ PASS</span></span>
+              </div>
+
+              {/* Spread */}
+              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
+                <span className="flex items-center gap-2 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Spread
+                </span>
+                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
+              </div>
+
+              {/* Liquidity */}
+              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
+                <span className="flex items-center gap-2 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Liquidity
+                </span>
+                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
+              </div>
+
+              {/* Freshness */}
+              <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
+                <span className="flex items-center gap-2 font-bold">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Freshness
+                </span>
+                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
               </div>
 
               {/* Persistence */}
-              <div className={`p-2 rounded-xl border flex items-center justify-between ${
-                lockEvaluation.checks.persistence ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+              <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
+                lockEvaluation.checks.persistence 
+                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
+                  : 'bg-amber-950/40 border-amber-500/50 text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]'
               }`}>
-                <span className="flex items-center gap-1.5 font-bold">
-                  {lockEvaluation.checks.persistence ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <Clock className="w-3.5 h-3.5 text-amber-400" />}
+                <span className="flex items-center gap-2 font-bold">
+                  {lockEvaluation.checks.persistence 
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> 
+                    : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />}
                   Persistence
                 </span>
-                <span className="font-extrabold text-white">{lockEvaluation.persistenceSeconds} / 15s</span>
+                <span className="font-extrabold">{lockEvaluation.persistenceSeconds} / 15 <span className="text-[10px] text-amber-400 font-normal">Running...</span></span>
               </div>
             </div>
           </div>
 
-          {/* AI REASONING & THINKING FEED (4 Cols) */}
-          <div className="lg:col-span-4 bg-[#070312] p-4 rounded-2xl border border-purple-900/60 shadow-xl flex flex-col justify-between space-y-3">
-            <div className="flex items-center justify-between border-b border-purple-900/40 pb-2 text-xs font-bold">
-              <span className="flex items-center gap-1.5 text-cyan-300 uppercase tracking-wider">
-                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" /> AI REASONING ENGINE
+          {/* AI REASONING TIMELINE (4 Cols) */}
+          <div className="lg:col-span-4 bg-[#070312] p-4.5 rounded-2xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
+            <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5 text-xs font-bold">
+              <span className="flex items-center gap-1.5 text-cyan-300 uppercase tracking-wider font-extrabold">
+                <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" /> AI REASONING TIMELINE
               </span>
-              <span className="text-[10px] text-emerald-400 font-mono font-extrabold px-2 py-0.5 rounded bg-emerald-950 border border-emerald-800/40">
-                LIVE LOG
+              <span className="text-[10px] text-emerald-400 font-mono font-extrabold px-2.5 py-0.5 rounded bg-emerald-950 border border-emerald-800/50">
+                LIVE
               </span>
             </div>
 
-            <div className="space-y-2 text-xs font-mono text-purple-200/90 leading-relaxed">
-              <div className="p-2.5 rounded-xl bg-[#0d0621] border border-purple-800/30 space-y-1">
-                <div className="text-[10px] text-purple-400/80 font-bold flex justify-between">
-                  <span>{lastUpdateUtc}</span>
-                  <span className="text-cyan-300">BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'} MAINTAINED</span>
-                </div>
-                <p className="text-[11px] text-purple-200 font-sans">
-                  Selling pressure exceeds buying pressure across monitored venues. VWAP rejection confirmed at $64,383.
-                </p>
+            {/* Step-by-step Timeline Items */}
+            <div className="space-y-2 text-xs font-mono text-purple-200/90">
+              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
+                <span className="text-purple-400 font-mono">06:11:24</span>
+                <span className="text-purple-100 font-bold">Liquidity confirmed</span>
+                <span className="text-emerald-400 font-bold">✓</span>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#0b051c] border border-purple-900/40 space-y-1">
-                <div className="text-[10px] text-amber-300 font-bold">STATUS & LOCK PROBABILITY</div>
-                <p className="text-[11px] text-purple-300/80 font-sans">
-                  {lockEvaluation.qualified
-                    ? 'All 6 institutional criteria satisfied. Signal locked for live execution.'
-                    : 'Signal remains unlocked pending confidence threshold and persistence timer completion.'}
-                </p>
-                <div className="pt-1 flex items-center justify-between text-[10px]">
-                  <span className="text-purple-400">Lock Probability:</span>
-                  <span className="text-amber-300 font-black uppercase bg-amber-950/80 px-2 py-0.5 rounded border border-amber-800/40">
-                    MEDIUM (63%)
-                  </span>
+              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
+                <span className="text-purple-400 font-mono">06:11:25</span>
+                <span className="text-purple-100 font-bold">Order imbalance detected</span>
+                <span className="text-emerald-400 font-bold">✓</span>
+              </div>
+
+              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
+                <span className="text-purple-400 font-mono">06:11:26</span>
+                <span className="text-purple-100 font-bold">Momentum weakening</span>
+                <span className="text-emerald-400 font-bold">✓</span>
+              </div>
+
+              <div className="p-2 rounded-xl bg-[#0d0621] border border-amber-500/40 flex items-center justify-between text-[11px] animate-pulse">
+                <span className="text-amber-400 font-mono">06:11:27</span>
+                <span className="text-amber-200 font-bold">Waiting confidence</span>
+                <span className="text-amber-400 font-bold animate-spin">...</span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-[#0b051c] border border-purple-900/50 space-y-1 mt-2">
+                <div className="text-[10px] text-amber-300 font-bold flex justify-between">
+                  <span>AI MODEL EVALUATION</span>
+                  <span className="text-cyan-300">347ms INFERENCE</span>
                 </div>
+                <p className="text-[11px] text-purple-200 font-sans leading-relaxed">
+                  {signal.reasoning}
+                </p>
               </div>
             </div>
           </div>
@@ -809,47 +847,67 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         />
       </div>
 
-        {/* Live Entry Advisor + Locked Call Position Guide */}
-        <div className="bg-[#080315] p-5 rounded-2xl border border-purple-900/50 space-y-4 shadow-md">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
+        {/* Live Entry Advisor + Institutional Call Position Guide */}
+        <div className="bg-[#080315] p-5 rounded-2xl border border-purple-800/60 space-y-4 shadow-xl">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-purple-900/50 pb-3">
             <span className="text-cyan-300 font-black text-xs sm:text-sm tracking-wide flex items-center gap-2">
-              <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
-              LIVE ENTRY ADVISOR + LOCKED CALL POSITION GUIDE / DIRECTION STAYS FROZEN
+              <Zap className="w-4.5 h-4.5 text-cyan-400 shrink-0 animate-pulse" />
+              INSTITUTIONAL ENTRY ADVISOR & POSITION GUIDE
             </span>
-            <span className="px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-black uppercase tracking-wider shadow-sm">
-              WAITING FOR LOCK
+            <span className={`px-3 py-1 rounded-xl text-xs font-black uppercase tracking-wider shadow-md ${
+              lockEvaluation.qualified 
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' 
+                : 'bg-amber-500/20 text-amber-300 border border-amber-500/50 animate-pulse'
+            }`}>
+              {lockEvaluation.qualified ? 'QUALIFIED ENTRY READY' : 'WAITING FOR LOCK'}
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-            {/* NEW ENTRY LANE -- HIGHLIGHTED & LARGER AS REQUESTED */}
-            <div className="bg-[#120726] p-4 rounded-2xl border border-amber-500/40 shadow-lg space-y-1.5 hover:border-amber-400/60 transition-all">
-              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">NEW ENTRY LANE</span>
-              <div className="pt-0.5">
-                <span className="text-sm sm:text-base font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-3 py-1 rounded-xl inline-block shadow-md tracking-wider">
-                  WAIT FOR VALUE
-                </span>
-              </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
+            {/* RECOMMENDED ENTRY */}
+            <div className="bg-[#120726] p-3.5 rounded-2xl border border-amber-500/50 shadow-lg space-y-1 hover:border-amber-400/80 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">RECOMMENDED ENTRY</span>
+              <span className="text-sm font-black text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 rounded-lg inline-block tracking-wider">
+                {lockEvaluation.qualified ? 'QUALIFIED ENTRY' : 'WAIT'}
+              </span>
             </div>
 
-            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
-              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">LIVE ASK</span>
-              <span className="text-base sm:text-lg font-black text-white block">$0.54 YES</span>
+            {/* REASON */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">REASON</span>
+              <span className="text-xs font-bold text-purple-200 block truncate">
+                {lockEvaluation.qualified ? 'All criteria satisfied' : 'Confidence below threshold'}
+              </span>
             </div>
 
-            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
-              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">PAYOUT</span>
-              <span className="text-base sm:text-lg font-black text-emerald-400 block">1.85x</span>
+            {/* ESTIMATED LOCK */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">ESTIMATED LOCK</span>
+              <span className="text-sm font-black text-cyan-300 block font-mono">11 seconds</span>
             </div>
 
-            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
-              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">SAFE EDGE</span>
-              <span className="text-base sm:text-lg font-black text-cyan-300 block">+{signal.edgePct}%</span>
+            {/* CURRENT BID */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">CURRENT BID</span>
+              <span className="text-sm font-black text-white block font-mono">$0.54 YES</span>
             </div>
 
-            <div className="bg-[#100624] p-4 rounded-2xl border border-purple-900/40 space-y-1 hover:border-purple-500/40 transition-all">
-              <span className="text-[11px] text-purple-300/70 block font-bold tracking-wider uppercase">EXECUTABLE EXIT BID</span>
-              <span className="text-base sm:text-lg font-black text-amber-400 block">$0.52 YES</span>
+            {/* IDEAL BID */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">IDEAL BID</span>
+              <span className="text-sm font-black text-emerald-400 block font-mono">$0.48 YES</span>
+            </div>
+
+            {/* RISK */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">RISK</span>
+              <span className="text-sm font-black text-emerald-400 block uppercase tracking-wider">LOW</span>
+            </div>
+
+            {/* REWARD */}
+            <div className="bg-[#100624] p-3.5 rounded-2xl border border-purple-900/50 space-y-1 hover:border-purple-500/40 transition-all">
+              <span className="text-[10px] text-purple-300/70 block font-bold tracking-wider uppercase">REWARD</span>
+              <span className="text-sm font-black text-cyan-300 block font-mono">1.86x</span>
             </div>
           </div>
         </div>

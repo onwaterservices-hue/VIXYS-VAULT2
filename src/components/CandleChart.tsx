@@ -629,36 +629,61 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </g>
       )}
 
-      {/* Target Strike Line */}
+      {/* Target Strike Line - Neon Glowing Institutional Banner */}
       {activeSignal.targetPrice && (
-        <g>
+        <g className="animate-pulse">
+          {/* Glowing Aura Backdrop Line */}
           <line
             x1={marginLeft}
             y1={y(activeSignal.targetPrice)}
             x2={marginLeft + plotWidth}
             y2={y(activeSignal.targetPrice)}
-            stroke={THEME.amber}
-            strokeWidth="1.5"
+            stroke="#c084fc"
+            strokeWidth="6"
+            strokeOpacity="0.3"
+            filter="url(#glow-purple)"
+          />
+          {/* Solid Glowing Core Line */}
+          <line
+            x1={marginLeft}
+            y1={y(activeSignal.targetPrice)}
+            x2={marginLeft + plotWidth}
+            y2={y(activeSignal.targetPrice)}
+            stroke="#a855f7"
+            strokeWidth="2"
             strokeDasharray="6 3"
           />
+          {/* Strike Price Badge Tag */}
           <rect
             x={marginLeft + plotWidth + 4}
-            y={y(activeSignal.targetPrice) - 9}
-            width="70"
-            height="18"
-            rx="4"
-            fill="#261c08"
-            stroke={THEME.amber}
-            strokeWidth="1"
+            y={y(activeSignal.targetPrice) - 12}
+            width="85"
+            height="24"
+            rx="6"
+            fill="#1e0c38"
+            stroke="#c084fc"
+            strokeWidth="1.5"
+            filter="url(#glow-purple)"
           />
           <text
-            x={marginLeft + plotWidth + 9}
-            y={y(activeSignal.targetPrice) + 3}
-            fill={THEME.amber}
+            x={marginLeft + plotWidth + 10}
+            y={y(activeSignal.targetPrice) - 1}
+            fill="#c084fc"
             fontSize="9"
-            fontWeight="bold"
+            fontWeight="900"
+            className="font-mono tracking-wider"
           >
-            STRIKE ${activeSignal.targetPrice.toFixed(0)}
+            STRIKE ${activeSignal.targetPrice.toFixed(1)}
+          </text>
+          <text
+            x={marginLeft + plotWidth + 10}
+            y={y(activeSignal.targetPrice) + 8}
+            fill="#34d399"
+            fontSize="7.5"
+            fontWeight="bold"
+            className="font-mono"
+          >
+            ▲ Target Above (+0.21%)
           </text>
         </g>
       )}
