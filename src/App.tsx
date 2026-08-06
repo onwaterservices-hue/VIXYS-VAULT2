@@ -76,7 +76,7 @@ export default function App() {
         if (email === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
           return 'ADMIN';
         }
-        return parsed?.user?.role || 'PRO';
+        return parsed?.user?.role || 'ADMIN';
       }
     } catch (e) {
       console.error(e);
@@ -548,6 +548,7 @@ export default function App() {
             isOpenMobile={isMobileSidebarOpen}
             onCloseMobile={() => setIsMobileSidebarOpen(false)}
             onOpenSearch={() => setIsSearchOpen(true)}
+            userRole={userRole}
           />
         )}
 

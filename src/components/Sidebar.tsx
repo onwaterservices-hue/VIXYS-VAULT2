@@ -39,6 +39,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSearch: () => void;
+  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,6 +48,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   onOpenSearch,
+  userRole = 'ADMIN',
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('vixy_sidebar_collapsed') === 'true';
@@ -112,8 +114,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'about', label: 'About Vixy Vault', icon: Info },
         { id: 'terms', label: 'Terms of Service', icon: FileText },
         { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck },
-        { id: 'risk', label: 'Risk Disclosure', icon: AlertTriangle, badge: 'NOTICE' },
-        { id: 'refunds', label: 'Refund Policy', icon: CreditCard },
+        { id: 'risk', label: 'Risk', icon: AlertTriangle, badge: 'NOTICE' },
+        { id: 'refunds', label: 'Refunds', icon: CreditCard },
       ],
     },
   ];
@@ -269,20 +271,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           ))}
 
-          {/* Institutional Badge Card - Positioned Directly Below Settings */}
+          {/* Institutional Badge & Sales Funnel Conversion Card */}
           {!isCollapsed ? (
-            <div className="pt-3 border-t border-purple-900/40 mt-3">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-950/60 via-[#12082a] to-[#090417] border border-purple-500/30 space-y-2 shadow-lg shadow-purple-950/50">
-                <div className="flex items-center gap-2 text-xs font-mono font-black text-purple-200">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
-                  </span>
-                  <span className="tracking-wide uppercase">VIXY QUANT v3.4</span>
+            <div className="pt-3 border-t border-purple-900/40 mt-3 space-y-2">
+              {userRole === 'ADMIN' || userRole === 'PRO' ? (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-950/80 via-[#14082e] to-[#0a0319] border border-emerald-500/40 space-y-1.5 shadow-lg shadow-purple-950/50">
+                  <div className="flex items-center justify-between text-xs font-mono font-black text-emerald-300">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      {userRole === 'ADMIN' ? 'MASTER ADMIN' : 'VIXY ELITE PRO'}
+                    </span>
+                    <span className="text-[9px] bg-emerald-500/20 px-1.5 py-0.2 rounded text-emerald-300 border border-emerald-500/30">ALL UNLOCKED</span>
+                  </div>
+                  <p className="text-[11px] text-purple-200/90 leading-snug font-sans font-bold flex items-center gap-1">
+                    ⚡ Complete Terminal, Models & Bot Access Active
+                  </p>
                 </div>
-                <p className="text-[11px] text-purple-300/80 leading-snug font-sans">
-                  AI Probability Engine connected to 12 top liquidity bridges.
-                </p>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-gradient-to-br from-amber-950/40 via-[#14082e] to-[#0a0319] border border-amber-500/40 space-y-2 shadow-lg shadow-purple-950/50">
+                  <div className="flex items-center justify-between text-xs font-mono font-black text-amber-300">
+                    <span className="flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      VIXY ELITE AI
+                    </span>
+                    <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.2 rounded text-amber-200 border border-amber-500/30">PRO</span>
+                  </div>
+                  <p className="text-[11px] text-purple-200/90 leading-snug font-sans">
+                    Unlock complete entry prices, stop-loss targets, profit levels & AI heatmaps.
+                  </p>
+                  <button
+                    onClick={() => setActiveTab('pricing')}
+                    className="w-full py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-[11px] font-mono uppercase tracking-wider shadow-md transition-transform active:scale-95 cursor-pointer"
+                  >
+                    Upgrade to Elite →
+                  </button>
+                </div>
+              )}
+
+              <div className="px-1 flex items-center justify-between text-[10px] text-purple-400/60 font-mono">
+                <span>VIXY AI v3.4</span>
+                <span className="text-emerald-400 font-bold">24 Models Active</span>
               </div>
             </div>
           ) : (

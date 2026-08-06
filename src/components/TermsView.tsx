@@ -140,7 +140,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
 
         {/* Contact info footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>Questions regarding Terms? Contact: <span className="text-white">legal@vixysvault.com</span></div>
+          <div>Questions regarding Terms? Contact: <span className="text-white">vixyvault0@gmail.com</span></div>
           <div>Last Updated: August 5, 2026</div>
         </div>
 

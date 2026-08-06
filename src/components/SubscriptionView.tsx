@@ -268,16 +268,16 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <span>THE GOLDEN RULE OF QUANTITATIVE EDGE</span>
           </div>
 
-          <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black font-mono tracking-tight leading-[1.05] text-white">
-            "YOU NEED TO SPEND MONEY
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight leading-[1.1] text-white">
+            TRADE PROBABILITY,
             <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-white to-violet-200 drop-shadow-[0_4px_12px_rgba(168,85,247,0.4)]">
-              TO MAKE MONEY"
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-white to-cyan-300 drop-shadow-[0_4px_12px_rgba(52,211,153,0.3)]">
+              NOT EMOTION.
             </span>
           </h1>
 
           <p className="text-purple-200/90 text-sm sm:text-base font-sans max-w-2xl mx-auto leading-relaxed">
-            Gain an insurmountable mathematical edge on Kalshi & Polymarket. Institutional traders don't gamble on intuition—they invest in real-time L2 net taker order flow, sub-second microstructure feeds, and probability intelligence.
+            Institutional-grade AI monitors live order flow, liquidity shifts, and prediction market pricing to surface high-conviction opportunities before the candle closes.
           </p>
 
           {/* 3-Hour Trial Live Banner in Quote Box */}

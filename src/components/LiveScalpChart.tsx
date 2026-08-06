@@ -197,8 +197,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
           setPriceChange(((last.close - prev.close) / prev.close) * 100);
         }
       })
-      .catch((err) => {
-        console.warn('Failed to load Binance REST klines', err);
+      .catch(() => {
         if (!isCancelled) setConnectionStatus('LIVE (SIM)');
       });
 
@@ -299,7 +298,17 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
     return () => {
       isCancelled = true;
       clearInterval(decayInterval);
-      ws.close();
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => {
+          try { ws.close(); } catch (_) {}
+        };
+      }
     };
   }, [binanceSymbol, klineInterval]);
 

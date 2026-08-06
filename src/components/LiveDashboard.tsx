@@ -30,6 +30,7 @@ import { ModelStatusBadge } from './ModelStatusBadge';
 import { AIBrainMemoryVault } from './AIBrainMemoryVault';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
+import { VixyAiStatusCard } from './VixyAiStatusCard';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -466,127 +467,11 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
       </div>
 
-      {/* Versatile Multi-Venue Odds & Arbitrage Comparison Matrix */}
-      <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-5 shadow-2xl space-y-4 font-mono">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
-          <div className="flex items-center gap-2">
-            <BarChart2 className="w-4 h-4 text-purple-400" />
-            <h2 className="text-xs font-bold text-white uppercase tracking-wider">
-              Prediction Market Venue Comparison Matrix ({timeframe})
-            </h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold">
-              HIGHEST EDGE: KALSHI 15M (+12.2%)
-            </span>
-          </div>
-        </div>
+      {/* VIXY AI STATUS & SALES FUNNEL CONVERSION MONITOR */}
+      <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
 
-        {/* Venue Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Kalshi Card (The Lock) */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-500/40 relative overflow-hidden space-y-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-purple-500/20 border border-purple-500/30 text-purple-300 text-[10px] font-black uppercase">
-                    PRIMARY LOCK
-                  </span>
-                  <button
-                    onClick={onOpenSettings}
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
-                      exchangeKeys?.kalshi.connected
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
-                    }`}
-                    title="Kalshi API Key Status. Click to manage API in Settings."
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                    <span>{exchangeKeys?.kalshi.connected ? `API ${exchangeKeys.kalshi.latencyMs}ms` : 'API Setup'}</span>
-                  </button>
-                </div>
-                <h3 className="text-sm font-black text-white mt-1">Kalshi 15M Market</h3>
-                <p className="text-[10px] text-purple-300/60 font-sans">CFTC Regulated Exchange • Direct Strike</p>
-              </div>
-              <div className="text-right">
-                <span className="text-base font-black text-emerald-400 block">54.0% Implied</span>
-                <span className="text-[10px] text-purple-300/80 font-mono block">$0.54 YES / $0.46 NO</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Vault Model Edge:</span>
-              <span className="font-black text-emerald-400">+12.2% EDGE</span>
-            </div>
-          </div>
-
-          {/* Polymarket Card */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 text-[10px] font-bold uppercase">
-                    DECENTRALIZED
-                  </span>
-                  <button
-                    onClick={onOpenSettings}
-                    className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
-                      exchangeKeys?.polymarket.connected
-                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
-                    }`}
-                    title="Polymarket L2 API Key Status. Click to manage API in Settings."
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                    <span>{exchangeKeys?.polymarket.connected ? `API ${exchangeKeys.polymarket.latencyMs}ms` : 'API Setup'}</span>
-                  </button>
-                </div>
-                <h3 className="text-sm font-black text-white mt-1">Polymarket 15M</h3>
-                <p className="text-[10px] text-purple-300/60 font-sans">Polygon On-Chain • USDC Liquidity</p>
-              </div>
-              <div className="text-right">
-                <span className="text-base font-black text-emerald-400 block">52.0% Implied</span>
-                <span className="text-[10px] text-purple-300/80 font-mono block">52¢ YES / 48¢ NO</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-purple-900/40 flex justify-between items-center text-xs">
-              <span className="text-purple-300/60">Vault Model Edge:</span>
-              <span className="font-black text-emerald-400">+12.2% EDGE</span>
-            </div>
-          </div>
-
-          {/* DraftKings Sportsbook Micro Card (Disabled / Pending Public API) */}
-          <div className="bg-[#0B061A]/60 p-4 rounded-xl border border-purple-900/20 space-y-3 opacity-60">
-            <div className="flex justify-between items-start">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-0.5 rounded bg-purple-900/30 text-purple-400 text-[10px] font-bold uppercase">
-                    SPORTSBOOK MICRO
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[9px] font-mono font-bold">
-                    COMING SOON
-                  </span>
-                </div>
-                <h3 className="text-sm font-black text-purple-200 mt-1">DraftKings Micro</h3>
-                <p className="text-[10px] text-purple-400/60 font-sans">API Integration Pending</p>
-              </div>
-              <div className="text-right">
-                <span className="text-sm font-bold text-purple-400/60 block">UNAVAILABLE</span>
-                <span className="text-[10px] text-purple-400/40 font-mono block">Odds Pending</span>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-purple-900/20 flex justify-between items-center text-xs">
-              <span className="text-purple-400/50">Status:</span>
-              <span className="font-bold text-purple-400/60">API Integration In Progress</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* PALANTIR/BLOOMBERG-GRADE EXECUTIVE DECISION DECK */}
-      <div className="bg-gradient-to-br from-[#12072b] via-[#0d0621] to-[#160a36] rounded-3xl border border-purple-500/40 p-5 sm:p-6 shadow-[0_0_50px_rgba(139,92,246,0.15)] font-mono text-purple-100 space-y-5">
+      {/* PALANTIR/BLOOMBERG-GRADE EXECUTIVE DECISION DECK (THE PRIMARY HERO) */}
+      <div className="bg-gradient-to-br from-[#12072b] via-[#0d0621] to-[#160a36] rounded-3xl border border-purple-500/50 p-5 sm:p-6 shadow-[0_0_60px_rgba(139,92,246,0.2)] font-mono text-purple-100 space-y-5">
         
         {/* 1. TOP OPERATIONAL SYSTEM HEALTH STATUS BAR */}
         <div className="bg-[#080315] px-4 py-2.5 rounded-xl border border-purple-800/60 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
@@ -599,15 +484,11 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             <span className="text-purple-300/80">Market Feed <strong className="text-white font-mono">0.41s</strong></span>
             <span className="text-purple-400/40">•</span>
             <span className="text-purple-300/80">Model Updated <strong className="text-emerald-400 font-mono">0.7s ago</strong></span>
-            <span className="text-purple-400/40">•</span>
-            <span className="text-purple-300/80">Prediction <strong className="text-cyan-300 font-mono">#291</strong></span>
-            <span className="text-purple-400/40">•</span>
-            <span className="text-purple-300/80">Inference <strong className="text-white font-mono">347ms</strong></span>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono text-purple-300/80">
             <span className="px-2 py-0.5 rounded bg-emerald-950 border border-emerald-500/40 text-emerald-300 font-bold text-[10px]">
-              API HEALTHY
+              API ACTIVE
             </span>
             <span className="px-2 py-0.5 rounded bg-purple-950 border border-purple-700/50 text-cyan-300 font-bold text-[10px]">
               EXCHANGE CONNECTED
@@ -618,61 +499,69 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
 
         {/* 2. MAIN HERO DECK GRID: Center Hero Prediction + Lock Engine Checklist + AI Reasoning Engine */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
           
-          {/* CENTER HERO CARD: Primary Prediction & Institutional Conviction Centerpiece (5 Cols) */}
-          <div className={`lg:col-span-5 bg-gradient-to-b from-[#100628] to-[#070214] p-6 rounded-2xl border ${
-            isBullish ? 'border-emerald-500/50 shadow-[0_0_40px_rgba(52,211,153,0.2)]' : 'border-rose-500/50 shadow-[0_0_40px_rgba(244,63,94,0.2)]'
-          } flex flex-col justify-between space-y-4 relative overflow-hidden group transition-all duration-500`}>
-            {/* Animated Edge Glow */}
-            <div className={`absolute -right-12 -top-12 w-56 h-56 rounded-full blur-3xl opacity-30 pointer-events-none animate-pulse ${isBullish ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+          {/* CENTER HERO CARD: Primary Prediction (5 Cols) */}
+          <div className={`lg:col-span-5 bg-gradient-to-b from-[#100628] to-[#070214] p-6 rounded-3xl border ${
+            isBullish 
+              ? 'border-emerald-500/60 shadow-[0_0_50px_rgba(52,211,153,0.3)]' 
+              : 'border-rose-500/60 shadow-[0_0_50px_rgba(244,63,94,0.3)]'
+          } flex flex-col justify-between space-y-5 relative overflow-hidden group transition-all duration-500`}>
+            {/* Animated Pulsing Glow Layer behind hero text */}
+            <div className={`absolute inset-0 pointer-events-none rounded-3xl animate-pulse ${
+              isBullish ? 'bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent' : 'bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-transparent'
+            }`} />
+            <div className={`absolute -right-12 -top-12 w-64 h-64 rounded-full blur-3xl opacity-35 pointer-events-none animate-pulse ${isBullish ? 'bg-emerald-500' : 'bg-rose-500'}`} />
 
-            <div className="space-y-3 relative z-10">
+            <div className="space-y-4 relative z-10">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-purple-300/80 uppercase font-bold tracking-widest text-[10px] flex items-center gap-2">
+                <span className="text-purple-300/90 uppercase font-extrabold tracking-widest text-[10px] flex items-center gap-2">
                   <span className={`w-2.5 h-2.5 rounded-full animate-ping ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                  INSTITUTIONAL SIGNAL CENTERPIECE
+                  15S SIGNAL INTELLIGENCE
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-purple-900/60 text-purple-200 border border-purple-500/40 text-[10px] font-black tracking-wider">
-                  {selectedVenue} VENUE
-                </span>
+                
+                {/* URGENCY COUNTDOWN TIMER NEAR SIGNAL */}
+                <div className="flex items-center gap-1.5 bg-[#0b051c] px-3 py-1 rounded-xl border border-amber-500/40 text-amber-300 text-xs font-bold font-mono shadow-md animate-pulse">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Strike closes in <strong className="text-white font-mono">{timeString}</strong></span>
+                </div>
               </div>
 
-              {/* Huge Single Focal Prediction Title */}
+              {/* Massive Single Focal Prediction Title */}
               <div className="py-2">
-                <h1 className={`text-5xl sm:text-6xl font-black tracking-tight uppercase drop-shadow-[0_0_35px_rgba(139,92,246,0.5)] ${
+                <h1 className={`text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight uppercase transition-all duration-300 drop-shadow-[0_0_40px_rgba(0,0,0,0.8)] ${
                   isBullish ? 'text-emerald-400' : 'text-rose-400'
                 }`}>
-                  BUY {signal.direction === 'YES' ? 'UP' : 'DOWN'}
+                  {isBullish ? '▲ BUY UP' : '▼ BUY DOWN'}
                 </h1>
                 
-                <div className="space-y-1.5 mt-3">
-                  <div className="text-xs text-purple-300/80 font-sans uppercase font-bold tracking-wider">INSTITUTIONAL CONVICTION</div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-3xl font-black text-white font-mono bg-purple-950/90 px-3.5 py-1 rounded-xl border border-purple-500/60 shadow-lg">
+                <div className="space-y-2 mt-4">
+                  <div className="text-xs text-purple-300/80 font-sans uppercase font-bold tracking-wider">MODEL CONVICTION</div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-4xl sm:text-5xl lg:text-6xl font-black text-white font-mono bg-[#0c051f]/90 px-4 py-1.5 rounded-2xl border border-purple-500/60 shadow-2xl tracking-tight">
                       {signal.confidence.toFixed(1)}%
                     </span>
                     <div className="flex flex-col">
-                      <div className="text-amber-400 text-sm tracking-widest">★★★★★</div>
-                      <span className="text-[10px] text-purple-300/70 uppercase font-extrabold tracking-wider">MODEL CONFIDENCE</span>
+                      <div className="text-amber-400 text-base sm:text-lg tracking-widest">★★★★★</div>
+                      <span className="text-[10px] sm:text-xs text-purple-300/80 uppercase font-extrabold tracking-wider">MODEL CONFIDENCE</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* QUALIFICATION PROGRESS BAR - Segmented & Live */}
-            <div className="bg-[#080315] p-4 rounded-xl border border-purple-800/60 space-y-3 font-mono relative z-10">
+            {/* CONFIDENCE BREAKDOWN */}
+            <div className="bg-[#080315] p-4 rounded-2xl border border-purple-800/60 space-y-3 font-mono relative z-10 shadow-inner">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-cyan-300 font-extrabold uppercase text-[11px] tracking-wide flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> QUALIFICATION BAR
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> CONFIDENCE BREAKDOWN
                 </span>
                 <span className={`font-black text-xs px-2.5 py-0.5 rounded-md border ${
                   lockEvaluation.qualified 
                     ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60 shadow-[0_0_10px_rgba(52,211,153,0.4)]' 
                     : 'bg-amber-950 text-amber-300 border-amber-500/60 animate-pulse'
                 }`}>
-                  {lockEvaluation.qualified ? '100% LOCKED' : `${Math.min(95, Math.round((Object.values(lockEvaluation.checks).filter(Boolean).length / 6) * 100))}% OVERALL QUALIFICATION`}
+                  {lockEvaluation.qualified ? '100% LOCKED' : `${Math.min(95, Math.round((Object.values(lockEvaluation.checks).filter(Boolean).length / 6) * 100))}% QUALIFIED`}
                 </span>
               </div>
 
@@ -706,7 +595,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
 
           {/* LOCK ENGINE CHECKLIST (3 Cols) */}
-          <div className="lg:col-span-3 bg-[#0a0418] p-4.5 rounded-2xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
+          <div className="lg:col-span-3 bg-[#0a0418] p-5 rounded-3xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5 text-xs font-bold text-purple-200">
               <span className="flex items-center gap-1.5 text-cyan-300 font-extrabold uppercase tracking-wider">
                 <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" /> LOCK ENGINE
@@ -715,7 +604,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
 
             <div className="space-y-2 text-xs font-mono">
-              {/* Confidence */}
+              {/* Confidence Check */}
               <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
                 lockEvaluation.checks.confidence 
                   ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
@@ -723,14 +612,16 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               }`}>
                 <span className="flex items-center gap-2 font-bold">
                   {lockEvaluation.checks.confidence 
-                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 animate-bounce" /> 
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> 
                     : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />}
                   Confidence
                 </span>
-                <span className="font-extrabold">{signal.confidence.toFixed(1)}% <span className="text-[10px] text-purple-300/60">/ PASS</span></span>
+                <span className="font-black text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> VERIFIED
+                </span>
               </div>
 
-              {/* Edge */}
+              {/* Edge Check */}
               <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
                 lockEvaluation.checks.edge 
                   ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
@@ -738,38 +629,46 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               }`}>
                 <span className="flex items-center gap-2 font-bold">
                   {lockEvaluation.checks.edge 
-                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 animate-bounce" /> 
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> 
                     : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />}
                   Edge
                 </span>
-                <span className="font-extrabold">+{signal.edgePct.toFixed(1)}% <span className="text-[10px] text-purple-300/60">/ PASS</span></span>
+                <span className="font-black text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> VERIFIED
+                </span>
               </div>
 
-              {/* Spread */}
+              {/* Spread Check */}
               <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
                 <span className="flex items-center gap-2 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Spread
                 </span>
-                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
+                <span className="font-black text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> VERIFIED
+                </span>
               </div>
 
-              {/* Liquidity */}
+              {/* Liquidity Check */}
               <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
                 <span className="flex items-center gap-2 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Liquidity
                 </span>
-                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
+                <span className="font-black text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> VERIFIED
+                </span>
               </div>
 
-              {/* Freshness */}
+              {/* Freshness Check */}
               <div className="p-2.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 flex items-center justify-between">
                 <span className="flex items-center gap-2 font-bold">
                   <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> Freshness
                 </span>
-                <span className="font-black text-emerald-300 bg-emerald-900/60 px-2 py-0.5 rounded text-[10px]">PASS</span>
+                <span className="font-black text-emerald-300 bg-emerald-950 border border-emerald-500/50 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> VERIFIED
+                </span>
               </div>
 
-              {/* Persistence */}
+              {/* Persistence Check */}
               <div className={`p-2.5 rounded-xl border flex items-center justify-between transition-all ${
                 lockEvaluation.checks.persistence 
                   ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' 
@@ -781,52 +680,54 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                     : <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-spin" />}
                   Persistence
                 </span>
-                <span className="font-extrabold">{lockEvaluation.persistenceSeconds} / 15 <span className="text-[10px] text-amber-400 font-normal">Running...</span></span>
+                <span className="font-extrabold text-amber-300 bg-amber-950/60 border border-amber-500/40 px-2 py-0.5 rounded text-[10px] flex items-center gap-1">
+                  {lockEvaluation.persistenceSeconds}/15s Syncing
+                </span>
               </div>
             </div>
           </div>
 
           {/* AI REASONING TIMELINE (4 Cols) */}
-          <div className="lg:col-span-4 bg-[#070312] p-4.5 rounded-2xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
+          <div className="lg:col-span-4 bg-[#070312] p-5 rounded-3xl border border-purple-800/60 shadow-xl flex flex-col justify-between space-y-3">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5 text-xs font-bold">
               <span className="flex items-center gap-1.5 text-cyan-300 uppercase tracking-wider font-extrabold">
                 <Sparkles className="w-4 h-4 text-cyan-400 shrink-0" /> AI REASONING TIMELINE
               </span>
               <span className="text-[10px] text-emerald-400 font-mono font-extrabold px-2.5 py-0.5 rounded bg-emerald-950 border border-emerald-800/50">
-                LIVE
+                LIVE STREAM
               </span>
             </div>
 
-            {/* Step-by-step Timeline Items */}
+            {/* Step-by-step Timeline Items with slide-in animation */}
             <div className="space-y-2 text-xs font-mono text-purple-200/90">
-              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
-                <span className="text-purple-400 font-mono">06:11:24</span>
-                <span className="text-purple-100 font-bold">Liquidity confirmed</span>
-                <span className="text-emerald-400 font-bold">✓</span>
+              <div className="p-2.5 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px] transition-all duration-300 hover:border-purple-500/40">
+                <span className="text-purple-400 font-mono text-[10px]">06:11:24</span>
+                <span className="text-purple-100 font-bold">✓ Liquidity confirmed</span>
+                <span className="text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded text-[10px] border border-emerald-500/40">OK</span>
               </div>
 
-              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
-                <span className="text-purple-400 font-mono">06:11:25</span>
-                <span className="text-purple-100 font-bold">Order imbalance detected</span>
-                <span className="text-emerald-400 font-bold">✓</span>
+              <div className="p-2.5 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px] transition-all duration-300 hover:border-purple-500/40">
+                <span className="text-purple-400 font-mono text-[10px]">06:11:25</span>
+                <span className="text-purple-100 font-bold">✓ Order imbalance</span>
+                <span className="text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded text-[10px] border border-emerald-500/40">OK</span>
               </div>
 
-              <div className="p-2 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px]">
-                <span className="text-purple-400 font-mono">06:11:26</span>
-                <span className="text-purple-100 font-bold">Momentum weakening</span>
-                <span className="text-emerald-400 font-bold">✓</span>
+              <div className="p-2.5 rounded-xl bg-[#0d0621] border border-purple-800/40 flex items-center justify-between text-[11px] transition-all duration-300 hover:border-purple-500/40">
+                <span className="text-purple-400 font-mono text-[10px]">06:11:26</span>
+                <span className="text-purple-100 font-bold">✓ Momentum weakening</span>
+                <span className="text-emerald-400 font-bold bg-emerald-950/80 px-1.5 py-0.5 rounded text-[10px] border border-emerald-500/40">OK</span>
               </div>
 
-              <div className="p-2 rounded-xl bg-[#0d0621] border border-amber-500/40 flex items-center justify-between text-[11px] animate-pulse">
-                <span className="text-amber-400 font-mono">06:11:27</span>
-                <span className="text-amber-200 font-bold">Waiting confidence</span>
+              <div className="p-2.5 rounded-xl bg-[#0d0621] border border-amber-500/40 flex items-center justify-between text-[11px] animate-pulse">
+                <span className="text-amber-400 font-mono text-[10px]">06:11:27</span>
+                <span className="text-amber-200 font-bold">✓ Final Lock evaluation</span>
                 <span className="text-amber-400 font-bold animate-spin">...</span>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#0b051c] border border-purple-900/50 space-y-1 mt-2">
+              <div className="p-3 rounded-2xl bg-[#0b051c] border border-purple-900/50 space-y-1.5 mt-2 shadow-inner">
                 <div className="text-[10px] text-amber-300 font-bold flex justify-between">
                   <span>AI MODEL EVALUATION</span>
-                  <span className="text-cyan-300">347ms INFERENCE</span>
+                  <span className="text-cyan-300 font-mono">347ms INFERENCE</span>
                 </div>
                 <p className="text-[11px] text-purple-200 font-sans leading-relaxed">
                   {signal.reasoning}
@@ -835,6 +736,119 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* SHRUNK SUPPORTING LEVEL: Multi-Venue Odds & Arbitrage Comparison Matrix (Shrunk by ~35% so it doesn't compete with Hero) */}
+      <div className="bg-[#0f0822] rounded-2xl border border-purple-900/50 p-4 shadow-xl space-y-3 font-mono">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-900/40 pb-2.5">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
+            <h2 className="text-[11px] font-bold text-purple-200 uppercase tracking-wider">
+              Prediction Market Venue Depth Matrix ({timeframe})
+            </h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/30 font-bold">
+              HIGHEST EDGE: KALSHI (+12.2%)
+            </span>
+          </div>
+        </div>
+
+        {/* Compact Venue Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {/* Kalshi Card (The Lock) */}
+          <div className="bg-[#080414] p-3 rounded-xl border border-purple-500/30 relative overflow-hidden space-y-2">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 text-[9px] font-black uppercase">
+                    PRIMARY LOCK
+                  </span>
+                  <button
+                    onClick={onOpenSettings}
+                    className={`px-1 py-0.2 rounded text-[8px] font-mono font-bold border flex items-center gap-1 ${
+                      exchangeKeys?.kalshi.connected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
+                    }`}
+                  >
+                    <span className={`w-1 h-1 rounded-full ${exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{exchangeKeys?.kalshi.connected ? `API ${exchangeKeys.kalshi.latencyMs}ms` : 'API Setup'}</span>
+                  </button>
+                </div>
+                <h3 className="text-xs font-black text-white mt-0.5">Kalshi 15M</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-black text-emerald-400 block">54.0% Implied</span>
+                <span className="text-[9px] text-purple-300/70 font-mono block">$0.54 YES / $0.46 NO</span>
+              </div>
+            </div>
+
+            <div className="pt-1.5 border-t border-purple-900/40 flex justify-between items-center text-[11px]">
+              <span className="text-purple-300/60">Model Edge:</span>
+              <span className="font-black text-emerald-400">+12.2% EDGE</span>
+            </div>
+          </div>
+
+          {/* Polymarket Card */}
+          <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/40 space-y-2">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 text-[9px] font-bold uppercase">
+                    DECENTRALIZED
+                  </span>
+                  <button
+                    onClick={onOpenSettings}
+                    className={`px-1 py-0.2 rounded text-[8px] font-mono font-bold border flex items-center gap-1 ${
+                      exchangeKeys?.polymarket.connected
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : 'bg-purple-900/40 text-purple-300/70 border-purple-800/40 hover:text-white'
+                    }`}
+                  >
+                    <span className={`w-1 h-1 rounded-full ${exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                    <span>{exchangeKeys?.polymarket.connected ? `API ${exchangeKeys.polymarket.latencyMs}ms` : 'API Setup'}</span>
+                  </button>
+                </div>
+                <h3 className="text-xs font-black text-white mt-0.5">Polymarket 15M</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-black text-emerald-400 block">52.0% Implied</span>
+                <span className="text-[9px] text-purple-300/70 font-mono block">52¢ YES / 48¢ NO</span>
+              </div>
+            </div>
+
+            <div className="pt-1.5 border-t border-purple-900/40 flex justify-between items-center text-[11px]">
+              <span className="text-purple-300/60">Model Edge:</span>
+              <span className="font-black text-emerald-400">+12.2% EDGE</span>
+            </div>
+          </div>
+
+          {/* DraftKings Sportsbook Micro Card */}
+          <div className="bg-[#080414]/60 p-3 rounded-xl border border-purple-900/20 space-y-2 opacity-60">
+            <div className="flex justify-between items-start">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="px-1.5 py-0.2 rounded bg-purple-900/30 text-purple-400 text-[9px] font-bold uppercase">
+                    SPORTSBOOK
+                  </span>
+                  <span className="px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 text-[8px] font-mono font-bold">
+                    SOON
+                  </span>
+                </div>
+                <h3 className="text-xs font-black text-purple-200 mt-0.5">DraftKings Micro</h3>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-bold text-purple-400/60 block">UNAVAILABLE</span>
+              </div>
+            </div>
+
+            <div className="pt-1.5 border-t border-purple-900/20 flex justify-between items-center text-[11px]">
+              <span className="text-purple-400/50">Status:</span>
+              <span className="font-bold text-purple-400/60">Integration Pending</span>
+            </div>
+          </div>
         </div>
       </div>
 

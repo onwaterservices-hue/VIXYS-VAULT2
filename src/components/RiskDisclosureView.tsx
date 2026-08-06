@@ -94,7 +94,7 @@ export const RiskDisclosureView: React.FC<RiskDisclosureViewProps> = ({ onReturn
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>Risk Management Help: <span className="text-white">risk@vixysvault.com</span></div>
+          <div>Risk Management Help: <span className="text-white">vixyvault0@gmail.com</span></div>
           <div>Vixy's Vault Quant Research Lab</div>
         </div>
 

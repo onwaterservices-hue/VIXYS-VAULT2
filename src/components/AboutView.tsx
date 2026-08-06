@@ -131,7 +131,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>General Contact: <span className="text-white">contact@vixysvault.com</span></div>
+          <div>General Contact: <span className="text-white">vixyvault0@gmail.com</span></div>
           <div>Vixy's Vault Quant Research Lab • All Rights Reserved</div>
         </div>
 

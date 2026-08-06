@@ -83,7 +83,7 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             If you are unsatisfied with your first subscription purchase on Vixy's Vault, you may request a <strong>100% full refund within 14 days</strong> of your initial signup date.
           </p>
           <p className="text-purple-200/80 text-xs">
-            To claim a first-purchase refund, simply send an email to <span className="text-white font-mono font-bold">billing@vixysvault.com</span> with your registered email address and "14-Day Refund Request" in the subject line. Refunds are credited back to your original payment method via Stripe within 3-5 business days.
+            To claim a first-purchase refund, simply send an email to <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span> with your registered email address and "14-Day Refund Request" in the subject line. Refunds are credited back to your original payment method via Stripe within 3-5 business days.
           </p>
         </section>
 
@@ -105,13 +105,13 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             <h2>4. Billing Inquiries & Dispute Prevention</h2>
           </div>
           <p className="text-purple-200/80">
-            Before initiating a credit card chargeback or bank dispute, please reach out directly to our dedicated billing desk at <span className="text-white font-mono font-bold">billing@vixysvault.com</span>. We respond to all billing inquiries within 24 hours and resolve any billing discrepancies immediately.
+            Before initiating a credit card chargeback or bank dispute, please reach out directly to our dedicated billing desk at <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span>. We respond to all billing inquiries within 24 hours and resolve any billing discrepancies immediately.
           </p>
         </section>
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>Billing Desk: <span className="text-white">billing@vixysvault.com</span></div>
+          <div>Billing Desk: <span className="text-white">vixyvault0@gmail.com</span></div>
           <div>Stripe Certified Secure Payments</div>
         </div>
 

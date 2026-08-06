@@ -70,7 +70,7 @@ export const ContactView: React.FC<ContactViewProps> = ({ onReturnToTerminal }) 
             <div className="space-y-2 text-xs text-purple-300/80">
               <p>For instant assistance or enterprise API requests:</p>
               <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-800/40 font-mono text-white font-bold flex items-center justify-between">
-                <span>support@vixysvault.com</span>
+                <span>vixyvault0@gmail.com</span>
                 <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">ONLINE</span>
               </div>
             </div>

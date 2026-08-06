@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Flame, Wifi, Zap, Volume2, VolumeX, ShieldCheck, Database, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
-import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
+import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 import { ModelStatusBadge } from './ModelStatusBadge';
 
@@ -96,12 +96,11 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       }
     }, 2500);
 
-    // Generate initial synthetic price history baseline centered around real REST price
-    fetch(`https://api.binance.com/api/v3/ticker/price?symbol=${binanceSymbol}`)
-      .then((res) => res.json())
+    // Generate initial price history baseline
+    fetchCryptoTicker(asset)
       .then((data) => {
-        if (isCancelled || !data.price) return;
-        const currentP = parseFloat(data.price);
+        if (isCancelled || !data) return;
+        const currentP = data.price || 64591.20;
         setLastPrice(currentP);
         setConnectionStatus('LIVE (REST)');
 
@@ -120,8 +119,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
         }
         setPriceHistory(initialPoints);
       })
-      .catch((err) => {
-        console.warn('Failed to fetch initial spot price', err);
+      .catch(() => {
         if (!isCancelled) setConnectionStatus('LIVE (SIM)');
       });
 
@@ -135,6 +133,13 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
     };
 
     ws.onclose = () => {
+      if (!isCancelled) {
+        setWsConnected(false);
+        setConnectionStatus('LIVE (FEED)');
+      }
+    };
+
+    ws.onerror = () => {
       if (!isCancelled) {
         setWsConnected(false);
         setConnectionStatus('LIVE (FEED)');
@@ -165,13 +170,23 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           });
         }
       } catch (err) {
-        console.warn('Error handling trade WS', err);
+        // Parse error ignored
       }
     };
 
     return () => {
       isCancelled = true;
-      ws.close();
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        ws.onopen = () => {
+          try { ws.close(); } catch (_) {}
+        };
+      }
     };
   }, [binanceSymbol]);
 

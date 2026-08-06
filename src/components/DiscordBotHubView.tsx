@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle } from 'lucide-react';
+import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle, Lock } from 'lucide-react';
 import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, unfreezeUserBotsApi } from '../services/api';
 
 interface DiscordBotHubViewProps {
@@ -364,37 +364,69 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
                 </div>
               </div>
 
-              {/* Rich Embed Card */}
-              <div className={`ml-12 border-l-4 rounded-r-lg bg-[#2B2D31] p-3 space-y-2 shadow-inner ${
+              {/* Rich Embed Card - Free Channel vs Elite Unlocked */}
+              <div className={`ml-12 border-l-4 rounded-r-lg bg-[#2B2D31] p-3 space-y-2.5 shadow-inner ${
                 testDirection === 'YES' ? 'border-l-emerald-500' : 'border-l-rose-500'
               }`}>
-                <div className="font-bold text-sm text-white flex items-center gap-1.5">
-                  <span>⚡ VIXY Signal Alert: {testSymbol} → {testDirection === 'YES' ? 'BUY UP (YES)' : 'BUY DOWN (NO)'}</span>
-                  <span className="text-xs text-emerald-400 font-mono">(89% Conf)</span>
+                <div className="font-bold text-sm text-white flex items-center justify-between">
+                  <span>📊 VIXY AI Market Pulse: {testSymbol}</span>
+                  <span className="text-xs text-emerald-400 font-mono font-bold">🟢 Overall Bias: {testDirection === 'YES' ? 'BULLISH' : 'BEARISH'}</span>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 py-1 text-xs font-mono">
+                <div className="grid grid-cols-3 gap-2 py-1 text-xs font-mono bg-[#1E1F22] p-2 rounded">
                   <div>
                     <span className="text-slate-400 text-[10px] block uppercase">Spot Price</span>
                     <span className="text-white font-bold">$64,821.50</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Target Price</span>
-                    <span className="text-emerald-400 font-bold">{testDirection === 'YES' ? '$65,120.00' : '$64,500.00'}</span>
+                    <span className="text-slate-400 text-[10px] block uppercase">Confidence</span>
+                    <span className="text-amber-400 font-bold">89.4%</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Value Edge</span>
-                    <span className="text-emerald-400 font-bold">+8.4%</span>
+                    <span className="text-slate-400 text-[10px] block uppercase">Resistance</span>
+                    <span className="text-cyan-400 font-bold">$65,120.00</span>
                   </div>
                 </div>
 
-                <div className="bg-[#1E1F22] p-2 rounded text-xs text-slate-300 font-mono">
-                  <span className="text-slate-400 block text-[10px] font-bold uppercase mb-0.5">AI Reasoning:</span>
-                  Institutional taker buy delta spike (+1,420 BTC) & Kalshi odds underpriced.
+                <div className="bg-[#1E1F22] p-2.5 rounded text-xs text-slate-300 font-mono">
+                  <span className="text-slate-400 block text-[10px] font-bold uppercase mb-0.5">Market Rationale:</span>
+                  Institutional taker buy delta spike (+1,420 BTC) & Kalshi odds underpriced. Institutional buyers accumulating beneath support.
+                </div>
+
+                {/* FUNNEL INFORMATION GAP - LOCKED SETUP */}
+                <div className="bg-[#18191c] border border-amber-500/40 p-2.5 rounded text-xs font-mono space-y-1.5">
+                  <div className="flex items-center justify-between font-bold text-amber-300">
+                    <span className="flex items-center gap-1">
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      Detailed Trade Setup
+                    </span>
+                    <span className="text-[9px] bg-purple-900/60 px-1.5 py-0.5 rounded text-purple-300">VIXY ELITE AI</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-400">
+                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
+                      <span>Full Entry:</span>
+                      <span className="text-amber-400 font-bold">🔒 Locked</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
+                      <span>Stop Loss:</span>
+                      <span className="text-amber-400 font-bold">🔒 Locked</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
+                      <span>Profit Targets:</span>
+                      <span className="text-amber-400 font-bold">🔒 Locked</span>
+                    </div>
+                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
+                      <span>Risk Score:</span>
+                      <span className="text-amber-400 font-bold">🔒 Locked</span>
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-amber-300/90 pt-0.5 font-sans font-semibold text-center">
+                    ⭐ Upgrade to <strong>VIXY ELITE AI</strong> to unlock the complete trade setup!
+                  </div>
                 </div>
 
                 <div className="text-[10px] text-slate-400 pt-1 flex justify-between items-center border-t border-slate-700/50">
-                  <span>VIXY AI • Brier Calibrated • Decision Intelligence</span>
+                  <span>VIXY AI • Sales Funnel & Decision Engine</span>
                   <span>{new Date().toLocaleTimeString()}</span>
                 </div>
               </div>

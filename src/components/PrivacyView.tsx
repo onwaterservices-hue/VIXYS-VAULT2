@@ -106,13 +106,13 @@ export const PrivacyView: React.FC<PrivacyViewProps> = ({ onReturnToTerminal }) 
             You have the right to request a full export of your account journal data or request permanent deletion of your account and associated webhook configurations.
           </p>
           <p className="text-purple-200/80 text-xs">
-            To request data deletion, contact our privacy officer at <span className="text-white font-mono font-bold">privacy@vixysvault.com</span>. Requests are processed within 48 business hours.
+            To request data deletion, contact our privacy officer at <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span>. Requests are processed within 48 business hours.
           </p>
         </section>
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>Privacy Contact: <span className="text-white">privacy@vixysvault.com</span></div>
+          <div>Privacy Contact: <span className="text-white">vixyvault0@gmail.com</span></div>
           <div>Compliant with GDPR & CCPA Standard Practices</div>
         </div>
 

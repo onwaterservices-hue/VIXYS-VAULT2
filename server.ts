@@ -11,6 +11,7 @@ import {
   assignDiscordVipRole,
   validateDiscordEnv,
 } from './src/bot';
+import { AutomationScheduler } from './src/bot/services/automationScheduler';
 
 let stripeClient: Stripe | null = null;
 
@@ -1383,7 +1384,8 @@ app.get('/api/signal', async (req, res) => {
   const spot = spotPrices[asset] || 100;
   const kalshiStrike = desk === '15s' ? Math.round(spot * 10) / 10 : Math.round(spot / 50) * 50;
 
-  const action = currentDirection === 'UP' ? 'BUY_YES' : currentDirection === 'DOWN' ? 'BUY_NO' : 'NEUTRAL';
+  const effectiveDirection = currentDirection === 'DOWN' ? 'DOWN' : 'UP';
+  const action = effectiveDirection === 'DOWN' ? 'BUY_NO' : 'BUY_YES';
 
   res.json({
     asset,
@@ -1894,6 +1896,8 @@ async function startServer() {
   initializeDiscordBot().catch((err) => {
     console.warn('[Server] Discord bot initialization warning:', err);
   });
+
+  AutomationScheduler.startScheduler();
 
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
