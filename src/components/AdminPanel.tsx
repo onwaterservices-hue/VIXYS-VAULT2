@@ -402,30 +402,54 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ stats, tickets, setTicke
     <div className="space-y-6 font-sans text-purple-100 max-w-full overflow-hidden">
       {/* 1. MASTER ADMIN CONTROL CENTER HEADER */}
       <div className="bg-gradient-to-r from-[#120B28] via-[#0D071E] to-[#18093B] rounded-3xl border border-purple-500/40 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-purple-900/40 pb-5">
-          <div className="space-y-1">
+        {/* Subtle Background Glow */}
+        <div className="absolute -top-10 -right-10 w-60 h-60 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-purple-900/40 pb-5 relative z-10">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2 font-mono">
-              <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/40 text-xs font-bold flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-purple-400" />
-                MASTER ADMIN CONTROL CENTER
+              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(52,211,153,0.3)]">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                MASTER ADMIN (VIXY VAULT OWNER) • LEVEL 0 CLEARANCE
               </span>
-              <span className="text-amber-300 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/30 text-xs font-bold">
-                Logged in as: vixyvault0@gmail.com
+              <span className="text-amber-300 bg-amber-500/15 px-3 py-1 rounded-full border border-amber-500/40 text-xs font-bold font-mono">
+                CLEARANCE_HASH#88F9A1B2
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight pt-1">
+            <h1 className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight pt-1 flex items-center gap-3">
               VIXY'S VAULT SaaS Master Intelligence
+              <span className="px-2.5 py-0.5 rounded-lg bg-purple-950 text-purple-300 border border-purple-700/50 text-xs font-bold">
+                ROOT ACTIVE
+              </span>
             </h1>
             <p className="text-purple-300/70 text-xs sm:text-sm font-sans max-w-3xl">
-              Real-time user directory, live recurring revenue (MRR/ARR), active subscriber management, and system telemetry.
+              Sub-second system audit, user access control, live Stripe/USDC revenue ledger, and global quant model circuit breakers.
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-[#0B061A] px-4 py-2.5 rounded-2xl border border-purple-900/50 font-mono text-xs shrink-0">
-            <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/80" />
-            <div>
-              <span className="text-purple-300/60 text-[10px] block font-bold uppercase">System Telemetry</span>
-              <span className="text-emerald-300 font-bold">ONLINE ({stats.apiLatencyMs}ms Latency)</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => {
+                const csvData = transactions.map(t => `${t.id},${t.email},${t.plan},${t.amount},${t.method},${t.status},${t.timestamp}`).join('\n');
+                const blob = new Blob([`Charge ID,Email,Plan,Amount,Gateway,Status,Time\n${csvData}`], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `VixyVault_Financial_Audit_${new Date().toISOString().slice(0, 10)}.csv`;
+                a.click();
+              }}
+              className="px-3.5 py-2 rounded-xl bg-[#0B061A] hover:bg-purple-950 text-purple-200 border border-purple-800/60 font-mono text-xs font-bold transition-all flex items-center gap-2 shadow-md shrink-0"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Export CSV Audit</span>
+            </button>
+
+            <div className="flex items-center gap-3 bg-[#0B061A] px-4 py-2 rounded-2xl border border-purple-900/60 font-mono text-xs shrink-0">
+              <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse shadow-md shadow-emerald-400/80" />
+              <div>
+                <span className="text-purple-300/60 text-[10px] block font-bold uppercase">System Telemetry</span>
+                <span className="text-emerald-300 font-bold">ONLINE ({stats.apiLatencyMs}ms Latency)</span>
+              </div>
             </div>
           </div>
         </div>
