@@ -32,6 +32,13 @@ import { NeuralRibbonChart } from './NeuralRibbonChart';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { VixyAiStatusCard } from './VixyAiStatusCard';
 
+// Five AI Brains
+import { SignalBrain } from './brains/SignalBrain';
+import { ProtectionBrain } from './brains/ProtectionBrain';
+import { WhaleBrain } from './brains/WhaleBrain';
+import { ExecutionBrain } from './brains/ExecutionBrain';
+import { AiThinkingBrain } from './brains/AiThinkingBrain';
+
 interface LiveDashboardProps {
   ticker: BTCTicker;
   candles: Candle[];
@@ -493,205 +500,28 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
       </div>
 
-      {/* 1. HERO PREDICTION CARD (70% OF PAGE FOCUS — Dominant, Clean, Unmissable) */}
-      <div className={`bg-gradient-to-br ${
-        isBullish 
-          ? 'from-[#0e241c] via-[#091712] to-[#12082b] border-emerald-500/60 shadow-[0_0_60px_rgba(16,185,129,0.25)]' 
-          : 'from-[#2a0b14] via-[#1a060d] to-[#12082b] border-rose-500/60 shadow-[0_0_60px_rgba(244,63,94,0.25)]'
-      } rounded-3xl border p-6 sm:p-8 space-y-6 relative overflow-hidden transition-all duration-500 font-mono`}>
-        {/* Glow backdrop */}
-        <div className={`absolute -top-20 -right-20 w-80 h-80 rounded-full blur-3xl opacity-30 pointer-events-none animate-pulse ${
-          isBullish ? 'bg-emerald-500' : 'bg-rose-500'
-        }`} />
+      {/* 🎯 BRAIN 1: SIGNAL BRAIN (Direction, Confidence, Strike, Lock Score Progress) */}
+      <SignalBrain
+        signal={signal}
+        ticker={ticker}
+        timeString={timeString}
+        timeframe={timeframe}
+        lockEvaluation={lockEvaluation}
+      />
 
-        {/* Live Status Header + Countdown */}
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/40 pb-4 relative z-10">
-          <div className="flex items-center gap-2.5">
-            <span className="flex items-center gap-2 font-mono text-xs font-black text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full border border-emerald-500/40 shadow-sm">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
-              ● LIVE SIGNAL
-            </span>
-            <span className="text-xs text-purple-300/70 font-mono hidden sm:inline">
-              Sub-Second Quant Stream ({lastUpdateUtc})
-            </span>
-          </div>
-
-          {/* Animated Countdown */}
-          <div className="flex items-center gap-2 bg-[#0c051f] px-3.5 py-1.5 rounded-xl border border-amber-500/50 text-amber-300 text-xs font-mono font-bold shadow-lg animate-pulse">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
-            <span>Strike closes in <strong className="text-white font-mono text-sm">{timeString}</strong></span>
-          </div>
-        </div>
-
-        {/* Hero Direction + Confidence + Key Metrics */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center relative z-10">
-          {/* Main Direction Title */}
-          <div className="lg:col-span-7 space-y-4">
-            <div className="text-xs font-mono font-extrabold text-purple-300/80 uppercase tracking-widest flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              MODEL CONVICTION OVERVIEW
-            </div>
-
-            <div className="flex flex-col sm:flex-row sm:items-baseline gap-3 sm:gap-6">
-              <h1 className={`text-6xl sm:text-7xl lg:text-8xl font-black tracking-tight uppercase drop-shadow-[0_0_35px_rgba(0,0,0,0.8)] ${
-                isBullish ? 'text-emerald-400' : 'text-rose-400'
-              }`}>
-                {isBullish ? '▲ BUY UP' : '▼ BUY DOWN'}
-              </h1>
-
-              <div className="flex items-baseline gap-2 bg-[#080315]/90 px-4 py-2 rounded-2xl border border-purple-500/50 shadow-2xl">
-                <span className="text-4xl sm:text-5xl font-black text-white font-mono">{signal.confidence.toFixed(1)}%</span>
-                <span className="text-xs text-amber-400 font-bold uppercase tracking-wider">CONFIDENCE</span>
-              </div>
-            </div>
-
-            {/* Target Strike vs Current Price & Edge Bar */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-              <div className="bg-[#080315]/80 p-3 rounded-2xl border border-purple-800/60">
-                <span className="text-[10px] text-purple-300/70 font-mono font-bold uppercase block">STRIKE TARGET</span>
-                <span className="text-lg sm:text-xl font-black text-white font-mono">${signal.targetPrice.toLocaleString()}</span>
-              </div>
-              <div className="bg-[#080315]/80 p-3 rounded-2xl border border-purple-800/60">
-                <span className="text-[10px] text-purple-300/70 font-mono font-bold uppercase block">CURRENT PRICE</span>
-                <span className="text-lg sm:text-xl font-black text-cyan-300 font-mono">${ticker.price.toLocaleString()}</span>
-              </div>
-              <div className="bg-[#080315]/80 p-3 rounded-2xl border border-purple-800/60">
-                <span className="text-[10px] text-purple-300/70 font-mono font-bold uppercase block">MODEL EDGE</span>
-                <span className="text-lg sm:text-xl font-black text-emerald-400 font-mono">+{signal.edgePct.toFixed(1)}% Edge</span>
-              </div>
-              <div className="bg-[#080315]/80 p-3 rounded-2xl border border-purple-800/60">
-                <span className="text-[10px] text-purple-300/70 font-mono font-bold uppercase block">TRADE GRADE</span>
-                <span className="text-lg sm:text-xl font-black text-amber-300 font-mono">{signal.tradeGrade}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Right: Confidence Conviction Bar */}
-          <div className="lg:col-span-5 bg-[#070214]/90 p-5 rounded-2xl border border-purple-800/60 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Gauge className="w-4 h-4 text-cyan-400" /> CONVICTION METER
-              </span>
-              <span className="px-2.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/50 font-bold text-[10px]">
-                {lockEvaluation.qualified ? '100% LOCK QUALIFIED' : 'QUALIFYING...'}
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-mono">
-                <span className="text-purple-300/80">Model Probability:</span>
-                <span className="text-white font-bold">{signal.confidence.toFixed(1)}%</span>
-              </div>
-              <div className="w-full bg-[#13072b] h-3.5 rounded-full overflow-hidden border border-purple-800/60 p-0.5">
-                <div 
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 shadow-[0_0_15px_rgba(52,211,153,0.8)] transition-all duration-700" 
-                  style={{ width: `${signal.confidence}%` }} 
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-2 border-t border-purple-900/40">
-              <div>
-                <span className="text-purple-300/60 text-[10px] uppercase block font-bold">RISK LEVEL</span>
-                <span className="text-emerald-400 font-black text-sm uppercase">LOW RISK</span>
-              </div>
-              <div>
-                <span className="text-purple-300/60 text-[10px] uppercase block font-bold">RECOMMENDED BID</span>
-                <span className="text-white font-black text-sm font-mono">$0.48 YES</span>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProtectionBrain signal={signal} ticker={ticker} />
+        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
       </div>
 
-      {/* 2. THREE CLEAN ESSENTIAL CARDS (WHY? / LIVE TIMELINE / ENTRY ADVISOR) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* WHY? CARD */}
-        <div className="bg-[#0c061c] p-5 rounded-2xl border border-purple-800/60 shadow-xl space-y-3 font-mono">
-          <div className="flex items-center gap-2 border-b border-purple-900/50 pb-2.5">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
-            <h3 className="text-xs font-black text-white uppercase tracking-wider">WHY? (KEY DRIVERS)</h3>
-          </div>
-          <ul className="space-y-2 text-xs text-purple-200 font-sans">
-            <li className="flex items-start gap-2">
-              <span className="text-emerald-400 font-bold shrink-0 font-mono">✓</span>
-              <span>Net Taker Delta <strong className="text-white font-mono">+1,420 BTC</strong> absorbing ask liquidity</span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-emerald-400 font-bold shrink-0 font-mono">✓</span>
-              <span>VWAP support holding at <strong className="text-white font-mono">${(ticker.price - 80).toLocaleString()}</strong></span>
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-emerald-400 font-bold shrink-0 font-mono">✓</span>
-              <span>Kalshi contract underpricing model by <strong className="text-emerald-400 font-mono">+{signal.edgePct.toFixed(1)}% edge</strong></span>
-            </li>
-          </ul>
-        </div>
-
-        {/* AI REASONING TIMELINE CARD */}
-        <div className="bg-[#0c061c] p-5 rounded-2xl border border-purple-800/60 shadow-xl space-y-3 font-mono">
-          <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5">
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4 text-cyan-400 shrink-0" />
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">AI REASONING TIMELINE</h3>
-            </div>
-            <span className="text-[10px] text-emerald-400 font-extrabold bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/50">STREAMING</span>
-          </div>
-          <div className="space-y-1.5 text-xs text-purple-200">
-            <div className="flex justify-between items-center text-[11px] bg-[#070312] p-2 rounded-xl border border-purple-900/40">
-              <span className="text-purple-400 font-mono text-[10px]">06:11</span>
-              <span className="font-sans">Buyer absorbed sell wall</span>
-              <span className="text-emerald-400 font-bold">✓</span>
-            </div>
-            <div className="flex justify-between items-center text-[11px] bg-[#070312] p-2 rounded-xl border border-purple-900/40">
-              <span className="text-purple-400 font-mono text-[10px]">06:13</span>
-              <span className="font-sans">Liquidity sweep detected</span>
-              <span className="text-emerald-400 font-bold">✓</span>
-            </div>
-            <div className="flex justify-between items-center text-[11px] bg-[#070312] p-2 rounded-xl border border-purple-900/40">
-              <span className="text-purple-400 font-mono text-[10px]">06:14</span>
-              <span className="font-sans">Momentum confirmed</span>
-              <span className="text-emerald-400 font-bold">✓</span>
-            </div>
-            <div className="flex justify-between items-center text-[11px] bg-[#070312] p-2 rounded-xl border border-amber-500/40 animate-pulse">
-              <span className="text-amber-400 font-mono text-[10px]">06:15</span>
-              <span className="text-amber-200 font-bold font-sans">Prediction Locked</span>
-              <span className="text-emerald-400 font-bold">100%</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ENTRY ADVISOR CARD */}
-        <div className="bg-[#0c061c] p-5 rounded-2xl border border-purple-800/60 shadow-xl space-y-3 font-mono">
-          <div className="flex items-center justify-between border-b border-purple-900/50 pb-2.5">
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400 shrink-0" />
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">ENTRY ADVISOR</h3>
-            </div>
-            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-extrabold px-2 py-0.5 rounded border border-emerald-500/40">QUALIFIED</span>
-          </div>
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between items-center">
-              <span className="text-purple-300/70">Action:</span>
-              <span className="text-emerald-400 font-black bg-emerald-950 px-2.5 py-1 rounded-lg border border-emerald-500/40">QUALIFIED ENTRY</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-purple-300/70">Current Bid:</span>
-              <span className="text-white font-bold font-mono">$0.54 YES</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-purple-300/70">Ideal Entry:</span>
-              <span className="text-emerald-300 font-bold font-mono">$0.48 YES</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-purple-300/70">Risk / Reward:</span>
-              <span className="text-cyan-300 font-bold font-mono">1.86x Ratio</span>
-            </div>
-          </div>
-        </div>
+      {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ExecutionBrain signal={signal} ticker={ticker} />
+        <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
       </div>
 
-      {/* 3. PROMINENT LIVE CANDLESTICK CHART */}
+      {/* PROMINENT LIVE CANDLESTICK CHART */}
       <div className="space-y-4">
         <CandleChart
           candles={displayCandles}
