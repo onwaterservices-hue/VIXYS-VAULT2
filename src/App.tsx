@@ -87,7 +87,7 @@ export default function App() {
   // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
 
-  // Auth State (persisted or defaults to authenticated Owner for vixyvault0@gmail.com)
+  // Auth State (persisted or defaults to unauthenticated for visitors)
   const [authState, setAuthState] = useState<AuthState>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
@@ -101,15 +101,8 @@ export default function App() {
       console.error(e);
     }
     return {
-      isAuthenticated: true,
-      user: {
-        id: 'usr_owner_01',
-        email: 'vixyvault0@gmail.com',
-        name: 'Vixy Vault Master Admin',
-        role: 'ADMIN',
-        joinedDate: 'January 2026',
-        apiKey: 'vault_live_owner_98a7b6c5d4e3f210',
-      },
+      isAuthenticated: false,
+      user: null,
     };
   });
 
@@ -124,20 +117,22 @@ export default function App() {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
       if (hash && VALID_ROUTES.includes(hash)) return hash;
+      if (hash === 'subscription') return 'pricing';
       if (hash && !VALID_ROUTES.includes(hash)) return '404';
 
       const path = window.location.pathname.replace(/^\//, '').trim();
       if (path && VALID_ROUTES.includes(path)) return path;
+      if (path === 'subscription') return 'pricing';
       if (path && !VALID_ROUTES.includes(path)) return '404';
     } catch (e) {
       console.error(e);
     }
-    return 'terminal';
+    return '';
   };
 
   const [activeTab, setActiveTabState] = useState<string>(() => {
     const locTab = getTabFromLocation();
-    if (locTab && locTab !== 'terminal') return locTab;
+    if (locTab) return locTab;
 
     try {
       const savedAuth = localStorage.getItem('vixy_auth');
@@ -148,7 +143,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return 'terminal';
+    return 'landing';
   });
 
   const setActiveTab = (tab: string) => {

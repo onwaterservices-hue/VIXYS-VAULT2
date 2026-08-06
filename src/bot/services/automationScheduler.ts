@@ -190,7 +190,7 @@ export class AutomationScheduler {
             '✔ **Stop Loss**: [Locked for Elite]\n' +
             '✔ **Take Profit (TP1 / TP2)**: [Locked for Elite]\n' +
             '✔ **Position Size & Risk %**: [Locked for Elite]\n\n' +
-            `👉 *Upgrade to unlock instant signals:* [UNLOCK VIXY ELITE](${env.APP_URL}#subscription)`,
+            `👉 *Upgrade to unlock instant signals:* [UNLOCK VIXY ELITE](${env.APP_URL})`,
           inline: false,
         },
       ],
@@ -254,7 +254,7 @@ export class AutomationScheduler {
             '✔ **Stop Loss**: Released to VIP\n' +
             '✔ **Take Profit**: Released to VIP\n' +
             '✔ **Probability Score**: 88.9%\n\n' +
-            `👉 *Upgrade with /vip or visit the app:* [🚀 Join VIXY ELITE](${env.APP_URL}#subscription)`,
+            `👉 *Upgrade with /vip or visit the app:* [🚀 Join VIXY ELITE](${env.APP_URL})`,
         },
       ],
       footer: { text: 'VIXY AI Free Feed • Upgrade to VIP for real-time trade setups' },
@@ -299,7 +299,7 @@ export class AutomationScheduler {
         '✔ **Position Size**  \n' +
         '✔ **Risk %**  \n' +
         '✔ **Probability Score**  \n\n' +
-        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL}#subscription)**`,
+        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL})**`,
       color: 0x06b6d4, // Cyan
       footer: {
         text: '🔒 Elite Analysis Hidden • Upgrade to unlock: Exact Entry, TP, Risk Score, AI Confidence & Live Updates • 🚀 Join VIXY ELITE',
@@ -336,7 +336,7 @@ export class AutomationScheduler {
         '✔ Immediate Directional Signal\n' +
         '✔ Volatility Impact Assessment\n' +
         '✔ Instant Webhook Alert\n\n' +
-        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL}#subscription)**`,
+        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL})**`,
       color: 0xf43f5e, // Red
       footer: { text: 'VIXY AI Breaking News • Instant Institutional Intelligence' },
       timestamp: new Date().toISOString(),
@@ -373,7 +373,7 @@ export class AutomationScheduler {
         '✔ Live Order Block Heatmaps  \n' +
         '✔ Sub-Second Delta Absorption  \n' +
         '✔ Automated Entry & Stop Calculations  \n\n' +
-        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL}#subscription)**`,
+        `👉 **[ UNLOCK ELITE AI ](${env.APP_URL})**`,
       color: 0x6366f1, // Indigo
       footer: { text: 'VIXY AI Educational Hub • Learn while seeing what you miss' },
       timestamp: new Date().toISOString(),
@@ -411,7 +411,7 @@ export class AutomationScheduler {
         '🐋 **Top Whale**: `$118M Coinbase Withdrawal`  \n\n' +
         '──────────────────────\n' +
         '⭐ **Elite Members Received 5 Complete Trade Plans Today.**\n\n' +
-        `👉 **[ UNLOCK VIXY ELITE AI ](${env.APP_URL}#subscription)**`,
+        `👉 **[ UNLOCK VIXY ELITE AI ](${env.APP_URL})**`,
       color: 0x10b981, // Emerald
       footer: { text: 'VIXY AI Daily Recap • 100% Calibrated Social Proof' },
       timestamp: new Date().toISOString(),

@@ -195,7 +195,7 @@ async function handleInteraction(interaction: Interaction) {
     await interaction.reply({ embeds: [embed] });
   } else if (commandName === 'vip') {
     await interaction.reply({
-      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\nUpgrade at: ${process.env.APP_URL || 'https://vixy.ai'}/#subscription`,
+      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\nUpgrade at: ${process.env.APP_URL || 'https://vixy.ai'}`,
       ephemeral: true,
     });
   } else if (commandName === 'leaderboard') {
