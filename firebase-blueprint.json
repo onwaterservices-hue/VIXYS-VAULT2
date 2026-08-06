@@ -1,0 +1,83 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "User profile data including role and tier subscription",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["USER", "SUPPORT", "ADMIN", "OWNER"] },
+        "subscription": { "type": "string", "enum": ["FREE_TRIAL", "PRO_PASS", "ELITE_PASS"] },
+        "joined": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["email", "role", "subscription"]
+    },
+    "journalEntry": {
+      "title": "Trading Journal Entry",
+      "description": "Logged trade prediction journal entry",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "market": { "type": "string", "maxLength": 120 },
+        "direction": { "type": "string", "enum": ["YES", "NO"] },
+        "entryOdds": { "type": "number" },
+        "exitOdds": { "type": "number" },
+        "stakeUSD": { "type": "number" },
+        "pnlUSD": { "type": "number" },
+        "confidence": { "type": "number" },
+        "edge": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "market", "direction", "stakeUSD", "timestamp"]
+    },
+    "supportTicket": {
+      "title": "Support Ticket",
+      "description": "User support ticket inquiry",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "date": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userEmail", "subject", "status"]
+    },
+    "predictionSignal": {
+      "title": "Prediction Signal",
+      "description": "15-minute prediction terminal signal record",
+      "type": "object",
+      "properties": {
+        "direction": { "type": "string", "enum": ["YES", "NO"] },
+        "targetPrice": { "type": "number" },
+        "currentPrice": { "type": "number" },
+        "confidence": { "type": "number" },
+        "tradeGrade": { "type": "string", "enum": ["A+", "A", "B", "SKIP"] },
+        "status": { "type": "string", "enum": ["PENDING", "WIN", "LOSS"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["direction", "targetPrice", "confidence", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/userProfile" },
+      "description": "User account document"
+    },
+    "/users/{userId}/journalEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/journalEntry" },
+      "description": "User trade journal entries"
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/supportTicket" },
+      "description": "Global support tickets"
+    },
+    "/predictions/{predictionId}": {
+      "schema": { "$ref": "#/entities/predictionSignal" },
+      "description": "Market prediction signals"
+    }
+  }
+}

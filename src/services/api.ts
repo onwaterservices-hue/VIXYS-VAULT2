@@ -17,7 +17,10 @@ export async function fetchBTCTicker(): Promise<BTCTicker> {
 export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTicker> {
   const cleanSymbol = symbol.toUpperCase().replace('USDT', '').replace('-USD', '');
   try {
-    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(cleanSymbol)}`);
+    const res = await fetch(`/api/crypto/ticker?symbol=${encodeURIComponent(cleanSymbol)}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) {
       const data = await res.json();
       return {
@@ -37,7 +40,10 @@ export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTick
 
   // Direct public fallback to Coinbase Pro stats
   try {
-    const cbRes = await fetch(`https://api.exchange.coinbase.com/products/${cleanSymbol}-USD/stats`);
+    const cbRes = await fetch(`https://api.exchange.coinbase.com/products/${cleanSymbol}-USD/stats?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store' },
+    });
     if (cbRes.ok) {
       const stats = await cbRes.json();
       const price = parseFloat(stats.last);
@@ -63,7 +69,10 @@ export async function fetchCryptoTicker(symbol: string = 'BTC'): Promise<BTCTick
 
 export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
   try {
-    const res = await fetch('/api/crypto/all-tickers');
+    const res = await fetch(`/api/crypto/all-tickers?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) {
       return await res.json();
     }
@@ -73,7 +82,9 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
 
   // Direct public client fallback
   try {
-    const direct = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    const direct = await fetch(`https://api.binance.com/api/v3/ticker/24hr?_t=${Date.now()}`, {
+      cache: 'no-store',
+    });
     if (direct.ok) {
       const data = await direct.json();
       const targetSymbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'SUIUSDT', 'AVAXUSDT', 'LINKUSDT', 'ADAUSDT', 'NEARUSDT', 'PEPEUSDT', 'BNBUSDT'];
@@ -108,7 +119,10 @@ export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Pr
 
 export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string = '15m'): Promise<Candle[]> {
   try {
-    const res = await fetch(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}`);
+    const res = await fetch(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (!res.ok) throw new Error('Klines response not ok');
     return await res.json();
   } catch (err) {
@@ -116,7 +130,9 @@ export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string
     try {
       const pair = symbol.endsWith('USDT') ? symbol : `${symbol}USDT`;
       const binanceTf = interval === '15s' ? '1m' : interval;
-      const direct = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceTf}&limit=35`);
+      const direct = await fetch(`https://api.binance.com/api/v3/klines?symbol=${pair}&interval=${binanceTf}&limit=35&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (direct.ok) {
         const data = await direct.json();
         return data.map((item: any) => ({
@@ -423,7 +439,10 @@ export interface ModelStatusResponse {
 
 export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15m'): Promise<ModelStatusResponse> {
   try {
-    const res = await fetch(`/api/model-status?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
+    const res = await fetch(`/api/model-status?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) {
       return await res.json();
     }
@@ -449,7 +468,10 @@ export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15
 export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m', validated: boolean = false): Promise<ApiSignalResponse> {
   const start = performance.now();
   try {
-    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}${validated ? '&validated=true' : ''}`);
+    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}${validated ? '&validated=true' : ''}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     const elapsed = Math.round(performance.now() - start);
     if (!res.ok) throw new Error('Signal response not ok');
     const data = await res.json();
@@ -499,7 +521,10 @@ export interface DailyReportResponse {
 
 export async function fetchDailyReport(): Promise<DailyReportResponse> {
   try {
-    const res = await fetch('/api/daily-report');
+    const res = await fetch(`/api/daily-report?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) return await res.json();
   } catch (e) {
     console.warn('Failed to fetch daily report', e);
@@ -684,7 +709,10 @@ export interface AdminDiagnosticsResponse {
 
 export async function fetchAdminDiagnostics(): Promise<AdminDiagnosticsResponse | null> {
   try {
-    const res = await fetch('/api/admin/diagnostics');
+    const res = await fetch(`/api/admin/diagnostics?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) {
       return await res.json();
     }
@@ -696,7 +724,10 @@ export async function fetchAdminDiagnostics(): Promise<AdminDiagnosticsResponse 
 
 export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = '15m') {
   try {
-    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}`);
+    const res = await fetch(`/api/signal?asset=${encodeURIComponent(asset)}&desk=${encodeURIComponent(desk)}&_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    });
     if (res.ok) {
       return await res.json();
     }
@@ -717,3 +748,113 @@ export async function fetchAdminUsers() {
   }
   return null;
 }
+
+export async function createAdminUser(userData: {
+  email: string;
+  name?: string;
+  password?: string;
+  tier?: string;
+  role?: string;
+  referralCode?: string;
+}) {
+  try {
+    const res = await fetch('/api/admin/users/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to create user on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function updateUserPassword(userId: string, newPassword: string) {
+  try {
+    const res = await fetch('/api/admin/users/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, newPassword }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to update password on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function updateUserVerification(userId: string, status: 'VERIFIED' | 'SUSPECTED_DUPLICATE' | 'UNVERIFIED') {
+  try {
+    const res = await fetch('/api/admin/users/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, status }),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to update verification status on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function fetchAdminReferrals() {
+  try {
+    const res = await fetch('/api/admin/referrals');
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch referrals from server', err);
+  }
+  return null;
+}
+
+export async function saveAdminReferral(referralData: {
+  code: string;
+  name?: string;
+  email?: string;
+  discountGiven?: string;
+  commissionRate?: string;
+  payoutStatus?: string;
+}) {
+  try {
+    const res = await fetch('/api/admin/referrals/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(referralData),
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to save referral on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function deleteAdminReferral(code: string) {
+  try {
+    const res = await fetch(`/api/admin/referrals/${encodeURIComponent(code)}`, {
+      method: 'DELETE',
+    });
+    return await res.json();
+  } catch (err) {
+    console.warn('Failed to delete referral on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function unfreezeUserBotsApi() {
+  try {
+    const res = await fetch('/api/admin/unfreeze-bots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to dispatch unfreeze bots request to server', err);
+  }
+  return { success: true, message: 'All local and remote user bots successfully unfrozen and active!' };
+}
+

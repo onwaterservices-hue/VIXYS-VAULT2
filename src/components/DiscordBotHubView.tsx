@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle } from 'lucide-react';
-import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi } from '../services/api';
+import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle } from 'lucide-react';
+import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, unfreezeUserBotsApi } from '../services/api';
 
 interface DiscordBotHubViewProps {
   onClose?: () => void;
@@ -18,6 +18,22 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
   const [syncingVip, setSyncingVip] = useState(false);
   const [vipResponse, setVipResponse] = useState<{ success?: boolean; message?: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [unfreezing, setUnfreezing] = useState(false);
+  const [unfreezeMessage, setUnfreezeMessage] = useState<string | null>(null);
+
+  const handleUnfreezeBots = async () => {
+    setUnfreezing(true);
+    setUnfreezeMessage(null);
+    try {
+      const res = await unfreezeUserBotsApi();
+      setUnfreezeMessage(res.message || '⚡ All user bots successfully unfrozen and active!');
+      await loadStatus();
+    } catch (err: any) {
+      setUnfreezeMessage('Failed to trigger unfreeze: ' + (err.message || 'Error'));
+    } finally {
+      setUnfreezing(false);
+    }
+  };
 
   const loadStatus = async () => {
     setLoading(true);
@@ -102,6 +118,15 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
           {/* Primary CTA button */}
           <div className="flex flex-wrap items-center gap-3">
             <button
+              onClick={handleUnfreezeBots}
+              disabled={unfreezing}
+              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 border border-emerald-400/50 flex items-center gap-1.5 transition-all transform hover:-translate-y-0.5"
+            >
+              <PlayCircle className={`w-4 h-4 text-emerald-200 ${unfreezing ? 'animate-spin' : ''}`} />
+              <span>{unfreezing ? 'Unfreezing...' : '⚡ UNFREEZE ALL BOTS'}</span>
+            </button>
+
+            <button
               onClick={loadStatus}
               disabled={loading}
               className="p-2.5 rounded-xl bg-purple-900/40 border border-purple-700/40 hover:bg-purple-800/50 text-purple-200 transition-all text-xs font-mono flex items-center gap-1.5"
@@ -124,6 +149,21 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
           </div>
         </div>
       </div>
+
+      {unfreezeMessage && (
+        <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-xs font-mono flex items-center justify-between shadow-lg animate-pulse">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+            <span className="font-bold">{unfreezeMessage}</span>
+          </div>
+          <button
+            onClick={() => setUnfreezeMessage(null)}
+            className="text-xs text-emerald-400 hover:text-white px-2 py-1 rounded bg-emerald-900/40"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Operational Status Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">

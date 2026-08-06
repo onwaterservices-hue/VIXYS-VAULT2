@@ -1,0 +1,53 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /_connection_check/{docId} {
+      allow read, write: if true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && resource.data.email == request.auth.token.email;
+      allow create, update: if isOwner(userId) && isValidId(userId);
+      allow delete: if isOwner(userId);
+
+      // User Journal Subcollection
+      match /journalEntries/{entryId} {
+        allow read, write: if isOwner(userId) && isValidId(entryId);
+      }
+    }
+
+    // Support Tickets
+    match /tickets/{ticketId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(ticketId);
+      allow update, delete: if isSignedIn();
+    }
+
+    // Market Prediction Signals
+    match /predictions/{predictionId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isValidId(predictionId);
+    }
+  }
+}

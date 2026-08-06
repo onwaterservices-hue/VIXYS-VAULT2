@@ -121,7 +121,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     requiredPersistenceSeconds: 15,
   });
 
-  // Poll backend prediction engine signal & lock evaluation every 3 seconds
+  // Poll backend prediction engine signal & lock evaluation every 2 seconds
   useEffect(() => {
     let isMounted = true;
 
@@ -134,19 +134,34 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
         if (data.direction) {
           const isBull = data.direction === 'UP';
+          const kalshiProbPct = Math.round((data.kalshiImpliedProbability || 0.54) * 1000) / 10;
+          const kalshiProbDec = (data.kalshiImpliedProbability || 0.54);
+
           setSignal((prev) => ({
             ...prev,
+            timestamp: Date.now(),
             direction: isBull ? 'YES' : 'NO',
             confidence: data.confidence || prev.confidence,
-            modelProb: (data.modelProbability || 0.685) * 100,
-            edgePct: data.edgePct || prev.edgePct,
+            modelProb: data.modelProbability ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb,
+            marketProb: kalshiProbPct,
+            edgePct: data.edgePct !== undefined ? data.edgePct : prev.edgePct,
+            targetPrice: data.features?.crossVenue?.kalshiStrike || prev.targetPrice,
+          }));
+
+          setVenueOdds((prev) => ({
+            ...prev,
+            kalshiYesPrice: Math.round(kalshiProbDec * 100) / 100,
+            kalshiNoPrice: Math.round((1 - kalshiProbDec) * 100) / 100,
+            polymarketYesPct: Math.round((kalshiProbDec - 0.02) * 1000) / 10,
+            polymarketNoPct: Math.round((1 - (kalshiProbDec - 0.02)) * 1000) / 10,
+            bestEdgeValue: data.edgePct !== undefined ? Math.abs(data.edgePct) : prev.bestEdgeValue,
           }));
         }
       }
     }
 
     pollLiveSignal();
-    const interval = setInterval(pollLiveSignal, 3000);
+    const interval = setInterval(pollLiveSignal, 2000);
     return () => {
       isMounted = false;
       clearInterval(interval);

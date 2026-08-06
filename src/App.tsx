@@ -417,16 +417,21 @@ export default function App() {
     let isMounted = true;
 
     const loadData = async () => {
-      const liveTicker = await fetchCryptoTicker(selectedAsset);
-      const liveCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
+      try {
+        const liveTicker = await fetchCryptoTicker(selectedAsset);
+        const liveCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
 
-      if (isMounted) {
-        if (liveTicker && liveTicker.price) setTicker(liveTicker);
-        if (liveCandles && liveCandles.length > 0) setCandles(liveCandles);
+        if (isMounted) {
+          if (liveTicker && liveTicker.price) setTicker(liveTicker);
+          if (liveCandles && liveCandles.length > 0) setCandles(liveCandles);
+        }
+      } catch (e) {
+        // Fallback or retry silently
       }
     };
 
     loadData();
+    const interval = setInterval(loadData, 2000);
 
     // Connect to Live Binance WebSocket Stream for Real Tick Updates
     const unsubscribeWs = connectLiveCryptoStream(selectedAsset, (streamUpdate) => {
@@ -449,30 +454,18 @@ export default function App() {
         if (prevCandles.length === 0) return prevCandles;
         const updated = [...prevCandles];
         const lastCandle = { ...updated[updated.length - 1] };
-
-        if (streamUpdate.price) {
-          lastCandle.close = streamUpdate.price;
-          lastCandle.high = Math.max(lastCandle.high, streamUpdate.price);
-          lastCandle.low = Math.min(lastCandle.low, streamUpdate.price);
-          updated[updated.length - 1] = lastCandle;
-        }
+        lastCandle.close = streamUpdate.price;
+        lastCandle.high = Math.max(lastCandle.high, streamUpdate.price);
+        lastCandle.low = Math.min(lastCandle.low, streamUpdate.price);
+        updated[updated.length - 1] = lastCandle;
         return updated;
       });
     });
 
-    // Periodic 10s candle refresh for live chart synchronization
-    const interval = setInterval(async () => {
-      if (!isMounted) return;
-      const refreshedCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
-      if (isMounted && refreshedCandles && refreshedCandles.length > 0) {
-        setCandles(refreshedCandles);
-      }
-    }, 10000);
-
     return () => {
       isMounted = false;
-      unsubscribeWs();
       clearInterval(interval);
+      if (unsubscribeWs) unsubscribeWs();
     };
   }, [selectedAsset, selectedTimeframe]);
 
