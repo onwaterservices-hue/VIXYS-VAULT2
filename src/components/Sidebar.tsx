@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'compare', label: 'Split-Screen Compare', icon: Sliders, badge: 'VS' },
-        { id: 'scalping', label: '15s Signals Feed', icon: Zap, badge: 'LIVE' },
+        { id: 'scalping', label: '15s Alpha Intelligence', icon: Zap, badge: 'LIVE' },
         { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
         { id: 'markets', label: 'Markets', icon: TrendingUp },
@@ -99,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'journal', label: 'Trade Journal', icon: BookOpen },
         { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'BOT' },
         { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
-        { id: 'history', label: 'Analytics', icon: BarChart2 },
+        { id: 'history', label: 'Quant Telemetry & Accuracy', icon: BarChart2 },
         { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
         { id: 'settings', label: 'Settings', icon: Settings },
         { id: 'landing', label: 'Landing Page', icon: Globe },

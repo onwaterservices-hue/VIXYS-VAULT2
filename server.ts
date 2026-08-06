@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
@@ -193,6 +192,8 @@ interface StructuredLockEvaluation {
   reason: string;
   persistenceSeconds: number;
   requiredPersistenceSeconds: number;
+  isEarlyLock: boolean;
+  oddsWindow5050: boolean;
 }
 
 let latestLockEvaluation: StructuredLockEvaluation = {
@@ -206,9 +207,11 @@ let latestLockEvaluation: StructuredLockEvaluation = {
     edge: true,
     persistence: true,
   },
-  reason: 'Signal qualified across all institutional edge and persistence thresholds',
+  reason: '⚡ EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) — Locked at 52¢',
   persistenceSeconds: 18,
-  requiredPersistenceSeconds: 15,
+  requiredPersistenceSeconds: 3,
+  isEarlyLock: true,
+  oddsWindow5050: true,
 };
 
 // Continuous Live Market Data Ingestion & Prediction Loop (Every 3 seconds)
@@ -248,7 +251,7 @@ setInterval(async () => {
     currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (bullVolumePct - 50) * 0.005 + (Math.random() - 0.49) * 0.012) * 1000) / 1000));
     currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
     
-    const newDirection: 'UP' | 'DOWN' | 'NEUTRAL' = currentEdgePct >= 3.0 ? 'UP' : currentEdgePct <= -3.0 ? 'DOWN' : 'NEUTRAL';
+    const newDirection: 'UP' | 'DOWN' | 'NEUTRAL' = currentEdgePct >= 2.5 ? 'UP' : currentEdgePct <= -2.5 ? 'DOWN' : 'NEUTRAL';
     
     if (newDirection === currentDirection && newDirection !== 'NEUTRAL') {
       persistenceSeconds += 3;
@@ -257,12 +260,17 @@ setInterval(async () => {
       currentDirection = newDirection;
     }
 
+    // 50/50 Pull Detection (Odds between 38¢ and 62¢ give max ROI leverage)
+    const is5050PullWindow = currentKalshiImpliedProb >= 0.38 && currentKalshiImpliedProb <= 0.62;
+    const isEarlyLockOpportunity = is5050PullWindow && Math.abs(currentEdgePct) >= 2.5;
+    const effectiveRequiredPersistenceSeconds = isEarlyLockOpportunity ? 3 : 12;
+
     const isFresh = now - lastMarketUpdateTs <= 15000;
-    const isConfPass = currentConfidence >= 75;
+    const isConfPass = currentConfidence >= 70;
     const isLiquidityPass = true;
     const isSpreadPass = true;
-    const isEdgePass = Math.abs(currentEdgePct) >= 3.0;
-    const isPersistPass = persistenceSeconds >= requiredPersistenceSeconds;
+    const isEdgePass = Math.abs(currentEdgePct) >= 2.5;
+    const isPersistPass = persistenceSeconds >= effectiveRequiredPersistenceSeconds;
 
     const isQualified = isFresh && isConfPass && isLiquidityPass && isSpreadPass && isEdgePass && isPersistPass;
 
@@ -270,11 +278,13 @@ setInterval(async () => {
     if (!isFresh) {
       reasonText = 'Market feed is stale (>15s since last tick update)';
     } else if (!isConfPass) {
-      reasonText = `Model confidence (${currentConfidence}%) below minimum required 75% threshold`;
+      reasonText = `Model confidence (${currentConfidence}%) below minimum required 70% threshold`;
     } else if (!isEdgePass) {
-      reasonText = `Minimum edge requirement (+3.0%) not reached (current: ${currentEdgePct >= 0 ? '+' : ''}${currentEdgePct}%)`;
+      reasonText = `Minimum edge requirement (+2.5%) not reached (current: ${currentEdgePct >= 0 ? '+' : ''}${currentEdgePct}%)`;
     } else if (!isPersistPass) {
-      reasonText = `Persistence timer in progress (${persistenceSeconds}s / ${requiredPersistenceSeconds}s required)`;
+      reasonText = `Early Lock persistence timer in progress (${persistenceSeconds}s / ${effectiveRequiredPersistenceSeconds}s required)`;
+    } else if (isQualified && isEarlyLockOpportunity) {
+      reasonText = `⚡ EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) — Locked at ~${Math.round(currentKalshiImpliedProb * 100)}¢`;
     }
 
     latestLockEvaluation = {
@@ -290,7 +300,9 @@ setInterval(async () => {
       },
       reason: reasonText,
       persistenceSeconds,
-      requiredPersistenceSeconds,
+      requiredPersistenceSeconds: effectiveRequiredPersistenceSeconds,
+      isEarlyLock: isEarlyLockOpportunity,
+      oddsWindow5050: is5050PullWindow,
     };
 
     // Transition State Machine
@@ -385,11 +397,13 @@ app.get('/api/admin/diagnostics', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (r
     activeContract: activeContractSymbol,
     lockStatus: {
       qualified: latestLockEvaluation.qualified,
-      label: latestLockEvaluation.qualified ? 'Locked' : 'Waiting',
+      label: latestLockEvaluation.qualified ? (latestLockEvaluation.isEarlyLock ? '⚡ Early Locked' : 'Locked') : 'Waiting',
       reason: latestLockEvaluation.reason,
       checks: latestLockEvaluation.checks,
       persistenceSeconds,
-      requiredPersistenceSeconds,
+      requiredPersistenceSeconds: latestLockEvaluation.requiredPersistenceSeconds,
+      isEarlyLock: latestLockEvaluation.isEarlyLock,
+      oddsWindow5050: latestLockEvaluation.oddsWindow5050,
     },
     database: {
       status: 'Connected',
@@ -1882,6 +1896,7 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

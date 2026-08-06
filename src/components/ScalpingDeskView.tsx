@@ -87,7 +87,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
           </div>
           <div>
             <h1 className="text-base font-black text-white tracking-wider flex items-center gap-2">
-              SCALPING TERMINAL (15S DESK)
+              15S ALPHA INTELLIGENCE ENGINE
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold">
                 SUB-SECOND LIVE
               </span>

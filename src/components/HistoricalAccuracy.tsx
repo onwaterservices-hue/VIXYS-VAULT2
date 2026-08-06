@@ -146,7 +146,7 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
               <span className="text-purple-300/60 text-xs font-mono">Recorded Historical Signals Log</span>
             </div>
             <h2 className="text-2xl font-black text-white font-mono tracking-tight">
-              Backtested Analytics & Performance Engine
+              Quant Telemetry & Accuracy Engine
             </h2>
             <p className="text-purple-300/70 text-xs mt-1 font-sans">
               Filter prediction signals by asset, confidence tier, timeframe, and win/loss outcome to evaluate calibrated backtested accuracy.
