@@ -737,10 +737,30 @@ export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = 
   return null;
 }
 
+async function safeParseJson(res: Response) {
+  if (!res.ok) {
+    let errText = '';
+    try { errText = await res.text(); } catch (e) {}
+    return { success: false, message: `Server error (${res.status})` };
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    return { success: false, message: 'Invalid response format from server' };
+  }
+  try {
+    return await res.json();
+  } catch (err) {
+    return { success: false, message: 'Failed to parse server response' };
+  }
+}
+
 export async function fetchAdminUsers() {
   try {
-    const res = await fetch('/api/admin/users');
-    if (res.ok) {
+    const res = await fetch('/api/admin/users?_t=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
     }
   } catch (err) {
@@ -763,7 +783,7 @@ export async function createAdminUser(userData: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
     });
-    return await res.json();
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to create user on server', err);
     return { success: false, message: 'Server connection error' };
@@ -777,7 +797,7 @@ export async function updateUserPassword(userId: string, newPassword: string) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, newPassword }),
     });
-    return await res.json();
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to update password on server', err);
     return { success: false, message: 'Server connection error' };
@@ -791,7 +811,7 @@ export async function updateUserVerification(userId: string, status: 'VERIFIED' 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, status }),
     });
-    return await res.json();
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to update verification status on server', err);
     return { success: false, message: 'Server connection error' };
@@ -800,8 +820,11 @@ export async function updateUserVerification(userId: string, status: 'VERIFIED' 
 
 export async function fetchAdminReferrals() {
   try {
-    const res = await fetch('/api/admin/referrals');
-    if (res.ok) {
+    const res = await fetch('/api/admin/referrals?_t=' + Date.now(), {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
     }
   } catch (err) {
@@ -824,7 +847,7 @@ export async function saveAdminReferral(referralData: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(referralData),
     });
-    return await res.json();
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to save referral on server', err);
     return { success: false, message: 'Server connection error' };
@@ -836,7 +859,7 @@ export async function deleteAdminReferral(code: string) {
     const res = await fetch(`/api/admin/referrals/${encodeURIComponent(code)}`, {
       method: 'DELETE',
     });
-    return await res.json();
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to delete referral on server', err);
     return { success: false, message: 'Server connection error' };
@@ -849,7 +872,7 @@ export async function unfreezeUserBotsApi() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
-    if (res.ok) {
+    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
     }
   } catch (err) {
