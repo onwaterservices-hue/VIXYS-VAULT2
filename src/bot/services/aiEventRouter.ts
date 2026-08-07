@@ -171,6 +171,10 @@ export interface LogEventPayload {
  * with institutional embed formatting and Zero UI-Spam rules.
  */
 export class AiEventRouter {
+  private static lastFreeAlertTime: number = 0;
+  private static lastFreeAlertHash: string = '';
+  private static FREE_ALERT_COOLDOWN_MS: number = 30 * 60 * 1000; // Minimum 30-minute cooldown between free alerts
+
   /**
    * Main Dispatch Router: Classifies event, generates embed, resolves target webhook, and posts.
    */
@@ -179,6 +183,45 @@ export class AiEventRouter {
     payload: any
   ): Promise<DispatchResult> {
     const channels = DiscordConfigService.getChannels();
+
+    // PHASE 7: FREE BOT OPTIMIZATION & NO-SPAM ENFORCEMENT
+    // 30-minute cooldown, deduplication, and confidence threshold for free channels
+    if (eventType.startsWith('FREE_')) {
+      const now = Date.now();
+      const timeSinceLastFreeAlert = now - this.lastFreeAlertTime;
+
+      // Enforce 30-minute minimum cooldown between free channel alerts
+      if (timeSinceLastFreeAlert < this.FREE_ALERT_COOLDOWN_MS) {
+        return {
+          success: true,
+          channelOrWebhook: 'FREE_ALERT_SKIPPED_COOLDOWN',
+          attempts: 0,
+        };
+      }
+
+      // Check confidence threshold if confidence is present in payload (minimum 75% for free alerts)
+      if (typeof payload?.confidence === 'number' && payload.confidence < 75) {
+        return {
+          success: true,
+          channelOrWebhook: 'FREE_ALERT_SKIPPED_LOW_CONFIDENCE',
+          attempts: 0,
+        };
+      }
+
+      // Deduplication check
+      const payloadHash = `${eventType}_${payload?.asset || payload?.symbol || 'BTC'}_${payload?.direction || payload?.headline || ''}`;
+      if (payloadHash === this.lastFreeAlertHash && timeSinceLastFreeAlert < 60 * 60 * 1000) {
+        return {
+          success: true,
+          channelOrWebhook: 'FREE_ALERT_SKIPPED_DUPLICATE',
+          attempts: 0,
+        };
+      }
+
+      // Record timestamp and hash of dispatched free alert
+      this.lastFreeAlertTime = now;
+      this.lastFreeAlertHash = payloadHash;
+    }
 
     switch (eventType) {
       case 'FREE_BOT_SIGNAL':

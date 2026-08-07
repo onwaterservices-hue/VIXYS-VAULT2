@@ -41,6 +41,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('annual');
 
   // Modals for compliance & transparency
   const [showFactorsModal, setShowFactorsModal] = useState(false);
@@ -466,9 +467,30 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <p className="text-xs text-purple-300/70 font-sans">Choose the plan that fits your edge.</p>
 
           <div className="pt-2 flex justify-center">
-            <div className="bg-[#0D071E] border border-purple-900/40 rounded-xl p-1 inline-flex items-center text-xs">
-              <button className="px-4 py-1.5 rounded-lg bg-[#180E30] text-white font-bold">Monthly</button>
-              <button className="px-4 py-1.5 rounded-lg text-purple-300/60 hover:text-white">Yearly <span className="text-purple-400 text-[10px]">(Save 20%)</span></button>
+            <div className="bg-[#0D071E] border border-purple-900/40 rounded-2xl p-1.5 inline-flex items-center text-xs gap-1">
+              <button
+                onClick={() => setBillingInterval('monthly')}
+                className={`px-5 py-2 rounded-xl font-bold transition-all ${
+                  billingInterval === 'monthly'
+                    ? 'bg-[#180E30] text-white shadow border border-purple-500/30'
+                    : 'text-purple-300/60 hover:text-white'
+                }`}
+              >
+                Monthly Billing
+              </button>
+              <button
+                onClick={() => setBillingInterval('annual')}
+                className={`px-5 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
+                  billingInterval === 'annual'
+                    ? 'bg-purple-600 text-white shadow shadow-purple-600/30 font-black'
+                    : 'text-purple-300/60 hover:text-white'
+                }`}
+              >
+                <span>Annual Billing</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-[#0B061A] text-purple-300 font-bold border border-purple-500/30">
+                  SAVE 20%
+                </span>
+              </button>
             </div>
           </div>
         </div>
@@ -479,9 +501,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="space-y-4">
               <h3 className="font-bold text-white text-sm uppercase tracking-wider">STARTER</h3>
               <div className="space-y-0.5">
-                <span className="text-4xl font-black text-purple-300">$29</span>
+                <span className="text-4xl font-black text-purple-300">
+                  ${billingInterval === 'annual' ? 24 : 29}
+                </span>
                 <span className="text-xs text-purple-300/60 ml-1">/month</span>
-                <p className="text-[10px] text-purple-300/50 block">Billed monthly</p>
+                <p className="text-[10px] text-purple-300/50 block">
+                  {billingInterval === 'annual' ? 'Billed annually ($288/yr)' : 'Billed monthly'}
+                </p>
               </div>
 
               <ul className="space-y-2.5 text-xs text-purple-200/90 font-sans pt-2">
@@ -525,9 +551,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="space-y-4">
               <h3 className="font-bold text-purple-300 text-sm uppercase tracking-wider">PROFESSIONAL</h3>
               <div className="space-y-0.5">
-                <span className="text-4xl font-black text-white">$79</span>
+                <span className="text-4xl font-black text-white">
+                  ${billingInterval === 'annual' ? 64 : 79}
+                </span>
                 <span className="text-xs text-purple-300/60 ml-1">/month</span>
-                <p className="text-[10px] text-purple-300/50 block">Billed monthly</p>
+                <p className="text-[10px] text-purple-300/50 block">
+                  {billingInterval === 'annual' ? 'Billed annually ($768/yr)' : 'Billed monthly'}
+                </p>
               </div>
 
               <ul className="space-y-2.5 text-xs text-purple-100 font-sans pt-2">
@@ -571,9 +601,13 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="space-y-4">
               <h3 className="font-bold text-white text-sm uppercase tracking-wider">ELITE</h3>
               <div className="space-y-0.5">
-                <span className="text-4xl font-black text-purple-300">$149</span>
+                <span className="text-4xl font-black text-purple-300">
+                  ${billingInterval === 'annual' ? 159 : 199}
+                </span>
                 <span className="text-xs text-purple-300/60 ml-1">/month</span>
-                <p className="text-[10px] text-purple-300/50 block">Billed monthly</p>
+                <p className="text-[10px] text-purple-300/50 block">
+                  {billingInterval === 'annual' ? 'Billed annually ($1,908/yr)' : 'Billed monthly'}
+                </p>
               </div>
 
               <ul className="space-y-2.5 text-xs text-purple-200/90 font-sans pt-2">

@@ -315,23 +315,29 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
       {/* Header Banner & Monthly / Annual Toggle */}
       <div className="text-center space-y-4 max-w-3xl mx-auto font-mono">
-        <div className="inline-flex items-center gap-3 p-1.5 bg-[#120B28] border border-purple-900/40 rounded-2xl text-xs">
+        <div className="inline-flex items-center gap-2 p-2 bg-[#120B28] border border-purple-500/40 rounded-2xl text-xs shadow-xl">
           <button
             onClick={() => setBillingInterval('monthly')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all ${
-              billingInterval === 'monthly' ? 'bg-[#1A1038] text-white shadow' : 'text-purple-300/60 hover:text-white'
+            className={`px-6 py-2.5 rounded-xl font-bold transition-all ${
+              billingInterval === 'monthly'
+                ? 'bg-purple-950 text-white shadow border border-purple-500/50 font-black'
+                : 'text-purple-300/60 hover:text-white'
             }`}
           >
             Monthly Billing
           </button>
           <button
             onClick={() => setBillingInterval('annual')}
-            className={`px-4 py-2 rounded-xl font-bold transition-all flex items-center gap-2 ${
-              billingInterval === 'annual' ? 'bg-purple-600 text-white shadow shadow-purple-600/30 font-black' : 'text-purple-300/60 hover:text-white'
+            className={`px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2.5 ${
+              billingInterval === 'annual'
+                ? 'bg-purple-600 text-white shadow shadow-purple-600/40 font-black border border-purple-400/50'
+                : 'text-purple-300/60 hover:text-white'
             }`}
           >
             <span>Annual Billing</span>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#0B061A] text-purple-300 font-bold">SAVE 20%</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0B061A] text-purple-300 font-extrabold border border-purple-400/30">
+              SAVE 20%
+            </span>
           </button>
         </div>
       </div>

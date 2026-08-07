@@ -847,7 +847,11 @@ export default function App() {
                   )}
 
                   {activeTab === 'discord-bot' && (
-                    <DiscordBotHubView />
+                    userRole === 'ADMIN' ? (
+                      <DiscordBotHubView />
+                    ) : (
+                      <NotFoundView />
+                    )
                   )}
 
                   {activeTab === 'settings' && (

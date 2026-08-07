@@ -557,11 +557,147 @@ app.delete('/api/admin/referrals/:code', requireRole(['OWNER', 'ADMIN']), (req, 
   res.status(404).json({ error: 'NOT_FOUND', message: `Referral code ${cleanCode} not found.` });
 });
 
+// SERVER AUDIT LOGS & TRANSACTIONS STORE
+interface ServerAuditLog {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  details: string;
+  level: 'INFO' | 'WARN' | 'ERROR';
+}
+
+const serverAuditLogs: ServerAuditLog[] = [
+  { id: 'log_101', timestamp: new Date(Date.now() - 60000).toISOString(), actor: 'vixyvault0@gmail.com', action: 'ADMIN_LOGIN', details: 'Master Admin authenticated with Level 0 Clearance', level: 'INFO' },
+  { id: 'log_102', timestamp: new Date(Date.now() - 300000).toISOString(), actor: 'vixyvault0@gmail.com', action: 'UPDATED_ROLE', details: 'Promoted trader.alex@gmail.com to ELITE_PASS', level: 'INFO' },
+  { id: 'log_103', timestamp: new Date(Date.now() - 1800000).toISOString(), actor: 'SYSTEM_STRIPE_WEBHOOK', action: 'SUBSCRIPTION_RENEWED', details: 'Pro Pass renewed for quant.sarah@optionstrade.io', level: 'INFO' },
+  { id: 'log_104', timestamp: new Date(Date.now() - 3600000).toISOString(), actor: 'SYSTEM_BOT_SCHEDULER', action: 'BOT_HEALTH_CHECK', details: 'Discord signal broadcaster synced successfully', level: 'INFO' },
+];
+
+function addServerAuditLog(actor: string, action: string, details: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') {
+  const log: ServerAuditLog = {
+    id: `log_${Date.now().toString().slice(-6)}`,
+    timestamp: new Date().toISOString(),
+    actor,
+    action,
+    details,
+    level,
+  };
+  serverAuditLogs.unshift(log);
+  if (serverAuditLogs.length > 200) serverAuditLogs.pop();
+  return log;
+}
+
+interface ServerTransaction {
+  id: string;
+  email: string;
+  plan: string;
+  amount: number;
+  method: string;
+  status: 'Succeeded' | 'Pending' | 'Processing' | 'Failed' | 'Refunded' | 'Canceled' | 'Chargeback';
+  timestamp: string;
+  rawTime: number;
+}
+
+const serverTransactions: ServerTransaction[] = [
+  { id: 'ch_3M4kxL2eZvKYlo12', email: 'jason.v@cryptoquant.ai', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '2m ago', rawTime: Date.now() - 120000 },
+  { id: 'ch_3M4kxK1eZvKYlo11', email: 'quant.sarah@optionstrade.io', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Apple Pay', status: 'Succeeded', timestamp: '14m ago', rawTime: Date.now() - 840000 },
+  { id: 'ch_3M4kxJ0eZvKYlo10', email: 'sam.predict@crypto.org', plan: 'Pro Pass ($49)', amount: 49.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '1h ago', rawTime: Date.now() - 3600000 },
+  { id: 'ch_3M4kxI9eZvKYlo09', email: 'dave.h@scalping.com', plan: 'Pro Pass ($49)', amount: 49.0, method: 'Crypto USDC', status: 'Succeeded', timestamp: '3h ago', rawTime: Date.now() - 10800000 },
+  { id: 'ch_3M4kxH8eZvKYlo08', email: 'trader.alex@gmail.com', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '5h ago', rawTime: Date.now() - 18000000 },
+];
+
+app.get('/api/admin/stats', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  const totalUsers = serverUsers.length + 1935;
+  const activeSubs = serverUsers.filter((u) => u.subscription !== 'FREE_TRIAL').length + 478;
+  const freeTrials = serverUsers.filter((u) => u.subscription === 'FREE_TRIAL').length + 184;
+  const mrr = 28450;
+  const dailyRevenue = 1194;
+  
+  res.json({
+    totalUsers,
+    onlineNow: 342,
+    activeSubscribers: activeSubs,
+    freeTrials,
+    monthlyRevenue: mrr,
+    dailyRevenue,
+    conversionRate: 14.2,
+    churnRate: 1.8,
+    predictionsGeneratedToday: 288,
+    avgPredictionLatencyMs: 14,
+    aiRequestsToday: 18420,
+    apiRequestsToday: 142050,
+    databaseSizeMb: 124.8,
+    serverLoadPct: 18,
+    winRate: 71.8,
+    timestamp: Date.now(),
+  });
+});
+
+app.get('/api/admin/transactions', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  res.json(serverTransactions);
+});
+
+app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const { userId, action, tier, role, password } = req.body || {};
+  if (!userId) {
+    return res.status(400).json({ error: 'USER_ID_REQUIRED', message: 'userId is required' });
+  }
+
+  const userIndex = serverUsers.findIndex((u) => u.id === userId || u.email.toLowerCase() === String(userId).toLowerCase());
+  if (userIndex === -1 && action !== 'delete') {
+    return res.status(404).json({ error: 'USER_NOT_FOUND', message: `User ${userId} not found` });
+  }
+
+  const user = serverUsers[userIndex];
+
+  if (action === 'suspend') {
+    user.status = 'SUSPENDED';
+    addServerAuditLog('ADMIN', 'USER_SUSPENDED', `Suspended user ${user.email} (${user.id})`, 'WARN');
+    return res.json({ success: true, message: `User ${user.email} suspended`, user });
+  } else if (action === 'unsuspend' || action === 'activate') {
+    user.status = 'ACTIVE';
+    addServerAuditLog('ADMIN', 'USER_ACTIVATED', `Activated user ${user.email} (${user.id})`);
+    return res.json({ success: true, message: `User ${user.email} activated`, user });
+  } else if (action === 'delete') {
+    if (userIndex !== -1) {
+      const removed = serverUsers.splice(userIndex, 1)[0];
+      addServerAuditLog('ADMIN', 'USER_DELETED', `Deleted user ${removed.email} (${removed.id})`, 'WARN');
+      return res.json({ success: true, message: `User ${removed.email} deleted` });
+    }
+    return res.json({ success: true, message: 'User deleted' });
+  } else if (action === 'grant_premium') {
+    const nextTier = tier === 'ELITE_PASS' ? 'ELITE_PASS' : 'PRO_PASS';
+    user.subscription = nextTier;
+    user.status = 'ACTIVE';
+    addServerAuditLog('ADMIN', 'GRANT_PREMIUM', `Granted ${nextTier} to ${user.email}`);
+    return res.json({ success: true, message: `Granted ${nextTier} to ${user.email}`, user });
+  } else if (action === 'revoke_premium') {
+    user.subscription = 'FREE_TRIAL';
+    user.status = 'TRIALING';
+    addServerAuditLog('ADMIN', 'REVOKE_PREMIUM', `Revoked premium from ${user.email}`, 'WARN');
+    return res.json({ success: true, message: `Revoked premium from ${user.email}`, user });
+  } else if (action === 'update_role') {
+    if (role) {
+      user.role = role;
+      addServerAuditLog('ADMIN', 'ROLE_UPDATED', `Updated role of ${user.email} to ${role}`);
+      return res.json({ success: true, message: `Role updated to ${role}`, user });
+    }
+  }
+
+  res.status(400).json({ error: 'INVALID_ACTION', message: 'Unknown action requested' });
+});
+
 app.post('/api/admin/users/role', requireRole(['OWNER', 'ADMIN']), (req, res) => {
   const { userId, newRole } = req.body;
-  const validRoles = ['OWNER', 'ADMIN', 'SUPPORT', 'PRO', 'FREE', 'TRIAL'];
+  const validRoles = ['OWNER', 'ADMIN', 'SUPPORT', 'PRO', 'FREE', 'TRIAL', 'USER'];
   if (!validRoles.includes(newRole)) {
     return res.status(400).json({ error: 'INVALID_ROLE', message: `Role must be one of ${validRoles.join(', ')}` });
+  }
+  const user = serverUsers.find((u) => u.id === userId || u.email.toLowerCase() === String(userId).toLowerCase());
+  if (user) {
+    user.role = newRole as any;
+    addServerAuditLog('ADMIN', 'ROLE_CHANGE', `Changed role for ${user.email} to ${newRole}`);
   }
   res.json({
     success: true,
@@ -572,21 +708,32 @@ app.post('/api/admin/users/role', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   });
 });
 
-app.get('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) => {
-  res.json([
-    { id: 'log_101', timestamp: new Date(Date.now() - 300000).toISOString(), actor: 'vixyvault0@gmail.com', action: 'UPDATED_ROLE', details: 'Promoted trader.sam@crypto.com to PRO' },
-    { id: 'log_102', timestamp: new Date(Date.now() - 1800000).toISOString(), actor: 'SYSTEM_STRIPE_WEBHOOK', action: 'SUBSCRIPTION_RENEWED', details: 'PRO_PASS renewed for usr_03' },
-    { id: 'log_103', timestamp: new Date(Date.now() - 3600000).toISOString(), actor: 'quant.desk@fund.io', action: 'API_KEY_ROTATED', details: 'Rotated secondary Binance data stream key' },
-  ]);
+app.get('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  res.json(serverAuditLogs);
+});
+
+app.post('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const { actor = 'ADMIN', action = 'MANUAL_ACTION', details = '', level = 'INFO' } = req.body || {};
+  const log = addServerAuditLog(actor, action, details, level);
+  res.json({ success: true, log });
 });
 
 app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  const memUsageMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+  const uptimeSecs = Math.floor(process.uptime());
+  
   res.json({
     status: 'HEALTHY',
-    uptimeSecs: Math.floor(process.uptime()),
-    memoryUsageMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
-    wsConnectionState: 'Connected',
-    latencyMs: 14,
+    cpuUsagePct: Math.round(12 + Math.random() * 8),
+    ramUsageMb: memUsageMb,
+    apiLatencyMs: Math.round(10 + Math.random() * 6),
+    databaseLatencyMs: Math.round(2 + Math.random() * 3),
+    realtimeConnections: 342,
+    websocketStatus: 'CONNECTED',
+    uptimeSecs,
+    discordBotStatus: getDiscordBotStatus().isReady ? 'ACTIVE' : 'READY',
+    openAiStatus: !!ai ? 'OPERATIONAL' : 'DEGRADED',
+    stripeStatus: !!process.env.STRIPE_SECRET_KEY ? 'CONFIGURED' : 'STANDBY',
     geminiConnected: !!ai,
     stripeConnected: !!process.env.STRIPE_SECRET_KEY,
     timestamp: Date.now(),
@@ -838,17 +985,73 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
       const customerEmail = (session.customer_email || session.metadata?.userEmail || 'customer@example.com').toLowerCase();
       const plan = (session.metadata?.plan || 'PRO').toUpperCase();
       const referralCode = session.metadata?.referralCode || 'DIRECT';
+      const amountTotal = (session.amount_total || 19900) / 100;
 
       const roleToGrant = plan === 'ELITE' ? 'ELITE' : 'PRO';
+      const passName = `${plan}_PASS`;
 
+      // 1. Update Subscription Store
       userSubscriptions.set(customerEmail, {
         email: customerEmail,
         role: roleToGrant,
-        plan: `${plan}_PASS`,
+        plan: passName,
         status: 'ACTIVE',
         referralCode,
         updatedAt: new Date().toISOString(),
       });
+
+      // 2. Sync to Server Users Array for Admin Table
+      const existingUser = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
+      if (existingUser) {
+        existingUser.subscription = passName as any;
+        existingUser.status = 'ACTIVE';
+        if (existingUser.role !== 'OWNER' && existingUser.role !== 'ADMIN') {
+          existingUser.role = 'USER';
+        }
+      } else {
+        serverUsers.unshift({
+          id: `usr_${Date.now().toString().slice(-4)}`,
+          email: customerEmail,
+          name: customerEmail.split('@')[0],
+          role: 'USER',
+          subscription: passName as any,
+          passwordHash: 'UserPass2026!',
+          verificationStatus: 'VERIFIED',
+          hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
+          ipHash: '172.56.22.10',
+          joined: new Date().toISOString().split('T')[0],
+          status: 'ACTIVE',
+          volumeTrades: 0,
+          referralCodeUsed: referralCode,
+        });
+      }
+
+      // 3. Record Successful Transaction in Server Ledger
+      serverTransactions.unshift({
+        id: session.id || `ch_${Date.now()}`,
+        email: customerEmail,
+        plan: `${plan === 'ELITE' ? 'Elite Pass' : 'Pro Pass'} ($${amountTotal})`,
+        amount: amountTotal,
+        method: session.payment_method_types?.[0] ? `Stripe (${session.payment_method_types[0]})` : 'Stripe Credit Card',
+        status: 'Succeeded',
+        timestamp: 'Just now',
+        rawTime: Date.now(),
+      });
+
+      // 4. Audit Log Entry
+      addServerAuditLog(
+        'SYSTEM_STRIPE_WEBHOOK',
+        'CHECKOUT_SUCCESS',
+        `User ${customerEmail} subscribed to ${passName} ($${amountTotal}) via Stripe. Ref: ${referralCode}`,
+        'INFO'
+      );
+
+      // 5. Automate Discord VIP Sync if available
+      if (session.metadata?.discordUserId) {
+        assignDiscordVipRole(session.metadata.discordUserId).catch((err) => {
+          console.warn('Discord VIP role auto-grant error:', err);
+        });
+      }
 
       break;
     }
@@ -857,11 +1060,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
     case 'invoice.payment_succeeded': {
       const sub = event.data.object;
       const customerEmail = (sub.customer_email || sub.metadata?.userEmail || '').toLowerCase();
-      if (customerEmail && userSubscriptions.has(customerEmail)) {
-        const current = userSubscriptions.get(customerEmail)!;
-        current.status = 'ACTIVE';
-        current.updatedAt = new Date().toISOString();
-        userSubscriptions.set(customerEmail, current);
+      if (customerEmail) {
+        if (userSubscriptions.has(customerEmail)) {
+          const current = userSubscriptions.get(customerEmail)!;
+          current.status = 'ACTIVE';
+          current.updatedAt = new Date().toISOString();
+          userSubscriptions.set(customerEmail, current);
+        }
+
+        const user = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
+        if (user) {
+          user.status = 'ACTIVE';
+        }
+
+        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'PAYMENT_SUCCEEDED', `Invoice payment succeeded for ${customerEmail}`);
       }
       break;
     }
@@ -870,7 +1082,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
     case 'invoice.payment_failed': {
       const sub = event.data.object;
       const customerEmail = (sub.customer_email || sub.metadata?.userEmail || '').toLowerCase();
-      if (customerEmail && userSubscriptions.has(customerEmail)) {
+      if (customerEmail) {
         userSubscriptions.set(customerEmail, {
           email: customerEmail,
           role: 'FREE',
@@ -878,6 +1090,19 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
           status: 'CANCELED_OR_FAILED',
           updatedAt: new Date().toISOString(),
         });
+
+        const user = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
+        if (user) {
+          user.subscription = 'FREE_TRIAL';
+          user.status = 'SUSPENDED';
+        }
+
+        addServerAuditLog(
+          'SYSTEM_STRIPE_WEBHOOK',
+          'PAYMENT_FAILED_OR_CANCELLED',
+          `Subscription cancelled or payment failed for ${customerEmail}. Access revoked.`,
+          'WARN'
+        );
       }
       break;
     }

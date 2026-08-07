@@ -216,8 +216,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
               )}
               <div className="space-y-1">
-                {sec.items.map((item) => {
-                  const IconComponent = item.icon;
+                {sec.items
+                  .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
+                  .map((item) => {
+                    const IconComponent = item.icon;
                   const isActive = activeTab === item.id;
 
                   if (isCollapsed) {
@@ -361,8 +363,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {sec.title}
                   </div>
                   <div className="space-y-1">
-                    {sec.items.map((item) => {
-                      const IconComponent = item.icon;
+                    {sec.items
+                      .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
+                      .map((item) => {
+                        const IconComponent = item.icon;
                       const isActive = activeTab === item.id;
 
                       return (

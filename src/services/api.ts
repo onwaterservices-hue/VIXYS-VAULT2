@@ -866,6 +866,48 @@ export async function deleteAdminReferral(code: string) {
   }
 }
 
+export async function fetchAdminStats() {
+  return await safeFetchJson<any>(`/api/admin/stats?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function fetchAdminTransactions() {
+  return await safeFetchJson<any[]>(`/api/admin/transactions?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function performUserAction(userId: string, action: string, extraPayload: Record<string, any> = {}) {
+  try {
+    const res = await fetch('/api/admin/users/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action, ...extraPayload }),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to perform user action on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
+export async function fetchAdminAuditLogs() {
+  return await safeFetchJson<any[]>(`/api/admin/audit-logs?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function fetchSystemHealth() {
+  return await safeFetchJson<any>(`/api/admin/system-health?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
 export async function unfreezeUserBotsApi() {
   try {
     const res = await fetch('/api/admin/unfreeze-bots', {
