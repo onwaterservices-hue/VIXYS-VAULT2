@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Sparkles, Clock, Lock, CheckCircle2, ShieldAlert, Cpu, EyeOff, Radio, Activity } from 'lucide-react';
+import { Clock, Cpu, Radio, Activity, Zap } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 
 interface SignalBrainProps {
@@ -42,21 +42,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   // Live Ticking Numbers for Alive Feeling
   const [liveConfidence, setLiveConfidence] = useState(signal.confidence);
-  const [cursorVisible, setCursorVisible] = useState(true);
 
   useEffect(() => {
     setLiveConfidence(signal.confidence);
   }, [signal.confidence]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCursorVisible((prev) => !prev);
-    }, 600);
-    return () => clearInterval(timer);
-  }, []);
-
-  // AI Battle Mode Calculations (Bulls vs Bears live pressure)
-  const bullPct = signal.orderFlow?.bullVolumePct || (isBullish ? 64 : 36);
+  // Bulls vs Bears order flow pressure
+  const bullPct = signal.orderFlow?.bullVolumePct || (isBullish ? 68 : 32);
   const bearPct = 100 - bullPct;
 
   // Micro-telemetry values
@@ -66,11 +58,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const strikeDistancePct = (strikeDistanceVal / currentPrice) * 100;
   const formattedStrikePct = `${strikeDistancePct >= 0 ? '+' : ''}${strikeDistancePct.toFixed(2)}%`;
 
-  // Simulated live latency jitter
-  const [latency, setLatency] = useState(203);
+  // Live latency jitter
+  const [latency, setLatency] = useState(198);
   useEffect(() => {
     const latInterval = setInterval(() => {
-      setLatency(201 + Math.floor(Math.random() * 8));
+      setLatency(195 + Math.floor(Math.random() * 8));
     }, 2500);
     return () => clearInterval(latInterval);
   }, []);
@@ -83,27 +75,29 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     <div
       className={`relative overflow-hidden rounded-3xl border p-5 sm:p-7 space-y-6 font-mono transition-all duration-700 shadow-2xl ${
         isBullish
-          ? 'bg-[#03010a] border-emerald-500/70 shadow-[0_0_90px_rgba(16,185,129,0.22)]'
-          : 'bg-[#03010a] border-rose-500/70 shadow-[0_0_90px_rgba(244,63,94,0.22)]'
+          ? 'bg-[#03010a] border-emerald-500/70 shadow-[0_0_90px_rgba(16,185,129,0.25)]'
+          : 'bg-[#03010a] border-rose-500/70 shadow-[0_0_90px_rgba(244,63,94,0.25)]'
       }`}
     >
-      {/* Background Terminal Scanlines Pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,10,38,0)_50%,rgba(0,0,0,0.35)_50%)] bg-[length:100%_4px] pointer-events-none opacity-40 z-0" />
+      {/* Terminal Grid Background Pattern */}
+      <div className="absolute inset-0 bg-[linear-gradient(rgba(18,10,38,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px] pointer-events-none opacity-40 z-0" />
 
-      {/* Radial Aura Effect */}
+      {/* Radial Directional Aura */}
       <div
-        className={`absolute -top-24 -right-24 w-96 h-96 rounded-full pointer-events-none filter blur-3xl opacity-20 transition-all duration-1000 ${
+        className={`absolute -top-20 -right-20 w-96 h-96 rounded-full pointer-events-none filter blur-3xl opacity-25 transition-all duration-1000 ${
           isBullish ? 'bg-emerald-500' : 'bg-rose-500'
         }`}
       />
 
-      {/* Top Header: VIXY NEURAL DECISION ENGINE & Telemetry Badges */}
+      {/* Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/60 pb-4 relative z-10">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-[#0b051b] px-3.5 py-1.5 rounded-xl border border-purple-800/80 shadow-md">
-            <span className={`w-2.5 h-2.5 rounded-full animate-ping ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            <span className={`text-lg sm:text-xl drop-shadow ${isBullish ? 'animate-bounce' : 'animate-pulse'}`}>
+              {isBullish ? '🐂' : '🐻'}
+            </span>
             <span className="font-extrabold text-white uppercase text-xs tracking-wider flex items-center gap-1.5">
-              ● VIXY NEURAL DECISION ENGINE
+              VIXY PREDICTION DIRECTION
             </span>
           </div>
           <span className="px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-800/60 text-[11px] font-black text-purple-200 tracking-widest uppercase">
@@ -112,11 +106,23 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <div
+            className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-md border flex items-center gap-1.5 ${
+              isBullish
+                ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60 shadow-emerald-900/40'
+                : 'bg-rose-950/90 text-rose-300 border-rose-500/60 shadow-rose-900/40'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full animate-ping ${isBullish ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+            {isBullish ? 'BULLISH PROJECTION' : 'BEARISH PROJECTION'}
+          </div>
+
           <div className="flex items-center gap-2 bg-[#090317] px-3 py-1.5 rounded-xl border border-purple-800/60 text-xs text-purple-200 font-bold">
             <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 animate-pulse" />
-            <span className="text-purple-400/80 text-[10px] uppercase">EXPIRES:</span>
+            <span className="text-purple-400/80 text-[10px] uppercase">EXPIRY:</span>
             <strong className="text-white font-mono text-xs">{timeString}</strong>
           </div>
+
           <div className="hidden sm:flex items-center gap-1.5 bg-[#090317] px-2.5 py-1.5 rounded-xl border border-purple-800/50 text-[10px] text-cyan-300 font-mono">
             <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
             <span>LATENCY {latency}ms</span>
@@ -134,54 +140,48 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               : 'bg-gradient-to-br from-[#260510]/90 via-[#18030b]/90 to-[#080104]/95 border-rose-500/80 shadow-[0_0_35px_rgba(244,63,94,0.3)]'
           }`}
         >
-          {/* Subtle Ambient Grid in Hero Card */}
+          {/* Radial Highlight */}
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/10 via-transparent to-transparent pointer-events-none" />
 
-          {/* Decision State Title */}
+          {/* Top Label */}
           <div className="flex items-center justify-between text-xs font-mono font-extrabold tracking-wider">
             <span className="flex items-center gap-2 text-purple-200 uppercase">
-              <Cpu className={`w-4 h-4 ${isBullish ? 'text-emerald-400' : 'text-rose-400'} animate-pulse`} />
-              VIXY PREDICTION DIRECTION
+              <span className="text-lg">{isBullish ? '🐂' : '🐻'}</span>
+              <span className="text-white font-bold">VIXY DECISION ENGINE</span>
             </span>
-            <span
-              className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest shadow-md border ${
-                isBullish
-                  ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60 shadow-emerald-900/40'
-                  : 'bg-rose-950/90 text-rose-300 border-rose-500/60 shadow-rose-900/40'
-              }`}
-            >
-              {isBullish ? 'BULLISH PROJECTION' : 'BEARISH PROJECTION'}
+            <span className="text-[10px] text-purple-300/80 font-mono font-bold tracking-widest uppercase">
+              HIGH-CONVICTION SETUP
             </span>
           </div>
 
           {/* Symmetrical Hero Decision State Callout */}
-          <div className="space-y-1 my-2">
+          <div className="space-y-2 my-2">
             <div className="flex items-baseline justify-between gap-4 flex-wrap">
               <div
-                className={`text-4xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight uppercase flex items-center gap-3 drop-shadow-[0_0_30px_rgba(0,0,0,0.8)] ${
+                className={`text-5xl sm:text-6xl lg:text-7xl font-black font-mono tracking-tight uppercase flex items-center gap-3 drop-shadow-[0_0_35px_rgba(0,0,0,0.9)] ${
                   isBullish
-                    ? 'text-emerald-400 drop-shadow-[0_0_25px_rgba(16,185,129,0.7)]'
-                    : 'text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.7)]'
+                    ? 'text-emerald-400 drop-shadow-[0_0_30px_rgba(16,185,129,0.8)]'
+                    : 'text-rose-400 drop-shadow-[0_0_30px_rgba(244,63,94,0.8)]'
                 }`}
               >
                 <span>{isBullish ? 'BUY UP' : 'BUY DOWN'}</span>
-                <span className="text-2xl sm:text-3xl opacity-80">{isBullish ? '▲' : '▼'}</span>
+                <span className="text-3xl sm:text-4xl opacity-90">{isBullish ? '▲' : '▼'}</span>
               </div>
 
               <div className="text-right">
-                <div className="text-3xl sm:text-4xl font-black text-white font-mono tracking-tight drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]">
+                <div className="text-3xl sm:text-4xl lg:text-5xl font-black text-white font-mono tracking-tight drop-shadow-[0_0_20px_rgba(255,255,255,0.4)]">
                   {liveConfidence.toFixed(0)}%
                 </div>
-                <div className="text-[10px] font-bold text-purple-300/80 uppercase tracking-widest">
-                  CONFIDENCE
+                <div className="text-[10px] font-extrabold text-purple-300/80 uppercase tracking-widest">
+                  VIXY CONFIDENCE
                 </div>
               </div>
             </div>
 
-            {/* Segmented ASCII/Block Confidence Meter */}
+            {/* Segmented VIXY Confidence Field */}
             <div className="pt-3 space-y-1.5">
               <div className="flex justify-between text-[11px] font-mono font-bold">
-                <span className="text-purple-300/80 uppercase tracking-wider">AI CONFIDENCE METER</span>
+                <span className="text-purple-300/80 uppercase tracking-wider">VIXY CONFIDENCE FIELD</span>
                 <span className={isBullish ? 'text-emerald-300 font-extrabold' : 'text-rose-300 font-extrabold'}>
                   {liveConfidence.toFixed(1)}% ({isBullish ? 'HIGH BULL' : 'HIGH BEAR'})
                 </span>
@@ -208,16 +208,16 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </div>
           </div>
 
-          {/* Edge and Execution Note */}
+          {/* Institutional Edge */}
           <div className="pt-3 border-t border-purple-900/50 flex items-center justify-between text-xs font-mono">
-            <span className="text-purple-300/80 font-bold uppercase">INSTITUTIONAL EDGE:</span>
-            <span className="text-emerald-400 font-black text-sm">+{signal.edgePct.toFixed(1)}% OVER MARKET</span>
+            <span className="text-purple-300/80 font-bold uppercase tracking-wider">INSTITUTIONAL EDGE:</span>
+            <span className="text-emerald-400 font-black text-sm tracking-wide">+{signal.edgePct.toFixed(1)}% OVER MARKET</span>
           </div>
         </div>
 
         {/* Right Column (5 cols): Micro-Telemetry Matrix Grid */}
         <div className="lg:col-span-5 grid grid-cols-2 gap-3 items-stretch">
-          {/* Target Price */}
+          {/* Target Strike */}
           <div className="bg-[#080318] p-4 rounded-2xl border border-purple-800/70 shadow-xl flex flex-col justify-between">
             <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
               TARGET STRIKE
@@ -226,11 +226,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               <span className="text-xl sm:text-2xl font-black text-white font-mono block">
                 ${targetPrice.toLocaleString()}
               </span>
-              <span className="text-[10px] text-emerald-400 font-bold block mt-0.5">
-                {isBullish ? 'Target Above Strike' : 'Target Below Strike'}
+              <span className={`text-[10px] font-bold block mt-0.5 ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {isBullish ? 'TARGET ABOVE STRIKE' : 'TARGET BELOW STRIKE'}
               </span>
             </div>
-            <span className="text-[9px] text-purple-400/60 font-mono">Kalshi 15M Contract</span>
+            <span className="text-[9px] text-purple-400/60 font-mono">Kalshi {timeframe} Contract</span>
           </div>
 
           {/* Strike Distance */}
@@ -247,7 +247,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                 {formattedStrikePct}
               </span>
               <span className="text-[10px] text-purple-300/90 font-bold block mt-0.5">
-                ${Math.abs(strikeDistanceVal).toFixed(1)} Delta
+                ${Math.abs(strikeDistanceVal).toFixed(1)} DELTA
               </span>
             </div>
             <span className="text-[9px] text-purple-400/60 font-mono">From Spot Price</span>
@@ -263,36 +263,36 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                 {timeString}
               </span>
               <span className="text-[10px] text-amber-400/90 font-bold block mt-0.5">
-                15M Candle Close
+                {timeframe} CANDLE CLOSE
               </span>
             </div>
             <span className="text-[9px] text-purple-400/60 font-mono">Live Ticking</span>
           </div>
 
-          {/* Lock Evaluation Status */}
+          {/* VIXY Lock Evaluation Status */}
           <div className="bg-[#080318] p-4 rounded-2xl border border-purple-800/70 shadow-xl flex flex-col justify-between">
             <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
-              MODEL LOCK
+              VIXY LOCK
             </span>
             <div className="my-1">
               <span className="text-xl sm:text-2xl font-black text-cyan-300 font-mono block">
                 {lockScorePct}%
               </span>
               <span className="text-[10px] text-cyan-400 font-bold block mt-0.5">
-                {lockEvaluation.qualified ? 'QUALIFIED ✓' : 'SCANNING...'}
+                {lockEvaluation.qualified ? 'DIRECTION LOCKED ✓' : 'SCANNING...'}
               </span>
             </div>
-            <span className="text-[9px] text-purple-400/60 font-mono">Model 17 Engine</span>
+            <span className="text-[9px] text-purple-400/60 font-mono">VIXY Engine 17</span>
           </div>
         </div>
       </div>
 
-      {/* AI Battle Mode & Order Flow Pressure Bar */}
+      {/* VIXY Order Flow Pressure Bar */}
       <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/70 space-y-2 relative z-10 shadow-xl">
         <div className="flex items-center justify-between text-xs font-mono">
           <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
             <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-            VIXY ORDER FLOW PRESSURE
+            〽 VIXY ORDER FLOW PRESSURE
           </span>
           <span className="text-emerald-400 font-black text-xs">
             TAKER BULLS {bullPct}% VS BEARS {bearPct}%
@@ -313,4 +313,5 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     </div>
   );
 };
+
 

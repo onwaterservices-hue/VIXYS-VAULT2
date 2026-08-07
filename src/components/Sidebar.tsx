@@ -73,37 +73,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navSections = [
     {
-      title: 'CORE DESKS',
+      title: 'COMMAND',
       items: [
         { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'compare', label: 'Split-Screen Compare', icon: Sliders, badge: 'VS' },
-        { id: 'scalping', label: '15s Alpha Intelligence', icon: Zap, badge: 'LIVE' },
+        { id: 'compare', label: 'Asset Compare', icon: Sliders, badge: 'VS' },
+        { id: 'scalping', label: 'Scalping Desk', icon: Zap, badge: '15S' },
         { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
+      ],
+    },
+    {
+      title: 'INTELLIGENCE',
+      items: [
+        { id: 'history', label: 'Signals & Analytics', icon: BarChart2, badge: 'VIXY' },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
         { id: 'markets', label: 'Markets', icon: TrendingUp },
-      ],
-    },
-    {
-      title: 'QUANT INTEL',
-      items: [
-        { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'AI' },
-        { id: 'whales', label: 'Whale Tracker', icon: Layers },
-        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'BACKTEST' },
         { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
-        { id: 'replay', label: 'Replay Center', icon: History },
+        { id: 'whales', label: 'Whale Tracker', icon: Layers },
       ],
     },
     {
-      title: 'TRADER TOOLS',
+      title: 'RESEARCH',
       items: [
-        { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'VERIFIED' },
-        { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
+        { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'CORE' },
+        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'LAB' },
+        { id: 'replay', label: 'Replay Center', icon: History },
         { id: 'journal', label: 'Trade Journal', icon: BookOpen },
-        { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'BOT' },
+      ],
+    },
+    {
+      title: 'SYSTEM',
+      items: [
         { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
-        { id: 'history', label: 'Quant Telemetry & Accuracy', icon: BarChart2 },
-        { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard },
+        { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard, badge: 'PRO' },
         { id: 'settings', label: 'Settings', icon: Settings },
+        { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'ADMIN' },
+        { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'TOP' },
+        { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
         { id: 'landing', label: 'Landing Page', icon: Globe },
       ],
     },
@@ -114,8 +119,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'about', label: 'About Vixy Vault', icon: Info },
         { id: 'terms', label: 'Terms of Service', icon: FileText },
         { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck },
-        { id: 'risk', label: 'Risk', icon: AlertTriangle, badge: 'NOTICE' },
-        { id: 'refunds', label: 'Refunds', icon: CreditCard },
+        { id: 'risk', label: 'Risk Notice', icon: AlertTriangle, badge: 'NOTICE' },
+        { id: 'refunds', label: 'Refund Policy', icon: CreditCard },
       ],
     },
   ];

@@ -248,10 +248,10 @@ export const Header: React.FC<HeaderProps> = ({
             );
           })()}
 
-          {/* Unified AI Signal Stat Cluster (Calculated from Live Exchange Feed API) */}
+          {/* Unified VIXY Intelligence Cluster (Calculated from Live Exchange Feed API) */}
           <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
-            <span className="flex items-center gap-1">
-              Signal
+            <span className="flex items-center gap-1 font-bold text-purple-300">
+              VIXY Signal:
               {apiSignal?.action === 'BUY_YES' ? (
                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
                   🟢 ▲ BUY UP
@@ -270,7 +270,7 @@ export const Header: React.FC<HeaderProps> = ({
             <span>
               {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
                 <>
-                  Confidence{' '}
+                  VIXY Confidence{' '}
                   <strong className="text-white font-black text-xs font-mono px-1.5 py-0.5 rounded bg-purple-950 border border-purple-700/40">
                     {Math.round(apiSignal.modelProbability * 100)}%
                   </strong>
@@ -278,8 +278,8 @@ export const Header: React.FC<HeaderProps> = ({
               ) : (
                 <strong className="text-amber-300 font-extrabold">
                   {modelStatus?.hasActiveModel
-                    ? `Active Model (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
-                    : `Collecting data (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
+                    ? `VIXY Engine (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
+                    : `Telemetry (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
                 </strong>
               )}
             </span>

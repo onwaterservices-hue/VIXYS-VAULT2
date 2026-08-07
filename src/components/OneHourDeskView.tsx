@@ -203,7 +203,75 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         </div>
       </div>
 
-      {/* 1. HERO LEVEL: Reusable Buy Up / Buy Down Scaling AI Chart */}
+      {/* 1. TOP LEVEL: 1-Hour Contract Strike Selector Matrix */}
+      <div className="bg-[#0b041a] rounded-3xl p-5 border border-purple-500/30 shadow-[0_0_40px_rgba(147,51,234,0.15)] space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-full bg-amber-500/20 border border-amber-400/60 flex items-center justify-center shadow-[0_0_12px_rgba(251,191,36,0.3)]">
+              <Target className="w-4 h-4 text-amber-400" />
+            </div>
+            <h3 className="font-black text-base sm:text-lg text-white font-mono tracking-wider">1–HOUR STRIKE CONTRACT MATRIX</h3>
+            <span className="px-2.5 py-0.5 rounded-full bg-purple-900/70 text-purple-200 text-[10px] font-extrabold font-mono border border-purple-500/40 shadow-sm">
+              LIVE DERIVATIVES FEED
+            </span>
+          </div>
+          <span className="text-xs text-purple-300/70 font-mono">Select target strike to calculate position odds</span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+          {[
+            { strike: 64000, yesOdds: 88, noOdds: 12, prob: 94, edge: 18.2, status: 'HIGH PROBABILITY', isOptimal: false },
+            { strike: 64200, yesOdds: 72, noOdds: 28, prob: 88, edge: 14.2, status: 'OPTIMAL ENTRY', isOptimal: true },
+            { strike: 64500, yesOdds: 34, noOdds: 66, prob: 42, edge: 8.5, status: 'STRETCH TARGET', isOptimal: false },
+          ].map((item) => {
+            const isSelected = selectedStrike === item.strike;
+            return (
+              <button
+                key={item.strike}
+                onClick={() => {
+                  setSelectedStrike(item.strike);
+                  setKalshiYesCent(item.yesOdds);
+                  setKalshiNoCent(item.noOdds);
+                  setConfidenceScore(item.prob);
+                  setModelEdge(item.edge);
+                }}
+                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden backdrop-blur-md ${
+                  isSelected || item.isOptimal
+                    ? 'bg-[#150734] border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.35)] ring-2 ring-purple-500/60'
+                    : 'bg-[#080214]/90 border-purple-900/50 text-purple-300/70 hover:opacity-100 hover:border-purple-600/60 opacity-80'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs mb-2">
+                  <span className={`font-black font-mono text-sm sm:text-base ${isSelected || item.isOptimal ? 'text-white' : 'text-purple-200'}`}>
+                    ${item.strike.toLocaleString()} Target
+                  </span>
+                  <span
+                    className={`text-[10px] font-black px-2.5 py-0.5 rounded font-mono ${
+                      item.isOptimal
+                        ? 'bg-amber-400 text-slate-950 shadow-[0_0_12px_rgba(251,191,36,0.5)] tracking-wide'
+                        : 'bg-purple-900/80 text-purple-200 border border-purple-700/50'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                </div>
+
+                <div className="text-2xl font-black text-white my-1 font-mono tracking-tight flex items-baseline gap-1.5">
+                  <span>YES {item.yesOdds}¢</span>
+                  <span className="text-purple-400/60 text-xs font-normal">/ NO {item.noOdds}¢</span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-purple-300/80 mt-3 pt-2.5 border-t border-purple-900/50 font-mono">
+                  <span>Model Win: <strong className="text-white font-bold">{item.prob}%</strong></span>
+                  <span className="text-emerald-400 font-extrabold">Edge: +{item.edge}%</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. HERO LEVEL: Reusable Buy Up / Buy Down Scaling AI Chart */}
       <ScalpDecisionChart
         asset="BTC"
         desk="1h"
@@ -275,71 +343,6 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           <AIBrainMemoryVault asset="BTC" desk="1h" />
         </div>
       )}
-
-      {/* 1-Hour Contract Strike Selector Matrix */}
-      <div className="bg-[#100726] rounded-2xl p-5 border border-purple-500/30 shadow-2xl space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Target className="w-5 h-5 text-amber-400" />
-            <h3 className="font-extrabold text-base text-white tracking-wide">1-HOUR STRIKE CONTRACT MATRIX</h3>
-            <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 text-[10px] font-bold border border-purple-400/30">
-              LIVE DERIVATIVES FEED
-            </span>
-          </div>
-          <span className="text-xs text-purple-300/70 font-sans">Select target strike to calculate position odds</span>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { strike: 64000, yesOdds: 88, noOdds: 12, prob: 94, edge: 18.2, status: 'HIGH PROBABILITY' },
-            { strike: 64200, yesOdds: 72, noOdds: 28, prob: 88, edge: 14.2, status: 'OPTIMAL ENTRY' },
-            { strike: 64500, yesOdds: 34, noOdds: 66, prob: 42, edge: 8.5, status: 'STRETCH TARGET' },
-          ].map((item) => {
-            const isSelected = selectedStrike === item.strike;
-            return (
-              <button
-                key={item.strike}
-                onClick={() => {
-                  setSelectedStrike(item.strike);
-                  setKalshiYesCent(item.yesOdds);
-                  setKalshiNoCent(item.noOdds);
-                  setConfidenceScore(item.prob);
-                  setModelEdge(item.edge);
-                }}
-                className={`p-4 rounded-2xl border text-left transition-all relative overflow-hidden backdrop-blur-md ${
-                  isSelected
-                    ? 'bg-purple-950/90 border-purple-400 shadow-[0_0_25px_rgba(168,85,247,0.3)] ring-1 ring-purple-400/60 scale-[1.01]'
-                    : 'bg-[#080317]/80 border-purple-900/40 text-purple-300/70 hover:opacity-100 hover:border-purple-600/50 opacity-80'
-                }`}
-              >
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className={`font-bold text-sm ${isSelected ? 'text-white font-mono' : 'text-purple-200'}`}>
-                    ${item.strike.toLocaleString()} Target
-                  </span>
-                  <span
-                    className={`text-[10px] font-black px-2 py-0.5 rounded ${
-                      isSelected
-                        ? 'bg-amber-400 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.4)]'
-                        : 'bg-purple-900/60 text-purple-300 border border-purple-800/40'
-                    }`}
-                  >
-                    {item.status}
-                  </span>
-                </div>
-
-                <div className="text-xl font-black text-white my-1 font-mono tracking-tight">
-                  YES {item.yesOdds}¢ <span className="text-purple-400/60 text-xs font-normal">/ NO {item.noOdds}¢</span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs text-purple-300/70 mt-2 pt-2 border-t border-purple-900/40 font-mono">
-                  <span>Model Win: <strong className="text-white">{item.prob}%</strong></span>
-                  <span className="text-emerald-400 font-bold">Edge: +{item.edge}%</span>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       {/* Main Grid: 1-Hour Neural Ribbon + Kelly Calculator */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

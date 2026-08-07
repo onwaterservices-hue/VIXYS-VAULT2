@@ -10,6 +10,9 @@ import {
   broadcastSignalToDiscord,
   assignDiscordVipRole,
   assignDiscordRoleToUser,
+  removeDiscordRoleFromUser,
+  runDiscordDiagnostics,
+  getDiscordHealthReport,
   validateDiscordEnv,
 } from './src/bot';
 import { AutomationScheduler } from './src/bot/services/automationScheduler';
@@ -741,6 +744,35 @@ app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), 
   });
 });
 
+// Stripe Health & Diagnostics Endpoint (Safe Mode Detection)
+app.get('/api/stripe/health', (req, res) => {
+  const secretKey = process.env.STRIPE_SECRET_KEY || '';
+  const pubKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+
+  const secretKeyMode = secretKey.startsWith('sk_live_')
+    ? 'live'
+    : secretKey.startsWith('sk_test_')
+    ? 'test'
+    : 'missing';
+
+  const pubKeyMode = pubKey.startsWith('pk_live_')
+    ? 'live'
+    : pubKey.startsWith('pk_test_')
+    ? 'test'
+    : 'missing';
+
+  res.json({
+    status: secretKey ? 'OPERATIONAL' : 'MISCONFIGURED',
+    stripe_secret_key_present: !!secretKey,
+    stripe_secret_key_mode: secretKeyMode,
+    stripe_publishable_key_present: !!pubKey,
+    stripe_publishable_key_mode: pubKeyMode,
+    stripe_webhook_secret_present: !!webhookSecret,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // Stripe Status / Configuration Endpoint
 app.get('/api/stripe/config', (req, res) => {
   res.json({
@@ -862,8 +894,19 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
 
     res.json({ url: session.url, sessionId: session.id, appliedReferral: cleanReferral });
   } catch (err: any) {
-    console.error('Error creating Stripe checkout session:', err);
-    res.status(500).json({ error: 'STRIPE_ERROR', message: err.message });
+    if (err instanceof Stripe.errors.StripeError) {
+      console.error('[Stripe Checkout API Error]', {
+        stripe_error_type: err.type,
+        stripe_error_code: err.code,
+        stripe_error_param: err.param,
+        stripe_request_id: err.requestId,
+        endpoint: '/api/stripe/create-checkout-session',
+        timestamp: new Date().toISOString(),
+      });
+    } else {
+      console.error('Error creating Stripe checkout session:', err);
+    }
+    res.status(500).json({ error: 'STRIPE_ERROR', message: err.message || 'Failed to create checkout session' });
   }
 };
 
@@ -1167,6 +1210,61 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           'PAYMENT_FAILED_OR_CANCELLED',
           `Subscription cancelled or payment failed for ${customerEmail}. Access revoked.`,
           'WARN'
+        );
+      }
+      break;
+    }
+
+    case 'charge.refunded': {
+      const charge = event.data.object;
+      const customerEmail = await extractEmail(charge);
+      if (customerEmail) {
+        addServerAuditLog(
+          'SYSTEM_STRIPE_WEBHOOK',
+          'CHARGE_REFUNDED',
+          `Charge refunded for ${customerEmail}. Amount: $${(charge.amount_refunded || 0) / 100}`,
+          'WARN'
+        );
+      }
+      break;
+    }
+
+    case 'payment_intent.payment_failed': {
+      const pi = event.data.object;
+      const customerEmail = await extractEmail(pi);
+      if (customerEmail) {
+        addServerAuditLog(
+          'SYSTEM_STRIPE_WEBHOOK',
+          'PAYMENT_INTENT_FAILED',
+          `Payment intent failed for ${customerEmail}. Reason: ${pi.last_payment_error?.message || 'Declined'}`,
+          'WARN'
+        );
+      }
+      break;
+    }
+
+    case 'payment_intent.succeeded': {
+      const pi = event.data.object;
+      const customerEmail = await extractEmail(pi);
+      if (customerEmail) {
+        addServerAuditLog(
+          'SYSTEM_STRIPE_WEBHOOK',
+          'PAYMENT_INTENT_SUCCEEDED',
+          `Payment intent succeeded for ${customerEmail} ($${(pi.amount || 0) / 100})`
+        );
+      }
+      break;
+    }
+
+    case 'customer.created':
+    case 'customer.updated': {
+      const customer = event.data.object;
+      const email = customer.email ? customer.email.toLowerCase() : '';
+      if (email) {
+        addServerAuditLog(
+          'SYSTEM_STRIPE_WEBHOOK',
+          'CUSTOMER_UPDATED',
+          `Stripe customer record synced for ${email} (${customer.id})`
         );
       }
       break;
@@ -2349,6 +2447,71 @@ app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
   });
 });
 
+// DISCORD AUTH STATUS ENDPOINT
+app.get(['/api/auth/discord/status', '/api/discord/status'], async (req, res) => {
+  const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
+  const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user') || null;
+  const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+
+  if (!profile || !profile.discordUserId) {
+    return res.json({
+      connected: false,
+      discordUserId: null,
+      username: null,
+      inServer: false,
+      guildId: targetGuildId,
+      roles: [],
+      hasEliteRole: false,
+      hasAIRole: false,
+      hasVerifiedRole: false,
+      membershipStatus: 'unlinked',
+    });
+  }
+
+  const roles = profile.guildRoles || [];
+  res.json({
+    connected: true,
+    discordUserId: profile.discordUserId,
+    username: profile.discordUsername,
+    inServer: profile.guildMember,
+    guildId: targetGuildId,
+    roles,
+    hasEliteRole: roles.includes('ELITE') || roles.includes('PRO') || profile.subscriptionTier === 'PRO',
+    hasAIRole: roles.includes('AI'),
+    hasVerifiedRole: roles.includes('VERIFIED') || roles.includes('MEMBER') || profile.guildMember,
+    membershipStatus: profile.guildMember ? 'active' : 'needs_server',
+  });
+});
+
+// DISCORD SERVER DIAGNOSTICS ENDPOINT
+app.get(['/api/discord/diagnostics', '/api/auth/discord/diagnostics'], async (req, res) => {
+  const diagnostics = await runDiscordDiagnostics();
+  res.json(diagnostics);
+});
+
+// DISCORD HEALTH DIAGNOSTIC ENDPOINT
+app.get(['/api/discord/health', '/api/auth/discord/health'], async (req, res) => {
+  try {
+    const report = await getDiscordHealthReport();
+    res.json(report);
+  } catch (err: any) {
+    res.status(500).json({
+      discordConfigured: !!(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET),
+      botTokenPresent: !!process.env.DISCORD_BOT_TOKEN,
+      guildIdPresent: !!process.env.DISCORD_GUILD_ID,
+      proRoleConfigured: true,
+      eliteRoleConfigured: true,
+      botCanAccessGuild: false,
+      botHighestRolePosition: 0,
+      proRolePosition: 0,
+      eliteRolePosition: 0,
+      roleHierarchyValid: false,
+      status: 'error',
+      message: err.message || 'Error running health diagnostics',
+    });
+  }
+});
+
 // DISCORD VERIFY GUILD MEMBERSHIP & ROLES
 app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
@@ -2359,9 +2522,10 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
   console.log(`[Verify Request] Linked Discord User ID: ${profile?.discordUserId || 'NONE'}`);
 
   if (!profile || !profile.discordUserId) {
-    return res.status(400).json({
+    return res.status(200).json({
       success: false,
       error: 'NOT_LINKED',
+      code: 'NOT_LINKED',
       message: 'No Discord identity is linked. Please click "Connect Discord" first.',
     });
   }
@@ -2379,44 +2543,61 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
 
   profile.lastSync = new Date().toLocaleTimeString();
 
-  if (!syncResult.success && syncResult.code === 'USER_NOT_IN_GUILD') {
-    profile.guildMember = false;
-    profile.guildJoined = false;
-    profile.verificationStatus = 'NEEDS_GUILD';
+  if (!syncResult.success) {
+    if (syncResult.code === 'DISCORD_RATE_LIMITED' || syncResult.status === 'rate_limited') {
+      const retryAfter = syncResult.retryAfter || 5;
+      return res.status(429).json({
+        success: false,
+        status: 'rate_limited',
+        code: 'DISCORD_RATE_LIMITED',
+        retryAfter,
+        message: `Discord verification is temporarily rate-limited. Try again in ${retryAfter} seconds.`,
+        profile,
+      });
+    }
+
+    if (syncResult.code === 'USER_NOT_IN_SERVER' || syncResult.code === 'USER_NOT_IN_GUILD' || syncResult.status === 'not_in_guild') {
+      profile.guildMember = false;
+      profile.guildJoined = false;
+      profile.verificationStatus = 'NEEDS_GUILD';
+      userDiscordProfiles.set(userEmail, profile);
+      userDiscordProfiles.set('global_active_user', profile);
+
+      return res.status(200).json({
+        success: false,
+        status: 'not_in_guild',
+        code: 'USER_NOT_IN_SERVER',
+        message: "Your Discord account is connected, but you haven't joined the VIXY Vault Discord server yet.",
+        profile,
+      });
+    }
+
     userDiscordProfiles.set(userEmail, profile);
     userDiscordProfiles.set('global_active_user', profile);
 
     return res.status(200).json({
       success: false,
-      error: 'USER_NOT_IN_GUILD',
+      error: syncResult.code || 'ROLE_SYNC_FAILED',
+      code: syncResult.code || 'ROLE_SYNC_FAILED',
       message: syncResult.message,
+      details: syncResult.details,
       profile,
     });
   }
 
-  if (syncResult.success) {
-    profile.guildMember = true;
-    profile.guildJoined = true;
-    profile.verificationStatus = 'VERIFIED';
-    profile.guildRoles = [targetTier];
-    userDiscordProfiles.set(userEmail, profile);
-    userDiscordProfiles.set('global_active_user', profile);
+  profile.guildMember = true;
+  profile.guildJoined = true;
+  profile.verificationStatus = 'VERIFIED';
+  profile.guildRoles = [targetTier];
+  userDiscordProfiles.set(userEmail, profile);
+  userDiscordProfiles.set('global_active_user', profile);
 
-    return res.json({
-      success: true,
-      profile,
-      message: `DISCORD CONNECTED • SERVER MEMBER VERIFIED • MEMBERSHIP ROLE ACTIVE (${targetTier})`,
-      details: syncResult,
-    });
-  }
-
-  // Handle API error or failure
-  return res.status(400).json({
-    success: false,
-    error: syncResult.code || 'ROLE_SYNC_FAILED',
-    message: syncResult.message,
-    details: syncResult.details,
+  return res.json({
+    success: true,
+    status: 'verified',
     profile,
+    message: `DISCORD CONNECTED • SERVER MEMBER VERIFIED • MEMBERSHIP ROLE ACTIVE (${targetTier})`,
+    details: syncResult,
   });
 });
 

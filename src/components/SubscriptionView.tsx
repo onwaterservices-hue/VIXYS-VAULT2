@@ -47,6 +47,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const [expiry, setExpiry] = useState<string>('12/28');
   const [cvc, setCvc] = useState<string>('888');
   const [isProcessingStripe, setIsProcessingStripe] = useState<boolean>(false);
+  const [isOpeningPortal, setIsOpeningPortal] = useState<boolean>(false);
   const [stripeError, setStripeError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [customStripeUrl, setCustomStripeUrl] = useState<string>('');
@@ -256,6 +257,28 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     handleInitiateRealStripeCheckout();
   };
 
+  const handleOpenCustomerPortal = async () => {
+    setIsOpeningPortal(true);
+    setStripeError('');
+    try {
+      const res = await fetch('/api/stripe/create-portal-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userEmail: 'vixyvault0@gmail.com' }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        setStripeError(data.message || 'Unable to connect to Stripe Customer Portal');
+        setIsOpeningPortal(false);
+      }
+    } catch (err: any) {
+      setStripeError('Network error connecting to Stripe Customer Portal');
+      setIsOpeningPortal(false);
+    }
+  };
+
   const priceFor = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
     return billingInterval === 'annual' ? plans[planKey].annualPrice : plans[planKey].monthlyPrice;
   };
@@ -364,10 +387,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <span className="text-purple-300 text-xs font-bold flex items-center gap-1.5">
+        <div className="flex items-center gap-3">
+          <span className="text-purple-300 text-xs font-bold flex items-center gap-1.5 mr-2">
             <CheckCircle2 className="w-4 h-4 text-purple-400" /> Account Active
           </span>
+          <button
+            onClick={handleOpenCustomerPortal}
+            disabled={isOpeningPortal}
+            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all border border-purple-400/40 shadow-lg shadow-purple-900/30 flex items-center gap-2"
+          >
+            <CreditCard className="w-4 h-4" />
+            {isOpeningPortal ? 'Launching Stripe Portal...' : 'Manage Billing (Stripe Customer Portal)'}
+          </button>
         </div>
       </div>
 

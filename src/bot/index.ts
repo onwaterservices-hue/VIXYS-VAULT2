@@ -329,7 +329,7 @@ export async function broadcastSignalToDiscord(signalData: {
   return { success: false, method: 'NONE', message: 'No active Discord Bot Token or Webhook configured.' };
 }
 
-export { assignDiscordRoleToUser } from './discordBotService';
+export { assignDiscordRoleToUser, removeDiscordRoleFromUser, runDiscordDiagnostics, getDiscordHealthReport } from './discordBotService';
 
 export async function assignDiscordVipRole(
   discordUserId: string,
@@ -337,3 +337,4 @@ export async function assignDiscordVipRole(
 ): Promise<{ success: boolean; message: string }> {
   return assignDiscordRoleToUser(discordUserId, 'ELITE', guildId);
 }
+

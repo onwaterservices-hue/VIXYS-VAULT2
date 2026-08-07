@@ -789,6 +789,13 @@ async function safeParseJson(res: Response) {
   }
 }
 
+export async function fetchDiscordDiagnostics() {
+  return await safeFetchJson<any>(`/api/discord/diagnostics?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
 export async function fetchAdminUsers() {
   try {
     const res = await fetch('/api/admin/users?_t=' + Date.now(), {

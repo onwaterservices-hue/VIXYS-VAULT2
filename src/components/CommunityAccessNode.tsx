@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   MessageSquare,
   ShieldCheck,
@@ -16,7 +16,9 @@ import {
   ChevronUp,
   Lock,
   Sparkles,
-  Sliders
+  Sliders,
+  Check,
+  Shield
 } from 'lucide-react';
 import { AlertSettings } from '../types';
 import {
@@ -51,6 +53,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Load backend profile on mount
   const loadProfile = async () => {
@@ -87,9 +91,10 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     // Listen for OAuth message from popup callback window
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === 'DISCORD_OAUTH_SUCCESS' && event.data?.data) {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         const data = event.data.data;
         setProfile(data);
-        setStatusMessage(`Successfully authenticated as ${data.discordGlobalName || data.discordUsername}!`);
+        setStatusMessage(`● DISCORD NETWORK AUTHORIZED: Welcome @${data.discordGlobalName || data.discordUsername}!`);
         setIsConnecting(false);
         setErrorMessage(null);
 
@@ -106,20 +111,32 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
           }));
         }
       } else if (event.data?.type === 'DISCORD_OAUTH_ERROR') {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
         setIsConnecting(false);
-        setErrorMessage(event.data.error || 'Discord authentication failed.');
+        setErrorMessage(event.data.error || 'Discord authentication failed. Please try again.');
       }
     };
 
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
-  // Initiate real Discord OAuth redirect/popup
+  // Initiate real Discord OAuth redirect/popup with strict timeout safety
   const handleConnectOAuth = async () => {
+    if (isConnecting) return;
     setIsConnecting(true);
     setErrorMessage(null);
-    setStatusMessage('Initiating Discord OAuth authorization...');
+    setStatusMessage('Initiating secure Discord OAuth authorization...');
+
+    // Safety timeout: If authorization popup is closed or blocked, reset isConnecting after 15 seconds
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      setIsConnecting(false);
+      setStatusMessage('OAuth window opened. Click "CONNECT DISCORD" again if you need to retry authorization.');
+    }, 15000);
 
     try {
       const authData = await getDiscordAuthUrlApi();
@@ -142,8 +159,9 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
         throw new Error('Failed to retrieve Discord authorization URL from backend.');
       }
     } catch (err: any) {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       setIsConnecting(false);
-      setErrorMessage(err.message || 'Failed to start Discord OAuth.');
+      setErrorMessage(err.message || 'Failed to start Discord OAuth. Please check network connection.');
     }
   };
 
@@ -169,10 +187,10 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
           }));
         }
       } else {
-        setErrorMessage(res?.message || 'Server membership verification failed.');
+        setErrorMessage(res?.message || 'Server membership verification pending. Make sure you joined the server.');
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Verification error');
+      setErrorMessage(err.message || 'Verification error connecting to Discord');
     } finally {
       setIsVerifying(false);
     }
@@ -183,7 +201,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     try {
       await disconnectDiscordApi();
       setProfile(null);
-      setStatusMessage('Discord identity unlinked.');
+      setStatusMessage('Discord identity disconnected.');
       if (setSettings) {
         setSettings((prev) => ({
           ...prev,
@@ -204,429 +222,229 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   const avatarUrl = profile?.discordAvatar;
   const guildMember = profile?.guildMember ?? settings?.guildMember ?? false;
   const isFullyVerified = isLinked && guildMember;
-  const roleAssigned = profile?.guildRoles?.[0] || (guildMember ? 'PRO' : 'None');
+  const roleAssigned = profile?.guildRoles?.[0] || (guildMember ? 'PRO MEMBER' : 'None');
 
   // =========================================================================
-  // 1. DASHBOARD MODE: FULLY VERIFIED USER -> SLEEK ULTRA-COMPACT RIBBON
+  // STATE 3 (FULLY VERIFIED USER) — SLEEK ULTRA-COMPACT COMMAND RIBBON
   // =========================================================================
   if (mode === 'dashboard' && isFullyVerified && !isLoadingProfile) {
     return (
-      <div className={`bg-[#080414]/90 rounded-2xl border border-emerald-800/50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-lg font-mono text-xs relative overflow-hidden ${className}`}>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <span className="px-2.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-indigo-400" />
-            <span>DISCORD CONNECTED</span>
+      <div className={`bg-[#070412]/95 rounded-2xl border border-purple-500/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_20px_rgba(109,24,255,0.12)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
+        {/* Subtle Ambient Radial Glow Backdrop */}
+        <div className="absolute top-0 right-0 w-80 h-32 bg-purple-600/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="flex items-center gap-3 flex-wrap relative z-10">
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>DISCORD NETWORK CONNECTED</span>
           </span>
 
-          <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>SERVER MEMBER VERIFIED</span>
+          <span className="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/40 text-purple-200 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
+            <span>SERVER VERIFIED: {roleAssigned}</span>
           </span>
 
-          <span className="px-2.5 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-            <Zap className="w-3.5 h-3.5 text-cyan-400" />
-            <span>MEMBERSHIP ROLE ACTIVE: {roleAssigned}</span>
-          </span>
-
-          <span className="text-purple-300/60 text-[10px] hidden lg:inline ml-1">
-            (@{username || displayName})
+          <span className="text-purple-300/80 text-[11px] font-bold hidden md:inline">
+            @{username || displayName}
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {onOpenDiscordModal && (
-            <button
-              onClick={onOpenDiscordModal}
-              className="px-3 py-1.5 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/30 text-purple-200 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5"
-            >
-              <Sliders className="w-3 h-3 text-purple-300" />
-              <span>Manage Connection</span>
-            </button>
-          )}
+        <div className="flex items-center gap-2 relative z-10">
+          <a
+            href="https://discord.gg/a9q3UCAjGH"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs transition-all shadow-md shadow-purple-600/30 flex items-center gap-1.5 cursor-pointer active:scale-95"
+          >
+            <span>OPEN DISCORD</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+
+          <button
+            onClick={handleVerifyMembership}
+            disabled={isVerifying}
+            className="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 border border-purple-800/50 text-purple-300 text-[11px] font-bold transition-all cursor-pointer flex items-center gap-1.5 active:scale-95"
+            title="Refresh Discord Role"
+          >
+            <RefreshCw className={`w-3 h-3 text-purple-300 ${isVerifying ? 'animate-spin' : ''}`} />
+            <span className="hidden sm:inline">REFRESH ROLE</span>
+          </button>
         </div>
       </div>
     );
   }
 
   // =========================================================================
-  // 2. DASHBOARD MODE: UNLINKED OR NEEDS SERVER JOIN -> TACTICAL ONBOARDING BANNER
-  // =========================================================================
-  if (mode === 'dashboard') {
-    return (
-      <div className={`bg-[#0B061A] rounded-2xl border border-purple-800/60 p-4 sm:p-5 shadow-2xl font-mono text-xs relative overflow-hidden transition-all ${className}`}>
-        {/* Background Ambient Glow */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none opacity-40" />
-
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3 relative z-10">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-inner">
-              <Radio className="w-4 h-4 animate-pulse text-indigo-400" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white text-xs uppercase tracking-widest">
-                  COMMUNITY ACCESS REQUIRED
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-800/50 text-[9px] text-purple-300 font-bold uppercase tracking-wider">
-                  VIXY NETWORK GATEWAY
-                </span>
-              </div>
-              <div className="text-[10px] text-purple-300/70 font-medium">
-                Unlock your complete VIXY Vault membership & real-time quant alerts.
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            {isLinked ? (
-              <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <ShieldAlert className="w-3 h-3 text-amber-400" />
-                <span>Needs Server Join</span>
-              </span>
-            ) : (
-              <span className="px-2.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                <Lock className="w-3 h-3 text-indigo-400" />
-                <span>Setup Required</span>
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* FEEDBACK NOTICES */}
-        {statusMessage && (
-          <div className="mt-3 p-2.5 rounded-xl bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 text-[11px] font-sans flex items-center gap-2 relative z-10">
-            <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-            <span>{statusMessage}</span>
-          </div>
-        )}
-
-        {errorMessage && (
-          <div className="mt-3 p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-[11px] font-sans flex items-center gap-2 relative z-10">
-            <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-            <span>{errorMessage}</span>
-          </div>
-        )}
-
-        {/* STATE A: AUTHORIZED BUT HAS NOT JOINED DISCORD SERVER */}
-        {isLinked && !guildMember ? (
-          <div className="pt-4 space-y-3.5 relative z-10">
-            <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-2">
-              <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-                <span>Discord Account Authorized (@{displayName}), but Server Membership Missing</span>
-              </div>
-              <p className="text-[11px] text-amber-200/80 font-sans leading-relaxed">
-                Your Discord account is linked, but you haven't joined the official VIXY Vault server yet. Join the server to receive your automated PRO channels and live signals.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-              <a
-                href="https://discord.gg/a9q3UCAjGH"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-amber-600/20 active:scale-95"
-              >
-                <span>JOIN DISCORD SERVER</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-
-              <button
-                onClick={handleVerifyMembership}
-                disabled={isVerifying}
-                className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-indigo-600/30 transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-60"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isVerifying ? 'animate-spin' : ''}`} />
-                <span>{isVerifying ? 'Verifying...' : 'VERIFY MEMBERSHIP'}</span>
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* STATE B: UNCONNECTED COMPACT DASHBOARD BANNER */
-          <div className="flex flex-wrap items-center justify-between gap-3 py-1 relative z-10">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-extrabold text-white uppercase tracking-wider text-xs">
-                  Discord Not Connected
-                </span>
-                <span className="text-purple-400/60 hidden sm:inline">•</span>
-                <span className="text-purple-300/80 text-[11px]">
-                  Connect to unlock real-time member signals & PRO channels.
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <a
-              href="https://discord.gg/a9q3UCAjGH"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-3 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/40 text-purple-200 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer hidden sm:flex"
-            >
-              <MessageSquare className="w-3.5 h-3.5 text-indigo-400" />
-              <span>JOIN SERVER</span>
-              <ExternalLink className="w-3 h-3 opacity-70" />
-            </a>
-
-            <button
-              onClick={handleConnectOAuth}
-              disabled={isConnecting}
-              className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-60"
-            >
-              {isConnecting ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-white" />
-                  <span>Connecting...</span>
-                </>
-              ) : (
-                <>
-                  <MessageSquare className="w-3.5 h-3.5 text-white" />
-                  <span>CONNECT DISCORD</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-        )}
-      </div>
-    );
-  }
-
-  // =========================================================================
-  // 3. SETTINGS MODE: DETAILED & COLLAPSIBLE COMMUNITY ACCESS CONTROL CARD
+  // VIXY NETWORK GATEWAY — FULL PREMIUM GATEWAY PANEL (NOT CONNECTED / CONNECTING / NEEDS SERVER)
   // =========================================================================
   return (
-    <div className={`bg-[#0B061A] rounded-2xl border border-purple-800/60 p-4 sm:p-5 shadow-2xl font-mono text-xs relative overflow-hidden transition-all ${className}`}>
-      {/* Background Ambient Glow */}
-      <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+    <div className={`bg-[#06030e] rounded-2xl border border-purple-500/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(109,24,255,0.15)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
+      {/* Visual Ambient Grid Texture + Radial Glow */}
+      <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800c_1px,transparent_1px),linear-gradient(to_bottom,#8080800c_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none opacity-40" />
 
-      {/* HEADER BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3 relative z-10">
-        <div className="flex items-center gap-2.5">
-          <div className="p-2 rounded-xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-400 shadow-inner">
-            <Radio className="w-4 h-4 text-indigo-400 animate-pulse" />
+      {/* GATEWAY HEADER BAR */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-4 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-300 shadow-inner">
+            <Radio className="w-4 h-4 animate-pulse text-purple-400" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-white text-xs uppercase tracking-widest">
-                Community Connection
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-black text-white text-sm tracking-wider uppercase">
+                VIXY NETWORK GATEWAY
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-purple-950 border border-purple-800/50 text-[9px] text-purple-300 font-bold uppercase tracking-wider">
-                OAUTH2 GATEWAY
+              <span className="px-2 py-0.5 rounded bg-purple-950/80 border border-purple-500/40 text-[9px] text-purple-300 font-extrabold uppercase tracking-widest">
+                PRIVATE INTELLIGENCE CHANNEL
               </span>
             </div>
-            <div className="text-[10px] text-purple-300/60 font-medium">
-              Real-time Discord API Permission & Role Synchronization
+            <div className="text-[11px] text-purple-300/70 font-sans mt-0.5">
+              Connect your Discord account to activate your exclusive VIXY Vault intelligence network access.
             </div>
           </div>
         </div>
 
-        {/* STATUS BADGES */}
-        <div className="flex items-center gap-2">
-          {isLinked ? (
-            <div className="flex items-center gap-1.5">
-              <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                <span>Connected</span>
-              </span>
-              {guildMember ? (
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold">
-                  PRO Verified
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold">
-                  Needs Server Join
-                </span>
-              )}
-            </div>
+        {/* NETWORK STATUS BADGE */}
+        <div className="flex items-center gap-2 shrink-0">
+          {isConnecting ? (
+            <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/50 text-purple-200 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+              <RefreshCw className="w-3 h-3 text-purple-300 animate-spin" />
+              <span>AUTHENTICATING...</span>
+            </span>
+          ) : isLinked && !guildMember ? (
+            <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
+              <span>NEEDS SERVER JOIN</span>
+            </span>
+          ) : isLinked ? (
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <span>NETWORK CONNECTED</span>
+            </span>
           ) : (
-            <span className="px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
+            <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>Not Connected</span>
+              <span>NOT CONNECTED</span>
             </span>
           )}
         </div>
       </div>
 
-      {/* FEEDBACK BANNERS */}
+      {/* FEEDBACK STATUS NOTICES */}
       {statusMessage && (
-        <div className="mt-3 p-2.5 rounded-xl bg-indigo-950/80 border border-indigo-500/40 text-indigo-200 text-[11px] font-sans flex items-center gap-2 relative z-10">
-          <Zap className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+        <div className="mt-3.5 p-3 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-200 text-xs font-sans flex items-center gap-2.5 relative z-10 shadow-lg">
+          <Zap className="w-4 h-4 text-purple-400 shrink-0" />
           <span>{statusMessage}</span>
         </div>
       )}
 
       {errorMessage && (
-        <div className="mt-3 p-2.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-[11px] font-sans flex items-center gap-2 relative z-10">
-          <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-          <span>{errorMessage}</span>
+        <div className="mt-3.5 p-3 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-xs font-sans flex items-center justify-between gap-2.5 relative z-10 shadow-lg">
+          <div className="flex items-center gap-2.5">
+            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <span>{errorMessage}</span>
+          </div>
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-xs font-bold text-rose-300 hover:text-white underline cursor-pointer"
+          >
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* MAIN COMPACT READOUT */}
-      {isLoadingProfile ? (
-        <div className="py-6 text-center text-purple-300/60 font-mono text-xs flex items-center justify-center gap-2 relative z-10">
-          <RefreshCw className="w-4 h-4 animate-spin text-indigo-400" />
-          <span>Querying Discord Backend Status...</span>
-        </div>
-      ) : isLinked && displayName ? (
-        <div className="pt-4 space-y-4 relative z-10">
-          <div className="p-3.5 rounded-xl bg-[#070314]/90 border border-purple-900/60 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl overflow-hidden bg-purple-900/40 border border-purple-600/40 flex items-center justify-center text-purple-300 shrink-0 font-bold">
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
-                ) : (
-                  <UserCheck className="w-5 h-5 text-emerald-400" />
-                )}
-              </div>
-              <div>
-                <div className="text-[10px] text-purple-300/60 uppercase font-mono font-semibold">
-                  Linked Discord Identity
-                </div>
-                <div className="text-sm font-extrabold text-white font-mono flex items-center gap-2">
-                  <span>{displayName}</span>
-                  {username && <span className="text-xs text-purple-300/60 font-normal">(@{username})</span>}
-                </div>
-              </div>
+      {/* STATE 2 OR LINKED WITH MISSING SERVER */}
+      {isLinked && !guildMember ? (
+        <div className="mt-4 pt-2 space-y-4 relative z-10">
+          <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-2">
+            <div className="text-xs font-extrabold text-amber-300 flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-amber-400" />
+              <span>Discord Identity Connected (@{displayName}), Server Join Pending</span>
             </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px]">
-              <div className="bg-[#120B28] px-3 py-1.5 rounded-lg border border-purple-900/50">
-                <span className="text-[9px] text-purple-300/60 block">ROLE</span>
-                <span className="text-emerald-300 font-black">{roleAssigned}</span>
-              </div>
-              <div className="bg-[#120B28] px-3 py-1.5 rounded-lg border border-purple-900/50">
-                <span className="text-[9px] text-purple-300/60 block">MEMBERSHIP</span>
-                <span className={guildMember ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                  {guildMember ? 'Verified ✓' : 'Needs Join ✗'}
-                </span>
-              </div>
-              <div className="bg-[#120B28] px-3 py-1.5 rounded-lg border border-purple-900/50 col-span-2 sm:col-span-1">
-                <span className="text-[9px] text-purple-300/60 block">LAST SYNC</span>
-                <span className="text-purple-200 font-bold">{profile?.lastSync || 'Just now'}</span>
-              </div>
-            </div>
-          </div>
-
-          {!guildMember && (
-            <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-500/40 flex flex-wrap items-center justify-between gap-3">
-              <div className="space-y-1">
-                <div className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
-                  <ShieldAlert className="w-4 h-4 text-amber-400" />
-                  <span>Join the VIXY Vault Community Server</span>
-                </div>
-                <p className="text-[11px] text-amber-200/80 font-sans">
-                  Account authorized, but server membership is missing. Join to receive your automated PRO role.
-                </p>
-              </div>
-
-              <a
-                href="https://discord.gg/a9q3UCAjGH"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 shrink-0"
-              >
-                <span>Join Discord Server</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            </div>
-          )}
-
-          {/* COLLAPSIBLE MANAGEMENT DRAWER TOGGLE */}
-          <div className="pt-2 flex items-center justify-between">
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="px-3 py-1.5 rounded-xl bg-purple-950/50 hover:bg-purple-900/50 border border-purple-800/50 text-purple-200 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer"
-            >
-              <span>{isExpanded ? 'Hide Advanced Controls' : 'Manage Connection'}</span>
-              {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-
-            <span className="text-[10px] text-purple-300/50 font-mono">
-              Auto-Sync Active (Stripe ➔ Discord)
-            </span>
-          </div>
-
-          {/* EXPANDED CONTROLS */}
-          {isExpanded && (
-            <div className="p-4 rounded-xl bg-[#070314]/90 border border-purple-900/60 space-y-4 pt-4 border-t border-purple-900/40">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-[11px] text-purple-300/70">
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Real-time OAuth Verification & Bot Role Sync Active</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleVerifyMembership}
-                    disabled={isVerifying}
-                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/40 text-white font-extrabold text-xs transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer disabled:opacity-60"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isVerifying ? 'animate-spin' : ''}`} />
-                    <span>{isVerifying ? 'Verifying...' : 'Force Verification'}</span>
-                  </button>
-
-                  <button
-                    onClick={handleDisconnect}
-                    className="px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-rose-950/50 border border-purple-800/50 hover:border-rose-500/40 text-purple-300 hover:text-rose-300 font-bold text-xs transition-all flex items-center gap-1 cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>Disconnect Identity</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        /* UNLINKED STATE IN SETTINGS */
-        <div className="pt-4 space-y-4 relative z-10">
-          <div className="p-4 rounded-xl bg-[#070314]/90 border border-purple-900/60 space-y-3">
-            <div className="flex items-center gap-2 text-indigo-300 font-extrabold text-xs uppercase tracking-wider">
-              <MessageSquare className="w-4 h-4 text-indigo-400" />
-              <span>Connect Discord Account</span>
-            </div>
-            <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
-              Connect your Discord account through Discord's official authorization page. VIXY AI will retrieve your real identity and automatically synchronize your paid subscription roles.
+            <p className="text-xs text-amber-200/90 font-sans leading-relaxed">
+              Your Discord identity is linked, but you haven't joined the official VIXY Vault Discord server yet. Click "JOIN DISCORD SERVER" below, then hit "VERIFY MEMBERSHIP" to unlock your member role.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <a
               href="https://discord.gg/a9q3UCAjGH"
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-2.5 rounded-xl bg-purple-900/40 hover:bg-purple-800/60 border border-purple-500/40 text-purple-200 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer"
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs transition-all flex items-center gap-2 shadow-lg shadow-purple-600/30 active:scale-95 cursor-pointer"
             >
-              <MessageSquare className="w-4 h-4 text-indigo-400" />
+              <MessageSquare className="w-4 h-4 text-white" />
               <span>JOIN DISCORD SERVER</span>
-              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              <ExternalLink className="w-3.5 h-3.5" />
             </a>
 
             <button
-              onClick={handleConnectOAuth}
-              disabled={isConnecting}
-              className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-indigo-600/30 transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-60"
+              onClick={handleVerifyMembership}
+              disabled={isVerifying}
+              className="px-5 py-3 rounded-xl bg-[#130B2C] hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2 active:scale-95 cursor-pointer disabled:opacity-60"
             >
-              {isConnecting ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                  <span>Redirecting...</span>
-                </>
-              ) : (
-                <>
-                  <MessageSquare className="w-4 h-4 text-white" />
-                  <span>CONNECT DISCORD</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
+              <RefreshCw className={`w-3.5 h-3.5 text-purple-300 ${isVerifying ? 'animate-spin' : ''}`} />
+              <span>{isVerifying ? 'Verifying...' : 'VERIFY MEMBERSHIP'}</span>
             </button>
+          </div>
+        </div>
+      ) : (
+        /* STATE 1: UNCONNECTED — PRIVATE NETWORK UNLOCKED PERKS & OAUTH CTA */
+        <div className="mt-4 pt-2 space-y-5 relative z-10">
+          {/* UNLOCKED PERKS CHECKLIST GRID */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+            {[
+              'Real-time quant signals',
+              'Private PRO channels',
+              'Automated membership verification',
+              'AI market alerts',
+              'Strategy discussion',
+              'Member-only intelligence',
+            ].map((perk, i) => (
+              <div key={i} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#090417]/80 border border-purple-900/40 text-purple-200 text-xs font-sans">
+                <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-medium">{perk}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* ACTIONS & SECURITY NOTICE */}
+          <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-purple-900/40">
+            <div className="flex items-center gap-2 text-purple-300/70 text-[11px] font-sans">
+              <Shield className="w-4 h-4 text-purple-400 shrink-0" />
+              <span>🔒 Secure Discord OAuth • We never receive your Discord password.</span>
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <a
+                href="https://discord.gg/a9q3UCAjGH"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-3 rounded-xl bg-[#0F0824] hover:bg-purple-900/40 border border-purple-800/50 text-purple-300 hover:text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer w-1/2 sm:w-auto"
+              >
+                <MessageSquare className="w-4 h-4 text-purple-400" />
+                <span>JOIN SERVER</span>
+                <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+              </a>
+
+              <button
+                onClick={handleConnectOAuth}
+                disabled={isConnecting}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:via-violet-500 hover:to-indigo-500 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-purple-600/30 transition-all flex items-center justify-center gap-2.5 active:scale-95 cursor-pointer disabled:opacity-60 w-1/2 sm:w-auto"
+              >
+                {isConnecting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    <span>CONNECTING...</span>
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-4 h-4 text-white" />
+                    <span>CONNECT DISCORD →</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

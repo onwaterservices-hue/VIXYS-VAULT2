@@ -667,6 +667,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       {visibleCandles.length > 0 && (
         <g>
           {(() => {
+            const isBullish = activeSignal.direction === 'YES';
             const lastCandleX = x(visibleCandles.length - 1);
             const lastCandleY = y(latestClose);
             const targetY = y(activeSignal.targetPrice || (isBullish ? latestClose + 120 : latestClose - 120));
@@ -727,58 +728,65 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       {/* VIXY Target Band - Neon Glowing Institutional Banner */}
       {activeSignal.targetPrice && (
         <g>
-          {/* Outer Glowing Aura Backdrop Band */}
-          <line
-            x1={marginLeft}
-            y1={y(activeSignal.targetPrice)}
-            x2={marginLeft + plotWidth}
-            y2={y(activeSignal.targetPrice)}
-            stroke={isBullish ? '#10b981' : '#f43f5e'}
-            strokeWidth="8"
-            strokeOpacity="0.2"
-            filter={isBullish ? 'url(#glow-green)' : 'url(#glow-red)'}
-          />
-          {/* Core Solid Dashed Line */}
-          <line
-            x1={marginLeft}
-            y1={y(activeSignal.targetPrice)}
-            x2={marginLeft + plotWidth}
-            y2={y(activeSignal.targetPrice)}
-            stroke={isBullish ? '#34d399' : '#fb7185'}
-            strokeWidth="2"
-            strokeDasharray="6 3"
-          />
-          {/* Target Strike Badge Tag on Right Y-Axis */}
-          <rect
-            x={marginLeft + plotWidth + 4}
-            y={y(activeSignal.targetPrice) - 14}
-            width="95"
-            height="28"
-            rx="6"
-            fill="#090317"
-            stroke={isBullish ? '#10b981' : '#f43f5e'}
-            strokeWidth="1.5"
-          />
-          <text
-            x={marginLeft + plotWidth + 10}
-            y={y(activeSignal.targetPrice) - 2}
-            fill="#ffffff"
-            fontSize="9"
-            fontWeight="900"
-            className="font-mono tracking-wider"
-          >
-            TARGET ${activeSignal.targetPrice.toFixed(0)}
-          </text>
-          <text
-            x={marginLeft + plotWidth + 10}
-            y={y(activeSignal.targetPrice) + 9}
-            fill={isBullish ? '#34d399' : '#fb7185'}
-            fontSize="8"
-            fontWeight="bold"
-            className="font-mono"
-          >
-            {isBullish ? '▲ STRIKE (+0.42%)' : '▼ STRIKE (-0.38%)'}
-          </text>
+          {(() => {
+            const isBullish = activeSignal.direction === 'YES';
+            return (
+              <g>
+                {/* Outer Glowing Aura Backdrop Band */}
+                <line
+                  x1={marginLeft}
+                  y1={y(activeSignal.targetPrice)}
+                  x2={marginLeft + plotWidth}
+                  y2={y(activeSignal.targetPrice)}
+                  stroke={isBullish ? '#10b981' : '#f43f5e'}
+                  strokeWidth="8"
+                  strokeOpacity="0.2"
+                  filter={isBullish ? 'url(#glow-green)' : 'url(#glow-red)'}
+                />
+                {/* Core Solid Dashed Line */}
+                <line
+                  x1={marginLeft}
+                  y1={y(activeSignal.targetPrice)}
+                  x2={marginLeft + plotWidth}
+                  y2={y(activeSignal.targetPrice)}
+                  stroke={isBullish ? '#34d399' : '#fb7185'}
+                  strokeWidth="2"
+                  strokeDasharray="6 3"
+                />
+                {/* Target Strike Badge Tag on Right Y-Axis */}
+                <rect
+                  x={marginLeft + plotWidth + 4}
+                  y={y(activeSignal.targetPrice) - 14}
+                  width="95"
+                  height="28"
+                  rx="6"
+                  fill="#090317"
+                  stroke={isBullish ? '#10b981' : '#f43f5e'}
+                  strokeWidth="1.5"
+                />
+                <text
+                  x={marginLeft + plotWidth + 10}
+                  y={y(activeSignal.targetPrice) - 2}
+                  fill="#ffffff"
+                  fontSize="9"
+                  fontWeight="900"
+                  className="font-mono tracking-wider"
+                >
+                  TARGET ${activeSignal.targetPrice.toFixed(0)}
+                </text>
+                <text
+                  x={marginLeft + plotWidth + 10}
+                  y={y(activeSignal.targetPrice) + 9}
+                  fill={isBullish ? '#34d399' : '#fb7185'}
+                  fontSize="8"
+                  fontWeight="bold"
+                  className="font-mono"
+                >
+                  {isBullish ? '▲ STRIKE (+0.42%)' : '▼ STRIKE (-0.38%)'}
+                </text>
+              </g>
+            );
+          })()}
         </g>
       )}
 

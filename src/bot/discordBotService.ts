@@ -385,180 +385,554 @@ export async function broadcastSignalToDiscord(signalData: {
   };
 }
 
-// Synchronize Discord Guild Member Roles (ELITE / VERIFIED / PRO)
+// Synchronize Discord Guild Member Roles (ELITE / AI / VERIFIED / PRO)
+interface CachedSyncResult {
+  res: { success: boolean; message: string; details?: any; code?: string; roleId?: string; status?: string; retryAfter?: number };
+  expiresAt: number;
+}
+const roleSyncCache = new Map<string, CachedSyncResult>();
+const inFlightSyncs = new Map<string, Promise<{ success: boolean; message: string; details?: any; code?: string; roleId?: string; status?: string; retryAfter?: number }>>();
+
 export async function assignDiscordRoleToUser(
   discordUserId: string,
-  targetTier: 'ELITE' | 'VERIFIED' | 'PRO' | 'NONE' = 'ELITE',
+  targetTier: 'ELITE' | 'AI' | 'VERIFIED' | 'PRO' | 'NONE' = 'ELITE',
   guildIdOverride?: string
-): Promise<{ success: boolean; message: string; details?: any; code?: string }> {
+): Promise<{ success: boolean; message: string; details?: any; code?: string; roleId?: string; status?: string; retryAfter?: number }> {
   const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '13280011234567890';
-  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const cacheKey = `${discordUserId}:${targetTier}:${targetGuildId}`;
 
-  // Determine role IDs from env
-  const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
-  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || '1535025983093215425'; // Fallback to verified role
-  const targetRoleId = targetTier === 'ELITE' || targetTier === 'PRO' ? eliteRoleId : verifiedRoleId;
-
-  console.log(`\n================ [DISCORD ROLE SYNCHRONIZATION AUDIT] ================`);
-  console.log(`[Discord Role Sync] Target User ID: ${discordUserId}`);
-  console.log(`[Discord Role Sync] Target Tier: ${targetTier} | Target Role ID: ${targetRoleId}`);
-  console.log(`[Discord Role Sync] Target Guild ID: ${targetGuildId}`);
-  console.log(`[Discord Role Sync] Bot Token Present: ${!!botToken}`);
-
-  if (!discordUserId) {
-    console.error(`[Discord Role Sync] ❌ Failure: Missing discordUserId`);
-    return { success: false, message: 'Discord User ID is required', code: 'MISSING_USER_ID' };
+  // 1. Check Short-Lived Server-Side Sync Cache (30s)
+  const existingCache = roleSyncCache.get(cacheKey);
+  if (existingCache && Date.now() < existingCache.expiresAt) {
+    console.log(`[Discord Role Sync] ⚡ Returning cached verification result for ${discordUserId} (expires in ${Math.round((existingCache.expiresAt - Date.now()) / 1000)}s)`);
+    return existingCache.res;
   }
 
-  // Method 1: Use discordClient if connected
-  if (discordClient && discordClient.isReady()) {
-    try {
-      console.log(`[Discord Role Sync] Step 1: Querying guild via discord.js client...`);
-      const guild = await discordClient.guilds.fetch(targetGuildId);
-      if (!guild) {
-        console.error(`[Discord Role Sync] ❌ Failure: Guild ${targetGuildId} not found`);
-        return { success: false, message: `Discord Guild ${targetGuildId} not found`, code: 'GUILD_NOT_FOUND' };
-      }
+  // 2. Prevent Duplicate Concurrent Requests (In-Flight Lock)
+  if (inFlightSyncs.has(cacheKey)) {
+    console.log(`[Discord Role Sync] 🔒 Request already in-flight for ${discordUserId}, joining active execution...`);
+    return await inFlightSyncs.get(cacheKey)!;
+  }
 
-      console.log(`[Discord Role Sync] Step 2: Querying bot member & role hierarchy...`);
-      const botMember = await guild.members.fetchMe();
-      const botHighestRole = botMember.roles.highest;
-      console.log(`[Discord Role Sync] Bot Role Name: "${botHighestRole.name}" (Position: ${botHighestRole.position})`);
+  const syncPromise = (async () => {
+    const botToken = process.env.DISCORD_BOT_TOKEN;
 
-      const roleToAssign = await guild.roles.fetch(targetRoleId);
-      if (!roleToAssign) {
-        console.error(`[Discord Role Sync] ❌ Failure: Role ID ${targetRoleId} not found in guild`);
-        return { success: false, message: `Target role ${targetRoleId} does not exist in Discord server`, code: 'ROLE_NOT_FOUND' };
-      }
-      console.log(`[Discord Role Sync] Target Role Name: "${roleToAssign.name}" (Position: ${roleToAssign.position})`);
+    // Determine role IDs from env (with fallbacks for all configured variable naming variations)
+    const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
+    const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
+    const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
 
-      if (botHighestRole.position <= roleToAssign.position) {
-        console.warn(`[Discord Role Sync] ⚠️ Hierarchy Warning: Bot role position (${botHighestRole.position}) is <= Target role position (${roleToAssign.position})`);
-      }
+    let targetRoleId = verifiedRoleId;
+    if (targetTier === 'ELITE' || targetTier === 'PRO') {
+      targetRoleId = eliteRoleId;
+    } else if (targetTier === 'AI') {
+      targetRoleId = aiRoleId;
+    }
 
-      console.log(`[Discord Role Sync] Step 3: Fetching member ${discordUserId} in guild...`);
-      let member: any = null;
+    console.log(`\n================ [DISCORD ROLE SYNCHRONIZATION AUDIT] ================`);
+    console.log(`[Discord Role Sync] Target User ID: ${discordUserId}`);
+    console.log(`[Discord Role Sync] Target Tier: ${targetTier} | Target Role ID: ${targetRoleId}`);
+    console.log(`[Discord Role Sync] Target Guild ID: ${targetGuildId}`);
+    console.log(`[Discord Role Sync] Bot Token Present: ${!!botToken}`);
+
+    if (!discordUserId) {
+      console.error(`[Discord Role Sync] ❌ Failure: Missing discordUserId`);
+      return { success: false, message: 'Discord User ID is required', code: 'MISSING_USER_ID' };
+    }
+
+    if (!botToken && (!discordClient || !discordClient.isReady())) {
+      console.error(`[Discord Role Sync] ❌ Failure: Missing DISCORD_BOT_TOKEN`);
+      return {
+        success: false,
+        message: 'DISCORD_BOT_TOKEN is missing in server environment variables.',
+        code: 'INVALID_BOT_TOKEN',
+      };
+    }
+
+    // Method 1: Use discordClient if connected
+    if (discordClient && discordClient.isReady()) {
       try {
-        member = await guild.members.fetch(discordUserId);
-      } catch (mErr: any) {
-        console.error(`[Discord Role Sync] ❌ Guild Member Check Failed for ID ${discordUserId}:`, mErr.message);
-        return {
-          success: false,
-          message: `User (ID: ${discordUserId}) is not a member of the VIXY Vault Discord server. Please join the server first!`,
-          code: 'USER_NOT_IN_GUILD',
-        };
-      }
+        console.log(`[Discord Role Sync] Step 1: Querying guild via discord.js client...`);
+        const guild = await discordClient.guilds.fetch(targetGuildId).catch(() => null);
+        if (!guild) {
+          console.error(`[Discord Role Sync] ❌ Failure: Guild ${targetGuildId} not found`);
+          return { success: false, message: `Discord Guild ${targetGuildId} not found or bot not in guild.`, code: 'INVALID_GUILD_ID' };
+        }
 
-      // Check idempotency: if user already has role
-      if (member.roles.cache.has(targetRoleId)) {
-        console.log(`[Discord Role Sync] ✅ Idempotent Success: User ${member.user.tag} already has role "${roleToAssign.name}"`);
+        console.log(`[Discord Role Sync] Step 2: Querying bot member & role hierarchy...`);
+        const botMember = await guild.members.fetchMe().catch(() => null);
+        if (!botMember) {
+          return { success: false, message: `Bot is not a member of guild ${targetGuildId}.`, code: 'BOT_NOT_IN_SERVER' };
+        }
+
+        const hasManageRoles = botMember.permissions.has('ManageRoles') || botMember.permissions.has('Administrator');
+        if (!hasManageRoles) {
+          console.error(`[Discord Role Sync] ❌ Failure: Bot missing Manage Roles permission`);
+          return { success: false, message: `Bot lacks 'Manage Roles' permission in server ${guild.name}.`, code: 'BOT_MISSING_MANAGE_ROLES' };
+        }
+
+        const botHighestRole = botMember.roles.highest;
+        console.log(`[Discord Role Sync] Bot Role Name: "${botHighestRole.name}" (Position: ${botHighestRole.position})`);
+
+        const roleToAssign = await guild.roles.fetch(targetRoleId).catch(() => null);
+        if (!roleToAssign) {
+          console.error(`[Discord Role Sync] ❌ Failure: Role ID ${targetRoleId} not found in guild`);
+          return { success: false, message: `Target role ${targetRoleId} does not exist in Discord server.`, code: 'INVALID_ROLE_ID' };
+        }
+        console.log(`[Discord Role Sync] Target Role Name: "${roleToAssign.name}" (Position: ${roleToAssign.position})`);
+
+        if (botHighestRole.position <= roleToAssign.position) {
+          console.error(`[Discord Role Sync] ❌ Hierarchy Error: Bot role position (${botHighestRole.position}) is <= Target role position (${roleToAssign.position})`);
+          return {
+            success: false,
+            message: `Bot role "${botHighestRole.name}" is lower than or equal to target role "${roleToAssign.name}". Drag the bot role above target role in Discord Server Settings -> Roles.`,
+            code: 'ROLE_ABOVE_BOT',
+          };
+        }
+
+        console.log(`[Discord Role Sync] Step 3: Fetching member ${discordUserId} in guild...`);
+        let member: any = null;
+        try {
+          member = await guild.members.fetch(discordUserId);
+        } catch (mErr: any) {
+          console.error(`[Discord Role Sync] ❌ Guild Member Check Failed for ID ${discordUserId}:`, mErr.message);
+          return {
+            success: false,
+            status: 'not_in_guild',
+            message: `User (${discordUserId}) is not in the VIXY Vault Discord server. Please click "JOIN DISCORD SERVER".`,
+            code: 'USER_NOT_IN_SERVER',
+          };
+        }
+
+        // Check idempotency: if user already has role
+        if (member.roles.cache.has(targetRoleId)) {
+          console.log(`[Discord Role Sync] ✅ Idempotent Success: User ${member.user.tag} already has role "${roleToAssign.name}"`);
+          return {
+            success: true,
+            status: 'verified',
+            message: `User ${member.user.tag} already has active role "${roleToAssign.name}" in ${guild.name}.`,
+            code: 'ALREADY_ASSIGNED',
+            roleId: targetRoleId,
+          };
+        }
+
+        // If tier is NONE, handle role removal
+        if (targetTier === 'NONE') {
+          if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
+          console.log(`[Discord Role Sync] ✅ Role Removed for ${member.user.tag}`);
+          return { success: true, status: 'verified', message: `Removed membership roles for ${member.user.tag}`, code: 'ROLE_REMOVED' };
+        }
+
+        console.log(`[Discord Role Sync] Step 4: Adding role "${roleToAssign.name}" to member ${member.user.tag}...`);
+        await member.roles.add(targetRoleId);
+        console.log(`[Discord Role Sync] ✅ ROLE ASSIGNMENT SUCCESSFUL for ${member.user.tag}!`);
+
         return {
           success: true,
-          message: `User ${member.user.tag} already has active role "${roleToAssign.name}" in ${guild.name}.`,
-          code: 'ALREADY_ASSIGNED',
+          status: 'verified',
+          message: `Successfully assigned "${roleToAssign.name}" role to ${member.user.tag} in ${guild.name}!`,
+          code: 'ROLE_ASSIGNED',
+          roleId: targetRoleId,
+          details: {
+            userTag: member.user.tag,
+            roleName: roleToAssign.name,
+            guildName: guild.name,
+          },
         };
+      } catch (err: any) {
+        console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err);
+        // Fallback to REST API if discord.js fetch errored
       }
-
-      // If tier is NONE or downgrade, handle role removal
-      if (targetTier === 'NONE') {
-        if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId);
-        if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId);
-        console.log(`[Discord Role Sync] ✅ Role Removed for ${member.user.tag}`);
-        return { success: true, message: `Removed membership roles for ${member.user.tag}` };
-      }
-
-      console.log(`[Discord Role Sync] Step 4: Adding role "${roleToAssign.name}" to member ${member.user.tag}...`);
-      await member.roles.add(targetRoleId);
-      console.log(`[Discord Role Sync] ✅ ROLE ASSIGNMENT SUCCESSFUL for ${member.user.tag}!`);
-
-      return {
-        success: true,
-        message: `Successfully assigned "${roleToAssign.name}" role to ${member.user.tag} in ${guild.name}!`,
-        details: {
-          userTag: member.user.tag,
-          roleName: roleToAssign.name,
-          guildName: guild.name,
-        },
-      };
-    } catch (err: any) {
-      console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err);
-      // Fallback to REST API if discord.js fetch errored
     }
+
+    // Method 2: Direct REST API call using DISCORD_BOT_TOKEN
+    if (botToken) {
+      try {
+        console.log(`[Discord Role Sync] Using Direct Discord REST API v10...`);
+        // 1. Fetch Guild Member
+        const memberRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}`, {
+          headers: { Authorization: `Bot ${botToken}` },
+        });
+
+        console.log(`[Discord Role Sync] Member Fetch REST Status: ${memberRes.status} ${memberRes.statusText}`);
+
+        if (memberRes.status === 429) {
+          const retryHeader = memberRes.headers.get('retry-after');
+          let retryAfterSec = retryHeader ? Math.ceil(parseFloat(retryHeader)) : 5;
+          try {
+            const errJson = await memberRes.json();
+            if (errJson.retry_after) retryAfterSec = Math.ceil(Number(errJson.retry_after));
+          } catch (_) {}
+          console.warn(`[Discord Role Sync] ⚠️ Discord Member Lookup Rate Limited (429). Retry after ${retryAfterSec}s`);
+          return {
+            success: false,
+            status: 'rate_limited',
+            code: 'DISCORD_RATE_LIMITED',
+            retryAfter: retryAfterSec,
+            message: `Discord verification is temporarily rate-limited. Try again in ${retryAfterSec} seconds.`,
+          };
+        }
+
+        if (memberRes.status === 404) {
+          console.error(`[Discord Role Sync] ❌ REST check: User ${discordUserId} NOT in guild ${targetGuildId}`);
+          return {
+            success: false,
+            status: 'not_in_guild',
+            message: `User (${discordUserId}) is not in the VIXY Vault Discord server. Please click "JOIN DISCORD SERVER".`,
+            code: 'USER_NOT_IN_SERVER',
+          };
+        } else if (memberRes.status === 401) {
+          return {
+            success: false,
+            message: 'Invalid DISCORD_BOT_TOKEN provided in environment variables.',
+            code: 'INVALID_BOT_TOKEN',
+          };
+        } else if (memberRes.status === 403) {
+          return {
+            success: false,
+            message: 'Bot is not in the target Discord server or lacks permission.',
+            code: 'BOT_NOT_IN_SERVER',
+          };
+        }
+
+        const memberData = await memberRes.json();
+        const existingRoles: string[] = memberData.roles || [];
+
+        if (targetTier === 'NONE') {
+          // Remove roles
+          if (existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          return { success: true, status: 'verified', message: `Removed membership roles for user ${discordUserId}`, code: 'ROLE_REMOVED' };
+        }
+
+        if (existingRoles.includes(targetRoleId)) {
+          console.log(`[Discord Role Sync] ✅ REST Idempotent Check: User already has role ${targetRoleId}`);
+          return {
+            success: true,
+            status: 'verified',
+            message: `User @${memberData.user?.username || discordUserId} already has active role in Discord server.`,
+            code: 'ALREADY_ASSIGNED',
+            roleId: targetRoleId,
+          };
+        }
+
+        // 2. Put role on user via REST
+        console.log(`[Discord Role Sync] Putting role ${targetRoleId} on user ${discordUserId}...`);
+        const putRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${targetRoleId}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bot ${botToken}`,
+            'X-Audit-Log-Reason': 'Vixy Vault Subscription Auto Role Assignment',
+          },
+        });
+
+        console.log(`[Discord Role Sync] REST PUT Response Status: ${putRes.status} ${putRes.statusText}`);
+
+        if (putRes.status === 429) {
+          const retryHeader = putRes.headers.get('retry-after');
+          let retryAfterSec = retryHeader ? Math.ceil(parseFloat(retryHeader)) : 5;
+          try {
+            const errJson = await putRes.json();
+            if (errJson.retry_after) retryAfterSec = Math.ceil(Number(errJson.retry_after));
+          } catch (_) {}
+          console.warn(`[Discord Role Sync] ⚠️ Discord Role PUT Rate Limited (429). Retry after ${retryAfterSec}s`);
+          return {
+            success: false,
+            status: 'rate_limited',
+            code: 'DISCORD_RATE_LIMITED',
+            retryAfter: retryAfterSec,
+            message: `Discord verification is temporarily rate-limited. Try again in ${retryAfterSec} seconds.`,
+          };
+        }
+
+        if (putRes.ok || putRes.status === 204) {
+          console.log(`[Discord Role Sync] ✅ REST API ROLE ASSIGNMENT SUCCESSFUL!`);
+          return {
+            success: true,
+            status: 'verified',
+            message: `Role assigned successfully to @${memberData.user?.username || discordUserId}!`,
+            code: 'ROLE_ASSIGNED',
+            roleId: targetRoleId,
+          };
+        } else {
+          const errText = await putRes.text();
+          console.error(`[Discord Role Sync] ❌ REST Role Assignment Failed. Status ${putRes.status}:`, errText);
+          let parsedErr: any = {};
+          try { parsedErr = JSON.parse(errText); } catch (_) {}
+
+          if (putRes.status === 403) {
+            if (parsedErr.code === 50013) {
+              return {
+                success: false,
+                message: 'Bot lacks "Manage Roles" permission or the target role is higher than the bot role in hierarchy.',
+                code: 'ROLE_ABOVE_BOT',
+                details: parsedErr,
+              };
+            }
+            return {
+              success: false,
+              message: 'Bot lacks permission to manage roles in target Discord server.',
+              code: 'BOT_MISSING_MANAGE_ROLES',
+              details: parsedErr,
+            };
+          } else if (putRes.status === 404) {
+            return {
+              success: false,
+              message: `Target role ID ${targetRoleId} was not found in Discord server.`,
+              code: 'INVALID_ROLE_ID',
+              details: parsedErr,
+            };
+          }
+
+          return {
+            success: false,
+            message: `Discord API Error (${putRes.status}): ${parsedErr.message || errText}`,
+            details: parsedErr,
+            code: 'DISCORD_API_ERROR',
+          };
+        }
+      } catch (restErr: any) {
+        console.error(`[Discord Role Sync] ❌ Network exception in REST role assignment:`, restErr);
+        return { success: false, message: `Network error connecting to Discord API: ${restErr.message}`, code: 'DISCORD_API_ERROR' };
+      }
+    }
+
+    return {
+      success: false,
+      message: 'DISCORD_BOT_TOKEN is missing in environment variables.',
+      code: 'INVALID_BOT_TOKEN',
+    };
+  })();
+
+  inFlightSyncs.set(cacheKey, syncPromise);
+
+  try {
+    const result = await syncPromise;
+    // Cache positive verification / membership results for 30 seconds, rate limit for retry duration
+    const ttlMs = result.status === 'rate_limited' ? (result.retryAfter || 5) * 1000 : 30000;
+    roleSyncCache.set(cacheKey, {
+      res: result,
+      expiresAt: Date.now() + ttlMs,
+    });
+    return result;
+  } finally {
+    inFlightSyncs.delete(cacheKey);
+  }
+}
+
+// Remove specific Discord Role from User (e.g. upon cancellation)
+export async function removeDiscordRoleFromUser(
+  discordUserId: string,
+  targetTier: 'ELITE' | 'AI' | 'VERIFIED' | 'PRO' = 'ELITE',
+  guildIdOverride?: string
+): Promise<{ success: boolean; message: string; code?: string }> {
+  return assignDiscordRoleToUser(discordUserId, 'NONE', guildIdOverride);
+}
+
+// Comprehensive Server Diagnostic Report Endpoint Helper
+export async function getDiscordHealthReport(): Promise<{
+  discordConfigured: boolean;
+  botTokenPresent: boolean;
+  guildIdPresent: boolean;
+  proRoleConfigured: boolean;
+  eliteRoleConfigured: boolean;
+  botCanAccessGuild: boolean;
+  botHighestRolePosition: number;
+  proRolePosition: number;
+  eliteRolePosition: number;
+  roleHierarchyValid: boolean;
+  status: string;
+  message: string;
+}> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
+  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
+
+  const health = {
+    discordConfigured: !!(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET),
+    botTokenPresent: !!botToken,
+    guildIdPresent: !!process.env.DISCORD_GUILD_ID,
+    proRoleConfigured: !!verifiedRoleId,
+    eliteRoleConfigured: !!eliteRoleId,
+    botCanAccessGuild: false,
+    botHighestRolePosition: 0,
+    proRolePosition: 0,
+    eliteRolePosition: 0,
+    roleHierarchyValid: false,
+    status: 'ok',
+    message: 'Health check completed',
+  };
+
+  if (!botToken) {
+    health.status = 'error';
+    health.message = 'DISCORD_BOT_TOKEN missing in environment variables';
+    return health;
   }
 
-  // Method 2: Direct REST API call if token is available
-  if (botToken) {
-    try {
-      console.log(`[Discord Role Sync] Using Direct Discord REST API v10...`);
-      // First check if user is in guild
-      const memberRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}`, {
+  const diag = await runDiscordDiagnostics();
+  health.botCanAccessGuild = diag.guildAccessible;
+  health.roleHierarchyValid = diag.hierarchySufficient && diag.botHasManageRoles;
+  health.status = diag.diagnosticCode === 'HEALTHY' ? 'ok' : 'degraded';
+  health.message = diag.statusMessage;
+
+  return health;
+}
+
+export async function runDiscordDiagnostics(): Promise<{
+  botTokenConfigured: boolean;
+  botConnected: boolean;
+  botTag: string | null;
+  guildConfigured: boolean;
+  guildId: string;
+  guildAccessible: boolean;
+  guildName?: string;
+  botHasManageRoles: boolean;
+  rolesConfigured: {
+    eliteRoleId: string;
+    aiRoleId: string;
+    verifiedRoleId: string;
+  };
+  rolesFound: {
+    eliteRoleFound: boolean;
+    aiRoleFound: boolean;
+    verifiedRoleFound: boolean;
+  };
+  hierarchySufficient: boolean;
+  statusMessage: string;
+  diagnosticCode: string;
+}> {
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
+  const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
+  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
+
+  const report = {
+    botTokenConfigured: !!botToken,
+    botConnected: discordClient?.isReady() || false,
+    botTag: discordClient?.user?.tag || null,
+    guildConfigured: !!process.env.DISCORD_GUILD_ID,
+    guildId,
+    guildAccessible: false,
+    guildName: undefined as string | undefined,
+    botHasManageRoles: false,
+    rolesConfigured: { eliteRoleId, aiRoleId, verifiedRoleId },
+    rolesFound: { eliteRoleFound: false, aiRoleFound: false, verifiedRoleFound: false },
+    hierarchySufficient: false,
+    statusMessage: 'Initializing diagnostics...',
+    diagnosticCode: 'HEALTHY',
+  };
+
+  if (!botToken) {
+    report.statusMessage = 'DISCORD_BOT_TOKEN is missing in process.env';
+    report.diagnosticCode = 'INVALID_BOT_TOKEN';
+    return report;
+  }
+
+  try {
+    // 1. Fetch Guild via REST API
+    const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+
+    if (!guildRes.ok) {
+      if (guildRes.status === 404) {
+        report.statusMessage = `Guild ID ${guildId} not found or Bot is not in the server.`;
+        report.diagnosticCode = 'INVALID_GUILD_ID';
+      } else if (guildRes.status === 401) {
+        report.statusMessage = 'DISCORD_BOT_TOKEN is invalid or unauthorized.';
+        report.diagnosticCode = 'INVALID_BOT_TOKEN';
+      } else {
+        report.statusMessage = `Discord API returned HTTP ${guildRes.status}`;
+        report.diagnosticCode = 'DISCORD_API_ERROR';
+      }
+      return report;
+    }
+
+    const guildData = await guildRes.json();
+    report.guildAccessible = true;
+    report.guildName = guildData.name;
+
+    // 2. Fetch Guild Roles
+    const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+      headers: { Authorization: `Bot ${botToken}` },
+    });
+
+    if (rolesRes.ok) {
+      const rolesData: any[] = await rolesRes.json();
+      const eliteRole = rolesData.find((r) => r.id === eliteRoleId);
+      const aiRole = rolesData.find((r) => r.id === aiRoleId);
+      const verifiedRole = rolesData.find((r) => r.id === verifiedRoleId);
+
+      report.rolesFound = {
+        eliteRoleFound: !!eliteRole,
+        aiRoleFound: !!aiRole,
+        verifiedRoleFound: !!verifiedRole,
+      };
+
+      // 3. Fetch Bot Member & Hierarchy Check
+      const meRes = await fetch(`https://discord.com/api/v10/users/@me`, {
         headers: { Authorization: `Bot ${botToken}` },
       });
 
-      console.log(`[Discord Role Sync] Member Fetch REST Status: ${memberRes.status} ${memberRes.statusText}`);
-      if (memberRes.status === 404) {
-        console.error(`[Discord Role Sync] ❌ REST check: User ${discordUserId} NOT in guild ${targetGuildId}`);
-        return {
-          success: false,
-          message: `User (ID: ${discordUserId}) has not joined the VIXY Vault Discord server yet. Please click "JOIN DISCORD SERVER".`,
-          code: 'USER_NOT_IN_GUILD',
-        };
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        report.botTag = meData.username ? `${meData.username}#${meData.discriminator || '0'}` : null;
+
+        const botMemberRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}/members/${meData.id}`, {
+          headers: { Authorization: `Bot ${botToken}` },
+        });
+
+        if (botMemberRes.ok) {
+          const botMemberData = await botMemberRes.json();
+          const botRoles: string[] = botMemberData.roles || [];
+          const botRoleObjects = rolesData.filter((r) => botRoles.includes(r.id));
+
+          // Check permissions bitfield or Admin
+          const isGuildOwner = guildData.owner_id === meData.id;
+          let botMaxPos = 0;
+          botRoleObjects.forEach((r) => {
+            if (r.position > botMaxPos) botMaxPos = r.position;
+          });
+
+          // Check Manage Roles permission (0x10000000 = MANAGE_ROLES, 0x8 = ADMINISTRATOR)
+          report.botHasManageRoles = isGuildOwner || botRoleObjects.some((r) => {
+            const perms = BigInt(r.permissions || '0');
+            return (perms & BigInt(0x10000000)) !== BigInt(0) || (perms & BigInt(0x8)) !== BigInt(0);
+          });
+
+          // Hierarchy check: Bot's max role position > target roles position
+          const targetRolePos = eliteRole ? eliteRole.position : 0;
+          report.hierarchySufficient = isGuildOwner || botMaxPos > targetRolePos;
+
+          if (!report.botHasManageRoles) {
+            report.statusMessage = 'Bot is missing "Manage Roles" permission in Discord server.';
+            report.diagnosticCode = 'BOT_MISSING_MANAGE_ROLES';
+          } else if (!report.hierarchySufficient) {
+            report.statusMessage = `Bot highest role position (${botMaxPos}) is below target role position (${targetRolePos}). Please drag Bot role higher in Discord Role settings.`;
+            report.diagnosticCode = 'ROLE_ABOVE_BOT';
+          } else if (!eliteRole && !verifiedRole) {
+            report.statusMessage = 'Configured Role IDs were not found in Discord server.';
+            report.diagnosticCode = 'INVALID_ROLE_ID';
+          } else {
+            report.statusMessage = '🟢 Discord Bot & Membership Automation fully operational!';
+            report.diagnosticCode = 'HEALTHY';
+          }
+        }
       }
-
-      const memberData = await memberRes.json();
-      const existingRoles: string[] = memberData.roles || [];
-
-      if (existingRoles.includes(targetRoleId)) {
-        console.log(`[Discord Role Sync] ✅ REST Idempotent Check: User already has role ${targetRoleId}`);
-        return {
-          success: true,
-          message: `User @${memberData.user?.username || discordUserId} already has active role in Discord server.`,
-          code: 'ALREADY_ASSIGNED',
-        };
-      }
-
-      // Add role via REST API PUT endpoint
-      console.log(`[Discord Role Sync] Putting role ${targetRoleId} on user ${discordUserId}...`);
-      const putRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${targetRoleId}`, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bot ${botToken}`,
-          'X-Audit-Log-Reason': 'Vixy Vault Subscription Auto Role Assignment',
-        },
-      });
-
-      console.log(`[Discord Role Sync] REST PUT Response Status: ${putRes.status} ${putRes.statusText}`);
-
-      if (putRes.ok || putRes.status === 204) {
-        console.log(`[Discord Role Sync] ✅ REST API ROLE ASSIGNMENT SUCCESSFUL!`);
-        return {
-          success: true,
-          message: `Role assigned successfully to @${memberData.user?.username || discordUserId}!`,
-        };
-      } else {
-        const errText = await putRes.text();
-        console.error(`[Discord Role Sync] ❌ REST Role Assignment Failed. Status ${putRes.status}:`, errText);
-        let parsedErr: any = {};
-        try { parsedErr = JSON.parse(errText); } catch (_) {}
-
-        return {
-          success: false,
-          message: `Discord API Error (${putRes.status}): ${parsedErr.message || errText}`,
-          details: parsedErr,
-          code: 'DISCORD_API_ERROR',
-        };
-      }
-    } catch (restErr: any) {
-      console.error(`[Discord Role Sync] ❌ Network exception in REST role assignment:`, restErr);
-      return { success: false, message: `Network error connecting to Discord API: ${restErr.message}` };
     }
+  } catch (err: any) {
+    report.statusMessage = `Diagnostic Exception: ${err.message || String(err)}`;
+    report.diagnosticCode = 'DISCORD_API_ERROR';
   }
 
-  return {
-    success: false,
-    message: 'DISCORD_BOT_TOKEN is missing or Discord bot is offline.',
-    code: 'BOT_OFFLINE',
-  };
+  return report;
 }
 
 // Legacy alias wrapper for backwards compatibility
@@ -566,4 +940,5 @@ export async function assignDiscordVipRole(discordUserId: string, guildId?: stri
   const result = await assignDiscordRoleToUser(discordUserId, 'ELITE', guildId);
   return { success: result.success, message: result.message };
 }
+
 
