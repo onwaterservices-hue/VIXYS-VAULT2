@@ -268,17 +268,13 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <span>THE GOLDEN RULE OF QUANTITATIVE EDGE</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight leading-[1.1] text-white">
-            TRADE PROBABILITY,
-            <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-white to-cyan-300 drop-shadow-[0_4px_12px_rgba(52,211,153,0.3)]">
-              NOT EMOTION.
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight leading-[1.15] uppercase max-w-4xl mx-auto">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 drop-shadow-[0_0_35px_rgba(251,191,36,0.5)]">
+              "YOU NEED TO SPEND MONEY
+              <br />
+              TO MAKE MONEY"
             </span>
           </h1>
-
-          <p className="text-purple-200/90 text-sm sm:text-base font-sans max-w-2xl mx-auto leading-relaxed">
-            Institutional-grade AI monitors live order flow, liquidity shifts, and prediction market pricing to surface high-conviction opportunities before the candle closes.
-          </p>
 
           {/* 3-Hour Trial Live Banner in Quote Box */}
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm text-purple-200 font-bold">
