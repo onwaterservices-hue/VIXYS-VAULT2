@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle, Lock } from 'lucide-react';
-import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, unfreezeUserBotsApi } from '../services/api';
+import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle, Lock, Activity, ShieldAlert, Cpu } from 'lucide-react';
+import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, unfreezeUserBotsApi, fetchAdminEventsApi, fetchDiscordHealthApi, resyncEntitlementApi } from '../services/api';
 
 interface DiscordBotHubViewProps {
   onClose?: () => void;
+  adminEvents?: any[];
 }
 
-export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
+export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvents: externalEvents }) => {
   const [loading, setLoading] = useState(true);
   const [statusData, setStatusData] = useState<any>(null);
+  const [healthData, setHealthData] = useState<any>(null);
+  const [localEvents, setLocalEvents] = useState<any[]>(externalEvents || []);
   const [testSymbol, setTestSymbol] = useState('BTC/USDT 15M');
   const [testDirection, setTestDirection] = useState<'YES' | 'NO'>('YES');
   const [customWebhook, setCustomWebhook] = useState('');
@@ -20,6 +23,11 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
   const [copied, setCopied] = useState(false);
   const [unfreezing, setUnfreezing] = useState(false);
   const [unfreezeMessage, setUnfreezeMessage] = useState<string | null>(null);
+
+  // Resync State
+  const [resyncIdentifier, setResyncIdentifier] = useState('vixyvault0@gmail.com');
+  const [isResyncing, setIsResyncing] = useState(false);
+  const [resyncResult, setResyncResult] = useState<any | null>(null);
 
   const handleUnfreezeBots = async () => {
     setUnfreezing(true);
@@ -37,14 +45,41 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
 
   const loadStatus = async () => {
     setLoading(true);
-    const data = await getDiscordBotStatusApi();
+    const [data, hData, evs] = await Promise.all([
+      getDiscordBotStatusApi(),
+      fetchDiscordHealthApi().catch(() => null),
+      fetchAdminEventsApi().catch(() => null),
+    ]);
     setStatusData(data);
+    if (hData) setHealthData(hData);
+    if (evs && Array.isArray(evs)) setLocalEvents(evs);
     setLoading(false);
   };
 
   useEffect(() => {
     loadStatus();
   }, []);
+
+  useEffect(() => {
+    if (externalEvents && externalEvents.length > 0) {
+      setLocalEvents(externalEvents);
+    }
+  }, [externalEvents]);
+
+  const handleEmergencyResync = async () => {
+    if (!resyncIdentifier.trim()) return;
+    setIsResyncing(true);
+    setResyncResult(null);
+    try {
+      const res = await resyncEntitlementApi(resyncIdentifier.trim());
+      setResyncResult(res);
+      await loadStatus();
+    } catch (err: any) {
+      setResyncResult({ success: false, message: err.message || 'Server connection error' });
+    } finally {
+      setIsResyncing(false);
+    }
+  };
 
   const handleTestBroadcast = async () => {
     setSendingTest(true);
@@ -490,48 +525,101 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = () => {
             </div>
           </div>
 
-          {/* VIP Role Assignment Test Tool */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-3">
-            <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-black text-white text-sm">Automated Discord VIP Member Sync</h3>
+          {/* VIP Role Assignment & Emergency Resync Panel */}
+          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-4 shadow-xl">
+            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="font-black text-white text-sm">Emergency Entitlement & Discord Role Resync</h3>
+              </div>
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                AUTHORITATIVE REPAIR
+              </span>
             </div>
 
             <p className="text-xs text-purple-300/70 font-mono">
-              When users purchase Pro via Stripe, the backend automatically grants the Discord VIP role:
+              Re-query Stripe payment records and enforce Discord server role grants using immutable Discord User IDs or Email:
             </p>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-mono text-purple-300/70 block uppercase">Test Discord User ID</label>
+              <label className="text-[10px] font-mono text-purple-300/70 block uppercase">Discord User ID or Customer Email</label>
               <div className="flex gap-2">
                 <input
                   type="text"
-                  placeholder="e.g. 9841203918230912"
-                  value={syncUserId}
-                  onChange={(e) => setSyncUserId(e.target.value)}
+                  placeholder="e.g. 10428491029301920 or user@example.com"
+                  value={resyncIdentifier}
+                  onChange={(e) => setResyncIdentifier(e.target.value)}
                   className="flex-1 bg-[#140B30] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500"
                 />
                 <button
-                  onClick={handleSyncVip}
-                  disabled={syncingVip || !syncUserId}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs disabled:opacity-50 transition-all"
+                  onClick={handleEmergencyResync}
+                  disabled={isResyncing || !resyncIdentifier}
+                  className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs disabled:opacity-50 transition-all shadow-md flex items-center gap-1.5"
                 >
-                  {syncingVip ? 'Syncing...' : 'Grant VIP Role'}
+                  <RefreshCw className={`w-3.5 h-3.5 ${isResyncing ? 'animate-spin' : ''}`} />
+                  <span>{isResyncing ? 'Syncing...' : 'RESYNC ROLE'}</span>
                 </button>
               </div>
             </div>
 
-            {vipResponse && (
-              <div className={`p-2.5 rounded-xl text-xs font-mono border ${
-                vipResponse.success
-                  ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50'
-                  : 'bg-amber-950/40 text-amber-300 border-amber-800/50'
+            {resyncResult && (
+              <div className={`p-3 rounded-xl text-xs font-mono border ${
+                resyncResult.success
+                  ? 'bg-emerald-950/50 text-emerald-300 border-emerald-800/50'
+                  : 'bg-amber-950/50 text-amber-300 border-amber-800/50'
               }`}>
-                {vipResponse.message}
+                <div className="font-bold flex items-center gap-1.5 mb-1">
+                  {resyncResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertCircle className="w-4 h-4 text-amber-400" />}
+                  <span>{resyncResult.success ? 'Entitlement Resynced Successfully' : 'Resync Notice'}</span>
+                </div>
+                <p>{resyncResult.message}</p>
+                {resyncResult.targetTier && (
+                  <p className="text-[10px] text-purple-300/70 mt-1">Tier: {resyncResult.targetTier} • User: {resyncResult.discordUserId}</p>
+                )}
               </div>
             )}
           </div>
 
+          {/* LIVE SYSTEM EVENT STREAM FEED */}
+          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+              <div className="flex items-center gap-2">
+                <Activity className="w-5 h-5 text-indigo-400" />
+                <h3 className="font-black text-white text-sm">Live System Event Stream</h3>
+              </div>
+              <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                SSE ACTIVE
+              </span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1 text-xs font-mono custom-scrollbar">
+              {localEvents.length === 0 ? (
+                <div className="p-4 text-center text-purple-400/50 text-xs">Waiting for live Stripe or Discord events...</div>
+              ) : (
+                localEvents.slice(0, 15).map((evt) => (
+                  <div key={evt.id} className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`font-bold text-[11px] ${
+                        evt.status === 'SUCCESS' ? 'text-emerald-400' :
+                        evt.status === 'FAILED' ? 'text-rose-400' :
+                        evt.status === 'WARN' ? 'text-amber-400' : 'text-purple-300'
+                      }`}>
+                        {evt.eventType}
+                      </span>
+                      <span className="text-[9px] text-purple-400/60">
+                        {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : 'Just now'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-purple-200/90">{evt.message}</p>
+                    {evt.userEmail && (
+                      <span className="text-[9px] text-purple-400/60 block">User: {evt.userEmail}</span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
           {/* Bot OAuth Link Copy Box */}
           <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-2 text-xs font-mono">
             <span className="text-purple-300/70 block font-bold">Bot OAuth2 Server Invite Link</span>

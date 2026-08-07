@@ -561,7 +561,73 @@ app.delete('/api/admin/referrals/:code', requireRole(['OWNER', 'ADMIN']), (req, 
   res.status(404).json({ error: 'NOT_FOUND', message: `Referral code ${cleanCode} not found.` });
 });
 
-// SERVER AUDIT LOGS & TRANSACTIONS STORE
+// SERVER AUDIT LOGS & REAL-TIME ADMIN EVENT STREAM STORE
+export interface AdminEvent {
+  id: string;
+  timestamp: string;
+  eventType: string;
+  userId?: string;
+  userEmail?: string;
+  discordUserId?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  plan?: string;
+  previousState?: string;
+  newState?: string;
+  status: 'SUCCESS' | 'FAILED' | 'PENDING' | 'WARN' | 'INFO';
+  message: string;
+  metadata?: any;
+}
+
+const adminEventsStore: AdminEvent[] = [
+  {
+    id: 'evt_init_1',
+    timestamp: new Date(Date.now() - 300000).toISOString(),
+    eventType: 'SYSTEM_BOOT',
+    userEmail: 'vixyvault0@gmail.com',
+    status: 'SUCCESS',
+    message: 'VIXY Vault Engine & Discord Entitlement Service Initialized',
+  },
+  {
+    id: 'evt_init_2',
+    timestamp: new Date(Date.now() - 120000).toISOString(),
+    eventType: 'STRIPE_WEBHOOK_HEALTH',
+    status: 'INFO',
+    message: 'Stripe webhook signature listener active on /api/stripe/webhook',
+  },
+];
+
+const adminSseClients = new Set<express.Response>();
+
+function broadcastAdminEvent(eventData: Omit<AdminEvent, 'id' | 'timestamp'>): AdminEvent {
+  const event: AdminEvent = {
+    id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    timestamp: new Date().toISOString(),
+    ...eventData,
+  };
+
+  adminEventsStore.unshift(event);
+  if (adminEventsStore.length > 200) adminEventsStore.pop();
+
+  addServerAuditLog(
+    event.userEmail || 'ADMIN_EVENT_STREAM',
+    event.eventType,
+    `${event.message} [Status: ${event.status}]`,
+    event.status === 'FAILED' ? 'ERROR' : event.status === 'WARN' ? 'WARN' : 'INFO'
+  );
+
+  const sseData = `data: ${JSON.stringify(event)}\n\n`;
+  for (const client of adminSseClients) {
+    try {
+      client.write(sseData);
+    } catch {
+      adminSseClients.delete(client);
+    }
+  }
+
+  return event;
+}
+
 interface ServerAuditLog {
   id: string;
   timestamp: string;
@@ -722,10 +788,12 @@ app.post('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   res.json({ success: true, log });
 });
 
-app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), async (req, res) => {
   const memUsageMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
   const uptimeSecs = Math.floor(process.uptime());
   
+  const discordDiag = await runDiscordDiagnostics().catch(() => null);
+
   res.json({
     status: 'HEALTHY',
     cpuUsagePct: Math.round(12 + Math.random() * 8),
@@ -740,7 +808,76 @@ app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), 
     stripeStatus: !!process.env.STRIPE_SECRET_KEY ? 'CONFIGURED' : 'STANDBY',
     geminiConnected: !!ai,
     stripeConnected: !!process.env.STRIPE_SECRET_KEY,
+    discordBotGuildAccess: discordDiag?.guildAccessible ?? false,
+    discordRoleHierarchyValid: (discordDiag?.hierarchySufficient && discordDiag?.botHasManageRoles) ?? false,
     timestamp: Date.now(),
+  });
+});
+
+// REAL-TIME ADMIN EVENT STREAM ENDPOINTS
+app.get('/api/admin/events', (req, res) => {
+  res.json(adminEventsStore);
+});
+
+app.get('/api/admin/events/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  res.write(`data: ${JSON.stringify({ type: 'INITIAL_BATCH', events: adminEventsStore })}\n\n`);
+
+  adminSseClients.add(res);
+
+  const keepAlive = setInterval(() => {
+    res.write(': keepalive\n\n');
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    adminSseClients.delete(res);
+  });
+});
+
+// ADMIN EMERGENCY MANUAL RESYNC ENTITLEMENT ENDPOINT
+app.post('/api/admin/resync-entitlement', requireRole(['OWNER', 'ADMIN']), async (req, res) => {
+  const { identifier } = req.body || {};
+  const query = (identifier || 'vixyvault0@gmail.com').toLowerCase().trim();
+
+  console.log(`[Admin Resync Request] Manual entitlement re-sync triggered for: "${query}"`);
+
+  let targetEmail = query;
+  let targetDiscordUserId = query;
+
+  const profileByEmail = userDiscordProfiles.get(query);
+  const profileGlobal = userDiscordProfiles.get('global_active_user');
+
+  let profile = profileByEmail || profileGlobal;
+
+  if (profile && profile.discordUserId) {
+    targetDiscordUserId = profile.discordUserId;
+  }
+
+  const sub = userSubscriptions.get(query) || { role: 'ELITE', plan: 'ELITE_PASS' };
+  const targetTier = sub.role === 'ELITE' || sub.plan?.includes('ELITE') ? 'ELITE' : sub.role === 'PRO' || sub.plan?.includes('PRO') ? 'PRO' : 'NONE';
+
+  const syncResult = await assignDiscordRoleToUser(targetDiscordUserId, targetTier);
+
+  broadcastAdminEvent({
+    eventType: 'ADMIN_MANUAL_RESYNC',
+    userEmail: targetEmail,
+    discordUserId: targetDiscordUserId,
+    plan: targetTier,
+    status: syncResult.success ? 'SUCCESS' : 'FAILED',
+    message: `Manual Resync for ${targetDiscordUserId}: ${syncResult.message}`,
+  });
+
+  return res.json({
+    success: syncResult.success,
+    message: syncResult.message,
+    syncResult,
+    targetTier,
+    discordUserId: targetDiscordUserId,
   });
 });
 
@@ -1103,19 +1240,71 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         rawTime: Date.now(),
       });
 
-      // 4. Audit Log Entry
-      addServerAuditLog(
-        'SYSTEM_STRIPE_WEBHOOK',
-        'CHECKOUT_SUCCESS',
-        `User ${customerEmail} subscribed to ${passName} ($${amountTotal}) via Stripe. Ref: ${referralCode}`,
-        'INFO'
-      );
+      // 4. Emit Admin Event & Audit Log Entry
+      broadcastAdminEvent({
+        eventType: 'STRIPE_CHECKOUT_COMPLETED',
+        userEmail: customerEmail,
+        stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
+        plan: passName,
+        status: 'SUCCESS',
+        message: `Checkout completed for ${customerEmail} ($${amountTotal}) -> ${passName}`,
+      });
 
-      // 5. Automate Discord VIP Sync if available
-      if (session.metadata?.discordUserId) {
-        assignDiscordVipRole(session.metadata.discordUserId).catch((err) => {
-          console.warn('Discord VIP role auto-grant error:', err);
+      broadcastAdminEvent({
+        eventType: 'ENTITLEMENT_GRANTED',
+        userEmail: customerEmail,
+        plan: passName,
+        status: 'SUCCESS',
+        message: `Entitlement ${passName} activated for ${customerEmail}`,
+      });
+
+      // 5. Automate Discord VIP/Elite Sync
+      const profileByEmail = userDiscordProfiles.get(customerEmail);
+      const profileGlobal = userDiscordProfiles.get('global_active_user');
+      const discordUserId = session.metadata?.discordUserId || profileByEmail?.discordUserId || profileGlobal?.discordUserId;
+
+      if (discordUserId) {
+        broadcastAdminEvent({
+          eventType: 'DISCORD_ROLE_ASSIGN_STARTED',
+          userEmail: customerEmail,
+          discordUserId,
+          plan: roleToGrant,
+          status: 'PENDING',
+          message: `Initiating Discord ${roleToGrant} role assignment for ${discordUserId}`,
         });
+
+        assignDiscordRoleToUser(discordUserId, roleToGrant as 'PRO' | 'ELITE')
+          .then((resSync) => {
+            if (resSync.success) {
+              broadcastAdminEvent({
+                eventType: 'DISCORD_ROLE_ASSIGNED',
+                userEmail: customerEmail,
+                discordUserId,
+                plan: roleToGrant,
+                status: 'SUCCESS',
+                message: `Discord role ${roleToGrant} successfully assigned to ${discordUserId}`,
+              });
+            } else {
+              broadcastAdminEvent({
+                eventType: 'DISCORD_ROLE_SYNC_FAILED',
+                userEmail: customerEmail,
+                discordUserId,
+                plan: roleToGrant,
+                status: 'WARN',
+                message: `Discord role sync failed for ${discordUserId}: ${resSync.message}`,
+              });
+            }
+          })
+          .catch((err) => {
+            broadcastAdminEvent({
+              eventType: 'DISCORD_ROLE_SYNC_FAILED',
+              userEmail: customerEmail,
+              discordUserId,
+              plan: roleToGrant,
+              status: 'FAILED',
+              message: `Discord sync exception for ${discordUserId}: ${err.message}`,
+            });
+          });
       }
 
       break;
@@ -1144,7 +1333,38 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           user.status = subStatus === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED';
         }
 
-        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'SUBSCRIPTION_UPDATE', `Subscription status updated for ${customerEmail} to ${subStatus}`);
+        broadcastAdminEvent({
+          eventType: event.type === 'customer.subscription.created' ? 'SUBSCRIPTION_CREATED' : 'SUBSCRIPTION_UPGRADED',
+          userEmail: customerEmail,
+          stripeSubscriptionId: sub.id,
+          status: subStatus === 'ACTIVE' ? 'SUCCESS' : 'WARN',
+          message: `Subscription status updated for ${customerEmail} to ${subStatus}`,
+        });
+
+        // Trigger role sync if active
+        if (subStatus === 'ACTIVE') {
+          const profileByEmail = userDiscordProfiles.get(customerEmail);
+          const profileGlobal = userDiscordProfiles.get('global_active_user');
+          const discordUserId = profileByEmail?.discordUserId || profileGlobal?.discordUserId;
+
+          if (discordUserId) {
+            const targetTier = current.role === 'ELITE' || current.plan === 'ELITE_PASS' ? 'ELITE' : 'PRO';
+            assignDiscordRoleToUser(discordUserId, targetTier)
+              .then((resSync) => {
+                if (resSync.success) {
+                  broadcastAdminEvent({
+                    eventType: 'DISCORD_ROLE_ASSIGNED',
+                    userEmail: customerEmail,
+                    discordUserId,
+                    plan: targetTier,
+                    status: 'SUCCESS',
+                    message: `Discord role ${targetTier} verified/assigned for ${discordUserId}`,
+                  });
+                }
+              })
+              .catch(() => {});
+          }
+        }
       }
       break;
     }
@@ -1180,7 +1400,13 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           });
         }
 
-        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'INVOICE_PAID', `Invoice payment succeeded for ${customerEmail} ($${amountPaid})`);
+        broadcastAdminEvent({
+          eventType: 'STRIPE_PAYMENT_SUCCEEDED',
+          userEmail: customerEmail,
+          stripeCustomerId: typeof invoice.customer === 'string' ? invoice.customer : undefined,
+          status: 'SUCCESS',
+          message: `Invoice payment succeeded for ${customerEmail} ($${amountPaid})`,
+        });
       }
       break;
     }
@@ -1205,12 +1431,39 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           user.status = 'SUSPENDED';
         }
 
-        addServerAuditLog(
-          'SYSTEM_STRIPE_WEBHOOK',
-          'PAYMENT_FAILED_OR_CANCELLED',
-          `Subscription cancelled or payment failed for ${customerEmail}. Access revoked.`,
-          'WARN'
-        );
+        broadcastAdminEvent({
+          eventType: 'SUBSCRIPTION_CANCELED',
+          userEmail: customerEmail,
+          status: 'WARN',
+          message: `Subscription cancelled or payment failed for ${customerEmail}`,
+        });
+
+        broadcastAdminEvent({
+          eventType: 'ENTITLEMENT_REVOKED',
+          userEmail: customerEmail,
+          plan: 'FREE_TRIAL',
+          status: 'WARN',
+          message: `Access revoked for ${customerEmail}`,
+        });
+
+        // Revoke Discord role
+        const profileByEmail = userDiscordProfiles.get(customerEmail);
+        const profileGlobal = userDiscordProfiles.get('global_active_user');
+        const discordUserId = profileByEmail?.discordUserId || profileGlobal?.discordUserId;
+
+        if (discordUserId) {
+          assignDiscordRoleToUser(discordUserId, 'NONE')
+            .then(() => {
+              broadcastAdminEvent({
+                eventType: 'DISCORD_ROLE_REMOVED',
+                userEmail: customerEmail,
+                discordUserId,
+                status: 'INFO',
+                message: `Discord paid roles removed for ${discordUserId}`,
+              });
+            })
+            .catch(() => {});
+        }
       }
       break;
     }

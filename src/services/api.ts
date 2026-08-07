@@ -950,6 +950,41 @@ export async function fetchSystemHealth() {
   });
 }
 
+export async function fetchAdminEventsApi() {
+  return await safeFetchJson<any[]>(`/api/admin/events?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function fetchDiscordHealthApi() {
+  return await safeFetchJson<any>(`/api/discord/health?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function fetchStripeHealthApi() {
+  return await safeFetchJson<any>(`/api/stripe/health?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+}
+
+export async function resyncEntitlementApi(identifier: string) {
+  try {
+    const res = await fetch('/api/admin/resync-entitlement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier }),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to dispatch resync entitlement request', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
 export async function unfreezeUserBotsApi() {
   try {
     const res = await fetch('/api/admin/unfreeze-bots', {
@@ -964,4 +999,5 @@ export async function unfreezeUserBotsApi() {
   }
   return { success: true, message: 'All local and remote user bots successfully unfrozen and active!' };
 }
+
 

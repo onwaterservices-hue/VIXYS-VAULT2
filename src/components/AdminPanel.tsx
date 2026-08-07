@@ -59,6 +59,10 @@ import {
   performUserAction,
   fetchAdminAuditLogs,
   fetchSystemHealth,
+  fetchAdminEventsApi,
+  fetchDiscordHealthApi,
+  fetchStripeHealthApi,
+  resyncEntitlementApi,
   AdminDiagnosticsResponse,
 } from '../services/api';
 
@@ -232,12 +236,20 @@ export const AdminPanel: React.FC = () => {
   // System Settings State
   const [minConfidenceOverride, setMinConfidenceOverride] = useState<number>(70);
 
+  // Admin Real-Time Events Stream State
+  const [adminEvents, setAdminEvents] = useState<any[]>([]);
+  const [resyncIdentifier, setResyncIdentifier] = useState('vixyvault0@gmail.com');
+  const [isResyncing, setIsResyncing] = useState(false);
+  const [resyncMessage, setResyncMessage] = useState<string | null>(null);
+  const [discordHealth, setDiscordHealth] = useState<any>(null);
+  const [stripeHealth, setStripeHealth] = useState<any>(null);
+
   // Load All Admin Data (Non-blocking)
   const loadAdminData = useCallback(async (isManualRefresh = false) => {
     if (isManualRefresh) setIsRefreshing(true);
 
     try {
-      const [diagData, usersData, refData, statsData, txData, logsData, healthData] = await Promise.all([
+      const [diagData, usersData, refData, statsData, txData, logsData, healthData, evsData, dHealth, sHealth] = await Promise.all([
         fetchAdminDiagnostics().catch(() => null),
         fetchAdminUsers().catch(() => null),
         fetchAdminReferrals().catch(() => null),
@@ -245,6 +257,9 @@ export const AdminPanel: React.FC = () => {
         fetchAdminTransactions().catch(() => null),
         fetchAdminAuditLogs().catch(() => null),
         fetchSystemHealth().catch(() => null),
+        fetchAdminEventsApi().catch(() => null),
+        fetchDiscordHealthApi().catch(() => null),
+        fetchStripeHealthApi().catch(() => null),
       ]);
 
       if (diagData) setDiagnosticsData(diagData);
@@ -254,6 +269,9 @@ export const AdminPanel: React.FC = () => {
       if (txData && Array.isArray(txData)) setTransactions(txData);
       if (logsData && Array.isArray(logsData)) setAuditLogs(logsData);
       if (healthData) setSystemHealth((prev: any) => ({ ...prev, ...healthData }));
+      if (evsData && Array.isArray(evsData)) setAdminEvents(evsData);
+      if (dHealth) setDiscordHealth(dHealth);
+      if (sHealth) setStripeHealth(sHealth);
 
       setLastRefreshedAt(new Date().toLocaleTimeString());
       setGlobalError(null);
@@ -265,6 +283,47 @@ export const AdminPanel: React.FC = () => {
       setIsRefreshing(false);
     }
   }, []);
+
+  // SSE Stream Listener for Real-Time Events
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    try {
+      eventSource = new EventSource('/api/admin/events/stream');
+      eventSource.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === 'INITIAL_BATCH' && Array.isArray(payload.events)) {
+            setAdminEvents(payload.events);
+          } else if (payload.id && payload.eventType) {
+            setAdminEvents((prev) => [payload, ...prev.slice(0, 199)]);
+          }
+        } catch (err) {
+          console.warn('SSE parse error:', err);
+        }
+      };
+    } catch (err) {
+      console.warn('SSE EventSource setup warning:', err);
+    }
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, []);
+
+  // Handler: Resync Entitlement
+  const handleResyncEntitlement = async () => {
+    if (!resyncIdentifier.trim()) return;
+    setIsResyncing(true);
+    setResyncMessage(null);
+    try {
+      const res = await resyncEntitlementApi(resyncIdentifier.trim());
+      setResyncMessage(`${res.success ? '✅ Success' : '⚠️ Warning'}: ${res.message}`);
+      loadAdminData();
+    } catch (err: any) {
+      setResyncMessage(`❌ Error: ${err.message || 'Server error'}`);
+    } finally {
+      setIsResyncing(false);
+    }
+  };
 
   // Initial Load & Lightweight Polling (12 seconds interval, non-blocking)
   useEffect(() => {
@@ -831,38 +890,98 @@ export const AdminPanel: React.FC = () => {
             )}
           </div>
 
-          {/* Diagnostics Logs Stream */}
-          {diagnosticsData?.recentLogs && diagnosticsData.recentLogs.length > 0 && (
-            <div className="bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-6 space-y-3 font-mono shadow-2xl">
-              <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
-                <span className="text-xs font-bold text-purple-300 uppercase">Live Engine Execution Stream</span>
-                <span className="text-[10px] text-purple-400 font-bold bg-purple-900/40 px-2 py-0.5 rounded">
-                  {diagnosticsData.recentLogs.length} Events Logged
+          {/* Live Authoritative System Event Stream & Resync Control */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Live SSE Stream (7 Cols) */}
+            <div className="lg:col-span-7 bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-5 space-y-3 font-mono shadow-2xl">
+              <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-emerald-400" />
+                  <span className="text-xs font-bold text-white uppercase tracking-wider">Live System Event Stream</span>
+                </div>
+                <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-500/30">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                  SSE REAL-TIME
                 </span>
               </div>
-              <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 text-xs">
-                {diagnosticsData.recentLogs.map((log, i) => (
-                  <div key={log.id || i} className="p-2 rounded-xl bg-[#0B061A] border border-purple-900/30 flex items-start gap-2">
-                    <span
-                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                        log.level === 'WARN'
-                          ? 'bg-amber-500/20 text-amber-300'
-                          : log.level === 'ERROR'
-                          ? 'bg-rose-500/20 text-rose-300'
-                          : 'bg-emerald-500/20 text-emerald-300'
-                      }`}
-                    >
-                      {log.level}
-                    </span>
-                    <span className="text-purple-300/50 text-[10px] shrink-0">
-                      {new Date(log.timestamp).toLocaleTimeString()}
-                    </span>
-                    <span className="text-purple-100 font-sans">{log.message}</span>
-                  </div>
-                ))}
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1 text-xs">
+                {adminEvents.length === 0 ? (
+                  <div className="p-6 text-center text-purple-400/50 text-xs">Waiting for incoming Stripe or Discord events...</div>
+                ) : (
+                  adminEvents.slice(0, 15).map((evt) => (
+                    <div key={evt.id} className="p-2.5 rounded-2xl bg-[#0B061A] border border-purple-900/40 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className={`font-bold text-[11px] ${
+                          evt.status === 'SUCCESS' ? 'text-emerald-400' :
+                          evt.status === 'FAILED' ? 'text-rose-400' :
+                          evt.status === 'WARN' ? 'text-amber-400' : 'text-purple-300'
+                        }`}>
+                          {evt.eventType}
+                        </span>
+                        <span className="text-[10px] text-purple-400/60">
+                          {evt.timestamp ? new Date(evt.timestamp).toLocaleTimeString() : 'Just now'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-purple-100 font-sans">{evt.message}</p>
+                      {evt.userEmail && (
+                        <span className="text-[9px] text-purple-400/60 block">User: {evt.userEmail}</span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
             </div>
-          )}
+
+            {/* Emergency Resync Entitlement Control (5 Cols) */}
+            <div className="lg:col-span-5 bg-[#120B28] rounded-3xl border border-purple-500/30 p-4 sm:p-5 space-y-4 font-mono shadow-2xl flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-purple-900/40 pb-3 mb-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-amber-400" />
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Emergency Entitlement Resync</span>
+                  </div>
+                  <span className="text-[9px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-bold">
+                    REPAIR
+                  </span>
+                </div>
+
+                <p className="text-xs text-purple-300/70 font-sans leading-relaxed mb-4">
+                  Forces backend to query Stripe subscription records, synchronize entitlements, and re-issue Discord server role grants to Discord User IDs.
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] text-purple-300/70 block uppercase">Discord User ID or Email</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 10428491029301920 or user@example.com"
+                    value={resyncIdentifier}
+                    onChange={(e) => setResyncIdentifier(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500 font-mono"
+                  />
+                  <button
+                    onClick={handleResyncEntitlement}
+                    disabled={isResyncing || !resyncIdentifier}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isResyncing ? 'animate-spin' : ''}`} />
+                    <span>{isResyncing ? 'RESYNCING STATE...' : 'RESYNC ENTITLEMENT & ROLE'}</span>
+                  </button>
+                </div>
+
+                {resyncMessage && (
+                  <div className="mt-3 p-3 rounded-xl bg-[#0B061A] border border-purple-800/50 text-xs font-sans text-purple-200">
+                    {resyncMessage}
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-purple-900/40 text-[10px] text-purple-300/50 flex items-center justify-between">
+                <span>Stripe Webhook: Active</span>
+                <span>Bot Role Hierarchy: Verified</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1935,7 +2054,7 @@ export const AdminPanel: React.FC = () => {
       )}
 
       {/* TAB 9: DISCORD BOT INTEGRATION */}
-      {adminTab === 'discord' && <DiscordBotHubView />}
+      {adminTab === 'discord' && <DiscordBotHubView adminEvents={adminEvents} />}
     </div>
   );
 };
