@@ -582,7 +582,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       {/* Main Grid: Chart Canvas (Left) + Synced Probability Bar & BUY Capsules (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: Live Canvas Chart */}
-        <div className="lg:col-span-8 relative rounded-xl bg-[#050210] border border-purple-900/40 p-2 overflow-hidden h-[340px] flex flex-col justify-between">
+        <div className="lg:col-span-8 relative rounded-xl bg-[#050210] border border-purple-900/40 p-2 overflow-hidden h-[430px] flex flex-col justify-between">
           <div ref={containerRef} className="w-full h-full relative">
             <canvas ref={canvasRef} className="w-full h-full block" />
 

@@ -106,71 +106,80 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       </div>
 
       {/* Dominant Centerpiece Focal Point: Direction + AI Conviction */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center relative z-10">
-        {/* Left 7 cols: Huge Hero Signal Output */}
-        <div className="lg:col-span-7 space-y-5">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start relative z-10">
+        {/* Left 7 cols: Hero Confidence & Bearish/Bullish Signal Output */}
+        <div className="lg:col-span-7 space-y-6">
           <div className="text-xs font-mono font-extrabold text-purple-300/90 uppercase tracking-widest flex items-center gap-2">
             <Cpu className="w-4 h-4 text-emerald-400" />
             AI CONVICTION VECTOR
           </div>
 
-          <div className="flex flex-col sm:flex-row sm:items-baseline gap-4 sm:gap-6">
-            <h1
-              className={`text-6xl sm:text-7xl lg:text-8xl font-black tracking-tighter uppercase drop-shadow-[0_0_40px_rgba(0,0,0,0.95)] flex items-center gap-2 ${
-                isBullish ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {isBullish ? '▲ BUY UP' : '▼ BUY DOWN'}
-            </h1>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 bg-[#070212]/95 p-6 rounded-3xl border border-purple-500/60 shadow-[0_0_40px_rgba(0,0,0,0.9)]">
+            {/* HERO: Lock Confidence Hero Display */}
+            <div className="space-y-1">
+              <div className="flex items-baseline gap-2">
+                <span className="text-5xl sm:text-6xl lg:text-7xl font-black text-white font-mono tracking-tight drop-shadow-[0_0_35px_rgba(255,255,255,0.4)]">
+                  {liveConfidence.toFixed(1)}%
+                </span>
+              </div>
+              <span className="text-xs text-amber-400 font-extrabold uppercase tracking-widest block">
+                ⚡ LOCK CONFIDENCE
+              </span>
+            </div>
 
-            <div className="flex items-baseline gap-2 bg-[#070212]/95 px-5 py-3 rounded-2xl border border-purple-500/60 shadow-[0_0_30px_rgba(0,0,0,0.9)]">
-              <span className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tight">
-                {liveConfidence.toFixed(1)}%
-              </span>
-              <span className="text-[10px] text-amber-400 font-black uppercase tracking-widest">
-                LOCK CONFIDENCE
-              </span>
+            {/* Compact Bearish / Bullish Direction Tag */}
+            <div className={`px-5 py-3 rounded-2xl border text-center ${
+              isBullish
+                ? 'bg-emerald-950/80 border-emerald-500/80 text-emerald-300 shadow-[0_0_25px_rgba(16,185,129,0.3)]'
+                : 'bg-rose-950/80 border-rose-500/80 text-rose-300 shadow-[0_0_25px_rgba(244,63,94,0.3)]'
+            }`}>
+              <div className="text-2xl sm:text-3xl font-black font-mono tracking-tight uppercase flex items-center justify-center gap-2">
+                {isBullish ? '🐂 BULLISH' : '🐻 BEARISH'}
+              </div>
+              <div className="text-[10px] font-mono font-bold uppercase tracking-widest text-purple-200/80 mt-0.5">
+                {isBullish ? '▲ BUY UP CALL' : '▼ BUY DOWN PUT'}
+              </div>
             </div>
           </div>
 
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-            <div className="bg-[#080214] p-3 rounded-2xl border border-purple-800/60">
-              <span className="text-[9px] text-purple-300/70 font-mono font-bold uppercase block tracking-wider">
+          {/* Key Metrics Grid - Increased Spacing & Padding */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-5 pt-1">
+            <div className="bg-[#080214] p-4 rounded-2xl border border-purple-800/60 shadow-lg">
+              <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase block tracking-wider">
                 STRIKE TARGET
               </span>
-              <span className="text-base sm:text-lg font-black text-white font-mono">
+              <span className="text-lg sm:text-xl font-black text-white font-mono block mt-1">
                 ${signal.targetPrice.toLocaleString()}
               </span>
             </div>
-            <div className="bg-[#080214] p-3 rounded-2xl border border-purple-800/60">
-              <span className="text-[9px] text-purple-300/70 font-mono font-bold uppercase block tracking-wider">
+            <div className="bg-[#080214] p-4 rounded-2xl border border-purple-800/60 shadow-lg">
+              <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase block tracking-wider">
                 SPOT PRICE
               </span>
-              <span className="text-base sm:text-lg font-black text-cyan-300 font-mono">
+              <span className="text-lg sm:text-xl font-black text-cyan-300 font-mono block mt-1">
                 ${ticker.price.toLocaleString()}
               </span>
             </div>
-            <div className="bg-[#080214] p-3 rounded-2xl border border-purple-800/60">
-              <span className="text-[9px] text-purple-300/70 font-mono font-bold uppercase block tracking-wider">
+            <div className="bg-[#080214] p-4 rounded-2xl border border-purple-800/60 shadow-lg">
+              <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase block tracking-wider">
                 MODEL EDGE
               </span>
-              <span className="text-base sm:text-lg font-black text-emerald-400 font-mono">
+              <span className="text-lg sm:text-xl font-black text-emerald-400 font-mono block mt-1">
                 +{signal.edgePct.toFixed(1)}%
               </span>
             </div>
-            <div className="bg-[#080214] p-3 rounded-2xl border border-purple-800/60">
-              <span className="text-[9px] text-purple-300/70 font-mono font-bold uppercase block tracking-wider">
+            <div className="bg-[#080214] p-4 rounded-2xl border border-purple-800/60 shadow-lg">
+              <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase block tracking-wider">
                 SURVIVAL INDEX
               </span>
-              <span className="text-base sm:text-lg font-black text-amber-300 font-mono">
+              <span className="text-lg sm:text-xl font-black text-amber-300 font-mono block mt-1">
                 98.4%
               </span>
             </div>
           </div>
 
-          {/* 🔥 AI BATTLE MODE: LIVE BULLS VS BEARS ORDERFLOW TUG-OF-WAR */}
-          <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/70 space-y-2">
+          {/* 🔥 AI BATTLE MODE: THICKER 8PX+ LIQUIDITY WARFARE BAR */}
+          <div className="bg-[#060210] p-4.5 rounded-2xl border border-purple-800/70 space-y-2.5">
             <div className="flex items-center justify-between text-xs font-mono">
               <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-2">
                 <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
@@ -181,21 +190,21 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               </span>
             </div>
 
-            <div className="w-full bg-[#12072b] h-3.5 rounded-full overflow-hidden flex border border-purple-900/60 p-0.5">
+            <div className="w-full bg-[#12072b] h-5 rounded-xl overflow-hidden flex border border-purple-800 p-0.5 shadow-inner">
               <div
-                className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-l-full transition-all duration-500 shadow-[0_0_12px_rgba(16,185,129,0.8)]"
+                className="bg-gradient-to-r from-emerald-500 via-teal-400 to-emerald-400 h-full rounded-l-lg transition-all duration-500 shadow-[0_0_16px_rgba(16,185,129,0.9)]"
                 style={{ width: `${bullPct}%` }}
               />
               <div
-                className="bg-gradient-to-r from-rose-500 to-red-600 h-full rounded-r-full transition-all duration-500 shadow-[0_0_12px_rgba(244,63,94,0.8)]"
+                className="bg-gradient-to-r from-rose-500 via-red-500 to-rose-600 h-full rounded-r-lg transition-all duration-500 shadow-[0_0_16px_rgba(244,63,94,0.9)]"
                 style={{ width: `${bearPct}%` }}
               />
             </div>
           </div>
         </div>
 
-        {/* Right 5 cols: LOCK SCORE PROGRESS BAR & CLASSIFIED MODEL LAYERS */}
-        <div className="lg:col-span-5 bg-[#060210] p-5 rounded-2xl border border-purple-800/70 space-y-4 shadow-2xl relative overflow-hidden">
+        {/* Right 5 cols: LOCK SCORE PROGRESS BAR & CLASSIFIED MODEL LAYERS - Pulled Upward */}
+        <div className="lg:col-span-5 bg-[#060210] p-5.5 rounded-2xl border border-purple-800/70 space-y-4 shadow-2xl relative overflow-hidden -mt-1 lg:-mt-2">
           <div className="flex items-center justify-between text-xs font-mono">
             <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
               <Lock className="w-4 h-4 text-cyan-400" /> NEURAL LOCK SCORE
