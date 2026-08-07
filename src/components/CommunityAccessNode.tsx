@@ -211,23 +211,26 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   // =========================================================================
   if (mode === 'dashboard' && isFullyVerified && !isLoadingProfile) {
     return (
-      <div className={`bg-[#080414]/90 rounded-2xl border border-purple-800/40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-lg font-mono text-xs relative overflow-hidden ${className}`}>
-        <div className="flex items-center gap-2.5">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-extrabold text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-              Community Gateway Verified
-            </span>
-            <span className="text-purple-400/60 hidden sm:inline">•</span>
-            <span className="text-emerald-300 font-bold text-[11px]">
-              @{username || displayName} ({roleAssigned} Synced)
-            </span>
-            <span className="text-purple-400/60 hidden md:inline">•</span>
-            <span className="text-purple-300/60 text-[10px] hidden md:inline">
-              Last Sync {profile?.lastSync || 'Just now'}
-            </span>
-          </div>
+      <div className={`bg-[#080414]/90 rounded-2xl border border-emerald-800/50 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 shadow-lg font-mono text-xs relative overflow-hidden ${className}`}>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <span className="px-2.5 py-1 rounded-full bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-indigo-400" />
+            <span>DISCORD CONNECTED</span>
+          </span>
+
+          <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            <span>SERVER MEMBER VERIFIED</span>
+          </span>
+
+          <span className="px-2.5 py-1 rounded-full bg-cyan-500/15 border border-cyan-500/40 text-cyan-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            <span>MEMBERSHIP ROLE ACTIVE: {roleAssigned}</span>
+          </span>
+
+          <span className="text-purple-300/60 text-[10px] hidden lg:inline ml-1">
+            (@{username || displayName})
+          </span>
         </div>
 
         <div className="flex items-center gap-2">

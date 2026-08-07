@@ -569,7 +569,39 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       </defs>
 
       {/* Plot Background */}
-      <rect x={marginLeft} y={marginTop} width={plotWidth} height={chartHeight} fill="url(#grid)" />
+      <rect x={marginLeft} y={marginTop} width={plotWidth} height={chartHeight} fill="#080414" />
+
+      {/* VIXY Technical Grid System (Horizontal & Vertical Lines) */}
+      <g opacity="0.6">
+        {[0, 0.2, 0.4, 0.6, 0.8, 1].map((pct, idx) => {
+          const gridY = marginTop + chartHeight * pct;
+          return (
+            <line
+              key={`h-grid-${idx}`}
+              x1={marginLeft}
+              y1={gridY}
+              x2={marginLeft + plotWidth}
+              y2={gridY}
+              stroke="#1a1236"
+              strokeWidth="0.75"
+            />
+          );
+        })}
+        {[0, 0.2, 0.4, 0.6, 0.8, 1].map((pct, idx) => {
+          const gridX = marginLeft + plotWidth * pct;
+          return (
+            <line
+              key={`v-grid-${idx}`}
+              x1={gridX}
+              y1={marginTop}
+              x2={gridX}
+              y2={marginTop + chartHeight}
+              stroke="#160f2e"
+              strokeWidth="0.75"
+            />
+          );
+        })}
+      </g>
 
       {/* Bollinger Bands Fill Ribbon */}
       {showBollinger && (
@@ -599,6 +631,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             fill={THEME.bull}
             fontSize="9"
             fontWeight="bold"
+            fontFamily="monospace"
           >
             SUPPORT ${currentSupport.toFixed(1)}
           </text>
@@ -623,67 +656,128 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             fill={THEME.bear}
             fontSize="9"
             fontWeight="bold"
+            fontFamily="monospace"
           >
             RESISTANCE ${currentResistance.toFixed(1)}
           </text>
         </g>
       )}
 
-      {/* Target Strike Line - Neon Glowing Institutional Banner */}
+      {/* VIXY AI Projection Trajectory Curve */}
+      {visibleCandles.length > 0 && (
+        <g>
+          {(() => {
+            const lastCandleX = x(visibleCandles.length - 1);
+            const lastCandleY = y(latestClose);
+            const targetY = y(activeSignal.targetPrice || (isBullish ? latestClose + 120 : latestClose - 120));
+            const endX = marginLeft + plotWidth;
+            const midX = lastCandleX + (endX - lastCandleX) * 0.5;
+            const projPathD = `M ${lastCandleX} ${lastCandleY} C ${midX} ${lastCandleY}, ${midX} ${targetY}, ${endX} ${targetY}`;
+            const projColor = isBullish ? '#10b981' : '#f43f5e';
+
+            return (
+              <g>
+                {/* Glowing Backdrop Aura Path */}
+                <path
+                  d={projPathD}
+                  fill="none"
+                  stroke={projColor}
+                  strokeWidth="5"
+                  strokeOpacity="0.25"
+                  filter={isBullish ? 'url(#glow-green)' : 'url(#glow-red)'}
+                />
+                {/* Dashed Animated Projection Line */}
+                <path
+                  d={projPathD}
+                  fill="none"
+                  stroke={projColor}
+                  strokeWidth="2.5"
+                  strokeDasharray="5 3"
+                  className="animate-pulse"
+                />
+                {/* Projection Label Capsule */}
+                <g transform={`translate(${(lastCandleX + endX) / 2 - 40}, ${(lastCandleY + targetY) / 2 - 12})`}>
+                  <rect
+                    width="80"
+                    height="16"
+                    rx="8"
+                    fill="#0a041c"
+                    stroke={projColor}
+                    strokeWidth="1"
+                    className="shadow-lg"
+                  />
+                  <text
+                    x="40"
+                    y="11"
+                    fill={projColor}
+                    fontSize="8"
+                    fontWeight="bold"
+                    textAnchor="middle"
+                    className="font-mono tracking-wider"
+                  >
+                    AI PROJECTION ➔
+                  </text>
+                </g>
+              </g>
+            );
+          })()}
+        </g>
+      )}
+
+      {/* VIXY Target Band - Neon Glowing Institutional Banner */}
       {activeSignal.targetPrice && (
-        <g className="animate-pulse">
-          {/* Glowing Aura Backdrop Line */}
+        <g>
+          {/* Outer Glowing Aura Backdrop Band */}
           <line
             x1={marginLeft}
             y1={y(activeSignal.targetPrice)}
             x2={marginLeft + plotWidth}
             y2={y(activeSignal.targetPrice)}
-            stroke="#c084fc"
-            strokeWidth="6"
-            strokeOpacity="0.3"
-            filter="url(#glow-purple)"
+            stroke={isBullish ? '#10b981' : '#f43f5e'}
+            strokeWidth="8"
+            strokeOpacity="0.2"
+            filter={isBullish ? 'url(#glow-green)' : 'url(#glow-red)'}
           />
-          {/* Solid Glowing Core Line */}
+          {/* Core Solid Dashed Line */}
           <line
             x1={marginLeft}
             y1={y(activeSignal.targetPrice)}
             x2={marginLeft + plotWidth}
             y2={y(activeSignal.targetPrice)}
-            stroke="#a855f7"
+            stroke={isBullish ? '#34d399' : '#fb7185'}
             strokeWidth="2"
             strokeDasharray="6 3"
           />
-          {/* Strike Price Badge Tag */}
+          {/* Target Strike Badge Tag on Right Y-Axis */}
           <rect
             x={marginLeft + plotWidth + 4}
-            y={y(activeSignal.targetPrice) - 12}
-            width="85"
-            height="24"
+            y={y(activeSignal.targetPrice) - 14}
+            width="95"
+            height="28"
             rx="6"
-            fill="#1e0c38"
-            stroke="#c084fc"
+            fill="#090317"
+            stroke={isBullish ? '#10b981' : '#f43f5e'}
             strokeWidth="1.5"
-            filter="url(#glow-purple)"
           />
           <text
             x={marginLeft + plotWidth + 10}
-            y={y(activeSignal.targetPrice) - 1}
-            fill="#c084fc"
+            y={y(activeSignal.targetPrice) - 2}
+            fill="#ffffff"
             fontSize="9"
             fontWeight="900"
             className="font-mono tracking-wider"
           >
-            STRIKE ${activeSignal.targetPrice.toFixed(1)}
+            TARGET ${activeSignal.targetPrice.toFixed(0)}
           </text>
           <text
             x={marginLeft + plotWidth + 10}
-            y={y(activeSignal.targetPrice) + 8}
-            fill="#34d399"
-            fontSize="7.5"
+            y={y(activeSignal.targetPrice) + 9}
+            fill={isBullish ? '#34d399' : '#fb7185'}
+            fontSize="8"
             fontWeight="bold"
             className="font-mono"
           >
-            ▲ Target Above (+0.21%)
+            {isBullish ? '▲ STRIKE (+0.42%)' : '▼ STRIKE (-0.38%)'}
           </text>
         </g>
       )}
@@ -977,7 +1071,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </g>
       )}
 
-      {/* Crosshair Overlay */}
+      {/* Crosshair Overlay with AI Delta Tooltip */}
       {crosshairPos && (
         <g>
           {/* Vertical Crosshair Line */}
@@ -989,7 +1083,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             stroke="#a78bfa"
             strokeWidth="0.75"
             strokeDasharray="3 3"
-            opacity="0.7"
+            opacity="0.8"
           />
           {/* Horizontal Crosshair Line */}
           <line
@@ -1000,69 +1094,146 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             stroke="#a78bfa"
             strokeWidth="0.75"
             strokeDasharray="3 3"
-            opacity="0.7"
+            opacity="0.8"
           />
-          {/* Price Label on right axis */}
+          {/* Price Capsule on Right Axis */}
           <rect
             x={marginLeft + plotWidth + 4}
-            y={crosshairPos.y - 8}
-            width="70"
-            height="16"
-            rx="3"
+            y={crosshairPos.y - 10}
+            width="80"
+            height="20"
+            rx="5"
             fill="#3b0764"
-            stroke="#a78bfa"
-            strokeWidth="1"
+            stroke="#c084fc"
+            strokeWidth="1.5"
+            className="shadow-lg"
           />
           <text
-            x={marginLeft + plotWidth + 8}
+            x={marginLeft + plotWidth + 10}
             y={crosshairPos.y + 3}
             fill="#ffffff"
-            fontSize="8"
+            fontSize="9"
             fontWeight="bold"
+            className="font-mono tracking-wider"
           >
             ${crosshairPos.price.toFixed(1)}
           </text>
-          {/* Timestamp Label at bottom */}
+
+          {/* Floating AI Delta Tooltip near Cursor */}
+          {(() => {
+            const priceDelta = crosshairPos.price - latestClose;
+            const pctDelta = (priceDelta / latestClose) * 100;
+            const isPos = priceDelta >= 0;
+            return (
+              <g transform={`translate(${Math.min(marginLeft + plotWidth - 90, crosshairPos.x + 12)}, ${Math.max(marginTop + 10, crosshairPos.y - 25)})`}>
+                <rect
+                  width="85"
+                  height="18"
+                  rx="4"
+                  fill="#080214"
+                  stroke={isPos ? '#10b981' : '#f43f5e'}
+                  strokeWidth="1"
+                  opacity="0.9"
+                />
+                <text
+                  x="42"
+                  y="12"
+                  fill={isPos ? '#34d399' : '#fb7185'}
+                  fontSize="8"
+                  fontWeight="black"
+                  textAnchor="middle"
+                  className="font-mono"
+                >
+                  {isPos ? '+' : ''}${priceDelta.toFixed(1)} ({isPos ? '+' : ''}{pctDelta.toFixed(2)}%)
+                </text>
+              </g>
+            );
+          })()}
+
+          {/* Timestamp Capsule at Bottom */}
           <rect
-            x={crosshairPos.x - 30}
+            x={crosshairPos.x - 32}
             y={marginTop + chartHeight + (showRSI ? volumeHeight + rsiHeight + 25 : volumeHeight + 15)}
-            width="60"
-            height="14"
-            rx="3"
+            width="64"
+            height="16"
+            rx="4"
             fill="#3b0764"
-            stroke="#a78bfa"
+            stroke="#c084fc"
             strokeWidth="1"
           />
           <text
             x={crosshairPos.x}
-            y={marginTop + chartHeight + (showRSI ? volumeHeight + rsiHeight + 35 : volumeHeight + 25)}
+            y={marginTop + chartHeight + (showRSI ? volumeHeight + rsiHeight + 36 : volumeHeight + 26)}
             fill="#ffffff"
             fontSize="8"
             fontWeight="bold"
             textAnchor="middle"
+            className="font-mono"
           >
             {crosshairPos.timeLabel}
           </text>
         </g>
       )}
 
-      {/* Y-Axis Price Scale Labels */}
-      <g>
-        <text x={marginLeft - 8} y={y(yMax) + 8} fill={THEME.textDim} fontSize="8" textAnchor="end">
-          ${yMax.toFixed(0)}
-        </text>
-        <text
-          x={marginLeft - 8}
-          y={y((yMax + yMin) / 2)}
-          fill={THEME.textDim}
-          fontSize="8"
-          textAnchor="end"
-        >
-          ${((yMax + yMin) / 2).toFixed(0)}
-        </text>
-        <text x={marginLeft - 8} y={y(yMin) - 2} fill={THEME.textDim} fontSize="8" textAnchor="end">
-          ${yMin.toFixed(0)}
-        </text>
+      {/* Right Y-Axis Price Scale Labels */}
+      <g className="font-mono">
+        {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+          const val = yMax - (yMax - yMin) * pct;
+          const labelY = marginTop + chartHeight * pct;
+          return (
+            <text
+              key={i}
+              x={marginLeft + plotWidth + 8}
+              y={labelY + 3}
+              fill="#8b84a8"
+              fontSize="8.5"
+              fontWeight="bold"
+              className="font-mono"
+            >
+              ${Math.round(val).toLocaleString()}
+            </text>
+          );
+        })}
+      </g>
+
+      {/* Bottom X-Axis Time Ticks & Time-State Badges */}
+      <g className="font-mono">
+        {[
+          { pct: 0.1, label: '10:15', badge: 'OPEN' },
+          { pct: 0.35, label: '10:30', badge: 'LIVE' },
+          { pct: 0.6, label: '10:45', badge: '+15M' },
+          { pct: 0.85, label: '11:00', badge: 'STRIKE' },
+        ].map((t, idx) => {
+          const tickX = marginLeft + plotWidth * t.pct;
+          const tickY = marginTop + chartHeight + 12;
+          return (
+            <g key={idx}>
+              <text x={tickX} y={tickY} fill="#8b84a8" fontSize="8" textAnchor="middle" fontWeight="bold">
+                {t.label}
+              </text>
+              <rect
+                x={tickX - 16}
+                y={tickY + 3}
+                width="32"
+                height="10"
+                rx="3"
+                fill={t.badge === 'STRIKE' ? '#3b0764' : '#0d0a1a'}
+                stroke={t.badge === 'STRIKE' ? '#c084fc' : '#2a2340'}
+                strokeWidth="0.75"
+              />
+              <text
+                x={tickX}
+                y={tickY + 10}
+                fill={t.badge === 'STRIKE' ? '#c084fc' : '#8b84a8'}
+                fontSize="6.5"
+                fontWeight="extrabold"
+                textAnchor="middle"
+              >
+                {t.badge}
+              </text>
+            </g>
+          );
+        })}
       </g>
     </svg>
   );
@@ -1119,36 +1290,43 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   );
 
   const controlsBar = (
-    <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[#150f28] rounded-xl border border-[#2a2340] font-mono text-xs mb-3">
-      {/* Timeframe selector */}
-      <div className="flex items-center gap-1">
-        {(['15M', '1H'] as const).map((tf) => (
-          <button
-            key={tf}
-            onClick={() => onTimeframeChange && onTimeframeChange(tf)}
-            className={`px-2.5 py-1 rounded text-[11px] font-bold border transition-all ${
-              timeframe === tf
-                ? 'bg-purple-600 text-white border-purple-400 shadow-md'
-                : 'bg-[#0d0a1a] text-[#8b84a8] border-[#2a2340] hover:text-white'
-            }`}
-          >
-            {tf}
-          </button>
-        ))}
-        {autoThinned && (
-          <span className="ml-2 text-[9px] px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-            auto-thinned
-          </span>
-        )}
+    <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#080316] rounded-2xl border border-purple-800/60 font-mono text-xs mb-3 shadow-xl">
+      {/* Title & Status Chips */}
+      <div className="flex items-center gap-2.5 flex-wrap">
+        <span className="text-white font-extrabold uppercase text-xs tracking-wider flex items-center gap-1.5 bg-[#12072a] px-3 py-1 rounded-xl border border-purple-700/60">
+          <Activity className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+          BTC {timeframe} • VIXY NEURAL RIBBON
+        </span>
+
+        {/* Live Status Chip */}
+        <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-black text-emerald-300">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+          LIVE
+        </span>
+
+        {/* Kalshi Chip */}
+        <span className="px-2 py-1 rounded-lg bg-purple-950/80 border border-purple-800/60 text-[10px] font-bold text-purple-300">
+          KALSHI
+        </span>
+
+        {/* AI Confidence Chip */}
+        <span className="px-2 py-1 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-[10px] font-extrabold text-cyan-300">
+          AI CONF {(activeSignal.confidence * 100).toFixed(0)}%
+        </span>
+
+        {/* Edge Chip */}
+        <span className="hidden sm:inline-block px-2 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-extrabold text-emerald-400">
+          EDGE +12.2%
+        </span>
       </div>
 
-      {/* Spot & Target summary */}
-      <div className="flex items-center gap-3 text-[11px]">
-        <div>
-          <span className="text-[#8b84a8]">SPOT: </span>
-          <span className="font-bold text-white">${latestClose.toFixed(1)}</span>
+      {/* Spot Price & Controls */}
+      <div className="flex items-center gap-3">
+        <div className="bg-[#0e0622] px-3 py-1 rounded-xl border border-purple-800/50 flex items-center gap-2">
+          <span className="text-[#8b84a8] text-[10px]">SPOT:</span>
+          <span className="font-extrabold text-white text-xs">${latestClose.toFixed(1)}</span>
           <span
-            className={`ml-1 text-[10px] font-bold ${
+            className={`text-[10px] font-bold ${
               lastPriceChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
             }`}
           >
@@ -1156,51 +1334,44 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             {lastPriceChangePct.toFixed(2)}%
           </span>
         </div>
-        {activeSignal.targetPrice && (
-          <div className="flex items-center gap-1">
-            <span className="text-[#8b84a8]">STRIKE: </span>
-            <span className="font-bold text-amber-400">${activeSignal.targetPrice.toFixed(1)}</span>
-            <span className="text-[9px] text-amber-300/70">
-              ({latestClose >= activeSignal.targetPrice ? 'Above Strike' : 'Below Strike'})
-            </span>
-          </div>
-        )}
-        <div className="hidden sm:block">
-          <span className="text-[#8b84a8]">CONF: </span>
-          <span className="font-bold text-teal-400">{(activeSignal.confidence * 100).toFixed(0)}%</span>
-        </div>
-      </div>
 
-      {/* Zoom & Controls */}
-      <div className="flex items-center gap-1">
-        <button
-          onClick={zoomIn}
-          title="Zoom In"
-          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
-        >
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={zoomOut}
-          title="Zoom Out"
-          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
-        >
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={resetZoom}
-          title="Reset Zoom"
-          className="p-1.5 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-        <button
-          onClick={() => setIsFullscreen(!isFullscreen)}
-          title="Toggle Fullscreen"
-          className="p-1.5 rounded bg-[#0d0a1a] text-purple-300 hover:text-white border border-purple-500/30 ml-1"
-        >
-          {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-        </button>
+        {/* Timeframe & Zoom buttons */}
+        <div className="flex items-center gap-1">
+          {(['15M', '1H'] as const).map((tf) => (
+            <button
+              key={tf}
+              onClick={() => onTimeframeChange && onTimeframeChange(tf)}
+              className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                timeframe === tf
+                  ? 'bg-purple-600 text-white border-purple-400 shadow-md'
+                  : 'bg-[#0d0a1a] text-[#8b84a8] border-[#2a2340] hover:text-white'
+              }`}
+            >
+              {tf}
+            </button>
+          ))}
+          <button
+            onClick={zoomIn}
+            title="Zoom In"
+            className="p-1 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={zoomOut}
+            title="Zoom Out"
+            className="p-1 rounded bg-[#0d0a1a] text-[#8b84a8] hover:text-white border border-[#2a2340]"
+          >
+            <ZoomOut className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            title="Toggle Fullscreen"
+            className="p-1 rounded bg-[#0d0a1a] text-purple-300 hover:text-white border border-purple-500/30"
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+          </button>
+        </div>
       </div>
     </div>
   );

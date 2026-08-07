@@ -9,6 +9,7 @@ import {
   getDiscordBotStatus,
   broadcastSignalToDiscord,
   assignDiscordVipRole,
+  assignDiscordRoleToUser,
   validateDiscordEnv,
 } from './src/bot';
 import { AutomationScheduler } from './src/bot/services/automationScheduler';
@@ -2120,9 +2121,12 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
   const { code, error, error_description } = req.query;
   const redirectUri = process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback';
 
-  console.log("OAuth redirect_uri being sent for token exchange:", redirectUri);
+  console.log('[Discord OAuth Callback Audit] Step 1: Callback triggered.');
+  console.log('[Discord OAuth Callback Audit] Step 1a: Enforced Redirect URI:', redirectUri);
+  console.log('[Discord OAuth Callback Audit] Step 1b: Query code received:', code ? `YES (length: ${String(code).length})` : 'NO');
 
   if (error || !code) {
+    console.error('[Discord OAuth Callback Audit] ❌ Authorization failed or missing code:', { error, error_description });
     return res.send(`
       <!DOCTYPE html>
       <html>
@@ -2147,6 +2151,8 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
   const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
   const clientSecret = process.env.DISCORD_CLIENT_SECRET || 'mQ_hr0BndwQA4pAxaBxl1_bVc208gzXG';
 
+  console.log('[Discord OAuth Callback Audit] Step 2: Preparing token exchange. Client ID:', clientId, '| Secret Present:', !!clientSecret);
+
   let discordUser: any = null;
   let userGuilds: any[] = [];
   let oauthError: string | null = null;
@@ -2161,43 +2167,79 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
         redirect_uri: redirectUri,
       });
 
+      console.log('[Discord OAuth Callback Audit] Step 3: Posting token exchange request to https://discord.com/api/v10/oauth2/token');
+      console.log('[Discord OAuth Callback Audit] Step 3a: Request parameters sent:', {
+        client_id: clientId,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code_preview: String(code).substring(0, 10) + '...',
+      });
+
       const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: tokenParams.toString(),
       });
 
-      if (tokenRes.ok) {
-        const tokenData = await tokenRes.json();
+      console.log('[Discord OAuth Callback Audit] Step 4: Token Response Status:', tokenRes.status, tokenRes.statusText);
+
+      const tokenText = await tokenRes.text();
+      let tokenData: any = {};
+      try {
+        tokenData = JSON.parse(tokenText);
+      } catch (pErr) {
+        console.error('[Discord OAuth Callback Audit] Failed to parse token response JSON:', tokenText);
+      }
+
+      if (tokenRes.ok && tokenData.access_token) {
         const accessToken = tokenData.access_token;
+        console.log('[Discord OAuth Callback Audit] Step 5: Access token successfully extracted! Token type:', tokenData.token_type, '| Scope:', tokenData.scope);
 
         // Fetch User Profile from Discord
+        console.log('[Discord OAuth Callback Audit] Step 6: Fetching /users/@me with Bearer token...');
         const userRes = await fetch('https://discord.com/api/v10/users/@me', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+
+        console.log('[Discord OAuth Callback Audit] Step 6a: User Profile Response Status:', userRes.status, userRes.statusText);
         if (userRes.ok) {
           discordUser = await userRes.json();
+          console.log('[Discord OAuth Callback Audit] Step 6b: User profile retrieved successfully! ID:', discordUser.id, '| Username:', discordUser.username);
+        } else {
+          const userErrText = await userRes.text();
+          console.error('[Discord OAuth Callback Audit] ❌ Failed to fetch /users/@me. Response:', userErrText);
+          oauthError = `Failed to fetch Discord user profile (/users/@me status ${userRes.status}): ${userErrText}`;
         }
 
         // Fetch Guild Membership from Discord
+        console.log('[Discord OAuth Callback Audit] Step 7: Fetching /users/@me/guilds...');
         const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
           headers: { Authorization: `Bearer ${accessToken}` },
         });
+
+        console.log('[Discord OAuth Callback Audit] Step 7a: Guilds Response Status:', guildsRes.status, guildsRes.statusText);
         if (guildsRes.ok) {
           userGuilds = await guildsRes.json();
+          console.log('[Discord OAuth Callback Audit] Step 7b: Guilds list retrieved count:', Array.isArray(userGuilds) ? userGuilds.length : 0);
+        } else {
+          const guildsErrText = await guildsRes.text();
+          console.warn('[Discord OAuth Callback Audit] Notice: Could not fetch user guilds:', guildsErrText);
         }
       } else {
-        const errJson = await tokenRes.json().catch(() => ({}));
-        oauthError = errJson.error_description || errJson.error || 'Discord token exchange failed';
+        console.error('[Discord OAuth Callback Audit] ❌ Token exchange failed! Response body:', tokenText);
+        oauthError = tokenData.error_description || tokenData.error || `Discord token exchange failed with status ${tokenRes.status}: ${tokenText}`;
       }
     } catch (err: any) {
-      oauthError = err.message || 'Network error during Discord OAuth exchange';
+      console.error('[Discord OAuth Callback Audit] ❌ Exception during Discord OAuth token exchange:', err);
+      oauthError = err.message || 'Network exception during Discord OAuth exchange';
     }
   } else {
-    oauthError = 'DISCORD_CLIENT_SECRET is missing in server environment variables. Please set DISCORD_CLIENT_SECRET in settings to complete token exchange.';
+    console.error('[Discord OAuth Callback Audit] ❌ Missing DISCORD_CLIENT_SECRET in process.env');
+    oauthError = 'DISCORD_CLIENT_SECRET is missing in server environment variables. Please set DISCORD_CLIENT_SECRET to complete token exchange.';
   }
 
   if (discordUser && discordUser.id) {
+    console.log('[Discord OAuth Callback Audit] Step 8: Finalizing profile registration for user:', discordUser.username);
     const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
     const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
     const isGuildMember = Array.isArray(userGuilds) && userGuilds.some((g: any) => g.id === targetGuildId);
@@ -2234,6 +2276,8 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
     userDiscordProfiles.set(userEmail, profile);
     userDiscordProfiles.set('global_active_user', profile);
 
+    console.log('[Discord OAuth Callback Audit] ✅ OAuth Flow Completed Successfully for:', profile.discordGlobalName, '(@' + profile.discordUsername + ')');
+
     return res.send(`
       <!DOCTYPE html>
       <html>
@@ -2265,23 +2309,26 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
       </html>
     `);
   } else {
+    console.error('[Discord OAuth Callback Audit] ❌ OAuth Flow Failed. Error reason:', oauthError);
     return res.send(`
       <!DOCTYPE html>
       <html>
-        <head><title>Discord Authorization</title></head>
+        <head><title>Discord Authorization Error</title></head>
         <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-          <div style="text-align:center;padding:24px;border:1px solid #f59e0b;border-radius:16px;background:#1e1b0e;max-width:440px;">
+          <div style="text-align:center;padding:24px;border:1px solid #f59e0b;border-radius:16px;background:#1e1b0e;max-width:480px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
             <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
-            <h3 style="color:#f59e0b;margin:0 0 8px 0;">OAuth Code Received</h3>
-            <p style="font-size:12px;color:#fde68a;line-height:1.5;">${oauthError || 'OAuth authentication completed code exchange.'}</p>
-            <p style="font-size:11px;color:#94a3b8;margin-top:12px;">To complete real token verification on Discord API, provide <code>DISCORD_CLIENT_SECRET</code> in environment settings.</p>
+            <h3 style="color:#f59e0b;margin:0 0 8px 0;">Discord OAuth Token Exchange Failed</h3>
+            <p style="font-size:12px;color:#fde68a;line-height:1.5;word-break:break-word;">${oauthError || 'OAuth authentication completed code exchange but failed user verification.'}</p>
+            <div style="font-size:11px;color:#94a3b8;margin-top:12px;background:#0d0a04;padding:8px;border-radius:6px;text-align:left;font-family:monospace;">
+              <div>Redirect URI Used: ${redirectUri}</div>
+            </div>
             <script>
               if (window.opener) {
                 window.opener.postMessage({
                   type: 'DISCORD_OAUTH_ERROR',
-                  error: ${JSON.stringify(oauthError || 'Missing client secret')}
+                  error: ${JSON.stringify(oauthError || 'Failed to exchange Discord token')}
                 }, '*');
-                setTimeout(() => window.close(), 3000);
+                setTimeout(() => window.close(), 5000);
               }
             </script>
           </div>
@@ -2307,7 +2354,11 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
   const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
   const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user');
 
-  if (!profile) {
+  console.log(`\n---------------- [DISCORD VERIFY MEMBERSHIP REQUEST] ----------------`);
+  console.log(`[Verify Request] User Email: ${userEmail}`);
+  console.log(`[Verify Request] Linked Discord User ID: ${profile?.discordUserId || 'NONE'}`);
+
+  if (!profile || !profile.discordUserId) {
     return res.status(400).json({
       success: false,
       error: 'NOT_LINKED',
@@ -2316,39 +2367,95 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
   }
 
   const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
-  let isGuildMember = profile.guildMember;
+  const userSub = userSubscriptions.get(userEmail) || serverUsers.find((u) => u.email.toLowerCase() === userEmail);
+  const targetTier = userSub && ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes((userSub as any).subscription || (userSub as any).role)
+    ? 'ELITE'
+    : 'VERIFIED';
 
-  const botStatus = getDiscordBotStatus();
-  if (botStatus && botStatus.isReady) {
-    try {
-      const vipResult = await assignDiscordVipRole(profile.discordUserId, targetGuildId);
-      if (vipResult.success) {
-        isGuildMember = true;
-      }
-    } catch (e) {
-      console.warn('[Discord] Live guild role check notice:', e);
-    }
-  }
+  console.log(`[Verify Request] [PURCHASE RECEIVED / SUBSCRIPTION CHECK] User Tier: ${targetTier}`);
+  console.log(`[Verify Request] [GUILD MEMBERSHIP CHECK] Guild ID: ${targetGuildId}`);
 
-  profile.guildMember = isGuildMember;
-  profile.guildJoined = isGuildMember;
+  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier, targetGuildId);
+
   profile.lastSync = new Date().toLocaleTimeString();
-  profile.verificationStatus = isGuildMember ? 'VERIFIED' : 'NEEDS_GUILD';
 
-  if (isGuildMember) {
-    profile.guildRoles = ['PRO'];
-    assignDiscordVipRole(profile.discordUserId, targetGuildId).catch((e) => console.warn(e));
+  if (!syncResult.success && syncResult.code === 'USER_NOT_IN_GUILD') {
+    profile.guildMember = false;
+    profile.guildJoined = false;
+    profile.verificationStatus = 'NEEDS_GUILD';
+    userDiscordProfiles.set(userEmail, profile);
+    userDiscordProfiles.set('global_active_user', profile);
+
+    return res.status(200).json({
+      success: false,
+      error: 'USER_NOT_IN_GUILD',
+      message: syncResult.message,
+      profile,
+    });
   }
 
-  userDiscordProfiles.set(userEmail, profile);
-  userDiscordProfiles.set('global_active_user', profile);
+  if (syncResult.success) {
+    profile.guildMember = true;
+    profile.guildJoined = true;
+    profile.verificationStatus = 'VERIFIED';
+    profile.guildRoles = [targetTier];
+    userDiscordProfiles.set(userEmail, profile);
+    userDiscordProfiles.set('global_active_user', profile);
+
+    return res.json({
+      success: true,
+      profile,
+      message: `DISCORD CONNECTED • SERVER MEMBER VERIFIED • MEMBERSHIP ROLE ACTIVE (${targetTier})`,
+      details: syncResult,
+    });
+  }
+
+  // Handle API error or failure
+  return res.status(400).json({
+    success: false,
+    error: syncResult.code || 'ROLE_SYNC_FAILED',
+    message: syncResult.message,
+    details: syncResult.details,
+    profile,
+  });
+});
+
+// VIXY VAULT PURCHASE / SUBSCRIPTION EVENT WEBHOOK
+app.post(['/api/subscription/event', '/api/purchase/event', '/api/payments/webhook'], async (req, res) => {
+  const { userEmail = 'vixyvault0@gmail.com', planTier = 'ELITE_PASS', eventType = 'PURCHASE_SUCCESS' } = req.body || {};
+  const normalizedEmail = String(userEmail).toLowerCase();
+
+  console.log(`\n================ [PURCHASE / SUBSCRIPTION EVENT RECEIVED] ================`);
+  console.log(`[Event Audit] PURCHASE RECEIVED: ${eventType} | Email: ${normalizedEmail} | Plan: ${planTier}`);
+
+  // Find linked Discord profile
+  const profile = userDiscordProfiles.get(normalizedEmail) || userDiscordProfiles.get('global_active_user');
+
+  if (!profile || !profile.discordUserId) {
+    console.log(`[Event Audit] ⚠️ DISCORD USER ID NOT FOUND for email ${normalizedEmail}. User must connect Discord.`);
+    return res.json({
+      success: true,
+      discordSynced: false,
+      message: 'Purchase recorded. User has not linked Discord yet.',
+    });
+  }
+
+  console.log(`[Event Audit] DISCORD USER ID FOUND: ${profile.discordUserId} (@${profile.discordUsername})`);
+
+  const targetTier: 'ELITE' | 'VERIFIED' | 'NONE' = eventType === 'SUBSCRIPTION_CANCELLED'
+    ? 'NONE'
+    : ['PRO_PASS', 'ELITE_PASS', 'PRO', 'ELITE'].includes(planTier)
+    ? 'ELITE'
+    : 'VERIFIED';
+
+  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier);
 
   res.json({
-    success: true,
+    success: syncResult.success,
+    discordSynced: syncResult.success,
+    code: syncResult.code,
+    message: syncResult.message,
     profile,
-    message: isGuildMember
-      ? `Guild membership verified! PRO role synced for ${profile.discordGlobalName} (@${profile.discordUsername}).`
-      : `Discord account @${profile.discordUsername} has not joined the VIXY Vault Discord server yet. Join at https://discord.gg/a9q3UCAjGH`,
   });
 });
 
@@ -2389,11 +2496,11 @@ app.post('/api/discord/test-broadcast', async (req, res) => {
 });
 
 app.post('/api/discord/sync-vip', async (req, res) => {
-  const { discordUserId, guildId } = req.body || {};
+  const { discordUserId, guildId, tier = 'ELITE' } = req.body || {};
   if (!discordUserId) {
     return res.status(400).json({ success: false, message: 'discordUserId is required' });
   }
-  const result = await assignDiscordVipRole(discordUserId, guildId);
+  const result = await assignDiscordRoleToUser(discordUserId, tier, guildId);
   res.json(result);
 });
 

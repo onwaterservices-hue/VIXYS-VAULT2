@@ -385,37 +385,185 @@ export async function broadcastSignalToDiscord(signalData: {
   };
 }
 
-// Assign VIP Role to Discord Member when subscribed
-export async function assignDiscordVipRole(discordUserId: string, guildId?: string): Promise<{ success: boolean; message: string }> {
-  const roleId = process.env.DISCORD_VIP_ROLE_ID;
-  const targetGuildId = guildId || process.env.DISCORD_GUILD_ID;
+// Synchronize Discord Guild Member Roles (ELITE / VERIFIED / PRO)
+export async function assignDiscordRoleToUser(
+  discordUserId: string,
+  targetTier: 'ELITE' | 'VERIFIED' | 'PRO' | 'NONE' = 'ELITE',
+  guildIdOverride?: string
+): Promise<{ success: boolean; message: string; details?: any; code?: string }> {
+  const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const botToken = process.env.DISCORD_BOT_TOKEN;
 
-  if (!discordClient || !discordClient.isReady()) {
-    return { success: false, message: 'Discord Bot is not connected. Unable to assign VIP role.' };
+  // Determine role IDs from env
+  const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
+  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || '1535025983093215425'; // Fallback to verified role
+  const targetRoleId = targetTier === 'ELITE' || targetTier === 'PRO' ? eliteRoleId : verifiedRoleId;
+
+  console.log(`\n================ [DISCORD ROLE SYNCHRONIZATION AUDIT] ================`);
+  console.log(`[Discord Role Sync] Target User ID: ${discordUserId}`);
+  console.log(`[Discord Role Sync] Target Tier: ${targetTier} | Target Role ID: ${targetRoleId}`);
+  console.log(`[Discord Role Sync] Target Guild ID: ${targetGuildId}`);
+  console.log(`[Discord Role Sync] Bot Token Present: ${!!botToken}`);
+
+  if (!discordUserId) {
+    console.error(`[Discord Role Sync] ❌ Failure: Missing discordUserId`);
+    return { success: false, message: 'Discord User ID is required', code: 'MISSING_USER_ID' };
   }
 
-  if (!roleId) {
-    return { success: false, message: 'DISCORD_VIP_ROLE_ID environment variable is not configured.' };
-  }
+  // Method 1: Use discordClient if connected
+  if (discordClient && discordClient.isReady()) {
+    try {
+      console.log(`[Discord Role Sync] Step 1: Querying guild via discord.js client...`);
+      const guild = await discordClient.guilds.fetch(targetGuildId);
+      if (!guild) {
+        console.error(`[Discord Role Sync] ❌ Failure: Guild ${targetGuildId} not found`);
+        return { success: false, message: `Discord Guild ${targetGuildId} not found`, code: 'GUILD_NOT_FOUND' };
+      }
 
-  try {
-    const guild = targetGuildId 
-      ? await discordClient.guilds.fetch(targetGuildId)
-      : discordClient.guilds.cache.first();
+      console.log(`[Discord Role Sync] Step 2: Querying bot member & role hierarchy...`);
+      const botMember = await guild.members.fetchMe();
+      const botHighestRole = botMember.roles.highest;
+      console.log(`[Discord Role Sync] Bot Role Name: "${botHighestRole.name}" (Position: ${botHighestRole.position})`);
 
-    if (!guild) {
-      return { success: false, message: 'Discord Server (Guild) not found.' };
+      const roleToAssign = await guild.roles.fetch(targetRoleId);
+      if (!roleToAssign) {
+        console.error(`[Discord Role Sync] ❌ Failure: Role ID ${targetRoleId} not found in guild`);
+        return { success: false, message: `Target role ${targetRoleId} does not exist in Discord server`, code: 'ROLE_NOT_FOUND' };
+      }
+      console.log(`[Discord Role Sync] Target Role Name: "${roleToAssign.name}" (Position: ${roleToAssign.position})`);
+
+      if (botHighestRole.position <= roleToAssign.position) {
+        console.warn(`[Discord Role Sync] ⚠️ Hierarchy Warning: Bot role position (${botHighestRole.position}) is <= Target role position (${roleToAssign.position})`);
+      }
+
+      console.log(`[Discord Role Sync] Step 3: Fetching member ${discordUserId} in guild...`);
+      let member: any = null;
+      try {
+        member = await guild.members.fetch(discordUserId);
+      } catch (mErr: any) {
+        console.error(`[Discord Role Sync] ❌ Guild Member Check Failed for ID ${discordUserId}:`, mErr.message);
+        return {
+          success: false,
+          message: `User (ID: ${discordUserId}) is not a member of the VIXY Vault Discord server. Please join the server first!`,
+          code: 'USER_NOT_IN_GUILD',
+        };
+      }
+
+      // Check idempotency: if user already has role
+      if (member.roles.cache.has(targetRoleId)) {
+        console.log(`[Discord Role Sync] ✅ Idempotent Success: User ${member.user.tag} already has role "${roleToAssign.name}"`);
+        return {
+          success: true,
+          message: `User ${member.user.tag} already has active role "${roleToAssign.name}" in ${guild.name}.`,
+          code: 'ALREADY_ASSIGNED',
+        };
+      }
+
+      // If tier is NONE or downgrade, handle role removal
+      if (targetTier === 'NONE') {
+        if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId);
+        if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId);
+        console.log(`[Discord Role Sync] ✅ Role Removed for ${member.user.tag}`);
+        return { success: true, message: `Removed membership roles for ${member.user.tag}` };
+      }
+
+      console.log(`[Discord Role Sync] Step 4: Adding role "${roleToAssign.name}" to member ${member.user.tag}...`);
+      await member.roles.add(targetRoleId);
+      console.log(`[Discord Role Sync] ✅ ROLE ASSIGNMENT SUCCESSFUL for ${member.user.tag}!`);
+
+      return {
+        success: true,
+        message: `Successfully assigned "${roleToAssign.name}" role to ${member.user.tag} in ${guild.name}!`,
+        details: {
+          userTag: member.user.tag,
+          roleName: roleToAssign.name,
+          guildName: guild.name,
+        },
+      };
+    } catch (err: any) {
+      console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err);
+      // Fallback to REST API if discord.js fetch errored
     }
-
-    const member = await guild.members.fetch(discordUserId);
-    if (!member) {
-      return { success: false, message: `Member with ID ${discordUserId} not found in Discord Server.` };
-    }
-
-    await member.roles.add(roleId);
-    return { success: true, message: `VIP Role successfully assigned to ${member.user.tag} in ${guild.name}!` };
-  } catch (error: any) {
-    console.error('[DiscordBot] Error assigning VIP role:', error);
-    return { success: false, message: `Failed to assign VIP role: ${error.message || 'Unknown error'}` };
   }
+
+  // Method 2: Direct REST API call if token is available
+  if (botToken) {
+    try {
+      console.log(`[Discord Role Sync] Using Direct Discord REST API v10...`);
+      // First check if user is in guild
+      const memberRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}`, {
+        headers: { Authorization: `Bot ${botToken}` },
+      });
+
+      console.log(`[Discord Role Sync] Member Fetch REST Status: ${memberRes.status} ${memberRes.statusText}`);
+      if (memberRes.status === 404) {
+        console.error(`[Discord Role Sync] ❌ REST check: User ${discordUserId} NOT in guild ${targetGuildId}`);
+        return {
+          success: false,
+          message: `User (ID: ${discordUserId}) has not joined the VIXY Vault Discord server yet. Please click "JOIN DISCORD SERVER".`,
+          code: 'USER_NOT_IN_GUILD',
+        };
+      }
+
+      const memberData = await memberRes.json();
+      const existingRoles: string[] = memberData.roles || [];
+
+      if (existingRoles.includes(targetRoleId)) {
+        console.log(`[Discord Role Sync] ✅ REST Idempotent Check: User already has role ${targetRoleId}`);
+        return {
+          success: true,
+          message: `User @${memberData.user?.username || discordUserId} already has active role in Discord server.`,
+          code: 'ALREADY_ASSIGNED',
+        };
+      }
+
+      // Add role via REST API PUT endpoint
+      console.log(`[Discord Role Sync] Putting role ${targetRoleId} on user ${discordUserId}...`);
+      const putRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${targetRoleId}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bot ${botToken}`,
+          'X-Audit-Log-Reason': 'Vixy Vault Subscription Auto Role Assignment',
+        },
+      });
+
+      console.log(`[Discord Role Sync] REST PUT Response Status: ${putRes.status} ${putRes.statusText}`);
+
+      if (putRes.ok || putRes.status === 204) {
+        console.log(`[Discord Role Sync] ✅ REST API ROLE ASSIGNMENT SUCCESSFUL!`);
+        return {
+          success: true,
+          message: `Role assigned successfully to @${memberData.user?.username || discordUserId}!`,
+        };
+      } else {
+        const errText = await putRes.text();
+        console.error(`[Discord Role Sync] ❌ REST Role Assignment Failed. Status ${putRes.status}:`, errText);
+        let parsedErr: any = {};
+        try { parsedErr = JSON.parse(errText); } catch (_) {}
+
+        return {
+          success: false,
+          message: `Discord API Error (${putRes.status}): ${parsedErr.message || errText}`,
+          details: parsedErr,
+          code: 'DISCORD_API_ERROR',
+        };
+      }
+    } catch (restErr: any) {
+      console.error(`[Discord Role Sync] ❌ Network exception in REST role assignment:`, restErr);
+      return { success: false, message: `Network error connecting to Discord API: ${restErr.message}` };
+    }
+  }
+
+  return {
+    success: false,
+    message: 'DISCORD_BOT_TOKEN is missing or Discord bot is offline.',
+    code: 'BOT_OFFLINE',
+  };
 }
+
+// Legacy alias wrapper for backwards compatibility
+export async function assignDiscordVipRole(discordUserId: string, guildId?: string): Promise<{ success: boolean; message: string }> {
+  const result = await assignDiscordRoleToUser(discordUserId, 'ELITE', guildId);
+  return { success: result.success, message: result.message };
+}
+

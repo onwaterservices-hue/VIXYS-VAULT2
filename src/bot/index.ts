@@ -13,6 +13,7 @@ import { createFlowForgeEmbed, createFinalLockEmbed } from './embeds/flowForgeEm
 import { createAnalyticsEmbed } from './embeds/analyticsEmbed';
 import { fetchLiveMarketOverview, MarketOverview } from './services/marketData';
 import { handleDashboardCommand } from './commands/dashboard';
+import { assignDiscordRoleToUser } from './discordBotService';
 import { REST, Routes, SlashCommandBuilder, Interaction, TextChannel } from 'discord.js';
 
 export interface DiscordBotState {
@@ -328,31 +329,11 @@ export async function broadcastSignalToDiscord(signalData: {
   return { success: false, method: 'NONE', message: 'No active Discord Bot Token or Webhook configured.' };
 }
 
+export { assignDiscordRoleToUser } from './discordBotService';
+
 export async function assignDiscordVipRole(
   discordUserId: string,
   guildId?: string
 ): Promise<{ success: boolean; message: string }> {
-  const roleId = process.env.DISCORD_VIP_ROLE_ID;
-  const targetGuildId = guildId || process.env.DISCORD_GUILD_ID;
-
-  if (!discordClient || !discordClient.isReady()) {
-    return { success: false, message: 'Discord Bot is not connected. Unable to assign VIP role.' };
-  }
-
-  if (!roleId) {
-    return { success: false, message: 'DISCORD_VIP_ROLE_ID environment variable is missing.' };
-  }
-
-  try {
-    const guild = targetGuildId ? await discordClient.guilds.fetch(targetGuildId) : discordClient.guilds.cache.first();
-    if (!guild) return { success: false, message: 'Discord Server (Guild) not found.' };
-
-    const member = await guild.members.fetch(discordUserId);
-    if (!member) return { success: false, message: `Member ${discordUserId} not found.` };
-
-    await member.roles.add(roleId);
-    return { success: true, message: `VIP Role successfully assigned to ${member.user.tag}!` };
-  } catch (err: any) {
-    return { success: false, message: `Failed to assign VIP role: ${err.message || 'Error'}` };
-  }
+  return assignDiscordRoleToUser(discordUserId, 'ELITE', guildId);
 }
