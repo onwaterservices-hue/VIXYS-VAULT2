@@ -21,7 +21,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
               Terms of Service
             </h1>
             <p className="text-sm text-purple-300/80 font-sans max-w-2xl leading-relaxed">
-              Please read these Terms of Service carefully before accessing or using Vixy's Vault prediction market intelligence platform and automated signal endpoints.
+              Please read these Terms of Service carefully before accessing or using VIXY AI prediction market intelligence platform and automated signal endpoints.
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
             <h2>Acceptance of Terms</h2>
           </div>
           <p className="text-purple-200/80">
-            By accessing, creating an account, or subscribing to <strong>Vixy's Vault</strong> ("the Service", "Platform", "we", "us"), you agree to be bound by these Terms of Service, all applicable laws and regulations, and agree that you are responsible for compliance with any applicable local laws. If you do not agree with any of these terms, you are prohibited from using or accessing this site.
+            By accessing, creating an account, or subscribing to <strong>VIXY AI</strong> ("the Service", "Platform", "we", "us"), you agree to be bound by these Terms of Service, all applicable laws and regulations, and agree that you are responsible for compliance with any applicable local laws. If you do not agree with any of these terms, you are prohibited from using or accessing this site.
           </p>
         </section>
 
@@ -63,7 +63,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
               <span>IMPORTANT NON-ADVISORY DISCLAIMER</span>
             </div>
             <p className="text-xs text-amber-200/90 leading-relaxed">
-              Vixy's Vault is an algorithmic analytics and prediction market decision support utility. Content, AI probability scores, order flow delta metrics, Kelly criterion position recommendations, and signals provided by the platform are for <strong>informational and educational purposes only</strong>.
+              VIXY AI is an algorithmic analytics and prediction market decision support utility. Content, AI probability scores, order flow delta metrics, Kelly criterion position recommendations, and signals provided by the platform are for <strong>informational and educational purposes only</strong>.
             </p>
           </div>
           <p className="text-purple-200/80">
@@ -123,7 +123,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
             <h2>Intellectual Property</h2>
           </div>
           <p className="text-purple-200/80">
-            The Service, including its neural ribbon charts, L2 order flow delta engines, Kelly criterion solvers, proprietary algorithms, design, code, graphics, and documentation are the exclusive intellectual property of Vixy's Vault Quant Research Lab.
+            The Service, including its neural ribbon charts, L2 order flow delta engines, Kelly criterion solvers, proprietary algorithms, design, code, graphics, and documentation are the exclusive intellectual property of VIXY AI Quant Research Lab.
           </p>
         </section>
 
@@ -134,7 +134,7 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
             <h2>Limitation of Liability</h2>
           </div>
           <p className="text-purple-200/80 text-xs leading-relaxed">
-            IN NO EVENT SHALL VIXY'S VAULT, ITS DIRECTORS, EMPLOYEES, PARTNERS, OR AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING WITHOUT LIMITATION, LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM (I) YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE SERVICE; (II) ANY TRADING LOSSES INCURRED ON KALSHI, POLYMARKET, OR OTHER EXCHANGES; (III) UNAUTHORIZED ACCESS TO OR ALTERATION OF YOUR TRANSMISSIONS.
+            IN NO EVENT SHALL VIXY AI, ITS DIRECTORS, EMPLOYEES, PARTNERS, OR AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, INCLUDING WITHOUT LIMITATION, LOSS OF PROFITS, DATA, USE, GOODWILL, OR OTHER INTANGIBLE LOSSES, RESULTING FROM (I) YOUR ACCESS TO OR USE OF OR INABILITY TO ACCESS OR USE THE SERVICE; (II) ANY TRADING LOSSES INCURRED ON KALSHI, POLYMARKET, OR OTHER EXCHANGES; (III) UNAUTHORIZED ACCESS TO OR ALTERATION OF YOUR TRANSMISSIONS.
           </p>
         </section>
 

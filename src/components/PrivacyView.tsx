@@ -21,7 +21,7 @@ export const PrivacyView: React.FC<PrivacyViewProps> = ({ onReturnToTerminal }) 
               Privacy Policy
             </h1>
             <p className="text-sm text-purple-300/80 font-sans max-w-2xl leading-relaxed">
-              At Vixy's Vault, we respect your privacy and are committed to protecting the personal data and credentials you share with our intelligence terminal.
+              At VIXY AI, we respect your privacy and are committed to protecting the personal data and credentials you share with our intelligence terminal.
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export const PrivacyView: React.FC<PrivacyViewProps> = ({ onReturnToTerminal }) 
             <h2>1. Information We Collect</h2>
           </div>
           <p className="text-purple-200/80">
-            When you register an account, subscribe to a plan, or configure webhook notifications on Vixy's Vault, we collect the following types of information:
+            When you register an account, subscribe to a plan, or configure webhook notifications on VIXY AI, we collect the following types of information:
           </p>
           <ul className="list-disc pl-5 space-y-2 text-purple-200/80 text-xs">
             <li><strong>Account Data:</strong> Email address, name, account role, and hashed authentication tokens.</li>
@@ -64,7 +64,7 @@ export const PrivacyView: React.FC<PrivacyViewProps> = ({ onReturnToTerminal }) 
             <h2>2. Payment & Stripe Data Handling</h2>
           </div>
           <p className="text-purple-200/80">
-            All credit card and subscription processing is handled externally by <strong>Stripe, Inc.</strong> We never receive, process, or store raw credit card numbers or CVC security codes on Vixy's Vault servers.
+            All credit card and subscription processing is handled externally by <strong>Stripe, Inc.</strong> We never receive, process, or store raw credit card numbers or CVC security codes on VIXY AI servers.
           </p>
           <div className="p-4 rounded-2xl bg-purple-950/50 border border-purple-800/40 text-xs text-purple-200/90 space-y-2">
             <p className="font-mono font-bold text-purple-300">Stripe Customer Portal Data:</p>

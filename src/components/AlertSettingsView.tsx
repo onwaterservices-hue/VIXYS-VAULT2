@@ -20,6 +20,7 @@ import {
 import { AlertSettings } from '../types';
 import { sendTestAlert } from '../services/api';
 import { playAlertSound } from '../utils/audio';
+import { CommunityAccessNode } from './CommunityAccessNode';
 
 interface AlertSettingsViewProps {
   settings: AlertSettings;
@@ -63,24 +64,36 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
     }
   };
 
-  const handleLinkDiscordAccount = () => {
+  const handleLinkDiscordAccount = async () => {
     setIsLinkingDiscord(true);
-    setTimeout(() => {
-      setSettings((prev) => ({
-        ...prev,
-        discordLinked: true,
-        discordUsername: prev.discordUsername || 'QuantTrader#1337',
-        discordUserId: prev.discordUserId || '9841203918230912',
-      }));
-      setIsLinkingDiscord(false);
-      if (settings.discordSoundEnabled) {
-        playAlertSound('discord_ping');
+    setTestResult(null);
+    try {
+      const { getDiscordAuthUrlApi } = await import('../services/api');
+      const authData = await getDiscordAuthUrlApi();
+      if (authData && authData.url) {
+        const width = 600;
+        const height = 700;
+        const left = window.screen.width / 2 - width / 2;
+        const top = window.screen.height / 2 - height / 2;
+
+        window.open(
+          authData.url,
+          'discord_oauth_popup',
+          `width=${width},height=${height},top=${top},left=${left},scrollbars=yes`
+        );
       }
       setTestResult({
         success: true,
-        message: 'Discord Account linked successfully! Webhooks & audio chimes active.',
+        message: 'Opening official Discord OAuth authorization window...',
       });
-    }, 600);
+    } catch (e: any) {
+      setTestResult({
+        success: false,
+        message: e.message || 'Failed to initialize Discord OAuth',
+      });
+    } finally {
+      setIsLinkingDiscord(false);
+    }
   };
 
   const handleTestTelegram = async () => {
@@ -163,50 +176,8 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
             </span>
           </div>
 
-          {/* Account Linking Section */}
-          <div className="p-4 bg-[#0B061A] rounded-xl border border-purple-900/60 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UserCheck className="w-4 h-4 text-purple-400" />
-                <span className="text-xs font-bold text-white">Discord Community Account</span>
-              </div>
-              <button
-                onClick={handleLinkDiscordAccount}
-                disabled={isLinkingDiscord}
-                className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-bold transition-all flex items-center gap-1.5"
-              >
-                {isLinkingDiscord ? (
-                  <RefreshCw className="w-3 h-3 animate-spin" />
-                ) : (
-                  <Link2 className="w-3 h-3" />
-                )}
-                {settings.discordLinked ? 'Re-Sync Discord' : 'Link Discord Account'}
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs pt-1">
-              <div>
-                <label className="text-[10px] text-purple-300/60 block mb-1">Discord Handle</label>
-                <input
-                  type="text"
-                  value={settings.discordUsername || ''}
-                  onChange={(e) => setSettings({ ...settings, discordUsername: e.target.value })}
-                  placeholder="e.g. Trader#1337"
-                  className="w-full bg-[#120B28] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-purple-300/60 block mb-1">Discord User ID</label>
-                <input
-                  type="text"
-                  value={settings.discordUserId || ''}
-                  onChange={(e) => setSettings({ ...settings, discordUserId: e.target.value })}
-                  placeholder="e.g. 9841203918230912"
-                  className="w-full bg-[#120B28] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                />
-              </div>
-            </div>
-          </div>
+          {/* Community Access Node (Discord Gateway) */}
+          <CommunityAccessNode settings={settings} setSettings={setSettings} mode="settings" />
 
           {/* Sound & Audio Notifications */}
           <div className="p-4 bg-[#0B061A] rounded-xl border border-purple-900/60 space-y-3">

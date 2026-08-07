@@ -19,7 +19,7 @@ import {
   BrainCircuit,
   AlertTriangle,
 } from 'lucide-react';
-import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys } from '../types';
+import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys, AlertSettings } from '../types';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
 import { AIPatternEngine } from './AIPatternEngine';
@@ -31,6 +31,7 @@ import { AIBrainMemoryVault } from './AIBrainMemoryVault';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { VixyAiStatusCard } from './VixyAiStatusCard';
+import { CommunityAccessNode } from './CommunityAccessNode';
 
 // Five AI Brains
 import { SignalBrain } from './brains/SignalBrain';
@@ -53,6 +54,8 @@ interface LiveDashboardProps {
   selectedVenues?: string[];
   exchangeKeys?: ExchangeApiKeys;
   onOpenSettings?: () => void;
+  alertSettings?: AlertSettings;
+  setAlertSettings?: React.Dispatch<React.SetStateAction<AlertSettings>>;
 }
 
 export const LiveDashboard: React.FC<LiveDashboardProps> = ({
@@ -69,6 +72,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   selectedVenues = ['Kalshi'],
   exchangeKeys,
   onOpenSettings,
+  alertSettings,
+  setAlertSettings,
 }) => {
   // Timeframe State
   const [timeframe, setTimeframe] = useState<'15M' | '1H'>(
@@ -500,6 +505,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         </div>
       </div>
 
+      {/* 📡 COMMUNITY ACCESS NODE (SECURE IDENTITY LINK & DISCORD GATEWAY) */}
+      <CommunityAccessNode
+        settings={alertSettings}
+        setSettings={setAlertSettings}
+        onOpenDiscordModal={onOpenAlerts}
+        mode="dashboard"
+      />
+
       {/* 🎯 BRAIN 1: SIGNAL BRAIN (Direction, Confidence, Strike, Lock Score Progress) */}
       <SignalBrain
         signal={signal}
@@ -508,6 +521,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         timeframe={timeframe}
         lockEvaluation={lockEvaluation}
       />
+
+      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProtectionBrain signal={signal} ticker={ticker} />
+        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
+      </div>
 
       {/* PROMINENT LIVE CANDLESTICK CHART */}
       <div className="space-y-4">
@@ -522,12 +541,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           }}
           predictedDirection={signal.direction}
         />
-      </div>
-
-      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProtectionBrain signal={signal} ticker={ticker} />
-        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
       </div>
 
       {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}

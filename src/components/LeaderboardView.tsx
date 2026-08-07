@@ -336,7 +336,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       <div className="p-4 rounded-xl bg-[#090514] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
         <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <p>
-          <strong className="text-purple-300">Leaderboard Integrity Standard:</strong> Leaderboard statistics are compiled exclusively from user-logged trade journal entries with verified client-side SHA-256 hashes. Vixy's Vault does not seed synthetic leaderboard entries or guarantee future trading performance.
+          <strong className="text-purple-300">Leaderboard Integrity Standard:</strong> Leaderboard statistics are compiled exclusively from user-logged trade journal entries with verified client-side SHA-256 hashes. VIXY AI does not seed synthetic leaderboard entries or guarantee future trading performance.
         </p>
       </div>
     </div>

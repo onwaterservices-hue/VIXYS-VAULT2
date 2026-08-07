@@ -155,7 +155,7 @@ export const SmartSearchModal: React.FC<SmartSearchModalProps> = ({
         {/* Modal Footer */}
         <div className="px-4 py-2.5 bg-[#090415] border-t border-purple-900/40 text-[11px] font-mono text-purple-300/60 flex items-center justify-between">
           <span>Press <kbd className="px-1.5 py-0.5 rounded bg-purple-900/50 text-white text-[10px]">ESC</kbd> to exit</span>
-          <span>VIXY'S VAULT AI Search v3.0</span>
+          <span>VIXY AI Search v3.0</span>
         </div>
       </div>
     </div>

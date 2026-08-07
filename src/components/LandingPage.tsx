@@ -20,7 +20,7 @@ import {
   Layers,
   Sparkles,
 } from 'lucide-react';
-import { BTCTicker } from '../types';
+import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
 
 interface LandingPageProps {
@@ -29,6 +29,7 @@ interface LandingPageProps {
   onOpenPricing: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
   dataSource?: 'mock' | 'live';
+  authState?: AuthState;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
@@ -37,6 +38,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenPricing,
   onOpenAuth,
   dataSource = 'live',
+  authState,
 }) => {
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
@@ -93,35 +95,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   return (
     <div className="space-y-20 py-4 font-sans text-purple-100 selection:bg-purple-600 selection:text-white">
-      {/* Landing Header Bar */}
-      <div className="flex items-center justify-between py-2 border-b border-purple-900/40">
-        <Logo size="md" showSubtitle={true} onClick={onLaunchTerminal} />
-
-        <div className="hidden md:flex items-center gap-8 text-xs font-mono text-purple-200/80">
-          <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">Features</button>
-          <button onClick={onOpenPricing} className="hover:text-white transition-colors">Pricing</button>
-          <button onClick={onLaunchTerminal} className="hover:text-white transition-colors">Dashboard</button>
-          <button onClick={() => setShowRiskModal(true)} className="hover:text-white transition-colors">Risk & Compliance</button>
-        </div>
-
-        <div className="flex items-center gap-3 font-mono">
-          <button
-            onClick={() => onOpenAuth('login')}
-            className="px-4 py-2 rounded-xl bg-[#120B24] border border-purple-900/50 text-xs font-bold text-purple-200 hover:text-white hover:border-purple-500/50 transition-all"
-          >
-            Log in
-          </button>
-          <button
-            onClick={() => onOpenAuth('register')}
-            className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all"
-          >
-            Start Free Trial
-          </button>
-        </div>
-      </div>
-
       {/* Main Hero Section */}
-      <section className="relative grid grid-cols-1 lg:grid-cols-12 gap-10 items-center pt-4">
+      <section className="relative grid grid-cols-1 lg:grid-cols-12 gap-10 items-center pt-2">
         {/* Subtle Background Accent */}
         <div className="absolute top-1/2 left-1/4 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/10 blur-[180px] rounded-full pointer-events-none" />
 
@@ -129,7 +104,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="lg:col-span-6 space-y-6 text-left">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs font-mono font-bold text-slate-300">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>VIXY'S VAULT — DECISION INTELLIGENCE</span>
+            <span>VIXY AI — DECISION INTELLIGENCE</span>
           </div>
 
           <h1 className="text-4xl sm:text-6xl lg:text-6xl font-black font-sans tracking-tight text-white leading-[1.05]">
@@ -146,10 +121,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="flex flex-wrap items-center gap-4 pt-2 font-mono">
             <button
-              onClick={() => onOpenAuth('register')}
+              onClick={() => {
+                if (authState?.isAuthenticated) {
+                  onLaunchTerminal();
+                } else {
+                  onOpenAuth('register');
+                }
+              }}
               className="px-8 py-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-xl shadow-purple-600/30 transition-all active:scale-95"
             >
-              ACTIVATE DECISION ENGINE
+              {authState?.isAuthenticated ? 'ENTER LIVE TERMINAL' : 'ACTIVATE DECISION ENGINE'}
             </button>
 
             <button
@@ -375,11 +356,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </ul>
           </div>
 
-          {/* VIXY'S VAULT Member */}
+          {/* VIXY AI Member */}
           <div className="bg-[#120B28] border-2 border-purple-500 rounded-2xl p-6 space-y-4 shadow-2xl shadow-purple-950/60">
             <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
               <span className="font-bold text-purple-200 text-sm flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-purple-400" /> VIXY'S VAULT Member
+                <CheckCircle2 className="w-4 h-4 text-purple-400" /> VIXY AI Member
               </span>
               <span className="text-[10px] bg-purple-600 text-white px-2.5 py-0.5 rounded font-black uppercase">ROYAL ADVANTAGE</span>
             </div>
@@ -650,7 +631,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             Mandatory Risk Disclosure
           </p>
           <p className="text-slate-300/90 leading-relaxed max-w-3xl mx-auto">
-            Prediction market trading involves real financial risk of capital loss. Past backtested performance is no guarantee of future live results. VIXY'S VAULT is a quantitative decision intelligence platform and does not provide investment, financial, or legal advice.
+            Prediction market trading involves real financial risk of capital loss. Past backtested performance is no guarantee of future live results. VIXY AI is a quantitative decision intelligence platform and does not provide investment, financial, or legal advice.
           </p>
         </div>
       </section>
@@ -702,7 +683,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          <span className="text-[10px] text-slate-500">© 2026 VIXY'S VAULT. All rights reserved.</span>
+          <span className="text-[10px] text-slate-500">© 2026 VIXY AI. All rights reserved.</span>
         </div>
 
         {/* Legal & Exchange Notice */}
@@ -800,10 +781,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="space-y-4 leading-relaxed font-sans text-slate-300">
               <p><strong>Last Updated: July 2026</strong></p>
               <h4 className="font-bold text-white text-sm">1. Acceptance of Terms</h4>
-              <p>By accessing or using VIXY'S VAULT, you agree to be bound by these Terms of Service. If you do not agree to all terms, do not access or use our platform.</p>
+              <p>By accessing or using VIXY AI, you agree to be bound by these Terms of Service. If you do not agree to all terms, do not access or use our platform.</p>
               
               <h4 className="font-bold text-white text-sm">2. Educational & Analytical Purpose Only</h4>
-              <p>VIXY'S VAULT provides quantitative decision analytics, model-estimated probabilities, and signal alerts. We are NOT a financial advisor, broker, or exchange. All content is for informational and educational purposes only.</p>
+              <p>VIXY AI provides quantitative decision analytics, model-estimated probabilities, and signal alerts. We are NOT a financial advisor, broker, or exchange. All content is for informational and educational purposes only.</p>
 
               <h4 className="font-bold text-white text-sm">3. Risk Acknowledgement</h4>
               <p>Prediction market trading carries a substantial risk of financial loss. You acknowledge that you alone are responsible for evaluating the risks and merits associated with trading operations.</p>
@@ -847,7 +828,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <p>We collect account credentials (email address), user preferences (dashboard configurations, alert webhooks), and local interaction logs necessary to provide service functionality.</p>
 
               <h4 className="font-bold text-white text-sm">2. Data Usage & Protection</h4>
-              <p>Your data is used solely to operate and improve VIXY'S VAULT services. We do not sell, rent, or lease your personal information to third parties.</p>
+              <p>Your data is used solely to operate and improve VIXY AI services. We do not sell, rent, or lease your personal information to third parties.</p>
 
               <h4 className="font-bold text-white text-sm">3. Security Standards</h4>
               <p>We employ encryption in transit (TLS) and at rest to protect sensitive account configurations and alert webhook endpoints.</p>
@@ -888,7 +869,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               <h4 className="font-bold text-white text-sm">Not Financial Advice</h4>
-              <p>VIXY'S VAULT is a software technology and decision analytics platform. Content generated by our software should not be construed as investment, financial, tax, or legal advice.</p>
+              <p>VIXY AI is a software technology and decision analytics platform. Content generated by our software should not be construed as investment, financial, tax, or legal advice.</p>
 
               <h4 className="font-bold text-white text-sm">Regulated Exchange Access & Eligibility</h4>
               <p>Exchanges such as Kalshi and Polymarket operate under specific regulatory frameworks and geographical restrictions. Kalshi is a CFTC-regulated exchange subject to US eligibility rules. Polymarket operates under its own terms. Users are solely responsible for ensuring their personal compliance with local exchange rules and jurisdictional laws.</p>

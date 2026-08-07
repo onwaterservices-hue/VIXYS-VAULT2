@@ -61,7 +61,7 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             <h2>1. Self-Service Instant Cancellation</h2>
           </div>
           <p className="text-purple-200/80">
-            You may cancel your Vixy's Vault Starter, Professional, or Elite subscription at any time with zero hassle or support intervention required.
+            You may cancel your VIXY AI Starter, Professional, or Elite subscription at any time with zero hassle or support intervention required.
           </p>
           <div className="p-4 rounded-2xl bg-purple-950/50 border border-purple-800/40 text-xs text-purple-200/90 space-y-2">
             <p className="font-mono font-bold text-purple-300">How to Cancel in 2 Clicks:</p>
@@ -80,7 +80,7 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             <h2>2. 14-Day Money-Back Guarantee (First Purchase)</h2>
           </div>
           <p className="text-purple-200/80">
-            If you are unsatisfied with your first subscription purchase on Vixy's Vault, you may request a <strong>100% full refund within 14 days</strong> of your initial signup date.
+            If you are unsatisfied with your first subscription purchase on VIXY AI, you may request a <strong>100% full refund within 14 days</strong> of your initial signup date.
           </p>
           <p className="text-purple-200/80 text-xs">
             To claim a first-purchase refund, simply send an email to <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span> with your registered email address and "14-Day Refund Request" in the subject line. Refunds are credited back to your original payment method via Stripe within 3-5 business days.

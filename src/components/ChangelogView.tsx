@@ -172,7 +172,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
             </h1>
 
             <p className="text-sm text-purple-200/80 max-w-2xl leading-relaxed">
-              Real-time operational metrics, API pipeline health, and transparent platform updates. Vixy's Vault is built on open, verifiable data feeds.
+              Real-time operational metrics, API pipeline health, and transparent platform updates. VIXY AI is built on open, verifiable data feeds.
             </p>
           </div>
 
@@ -376,7 +376,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
       <div className="p-4 rounded-xl bg-[#090514] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
         <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <p>
-          <strong className="text-purple-300">Platform Transparency Notice:</strong> Vixy's Vault displays live public exchange data (Binance, Kalshi, Polymarket). Model progress metrics are calculated from real time-series logged records. No prediction accuracy is guaranteed.
+          <strong className="text-purple-300">Platform Transparency Notice:</strong> VIXY AI displays live public exchange data (Binance, Kalshi, Polymarket). Model progress metrics are calculated from real time-series logged records. No prediction accuracy is guaranteed.
         </p>
       </div>
     </div>

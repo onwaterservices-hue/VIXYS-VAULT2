@@ -818,18 +818,18 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
   else if (cleanReferral === 'VIP2026') unitAmount = Math.round(unitAmount * 0.75);
   else if (cleanReferral.startsWith('REF-')) unitAmount = Math.round(unitAmount * 0.85);
 
+  // Check if a specific Stripe Price ID was passed or configured in env
+  const passedPriceId = req.body.priceId || process.env[`STRIPE_${targetPlan}_PRICE_ID`] || process.env[`VITE_STRIPE_${targetPlan}_PRICE_ID`];
+
   try {
     const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
-    const sessionParams: any = {
-      payment_method_types: ['card'],
-      allow_promotion_codes: true,
-      customer_email: userEmail || undefined,
-      line_items: [
-        {
+    const lineItem: any = (passedPriceId && !cleanReferral)
+      ? { price: passedPriceId, quantity: 1 }
+      : {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: `VIXY'S VAULT - ${targetPlan} Tier`,
+              name: `VIXY AI - ${targetPlan} Tier`,
               description: `Institutional 15m crypto prediction market intelligence (${isAnnual ? 'Annual' : 'Monthly'})${cleanReferral ? ` [Referral Tag: ${cleanReferral}]` : ''}`,
             },
             unit_amount: unitAmount,
@@ -838,8 +838,13 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
             },
           },
           quantity: 1,
-        },
-      ],
+        };
+
+    const sessionParams: any = {
+      payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      customer_email: userEmail || undefined,
+      line_items: [lineItem],
       metadata: {
         referralCode: cleanReferral || 'DIRECT',
         promoterCommissionRate: cleanReferral ? '20%' : '0%',
@@ -949,7 +954,7 @@ app.get('/api/user/subscription', (req, res) => {
   });
 });
 
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req, res) => {
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -974,15 +979,31 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
   const eventId = event?.id || `evt_${Date.now()}`;
 
   if (processedWebhookEvents.has(eventId)) {
-    return res.json({ received: true, deduplicated: true });
+    return res.status(200).json({ received: true, deduplicated: true });
   }
 
   processedWebhookEvents.add(eventId);
 
+  // Helper to extract email reliably from event data or by fetching customer
+  const extractEmail = async (obj: any): Promise<string> => {
+    let email = (obj.customer_email || obj.customer_details?.email || obj.metadata?.userEmail || '').toLowerCase();
+    if (!email && obj.customer && typeof obj.customer === 'string' && stripe) {
+      try {
+        const customer = await stripe.customers.retrieve(obj.customer);
+        if (customer && !(customer as any).deleted && (customer as any).email) {
+          email = ((customer as any).email as string).toLowerCase();
+        }
+      } catch (err) {
+        console.warn('Could not retrieve customer email from Stripe:', err);
+      }
+    }
+    return email || 'customer@vixyai.com';
+  };
+
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
-      const customerEmail = (session.customer_email || session.metadata?.userEmail || 'customer@example.com').toLowerCase();
+      const customerEmail = await extractEmail(session);
       const plan = (session.metadata?.plan || 'PRO').toUpperCase();
       const referralCode = session.metadata?.referralCode || 'DIRECT';
       const amountTotal = (session.amount_total || 19900) / 100;
@@ -1056,10 +1077,39 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
       break;
     }
 
-    case 'customer.subscription.updated':
-    case 'invoice.payment_succeeded': {
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated': {
       const sub = event.data.object;
-      const customerEmail = (sub.customer_email || sub.metadata?.userEmail || '').toLowerCase();
+      const customerEmail = await extractEmail(sub);
+      const subStatus = sub.status === 'active' || sub.status === 'trialing' ? 'ACTIVE' : sub.status.toUpperCase();
+
+      if (customerEmail) {
+        const current = userSubscriptions.get(customerEmail) || {
+          email: customerEmail,
+          role: 'PRO',
+          plan: 'PRO_PASS',
+          status: 'ACTIVE',
+          updatedAt: new Date().toISOString(),
+        };
+        current.status = subStatus;
+        current.updatedAt = new Date().toISOString();
+        userSubscriptions.set(customerEmail, current);
+
+        const user = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
+        if (user) {
+          user.status = subStatus === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED';
+        }
+
+        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'SUBSCRIPTION_UPDATE', `Subscription status updated for ${customerEmail} to ${subStatus}`);
+      }
+      break;
+    }
+
+    case 'invoice.paid': {
+      const invoice = event.data.object;
+      const customerEmail = await extractEmail(invoice);
+      const amountPaid = (invoice.amount_paid || 0) / 100;
+
       if (customerEmail) {
         if (userSubscriptions.has(customerEmail)) {
           const current = userSubscriptions.get(customerEmail)!;
@@ -1073,7 +1123,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
           user.status = 'ACTIVE';
         }
 
-        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'PAYMENT_SUCCEEDED', `Invoice payment succeeded for ${customerEmail}`);
+        if (amountPaid > 0) {
+          serverTransactions.unshift({
+            id: invoice.id || `inv_${Date.now()}`,
+            email: customerEmail,
+            plan: `Recurring Subscription ($${amountPaid})`,
+            amount: amountPaid,
+            method: 'Stripe Auto-Debit',
+            status: 'Succeeded',
+            timestamp: 'Just now',
+            rawTime: Date.now(),
+          });
+        }
+
+        addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'INVOICE_PAID', `Invoice payment succeeded for ${customerEmail} ($${amountPaid})`);
       }
       break;
     }
@@ -1081,7 +1144,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
     case 'customer.subscription.deleted':
     case 'invoice.payment_failed': {
       const sub = event.data.object;
-      const customerEmail = (sub.customer_email || sub.metadata?.userEmail || '').toLowerCase();
+      const customerEmail = await extractEmail(sub);
+
       if (customerEmail) {
         userSubscriptions.set(customerEmail, {
           email: customerEmail,
@@ -1108,10 +1172,10 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), (req,
     }
 
     default:
-      // Unhandled event
+      addServerAuditLog('SYSTEM_STRIPE_WEBHOOK', 'EVENT_RECEIVED', `Received event: ${event.type}`, 'INFO');
   }
 
-  res.json({ received: true, eventId, status: 'PROCESSED' });
+  res.status(200).json({ received: true, eventId, status: 'PROCESSED' });
 });
 
 app.get('/api/btc/ticker', async (req, res) => {
@@ -1377,7 +1441,7 @@ app.post('/api/predict', async (req, res) => {
   }
 
   try {
-    const prompt = `System Instruction: You are the quantitative intelligence layer powering VIXY'S VAULT - REAL-TIME MULTI-MARKET DECISION ENGINE.
+    const prompt = `System Instruction: You are the quantitative intelligence layer powering VIXY AI - REAL-TIME MULTI-MARKET DECISION ENGINE.
 
 Your purpose is NOT to guess. You continuously evaluate live market conditions, calculate probabilities from observable evidence, explain uncertainty, and update conclusions as new data arrives.
 
@@ -2003,6 +2067,292 @@ app.all('/api/cron/settle', (req, res) => {
     samplesLoggedTotal: 340,
     timestamp: new Date().toISOString(),
   });
+});
+
+// DISCORD OAUTH2 AUTHENTICATION & IDENTITY STORE
+interface DiscordAuthProfile {
+  discordUserId: string;
+  discordUsername: string;
+  discordGlobalName: string;
+  discordAvatar: string | null;
+  guildMember: boolean;
+  guildJoined: boolean;
+  guildRoles: string[];
+  lastSync: string;
+  subscriptionTier: string;
+  verificationStatus: 'VERIFIED' | 'NEEDS_GUILD' | 'UNLINKED';
+  connectedAt: string;
+}
+
+const userDiscordProfiles = new Map<string, DiscordAuthProfile>();
+
+// DISCORD OAUTH AUTHORIZATION URL ENDPOINT
+app.get('/api/auth/discord/url', (req, res) => {
+  const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin.replace(/\/$/, '')}/auth/discord/callback`;
+  const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: 'identify guilds',
+    prompt: 'consent',
+  });
+
+  const url = `https://discord.com/oauth2/authorize?${params.toString()}`;
+
+  res.json({
+    url,
+    redirectUri,
+    clientId,
+    hasClientSecret: !!process.env.DISCORD_CLIENT_SECRET,
+  });
+});
+
+// DISCORD OAUTH CALLBACK HANDLER (POPUP POSTMESSAGE)
+app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord/callback'], async (req, res) => {
+  const { code, error, error_description } = req.query;
+  const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin.replace(/\/$/, '')}/auth/discord/callback`;
+
+  if (error || !code) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Discord Authorization Error</title></head>
+        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+          <div style="text-align:center;padding:24px;border:1px solid #e11d48;border-radius:16px;background:#1e0d29;max-width:420px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+            <div style="font-size:32px;margin-bottom:8px;">❌</div>
+            <h3 style="color:#f43f5e;margin:0 0 8px 0;font-size:18px;">Discord Authorization Cancelled</h3>
+            <p style="font-size:13px;color:#cbd5e1;line-height:1.5;">${error_description || error || 'The OAuth authorization request was cancelled or denied.'}</p>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({ type: 'DISCORD_OAUTH_ERROR', error: '${error || 'Cancelled'}' }, '*');
+                setTimeout(() => window.close(), 1800);
+              }
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+
+  const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET || 'mQ_hr0BndwQA4pAxaBxl1_bVc208gzXG';
+
+  let discordUser: any = null;
+  let userGuilds: any[] = [];
+  let oauthError: string | null = null;
+
+  if (clientSecret) {
+    try {
+      const tokenParams = new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        code: String(code),
+        redirect_uri: redirectUri,
+      });
+
+      const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: tokenParams.toString(),
+      });
+
+      if (tokenRes.ok) {
+        const tokenData = await tokenRes.json();
+        const accessToken = tokenData.access_token;
+
+        // Fetch User Profile from Discord
+        const userRes = await fetch('https://discord.com/api/v10/users/@me', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (userRes.ok) {
+          discordUser = await userRes.json();
+        }
+
+        // Fetch Guild Membership from Discord
+        const guildsRes = await fetch('https://discord.com/api/v10/users/@me/guilds', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (guildsRes.ok) {
+          userGuilds = await guildsRes.json();
+        }
+      } else {
+        const errJson = await tokenRes.json().catch(() => ({}));
+        oauthError = errJson.error_description || errJson.error || 'Discord token exchange failed';
+      }
+    } catch (err: any) {
+      oauthError = err.message || 'Network error during Discord OAuth exchange';
+    }
+  } else {
+    oauthError = 'DISCORD_CLIENT_SECRET is missing in server environment variables. Please set DISCORD_CLIENT_SECRET in settings to complete token exchange.';
+  }
+
+  if (discordUser && discordUser.id) {
+    const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
+    const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+    const isGuildMember = Array.isArray(userGuilds) && userGuilds.some((g: any) => g.id === targetGuildId);
+
+    const userSub = userSubscriptions.get(userEmail) || serverUsers.find((u) => u.email.toLowerCase() === userEmail);
+    const hasActiveSub = userSub ? ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes((userSub as any).subscription || (userSub as any).role) : true;
+
+    let roleAssigned = 'NONE';
+    if (isGuildMember) {
+      roleAssigned = hasActiveSub ? 'PRO' : 'MEMBER';
+      if (hasActiveSub) {
+        assignDiscordVipRole(discordUser.id, targetGuildId).catch((e) => console.warn('VIP role auto-assign notice:', e));
+      }
+    }
+
+    const avatarUrl = discordUser.avatar
+      ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+      : `https://cdn.discordapp.com/embed/avatars/${parseInt(discordUser.discriminator || '0') % 5}.png`;
+
+    const profile: DiscordAuthProfile = {
+      discordUserId: discordUser.id,
+      discordUsername: discordUser.username + (discordUser.discriminator && discordUser.discriminator !== '0' ? `#${discordUser.discriminator}` : ''),
+      discordGlobalName: discordUser.global_name || discordUser.username,
+      discordAvatar: avatarUrl,
+      guildMember: isGuildMember,
+      guildJoined: isGuildMember,
+      guildRoles: isGuildMember ? [roleAssigned] : [],
+      lastSync: new Date().toLocaleTimeString(),
+      subscriptionTier: hasActiveSub ? 'PRO' : 'FREE',
+      verificationStatus: isGuildMember ? 'VERIFIED' : 'NEEDS_GUILD',
+      connectedAt: new Date().toISOString(),
+    };
+
+    userDiscordProfiles.set(userEmail, profile);
+    userDiscordProfiles.set('global_active_user', profile);
+
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Discord Connected</title></head>
+        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+          <div style="text-align:center;padding:24px;border:1px solid #10b981;border-radius:16px;background:#091e17;max-width:420px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
+            <div style="font-size:32px;margin-bottom:8px;">🟢</div>
+            <h3 style="color:#10b981;margin:0 0 8px 0;font-size:18px;">Discord Authenticated!</h3>
+            <p style="font-size:13px;color:#a7f3d0;margin:0 0 12px 0;">Connected as <strong>${profile.discordGlobalName}</strong> (@${profile.discordUsername})</p>
+            <div style="font-size:11px;color:#94a3b8;background:#06120e;padding:10px;border-radius:8px;text-align:left;font-family:monospace;">
+              <div>• User ID: ${profile.discordUserId}</div>
+              <div>• Server Joined: ${profile.guildMember ? 'Yes ✓' : 'No ✗'}</div>
+              <div>• Role Assigned: ${roleAssigned}</div>
+            </div>
+            <p style="font-size:11px;color:#64748b;margin-top:12px;">Closing popup and updating dashboard...</p>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'DISCORD_OAUTH_SUCCESS',
+                  data: ${JSON.stringify(profile)}
+                }, '*');
+                setTimeout(() => window.close(), 1200);
+              } else {
+                window.location.href = '/?discord_sync=success';
+              }
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+  } else {
+    return res.send(`
+      <!DOCTYPE html>
+      <html>
+        <head><title>Discord Authorization</title></head>
+        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+          <div style="text-align:center;padding:24px;border:1px solid #f59e0b;border-radius:16px;background:#1e1b0e;max-width:440px;">
+            <div style="font-size:28px;margin-bottom:8px;">⚠️</div>
+            <h3 style="color:#f59e0b;margin:0 0 8px 0;">OAuth Code Received</h3>
+            <p style="font-size:12px;color:#fde68a;line-height:1.5;">${oauthError || 'OAuth authentication completed code exchange.'}</p>
+            <p style="font-size:11px;color:#94a3b8;margin-top:12px;">To complete real token verification on Discord API, provide <code>DISCORD_CLIENT_SECRET</code> in environment settings.</p>
+            <script>
+              if (window.opener) {
+                window.opener.postMessage({
+                  type: 'DISCORD_OAUTH_ERROR',
+                  error: ${JSON.stringify(oauthError || 'Missing client secret')}
+                }, '*');
+                setTimeout(() => window.close(), 3000);
+              }
+            </script>
+          </div>
+        </body>
+      </html>
+    `);
+  }
+});
+
+// DISCORD USER PROFILE ENDPOINT
+app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
+  const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
+  const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user') || null;
+
+  res.json({
+    linked: !!profile,
+    profile: profile || null,
+  });
+});
+
+// DISCORD VERIFY GUILD MEMBERSHIP & ROLES
+app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, res) => {
+  const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
+  const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user');
+
+  if (!profile) {
+    return res.status(400).json({
+      success: false,
+      error: 'NOT_LINKED',
+      message: 'No Discord identity is linked. Please click "Connect Discord" first.',
+    });
+  }
+
+  const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  let isGuildMember = profile.guildMember;
+
+  const botStatus = getDiscordBotStatus();
+  if (botStatus && botStatus.isReady) {
+    try {
+      const vipResult = await assignDiscordVipRole(profile.discordUserId, targetGuildId);
+      if (vipResult.success) {
+        isGuildMember = true;
+      }
+    } catch (e) {
+      console.warn('[Discord] Live guild role check notice:', e);
+    }
+  }
+
+  profile.guildMember = isGuildMember;
+  profile.guildJoined = isGuildMember;
+  profile.lastSync = new Date().toLocaleTimeString();
+  profile.verificationStatus = isGuildMember ? 'VERIFIED' : 'NEEDS_GUILD';
+
+  if (isGuildMember) {
+    profile.guildRoles = ['PRO'];
+    assignDiscordVipRole(profile.discordUserId, targetGuildId).catch((e) => console.warn(e));
+  }
+
+  userDiscordProfiles.set(userEmail, profile);
+  userDiscordProfiles.set('global_active_user', profile);
+
+  res.json({
+    success: true,
+    profile,
+    message: isGuildMember
+      ? `Guild membership verified! PRO role synced for ${profile.discordGlobalName} (@${profile.discordUsername}).`
+      : `Discord account @${profile.discordUsername} has not joined the VIXY Vault Discord server yet. Join at https://discord.gg/a9q3UCAjGH`,
+  });
+});
+
+// DISCORD UNLINK / DISCONNECT ENDPOINT
+app.post('/api/discord/disconnect', (req, res) => {
+  const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
+  userDiscordProfiles.delete(userEmail);
+  userDiscordProfiles.delete('global_active_user');
+
+  res.json({ success: true, message: 'Discord identity disconnected successfully.' });
 });
 
 app.get('/api/discord/bot-status', (req, res) => {

@@ -96,11 +96,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="text-center space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-mono font-bold">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>VIXY'S VAULT AUTHENTICATION</span>
+              <span>VIXY AI AUTHENTICATION</span>
             </div>
             <h2 className="text-2xl font-black font-mono tracking-tight text-white">
               {mode === 'login' && 'Welcome Back'}
-              {mode === 'register' && 'Create Your Vault Account'}
+              {mode === 'register' && 'Create Your VIXY AI Account'}
               {mode === 'forgot' && 'Reset Password'}
             </h2>
             <p className="text-xs text-purple-300/60 font-sans">

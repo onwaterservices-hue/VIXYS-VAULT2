@@ -115,6 +115,13 @@ export interface AlertSettings {
   discordLinked?: boolean;
   discordSoundEnabled?: boolean;
   discordNotificationSound?: 'discord_ping' | 'quant_chime' | 'subsecond_alert';
+  guildMember?: boolean;
+  serverJoined?: boolean;
+  roleAssigned?: string;
+  subscriptionActive?: boolean;
+  lastSyncTimestamp?: string;
+  syncStatus?: 'HEALTHY' | 'SYNCING' | 'ACTION_REQUIRED' | 'DISCONNECTED';
+  webhookStatus?: 'ACTIVE' | 'TESTING' | 'OFFLINE';
   telegramBotToken: string;
   telegramChatId: string;
   telegramEnabled: boolean;

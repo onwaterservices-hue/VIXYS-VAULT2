@@ -161,7 +161,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         billingInterval: 'monthly',
       });
       setUserRole('PRO');
-      setSuccessMessage(`Stripe Payment Verified! Welcome to VIXY's Vault ${activePlan} Tier.`);
+      setSuccessMessage(`Stripe Payment Verified! Welcome to VIXY AI ${activePlan} Tier.`);
       setShowCheckoutModal(true);
       // Clean query params from URL
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -222,7 +222,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             billingInterval,
           });
           setUserRole('PRO');
-          setSuccessMessage(`Payment Authorized! Welcome to VIXY's Vault ${selectedPlanToBuy} Tier.`);
+          setSuccessMessage(`Payment Authorized! Welcome to VIXY AI ${selectedPlanToBuy} Tier.`);
           setTimeout(() => {
             setShowCheckoutModal(false);
           }, 1500);
@@ -243,7 +243,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           billingInterval,
         });
         setUserRole('PRO');
-        setSuccessMessage(`Payment Authorized! Welcome to VIXY's Vault ${selectedPlanToBuy} Tier.`);
+        setSuccessMessage(`Payment Authorized! Welcome to VIXY AI ${selectedPlanToBuy} Tier.`);
         setTimeout(() => {
           setShowCheckoutModal(false);
         }, 1500);
@@ -356,7 +356,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               </span>
             </div>
             <h2 className="text-lg font-black text-white mt-0.5">
-              VIXY'S VAULT {subscription.plan} Tier
+              VIXY AI {subscription.plan} Tier
             </h2>
             <p className="text-purple-300/60 text-xs font-sans mt-0.5">
               Status: Active • Renews {subscription.renewalDate} via {subscription.paymentMethod}
@@ -527,7 +527,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           <span>RESPONSIBLE TRADING & RISK DISCLOSURE</span>
         </div>
         <p className="leading-relaxed font-sans text-[11px]">
-          VIXY'S VAULT is an analytical decision-support tool created for informational and probability research purposes. VIXY'S VAULT does NOT guarantee profits or offer personalized financial, investment, or trading advice. Prediction market trading carries significant financial risk. Users remain solely responsible for managing their own risk and execution decisions.
+          VIXY AI is an analytical decision-support tool created for informational and probability research purposes. VIXY AI does NOT guarantee profits or offer personalized financial, investment, or trading advice. Prediction market trading carries significant financial risk. Users remain solely responsible for managing their own risk and execution decisions.
         </p>
       </div>
 

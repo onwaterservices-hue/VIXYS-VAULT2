@@ -49,6 +49,7 @@ import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
 import { TermsView } from './components/TermsView';
 import { PrivacyView } from './components/PrivacyView';
 import { DiscordBotHubView } from './components/DiscordBotHubView';
+import { DiscordOnboardingModal } from './components/DiscordOnboardingModal';
 import { RiskDisclosureView } from './components/RiskDisclosureView';
 import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
@@ -66,6 +67,7 @@ export default function App() {
 
   const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+  const [isDiscordModalOpen, setIsDiscordModalOpen] = useState<boolean>(false);
 
   const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>(() => {
     try {
@@ -316,27 +318,68 @@ export default function App() {
   });
 
   // Alert Settings State
-  const [alertSettings, setAlertSettings] = useState<AlertSettings>({
-    discordWebhook: 'https://discord.com/api/webhooks/123456789/vixy_terminal_signals',
-    discordEnabled: true,
-    discordUserId: '9841203918230912',
-    discordUsername: 'QuantTrader#1337',
-    discordLinked: true,
-    discordSoundEnabled: true,
-    discordNotificationSound: 'discord_ping',
-    telegramBotToken: '718293847:AAH...',
-    telegramChatId: '-1001928374',
-    telegramEnabled: false,
-    minConfidence: 85,
-    minEdge: 5,
-    minEdgePct: 5,
-    notify1MinBeforeClose: true,
-    notifyNewSignal: true,
-    notifyOutcome: true,
-    onlyHighGrade: true,
-    emailAlerts: true,
-    emailAddress: 'trader@vixyvault.com',
+  const [alertSettings, setAlertSettings] = useState<AlertSettings>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_alert_settings');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {
+      console.error(e);
+    }
+    return {
+      discordWebhook: 'https://discord.com/api/webhooks/123456789/vixy_terminal_signals',
+      discordEnabled: true,
+      discordUserId: undefined,
+      discordUsername: undefined,
+      discordLinked: false,
+      discordSoundEnabled: true,
+      discordNotificationSound: 'discord_ping',
+      telegramBotToken: '718293847:AAH...',
+      telegramChatId: '-1001928374',
+      telegramEnabled: false,
+      minConfidence: 85,
+      minEdge: 5,
+      minEdgePct: 5,
+      notify1MinBeforeClose: true,
+      notifyNewSignal: true,
+      notifyOutcome: true,
+      onlyHighGrade: true,
+      emailAlerts: true,
+      emailAddress: 'trader@vixyvault.com',
+    };
   });
+
+  // Sync Discord profile from real backend API on mount
+  useEffect(() => {
+    async function syncProfile() {
+      try {
+        const { getDiscordUserProfileApi } = await import('./services/api');
+        const res = await getDiscordUserProfileApi();
+        if (res && res.linked && res.profile) {
+          setAlertSettings((prev) => ({
+            ...prev,
+            discordLinked: true,
+            discordUsername: res.profile.discordUsername,
+            discordUserId: res.profile.discordUserId,
+            guildMember: res.profile.guildMember,
+            roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
+            lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
+            syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
+          }));
+        }
+      } catch (e) {
+        console.warn('Discord profile sync on mount notice:', e);
+      }
+    }
+    syncProfile();
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('vixy_alert_settings', JSON.stringify(alertSettings));
+    } catch (e) {
+      console.error(e);
+    }
+  }, [alertSettings]);
 
   // API Keys State
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([
@@ -522,6 +565,8 @@ export default function App() {
         subscription={subscription}
         authState={authState}
         exchangeKeys={exchangeKeys}
+        alertSettings={alertSettings}
+        onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
         trialSeconds={trialSeconds}
@@ -557,6 +602,7 @@ export default function App() {
               onOpenPricing={() => setActiveTab('pricing')}
               onOpenAuth={handleOpenAuth}
               dataSource={CURRENT_DATA_SOURCE}
+              authState={authState}
             />
           )}
 
@@ -637,7 +683,7 @@ export default function App() {
                       Create an Account to Unlock Your Free Access
                     </h2>
                     <p className="text-sm text-purple-300/70 font-sans max-w-lg mx-auto leading-relaxed">
-                      Register your free Vixy's Vault account to activate your 3-Hour Free Access Pass and enter the live prediction terminal, order flow delta metrics, and AI signal engine.
+                      Register your free VIXY AI account to activate your 3-Hour Free Access Pass and enter the live prediction terminal, order flow delta metrics, and AI signal engine.
                     </p>
                   </div>
 
@@ -744,6 +790,8 @@ export default function App() {
                       selectedVenues={selectedVenues}
                       exchangeKeys={exchangeKeys}
                       onOpenSettings={() => setActiveTab('settings')}
+                      alertSettings={alertSettings}
+                      setAlertSettings={setAlertSettings}
                     />
                   )}
 
@@ -926,7 +974,7 @@ export default function App() {
         <div className="max-w-[1700px] mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-purple-500 shadow-sm shadow-purple-500/80 animate-pulse" />
-            <span className="text-white font-black tracking-tight cursor-pointer" onClick={() => setActiveTab('terminal')}>VIXY'S VAULT</span>
+            <span className="text-white font-black tracking-tight cursor-pointer" onClick={() => setActiveTab('terminal')}>VIXY AI</span>
             <span className="text-purple-400/80">— AI Prediction Market Decision Intelligence</span>
           </div>
 
@@ -947,9 +995,18 @@ export default function App() {
 
         {/* MANDATORY PERSISTENT DISCLOSURE */}
         <div className="max-w-[1700px] mx-auto px-4 sm:px-6 pt-3 border-t border-purple-950 text-[11px] text-purple-300/50 font-sans leading-relaxed text-center sm:text-left">
-          <strong>Mandatory Risk Disclosure:</strong> Vixy's Vault provides data-driven signals, market analysis, and explainable models — not financial advice or guaranteed outcomes. Prediction market contracts (Kalshi, Polymarket, DraftKings) carry substantial risk of loss, including total loss of principal. Past signal performance does not guarantee future results.
+          <strong>Mandatory Risk Disclosure:</strong> VIXY AI provides data-driven signals, market analysis, and explainable models — not financial advice or guaranteed outcomes. Prediction market contracts (Kalshi, Polymarket, DraftKings) carry substantial risk of loss, including total loss of principal. Past signal performance does not guarantee future results.
         </div>
       </footer>
+
+      {/* DISCORD AUTOMATED ONBOARDING MODAL */}
+      <DiscordOnboardingModal
+        isOpen={isDiscordModalOpen}
+        onClose={() => setIsDiscordModalOpen(false)}
+        settings={alertSettings}
+        setSettings={setAlertSettings}
+        onComplete={() => setActiveTab('terminal')}
+      />
     </div>
   );
 }

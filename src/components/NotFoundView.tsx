@@ -28,7 +28,7 @@ export const NotFoundView: React.FC<NotFoundViewProps> = ({
             Out of Signal Range
           </h1>
           <p className="text-xs text-purple-300/80 font-sans max-w-md mx-auto leading-relaxed">
-            The requested page or endpoint route does not exist or has been relocated within the Vixy's Vault decision terminal.
+            The requested page or endpoint route does not exist or has been relocated within the VIXY AI decision terminal.
           </p>
         </div>
 
@@ -61,7 +61,7 @@ export const NotFoundView: React.FC<NotFoundViewProps> = ({
         </div>
 
         <div className="pt-4 border-t border-purple-900/40 text-[11px] text-purple-400/60 font-mono">
-          Vixy's Vault Quant Research Lab • Route Error Exception Handled
+          VIXY AI Quant Research Lab • Route Error Exception Handled
         </div>
       </div>
     </div>

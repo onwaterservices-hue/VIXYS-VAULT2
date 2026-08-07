@@ -1,6 +1,6 @@
 {
-  "name": "Vixy's Vault",
-  "description": "AI-powered institutional decision-support platform for prediction markets. Live probabilities, 15s scalping desk, explainable multi-engine signals, whale delta tracking, and backtested track records.",
+  "name": "VIXY AI",
+  "description": "AI-powered market intelligence with live predictions, whale tracking, order flow analysis, smart money monitoring, and real-time trading insights.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

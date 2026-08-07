@@ -90,12 +90,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
       <div className="text-center space-y-3 max-w-2xl mx-auto">
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-bold">
           <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-          <span>VIXY'S VAULT DECISION INTELLIGENCE</span>
+          <span>VIXY AI DECISION INTELLIGENCE</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-mono">
           {mode === 'login' && 'SIGN IN TO YOUR TERMINAL'}
-          {mode === 'register' && 'CREATE YOUR VAULT ACCOUNT'}
-          {mode === 'forgot' && 'RESET YOUR VAULT PASSWORD'}
+          {mode === 'register' && 'CREATE YOUR VIXY AI ACCOUNT'}
+          {mode === 'forgot' && 'RESET YOUR VIXY AI PASSWORD'}
         </h1>
         <p className="text-xs sm:text-sm text-purple-300/70 font-sans">
           Access real-time 15m & 1H Kalshi prediction market signals, L2 order book delta sweeps, and automated Discord bot triggers.

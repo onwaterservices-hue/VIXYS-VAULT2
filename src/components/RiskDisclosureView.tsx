@@ -74,7 +74,7 @@ export const RiskDisclosureView: React.FC<RiskDisclosureViewProps> = ({ onReturn
             <h2>2. Model Signals & Historical Performance</h2>
           </div>
           <p className="text-purple-200/80">
-            Vixy's Vault neural ribbon charts, model confidence scores, and Kelly criterion recommendations are calculated using live L2 order flow data and historical pattern matching.
+            VIXY AI neural ribbon charts, model confidence scores, and Kelly criterion recommendations are calculated using live L2 order flow data and historical pattern matching.
           </p>
           <p className="text-purple-200/80 text-xs">
             <strong>Past Performance Is No Guarantee of Future Results:</strong> Statistical probability models are estimation tools, not crystal balls. Unusual market regimes, flash crashes, regulatory actions, or exchange downtime can invalidate statistical edges.
@@ -88,14 +88,14 @@ export const RiskDisclosureView: React.FC<RiskDisclosureViewProps> = ({ onReturn
             <h2>3. Responsible Bankroll Management</h2>
           </div>
           <p className="text-purple-200/80">
-            We strongly advocate for strict position sizing rules. The Vixy's Vault Kelly Criterion Position Sizer defaults to fractional Kelly (0.25x or 0.10x) to reduce bankroll drawdown risk. Always maintain strict stop losses and risk limits.
+            We strongly advocate for strict position sizing rules. The VIXY AI Kelly Criterion Position Sizer defaults to fractional Kelly (0.25x or 0.10x) to reduce bankroll drawdown risk. Always maintain strict stop losses and risk limits.
           </p>
         </section>
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
           <div>Risk Management Help: <span className="text-white">vixyvault0@gmail.com</span></div>
-          <div>Vixy's Vault Quant Research Lab</div>
+          <div>VIXY AI Quant Research Lab</div>
         </div>
 
       </div>

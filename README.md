@@ -1,4 +1,4 @@
-# Vixy's Vault -- signal engine
+# VIXY AI -- signal engine
 
 Real-time crypto prediction market engine for the 15s scalp desk and 1H desk.
 Every number the UI shows traces back to a real API call or a real database row.

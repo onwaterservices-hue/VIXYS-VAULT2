@@ -19,7 +19,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
               <span>QUANT RESEARCH LAB • EST. 2026</span>
             </div>
             <h1 className="text-3xl sm:text-5xl font-black font-mono tracking-tight text-white">
-              About Vixy's Vault
+              About VIXY AI
             </h1>
             <p className="text-sm text-purple-300/80 font-sans max-w-2xl leading-relaxed">
               Institutional-grade decision intelligence for sub-minute and 1-hour prediction market traders on Kalshi, Polymarket, and DraftKings.
@@ -61,7 +61,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
             Prediction markets are the fastest-growing financial innovation of the decade. Yet retail traders have historically lacked the sub-second microstructure analytics, orderbook delta processing, and neural pattern recognition available to high-frequency trading firms.
           </p>
           <p className="text-purple-200/80">
-            <strong>Vixy's Vault</strong> bridges this gap by aggregating live L2 order flow from Binance, Coinbase, Kalshi, and Polymarket, feeding it through multi-algorithm ensemble models to output real-time probability estimates and Kelly Criterion position sizing.
+            <strong>VIXY AI</strong> bridges this gap by aggregating live L2 order flow from Binance, Coinbase, Kalshi, and Polymarket, feeding it through multi-algorithm ensemble models to output real-time probability estimates and Kelly Criterion position sizing.
           </p>
         </section>
 
@@ -114,7 +114,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
           <div className="p-5 rounded-2xl bg-purple-950/50 border border-purple-800/40 text-xs text-purple-200/90 space-y-2 font-mono">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-purple-400">Company Name:</span> Vixy's Vault Quant Research Lab
+                <span className="text-purple-400">Company Name:</span> VIXY AI Quant Research Lab
               </div>
               <div>
                 <span className="text-purple-400">Infrastructure:</span> Cloud Run Multi-Region Edge Containers
@@ -132,7 +132,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
           <div>General Contact: <span className="text-white">vixyvault0@gmail.com</span></div>
-          <div>Vixy's Vault Quant Research Lab • All Rights Reserved</div>
+          <div>VIXY AI Quant Research Lab • All Rights Reserved</div>
         </div>
 
       </div>

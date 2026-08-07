@@ -17,21 +17,25 @@ import {
   Globe,
   Sliders,
 } from 'lucide-react';
-import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys } from '../types';
+import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys, AlertSettings } from '../types';
 import { Logo } from './Logo';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
+import { DiscordCompactBadge } from './DiscordCompactBadge';
 
 interface HeaderProps {
   ticker: BTCTicker;
-  activeTab: 'terminal' | 'scalping' | 'onehour' | 'history' | 'journal' | 'alerts' | 'pricing' | 'settings' | 'admin' | 'landing' | 'auth' | 'markets' | 'compare';
+  activeTab: 'terminal' | 'scalping' | 'onehour' | 'history' | 'journal' | 'alerts' | 'pricing' | 'settings' | 'admin' | 'landing' | 'auth' | 'markets' | 'compare' | string;
   setActiveTab: (tab: any) => void;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   setUserRole: (role: 'DEMO' | 'PRO' | 'ADMIN') => void;
   subscription: UserSubscription;
   authState: AuthState;
   exchangeKeys?: ExchangeApiKeys;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
   onLogout: () => void;
+  isLoading?: boolean;
   trialSeconds?: number;
   onResetTrial?: () => void;
   onExpireTrial?: () => void;
@@ -50,8 +54,11 @@ export const Header: React.FC<HeaderProps> = ({
   subscription,
   authState,
   exchangeKeys,
+  alertSettings,
+  onOpenDiscordModal,
   onOpenAuth,
   onLogout,
+  isLoading = false,
   trialSeconds = 10800,
   onResetTrial,
   onExpireTrial,
@@ -152,21 +159,35 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Public CTA Actions */}
           <div className="flex items-center gap-3">
-            {authState.isAuthenticated ? (
+            {isLoading ? (
+              <div className="flex items-center gap-2 animate-pulse">
+                <div className="w-24 h-9 bg-purple-900/40 rounded-xl border border-purple-800/30 flex items-center justify-center">
+                  <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              </div>
+            ) : authState.isAuthenticated ? (
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setActiveTab('settings')}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 transition-all"
+                  onClick={() => setActiveTab(userRole === 'ADMIN' ? 'admin' : 'settings')}
+                  title={userRole === 'ADMIN' ? 'Master Admin Control Center' : 'User Settings'}
+                  className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 hover:text-white transition-all max-w-[160px] sm:max-w-[220px]"
                 >
-                  <User className="w-3.5 h-3.5 text-purple-400" />
-                  <span className="hidden sm:inline">{authState.user?.name || 'Quant Member'}</span>
+                  <User className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span className="hidden sm:inline truncate whitespace-nowrap">{authState.user?.name || 'Quant Member'}</span>
                 </button>
                 <button
                   onClick={() => setActiveTab('terminal')}
-                  className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
+                  className="px-4.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   <span>Enter Terminal</span>
+                </button>
+                <button
+                  onClick={onLogout}
+                  title="Sign Out"
+                  className="p-2 rounded-xl bg-[#120B24] border border-purple-900/40 text-purple-400 hover:text-rose-400 hover:border-rose-500/30 transition-all shrink-0"
+                >
+                  <LogOut className="w-4 h-4" />
                 </button>
               </div>
             ) : (
@@ -182,7 +203,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="px-4.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Launch Free Trial</span>
+                  <span>Start Free Trial</span>
                 </button>
               </div>
             )}
@@ -329,6 +350,16 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-purple-200 font-bold hidden sm:inline">3H TRIAL:</span>
               <span className="font-black text-amber-300 text-xs tracking-wider">{formatTrialTime(trialSeconds)}</span>
             </div>
+          )}
+
+          {/* Compact Discord Status Badge */}
+          {onOpenDiscordModal && alertSettings && (
+            <DiscordCompactBadge
+              discordLinked={alertSettings.discordLinked ?? false}
+              discordUsername={alertSettings.discordUsername}
+              roleAssigned={alertSettings.roleAssigned || 'PRO'}
+              onClick={onOpenDiscordModal}
+            />
           )}
 
           {/* Subtle Role Badge */}
@@ -491,16 +522,31 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right CTA / Auth Status */}
         <div className="flex items-center gap-3">
-          {authState.isAuthenticated ? (
+          {isLoading ? (
+            <div className="flex items-center gap-2 animate-pulse">
+              <div className="w-24 h-9 bg-purple-900/40 rounded-xl border border-purple-800/30 flex items-center justify-center">
+                <div className="w-3.5 h-3.5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            </div>
+          ) : authState.isAuthenticated ? (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setActiveTab(userRole === 'ADMIN' ? 'admin' : 'settings')}
                 title={userRole === 'ADMIN' ? 'Master Admin Control Center' : 'User Settings'}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 transition-all max-w-[160px] sm:max-w-[220px]"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs text-purple-200 font-bold hover:border-purple-500/50 hover:text-white transition-all max-w-[160px] sm:max-w-[220px]"
               >
                 <User className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                 <span className="hidden sm:inline truncate whitespace-nowrap">{authState.user?.name || 'Quant User'}</span>
               </button>
+              {activeTab !== 'terminal' && (
+                <button
+                  onClick={() => setActiveTab('terminal')}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
+                >
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  <span className="hidden md:inline">Enter Terminal</span>
+                </button>
+              )}
               <button
                 onClick={onLogout}
                 title="Sign Out"
@@ -515,12 +561,13 @@ export const Header: React.FC<HeaderProps> = ({
                 onClick={() => onOpenAuth('login')}
                 className="px-3.5 py-2 rounded-xl bg-[#120B24] border border-purple-900/40 text-xs font-bold text-purple-200 hover:text-white hover:border-purple-500/50 transition-all"
               >
-                Log in
+                Log In
               </button>
               <button
                 onClick={() => onOpenAuth('register')}
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all active:scale-95 flex items-center gap-1.5"
               >
+                <Sparkles className="w-3.5 h-3.5 text-white" />
                 <span>Start Free Trial</span>
               </button>
             </div>

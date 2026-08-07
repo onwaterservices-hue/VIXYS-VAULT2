@@ -350,6 +350,41 @@ export async function fetchPrediction(
   };
 }
 
+export async function getDiscordAuthUrlApi() {
+  const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>('/api/auth/discord/url');
+  return data;
+}
+
+export async function getDiscordUserProfileApi() {
+  const data = await safeFetchJson<{ linked: boolean; profile: any }>('/api/discord/user-profile');
+  return data;
+}
+
+export async function verifyDiscordMembershipApi(discordUserId?: string) {
+  try {
+    const res = await fetch('/api/discord/verify-membership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ discordUserId }),
+    });
+    return await safeParseJson(res);
+  } catch {
+    return { success: false, message: 'Failed to verify membership' };
+  }
+}
+
+export async function disconnectDiscordApi() {
+  try {
+    const res = await fetch('/api/discord/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return await safeParseJson(res);
+  } catch {
+    return { success: false, message: 'Failed to disconnect' };
+  }
+}
+
 export async function getDiscordBotStatusApi() {
   const data = await safeFetchJson<any>('/api/discord/bot-status');
   if (data) return data;

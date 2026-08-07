@@ -507,7 +507,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div>
             <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
               <Key className="w-4 h-4 text-violet-400" />
-              <span>VIXY'S VAULT REST & WebSocket API Keys</span>
+              <span>VIXY AI REST & WebSocket API Keys</span>
             </h2>
             <p className="text-xs text-purple-300/60 font-mono mt-1">
               Programmatic access for automated execution, custom trading bots, or Python quant workflows.
