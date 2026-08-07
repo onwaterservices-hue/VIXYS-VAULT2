@@ -16,6 +16,11 @@ import {
   Activity,
   CheckCircle2,
   BarChart2,
+  Clock,
+  Gauge,
+  History,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
@@ -83,6 +88,35 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const [selectedDirection, setSelectedDirection] = useState<'UP' | 'DOWN'>('UP');
   const [strikePrice, setStrikePrice] = useState<number>(64150.0);
   const [strikeCrossed, setStrikeCrossed] = useState<boolean>(false);
+
+  // AI Probability Dynamics & Momentum Timeline State
+  const [momentumDelta, setMomentumDelta] = useState<string>('▲ +3.4% (2m)');
+  const [velocity, setVelocity] = useState<string>('+2.1% / min');
+  const [momentumStatus, setMomentumStatus] = useState<string>('Strength Rising');
+  
+  const [probabilityTimeline, setProbabilityTimeline] = useState([
+    { label: '-30m', value: 47, isUp: true },
+    { label: '-15m', value: 59, isUp: true },
+    { label: '-10m', value: 68, isUp: true },
+    { label: '-5m', value: 61, isUp: false },
+    { label: '-2m', value: 67, isUp: true },
+    { label: 'Now', value: 71, isUp: true },
+  ]);
+
+  const [driverChips, setDriverChips] = useState([
+    { label: 'Whale Buy Sweeping Bids', positive: true },
+    { label: 'Net Taker Delta +$13.4M', positive: true },
+    { label: 'Liquidity Sweep Below Spot', positive: true },
+    { label: 'Resistance Overhead ($64,280)', positive: false },
+    { label: 'Microstructure Volatility High', positive: false },
+  ]);
+
+  const [convictionEvents, setConvictionEvents] = useState([
+    { id: '1', type: 'up', change: '+4.2%', reason: 'Large Whale Buy Wall Absorbed at $64,150', timeAgo: '12s ago' },
+    { id: '2', type: 'down', change: '-2.8%', reason: 'Transient Resistance Hit at $64,210', timeAgo: '48s ago' },
+    { id: '3', type: 'up', change: '+3.1%', reason: 'Net Orderbook Imbalance Ribbon Flipped Bullish', timeAgo: '1.5m ago' },
+    { id: '4', type: 'up', change: '+1.9%', reason: 'Options Gamma Delta Pressure Spike on Kalshi', timeAgo: '3m ago' },
+  ]);
 
   const binanceSymbol = `${asset}USDT`.toUpperCase();
 
@@ -754,6 +788,207 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               </div>
             </div>
           </button>
+        </div>
+      </div>
+
+      {/* AI CONVICTION TIMELINE & LIVE PROBABILITY MOMENTUM ENGINE */}
+      <div className="mt-4 p-5 rounded-2xl bg-[#080318] border border-purple-800/60 shadow-2xl space-y-4">
+        {/* Module Header */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-3">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+              <Activity className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <h3 className="text-sm font-black font-mono text-white tracking-wider flex items-center gap-2">
+                <span>AI CONVICTION TIMELINE & PROBABILITY DYNAMICS</span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800 uppercase">
+                  LIVE MOMENTUM
+                </span>
+              </h3>
+              <p className="text-xs text-purple-300/70">
+                Real-time tracking of AI conviction velocity, probability dips, and driver catalyst chips.
+              </p>
+            </div>
+          </div>
+
+          {/* Velocity & Momentum Badges */}
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <div className="px-3 py-1.5 rounded-xl bg-[#10062b] border border-emerald-500/40 flex items-center gap-2">
+              <span className="text-purple-400 text-[10px]">VELOCITY:</span>
+              <span className="text-emerald-400 font-extrabold">{velocity}</span>
+            </div>
+            <div className="px-3 py-1.5 rounded-xl bg-[#10062b] border border-purple-700/50 flex items-center gap-2">
+              <span className="text-purple-400 text-[10px]">SWING (2M):</span>
+              <span className="text-cyan-300 font-extrabold">{momentumDelta}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2-Column Main Section: Timeline Graph & Drivers on Left, Heat Meter & Events Log on Right */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left: AI Probability Sparkline Timeline & Driver Chips */}
+          <div className="lg:col-span-7 space-y-4">
+            {/* AI Conviction Timeline Step Graph */}
+            <div className="p-4 rounded-xl bg-[#050212] border border-purple-900/50 space-y-3">
+              <div className="flex items-center justify-between text-xs font-mono font-bold">
+                <span className="text-purple-200 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  AI CONVICTION TIMELINE (30M)
+                </span>
+                <span className="text-emerald-400 font-black">
+                  NOW: {upProbability}% {upProbability >= 50 ? 'BULLISH' : 'BEARISH'}
+                </span>
+              </div>
+
+              {/* Visual Timeline Sparkline & Step Nodes */}
+              <div className="relative pt-2 pb-1">
+                <div className="h-20 w-full relative">
+                  <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 40">
+                    <defs>
+                      <linearGradient id="probGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.4" />
+                        <stop offset="100%" stopColor="#34d399" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+                    {/* Area under curve */}
+                    <path
+                      d="M 0,30 L 0,22 Q 20,10 40,5 T 80,12 L 100,2 L 100,40 L 0,40 Z"
+                      fill="url(#probGradient)"
+                    />
+                    {/* Main stroke line */}
+                    <path
+                      d="M 0,30 Q 20,10 40,5 T 80,12 L 100,2"
+                      fill="none"
+                      stroke="#34d399"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      className="drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]"
+                    />
+                  </svg>
+
+                  {/* Step Nodes Overlay */}
+                  <div className="absolute inset-0 flex justify-between items-end px-1 pointer-events-none font-mono">
+                    {probabilityTimeline.map((pt, idx) => (
+                      <div key={idx} className="flex flex-col items-center gap-1 relative z-10">
+                        <div className={`px-1.5 py-0.5 rounded text-[10px] font-black shadow-md ${
+                          pt.label === 'Now'
+                            ? 'bg-emerald-500 text-black animate-pulse font-mono'
+                            : pt.isUp
+                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/80'
+                            : 'bg-rose-950 text-rose-300 border border-rose-800/80'
+                        }`}>
+                          {pt.value}%
+                        </div>
+                        <div className={`w-2.5 h-2.5 rounded-full border-2 ${
+                          pt.label === 'Now' ? 'bg-emerald-400 border-white ring-4 ring-emerald-500/30' : 'bg-[#080318] border-purple-400'
+                        }`} />
+                        <span className="text-[10px] text-purple-300/70 font-semibold">{pt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Baseline indicator */}
+              <div className="flex items-center justify-between text-[10px] text-purple-400/60 font-mono border-t border-purple-900/30 pt-1.5">
+                <span>50% EQUILIBRIUM BASELINE</span>
+                <span className="text-cyan-300 font-bold">▲ +21% ABOVE NEUTRAL</span>
+              </div>
+            </div>
+
+            {/* Confidence Driver Chips */}
+            <div className="p-3.5 rounded-xl bg-[#050212] border border-purple-900/50 space-y-2">
+              <div className="text-xs font-mono font-bold text-purple-200 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Gauge className="w-3.5 h-3.5 text-amber-400" />
+                  CONVICTION CATALYST CHIPS
+                </span>
+                <span className="text-[10px] text-purple-400 font-mono">LIVE FACTOR WEIGHTS</span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {driverChips.map((chip, idx) => (
+                  <div
+                    key={idx}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-mono font-bold flex items-center gap-1.5 border transition-all ${
+                      chip.positive
+                        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40 hover:bg-emerald-900/80 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                        : 'bg-rose-950/60 text-rose-300 border-rose-500/40 hover:bg-rose-900/80'
+                    }`}
+                  >
+                    {chip.positive ? <Plus className="w-3 h-3 text-emerald-400" /> : <Minus className="w-3 h-3 text-rose-400" />}
+                    <span>{chip.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Pulsing Heat Meter & Conviction Events Log */}
+          <div className="lg:col-span-5 space-y-4">
+            {/* Probability Heat Meter & Pulse */}
+            <div className="p-4 rounded-xl bg-[#050212] border border-purple-900/50 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-mono font-bold">
+                <span className="text-purple-200 flex items-center gap-1.5">
+                  <Flame className="w-4 h-4 text-rose-400 animate-pulse" />
+                  PROBABILITY HEAT METER
+                </span>
+                <span className="text-cyan-300 font-mono text-[11px] uppercase">
+                  {momentumStatus}
+                </span>
+              </div>
+
+              {/* Pulsing Animated Heat Ribbon */}
+              <div className="space-y-1">
+                <div className="h-4 w-full bg-[#12072b] rounded-lg overflow-hidden p-0.5 border border-purple-600/40 relative">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-300 to-cyan-400 rounded transition-all duration-500 shadow-[0_0_15px_rgba(52,211,153,0.8)] animate-pulse"
+                    style={{ width: `${upProbability}%` }}
+                  />
+                </div>
+                <div className="flex justify-between text-[10px] font-mono font-extrabold">
+                  <span className="text-emerald-400">BUY UP HEAT: {upProbability}%</span>
+                  <span className="text-rose-400">BUY DOWN HEAT: {100 - upProbability}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Conviction Events Feed */}
+            <div className="p-4 rounded-xl bg-[#050212] border border-purple-900/50 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-mono font-bold">
+                <span className="text-purple-200 flex items-center gap-1.5">
+                  <History className="w-4 h-4 text-purple-400" />
+                  RECENT CONVICTION EVENTS
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">LIVE FEED</span>
+              </div>
+
+              <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+                {convictionEvents.map((evt) => (
+                  <div
+                    key={evt.id}
+                    className="p-2.5 rounded-lg bg-[#0b051e] border border-purple-900/40 flex items-center justify-between text-xs font-mono"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${evt.type === 'up' ? 'bg-emerald-400 animate-ping' : 'bg-rose-400'}`} />
+                      <span className={`font-black px-1.5 py-0.5 rounded text-[10px] ${
+                        evt.type === 'up' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' : 'bg-rose-950 text-rose-300 border border-rose-800'
+                      }`}>
+                        {evt.change}
+                      </span>
+                      <span className="text-purple-200 text-[11px] truncate max-w-[180px]">
+                        {evt.reason}
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-purple-400/60 shrink-0 ml-2">
+                      {evt.timeAgo}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
