@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { loadStripe } from '@stripe/stripe-js';
 import {
   CreditCard,
   Check,
@@ -16,6 +17,9 @@ import {
   Flame,
 } from 'lucide-react';
 import { UserSubscription } from '../types';
+
+const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
+const stripePromise = loadStripe(stripePublishableKey);
 
 interface SubscriptionViewProps {
   subscription: UserSubscription;
@@ -195,6 +199,17 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       const data = res.headers.get('content-type')?.includes('application/json') ? await res.json() : {};
       if (res.ok && data.url) {
         window.location.href = data.url;
+      } else if (res.ok && data.sessionId) {
+        const stripe = await stripePromise;
+        if (stripe) {
+          const { error } = await (stripe as any).redirectToCheckout({ sessionId: data.sessionId });
+          if (error) {
+            setStripeError(error.message || 'Stripe Redirect Error');
+            setIsProcessingStripe(false);
+          }
+        } else if (data.url) {
+          window.location.href = data.url;
+        }
       } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
         // Fallback to interactive authorization if secret key not injected yet
         setTimeout(() => {
