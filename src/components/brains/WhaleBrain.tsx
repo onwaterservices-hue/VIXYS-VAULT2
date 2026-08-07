@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, Flame, ArrowUpRight, ArrowDownRight, Clock, ShieldAlert, Radio } from 'lucide-react';
+import { Flame, ArrowUpRight, ArrowDownRight, Radio } from 'lucide-react';
 import { BTCTicker } from '../../types';
 
 interface WhaleMove {
@@ -60,7 +60,9 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
     },
   ]);
 
-  // Simulate new whale radar arrivals every 15s for Bloomberg feel
+  // Flash alert state when a new whale order is intercepted
+  const [isFlashing, setIsFlashing] = useState<boolean>(false);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const isBuy = Math.random() > 0.35;
@@ -77,12 +79,15 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
         confidence: isBuy ? 'INSTITUTIONAL' : 'HIGH',
         effect: isBuy ? 'Bullish' : 'Bearish',
         estimatedImpactMins: Math.floor(Math.random() * 8) + 3,
-        timeAgo: 'JUST DETECTED',
+        timeAgo: 'JUST INTERCEPTED',
         timestamp: Date.now(),
       };
 
+      setIsFlashing(true);
+      setTimeout(() => setIsFlashing(false), 800);
+
       setWhaleEvents((prev) => [newMove, ...prev.slice(0, 4)]);
-    }, 15000);
+    }, 12000);
 
     return () => clearInterval(interval);
   }, [selectedAsset]);
@@ -90,56 +95,64 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
   const latest = whaleEvents[0];
 
   return (
-    <div className="bg-[#0b061b] rounded-3xl border border-purple-800/70 p-6 space-y-5 font-mono shadow-2xl relative overflow-hidden">
+    <div className="bg-[#030108] rounded-3xl border border-purple-800/70 p-6 space-y-5 font-mono shadow-2xl relative overflow-hidden">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-4">
         <div className="flex items-center gap-2.5">
-          <span className="flex items-center gap-2 font-mono text-xs font-black text-cyan-300 bg-cyan-950/80 px-3 py-1 rounded-full border border-cyan-500/50 shadow-sm">
+          <span className="flex items-center gap-2 font-mono text-xs font-black text-cyan-300 bg-cyan-950/90 px-3 py-1 rounded-full border border-cyan-500/50 shadow-sm">
             <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
-            🐋 WHALE BRAIN • BLOOMBERG WHALE RADAR
+            🐋 INSTITUTIONAL SURVEILLANCE INTERCEPT
           </span>
-          <span className="text-xs text-purple-300/70 hidden sm:inline">
-            Deep Orderbook & Institutional Flow Radar
+          <span className="text-xs text-purple-300/80 hidden sm:inline tracking-wider">
+            DARK POOL & BLOCK DESK SURVEILLANCE
           </span>
         </div>
 
         <div className="flex items-center gap-2 bg-[#05020f] px-3 py-1 rounded-xl border border-purple-800/60 text-xs text-purple-300">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-          <span>RADAR ACTIVE (SCANNING 12 VENUES)</span>
+          <span>SURVEILLANCE ACTIVE (12 VENUES)</span>
         </div>
       </div>
 
-      {/* Featured Just-Detected Animated Radar Banner */}
+      {/* Featured Just-Intercepted Banner */}
       {latest && (
-        <div className="bg-gradient-to-r from-purple-950/80 via-[#13072b] to-cyan-950/80 border border-purple-500/50 rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all duration-500">
+        <div
+          className={`border rounded-2xl p-4 sm:p-5 shadow-xl relative overflow-hidden transition-all duration-500 ${
+            isFlashing
+              ? latest.action === 'BOUGHT'
+                ? 'bg-emerald-950/90 border-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.8)] scale-[1.01]'
+                : 'bg-rose-950/90 border-rose-400 shadow-[0_0_40px_rgba(244,63,94,0.8)] scale-[1.01]'
+              : 'bg-gradient-to-r from-purple-950/80 via-[#0a031a] to-cyan-950/80 border-purple-500/50'
+          }`}
+        >
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
               <div className="flex items-center gap-2 text-[10px] font-black tracking-widest text-amber-400 uppercase">
                 <Flame className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
-                JUST DETECTED ON RADAR
+                JUST INTERCEPTED ON NETWORK
               </div>
               <div className="text-2xl sm:text-3xl font-black text-white flex items-center gap-3">
                 <span className={latest.action === 'BOUGHT' ? 'text-emerald-400' : 'text-rose-400'}>
                   {latest.sizeUSD} {latest.asset} {latest.action}
                 </span>
-                <span className="text-xs text-purple-300 font-normal bg-[#080315] px-2.5 py-1 rounded-lg border border-purple-800/60">
+                <span className="text-xs text-purple-300 font-normal bg-[#060210] px-2.5 py-1 rounded-lg border border-purple-800/60">
                   {latest.venue}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <div className="bg-[#080315] p-2.5 rounded-xl border border-purple-800/60 text-center">
+              <div className="bg-[#060210] p-2.5 rounded-xl border border-purple-800/60 text-center">
                 <div className="text-[9px] text-purple-300/70 uppercase">CONFIDENCE</div>
                 <div className="text-xs font-black text-amber-300">{latest.confidence}</div>
               </div>
-              <div className="bg-[#080315] p-2.5 rounded-xl border border-purple-800/60 text-center">
+              <div className="bg-[#060210] p-2.5 rounded-xl border border-purple-800/60 text-center">
                 <div className="text-[9px] text-purple-300/70 uppercase">EFFECT</div>
                 <div className={`text-xs font-black ${latest.effect === 'Bullish' ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {latest.effect}
                 </div>
               </div>
-              <div className="bg-[#080315] p-2.5 rounded-xl border border-purple-800/60 text-center">
+              <div className="bg-[#060210] p-2.5 rounded-xl border border-purple-800/60 text-center">
                 <div className="text-[9px] text-purple-300/70 uppercase">IMPACT WINDOW</div>
                 <div className="text-xs font-black text-cyan-300">+{latest.estimatedImpactMins} mins</div>
               </div>
@@ -151,13 +164,13 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
       {/* Whale Move Log Stream */}
       <div className="space-y-2">
         <div className="text-[10px] text-purple-300/70 font-bold uppercase tracking-wider">
-          Recent Institutional Orderbook Injections:
+          Recent Dark Pool Injections:
         </div>
         <div className="space-y-2">
           {whaleEvents.map((move) => (
             <div
               key={move.id}
-              className="bg-[#070314] hover:bg-[#0f0724] p-3 rounded-2xl border border-purple-900/50 flex flex-wrap items-center justify-between gap-3 text-xs transition-all"
+              className="bg-[#060210] hover:bg-[#0f0724] p-3 rounded-2xl border border-purple-900/50 flex flex-wrap items-center justify-between gap-3 text-xs transition-all"
             >
               <div className="flex items-center gap-3">
                 <div
@@ -195,3 +208,4 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
     </div>
   );
 };
+

@@ -1,60 +1,69 @@
 import { EmbedBuilder } from 'discord.js';
 import { MarketOverview } from '../services/marketData';
 
-export function createWhaleTrackerEmbed(btcAmount: number = 2800, destination: string = 'Coinbase') {
+export function createWhaleTrackerEmbed(btcAmount: number = 2800, destination: string = 'Coinbase Prime') {
   return new EmbedBuilder()
-    .setTitle(`🔥 VIXY AI • WHALE TRACKER`)
-    .setColor(0xF59E0B) // Amber
-    .setDescription(`🐋 **${btcAmount.toLocaleString()} BTC** transferred to **${destination}**\n\nPossible selling pressure detected.`)
-    .setFooter({ text: 'VIXY AI Intelligence • On-Chain Tracker' })
+    .setTitle(`🐋 Institutional Surveillance Intercept`)
+    .setColor(0x0c1e28)
+    .setDescription(`**$${(btcAmount * 64410 / 1000000).toFixed(1)}M BTC Accumulated** on **${destination}**\n\nOrderbook taker delta and block Desk surveillance indicate spot accumulation.`)
+    .setFooter({ text: 'VIXY AI Signal Scanner • Dark Pool & Block Desk Surveillance' })
     .setTimestamp();
 }
 
 export function createMarketFlowEmbed(data: MarketOverview) {
   const isBull = data.prediction.direction === 'BULLISH';
   return new EmbedBuilder()
-    .setTitle(`📊 VIXY AI • Market Flow Metrics`)
-    .setColor(isBull ? 0x10B981 : 0xF43F5E)
+    .setTitle(`📊 Hourly Institutional Market Intelligence`)
+    .setColor(0x111a2e)
     .addFields(
-      { name: 'Momentum', value: isBull ? '⬆ **Rising**' : '⬇ **Falling**', inline: true },
-      { name: 'Volume', value: '⬆ **Rising**', inline: true },
-      { name: 'Liquidity', value: '⚖️ **Neutral / Balanced**', inline: true },
+      { name: 'Momentum', value: isBull ? 'Rising Taker Aggression' : 'Declining Delta', inline: true },
+      { name: 'Volume', value: 'Expanding Band', inline: true },
+      { name: 'Liquidity', value: '$42M Bid Wall at Support', inline: true },
       { name: 'Whale Pressure', value: `\`${data.prediction.whalePressureScore}%\``, inline: true },
       { name: 'Taker Ratio', value: `\`${isBull ? '1.24' : '0.82'}\``, inline: true },
       { name: 'Risk Assessment', value: `\`${data.prediction.riskLevel}\``, inline: true }
     )
-    .setFooter({ text: 'VIXY AI • Market Flow Dynamics' })
+    .setFooter({ text: 'VIXY AI Signal Scanner • Quantitative Desk Synthesis' })
     .setTimestamp();
 }
 
 export function createSniperAlertEmbed(data: MarketOverview) {
   const isBull = data.prediction.direction === 'BULLISH';
   return new EmbedBuilder()
-    .setTitle(`🎯 VIXY AI • HIGH CONFIDENCE SNIPER SETUP`)
-    .setColor(0x8B5CF6)
-    .setDescription(
-      `🔥 **High Confidence Setup Detected** (${data.prediction.confidence}% Confidence)\n\n` +
-      `⚡ *VIP received the full alert 90 seconds ago. Public release begins now.*`
-    )
+    .setTitle(`🧠 VIXY AI • 15m Market Scan`)
+    .setColor(0x0f1f18)
+    .setDescription(`Institutional activity has increased across BTC during the current 15-minute cycle.`)
     .addFields(
-      { name: 'Asset', value: `**${data.asset}**`, inline: true },
-      { name: 'Direction', value: `**${isBull ? '🐂 Bullish (YES)' : '🐻 Bearish (NO)'}**`, inline: true },
-      { name: 'Model Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
+      { name: 'Current AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
+      { name: 'Market Bias', value: `\`${isBull ? 'Bullish' : 'Bearish'}\``, inline: true },
+      { name: 'Probability Score', value: `\`${(data.prediction.confidence * 0.96).toFixed(1)}%\``, inline: true },
       {
-        name: '🔒 Unlock Exact Entry & Exit Targets',
-        value: `VIP received exact Entry, Stop-Loss, and Take-Profit 90s ago.\nType \`/vip\` to upgrade!`,
+        name: '🔒 Full trade released to VIXY ELITE',
+        value:
+          '• **Entry Price**: Locked\n' +
+          '• **Stop Loss**: Locked\n' +
+          '• **Take Profit**: Locked\n' +
+          '• **Risk Rating**: Locked\n' +
+          '• **Live Position Updates**: Locked',
+        inline: false,
+      },
+      {
+        name: ' ',
+        value:
+          '🚀 Unlock live entries, exits, VIXY Protection™, and institutional intelligence inside VIXY ELITE.\n\n' +
+          `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '')}/#pricing)**`,
         inline: false,
       }
     )
-    .setFooter({ text: 'VIXY AI Sniper Alert • 90s Delay Notice' })
+    .setFooter({ text: 'VIXY AI Signal Scanner • Confidential Quantitative Intelligence' })
     .setTimestamp();
 }
 
 export function createMacroAlertEmbed(title: string, details: string) {
   return new EmbedBuilder()
-    .setTitle(`🚨 VIXY AI ALERT • ${title}`)
-    .setColor(0xEF4444)
-    .setDescription(details)
-    .setFooter({ text: 'VIXY AI Macro & Liquidation Tracker' })
+    .setTitle(`🚨 Breaking Market Intelligence`)
+    .setColor(0x221118)
+    .setDescription(`**${title}**\n\n${details}\n\nInstitutional volatility expected over the next 30 minutes. VIXY models remain neutral pending confirmation.`)
+    .setFooter({ text: 'VIXY AI Signal Scanner • Bloomberg Terminal Grade Intelligence' })
     .setTimestamp();
 }

@@ -194,8 +194,9 @@ async function handleInteraction(interaction: Interaction) {
 
     await interaction.reply({ embeds: [embed] });
   } else if (commandName === 'vip') {
+    const baseUrl = (process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '');
     await interaction.reply({
-      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\nUpgrade at: ${process.env.APP_URL || 'https://vixy.ai'}`,
+      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\n👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/#pricing)**`,
       ephemeral: true,
     });
   } else if (commandName === 'leaderboard') {
@@ -246,11 +247,28 @@ export async function initializeDiscordBot(): Promise<boolean> {
       botState.guildCount = client.guilds.cache.size;
       botState.mode = 'ACTIVE_BOT';
 
-      // Set bot presence
+      // Set initial bot presence and start rotation ticker
+      const presenceActivities = [
+        'Scanning Global Markets',
+        'Watching Institutional Order Flow',
+        'Analyzing BTC Liquidity',
+      ];
+      let presenceIdx = 0;
+
       client.user.setPresence({
-        activities: [{ name: 'VIXY AI Prediction Signals | /predict', type: 3 }],
+        activities: [{ name: presenceActivities[0], type: 3 }],
         status: 'online',
       });
+
+      setInterval(() => {
+        if (discordClient && discordClient.user) {
+          presenceIdx = (presenceIdx + 1) % presenceActivities.length;
+          discordClient.user.setPresence({
+            activities: [{ name: presenceActivities[presenceIdx], type: 3 }],
+            status: 'online',
+          });
+        }
+      }, 180000); // Rotate presence every 3 minutes
 
       // Register slash commands if Client ID is provided
       if (clientId) {

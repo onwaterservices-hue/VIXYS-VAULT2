@@ -509,18 +509,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         lockEvaluation={lockEvaluation}
       />
 
-      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProtectionBrain signal={signal} ticker={ticker} />
-        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
-      </div>
-
-      {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ExecutionBrain signal={signal} ticker={ticker} />
-        <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
-      </div>
-
       {/* PROMINENT LIVE CANDLESTICK CHART */}
       <div className="space-y-4">
         <CandleChart
@@ -534,6 +522,18 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           }}
           predictedDirection={signal.direction}
         />
+      </div>
+
+      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProtectionBrain signal={signal} ticker={ticker} />
+        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
+      </div>
+
+      {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ExecutionBrain signal={signal} ticker={ticker} />
+        <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
       </div>
 
       {/* 4. ADVANCED QUANT INTELLIGENCE TOGGLE (PROGRESSIVE DISCLOSURE ACCORDION) */}

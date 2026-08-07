@@ -96,13 +96,13 @@ export class DiscordConfigService {
         isEliteOnly: false,
       },
 
-      // VIXY Live Intelligence (Free Funnel Layer - Leaves Info Gap)
+      // VIXY Live Intelligence (Free Funnel Layer)
       marketAnalysis: {
         id: env.DISCORD_CHANNEL_MARKET_ANALYSIS,
         name: '📊 market-analysis',
         category: 'FREE_INTELLIGENCE',
         isEliteOnly: false,
-        webhookUrl: env.DISCORD_WEBHOOK_URL,
+        webhookUrl: env.DISCORD_WEBHOOK_ANALYSIS || env.DISCORD_WEBHOOK_URL,
       },
       aiSignals: {
         id: env.DISCORD_CHANNEL_AI_SIGNALS,
@@ -125,6 +125,13 @@ export class DiscordConfigService {
         isEliteOnly: false,
         webhookUrl: env.DISCORD_WEBHOOK_BREAKING || env.DISCORD_WEBHOOK_URL,
       },
+      vixysProtection: {
+        id: process.env.DISCORD_CHANNEL_PROTECTION || '',
+        name: '🛡️ vixys-protection',
+        category: 'FREE_INTELLIGENCE',
+        isEliteOnly: false,
+        webhookUrl: env.DISCORD_WEBHOOK_PROTECTION || env.DISCORD_WEBHOOK_URL,
+      },
 
       // ELITE CATEGORY LAYER (UNLOCKED FOR PRO MEMBERS)
       premiumSignals: {
@@ -133,6 +140,27 @@ export class DiscordConfigService {
         category: 'ELITE',
         isEliteOnly: true,
         webhookUrl: env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
+      },
+      aiTerminal: {
+        id: process.env.DISCORD_CHANNEL_AI_TERMINAL || '',
+        name: '🧠 ai-terminal',
+        category: 'ELITE',
+        isEliteOnly: true,
+        webhookUrl: env.DISCORD_WEBHOOK_TERMINAL || env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
+      },
+      analytics: {
+        id: process.env.DISCORD_CHANNEL_ANALYTICS || '',
+        name: '📊 analytics',
+        category: 'ELITE',
+        isEliteOnly: true,
+        webhookUrl: env.DISCORD_WEBHOOK_ANALYTICS || env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
+      },
+      flowForge: {
+        id: env.DISCORD_CHANNEL_INSTITUTIONAL_ORDER_FLOW || '',
+        name: '⚡ flow-forge',
+        category: 'ELITE',
+        isEliteOnly: true,
+        webhookUrl: env.DISCORD_WEBHOOK_FLOW || env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
       },
       eliteAnalysis: {
         id: env.DISCORD_CHANNEL_ELITE_ANALYSIS,
@@ -146,7 +174,7 @@ export class DiscordConfigService {
         name: '🔒 institutional-order-flow',
         category: 'ELITE',
         isEliteOnly: true,
-        webhookUrl: env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
+        webhookUrl: env.DISCORD_WEBHOOK_FLOW || env.DISCORD_WEBHOOK_VIP || env.DISCORD_WEBHOOK_URL,
       },
       liquidityMap: {
         id: env.DISCORD_CHANNEL_LIQUIDITY_MAP,
@@ -172,14 +200,21 @@ export class DiscordConfigService {
       // Logs & Diagnostics
       auditLogs: {
         id: env.DISCORD_CHANNEL_AUDIT_LOGS,
-        name: '🛡 audit-logs',
+        name: '🔒 audit-logs',
+        category: 'LOGS',
+        isEliteOnly: true,
+        webhookUrl: env.DISCORD_WEBHOOK_LOGS || env.DISCORD_WEBHOOK_URL,
+      },
+      botLogs: {
+        id: process.env.DISCORD_CHANNEL_BOT_LOGS || '',
+        name: '🤖 bot-logs',
         category: 'LOGS',
         isEliteOnly: true,
         webhookUrl: env.DISCORD_WEBHOOK_LOGS || env.DISCORD_WEBHOOK_URL,
       },
       errorLogs: {
         id: env.DISCORD_CHANNEL_ERROR_LOGS,
-        name: '🚨 error-logs',
+        name: '⚠️ error-logs',
         category: 'LOGS',
         isEliteOnly: true,
         webhookUrl: env.DISCORD_WEBHOOK_LOGS || env.DISCORD_WEBHOOK_URL,

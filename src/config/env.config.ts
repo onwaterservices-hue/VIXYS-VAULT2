@@ -55,7 +55,12 @@ export const EnvSchema = z.object({
   DISCORD_WEBHOOK_SIGNALS: z.string().optional().default(''),
   DISCORD_WEBHOOK_WHALE: z.string().optional().default(''),
   DISCORD_WEBHOOK_BREAKING: z.string().optional().default(''),
+  DISCORD_WEBHOOK_PROTECTION: z.string().optional().default(''),
+  DISCORD_WEBHOOK_ANALYSIS: z.string().optional().default(''),
   DISCORD_WEBHOOK_VIP: z.string().optional().default(''),
+  DISCORD_WEBHOOK_TERMINAL: z.string().optional().default(''),
+  DISCORD_WEBHOOK_FLOW: z.string().optional().default(''),
+  DISCORD_WEBHOOK_ANALYTICS: z.string().optional().default(''),
   DISCORD_WEBHOOK_LOGS: z.string().optional().default(''),
 
   // 7. Discord Roles

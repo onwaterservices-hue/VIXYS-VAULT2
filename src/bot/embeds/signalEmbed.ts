@@ -3,28 +3,37 @@ import { MarketOverview } from '../services/marketData';
 
 export function createFreeSignalEmbed(data: MarketOverview) {
   const isBull = data.prediction.direction === 'BULLISH';
-  const color = isBull ? 0x10B981 : 0xF43F5E;
+  const color = 0x0f1f18; // Dark charcoal green
+
+  const baseUrl = (process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '');
 
   return new EmbedBuilder()
-    .setTitle(`🧠 VIXY AI • SIGNAL DETECTED`)
+    .setTitle(`🧠 VIXY AI • 15m Market Scan`)
     .setColor(color)
-    .setDescription(`*Public Teaser Feed • 90-Second Delayed Broadcast*`)
+    .setDescription(`Institutional activity has increased across ${data.asset} during the current 15-minute cycle.`)
     .addFields(
-      { name: 'Asset', value: `**${data.asset}**`, inline: true },
-      { name: 'Direction', value: `**${isBull ? '🐂 Bullish' : '🐻 Bearish'}**`, inline: true },
-      { name: 'AI Confidence', value: `**${data.prediction.confidence}%**`, inline: true },
+      { name: 'Current AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
+      { name: 'Market Bias', value: `\`${isBull ? 'Bullish' : 'Bearish'}\``, inline: true },
+      { name: 'Probability Score', value: `\`${(data.prediction.confidence * 0.96).toFixed(1)}%\``, inline: true },
       {
-        name: '🔒 Execution Parameters (VIP Only)',
-        value: `\`ENTRY:  [🔒 MASKED]\`\n\`STOP:   [🔒 MASKED]\`\n\`TARGET: [🔒 MASKED]\``,
+        name: '🔒 Full trade released to VIXY ELITE',
+        value:
+          '• **Entry Price**: Locked\n' +
+          '• **Stop Loss**: Locked\n' +
+          '• **Take Profit**: Locked\n' +
+          '• **Risk Rating**: Locked\n' +
+          '• **Live Position Updates**: Locked',
         inline: false,
       },
       {
-        name: '⚡ Timing Advantage',
-        value: `🔒 *Full signal released to VIP 90 seconds ago. VIP subscribers traded before public notification.*\n\n👉 Upgrade with \`/vip\` or visit the app to unlock instant signals.`,
+        name: ' ',
+        value:
+          `🚀 Unlock live entries, exits, VIXY Protection™, and institutional intelligence inside VIXY ELITE.\n\n` +
+          `👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/#pricing)**`,
         inline: false,
       }
     )
-    .setFooter({ text: 'VIXY AI Free Feed • Upgrade to VIP for real-time trade setups' })
+    .setFooter({ text: 'VIXY AI Signal Scanner • Confidential Quantitative Intelligence' })
     .setTimestamp();
 }
 

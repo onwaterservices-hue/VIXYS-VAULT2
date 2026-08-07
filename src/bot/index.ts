@@ -145,7 +145,7 @@ async function handleInteraction(interaction: Interaction) {
         `• **Full Trade Parameters**: Exact Entry, Stop-Loss, and Take-Profit Targets\n` +
         `• **Flow-Forge Core**: Order blocks, liquidity sweeps, and taker absorption\n` +
         `• **Final-Lock Predictions**: Highest-confidence contract settlement calls\n\n` +
-        `👉 Upgrade instantly at: ${process.env.APP_URL || 'https://vixy.ai'}`,
+        `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '')}/#pricing)**`,
       ephemeral: true,
     });
   } else if (commandName === 'leaderboard') {
