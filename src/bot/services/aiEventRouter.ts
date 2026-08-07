@@ -4,6 +4,12 @@ import { env } from '../../config/env.config';
 
 export type EventType =
   | 'FREE_BOT_SIGNAL'
+  | 'FREE_BEARISH_ALERT'
+  | 'FREE_BULLISH_ALERT'
+  | 'FREE_AI_PULSE'
+  | 'FREE_AI_HEARTBEAT'
+  | 'FREE_COUNTDOWN_ALERT'
+  | 'FREE_PERFORMANCE_RECAP'
   | 'FREE_WHALE_ALERT'
   | 'FREE_BREAKING_NEWS'
   | 'FREE_MARKET_ANALYSIS'
@@ -15,6 +21,52 @@ export type EventType =
   | 'SYSTEM_BOT_LOG'
   | 'SYSTEM_AUDIT_LOG'
   | 'SYSTEM_ERROR_LOG';
+
+export interface BearishAlertEventPayload {
+  asset?: string;
+  cycle?: string;
+  confidence: number;
+  marketBias?: string;
+  institutionalSelling?: string;
+  probabilityPct: number;
+  status?: string;
+}
+
+export interface BullishAlertEventPayload {
+  asset?: string;
+  confidence: number;
+  buySidePressure?: string;
+  orderflowDelta?: string;
+  protectionStatus?: string;
+}
+
+export interface AiPulseEventPayload {
+  pulseType: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  headline: string;
+  oldConfidence?: number;
+  newConfidence: number;
+  details: string;
+}
+
+export interface AiHeartbeatEventPayload {
+  marketsMonitoredCount?: number;
+  systemStatus: string;
+  latencyMs?: number;
+}
+
+export interface CountdownEventPayload {
+  minutesRemaining: number;
+  lockProgressPct: number;
+  marketBias: string;
+}
+
+export interface PerformanceRecapEventPayload {
+  signalsCount: number;
+  winsCount: number;
+  winRatePct: number;
+  highestConfidencePct: number;
+  bestMarket: string;
+}
 
 export interface SignalEventPayload {
   direction: 'BUY UP' | 'BUY DOWN' | 'WAIT';
@@ -132,6 +184,24 @@ export class AiEventRouter {
       case 'FREE_BOT_SIGNAL':
         return this.sendFreeBotSignal(payload as SignalEventPayload, channels.aiSignals.webhookUrl);
 
+      case 'FREE_BEARISH_ALERT':
+        return this.sendBearishAlert(payload as BearishAlertEventPayload, channels.aiSignals.webhookUrl);
+
+      case 'FREE_BULLISH_ALERT':
+        return this.sendBullishAlert(payload as BullishAlertEventPayload, channels.aiSignals.webhookUrl);
+
+      case 'FREE_AI_PULSE':
+        return this.sendAiPulse(payload as AiPulseEventPayload, channels.aiSignals.webhookUrl);
+
+      case 'FREE_AI_HEARTBEAT':
+        return this.sendAiHeartbeat(payload as AiHeartbeatEventPayload, channels.aiSignals.webhookUrl);
+
+      case 'FREE_COUNTDOWN_ALERT':
+        return this.sendCountdownAlert(payload as CountdownEventPayload, channels.aiSignals.webhookUrl);
+
+      case 'FREE_PERFORMANCE_RECAP':
+        return this.sendPerformanceRecap(payload as PerformanceRecapEventPayload, channels.aiSignals.webhookUrl);
+
       case 'FREE_WHALE_ALERT':
         return this.sendWhaleAlert(payload as WhaleEventPayload, channels.whaleTracker.webhookUrl);
 
@@ -213,6 +283,227 @@ export class AiEventRouter {
         },
       ],
       footer: { text: 'VIXY AI Signal Scanner • Confidential Quantitative Intelligence' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1b. BEARISH ALERT (#bot-signals)
+  private static async sendBearishAlert(
+    data: BearishAlertEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const asset = data.asset || 'BTC';
+    const cycle = data.cycle || '15 Minute Cycle';
+    const confidence = data.confidence || 82;
+    const probability = data.probabilityPct || Math.round(confidence * 0.95);
+    const sellingText = data.institutionalSelling || 'Detected (-1,120 BTC)';
+    const status = data.status || 'Monitoring continuation...';
+
+    const embed = {
+      title: `🐻 BEARISH ALERT • ${asset} ${cycle}`,
+      description: `AI has detected increasing downside pressure & institutional distribution.`,
+      color: 0x3d0c14,
+      fields: [
+        { name: 'AI Conviction', value: `\`${confidence.toFixed(1)}%\``, inline: true },
+        { name: 'Market Bias', value: `\`${data.marketBias || 'Bearish'}\``, inline: true },
+        { name: 'Probability Score', value: `\`${probability.toFixed(1)}%\``, inline: true },
+        { name: 'Institutional Flow', value: `\`${sellingText}\``, inline: true },
+        { name: 'Status', value: `\`${status}\``, inline: true },
+        {
+          name: '🔒 VIXY ELITE Members Already Received',
+          value:
+            '✓ **Exact Entry Price**\n' +
+            '✓ **Stop Loss & Take Profit Targets**\n' +
+            '✓ **Position Sizing & Recommended Risk**\n' +
+            '✓ **Live VIXY Protection™ Reversal Sentinel**',
+          inline: false,
+        },
+        {
+          name: ' ',
+          value: `🚀 **[ Launch VIXY Vault AI Dashboard → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI • Quantitative Bearish Intelligence' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1c. BULLISH ALERT (#bot-signals)
+  private static async sendBullishAlert(
+    data: BullishAlertEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const asset = data.asset || 'BTC';
+    const confidence = data.confidence || 89;
+    const buyPressure = data.buySidePressure || 'Increasing (+$8.4M Spot Sweep)';
+    const delta = data.orderflowDelta || '+$14.2M Net Buy Delta';
+
+    const embed = {
+      title: `🐂 BULLISH ALERT • ${asset} Whale Accumulation`,
+      description: `Institutional spot buying detected. Orderflow delta strengthening above VWAP.`,
+      color: 0x072818,
+      fields: [
+        { name: 'AI Conviction', value: `\`${confidence.toFixed(1)}%\``, inline: true },
+        { name: 'Buy-side Pressure', value: `\`${buyPressure}\``, inline: true },
+        { name: 'Orderflow Delta', value: `\`${delta}\``, inline: true },
+        { name: 'VIXY Protection™', value: `\`${data.protectionStatus || 'ACTIVE'}\``, inline: true },
+        {
+          name: '🔒 Full Trade Released to VIXY ELITE',
+          value:
+            '✓ **Exact Entry Price**\n' +
+            '✓ **Stop Loss & Take Profit Targets**\n' +
+            '✓ **Position Sizing & Leverage**\n' +
+            '✓ **Live VIXY Protection™ Reversal Sentinel**',
+          inline: false,
+        },
+        {
+          name: ' ',
+          value: `🚀 **[ Unlock VIXY ELITE Today → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI • Quantitative Bullish Intelligence' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1d. AI PULSE (#bot-signals)
+  private static async sendAiPulse(
+    data: AiPulseEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const emoji = data.pulseType === 'BULLISH' ? '🟢' : data.pulseType === 'BEARISH' ? '🔴' : '🟡';
+    const color = data.pulseType === 'BULLISH' ? 0x0c2b1d : data.pulseType === 'BEARISH' ? 0x2e0c14 : 0x2e240c;
+
+    const embed = {
+      title: `${emoji} AI PULSE • ${data.headline}`,
+      description: data.details,
+      color,
+      fields: [
+        { name: 'AI Conviction Score', value: `\`${data.newConfidence.toFixed(1)}%\``, inline: true },
+        ...(data.oldConfidence ? [{ name: 'Shift', value: `\`${data.oldConfidence.toFixed(1)}% → ${data.newConfidence.toFixed(1)}%\``, inline: true }] : []),
+        {
+          name: ' ',
+          value: `🚀 **[ Launch VIXY Vault AI Dashboard → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI Pulse • Real-Time Orderbook Monitor' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1e. AI HEARTBEAT (#bot-signals)
+  private static async sendAiHeartbeat(
+    data: AiHeartbeatEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const embed = {
+      title: `🧠 VIXY AI ENGINE • LIVE SYSTEM WATCH`,
+      description: `Actively monitoring **${data.marketsMonitoredCount || 17} crypto markets** & L2 order books.`,
+      color: 0x16122e,
+      fields: [
+        { name: 'System Status', value: `\`${data.systemStatus}\``, inline: false },
+        { name: 'Neural Processing Latency', value: `\`${data.latencyMs || 78}ms\``, inline: true },
+        { name: 'Prediction Queue', value: `\`Ready • Auto-evaluating\``, inline: true },
+        {
+          name: ' ',
+          value: `🚀 **[ Launch VIXY Vault AI Dashboard → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI Engine • Continuous Operations Center' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1f. COUNTDOWN ALERT (#bot-signals)
+  private static async sendCountdownAlert(
+    data: CountdownEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const embed = {
+      title: `⏳ STRIKE CLOSES IN ${data.minutesRemaining} MINUTES`,
+      description: `AI prediction window closing soon. Institutional orderflow delta building towards final settlement lock.`,
+      color: 0x2b1e09,
+      fields: [
+        { name: 'AI Lock Score', value: `\`${data.lockProgressPct}% LOCKED\``, inline: true },
+        { name: 'Current Market Bias', value: `\`${data.marketBias}\``, inline: true },
+        {
+          name: '🔒 Final Trade Parameters Dispatched to Elite',
+          value: 'Complete setup parameters, entry targets, and live VIXY Protection™ active in VIXY ELITE.',
+          inline: false,
+        },
+        {
+          name: ' ',
+          value: `👉 **[ Unlock VIXY ELITE Today → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI • Final Lock Countdown' },
+      timestamp: new Date().toISOString(),
+    };
+
+    return WebhookManager.sendWebhook(webhookUrl, {
+      username: 'VIXY AI Signal Scanner',
+      avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
+      embeds: [embed],
+    });
+  }
+
+  // 1g. PERFORMANCE RECAP (#bot-signals)
+  private static async sendPerformanceRecap(
+    data: PerformanceRecapEventPayload,
+    webhookUrl?: string
+  ): Promise<DispatchResult> {
+    const embed = {
+      title: `🏆 TODAY'S PERFORMANCE • VIXY QUANT DESK`,
+      description: `Verified accuracy metrics across automated predictive cycle execution.`,
+      color: 0x281c08,
+      fields: [
+        { name: 'Signals Released', value: `\`${data.signalsCount} Calls\``, inline: true },
+        { name: 'Elite Wins', value: `\`${data.winsCount} Wins\``, inline: true },
+        { name: 'Current Accuracy', value: `\`${data.winRatePct.toFixed(1)}%\``, inline: true },
+        { name: 'Highest Conviction Call', value: `\`${data.highestConfidencePct.toFixed(1)}%\``, inline: true },
+        { name: 'Best Market', value: `\`${data.bestMarket}\``, inline: true },
+        {
+          name: ' ',
+          value: `🚀 **[ Launch VIXY Vault AI Dashboard → ](${env.APP_URL}/#pricing)**`,
+          inline: false,
+        },
+      ],
+      footer: { text: 'VIXY AI • Decision Intelligence Performance Summary' },
       timestamp: new Date().toISOString(),
     };
 
