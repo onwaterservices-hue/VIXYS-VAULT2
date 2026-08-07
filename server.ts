@@ -2088,9 +2088,11 @@ const userDiscordProfiles = new Map<string, DiscordAuthProfile>();
 
 // DISCORD OAUTH AUTHORIZATION URL ENDPOINT
 app.get('/api/auth/discord/url', (req, res) => {
-  const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
-  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin.replace(/\/$/, '')}/auth/discord/callback`;
+  // Enforce process.env.DISCORD_REDIRECT_URI exclusively as single source of truth
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback';
   const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
+
+  console.log("OAuth redirect_uri being sent:", redirectUri);
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -2101,6 +2103,9 @@ app.get('/api/auth/discord/url', (req, res) => {
   });
 
   const url = `https://discord.com/oauth2/authorize?${params.toString()}`;
+
+  console.log('[Discord OAuth Audit] Exact Generated Authorization URL:', url);
+  console.log('[Discord OAuth Audit] Enforced Redirect URI:', redirectUri);
 
   res.json({
     url,
@@ -2113,8 +2118,9 @@ app.get('/api/auth/discord/url', (req, res) => {
 // DISCORD OAUTH CALLBACK HANDLER (POPUP POSTMESSAGE)
 app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord/callback'], async (req, res) => {
   const { code, error, error_description } = req.query;
-  const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
-  const redirectUri = process.env.DISCORD_REDIRECT_URI || `${origin.replace(/\/$/, '')}/auth/discord/callback`;
+  const redirectUri = process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback';
+
+  console.log("OAuth redirect_uri being sent for token exchange:", redirectUri);
 
   if (error || !code) {
     return res.send(`
@@ -2501,6 +2507,7 @@ async function startServer() {
   if (!process.env.VERCEL) {
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
+      console.log("Discord Redirect URI:", process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback');
     });
   }
 }
