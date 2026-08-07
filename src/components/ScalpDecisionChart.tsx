@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -195,73 +195,78 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         }
       });
 
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@trade`);
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@trade`);
 
-    ws.onopen = () => {
-      if (!isCancelled) setWsStatus('CONNECTED');
-    };
+      ws.onopen = () => {
+        if (!isCancelled) setWsStatus('CONNECTED');
+      };
 
-    ws.onclose = () => {
-      if (!isCancelled) setWsStatus('RECONNECTING');
-    };
+      ws.onclose = () => {
+        if (!isCancelled) setWsStatus('RECONNECTING');
+      };
 
-    ws.onerror = () => {
-      if (!isCancelled) setWsStatus('RECONNECTING');
-    };
+      ws.onerror = () => {
+        if (!isCancelled) setWsStatus('RECONNECTING');
+      };
 
-    ws.onmessage = (event) => {
-      if (isCancelled) return;
-      try {
-        const trade = JSON.parse(event.data);
-        if (trade && trade.p) {
-          const p = parseFloat(trade.p);
-          const isBuyer = !trade.m; // true if buyer was maker or taker
-          const qty = parseFloat(trade.q || '0.1');
+      ws.onmessage = (event) => {
+        if (isCancelled) return;
+        try {
+          const trade = JSON.parse(event.data);
+          if (trade && trade.p) {
+            const p = parseFloat(trade.p);
+            const isBuyer = !trade.m; // true if buyer was maker or taker
+            const qty = parseFloat(trade.q || '0.1');
 
-          setCurrentPrice(p);
+            setCurrentPrice(p);
 
-          // Smoothly drift probability
-          setUpProbability((prev) => {
-            const shift = (isBuyer ? 0.3 : -0.3) + (Math.random() - 0.49) * 0.4;
-            return Math.min(94, Math.max(22, Math.round(prev + shift)));
-          });
+            // Smoothly drift probability
+            setUpProbability((prev) => {
+              const shift = (isBuyer ? 0.3 : -0.3) + (Math.random() - 0.49) * 0.4;
+              return Math.min(94, Math.max(22, Math.round(prev + shift)));
+            });
 
-          // Append or update current 5-second candle
-          setCandles((prev) => {
-            if (prev.length === 0) return prev;
-            const last = { ...prev[prev.length - 1] };
-            const now = Date.now();
+            // Append or update current 5-second candle
+            setCandles((prev) => {
+              if (prev.length === 0) return prev;
+              const last = { ...prev[prev.length - 1] };
+              const now = Date.now();
 
-            if (now - last.time > 5000) {
-              // Create new candle
-              const newCandle: Candle = {
-                time: now,
-                open: last.close,
-                high: Math.max(last.close, p),
-                low: Math.min(last.close, p),
-                close: p,
-                volume: qty,
-                takerBuyRatio: isBuyer ? 0.65 : 0.35,
-              };
-              const updated = [...prev.slice(1), newCandle];
-              return updated;
-            } else {
-              // Update last candle
-              last.high = Math.max(last.high, p);
-              last.low = Math.min(last.low, p);
-              last.close = p;
-              last.volume += qty;
-              last.takerBuyRatio = (last.takerBuyRatio * 4 + (isBuyer ? 1 : 0)) / 5;
-              const updated = [...prev];
-              updated[updated.length - 1] = last;
-              return updated;
-            }
-          });
+              if (now - last.time > 5000) {
+                // Create new candle
+                const newCandle: Candle = {
+                  time: now,
+                  open: last.close,
+                  high: Math.max(last.close, p),
+                  low: Math.min(last.close, p),
+                  close: p,
+                  volume: qty,
+                  takerBuyRatio: isBuyer ? 0.65 : 0.35,
+                };
+                const updated = [...prev.slice(1), newCandle];
+                return updated;
+              } else {
+                // Update last candle
+                last.high = Math.max(last.high, p);
+                last.low = Math.min(last.low, p);
+                last.close = p;
+                last.volume += qty;
+                last.takerBuyRatio = (last.takerBuyRatio * 4 + (isBuyer ? 1 : 0)) / 5;
+                const updated = [...prev];
+                updated[updated.length - 1] = last;
+                return updated;
+              }
+            });
+          }
+        } catch (err) {
+          // Parse error ignored
         }
-      } catch (err) {
-        // Parse error ignored
-      }
-    };
+      };
+    } catch (_) {
+      if (!isCancelled) setWsStatus('RECONNECTING');
+    }
 
     // Live tick simulator interval to ensure continuous chart motion regardless of network
     const liveTickTimer = setInterval(() => {
@@ -287,19 +292,115 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     return () => {
       isCancelled = true;
       clearInterval(liveTickTimer);
-      ws.onopen = null;
-      ws.onclose = null;
-      ws.onerror = null;
-      ws.onmessage = null;
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.close();
-      } else if (ws.readyState === WebSocket.CONNECTING) {
-        ws.onopen = () => {
-          try { ws.close(); } catch (_) {}
-        };
+      if (ws) {
+        ws.onopen = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        try {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
+        } catch (_) {}
       }
     };
   }, [binanceSymbol]);
+
+  // Live Connector Effect: Reactively update Timeline, Velocity, Driver Chips & Events
+  const lastProbRef = useRef<number>(upProbability);
+  const probHistoryRef = useRef<{ time: number; value: number }[]>([
+    { time: Date.now() - 1800000, value: 47 },
+    { time: Date.now() - 900000, value: 59 },
+    { time: Date.now() - 600000, value: 68 },
+    { time: Date.now() - 300000, value: 61 },
+    { time: Date.now() - 120000, value: 67 },
+    { time: Date.now(), value: upProbability },
+  ]);
+
+  useEffect(() => {
+    const now = Date.now();
+    const history = probHistoryRef.current;
+
+    history.push({ time: now, value: upProbability });
+    if (history.length > 60) history.shift();
+
+    const twoMinAgo = history.find((h) => now - h.time >= 120000) || history[0];
+    const diff2m = upProbability - twoMinAgo.value;
+    const velVal = (diff2m / 2).toFixed(1);
+
+    setMomentumDelta(`${diff2m >= 0 ? '▲ +' : '▼ '}${diff2m.toFixed(1)}% (2m)`);
+    setVelocity(`${diff2m >= 0 ? '+' : ''}${velVal}% / min`);
+
+    if (diff2m > 3.0) setMomentumStatus('Momentum Accelerating');
+    else if (diff2m > 0.5) setMomentumStatus('Strength Rising');
+    else if (diff2m < -3.0) setMomentumStatus('High Downside Pressure');
+    else if (diff2m < -0.5) setMomentumStatus('Probability Dipping');
+    else setMomentumStatus('Equilibrium Stable');
+
+    const p30m = history[0]?.value || 47;
+    const p15m = history[Math.floor(history.length * 0.25)]?.value || 59;
+    const p10m = history[Math.floor(history.length * 0.5)]?.value || 68;
+    const p5m = history[Math.floor(history.length * 0.75)]?.value || 61;
+    const p2m = twoMinAgo.value;
+
+    setProbabilityTimeline([
+      { label: '-30m', value: Math.round(p30m), isUp: p30m >= 50 },
+      { label: '-15m', value: Math.round(p15m), isUp: p15m >= 50 },
+      { label: '-10m', value: Math.round(p10m), isUp: p10m >= 50 },
+      { label: '-5m', value: Math.round(p5m), isUp: p5m >= 50 },
+      { label: '-2m', value: Math.round(p2m), isUp: p2m >= 50 },
+      { label: 'Now', value: upProbability, isUp: upProbability >= 50 },
+    ]);
+
+    const lastCandle = candles[candles.length - 1];
+    const takerRatio = lastCandle ? lastCandle.takerBuyRatio : 0.55;
+    const gap = currentPrice - strikePrice;
+
+    setDriverChips([
+      { label: takerRatio > 0.52 ? 'Net Taker Buy Dominance' : 'Taker Heavy Sell Delta', positive: takerRatio > 0.52 },
+      { label: gap >= 0 ? `Spot Above Strike (+$${gap.toFixed(2)})` : `Under Strike Gap (-$${Math.abs(gap).toFixed(2)})`, positive: gap >= 0 },
+      { label: upProbability >= 65 ? 'High AI Conviction Signal' : upProbability <= 35 ? 'Bearish Signal Dominance' : 'Equilibrium Orderbook', positive: upProbability >= 50 },
+      { label: 'Kalshi Options Gamma Alignment', positive: true },
+      { label: 'Sub-Second Microstructure Feed', positive: true },
+    ]);
+
+    const prevProb = lastProbRef.current;
+    const deltaShift = upProbability - prevProb;
+
+    if (Math.abs(deltaShift) >= 2) {
+      const isUp = deltaShift > 0;
+      const newEvt = {
+        id: String(Date.now()),
+        type: isUp ? ('up' as const) : ('down' as const),
+        change: `${isUp ? '+' : ''}${deltaShift.toFixed(1)}%`,
+        reason: isUp
+          ? (gap > 0 ? 'Strike Price Crossed Upside' : 'Institutional Buy Sweep Detected')
+          : (gap < 0 ? 'Strike Price Dropped Below Target' : 'Whale Sell Orderbook Pressure'),
+        timeAgo: 'Just now',
+      };
+
+      setConvictionEvents((prev) => [newEvt, ...prev.slice(0, 5)]);
+    }
+
+    lastProbRef.current = upProbability;
+  }, [upProbability, currentPrice, strikePrice, candles]);
+
+  // Compute smooth SVG sparkline path dynamically for AI Conviction Timeline
+  const { lineD, areaD } = useMemo(() => {
+    if (!probabilityTimeline || probabilityTimeline.length === 0) {
+      return { lineD: 'M 0,20 L 100,20', areaD: 'M 0,20 L 100,20 L 100,40 L 0,40 Z' };
+    }
+    const points = probabilityTimeline.map((pt, idx) => {
+      const x = (idx / (probabilityTimeline.length - 1)) * 100;
+      const clampedVal = Math.min(95, Math.max(15, pt.value));
+      const y = 38 - ((clampedVal - 15) / 80) * 34;
+      return { x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 };
+    });
+
+    const line = points.reduce((acc, p, i) => (i === 0 ? `M ${p.x},${p.y}` : `${acc} L ${p.x},${p.y}`), '');
+    const area = `${line} L 100,40 L 0,40 Z`;
+    return { lineD: line, areaD: area };
+  }, [probabilityTimeline]);
 
   // High-frame-rate Canvas Render Engine
   useEffect(() => {
@@ -847,20 +948,20 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                   <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 100 40">
                     <defs>
                       <linearGradient id="probGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#34d399" stopOpacity="0.4" />
-                        <stop offset="100%" stopColor="#34d399" stopOpacity="0.0" />
+                        <stop offset="0%" stopColor={upProbability >= 50 ? "#34d399" : "#f43f5e"} stopOpacity="0.4" />
+                        <stop offset="100%" stopColor={upProbability >= 50 ? "#34d399" : "#f43f5e"} stopOpacity="0.0" />
                       </linearGradient>
                     </defs>
                     {/* Area under curve */}
                     <path
-                      d="M 0,30 L 0,22 Q 20,10 40,5 T 80,12 L 100,2 L 100,40 L 0,40 Z"
+                      d={areaD}
                       fill="url(#probGradient)"
                     />
                     {/* Main stroke line */}
                     <path
-                      d="M 0,30 Q 20,10 40,5 T 80,12 L 100,2"
+                      d={lineD}
                       fill="none"
-                      stroke="#34d399"
+                      stroke={upProbability >= 50 ? "#34d399" : "#f43f5e"}
                       strokeWidth="2.5"
                       strokeLinecap="round"
                       className="drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]"
