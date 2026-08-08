@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
@@ -21,8 +22,9 @@ import { AutomationScheduler } from './src/bot/services/automationScheduler';
 let stripeClient: Stripe | null = null;
 
 function getStripe(): Stripe | null {
-  if (!stripeClient && process.env.STRIPE_SECRET_KEY) {
-    stripeClient = new Stripe(process.env.STRIPE_SECRET_KEY);
+  const rawKey = (process.env.STRIPE_SECRET_KEY || '').replace(/^["']|["']$/g, '').trim();
+  if (!stripeClient && rawKey) {
+    stripeClient = new Stripe(rawKey);
   }
   return stripeClient;
 }
@@ -884,9 +886,9 @@ app.post('/api/admin/resync-entitlement', requireRole(['OWNER', 'ADMIN']), async
 
 // Stripe Health & Diagnostics Endpoint (Safe Mode Detection)
 app.get('/api/stripe/health', (req, res) => {
-  const secretKey = process.env.STRIPE_SECRET_KEY || '';
-  const pubKey = process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || '';
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  const secretKey = (process.env.STRIPE_SECRET_KEY || '').replace(/^["']|["']$/g, '').trim();
+  const pubKey = (process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || '').replace(/^["']|["']$/g, '').trim();
+  const webhookSecret = (process.env.STRIPE_WEBHOOK_SECRET || '').replace(/^["']|["']$/g, '').trim();
 
   const secretKeyMode = secretKey.startsWith('sk_live_')
     ? 'live'
