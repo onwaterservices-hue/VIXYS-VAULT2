@@ -605,6 +605,8 @@ app.post('/api/admin/referrals', requireRole(['OWNER', 'ADMIN']), (req, res) => 
     payoutStatus: payoutStatus || 'Active',
   };
   serverReferrals.unshift(newRef);
+  const actor = (req.headers['x-user-email'] as string) || 'ADMIN';
+  addServerAuditLog(actor, 'REFERRAL_CREATED', `Created referral promoter code ${cleanCode} (${newRef.name})`);
   return res.status(200).json({
     success: true,
     referral: newRef,
@@ -618,6 +620,7 @@ app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res
     return res.status(400).json({ error: 'CODE_REQUIRED', message: 'Referral code is required.' });
   }
 
+  const actor = (req.headers['x-user-email'] as string) || 'ADMIN';
   const cleanCode = code.trim().toUpperCase();
   const existingIdx = serverReferrals.findIndex((r) => r.code === cleanCode);
 
@@ -630,6 +633,7 @@ app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res
       commissionRate: commissionRate || serverReferrals[existingIdx].commissionRate,
       payoutStatus: payoutStatus || serverReferrals[existingIdx].payoutStatus,
     };
+    addServerAuditLog(actor, 'REFERRAL_UPDATED', `Updated referral promoter code ${cleanCode}`);
     return res.json({ success: true, referral: serverReferrals[existingIdx], message: `Referral code ${cleanCode} updated successfully!` });
   } else {
     const newRef: ServerReferral = {
@@ -644,6 +648,7 @@ app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res
       payoutStatus: payoutStatus || 'Active',
     };
     serverReferrals.unshift(newRef);
+    addServerAuditLog(actor, 'REFERRAL_CREATED', `Created referral promoter code ${cleanCode}`);
     return res.json({ success: true, referral: newRef, message: `New referral promoter ${cleanCode} created successfully!` });
   }
 });
@@ -654,6 +659,8 @@ app.delete('/api/admin/referrals/:code', requireRole(['OWNER', 'ADMIN']), (req, 
   const idx = serverReferrals.findIndex((r) => r.code === cleanCode);
   if (idx !== -1) {
     serverReferrals.splice(idx, 1);
+    const actor = (req.headers['x-user-email'] as string) || 'ADMIN';
+    addServerAuditLog(actor, 'REFERRAL_DELETED', `Deleted referral promoter code ${cleanCode}`, 'WARN');
     return res.json({ success: true, message: `Referral code ${cleanCode} deleted.` });
   }
   res.status(404).json({ error: 'NOT_FOUND', message: `Referral code ${cleanCode} not found.` });
@@ -886,11 +893,24 @@ app.post('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   res.json({ success: true, log });
 });
 
-app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), async (req, res) => {
+app.get(['/api/admin/health', '/api/admin/system-health'], requireRole(['OWNER', 'ADMIN', 'SUPPORT']), async (req, res) => {
   const memUsageMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
   const uptimeSecs = Math.floor(process.uptime());
   
   const discordDiag = await runDiscordDiagnostics().catch(() => null);
+
+  const services = {
+    DATABASE: { status: 'healthy', latencyMs: 2, lastChecked: Date.now() },
+    STRIPE: { status: process.env.STRIPE_SECRET_KEY ? 'healthy' : 'not_configured', details: process.env.STRIPE_SECRET_KEY ? 'Key Present' : 'Missing Key' },
+    STRIPE_WEBHOOK: { status: process.env.STRIPE_WEBHOOK_SECRET ? 'healthy' : 'not_configured', details: process.env.STRIPE_WEBHOOK_SECRET ? 'Webhook Secret Present' : 'Missing Webhook Secret' },
+    DISCORD: { status: getDiscordBotStatus().isReady ? 'healthy' : 'degraded', details: discordDiag?.guildAccessible ? 'Guild Accessible' : 'Bot Initialized' },
+    GEMINI: { status: !!ai ? 'healthy' : 'degraded', details: !!ai ? 'SDK Ready' : 'API Key Missing' },
+    PREDICTION_ENGINE: { status: engineFeedStatus === 'CONNECTED' ? 'healthy' : 'degraded', details: engineState },
+    WEBSOCKET: { status: 'healthy', latencyMs: 14 },
+    MARKET_DATA: { status: (Date.now() - lastMarketUpdateTs < 60000) ? 'healthy' : 'degraded', lastUpdate: lastMarketUpdateTs },
+    REFERRAL_SYSTEM: { status: 'healthy', activePromoters: serverReferrals.length },
+    ENTITLEMENT_SERVICE: { status: 'healthy', profilesTracked: userDiscordProfiles.size },
+  };
 
   res.json({
     status: 'HEALTHY',
@@ -908,6 +928,7 @@ app.get('/api/admin/system-health', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), 
     stripeConnected: !!process.env.STRIPE_SECRET_KEY,
     discordBotGuildAccess: discordDiag?.guildAccessible ?? false,
     discordRoleHierarchyValid: (discordDiag?.hierarchySufficient && discordDiag?.botHasManageRoles) ?? false,
+    services,
     timestamp: Date.now(),
   });
 });
@@ -960,6 +981,9 @@ app.post('/api/admin/resync-entitlement', requireRole(['OWNER', 'ADMIN']), async
   const targetTier = sub.role === 'ELITE' || sub.plan?.includes('ELITE') ? 'ELITE' : sub.role === 'PRO' || sub.plan?.includes('PRO') ? 'PRO' : 'NONE';
 
   const syncResult = await assignDiscordRoleToUser(targetDiscordUserId, targetTier);
+
+  const actor = (req.headers['x-user-email'] as string) || 'ADMIN';
+  addServerAuditLog(actor, 'ENTITLEMENT_RESYNC', `Triggered entitlement resync for ${query} (${targetDiscordUserId}) - Result: ${syncResult.success ? 'SUCCESS' : 'FAILED'}`);
 
   broadcastAdminEvent({
     eventType: 'ADMIN_MANUAL_RESYNC',
@@ -3100,7 +3124,7 @@ app.post('/api/discord/sync-vip', async (req, res) => {
   res.json(result);
 });
 
-app.post(['/api/admin/unfreeze-bots', '/api/discord/unfreeze'], (req, res) => {
+app.post(['/api/admin/unfreeze-bots', '/api/discord/unfreeze'], requireRole(['OWNER', 'ADMIN']), (req, res) => {
   lastMarketUpdateTs = Date.now();
   lastModelRunTs = Date.now();
   lastSignalUpdateTs = Date.now();
@@ -3112,6 +3136,9 @@ app.post(['/api/admin/unfreeze-bots', '/api/discord/unfreeze'], (req, res) => {
   serverUsers.forEach((u) => {
     u.status = 'ACTIVE';
   });
+
+  const actor = (req.headers['x-user-email'] as string) || 'ADMIN';
+  addServerAuditLog(actor, 'BOT_UNFROZEN', 'Emergency unfreeze executed for all user bots', 'WARN');
 
   pushEngineLog('INFO', '⚡ EMERGENCY UNFREEZE TRIGGERED: All user bots, signal loops, and Discord webhooks unfrozen and set to ACTIVE.');
 

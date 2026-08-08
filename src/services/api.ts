@@ -800,7 +800,7 @@ export interface AdminDiagnosticsResponse {
 export async function fetchAdminDiagnostics(): Promise<AdminDiagnosticsResponse | null> {
   return await safeFetchJson<AdminDiagnosticsResponse>(`/api/admin/diagnostics?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
@@ -851,7 +851,7 @@ async function safeParseJson(res: Response) {
 export async function fetchDiscordDiagnostics() {
   return await safeFetchJson<any>(`/api/discord/diagnostics?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
@@ -859,7 +859,7 @@ export async function fetchAdminUsers() {
   try {
     const res = await fetch('/api/admin/users?_t=' + Date.now(), {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
+      headers: getAdminHeaders({ 'Cache-Control': 'no-cache' }),
     });
     if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
@@ -881,7 +881,7 @@ export async function createAdminUser(userData: {
   try {
     const res = await fetch('/api/admin/users/create', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify(userData),
     });
     return await safeParseJson(res);
@@ -895,7 +895,7 @@ export async function updateUserPassword(userId: string, newPassword: string) {
   try {
     const res = await fetch('/api/admin/users/password', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify({ userId, newPassword }),
     });
     return await safeParseJson(res);
@@ -909,7 +909,7 @@ export async function updateUserVerification(userId: string, status: 'VERIFIED' 
   try {
     const res = await fetch('/api/admin/users/verify', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify({ userId, status }),
     });
     return await safeParseJson(res);
@@ -984,14 +984,14 @@ export async function deleteAdminReferral(code: string) {
 export async function fetchAdminStats() {
   return await safeFetchJson<any>(`/api/admin/stats?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
 export async function fetchAdminTransactions() {
   return await safeFetchJson<any[]>(`/api/admin/transactions?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
@@ -999,7 +999,7 @@ export async function performUserAction(userId: string, action: string, extraPay
   try {
     const res = await fetch('/api/admin/users/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify({ userId, action, ...extraPayload }),
     });
     return await safeParseJson(res);
@@ -1012,35 +1012,35 @@ export async function performUserAction(userId: string, action: string, extraPay
 export async function fetchAdminAuditLogs() {
   return await safeFetchJson<any[]>(`/api/admin/audit-logs?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
 export async function fetchSystemHealth() {
   return await safeFetchJson<any>(`/api/admin/system-health?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
 export async function fetchAdminEventsApi() {
   return await safeFetchJson<any[]>(`/api/admin/events?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
 export async function fetchDiscordHealthApi() {
   return await safeFetchJson<any>(`/api/discord/health?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
 export async function fetchStripeHealthApi() {
   return await safeFetchJson<any>(`/api/stripe/health?_t=${Date.now()}`, {
     cache: 'no-store',
-    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
 }
 
@@ -1048,7 +1048,7 @@ export async function resyncEntitlementApi(identifier: string) {
   try {
     const res = await fetch('/api/admin/resync-entitlement', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify({ identifier }),
     });
     return await safeParseJson(res);
@@ -1062,11 +1062,9 @@ export async function unfreezeUserBotsApi() {
   try {
     const res = await fetch('/api/admin/unfreeze-bots', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
     });
-    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
-      return await res.json();
-    }
+    return await safeParseJson(res);
   } catch (err) {
     console.warn('Failed to dispatch unfreeze bots request to server', err);
   }
