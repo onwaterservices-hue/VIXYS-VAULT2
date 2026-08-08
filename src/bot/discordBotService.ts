@@ -398,7 +398,7 @@ export async function assignDiscordRoleToUser(
   targetTier: 'ELITE' | 'AI' | 'VERIFIED' | 'PRO' | 'NONE' = 'ELITE',
   guildIdOverride?: string
 ): Promise<{ success: boolean; message: string; details?: any; code?: string; roleId?: string; status?: string; retryAfter?: number }> {
-  const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const cacheKey = `${discordUserId}:${targetTier}:${targetGuildId}`;
 
   // 1. Check Short-Lived Server-Side Sync Cache (30s)
@@ -750,7 +750,7 @@ export async function getDiscordHealthReport(): Promise<{
   message: string;
 }> {
   const botToken = process.env.DISCORD_BOT_TOKEN;
-  const guildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
   const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
 
@@ -808,7 +808,7 @@ export async function runDiscordDiagnostics(): Promise<{
   diagnosticCode: string;
 }> {
   const botToken = process.env.DISCORD_BOT_TOKEN;
-  const guildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
   const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
   const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
