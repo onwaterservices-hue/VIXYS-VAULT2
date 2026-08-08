@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, Cpu, Radio, Activity, Zap } from 'lucide-react';
+import { Clock, Cpu, Radio, Activity, Zap, Lock, ShieldCheck, KeyRound } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 
 interface SignalBrainProps {
@@ -283,20 +283,94 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             <span className="text-[9px] text-purple-400/60 font-mono">Live Ticking</span>
           </div>
 
-          {/* VIXY Lock Evaluation Status */}
-          <div className="bg-[#080318] p-4 rounded-2xl border border-purple-800/70 shadow-xl flex flex-col justify-between">
-            <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
-              VIXY LOCK
-            </span>
-            <div className="my-1">
-              <span className="text-xl sm:text-2xl font-black text-cyan-300 font-mono block">
-                {lockScorePct}%
+          {/* VIXY Lock Evaluation Status - Hyper-Visible Cybernetic Lock Module */}
+          <div className={`p-4 rounded-2xl flex flex-col justify-between transition-all duration-500 relative overflow-hidden group ${
+            lockEvaluation.qualified
+              ? 'bg-gradient-to-br from-[#062c1d] via-[#051a13] to-[#020d09] border-2 border-emerald-400 shadow-[0_0_40px_rgba(16,185,129,0.7)]'
+              : 'bg-gradient-to-br from-[#071f30] via-[#091228] to-[#030312] border-2 border-cyan-400 shadow-[0_0_35px_rgba(6,182,212,0.6)] animate-pulse'
+          }`}>
+            {/* Ambient Radial Laser Glow */}
+            <div className={`absolute -top-12 -right-12 w-28 h-28 rounded-full pointer-events-none filter blur-xl opacity-80 ${
+              lockEvaluation.qualified ? 'bg-emerald-400 animate-ping' : 'bg-cyan-400 animate-pulse'
+            }`} />
+
+            {/* Header with Glowing Lock Icon */}
+            <div className="flex items-center justify-between text-[10px] font-mono font-black uppercase tracking-wider relative z-10">
+              <span className="flex items-center gap-1.5 bg-cyan-950/90 px-2.5 py-1 rounded-lg border border-cyan-400/80 shadow-[0_0_12px_rgba(34,211,238,0.5)]">
+                {lockEvaluation.qualified ? (
+                  <Lock className="w-3.5 h-3.5 text-emerald-300 animate-bounce" />
+                ) : (
+                  <KeyRound className="w-3.5 h-3.5 text-cyan-300 animate-spin" />
+                )}
+                <span className="bg-gradient-to-r from-cyan-200 via-teal-200 to-emerald-200 bg-clip-text text-transparent font-black tracking-widest text-[11px]">
+                  VIXY LOCK
+                </span>
               </span>
-              <span className="text-[10px] text-cyan-400 font-bold block mt-0.5">
-                {lockEvaluation.qualified ? 'DIRECTION LOCKED ✓' : 'SCANNING...'}
+
+              {/* Pulsing Beacon Signal */}
+              <span className="relative flex h-2.5 w-2.5">
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-80 ${
+                  lockEvaluation.qualified ? 'bg-emerald-400' : 'bg-cyan-400'
+                }`} />
+                <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${
+                  lockEvaluation.qualified ? 'bg-emerald-300 shadow-[0_0_10px_#10b981]' : 'bg-cyan-300 shadow-[0_0_10px_#06b6d4]'
+                }`} />
               </span>
             </div>
-            <span className="text-[9px] text-purple-400/60 font-mono">VIXY Engine 17</span>
+
+            {/* Big Electric Score Display */}
+            <div className="my-1.5 relative z-10 space-y-1">
+              <div className="flex items-baseline justify-between gap-1">
+                <span className={`text-2xl sm:text-3xl lg:text-4xl font-black font-mono tracking-tight block ${
+                  lockEvaluation.qualified
+                    ? 'text-emerald-300 drop-shadow-[0_0_20px_rgba(52,211,153,0.95)]'
+                    : 'text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.95)]'
+                }`}>
+                  {lockScorePct}%
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border shadow-lg ${
+                  lockEvaluation.qualified
+                    ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/90 shadow-emerald-500/40'
+                    : 'bg-cyan-500/30 text-cyan-200 border-cyan-400/90 shadow-cyan-500/40'
+                }`}>
+                  {lockEvaluation.qualified ? 'LOCKED ✓' : 'SCANNING'}
+                </span>
+              </div>
+
+              {/* Glowing 6-Block Lock Verification Strength Meter */}
+              <div className="space-y-0.5 pt-0.5">
+                <div className="flex justify-between items-center text-[9px] font-mono text-cyan-200/90 font-extrabold uppercase tracking-wider">
+                  <span>CRITERIA VERIFIED:</span>
+                  <span className="text-emerald-400 font-black">{checkCount}/{totalChecks}</span>
+                </div>
+                <div className="grid grid-cols-6 gap-1 p-1 bg-[#020108] rounded-md border border-cyan-500/50 shadow-inner">
+                  {Object.entries(lockEvaluation.checks).map(([key, value]) => (
+                    <div
+                      key={key}
+                      title={`${key.toUpperCase()}: ${value ? 'VERIFIED ✓' : 'PENDING'}`}
+                      className={`h-2 rounded-xs transition-all duration-300 ${
+                        value
+                          ? 'bg-gradient-to-t from-emerald-500 via-teal-300 to-cyan-200 shadow-[0_0_10px_rgba(52,211,153,0.9)] border border-emerald-300/80'
+                          : 'bg-purple-950/40 border border-purple-900/60'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Telemetry */}
+            <div className="flex items-center justify-between text-[9px] font-mono font-bold pt-1 border-t border-cyan-500/30 relative z-10">
+              <span className="text-cyan-300/90 flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                VIXY Engine 17
+              </span>
+              <span className={`font-black tracking-wider ${
+                lockEvaluation.qualified ? 'text-emerald-400 animate-pulse' : 'text-cyan-300'
+              }`}>
+                {lockEvaluation.qualified ? 'DIRECTION SECURED' : 'LOCKED GATE ACTIVE'}
+              </span>
+            </div>
           </div>
         </div>
       </div>

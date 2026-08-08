@@ -7,26 +7,29 @@ import './index.css';
 if (typeof window !== 'undefined') {
   const isWebSocketError = (err: any) => {
     if (!err) return false;
-    const str = String(err.message || err.reason || err || '').toLowerCase();
+    const str = String(err?.message || err?.reason || err?.stack || err?.type || err || '').toLowerCase();
     return (
       str.includes('websocket') ||
       str.includes('vite') ||
       str.includes('closed without opened') ||
-      str.includes('hmr')
+      str.includes('hmr') ||
+      str.includes('failed to connect')
     );
   };
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (isWebSocketError(event.reason)) {
+    if (isWebSocketError(event.reason) || isWebSocketError(event.promise) || isWebSocketError(event)) {
       event.preventDefault();
-      event.stopPropagation();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     }
   });
 
   window.addEventListener('error', (event) => {
-    if (isWebSocketError(event.error) || isWebSocketError(event.message)) {
+    if (isWebSocketError(event.error) || isWebSocketError(event.message) || isWebSocketError(event)) {
       event.preventDefault();
-      event.stopPropagation();
+      if (typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
     }
   });
 }

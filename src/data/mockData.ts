@@ -63,6 +63,14 @@ function generatePredictions(): HistoricalPrediction[] {
 
     const hashPart = Math.floor(random() * 0xffffff).toString(16).padStart(6, '0');
     const hashPart2 = Math.floor(random() * 0xffffff).toString(16).padStart(6, '0');
+    const platform = random() > 0.4 ? 'Kalshi' : 'Polymarket';
+    const modelProb = Math.round((confidence / 100) * 1000) / 1000;
+    const marketProb = Math.max(0.05, Math.round(((confidence - edge) / 100) * 1000) / 1000);
+    const modelVersion = i < 40 ? 'v4.3-INCREMENTAL' : i < 100 ? 'v4.2-STABLE' : 'v4.1-BASELINE';
+    const latencyMs = Math.floor(45 + random() * 110);
+    const qualityNumeric = Math.min(99, Math.floor(confidence * 0.85 + edge * 2));
+    const qualityScore: 'A+' | 'A' | 'B' | 'C' | 'D' =
+      qualityNumeric >= 92 ? 'A+' : qualityNumeric >= 84 ? 'A' : qualityNumeric >= 75 ? 'B' : qualityNumeric >= 65 ? 'C' : 'D';
 
     predictions.push({
       id: `SIG-${9950 - i}`,
@@ -70,14 +78,31 @@ function generatePredictions(): HistoricalPrediction[] {
       timestamp,
       asset,
       timeframe,
+      platform,
       targetPrice,
       actualClose,
       direction,
       confidence,
+      modelProbability: modelProb,
+      marketProbability: marketProb,
       edge,
       result: isWin ? 'WIN' : 'LOSS',
       pnlPct,
       hash: `0x${hashPart}...${hashPart2}`,
+      modelVersion,
+      latencyMs,
+      dataFreshnessMs: Math.floor(12 + random() * 40),
+      qualityScore,
+      qualityNumeric,
+      evaluationStatus: 'VERIFIED',
+      settlementTimestamp: timestamp + (timeframe === '15S' ? 15000 : timeframe === '15M' ? 900000 : 3600000),
+      reasoning: `${asset} ${timeframe} setup verified: Order flow delta +${(12 + random() * 15).toFixed(1)}%, VWAP anchor alignment, neural pattern match ${(85 + random() * 12).toFixed(1)}%.`,
+      featureSnapshot: {
+        orderFlowDelta: Math.round((0.12 + random() * 0.15) * 100) / 100,
+        neuralSimilarity: Math.round((0.85 + random() * 0.12) * 100) / 100,
+        vwapDistancePct: Math.round((0.02 + random() * 0.08) * 100) / 100,
+        institutionalVolume: Math.round(1400 + random() * 3200),
+      },
     });
   }
 

@@ -1,4 +1,4 @@
-export type SignalDirection = 'YES' | 'NO'; // YES = Bullish (Close higher), NO = Bearish (Close lower)
+export type SignalDirection = 'YES' | 'NO' | 'BUY_UP' | 'BUY_DOWN' | 'UP' | 'DOWN'; // YES/BUY_UP/UP = Bullish, NO/BUY_DOWN/DOWN = Bearish
 
 export interface BTCTicker {
   price: number;
@@ -80,16 +80,28 @@ export interface HistoricalPrediction {
   id: string;
   timeString: string;
   timestamp: number;
-  asset?: string; // e.g. 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE'
-  timeframe?: string; // e.g. '15M', '15S', '1H'
+  asset?: string; // e.g. 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'SUI'
+  timeframe?: string; // e.g. '15M', '15S', '1H', '5M', '4H'
+  platform?: string; // e.g. 'Kalshi', 'Polymarket'
   targetPrice: number;
   actualClose: number;
   direction: SignalDirection;
   confidence: number;
+  modelProbability?: number; // 0.0 - 1.0
+  marketProbability?: number; // 0.0 - 1.0
   edge: number;
-  result: 'WIN' | 'LOSS';
+  result: 'WIN' | 'LOSS' | 'OPEN' | 'LOCKED' | 'CANCELLED' | 'INSUFFICIENT DATA';
   pnlPct: number;
   hash: string;
+  modelVersion?: string; // e.g. 'v4.3-INCREMENTAL'
+  latencyMs?: number;
+  dataFreshnessMs?: number;
+  qualityScore?: 'A+' | 'A' | 'B' | 'C' | 'D';
+  qualityNumeric?: number;
+  featureSnapshot?: Record<string, number | string>;
+  reasoning?: string;
+  settlementTimestamp?: number;
+  evaluationStatus?: 'VERIFIED' | 'SIMULATED' | 'BACKTEST' | 'LIVE';
 }
 
 export interface JournalEntry {
