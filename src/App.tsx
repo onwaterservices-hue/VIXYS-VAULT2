@@ -365,6 +365,16 @@ export default function App() {
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
+        } else {
+          setAlertSettings((prev) => ({
+            ...prev,
+            discordLinked: false,
+            discordUsername: undefined,
+            discordUserId: undefined,
+            guildMember: false,
+            roleAssigned: 'NONE',
+            syncStatus: 'DISCONNECTED',
+          }));
         }
       } catch (e) {
         console.warn('Discord profile sync on mount notice:', e);
@@ -812,6 +822,8 @@ export default function App() {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');
                       }}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
 
@@ -822,6 +834,8 @@ export default function App() {
                       onUpgradeToPro={handleUpgradeToPro}
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
 
@@ -832,11 +846,18 @@ export default function App() {
                       selectedAsset={selectedAsset}
                       userRole={userRole}
                       onUpgradeToPro={handleUpgradeToPro}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
 
                   {activeTab === 'patterns' && (
-                    <AIPatternEngine ticker={ticker} timeframe={selectedTimeframe as any} />
+                    <AIPatternEngine
+                      ticker={ticker}
+                      timeframe={selectedTimeframe as any}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
+                    />
                   )}
 
                   {activeTab === 'whales' && (
@@ -845,6 +866,8 @@ export default function App() {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');
                       }}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
 
@@ -852,6 +875,8 @@ export default function App() {
                     <ExplainabilityVaultView
                       currentSymbol={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
+                      alertSettings={alertSettings}
+                      onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
 

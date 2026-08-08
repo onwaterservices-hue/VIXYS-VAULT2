@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
@@ -1259,53 +1260,20 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
       });
 
       // 5. Automate Discord VIP/Elite Sync
-      const profileByEmail = userDiscordProfiles.get(customerEmail);
-      const profileGlobal = userDiscordProfiles.get('global_active_user');
-      const discordUserId = session.metadata?.discordUserId || profileByEmail?.discordUserId || profileGlobal?.discordUserId;
-
-      if (discordUserId) {
-        broadcastAdminEvent({
-          eventType: 'DISCORD_ROLE_ASSIGN_STARTED',
-          userEmail: customerEmail,
-          discordUserId,
-          plan: roleToGrant,
-          status: 'PENDING',
-          message: `Initiating Discord ${roleToGrant} role assignment for ${discordUserId}`,
-        });
-
-        assignDiscordRoleToUser(discordUserId, roleToGrant as 'PRO' | 'ELITE')
-          .then((resSync) => {
-            if (resSync.success) {
-              broadcastAdminEvent({
-                eventType: 'DISCORD_ROLE_ASSIGNED',
-                userEmail: customerEmail,
-                discordUserId,
-                plan: roleToGrant,
-                status: 'SUCCESS',
-                message: `Discord role ${roleToGrant} successfully assigned to ${discordUserId}`,
-              });
-            } else {
-              broadcastAdminEvent({
-                eventType: 'DISCORD_ROLE_SYNC_FAILED',
-                userEmail: customerEmail,
-                discordUserId,
-                plan: roleToGrant,
-                status: 'WARN',
-                message: `Discord role sync failed for ${discordUserId}: ${resSync.message}`,
-              });
-            }
-          })
-          .catch((err) => {
-            broadcastAdminEvent({
-              eventType: 'DISCORD_ROLE_SYNC_FAILED',
-              userEmail: customerEmail,
-              discordUserId,
-              plan: roleToGrant,
-              status: 'FAILED',
-              message: `Discord sync exception for ${discordUserId}: ${err.message}`,
-            });
+      savePersistentStore();
+      syncUserEntitlementToDiscord(customerEmail)
+        .then((syncRes) => {
+          broadcastAdminEvent({
+            eventType: syncRes.success ? 'DISCORD_ROLE_ASSIGNED' : 'DISCORD_ROLE_SYNC_FAILED',
+            userEmail: customerEmail,
+            plan: roleToGrant,
+            status: syncRes.success ? 'SUCCESS' : 'WARN',
+            message: syncRes.message,
           });
-      }
+        })
+        .catch((err) => {
+          console.warn('[Stripe Webhook] Discord sync exception:', err);
+        });
 
       break;
     }
@@ -1327,6 +1295,7 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
         current.status = subStatus;
         current.updatedAt = new Date().toISOString();
         userSubscriptions.set(customerEmail, current);
+        savePersistentStore();
 
         const user = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
         if (user) {
@@ -1341,30 +1310,10 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           message: `Subscription status updated for ${customerEmail} to ${subStatus}`,
         });
 
-        // Trigger role sync if active
-        if (subStatus === 'ACTIVE') {
-          const profileByEmail = userDiscordProfiles.get(customerEmail);
-          const profileGlobal = userDiscordProfiles.get('global_active_user');
-          const discordUserId = profileByEmail?.discordUserId || profileGlobal?.discordUserId;
-
-          if (discordUserId) {
-            const targetTier = current.role === 'ELITE' || current.plan === 'ELITE_PASS' ? 'ELITE' : 'PRO';
-            assignDiscordRoleToUser(discordUserId, targetTier)
-              .then((resSync) => {
-                if (resSync.success) {
-                  broadcastAdminEvent({
-                    eventType: 'DISCORD_ROLE_ASSIGNED',
-                    userEmail: customerEmail,
-                    discordUserId,
-                    plan: targetTier,
-                    status: 'SUCCESS',
-                    message: `Discord role ${targetTier} verified/assigned for ${discordUserId}`,
-                  });
-                }
-              })
-              .catch(() => {});
-          }
-        }
+        // Idempotent entitlement sync to Discord
+        syncUserEntitlementToDiscord(customerEmail).catch((err) => {
+          console.warn('[Stripe Webhook] Subscription Discord sync exception:', err);
+        });
       }
       break;
     }
@@ -2421,28 +2370,172 @@ app.all('/api/cron/settle', (req, res) => {
   });
 });
 
-// DISCORD OAUTH2 AUTHENTICATION & IDENTITY STORE
+// DISCORD OAUTH2 AUTHENTICATION & PERSISTENT IDENTITY STORE
 interface DiscordAuthProfile {
+  vixyUserId?: string;
+  email?: string;
   discordUserId: string;
   discordUsername: string;
   discordGlobalName: string;
   discordAvatar: string | null;
+  discordLinked: boolean;
   guildMember: boolean;
   guildJoined: boolean;
+  roleAssigned?: string;
+  assignedRoleId?: string;
+  assignedRoleName?: string;
   guildRoles: string[];
   lastSync: string;
   subscriptionTier: string;
   verificationStatus: 'VERIFIED' | 'NEEDS_GUILD' | 'UNLINKED';
   connectedAt: string;
+  linkedAt?: string;
+  lastVerifiedAt?: string;
+  lastRoleSyncAt?: string;
 }
 
 const userDiscordProfiles = new Map<string, DiscordAuthProfile>();
+
+const STORE_FILE_PATH = path.join(process.cwd(), 'data', 'vixy_store.json');
+
+function savePersistentStore() {
+  try {
+    const dir = path.dirname(STORE_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const profilesObj: Record<string, any> = {};
+    userDiscordProfiles.forEach((val, key) => {
+      profilesObj[key] = val;
+    });
+    const subsObj: Record<string, any> = {};
+    userSubscriptions.forEach((val, key) => {
+      subsObj[key] = val;
+    });
+    fs.writeFileSync(STORE_FILE_PATH, JSON.stringify({ profiles: profilesObj, subscriptions: subsObj }, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('[Store] Notice saving store to disk:', err);
+  }
+}
+
+function loadPersistentStore() {
+  try {
+    if (fs.existsSync(STORE_FILE_PATH)) {
+      const raw = fs.readFileSync(STORE_FILE_PATH, 'utf-8');
+      const data = JSON.parse(raw);
+      if (data.profiles && typeof data.profiles === 'object') {
+        Object.entries(data.profiles).forEach(([k, v]) => {
+          userDiscordProfiles.set(k, v as any);
+        });
+      }
+      if (data.subscriptions && typeof data.subscriptions === 'object') {
+        Object.entries(data.subscriptions).forEach(([k, v]) => {
+          userSubscriptions.set(k, v as any);
+        });
+      }
+      console.log(`[Store] Loaded ${userDiscordProfiles.size} Discord profiles & ${userSubscriptions.size} subscriptions from disk store.`);
+    }
+  } catch (err) {
+    console.warn('[Store] Notice loading store from disk:', err);
+  }
+}
+
+// Immediately load disk store into memory
+loadPersistentStore();
+
+// Idempotent User Entitlement to Discord Role Synchronization
+async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
+  success: boolean;
+  code: string;
+  message: string;
+  profile?: DiscordAuthProfile | null;
+}> {
+  loadPersistentStore();
+  const normalizedEmail = String(userEmail || 'vixyvault0@gmail.com').toLowerCase();
+  const profileByEmail = userDiscordProfiles.get(normalizedEmail);
+  const globalProfile = userDiscordProfiles.get('global_active_user');
+  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === normalizedEmail ? globalProfile : null);
+
+  console.log(`[DISCORD_ENTITLEMENT_SYNC] Processing entitlement sync for email: ${normalizedEmail}`);
+
+  if (!profile || !profile.discordUserId) {
+    console.log(`[DISCORD_ENTITLEMENT_SYNC] PENDING_DISCORD_LINK: No linked Discord profile found for email ${normalizedEmail}.`);
+    return {
+      success: true,
+      code: 'PENDING_DISCORD_LINK',
+      message: 'User entitlement active, but Discord identity is not linked yet.',
+      profile: null,
+    };
+  }
+
+  const userSub = userSubscriptions.get(normalizedEmail) || serverUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
+  const subStatus = (userSub as any)?.status || 'ACTIVE';
+  const userRole = (userSub as any)?.role || (userSub as any)?.subscription || 'PRO';
+
+  const hasActiveEntitlement = ['ACTIVE', 'TRIALING'].includes(subStatus) && ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes(userRole);
+  const targetTier: 'ELITE' | 'VERIFIED' | 'NONE' = hasActiveEntitlement
+    ? (userRole === 'ELITE' || userRole === 'ELITE_PASS' ? 'ELITE' : 'VERIFIED')
+    : 'NONE';
+
+  const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
+
+  console.log(`[DISCORD_ROLE_SYNC_START] Syncing Discord user ID ${profile.discordUserId} (@${profile.discordUsername}) to target tier ${targetTier} in guild ${targetGuildId}`);
+
+  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier, targetGuildId);
+
+  profile.lastSync = new Date().toLocaleTimeString();
+  profile.lastRoleSyncAt = new Date().toISOString();
+
+  if (syncResult.success) {
+    profile.guildMember = true;
+    profile.guildJoined = true;
+    profile.discordLinked = true;
+    profile.roleAssigned = targetTier;
+    profile.assignedRoleName = targetTier;
+    profile.guildRoles = [targetTier];
+    profile.verificationStatus = 'VERIFIED';
+    profile.lastVerifiedAt = new Date().toISOString();
+
+    userDiscordProfiles.set(normalizedEmail, profile);
+    userDiscordProfiles.set('global_active_user', profile);
+    savePersistentStore();
+
+    console.log(`[DISCORD_ROLE_SYNC_SUCCESS] Successfully synced role ${targetTier} for Discord user ID ${profile.discordUserId}`);
+    return {
+      success: true,
+      code: 'ROLE_SYNC_SUCCESS',
+      message: `Role ${targetTier} successfully synchronized for Discord user ${profile.discordUserId}`,
+      profile,
+    };
+  } else {
+    console.warn(`[DISCORD_ROLE_SYNC_FAILED] Failed to sync role for Discord user ID ${profile.discordUserId}: ${syncResult.message}`);
+
+    if (syncResult.code === 'USER_NOT_IN_SERVER' || syncResult.code === 'USER_NOT_IN_GUILD' || syncResult.status === 'not_in_guild') {
+      profile.guildMember = false;
+      profile.guildJoined = false;
+      profile.verificationStatus = 'NEEDS_GUILD';
+      profile.roleAssigned = 'NEEDS_GUILD';
+    }
+
+    userDiscordProfiles.set(normalizedEmail, profile);
+    userDiscordProfiles.set('global_active_user', profile);
+    savePersistentStore();
+
+    return {
+      success: false,
+      code: syncResult.code || 'ROLE_SYNC_FAILED',
+      message: syncResult.message,
+      profile,
+    };
+  }
+}
 
 // DISCORD OAUTH AUTHORIZATION URL ENDPOINT
 app.get('/api/auth/discord/url', (req, res) => {
   // Enforce process.env.DISCORD_REDIRECT_URI exclusively as single source of truth
   const redirectUri = process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback';
   const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
+  const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
 
   console.log("OAuth redirect_uri being sent:", redirectUri);
 
@@ -2452,6 +2545,7 @@ app.get('/api/auth/discord/url', (req, res) => {
     response_type: 'code',
     scope: 'identify guilds',
     prompt: 'consent',
+    state: userEmail,
   });
 
   const url = `https://discord.com/oauth2/authorize?${params.toString()}`;
@@ -2591,43 +2685,46 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
 
   if (discordUser && discordUser.id) {
     console.log('[Discord OAuth Callback Audit] Step 8: Finalizing profile registration for user:', discordUser.username);
-    const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
-    const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+    const stateEmail = typeof req.query.state === 'string' && req.query.state.includes('@') ? req.query.state.toLowerCase() : null;
+    const headerEmail = (req.headers['x-user-email'] as string)?.toLowerCase();
+    const userEmail = (stateEmail || headerEmail || 'vixyvault0@gmail.com').toLowerCase();
+    const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
     const isGuildMember = Array.isArray(userGuilds) && userGuilds.some((g: any) => g.id === targetGuildId);
 
     const userSub = userSubscriptions.get(userEmail) || serverUsers.find((u) => u.email.toLowerCase() === userEmail);
     const hasActiveSub = userSub ? ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes((userSub as any).subscription || (userSub as any).role) : true;
-
-    let roleAssigned = 'NONE';
-    if (isGuildMember) {
-      roleAssigned = hasActiveSub ? 'PRO' : 'MEMBER';
-      if (hasActiveSub) {
-        assignDiscordVipRole(discordUser.id, targetGuildId).catch((e) => console.warn('VIP role auto-assign notice:', e));
-      }
-    }
 
     const avatarUrl = discordUser.avatar
       ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
       : `https://cdn.discordapp.com/embed/avatars/${parseInt(discordUser.discriminator || '0') % 5}.png`;
 
     const profile: DiscordAuthProfile = {
+      email: userEmail,
       discordUserId: discordUser.id,
       discordUsername: discordUser.username + (discordUser.discriminator && discordUser.discriminator !== '0' ? `#${discordUser.discriminator}` : ''),
       discordGlobalName: discordUser.global_name || discordUser.username,
       discordAvatar: avatarUrl,
+      discordLinked: true,
       guildMember: isGuildMember,
       guildJoined: isGuildMember,
-      guildRoles: isGuildMember ? [roleAssigned] : [],
+      roleAssigned: isGuildMember ? (hasActiveSub ? 'PRO' : 'MEMBER') : 'NONE',
+      guildRoles: isGuildMember ? [(hasActiveSub ? 'PRO' : 'MEMBER')] : [],
       lastSync: new Date().toLocaleTimeString(),
       subscriptionTier: hasActiveSub ? 'PRO' : 'FREE',
       verificationStatus: isGuildMember ? 'VERIFIED' : 'NEEDS_GUILD',
       connectedAt: new Date().toISOString(),
+      linkedAt: new Date().toISOString(),
     };
 
     userDiscordProfiles.set(userEmail, profile);
     userDiscordProfiles.set('global_active_user', profile);
+    savePersistentStore();
 
-    console.log('[Discord OAuth Callback Audit] ✅ OAuth Flow Completed Successfully for:', profile.discordGlobalName, '(@' + profile.discordUsername + ')');
+    console.log(`[DISCORD_OAUTH_SUCCESS] Successfully linked Discord identity: ${profile.discordGlobalName} (@${profile.discordUsername}, ID: ${profile.discordUserId})`);
+    console.log(`[DISCORD_PROFILE_PERSISTED] Profile saved persistently for email: ${userEmail}`);
+
+    // Trigger post-OAuth entitlement role sync
+    await syncUserEntitlementToDiscord(userEmail);
 
     return res.send(`
       <!DOCTYPE html>
@@ -2692,10 +2789,12 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
 // DISCORD USER PROFILE ENDPOINT
 app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
-  const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user') || null;
+  const profileByEmail = userDiscordProfiles.get(userEmail);
+  const globalProfile = userDiscordProfiles.get('global_active_user');
+  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === userEmail ? globalProfile : null);
 
   res.json({
-    linked: !!profile,
+    linked: !!(profile && profile.discordUserId),
     profile: profile || null,
   });
 });
@@ -2703,8 +2802,10 @@ app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
 // DISCORD AUTH STATUS ENDPOINT
 app.get(['/api/auth/discord/status', '/api/discord/status'], async (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
-  const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user') || null;
-  const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
+  const profileByEmail = userDiscordProfiles.get(userEmail);
+  const globalProfile = userDiscordProfiles.get('global_active_user');
+  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === userEmail ? globalProfile : null);
+  const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
 
   if (!profile || !profile.discordUserId) {
     return res.json({
@@ -2770,9 +2871,8 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
   const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
   const profile = userDiscordProfiles.get(userEmail) || userDiscordProfiles.get('global_active_user');
 
-  console.log(`\n---------------- [DISCORD VERIFY MEMBERSHIP REQUEST] ----------------`);
-  console.log(`[Verify Request] User Email: ${userEmail}`);
-  console.log(`[Verify Request] Linked Discord User ID: ${profile?.discordUserId || 'NONE'}`);
+  console.log(`[DISCORD_MEMBERSHIP_CHECK] Verification request for email: ${userEmail}`);
+  console.log(`[DISCORD_MEMBERSHIP_CHECK] Discord User ID: ${profile?.discordUserId || 'NONE'}`);
 
   if (!profile || !profile.discordUserId) {
     return res.status(200).json({
@@ -2783,74 +2883,43 @@ app.post(['/api/discord/verify-membership', '/api/discord/verify'], async (req, 
     });
   }
 
-  const targetGuildId = process.env.DISCORD_GUILD_ID || '13280011234567890';
-  const userSub = userSubscriptions.get(userEmail) || serverUsers.find((u) => u.email.toLowerCase() === userEmail);
-  const targetTier = userSub && ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes((userSub as any).subscription || (userSub as any).role)
-    ? 'ELITE'
-    : 'VERIFIED';
-
-  console.log(`[Verify Request] [PURCHASE RECEIVED / SUBSCRIPTION CHECK] User Tier: ${targetTier}`);
-  console.log(`[Verify Request] [GUILD MEMBERSHIP CHECK] Guild ID: ${targetGuildId}`);
-
-  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier, targetGuildId);
-
-  profile.lastSync = new Date().toLocaleTimeString();
+  const syncResult = await syncUserEntitlementToDiscord(userEmail);
 
   if (!syncResult.success) {
-    if (syncResult.code === 'DISCORD_RATE_LIMITED' || syncResult.status === 'rate_limited') {
-      const retryAfter = syncResult.retryAfter || 5;
-      return res.status(429).json({
-        success: false,
-        status: 'rate_limited',
-        code: 'DISCORD_RATE_LIMITED',
-        retryAfter,
-        message: `Discord verification is temporarily rate-limited. Try again in ${retryAfter} seconds.`,
-        profile,
-      });
-    }
-
-    if (syncResult.code === 'USER_NOT_IN_SERVER' || syncResult.code === 'USER_NOT_IN_GUILD' || syncResult.status === 'not_in_guild') {
-      profile.guildMember = false;
-      profile.guildJoined = false;
-      profile.verificationStatus = 'NEEDS_GUILD';
-      userDiscordProfiles.set(userEmail, profile);
-      userDiscordProfiles.set('global_active_user', profile);
-
+    if (syncResult.code === 'USER_NOT_IN_SERVER' || syncResult.code === 'USER_NOT_IN_GUILD') {
       return res.status(200).json({
         success: false,
         status: 'not_in_guild',
+        error: 'USER_NOT_IN_SERVER',
         code: 'USER_NOT_IN_SERVER',
+        linked: true,
+        guildMember: false,
         message: "Your Discord account is connected, but you haven't joined the VIXY Vault Discord server yet.",
         profile,
       });
     }
-
-    userDiscordProfiles.set(userEmail, profile);
-    userDiscordProfiles.set('global_active_user', profile);
 
     return res.status(200).json({
       success: false,
       error: syncResult.code || 'ROLE_SYNC_FAILED',
       code: syncResult.code || 'ROLE_SYNC_FAILED',
       message: syncResult.message,
-      details: syncResult.details,
       profile,
     });
   }
 
-  profile.guildMember = true;
-  profile.guildJoined = true;
-  profile.verificationStatus = 'VERIFIED';
-  profile.guildRoles = [targetTier];
-  userDiscordProfiles.set(userEmail, profile);
-  userDiscordProfiles.set('global_active_user', profile);
+  const updatedProfile = userDiscordProfiles.get(userEmail) || profile;
 
   return res.json({
     success: true,
     status: 'verified',
-    profile,
-    message: `DISCORD CONNECTED • SERVER MEMBER VERIFIED • MEMBERSHIP ROLE ACTIVE (${targetTier})`,
-    details: syncResult,
+    linked: true,
+    guildMember: true,
+    roleAssigned: updatedProfile.roleAssigned || 'VERIFIED',
+    roleName: updatedProfile.roleAssigned || 'VERIFIED',
+    verifiedAt: updatedProfile.lastVerifiedAt || new Date().toISOString(),
+    profile: updatedProfile,
+    message: `DISCORD CONNECTED • SERVER MEMBER VERIFIED • ROLE SYNCED (${updatedProfile.roleAssigned})`,
   });
 });
 
@@ -2859,37 +2928,29 @@ app.post(['/api/subscription/event', '/api/purchase/event', '/api/payments/webho
   const { userEmail = 'vixyvault0@gmail.com', planTier = 'ELITE_PASS', eventType = 'PURCHASE_SUCCESS' } = req.body || {};
   const normalizedEmail = String(userEmail).toLowerCase();
 
-  console.log(`\n================ [PURCHASE / SUBSCRIPTION EVENT RECEIVED] ================`);
-  console.log(`[Event Audit] PURCHASE RECEIVED: ${eventType} | Email: ${normalizedEmail} | Plan: ${planTier}`);
+  console.log(`[DISCORD_ENTITLEMENT_SYNC] Purchase/Subscription event received: ${eventType} | Email: ${normalizedEmail} | Plan: ${planTier}`);
 
-  // Find linked Discord profile
-  const profile = userDiscordProfiles.get(normalizedEmail) || userDiscordProfiles.get('global_active_user');
+  // Update in-memory user subscription record
+  const current = userSubscriptions.get(normalizedEmail) || {
+    email: normalizedEmail,
+    role: planTier.includes('ELITE') ? 'ELITE' : 'PRO',
+    plan: planTier,
+    status: eventType === 'SUBSCRIPTION_CANCELLED' ? 'CANCELLED' : 'ACTIVE',
+    updatedAt: new Date().toISOString(),
+  };
+  current.status = eventType === 'SUBSCRIPTION_CANCELLED' ? 'CANCELLED' : 'ACTIVE';
+  current.updatedAt = new Date().toISOString();
+  userSubscriptions.set(normalizedEmail, current);
+  savePersistentStore();
 
-  if (!profile || !profile.discordUserId) {
-    console.log(`[Event Audit] ⚠️ DISCORD USER ID NOT FOUND for email ${normalizedEmail}. User must connect Discord.`);
-    return res.json({
-      success: true,
-      discordSynced: false,
-      message: 'Purchase recorded. User has not linked Discord yet.',
-    });
-  }
-
-  console.log(`[Event Audit] DISCORD USER ID FOUND: ${profile.discordUserId} (@${profile.discordUsername})`);
-
-  const targetTier: 'ELITE' | 'VERIFIED' | 'NONE' = eventType === 'SUBSCRIPTION_CANCELLED'
-    ? 'NONE'
-    : ['PRO_PASS', 'ELITE_PASS', 'PRO', 'ELITE'].includes(planTier)
-    ? 'ELITE'
-    : 'VERIFIED';
-
-  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier);
+  const syncResult = await syncUserEntitlementToDiscord(normalizedEmail);
 
   res.json({
-    success: syncResult.success,
+    success: true,
     discordSynced: syncResult.success,
     code: syncResult.code,
     message: syncResult.message,
-    profile,
+    profile: syncResult.profile,
   });
 });
 
@@ -2898,7 +2959,9 @@ app.post('/api/discord/disconnect', (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
   userDiscordProfiles.delete(userEmail);
   userDiscordProfiles.delete('global_active_user');
+  savePersistentStore();
 
+  console.log(`[DISCORD_PROFILE_PERSISTED] Profile disconnected and deleted from store for email: ${userEmail}`);
   res.json({ success: true, message: 'Discord identity disconnected successfully.' });
 });
 

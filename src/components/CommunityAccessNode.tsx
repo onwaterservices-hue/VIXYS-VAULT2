@@ -77,6 +77,17 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
         }
       } else {
         setProfile(null);
+        if (setSettings) {
+          setSettings((prev) => ({
+            ...prev,
+            discordLinked: false,
+            discordUsername: undefined,
+            discordUserId: undefined,
+            guildMember: false,
+            roleAssigned: 'NONE',
+            syncStatus: 'DISCONNECTED',
+          }));
+        }
       }
     } catch (e) {
       console.warn('Failed to fetch Discord user profile from backend:', e);
@@ -278,7 +289,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   // VIXY NETWORK GATEWAY — FULL PREMIUM GATEWAY PANEL (NOT CONNECTED / CONNECTING / NEEDS SERVER)
   // =========================================================================
   return (
-    <div className={`bg-[#06030e] rounded-2xl border border-purple-500/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(109,24,255,0.15)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
+    <div id="vixy-discord-gateway" className={`bg-[#06030e] rounded-2xl border border-purple-500/30 p-5 sm:p-6 shadow-[0_0_30px_rgba(109,24,255,0.15)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
       {/* Visual Ambient Grid Texture + Radial Glow */}
       <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800c_1px,transparent_1px),linear-gradient(to_bottom,#8080800c_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none opacity-40" />
@@ -356,6 +367,15 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
       {/* STATE 2 OR LINKED WITH MISSING SERVER */}
       {isLinked && !guildMember ? (
         <div className="mt-4 pt-2 space-y-4 relative z-10">
+          {/* 5-Step Pipeline Progress Indicator */}
+          <div className="grid grid-cols-5 gap-1 text-[10px] text-center font-bold font-mono">
+            <div className="p-1.5 rounded-lg bg-emerald-950/60 border border-emerald-500/50 text-emerald-300">1. LINKED ✓</div>
+            <div className="p-1.5 rounded-lg bg-amber-950/80 border border-amber-500/50 text-amber-300 animate-pulse">2. JOIN SERVER</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">3. VERIFY</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">4. ROLE SYNC</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">5. GRANTED</div>
+          </div>
+
           <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-2">
             <div className="text-xs font-extrabold text-amber-300 flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-amber-400" />
@@ -391,6 +411,15 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
       ) : (
         /* STATE 1: UNCONNECTED — PRIVATE NETWORK UNLOCKED PERKS & OAUTH CTA */
         <div className="mt-4 pt-2 space-y-5 relative z-10">
+          {/* 5-Step Pipeline Progress Indicator */}
+          <div className="grid grid-cols-5 gap-1 text-[10px] text-center font-bold font-mono">
+            <div className="p-1.5 rounded-lg bg-purple-900/40 border border-purple-500/40 text-purple-200 animate-pulse">1. DISCORD LINK</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">2. SERVER JOIN</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">3. VERIFY</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">4. ROLE SYNC</div>
+            <div className="p-1.5 rounded-lg bg-[#0d0722] border border-purple-900/40 text-purple-400">5. ACCESS GRANTED</div>
+          </div>
+
           {/* UNLOCKED PERKS CHECKLIST GRID */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
             {[

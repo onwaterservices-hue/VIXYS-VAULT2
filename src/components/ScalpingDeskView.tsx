@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { BTCTicker } from '../types';
+import { BTCTicker, AlertSettings } from '../types';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { AIBrainMemoryVault } from './AIBrainMemoryVault';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import {
   Zap,
@@ -32,6 +33,8 @@ interface ScalpingDeskViewProps {
   onUpgradeToPro: () => void;
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
 export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
@@ -40,12 +43,16 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   onUpgradeToPro,
   selectedAsset = 'BTC',
   onSelectAsset,
+  alertSettings,
+  onOpenDiscordModal,
 }) => {
   const [deskTab, setDeskTab] = useState<'SIGNAL' | 'WHY' | 'L2_SCANNER' | 'PAPER_DESK'>('SIGNAL');
   const [showWhyDrawer, setShowWhyDrawer] = useState<boolean>(false);
 
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
+
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   useEffect(() => {
     let active = true;
@@ -116,14 +123,22 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
         </div>
       </div>
 
-      {/* 1. HERO LEVEL: Full-Width <ScalpDecisionChart> */}
-      <div className="relative">
-        <ScalpDecisionChart
-          asset={selectedAsset}
-          desk="15s"
-          title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
-        />
-      </div>
+      {/* GATED INTELLIGENCE BODY */}
+      <IntelligenceLockGate
+        isVerified={isDiscordVerified}
+        onOpenDiscordModal={onOpenDiscordModal}
+        title="15S SCALPING INTELLIGENCE LOCKED"
+        subtitle="Verify your VIXY Vault Discord membership to unlock live 15s probability cones, micro-delta sweeps, and AI conviction signals."
+      >
+        <div className="space-y-5">
+          {/* 1. HERO LEVEL: Full-Width <ScalpDecisionChart> */}
+          <div className="relative">
+            <ScalpDecisionChart
+              asset={selectedAsset}
+              desk="15s"
+              title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
+            />
+          </div>
 
       {/* 2. SINGLE DECISION STRIP (Directly below chart, 1 clean row) */}
       <div className="bg-[#0b051f] border border-purple-500/30 p-4 rounded-2xl shadow-xl grid grid-cols-2 md:grid-cols-4 gap-4 items-center">
@@ -183,6 +198,41 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
             <span>Why Signal?</span>
             {showWhyDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
+        </div>
+      </div>
+
+      {/* VIXY SAE 15S REAL-TIME INTELLIGENCE BAR */}
+      <div className="bg-[#060212] border border-purple-800/60 p-3.5 rounded-2xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Order-Flow Pressure</span>
+          <span className="text-xs font-extrabold text-emerald-300 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            +1,420 BTC (Ask Sweep)
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">15S Short Conviction</span>
+          <span className="text-xs font-extrabold text-cyan-300 flex items-center gap-1">
+            <Sparkles className="w-3 h-3 text-cyan-400" />
+            HIGH ALIGNMENT ({confidence}%)
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Micro-Momentum Velocity</span>
+          <span className="text-xs font-extrabold text-purple-200 flex items-center gap-1">
+            <TrendingUp className="w-3 h-3 text-emerald-400" />
+            +1.42%/s Velocity
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">SAE Engine Stream</span>
+          <span className="text-xs font-extrabold text-amber-300 flex items-center gap-1">
+            <Radio className="w-3 h-3 text-amber-400 animate-pulse" />
+            SUB-SECOND SYNCHRONIZED
+          </span>
         </div>
       </div>
 
@@ -322,7 +372,9 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
             </div>
           </div>
         )}
+        </div>
       </div>
-    </div>
-  );
+    </IntelligenceLockGate>
+  </div>
+);
 };

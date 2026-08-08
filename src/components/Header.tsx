@@ -356,8 +356,9 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenDiscordModal && alertSettings && (
             <DiscordCompactBadge
               discordLinked={alertSettings.discordLinked ?? false}
+              guildMember={alertSettings.guildMember ?? false}
               discordUsername={alertSettings.discordUsername}
-              roleAssigned={alertSettings.roleAssigned || 'PRO'}
+              roleAssigned={alertSettings.roleAssigned}
               onClick={onOpenDiscordModal}
             />
           )}

@@ -25,9 +25,14 @@ import {
   Layers3
 } from 'lucide-react';
 
+import { AlertSettings } from '../types';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
+
 interface ExplainabilityVaultViewProps {
   currentSymbol?: string;
   onSelectAsset?: (symbol: string) => void;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
 interface EngineModule {
@@ -53,10 +58,14 @@ interface HistoricalMatch {
 export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = ({
   currentSymbol = 'BTC',
   onSelectAsset,
+  alertSettings,
+  onOpenDiscordModal,
 }) => {
   const [selectedAsset, setSelectedAsset] = useState<string>(currentSymbol);
   const [activeTab, setActiveTab] = useState<'evidence' | 'timeline' | 'historical' | 'ranking'>('evidence');
   const [showRawVsCalibrated, setShowRawVsCalibrated] = useState<boolean>(true);
+
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   // Layer 3 Independent Engine Breakdown Data
   const engineModules: EngineModule[] = [
@@ -245,8 +254,16 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
         </div>
       </div>
 
-      {/* TOP METRIC / CONFIDENCE STABILITY HIGHLIGHT */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* GATED EXPLAINABILITY VAULT CONTENT */}
+      <IntelligenceLockGate
+        isVerified={isDiscordVerified}
+        onOpenDiscordModal={onOpenDiscordModal}
+        title="EXPLAINABILITY VAULT LOCKED"
+        subtitle="Verify your VIXY Vault Discord membership to unlock signal decomposition, independent engine weightings, and historical setup matching."
+      >
+        <div className="space-y-6">
+          {/* TOP METRIC / CONFIDENCE STABILITY HIGHLIGHT */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Card 1: Calibrated Probability */}
         <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
@@ -661,6 +678,8 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           </div>
         </div>
       )}
+      </div>
+      </IntelligenceLockGate>
     </div>
   );
 };

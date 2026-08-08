@@ -1,12 +1,20 @@
 import React, { useState } from 'react';
 import { Sliders, Sparkles, TrendingUp, ShieldAlert, ArrowRightLeft, Zap, ArrowRight, BarChart2, Layers, CheckCircle2 } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
+import { AlertSettings } from '../types';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
 
 interface CompareViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
-export const CompareView: React.FC<CompareViewProps> = ({ onSelectAssetAndNavigate }) => {
+export const CompareView: React.FC<CompareViewProps> = ({
+  onSelectAssetAndNavigate,
+  alertSettings,
+  onOpenDiscordModal,
+}) => {
   const [assetA, setAssetA] = useState<string>('BTC');
   const [assetB, setAssetB] = useState<string>('ETH');
 
@@ -14,6 +22,7 @@ export const CompareView: React.FC<CompareViewProps> = ({ onSelectAssetAndNaviga
   const configB = ASSET_DATABASE[assetB] || ASSET_DATABASE.ETH;
 
   const allAssets = Object.keys(ASSET_DATABASE);
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   // Quick preset pairs for fast switching
   const presetPairs = [
@@ -115,8 +124,14 @@ export const CompareView: React.FC<CompareViewProps> = ({ onSelectAssetAndNaviga
         </div>
       </div>
 
-      {/* Side-by-Side Comparison Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* GATED COMPARISON GRID */}
+      <IntelligenceLockGate
+        isVerified={isDiscordVerified}
+        onOpenDiscordModal={onOpenDiscordModal}
+        title="ASSET COMPARE INTELLIGENCE LOCKED"
+        subtitle="Verify your VIXY Vault Discord membership to unlock split-screen quantitative probability comparisons and order flow telemetry."
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Asset A Column */}
         <AssetComparisonCard
           config={configA}
@@ -131,6 +146,7 @@ export const CompareView: React.FC<CompareViewProps> = ({ onSelectAssetAndNaviga
           onSelectAssetAndNavigate={onSelectAssetAndNavigate}
         />
       </div>
+      </IntelligenceLockGate>
     </div>
   );
 };

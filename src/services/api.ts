@@ -211,16 +211,27 @@ export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string
 
 /**
  * Connects to live Binance WebSocket stream for real-time live ticker updates
- * with automatic exponential backoff reconnect logic.
+ * with automatic endpoint failover and exponential backoff reconnect logic.
  */
 export function connectLiveCryptoStream(
   symbol: string = 'BTC',
   onUpdate: (data: Partial<BTCTicker>) => void,
   onStatusChange?: (status: 'CONNECTED' | 'RECONNECTING' | 'OFFLINE') => void
 ): () => void {
-  const pair = symbol.toLowerCase().endsWith('usdt') ? symbol.toLowerCase() : `${symbol.toLowerCase()}usdt`;
-  const wsUrl = `wss://stream.binance.com:9443/ws/${pair}@ticker`;
+  if (typeof window === 'undefined' || typeof WebSocket === 'undefined') {
+    return () => {};
+  }
 
+  const pair = symbol.toLowerCase().endsWith('usdt') ? symbol.toLowerCase() : `${symbol.toLowerCase()}usdt`;
+  
+  // Endpoint candidates (Port 443 primary, 9443 fallback, fstream fallback)
+  const endpoints = [
+    `wss://stream.binance.com/ws/${pair}@ticker`,
+    `wss://stream.binance.com:9443/ws/${pair}@ticker`,
+    `wss://fstream.binance.com/ws/${pair}@ticker`,
+  ];
+
+  let endpointIdx = 0;
   let ws: WebSocket | null = null;
   let reconnectAttempts = 0;
   let reconnectTimer: any = null;
@@ -230,14 +241,29 @@ export function connectLiveCryptoStream(
     if (isClosedByUnmount) return;
 
     try {
+      if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
+        return;
+      }
+
+      const wsUrl = endpoints[endpointIdx % endpoints.length];
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
+        if (isClosedByUnmount) {
+          try { ws?.close(); } catch (_) {}
+          return;
+        }
         reconnectAttempts = 0;
+        console.log('[BINANCE_WS_OPEN]', {
+          endpoint: wsUrl,
+          stream: `${pair}@ticker`,
+          timestamp: new Date().toISOString(),
+        });
         if (onStatusChange) onStatusChange('CONNECTED');
       };
 
       ws.onmessage = (event) => {
+        if (isClosedByUnmount) return;
         try {
           const msg = JSON.parse(event.data);
           if (msg && msg.c) {
@@ -258,30 +284,66 @@ export function connectLiveCryptoStream(
               marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
             });
           }
-        } catch (err) {
-          // Ignore parse error
+        } catch (parseErr) {
+          console.warn('[BINANCE_WS_PARSE_WARN]', {
+            endpoint: wsUrl,
+            error: parseErr instanceof Error ? parseErr.message : String(parseErr),
+            timestamp: new Date().toISOString(),
+          });
         }
       };
 
-      ws.onerror = () => {
-        if (onStatusChange) onStatusChange('RECONNECTING');
+      ws.onerror = (e: Event) => {
+        if (e && typeof e.preventDefault === 'function') {
+          e.preventDefault();
+        }
+        console.warn('[BINANCE_WS_ERROR]', {
+          endpoint: wsUrl,
+          readyState: ws ? ws.readyState : 'CLOSED',
+          stream: `${pair}@ticker`,
+          timestamp: new Date().toISOString(),
+        });
+        if (!isClosedByUnmount && onStatusChange) {
+          onStatusChange('RECONNECTING');
+        }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event: CloseEvent) => {
         if (isClosedByUnmount) return;
+        console.log('[BINANCE_WS_CLOSE]', {
+          endpoint: wsUrl,
+          code: event.code,
+          reason: event.reason || 'None',
+          wasClean: event.wasClean,
+          readyState: ws ? ws.readyState : 'CLOSED',
+          reconnectAttempt: reconnectAttempts + 1,
+          timestamp: new Date().toISOString(),
+        });
+
         if (onStatusChange) onStatusChange('RECONNECTING');
 
-        // Exponential backoff reconnect: 1s, 2s, 4s, 8s, capped at 10s
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000);
-        reconnectAttempts++;
+        // Rotate endpoint on failure
+        endpointIdx++;
 
+        // Exponential backoff reconnect: 1.5s, 3s, 6s, 12s, max 20s
+        reconnectAttempts++;
+        const delay = Math.min(1500 * Math.pow(1.8, reconnectAttempts), 20000);
+
+        if (reconnectTimer) clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(() => {
-          connect();
+          if (!isClosedByUnmount) {
+            connect();
+          }
         }, delay);
       };
     } catch (err) {
-      console.warn(`WebSocket connection error for ${symbol}`, err);
-      if (onStatusChange) onStatusChange('OFFLINE');
+      console.warn('[BINANCE_WS_INIT_ERROR]', {
+        error: err instanceof Error ? err.message : String(err),
+        timestamp: new Date().toISOString(),
+      });
+      if (!isClosedByUnmount && onStatusChange) {
+        onStatusChange('OFFLINE');
+      }
     }
   };
 
@@ -296,13 +358,16 @@ export function connectLiveCryptoStream(
       socket.onmessage = null;
       socket.onerror = null;
       socket.onclose = null;
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.close();
-      } else if (socket.readyState === WebSocket.CONNECTING) {
-        socket.onopen = () => {
-          try { socket.close(); } catch (_) {}
-        };
-      }
+      try {
+        if (socket.readyState === WebSocket.OPEN) {
+          socket.close();
+        } else if (socket.readyState === WebSocket.CONNECTING) {
+          socket.onopen = () => {
+            try { socket.close(); } catch (_) {}
+          };
+        }
+      } catch (_) {}
+      ws = null;
     }
     if (onStatusChange) onStatusChange('OFFLINE');
   };

@@ -179,29 +179,43 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </div>
 
             {/* Segmented VIXY Confidence Field */}
-            <div className="pt-3 space-y-1.5">
-              <div className="flex justify-between text-[11px] font-mono font-bold">
-                <span className="text-purple-300/80 uppercase tracking-wider">VIXY CONFIDENCE FIELD</span>
-                <span className={isBullish ? 'text-emerald-300 font-extrabold' : 'text-rose-300 font-extrabold'}>
+            <div className="pt-3 space-y-2">
+              <div className="flex justify-between items-center text-[11px] font-mono font-bold">
+                <span className="text-purple-300/90 uppercase tracking-wider flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <span className="bg-gradient-to-r from-purple-200 via-indigo-200 to-purple-300 bg-clip-text text-transparent">VIXY CONFIDENCE FIELD</span>
+                </span>
+                <span className={`px-2.5 py-0.5 rounded-lg font-extrabold text-[11px] border backdrop-blur-md transition-all ${
+                  isBullish 
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(52,211,153,0.35)]' 
+                    : 'bg-rose-950/80 text-rose-300 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+                }`}>
                   {liveConfidence.toFixed(1)}% ({isBullish ? 'HIGH BULL' : 'HIGH BEAR'})
                 </span>
               </div>
 
               {/* Segmented Blocks Representation */}
-              <div className="flex items-center gap-1 w-full bg-[#060212] p-1.5 rounded-xl border border-purple-900/80 shadow-inner">
+              <div className="flex items-center gap-1.5 w-full bg-[#04010b] p-2 rounded-xl border border-purple-700/50 shadow-[inset_0_2px_10px_rgba(0,0,0,0.9),0_0_15px_rgba(147,51,234,0.15)] relative overflow-hidden">
                 {Array.from({ length: totalBlocks }).map((_, i) => {
                   const isActive = i < activeBlocks;
                   return (
                     <div
                       key={i}
-                      className={`h-3.5 flex-1 rounded-sm transition-all duration-300 ${
+                      className={`h-4 flex-1 rounded-md transition-all duration-300 relative overflow-hidden ${
                         isActive
                           ? isBullish
-                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)]'
-                            : 'bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)]'
-                          : 'bg-purple-950/40 border border-purple-900/30'
+                            ? 'bg-gradient-to-t from-emerald-600 via-emerald-400 to-emerald-200 shadow-[0_0_12px_rgba(52,211,153,0.9)] border border-emerald-300/70'
+                            : 'bg-gradient-to-t from-rose-700 via-rose-500 to-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.9)] border border-rose-300/70'
+                          : 'bg-purple-950/20 border border-purple-900/40 opacity-50'
                       }`}
-                    />
+                    >
+                      {isActive && (
+                        <>
+                          <div className="absolute top-0 inset-x-0 h-0.5 bg-white/80 blur-[0.3px]" />
+                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
+                        </>
+                      )}
+                    </div>
                   );
                 })}
               </div>

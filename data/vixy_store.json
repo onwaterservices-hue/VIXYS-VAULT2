@@ -1,0 +1,55 @@
+{
+  "profiles": {
+    "vixyvault0@gmail.com": {
+      "email": "vixyvault0@gmail.com",
+      "discordUserId": "766312591915483156",
+      "discordUsername": "vixyvault_owner",
+      "discordGlobalName": "VIXY Vault Owner",
+      "discordLinked": true,
+      "guildMember": true,
+      "guildJoined": true,
+      "roleAssigned": "ELITE",
+      "assignedRoleName": "ELITE",
+      "guildRoles": [
+        "ELITE"
+      ],
+      "lastSync": "2:28:15 PM",
+      "subscriptionTier": "ELITE",
+      "verificationStatus": "VERIFIED",
+      "connectedAt": "2026-08-08T14:28:15.943Z",
+      "linkedAt": "2026-08-08T14:28:15.943Z",
+      "lastVerifiedAt": "2026-08-08T14:28:15.943Z",
+      "lastRoleSyncAt": "2026-08-08T14:28:15.943Z"
+    },
+    "global_active_user": {
+      "email": "vixyvault0@gmail.com",
+      "discordUserId": "766312591915483156",
+      "discordUsername": "vixyvault_owner",
+      "discordGlobalName": "VIXY Vault Owner",
+      "discordLinked": true,
+      "guildMember": true,
+      "guildJoined": true,
+      "roleAssigned": "ELITE",
+      "assignedRoleName": "ELITE",
+      "guildRoles": [
+        "ELITE"
+      ],
+      "lastSync": "2:28:15 PM",
+      "subscriptionTier": "ELITE",
+      "verificationStatus": "VERIFIED",
+      "connectedAt": "2026-08-08T14:28:15.943Z",
+      "linkedAt": "2026-08-08T14:28:15.943Z",
+      "lastVerifiedAt": "2026-08-08T14:28:15.943Z",
+      "lastRoleSyncAt": "2026-08-08T14:28:15.943Z"
+    }
+  },
+  "subscriptions": {
+    "vixyvault0@gmail.com": {
+      "email": "vixyvault0@gmail.com",
+      "role": "OWNER",
+      "plan": "ELITE_PASS",
+      "status": "ACTIVE",
+      "updatedAt": "2026-08-08T14:28:15.943Z"
+    }
+  }
+}

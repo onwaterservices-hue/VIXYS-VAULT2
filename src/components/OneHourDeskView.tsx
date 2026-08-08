@@ -26,7 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { BTCTicker } from '../types';
+import { BTCTicker, AlertSettings } from '../types';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
@@ -34,6 +34,7 @@ import { LiveScalpChart } from './LiveScalpChart';
 import { ModelStatusBadge } from './ModelStatusBadge';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
 import { AIBrainMemoryVault } from './AIBrainMemoryVault';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
 import {
   fetchApiSignal,
   fetchPerformanceStats,
@@ -50,6 +51,8 @@ interface OneHourDeskViewProps {
   selectedAsset?: string;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   onUpgradeToPro: () => void;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
 export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
@@ -58,11 +61,15 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   selectedAsset = 'BTC',
   userRole,
   onUpgradeToPro,
+  alertSettings,
+  onOpenDiscordModal,
 }) => {
   const [selectedStrike, setSelectedStrike] = useState<number>(64200);
   const [activeContractId, setActiveContractId] = useState<string>('KXBTC1H-26JUL-64200');
   const [timeRemainingMin, setTimeRemainingMin] = useState<number>(24);
   const [timeRemainingSec, setTimeRemainingSec] = useState<number>(18);
+
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   // 1H Probabilities & Odds
   const [kalshiYesCent, setKalshiYesCent] = useState<number>(72.0);
@@ -203,7 +210,15 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         </div>
       </div>
 
-      {/* 1. TOP LEVEL: 1-Hour Contract Strike Selector Matrix */}
+      {/* GATED INTELLIGENCE BODY */}
+      <IntelligenceLockGate
+        isVerified={isDiscordVerified}
+        onOpenDiscordModal={onOpenDiscordModal}
+        title="1-HOUR DESK INTELLIGENCE LOCKED"
+        subtitle="Verify your VIXY Vault Discord membership to unlock live 1H macro trend probability, strike targets, and directional conviction."
+      >
+        <div className="space-y-6">
+          {/* 1. TOP LEVEL: 1-Hour Contract Strike Selector Matrix */}
       <div className="bg-[#0b041a] rounded-3xl p-5 border border-purple-500/30 shadow-[0_0_40px_rgba(147,51,234,0.15)] space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2.5">
@@ -334,6 +349,41 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             <span>Why Signal?</span>
             {showWhyDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
+        </div>
+      </div>
+
+      {/* VIXY SAE 1H MACRO-STRUCTURE INTELLIGENCE BAR */}
+      <div className="bg-[#060212] border border-purple-800/60 p-3.5 rounded-2xl shadow-lg grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-mono">
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Macro Trend Structure</span>
+          <span className="text-xs font-extrabold text-emerald-300 flex items-center gap-1">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+            BULLISH CHANNEL INTACT
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">1H Momentum Persistence</span>
+          <span className="text-xs font-extrabold text-cyan-300 flex items-center gap-1">
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            92.4% PERSISTENCE INDEX
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">Reversal Risk Threat</span>
+          <span className="text-xs font-extrabold text-emerald-400 flex items-center gap-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            LOW THREAT (14.2%)
+          </span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-[#0e0622] border border-purple-900/50 space-y-1">
+          <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">1H Macro Taker Delta</span>
+          <span className="text-xs font-extrabold text-amber-300 flex items-center gap-1">
+            <Activity className="w-3.5 h-3.5 text-amber-400" />
+            +2,840 BTC SWEEP
+          </span>
         </div>
       </div>
 
@@ -487,6 +537,8 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           </div>
         </div>
       </div>
+      </div>
+      </IntelligenceLockGate>
     </div>
   );
 };

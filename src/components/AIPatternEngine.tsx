@@ -16,12 +16,15 @@ import {
   Info,
   ArrowUpRight,
 } from 'lucide-react';
-import { BTCTicker } from '../types';
+import { BTCTicker, AlertSettings } from '../types';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
 
 interface AIPatternEngineProps {
   ticker?: BTCTicker;
   timeframe?: '15M' | '1H';
   appMode?: 'SIMPLE' | 'PRO';
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
 interface PatternItem {
@@ -46,12 +49,16 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   ticker = { price: 64108, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5 },
   timeframe = '15M',
   appMode = 'SIMPLE',
+  alertSettings,
+  onOpenDiscordModal,
 }) => {
   const [activeFilter, setActiveFilter] = useState<'ALL' | 'BULLISH' | 'BEARISH' | 'MICRO' | 'EXPERIMENTAL'>('ALL');
   const [selectedPattern, setSelectedPattern] = useState<PatternItem | null>(null);
   const [isScanning, setIsScanning] = useState<boolean>(false);
   const [lastScanTime, setLastScanTime] = useState<string>('Just now');
   const [scanCount, setScanCount] = useState<number>(1420);
+
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   // Auto Refresh Simulation
   useEffect(() => {
@@ -246,7 +253,13 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   });
 
   return (
-    <div className="bg-[#0B0A1C] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden transition-all duration-300">
+    <IntelligenceLockGate
+      isVerified={isDiscordVerified}
+      onOpenDiscordModal={onOpenDiscordModal}
+      title="AI PATTERN RECOGNITION LOCKED"
+      subtitle="Verify your VIXY Vault Discord membership to unlock live AI microstructure patterns, liquidity sweeps, and L2 order book detection."
+    >
+      <div className="bg-[#0B0A1C] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden transition-all duration-300">
       {/* Background Soft Ambient Glow */}
       <div className="absolute top-0 right-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -484,5 +497,6 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
         </span>
       </div>
     </div>
+    </IntelligenceLockGate>
   );
 };

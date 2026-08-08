@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   BrainCircuit,
   AlertTriangle,
+  Lock,
 } from 'lucide-react';
 import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys, AlertSettings } from '../types';
 import { CandleChart } from './CandleChart';
@@ -32,6 +33,7 @@ import { NeuralRibbonChart } from './NeuralRibbonChart';
 import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { VixyAiStatusCard } from './VixyAiStatusCard';
 import { CommunityAccessNode } from './CommunityAccessNode';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
 
 // Five AI Brains
 import { SignalBrain } from './brains/SignalBrain';
@@ -506,102 +508,128 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       </div>
 
       {/* 📡 COMMUNITY ACCESS NODE (SECURE IDENTITY LINK & DISCORD GATEWAY) */}
-      <CommunityAccessNode
-        settings={alertSettings}
-        setSettings={setAlertSettings}
-        onOpenDiscordModal={onOpenAlerts}
-        mode="dashboard"
-      />
-
-      {/* 🎯 BRAIN 1: SIGNAL BRAIN (Direction, Confidence, Strike, Lock Score Progress) */}
-      <SignalBrain
-        signal={signal}
-        ticker={ticker}
-        timeString={timeString}
-        timeframe={timeframe}
-        lockEvaluation={lockEvaluation}
-      />
-
-      {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProtectionBrain signal={signal} ticker={ticker} />
-        <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
-      </div>
-
-      {/* PROMINENT LIVE CANDLESTICK CHART */}
-      <div className="space-y-4">
-        <CandleChart
-          candles={displayCandles}
-          targetPrice={signal.targetPrice}
-          currentPrice={ticker.price}
-          timeframe={timeframe}
-          onTimeframeChange={(tf) => {
-            setTimeframe(tf);
-            handleMarketChange(tf === '1H' ? 'BTC1H' : 'BTC15M');
-          }}
-          predictedDirection={signal.direction}
+      <div id="vixy-discord-gateway">
+        <CommunityAccessNode
+          settings={alertSettings}
+          setSettings={setAlertSettings}
+          onOpenDiscordModal={onOpenAlerts}
+          mode="dashboard"
         />
       </div>
 
-      {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ExecutionBrain signal={signal} ticker={ticker} />
-        <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
-      </div>
+      {/* 🎯 PROTECTED VIXY INTELLIGENCE CORE */}
+      <IntelligenceLockGate
+        isVerified={Boolean(alertSettings?.discordLinked && alertSettings?.guildMember)}
+        onOpenDiscordModal={onOpenAlerts}
+        title="VIXY VAULT INTELLIGENCE LOCKED"
+        subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."
+      >
+        <div className="space-y-6">
+          {/* 🎯 BRAIN 1: SIGNAL BRAIN (Direction, Confidence, Strike, Lock Score Progress) */}
+          <div>
+            <SignalBrain
+              signal={signal}
+              ticker={ticker}
+              timeString={timeString}
+              timeframe={timeframe}
+              lockEvaluation={lockEvaluation}
+            />
+          </div>
 
-      {/* 4. ADVANCED QUANT INTELLIGENCE TOGGLE (PROGRESSIVE DISCLOSURE ACCORDION) */}
-      <div className="pt-4 border-t border-purple-900/50 text-center">
-        <button
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-[#12072b] hover:bg-[#1a0b3e] border border-purple-500/40 hover:border-purple-400 text-purple-200 text-xs font-mono font-extrabold shadow-lg transition-all active:scale-95 cursor-pointer"
-        >
-          <Sliders className="w-4 h-4 text-purple-300" />
-          <span>{showAdvanced ? 'Hide Advanced Quant Intelligence ▲' : 'Show Advanced Quant Intelligence (Venues, Order Flow, Reversal, Brain Vault) ▼'}</span>
-        </button>
-      </div>
+          {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <ProtectionBrain 
+                signal={signal} 
+                ticker={ticker} 
+                isDiscordVerified={Boolean(alertSettings?.discordLinked && alertSettings?.guildMember)} 
+              />
+            </div>
+            <div>
+              <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
+            </div>
+          </div>
 
-      {showAdvanced && (
-        <div className="space-y-6 pt-4 border-t border-purple-900/40">
-          {/* Vixy AI Status */}
-          <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
+          {/* PROMINENT LIVE CANDLESTICK CHART */}
+          <div className="space-y-4">
+            <CandleChart
+              candles={displayCandles}
+              targetPrice={signal.targetPrice}
+              currentPrice={ticker.price}
+              timeframe={timeframe}
+              onTimeframeChange={(tf) => {
+                setTimeframe(tf);
+                handleMarketChange(tf === '1H' ? 'BTC1H' : 'BTC15M');
+              }}
+              predictedDirection={signal.direction}
+            />
+          </div>
 
-          {/* Executive Command Center */}
-          <ExecutiveCommandCenter
-            ticker={ticker}
-            signal={signal}
-            selectedAsset={selectedAsset}
-            onSelectAsset={onSelectAsset}
-            onOpenJournal={onOpenJournal}
-            timeframe={timeframe}
-            appMode={appMode}
-            setAppMode={setAppMode}
-          />
+          {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <ExecutionBrain signal={signal} ticker={ticker} />
+            </div>
+            <div>
+              <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
+            </div>
+          </div>
 
-          {/* Scalp Decision Matrix */}
-          <ScalpDecisionChart
-            asset={selectedAsset}
-            desk={timeframe.toLowerCase()}
-            title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
-          />
+          {/* 4. ADVANCED QUANT INTELLIGENCE TOGGLE (PROGRESSIVE DISCLOSURE ACCORDION) */}
+          <div className="pt-4 border-t border-purple-900/50 text-center">
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-[#12072b] hover:bg-[#1a0b3e] border border-purple-500/40 hover:border-purple-400 text-purple-200 text-xs font-mono font-extrabold shadow-lg transition-all active:scale-95 cursor-pointer"
+            >
+              <Sliders className="w-4 h-4 text-purple-300" />
+              <span>{showAdvanced ? 'Hide Advanced Quant Intelligence ▲' : 'Show Advanced Quant Intelligence (Venues, Order Flow, Reversal, Brain Vault) ▼'}</span>
+            </button>
+          </div>
 
-          {/* Neural Ribbon Chart */}
-          <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
+          {showAdvanced && (
+            <div className="space-y-6 pt-4 border-t border-purple-900/40">
+              {/* Vixy AI Status */}
+              <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
 
-          {/* AI Brain Memory Vault */}
-          <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
+              {/* Executive Command Center */}
+              <ExecutiveCommandCenter
+                ticker={ticker}
+                signal={signal}
+                selectedAsset={selectedAsset}
+                onSelectAsset={onSelectAsset}
+                onOpenJournal={onOpenJournal}
+                timeframe={timeframe}
+                appMode={appMode}
+                setAppMode={setAppMode}
+              />
 
-          {/* Prediction Health Watch */}
-          <PredictionHealthWatch
-            currentPrice={ticker.price}
-            timeframe={timeframe}
-            onBuyOutPosition={() => setIsBailedOut(true)}
-            appMode={appMode}
-          />
+              {/* Scalp Decision Matrix */}
+              <ScalpDecisionChart
+                asset={selectedAsset}
+                desk={timeframe.toLowerCase()}
+                title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
+              />
 
-          {/* AI Pattern Engine */}
-          <AIPatternEngine ticker={ticker} timeframe={timeframe} appMode={appMode} />
+              {/* Neural Ribbon Chart */}
+              <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
+
+              {/* AI Brain Memory Vault */}
+              <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
+
+              {/* Prediction Health Watch */}
+              <PredictionHealthWatch
+                currentPrice={ticker.price}
+                timeframe={timeframe}
+                onBuyOutPosition={() => setIsBailedOut(true)}
+                appMode={appMode}
+              />
+
+              {/* AI Pattern Engine */}
+              <AIPatternEngine ticker={ticker} timeframe={timeframe} appMode={appMode} />
+            </div>
+          )}
         </div>
-      )}
+      </IntelligenceLockGate>
     </div>
   );
 };

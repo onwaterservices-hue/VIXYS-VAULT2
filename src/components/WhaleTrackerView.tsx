@@ -18,8 +18,13 @@ import {
   ChevronRight
 } from 'lucide-react';
 
+import { AlertSettings } from '../types';
+import { IntelligenceLockGate } from './IntelligenceLockGate';
+
 interface WhaleTrackerViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
+  alertSettings?: AlertSettings;
+  onOpenDiscordModal?: () => void;
 }
 
 interface WhaleOrder {
@@ -127,6 +132,8 @@ const TOP_WHALE_ENTITIES = [
 
 export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   onSelectAssetAndNavigate,
+  alertSettings,
+  onOpenDiscordModal,
 }) => {
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');
   const [minSizeFilter, setMinSizeFilter] = useState<number>(100000);
@@ -134,6 +141,8 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   const [isLiveStreaming, setIsLiveStreaming] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
 
   // Real live whale order feed effect from /api/whales
   useEffect(() => {
@@ -277,8 +286,14 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
         </div>
       </div>
 
-      {/* MAIN CONTENT GRID: REAL-TIME BLOCK STREAM + WHALE STRIKE WALLS */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* GATED MAIN CONTENT GRID */}
+      <IntelligenceLockGate
+        isVerified={isDiscordVerified}
+        onOpenDiscordModal={onOpenDiscordModal}
+        title="WHALE RADAR INTELLIGENCE LOCKED"
+        subtitle="Verify your VIXY Vault Discord membership to unlock live institutional block trades, iceberg accumulation alerts, and strike walls."
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* COLUMN 1 & 2: LIVE WHALE ORDERS STREAM (2 COLS) */}
         <div className="lg:col-span-2 space-y-4">
           {/* VIXY ELITE WHALE ALERT FUNNEL CONVERSION BOX */}
@@ -487,6 +502,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
           </div>
         </div>
       </div>
+      </IntelligenceLockGate>
     </div>
   );
 };
