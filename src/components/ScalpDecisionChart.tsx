@@ -413,8 +413,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
     const render = () => {
       try {
-        const width = (canvas.width = canvas.parentElement?.clientWidth || 600);
-        const height = (canvas.height = 320);
+        const width = (canvas.width = containerRef.current?.clientWidth || canvas.parentElement?.clientWidth || 600);
+        const height = (canvas.height = containerRef.current?.clientHeight || canvas.parentElement?.clientHeight || 380);
 
         // Clear Canvas Background
         ctx.fillStyle = '#060312';

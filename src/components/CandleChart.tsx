@@ -322,8 +322,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
   const isWide = measuredWidth >= WIDE_BREAKPOINT;
   const sidePanelWidth = isWide ? 260 : 0;
+  const gapX = isWide ? 16 : 0;
   const paddingX = 32;
-  const chartSvgWidth = Math.max(300, measuredWidth - sidePanelWidth - paddingX);
+  const chartSvgWidth = Math.max(280, measuredWidth - sidePanelWidth - gapX - paddingX);
 
   const safeCandles = candles || [];
   const rawVisibleCount =
@@ -525,7 +526,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     <svg
       width={chartSvgWidth}
       height={svgHeight}
-      className="overflow-visible select-none cursor-crosshair"
+      viewBox={`0 0 ${chartSvgWidth} ${svgHeight}`}
+      className="w-full max-w-full h-auto overflow-visible select-none cursor-crosshair"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
@@ -1553,7 +1555,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       {indicatorToolbar}
 
       <div className={`grid gap-4 ${isWide ? 'grid-cols-[1fr_260px]' : 'grid-cols-1'}`}>
-        <div className="overflow-x-auto flex justify-center">{mainSvgContent}</div>
+        <div className="w-full overflow-hidden flex justify-center">{mainSvgContent}</div>
         <div>{annotationPanel}</div>
       </div>
 

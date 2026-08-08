@@ -126,7 +126,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
         secondsVisible: desk === '15s',
       },
       width: container.clientWidth || 600,
-      height: 360,
+      height: container.clientHeight || 360,
     });
 
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
@@ -145,6 +145,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
       if (chartContainerRef.current && chartRef.current) {
         chartRef.current.applyOptions({
           width: chartContainerRef.current.clientWidth,
+          height: chartContainerRef.current.clientHeight || 360,
         });
       }
     };

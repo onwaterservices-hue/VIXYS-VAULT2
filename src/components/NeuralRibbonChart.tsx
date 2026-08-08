@@ -205,7 +205,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
         particleOffset = (particleOffset + 0.8) % 30;
 
         const width = (canvas.width = canvas.parentElement?.clientWidth || 700);
-        const height = (canvas.height = 320);
+        const height = (canvas.height = canvas.parentElement?.clientHeight || 320);
 
         // Fill background
         ctx.fillStyle = '#060312';
