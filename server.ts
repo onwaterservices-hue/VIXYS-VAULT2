@@ -97,21 +97,38 @@ if (process.env.GEMINI_API_KEY) {
 const requireRole = (allowedRoles: string[]) => {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const userRole = ((req.headers['x-user-role'] as string) || 'FREE').toUpperCase();
-    const userEmail = ((req.headers['x-user-email'] as string) || '').toLowerCase();
+    const userEmail = (
+      (req.headers['x-user-email'] as string) ||
+      (req.body && req.body.userEmail) ||
+      (req.query && (req.query.email as string)) ||
+      ''
+    ).toLowerCase();
 
-    // Owner override check
-    if (userEmail === 'vixyvault0@gmail.com') {
+    const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'vixyvault0@gmail.com').toLowerCase();
+    const configuredAdminId = (process.env.ADMIN_USER_ID || '').toLowerCase();
+
+    // 1. Admin Email / ID override check
+    if (
+      userEmail === configuredAdminEmail ||
+      userEmail === 'vixyvault0@gmail.com' ||
+      (configuredAdminId && (userEmail === configuredAdminId || req.headers['x-user-id'] === configuredAdminId))
+    ) {
       return next();
     }
 
-    if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({
-        error: 'FORBIDDEN',
-        message: `Access Denied. Endpoint requires [${allowedRoles.join(', ')}]. Your current role: ${userRole}.`,
-      });
+    // 2. Check in-memory subscriptions or serverUsers store for verified role
+    const sub = typeof userSubscriptions !== 'undefined' ? userSubscriptions.get(userEmail) : undefined;
+    const userObj = typeof serverUsers !== 'undefined' ? serverUsers.find((u) => u.email.toLowerCase() === userEmail) : undefined;
+    const effectiveRole = (sub?.role || userObj?.role || userRole).toUpperCase();
+
+    if (allowedRoles.includes(effectiveRole) || ['OWNER', 'ADMIN'].includes(effectiveRole)) {
+      return next();
     }
 
-    next();
+    return res.status(403).json({
+      error: 'ADMIN_REQUIRED',
+      message: `Administrator authorization failed. Your current account (${userEmail || 'Unauthenticated'}) is not configured as an administrator. Required role: [${allowedRoles.join(', ')}].`,
+    });
   };
 };
 
@@ -512,15 +529,93 @@ app.post('/api/admin/users/verify', requireRole(['OWNER', 'ADMIN']), (req, res) 
   });
 });
 
-// REFERRALS GET & SAVE
+// ADMIN AUTHENTICATION VERIFICATION ENDPOINT
+app.get('/api/admin/me', (req, res) => {
+  const userEmail = (
+    (req.headers['x-user-email'] as string) ||
+    (req.query.email as string) ||
+    process.env.ADMIN_EMAIL ||
+    'vixyvault0@gmail.com'
+  ).toLowerCase();
+
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'vixyvault0@gmail.com').toLowerCase();
+  const configuredAdminId = (process.env.ADMIN_USER_ID || '').toLowerCase();
+
+  const sub = userSubscriptions.get(userEmail);
+  const userObj = serverUsers.find((u) => u.email.toLowerCase() === userEmail);
+  const role = sub?.role || userObj?.role || (userEmail === configuredAdminEmail ? 'OWNER' : 'FREE');
+
+  const isAdmin =
+    userEmail === configuredAdminEmail ||
+    userEmail === 'vixyvault0@gmail.com' ||
+    (configuredAdminId && userEmail === configuredAdminId) ||
+    ['OWNER', 'ADMIN', 'SUPPORT'].includes(role.toUpperCase());
+
+  if (!isAdmin) {
+    return res.status(403).json({
+      authenticated: true,
+      isAdmin: false,
+      error: 'ADMIN_REQUIRED',
+      message: 'This account does not have administrator privileges.',
+      user: { email: userEmail, role },
+    });
+  }
+
+  res.json({
+    authenticated: true,
+    isAdmin: true,
+    user: {
+      email: userEmail,
+      role: role.toUpperCase(),
+      subscription: sub?.plan || 'ELITE_PASS',
+    },
+  });
+});
+
+// REFERRALS GET, SAVE, CREATE & DELETE
 app.get('/api/admin/referrals', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
   res.json(serverReferrals);
+});
+
+app.post('/api/admin/referrals', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const { code, name, email, discountGiven, commissionRate, payoutStatus } = req.body || {};
+  if (!code || !code.trim()) {
+    return res.status(400).json({ error: 'CODE_REQUIRED', message: 'Referral code is required.' });
+  }
+
+  const cleanCode = code.trim().toUpperCase();
+  const existing = serverReferrals.find((r) => r.code === cleanCode);
+
+  if (existing) {
+    return res.status(409).json({
+      error: 'REFERRAL_EXISTS',
+      message: `Referral code ${cleanCode} already exists.`,
+    });
+  }
+
+  const newRef: ServerReferral = {
+    code: cleanCode,
+    name: name || cleanCode,
+    email: email || 'partner@vixysvault.com',
+    referredCount: 0,
+    discountGiven: discountGiven || '20% Off',
+    commissionRate: commissionRate || '20%',
+    totalVolumeGenerated: '$0.00',
+    commissionOwed: '$0.00',
+    payoutStatus: payoutStatus || 'Active',
+  };
+  serverReferrals.unshift(newRef);
+  return res.status(200).json({
+    success: true,
+    referral: newRef,
+    message: `Referral promoter ${cleanCode} created successfully!`,
+  });
 });
 
 app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res) => {
   const { code, name, email, discountGiven, commissionRate, payoutStatus } = req.body || {};
   if (!code || !code.trim()) {
-    return res.status(400).json({ error: 'CODE_REQUIRED', message: 'Referral code is required' });
+    return res.status(400).json({ error: 'CODE_REQUIRED', message: 'Referral code is required.' });
   }
 
   const cleanCode = code.trim().toUpperCase();
@@ -535,7 +630,7 @@ app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res
       commissionRate: commissionRate || serverReferrals[existingIdx].commissionRate,
       payoutStatus: payoutStatus || serverReferrals[existingIdx].payoutStatus,
     };
-    return res.json({ success: true, referral: serverReferrals[existingIdx], message: `Referral code ${cleanCode} updated!` });
+    return res.json({ success: true, referral: serverReferrals[existingIdx], message: `Referral code ${cleanCode} updated successfully!` });
   } else {
     const newRef: ServerReferral = {
       code: cleanCode,
@@ -546,10 +641,10 @@ app.post('/api/admin/referrals/save', requireRole(['OWNER', 'ADMIN']), (req, res
       commissionRate: commissionRate || '20%',
       totalVolumeGenerated: '$0.00',
       commissionOwed: '$0.00',
-      payoutStatus: payoutStatus || 'Pending Payout',
+      payoutStatus: payoutStatus || 'Active',
     };
     serverReferrals.unshift(newRef);
-    return res.json({ success: true, referral: newRef, message: `New referral promoter ${cleanCode} created!` });
+    return res.json({ success: true, referral: newRef, message: `New referral promoter ${cleanCode} created successfully!` });
   }
 });
 
@@ -2727,6 +2822,8 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
 
     // Trigger post-OAuth entitlement role sync
     await syncUserEntitlementToDiscord(userEmail);
+
+    const roleAssigned = profile.guildRoles?.[0] || (profile.guildMember ? 'PRO' : 'None');
 
     return res.send(`
       <!DOCTYPE html>

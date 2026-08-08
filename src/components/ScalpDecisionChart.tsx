@@ -197,7 +197,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
     let ws: WebSocket | null = null;
     try {
-      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@trade`);
+      ws = new WebSocket(`wss://fstream.binance.com/ws/${binanceSymbol.toLowerCase()}@trade`);
 
       ws.onopen = () => {
         if (!isCancelled) setWsStatus('CONNECTED');

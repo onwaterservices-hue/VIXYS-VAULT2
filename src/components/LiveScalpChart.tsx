@@ -208,7 +208,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
 
     // Connect to Binance Kline & Trade WebSockets
     const streamName = `${binanceSymbol.toLowerCase()}@kline_${klineInterval}/${binanceSymbol.toLowerCase()}@trade`;
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${streamName}`);
+    const ws = new WebSocket(`wss://fstream.binance.com/ws/${streamName}`);
 
     ws.onopen = () => {
       if (!isCancelled) {

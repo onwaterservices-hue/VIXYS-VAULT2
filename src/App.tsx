@@ -13,7 +13,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -352,7 +352,6 @@ export default function App() {
   useEffect(() => {
     async function syncProfile() {
       try {
-        const { getDiscordUserProfileApi } = await import('./services/api');
         const res = await getDiscordUserProfileApi();
         if (res && res.linked && res.profile) {
           setAlertSettings((prev) => ({

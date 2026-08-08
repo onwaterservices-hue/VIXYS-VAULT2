@@ -18,7 +18,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { AlertSettings } from '../types';
-import { sendTestAlert } from '../services/api';
+import { sendTestAlert, getDiscordAuthUrlApi } from '../services/api';
 import { playAlertSound } from '../utils/audio';
 import { CommunityAccessNode } from './CommunityAccessNode';
 
@@ -68,7 +68,6 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
     setIsLinkingDiscord(true);
     setTestResult(null);
     try {
-      const { getDiscordAuthUrlApi } = await import('../services/api');
       const authData = await getDiscordAuthUrlApi();
       if (authData && authData.url) {
         const width = 600;

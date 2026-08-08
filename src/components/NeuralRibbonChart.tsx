@@ -123,7 +123,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
         if (!isCancelled) setConnectionStatus('LIVE (SIM)');
       });
 
-    const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${binanceSymbol.toLowerCase()}@trade`);
+    const ws = new WebSocket(`wss://fstream.binance.com/ws/${binanceSymbol.toLowerCase()}@trade`);
 
     ws.onopen = () => {
       if (!isCancelled) {

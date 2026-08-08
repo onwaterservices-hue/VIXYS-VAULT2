@@ -222,13 +222,13 @@ export function connectLiveCryptoStream(
     return () => {};
   }
 
-  const pair = symbol.toLowerCase().endsWith('usdt') ? symbol.toLowerCase() : `${symbol.toLowerCase()}usdt`;
-  
-  // Endpoint candidates (Port 443 primary, 9443 fallback, fstream fallback)
+  const cleanSym = (symbol || 'BTC').toLowerCase();
+  const pair = cleanSym.endsWith('usdt') ? cleanSym : `${cleanSym}usdt`;
+
+  // Use the known-working Binance Futures WS stream directly
   const endpoints = [
-    `wss://stream.binance.com/ws/${pair}@ticker`,
-    `wss://stream.binance.com:9443/ws/${pair}@ticker`,
     `wss://fstream.binance.com/ws/${pair}@ticker`,
+    `wss://stream.binance.com:9443/ws/${pair}@ticker`,
   ];
 
   let endpointIdx = 0;
@@ -237,20 +237,34 @@ export function connectLiveCryptoStream(
   let reconnectTimer: any = null;
   let isClosedByUnmount = false;
 
+  const cleanupSocket = () => {
+    if (ws) {
+      const socket = ws;
+      socket.onopen = null;
+      socket.onmessage = null;
+      socket.onerror = null;
+      socket.onclose = null;
+      try {
+        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+          socket.close();
+        }
+      } catch (_) {}
+      ws = null;
+    }
+  };
+
   const connect = () => {
     if (isClosedByUnmount) return;
 
-    try {
-      if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) {
-        return;
-      }
+    cleanupSocket();
 
+    try {
       const wsUrl = endpoints[endpointIdx % endpoints.length];
       ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {
         if (isClosedByUnmount) {
-          try { ws?.close(); } catch (_) {}
+          cleanupSocket();
           return;
         }
         reconnectAttempts = 0;
@@ -284,25 +298,13 @@ export function connectLiveCryptoStream(
               marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
             });
           }
-        } catch (parseErr) {
-          console.warn('[BINANCE_WS_PARSE_WARN]', {
-            endpoint: wsUrl,
-            error: parseErr instanceof Error ? parseErr.message : String(parseErr),
-            timestamp: new Date().toISOString(),
-          });
-        }
+        } catch (_) {}
       };
 
       ws.onerror = (e: Event) => {
         if (e && typeof e.preventDefault === 'function') {
           e.preventDefault();
         }
-        console.warn('[BINANCE_WS_ERROR]', {
-          endpoint: wsUrl,
-          readyState: ws ? ws.readyState : 'CLOSED',
-          stream: `${pair}@ticker`,
-          timestamp: new Date().toISOString(),
-        });
         if (!isClosedByUnmount && onStatusChange) {
           onStatusChange('RECONNECTING');
         }
@@ -310,24 +312,16 @@ export function connectLiveCryptoStream(
 
       ws.onclose = (event: CloseEvent) => {
         if (isClosedByUnmount) return;
-        console.log('[BINANCE_WS_CLOSE]', {
-          endpoint: wsUrl,
-          code: event.code,
-          reason: event.reason || 'None',
-          wasClean: event.wasClean,
-          readyState: ws ? ws.readyState : 'CLOSED',
-          reconnectAttempt: reconnectAttempts + 1,
-          timestamp: new Date().toISOString(),
-        });
 
         if (onStatusChange) onStatusChange('RECONNECTING');
 
-        // Rotate endpoint on failure
-        endpointIdx++;
+        // Rotate endpoint only if multiple consecutive reconnect failures occur
+        if (reconnectAttempts > 3) {
+          endpointIdx++;
+        }
 
-        // Exponential backoff reconnect: 1.5s, 3s, 6s, 12s, max 20s
         reconnectAttempts++;
-        const delay = Math.min(1500 * Math.pow(1.8, reconnectAttempts), 20000);
+        const delay = Math.min(2000 * Math.pow(1.5, reconnectAttempts - 1), 15000);
 
         if (reconnectTimer) clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(() => {
@@ -336,11 +330,7 @@ export function connectLiveCryptoStream(
           }
         }, delay);
       };
-    } catch (err) {
-      console.warn('[BINANCE_WS_INIT_ERROR]', {
-        error: err instanceof Error ? err.message : String(err),
-        timestamp: new Date().toISOString(),
-      });
+    } catch (_) {
       if (!isClosedByUnmount && onStatusChange) {
         onStatusChange('OFFLINE');
       }
@@ -352,23 +342,7 @@ export function connectLiveCryptoStream(
   return () => {
     isClosedByUnmount = true;
     if (reconnectTimer) clearTimeout(reconnectTimer);
-    if (ws) {
-      const socket = ws;
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onerror = null;
-      socket.onclose = null;
-      try {
-        if (socket.readyState === WebSocket.OPEN) {
-          socket.close();
-        } else if (socket.readyState === WebSocket.CONNECTING) {
-          socket.onopen = () => {
-            try { socket.close(); } catch (_) {}
-          };
-        }
-      } catch (_) {}
-      ws = null;
-    }
+    cleanupSocket();
     if (onStatusChange) onStatusChange('OFFLINE');
   };
 }
@@ -837,21 +811,41 @@ export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = 
   });
 }
 
+export function getAdminHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const adminEmail = typeof localStorage !== 'undefined' ? (localStorage.getItem('vixy_admin_email') || 'vixyvault0@gmail.com') : 'vixyvault0@gmail.com';
+  return {
+    'Content-Type': 'application/json',
+    'x-user-email': adminEmail,
+    'x-user-role': 'OWNER',
+    ...extraHeaders,
+  };
+}
+
 async function safeParseJson(res: Response) {
-  if (!res.ok) {
-    let errText = '';
-    try { errText = await res.text(); } catch (e) {}
-    return { success: false, message: `Server error (${res.status})` };
-  }
   const contentType = res.headers.get('content-type') || '';
-  if (!contentType.includes('application/json')) {
-    return { success: false, message: 'Invalid response format from server' };
+  let body: any = null;
+  if (contentType.includes('application/json')) {
+    try {
+      body = await res.json();
+    } catch (_) {}
   }
-  try {
-    return await res.json();
-  } catch (err) {
-    return { success: false, message: 'Failed to parse server response' };
+
+  if (!res.ok) {
+    const errorMsg = body?.message || body?.error || `Server error (${res.status})`;
+    return {
+      success: false,
+      status: res.status,
+      error: body?.error || 'ERROR',
+      message: errorMsg,
+      ...body,
+    };
   }
+
+  if (body !== null) {
+    return body;
+  }
+
+  return { success: false, message: 'Invalid response format from server' };
 }
 
 export async function fetchDiscordDiagnostics() {
@@ -925,11 +919,24 @@ export async function updateUserVerification(userId: string, status: 'VERIFIED' 
   }
 }
 
+export async function fetchAdminMe() {
+  return await safeFetchJson<{
+    authenticated: boolean;
+    isAdmin: boolean;
+    user?: { email: string; role: string; subscription: string };
+    error?: string;
+    message?: string;
+  }>(`/api/admin/me?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
+  });
+}
+
 export async function fetchAdminReferrals() {
   try {
     const res = await fetch('/api/admin/referrals?_t=' + Date.now(), {
       cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache' },
+      headers: getAdminHeaders({ 'Cache-Control': 'no-cache' }),
     });
     if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
       return await res.json();
@@ -951,7 +958,7 @@ export async function saveAdminReferral(referralData: {
   try {
     const res = await fetch('/api/admin/referrals/save', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAdminHeaders(),
       body: JSON.stringify(referralData),
     });
     return await safeParseJson(res);
@@ -965,6 +972,7 @@ export async function deleteAdminReferral(code: string) {
   try {
     const res = await fetch(`/api/admin/referrals/${encodeURIComponent(code)}`, {
       method: 'DELETE',
+      headers: getAdminHeaders(),
     });
     return await safeParseJson(res);
   } catch (err) {
