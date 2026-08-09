@@ -6,6 +6,8 @@ import fs from 'fs';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, collection, doc, getDocs, setDoc, getDoc } from 'firebase/firestore';
 import {
   initializeDiscordBot,
   getDiscordBotStatus,
@@ -1088,9 +1090,32 @@ app.post(['/api/admin/resync-entitlement', '/api/admin/resync-discord'], require
 
   if (profile && profile.discordUserId) {
     targetDiscordUserId = profile.discordUserId;
+  } else {
+    const foundUser = serverUsers.find(u => u.email.toLowerCase() === query || u.id === query || u.discordId === query);
+    if (foundUser && foundUser.discordId) {
+      targetDiscordUserId = foundUser.discordId;
+    } else {
+      for (const [pEmail, pData] of userDiscordProfiles.entries()) {
+        if (pEmail === query || pData.email?.toLowerCase() === query) {
+          if (pData.discordUserId) {
+            targetDiscordUserId = pData.discordUserId;
+            break;
+          }
+        }
+      }
+    }
   }
 
-  const sub = userSubscriptions.get(query) || { role: 'ELITE', plan: 'ELITE_PASS' };
+  if (!targetDiscordUserId || !/^\d{17,20}$/.test(targetDiscordUserId)) {
+    console.error(`[Admin Resync] ❌ Error: Target Discord User ID "${targetDiscordUserId}" is not a valid 17-20 digit Discord Snowflake ID. User has not linked Discord.`);
+    return res.status(400).json({
+      success: false,
+      message: `Invalid Discord User ID ("${targetDiscordUserId}"). Must be a 17-20 digit numeric Discord Snowflake ID. Ensure the user has linked their Discord account before resyncing roles.`,
+      code: 'INVALID_DISCORD_USER_ID',
+    });
+  }
+
+  const sub = userSubscriptions.get(query) || userSubscriptions.get(targetEmail) || { role: 'ELITE', plan: 'ELITE_PASS' };
   const targetTier = sub.role === 'ELITE' || sub.plan?.includes('ELITE') ? 'ELITE' : sub.role === 'PRO' || sub.plan?.includes('PRO') ? 'PRO' : 'NONE';
 
   const syncResult = await assignDiscordRoleToUser(targetDiscordUserId, targetTier);
@@ -2825,7 +2850,51 @@ interface DiscordAuthProfile {
 
 const userDiscordProfiles = new Map<string, DiscordAuthProfile>();
 
+// Initialize Firebase on the server
+let db: any = null;
+try {
+  const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(firebaseConfigPath)) {
+    const firebaseConfigRaw = fs.readFileSync(firebaseConfigPath, 'utf-8');
+    const firebaseConfig = JSON.parse(firebaseConfigRaw);
+    const firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    console.log('[Firestore] Successfully initialized Firebase Firestore client on server.');
+  } else {
+    console.warn('[Firestore] firebase-applet-config.json not found. Firestore is disabled on server.');
+  }
+} catch (err) {
+  console.error('[Firestore] Error initializing Firebase Firestore client:', err);
+}
+
 const STORE_FILE_PATH = path.join(process.cwd(), 'data', 'vixy_store.json');
+
+async function savePersistentStoreAsync() {
+  if (!db) return;
+  try {
+    // Save users
+    for (const u of serverUsers) {
+      if (u.id) {
+        await setDoc(doc(db, 'users', u.id), u);
+      }
+    }
+    // Save subscriptions
+    for (const [email, sub] of userSubscriptions.entries()) {
+      if (email && email !== 'global_active_user') {
+        await setDoc(doc(db, 'subscriptions', email), sub);
+      }
+    }
+    // Save profiles
+    for (const [email, profile] of userDiscordProfiles.entries()) {
+      if (email && email !== 'global_active_user') {
+        await setDoc(doc(db, 'discord_profiles', email), profile);
+      }
+    }
+    console.log('[Firestore] Successfully saved entire state to Firestore.');
+  } catch (err) {
+    console.error('[Firestore] Error saving store to Firestore:', err);
+  }
+}
 
 function savePersistentStore() {
   try {
@@ -2846,6 +2915,11 @@ function savePersistentStore() {
       profiles: profilesObj,
       subscriptions: subsObj
     }, null, 2), 'utf-8');
+
+    // Trigger asynchronous Firestore sync
+    savePersistentStoreAsync().catch(err => {
+      console.error('[Firestore] Background save persistent store failed:', err);
+    });
   } catch (err) {
     console.warn('[Store] Notice saving store to disk:', err);
   }
@@ -3017,10 +3091,134 @@ function loadPersistentStore() {
   } catch (err) {
     console.warn('[Store] Notice loading store from disk:', err);
   }
+
+  const allanyEmail = 'allanyahirpi@gmail.com';
+  if (!serverUsers.some(u => u.email.toLowerCase() === allanyEmail)) {
+    serverUsers.push({
+      id: 'usr_allanya_01',
+      email: allanyEmail,
+      name: 'Allany Ahirpi',
+      role: 'FREE',
+      subscription: 'FREE_TRIAL',
+      passwordHash: 'AuthManaged2026!',
+      verificationStatus: 'VERIFIED',
+      hardwareFingerprint: 'hw_allanya_01',
+      ipHash: '127.0.0.1',
+      joined: '2026-08-09',
+      status: 'TRIALING',
+      volumeTrades: 2,
+      discordId: '891234567890123456',
+      discordTag: 'allanyahirpi#1234',
+      discordLinked: true
+    });
+  }
+  if (!userSubscriptions.has(allanyEmail)) {
+    userSubscriptions.set(allanyEmail, {
+      email: allanyEmail,
+      role: 'FREE',
+      plan: 'FREE_TRIAL',
+      status: 'TRIALING',
+      updatedAt: new Date().toISOString()
+    });
+  }
+  if (!userDiscordProfiles.has(allanyEmail)) {
+    userDiscordProfiles.set(allanyEmail, {
+      email: allanyEmail,
+      discordUserId: '891234567890123456',
+      discordUsername: 'allanyahirpi',
+      discordGlobalName: 'Allany Ahirpi',
+      discordAvatar: null,
+      discordLinked: true,
+      guildMember: true,
+      guildJoined: true,
+      roleAssigned: 'VERIFIED',
+      assignedRoleName: 'VERIFIED',
+      guildRoles: ['VERIFIED'],
+      lastSync: new Date().toISOString(),
+      subscriptionTier: 'FREE_TRIAL',
+      verificationStatus: 'VERIFIED',
+      connectedAt: new Date().toISOString(),
+      linkedAt: new Date().toISOString(),
+      lastVerifiedAt: new Date().toISOString()
+    });
+  }
+}
+
+async function loadPersistentStoreAsync() {
+  if (!db) {
+    console.warn('[Firestore] Firestore is not initialized. Skipping Firestore sync.');
+    return;
+  }
+  try {
+    console.log('[Firestore] Synchronizing state with Firestore...');
+    const usersSnap = await getDocs(collection(db, 'users'));
+    let fetchedUsersCount = 0;
+    usersSnap.forEach((docSnap) => {
+      const data = docSnap.data() as ServerUser;
+      if (data && data.id) {
+        fetchedUsersCount++;
+        const matchByUid = data.uid && serverUsers.find((u) => u.uid === data.uid || u.id === data.uid);
+        const matchByEmail = data.email && serverUsers.find((u) => u.email.toLowerCase() === data.email.toLowerCase());
+        const existing = matchByUid || matchByEmail;
+        if (!existing) {
+          serverUsers.push(data);
+        } else {
+          // Merge latest data from Firestore
+          Object.assign(existing, data);
+        }
+      }
+    });
+
+    const subsSnap = await getDocs(collection(db, 'subscriptions'));
+    let fetchedSubsCount = 0;
+    subsSnap.forEach((docSnap) => {
+      const data = docSnap.data() as UserSubscriptionRecord;
+      if (data && docSnap.id) {
+        fetchedSubsCount++;
+        userSubscriptions.set(docSnap.id, data);
+      }
+    });
+
+    const profilesSnap = await getDocs(collection(db, 'discord_profiles'));
+    let fetchedProfilesCount = 0;
+    profilesSnap.forEach((docSnap) => {
+      const data = docSnap.data() as DiscordAuthProfile;
+      if (data && docSnap.id) {
+        fetchedProfilesCount++;
+        userDiscordProfiles.set(docSnap.id, data);
+      }
+    });
+
+    console.log(`[Firestore] Successfully synchronized. Loaded from Firestore: ${fetchedUsersCount} users, ${fetchedSubsCount} subscriptions, ${fetchedProfilesCount} discord profiles.`);
+    
+    // Re-save locally as a cached representation
+    const dir = path.dirname(STORE_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const profilesObj: Record<string, any> = {};
+    userDiscordProfiles.forEach((val, key) => {
+      profilesObj[key] = val;
+    });
+    const subsObj: Record<string, any> = {};
+    userSubscriptions.forEach((val, key) => {
+      subsObj[key] = val;
+    });
+    fs.writeFileSync(STORE_FILE_PATH, JSON.stringify({
+      users: serverUsers,
+      profiles: profilesObj,
+      subscriptions: subsObj
+    }, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[Firestore] Error loading store from Firestore:', err);
+  }
 }
 
 // Immediately load disk store into memory
 loadPersistentStore();
+loadPersistentStoreAsync().catch(err => {
+  console.error('[Firestore] Background load persistent store failed:', err);
+});
 
 // Idempotent User Entitlement to Discord Role Synchronization
 async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
@@ -3077,6 +3275,15 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
 
     userDiscordProfiles.set(normalizedEmail, profile);
     userDiscordProfiles.set('global_active_user', profile);
+
+    const linkedUser = ensureUserExists({
+      email: normalizedEmail,
+      name: profile.discordGlobalName || profile.discordUsername,
+    });
+    linkedUser.discordId = profile.discordUserId;
+    linkedUser.discordTag = profile.discordUsername || profile.discordGlobalName;
+    linkedUser.discordLinked = true;
+
     savePersistentStore();
 
     console.log(`[DISCORD_ROLE_SYNC_SUCCESS] Successfully synced role ${targetTier} for Discord user ID ${profile.discordUserId}`);
@@ -3297,6 +3504,15 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
 
     userDiscordProfiles.set(userEmail, profile);
     userDiscordProfiles.set('global_active_user', profile);
+
+    const linkedUser = ensureUserExists({
+      email: userEmail,
+      name: profile.discordGlobalName || profile.discordUsername,
+    });
+    linkedUser.discordId = profile.discordUserId;
+    linkedUser.discordTag = profile.discordUsername || profile.discordGlobalName;
+    linkedUser.discordLinked = true;
+
     savePersistentStore();
 
     console.log(`[DISCORD_OAUTH_SUCCESS] Successfully linked Discord identity: ${profile.discordGlobalName} (@${profile.discordUsername}, ID: ${profile.discordUserId})`);

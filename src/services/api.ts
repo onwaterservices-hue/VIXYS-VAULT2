@@ -867,7 +867,10 @@ export async function fetchAdminUsers() {
       headers: getAdminHeaders({ 'Cache-Control': 'no-cache' }),
     });
     if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
-      return await res.json();
+      const data = await res.json();
+      if (Array.isArray(data)) return data;
+      if (data && Array.isArray(data.users)) return data.users;
+      return data;
     }
   } catch (err) {
     console.warn('Failed to fetch admin users from server', err);

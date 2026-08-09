@@ -15,6 +15,7 @@ import {
   Check,
 } from 'lucide-react';
 import { AuthState } from '../types';
+import { syncAuthUserApi } from '../services/api';
 
 interface AuthViewProps {
   authState: AuthState;
@@ -56,6 +57,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
     const userName = fullName.trim() || (isAdminEmail ? 'Master Admin (Vixy Vault)' : email ? email.split('@')[0] : 'Free Trial Trader');
+
+    // Live sync user to server backend persistent database
+    syncAuthUserApi({
+      email: userEmail,
+      name: userName,
+      role: isAdminEmail ? 'OWNER' : 'FREE',
+      subscription: isAdminEmail ? 'ELITE_PASS' : (mode === 'register' ? 'FREE_TRIAL' : 'FREE_TRIAL'),
+    }).catch((err) => console.warn('Auth sync error:', err));
 
     setTimeout(() => {
       setLoading(false);

@@ -1,6 +1,20 @@
 {
   "users": [
     {
+      "id": "usr_2863_ivm",
+      "email": "test.live.trader@gmail.com",
+      "name": "Live Test Trader",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_04eldr",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
       "id": "usr_master_001",
       "uid": "usr_a37wk50",
       "email": "vixyvault0@gmail.com",
@@ -46,6 +60,13 @@
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
       "updatedAt": "2026-08-08T15:03:21.053Z"
+    },
+    "test.live.trader@gmail.com": {
+      "email": "test.live.trader@gmail.com",
+      "role": "FREE",
+      "plan": "FREE_TRIAL",
+      "status": "INACTIVE",
+      "updatedAt": "2026-08-09T17:39:42.863Z"
     }
   }
 }

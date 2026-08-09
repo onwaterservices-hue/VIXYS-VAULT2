@@ -440,9 +440,13 @@ export async function assignDiscordRoleToUser(
     console.log(`[Discord Role Sync] Target Guild ID: ${targetGuildId}`);
     console.log(`[Discord Role Sync] Bot Token Present: ${!!botToken}`);
 
-    if (!discordUserId) {
-      console.error(`[Discord Role Sync] ❌ Failure: Missing discordUserId`);
-      return { success: false, message: 'Discord User ID is required', code: 'MISSING_USER_ID' };
+    if (!discordUserId || !/^\d{17,20}$/.test(discordUserId)) {
+      console.error(`[Discord Role Sync] ❌ Failure: Invalid Discord Snowflake ID: "${discordUserId}"`);
+      return {
+        success: false,
+        message: `Invalid Discord User ID ("${discordUserId}"). Must be a 17-20 digit numeric Discord Snowflake ID. Ensure the user has linked their actual Discord account.`,
+        code: 'INVALID_DISCORD_USER_ID',
+      };
     }
 
     if (!botToken && (!discordClient || !discordClient.isReady())) {

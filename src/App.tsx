@@ -576,6 +576,14 @@ export default function App() {
       role: 'DEMO' as const,
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
     };
+
+    syncAuthUserApi({
+      email: trialUser.email,
+      name: trialUser.name,
+      role: 'FREE',
+      subscription: 'FREE_TRIAL',
+    }).catch((err) => console.warn('Auth sync error:', err));
+
     setAuthState({
       isAuthenticated: true,
       user: trialUser,
