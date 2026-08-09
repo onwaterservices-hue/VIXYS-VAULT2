@@ -1,0 +1,19 @@
+{
+  "id": "evt_test_success_7711",
+  "type": "checkout.session.completed",
+  "data": {
+    "object": {
+      "id": "cs_test_7711",
+      "customer": "cus_R7711",
+      "subscription": "sub_R7711",
+      "customer_email": "pro.subscriber@vixyai.com",
+      "amount_total": 7900,
+      "payment_method_types": ["card"],
+      "metadata": {
+        "plan": "PRO",
+        "referralCode": "DIRECT",
+        "userEmail": "pro.subscriber@vixyai.com"
+      }
+    }
+  }
+}

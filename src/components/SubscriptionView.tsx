@@ -223,44 +223,14 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         } else if (data.url) {
           window.location.href = data.url;
         }
-      } else if (data.error === 'STRIPE_NOT_CONFIGURED') {
-        // Fallback to interactive authorization if secret key not injected yet
-        setTimeout(() => {
-          setIsProcessingStripe(false);
-          setSubscription({
-            plan: selectedPlanToBuy,
-            status: 'active',
-            renewalDate: '30 days from today',
-            paymentMethod: 'Visa ending in 4242',
-            billingInterval,
-          });
-          setUserRole('PRO');
-          setSuccessMessage(`Payment Authorized! Welcome to VIXY AI ${selectedPlanToBuy} Tier.`);
-          setTimeout(() => {
-            setShowCheckoutModal(false);
-          }, 1500);
-        }, 1000);
       } else {
-        setStripeError(data.message || 'Unable to connect to Stripe');
+        setStripeError(data.message || 'Unable to connect to Stripe checkout service.');
         setIsProcessingStripe(false);
       }
     } catch (err: any) {
-      console.warn('Stripe endpoint fallback to instant verification', err);
-      setTimeout(() => {
-        setIsProcessingStripe(false);
-        setSubscription({
-          plan: selectedPlanToBuy,
-          status: 'active',
-          renewalDate: '30 days from today',
-          paymentMethod: 'Visa ending in 4242',
-          billingInterval,
-        });
-        setUserRole('PRO');
-        setSuccessMessage(`Payment Authorized! Welcome to VIXY AI ${selectedPlanToBuy} Tier.`);
-        setTimeout(() => {
-          setShowCheckoutModal(false);
-        }, 1500);
-      }, 1000);
+      console.error('Stripe Checkout Error:', err);
+      setStripeError('Network connection error when reaching Stripe server.');
+      setIsProcessingStripe(false);
     }
   };
 

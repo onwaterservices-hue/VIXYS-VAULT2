@@ -125,7 +125,15 @@ const requireRole = (allowedRoles: string[]) => {
     // 2. Check in-memory subscriptions or serverUsers store for verified role
     const sub = typeof userSubscriptions !== 'undefined' ? userSubscriptions.get(userEmail) : undefined;
     const userObj = typeof serverUsers !== 'undefined' ? serverUsers.find((u) => u.email.toLowerCase() === userEmail) : undefined;
-    const effectiveRole = (sub?.role || userObj?.role || userRole).toUpperCase();
+    
+    // SERVER SECURITY: Never trust client header x-user-role for ADMIN/OWNER/SUPPORT roles.
+    // Must be backed by server user store record or configured admin email.
+    let effectiveRole = (sub?.role || userObj?.role || 'FREE').toUpperCase();
+    
+    // Allow non-privileged header role override only if not asking for elevated admin/owner/support roles
+    if (!['OWNER', 'ADMIN', 'SUPPORT'].includes(userRole) && effectiveRole === 'FREE') {
+      effectiveRole = userRole;
+    }
 
     if (allowedRoles.includes(effectiveRole) || ['OWNER', 'ADMIN'].includes(effectiveRole)) {
       return next();
@@ -1531,8 +1539,15 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
     }
   } else {
     try {
-      event = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    } catch {
+      if (Buffer.isBuffer(req.body)) {
+        event = JSON.parse(req.body.toString('utf-8'));
+      } else if (typeof req.body === 'string') {
+        event = JSON.parse(req.body);
+      } else {
+        event = req.body;
+      }
+    } catch (parseErr: any) {
+      console.error('[WEBHOOK_PARSE_ERROR] Failed to parse request body:', parseErr.message);
       event = { type: 'unknown', id: `evt_mock_${Date.now()}` };
     }
   }

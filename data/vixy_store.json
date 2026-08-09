@@ -1,4 +1,152 @@
 {
+  "users": [
+    {
+      "id": "usr_7564_nji",
+      "email": "real.stripe.user@vixyai.com",
+      "name": "real.stripe.user",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_a5rq2g",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
+      "id": "usr_2495_tgv",
+      "email": "quant.trader.test@vixyai.com",
+      "name": "quant.trader.test",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_w7k8sb",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
+      "id": "uid_test_12345",
+      "uid": "uid_test_12345",
+      "email": "test.trader@vixyai.com",
+      "name": "test.trader",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_be9jqw",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
+      "id": "usr_01",
+      "email": "vixyvault0@gmail.com",
+      "name": "Master Admin (Vixy Vault)",
+      "role": "OWNER",
+      "subscription": "ELITE_PASS",
+      "passwordHash": "Seattle007",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_master_001",
+      "ipHash": "192.168.1.1",
+      "joined": "2026-01-15",
+      "status": "ACTIVE",
+      "volumeTrades": 1420,
+      "uid": "usr_a37wk50"
+    },
+    {
+      "id": "usr_02",
+      "email": "trader.alex@gmail.com",
+      "name": "Alex Vance",
+      "role": "USER",
+      "subscription": "ELITE_PASS",
+      "passwordHash": "Alex2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_alex_991",
+      "ipHash": "24.120.88.11",
+      "joined": "2026-07-28",
+      "status": "ACTIVE",
+      "volumeTrades": 428,
+      "referralCodeUsed": "REF-ALEX"
+    },
+    {
+      "id": "usr_03",
+      "email": "quant.sarah@optionstrade.io",
+      "name": "Sarah Connor",
+      "role": "USER",
+      "subscription": "ELITE_PASS",
+      "passwordHash": "SarahPass99",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_sarah_442",
+      "ipHash": "68.90.14.22",
+      "joined": "2026-07-29",
+      "status": "ACTIVE",
+      "volumeTrades": 312,
+      "referralCodeUsed": "PROMOTER20"
+    },
+    {
+      "id": "usr_04",
+      "email": "sam.predict@crypto.org",
+      "name": "Sam Miller",
+      "role": "USER",
+      "subscription": "PRO_PASS",
+      "passwordHash": "SamCrypto1!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_sam_882",
+      "ipHash": "172.56.12.90",
+      "joined": "2026-07-20",
+      "status": "ACTIVE",
+      "volumeTrades": 194,
+      "referralCodeUsed": "DIRECT"
+    },
+    {
+      "id": "usr_05",
+      "email": "dave.h@scalping.com",
+      "name": "Dave Hawkins",
+      "role": "USER",
+      "subscription": "PRO_PASS",
+      "passwordHash": "ScalperDave#1",
+      "verificationStatus": "SUSPECTED_DUPLICATE",
+      "hardwareFingerprint": "hw_sam_882",
+      "ipHash": "172.56.12.90",
+      "joined": "2026-07-25",
+      "status": "ACTIVE",
+      "volumeTrades": 88,
+      "referralCodeUsed": "PROMOTER20"
+    },
+    {
+      "id": "usr_06",
+      "email": "support@vixysvault.com",
+      "name": "Elena Rostova",
+      "role": "SUPPORT",
+      "subscription": "PRO_PASS",
+      "passwordHash": "SupportElena2026",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_elena_101",
+      "ipHash": "10.0.0.4",
+      "joined": "2026-02-20",
+      "status": "ACTIVE",
+      "volumeTrades": 50
+    },
+    {
+      "id": "usr_07",
+      "email": "free.trader@gmail.com",
+      "name": "David Kim",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "TrialUser123",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_david_302",
+      "ipHash": "98.110.42.12",
+      "joined": "2026-08-01",
+      "status": "TRIALING",
+      "volumeTrades": 12
+    }
+  ],
   "profiles": {
     "vixyvault0@gmail.com": {
       "email": "vixyvault0@gmail.com",
@@ -50,6 +198,27 @@
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
       "updatedAt": "2026-08-08T15:03:21.053Z"
+    },
+    "test.trader@vixyai.com": {
+      "email": "test.trader@vixyai.com",
+      "role": "FREE",
+      "plan": "FREE_TRIAL",
+      "status": "INACTIVE",
+      "updatedAt": "2026-08-09T14:46:01.328Z"
+    },
+    "quant.trader.test@vixyai.com": {
+      "email": "quant.trader.test@vixyai.com",
+      "role": "FREE",
+      "plan": "FREE_TRIAL",
+      "status": "INACTIVE",
+      "updatedAt": "2026-08-09T14:46:22.495Z"
+    },
+    "real.stripe.user@vixyai.com": {
+      "email": "real.stripe.user@vixyai.com",
+      "role": "FREE",
+      "plan": "FREE_TRIAL",
+      "status": "INACTIVE",
+      "updatedAt": "2026-08-09T14:48:37.564Z"
     }
   }
 }
