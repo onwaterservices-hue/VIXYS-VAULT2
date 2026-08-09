@@ -980,4 +980,62 @@ export async function assignDiscordVipRole(discordUserId: string, guildId?: stri
   return { success: result.success, message: result.message };
 }
 
+// Share client instance across services
+export function setServiceDiscordClient(client: Client) {
+  discordClient = client;
+}
+
+// Fetch guild members from Discord server
+export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promise<Array<{ id: string, tag: string, roles: string[], avatar?: string | null }>> {
+  const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '1451337712937336985';
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+
+  // Approach 1: discordClient if connected and ready
+  if (discordClient && discordClient.isReady()) {
+    try {
+      console.log('[DiscordBot] Fetching guild members via discord.js client...');
+      const guild = await discordClient.guilds.fetch(targetGuildId);
+      if (guild) {
+        const membersCollection = await guild.members.fetch();
+        console.log(`[DiscordBot] Successfully fetched ${membersCollection.size} members via client.`);
+        return Array.from(membersCollection.values()).map(m => ({
+          id: m.id,
+          tag: m.user.tag,
+          roles: Array.from(m.roles.cache.keys()),
+          avatar: m.user.avatarURL() || null
+        }));
+      }
+    } catch (err) {
+      console.warn('[DiscordBot] Failed to fetch guild members via client, trying REST:', err);
+    }
+  }
+
+  // Approach 2: Direct REST API call
+  if (botToken) {
+    try {
+      console.log('[DiscordBot] Fetching guild members via direct REST API...');
+      const res = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members?limit=1000`, {
+        headers: { Authorization: `Bot ${botToken}` }
+      });
+      if (res.ok) {
+        const membersData: any[] = await res.json();
+        console.log(`[DiscordBot] Successfully fetched ${membersData.length} members via REST.`);
+        return membersData.map((m: any) => ({
+          id: m.user.id,
+          tag: m.user.username + (m.user.discriminator && m.user.discriminator !== '0' ? `#${m.user.discriminator}` : ''),
+          roles: m.roles || [],
+          avatar: m.user.avatar ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png` : null
+        }));
+      } else {
+        console.error('[DiscordBot] Direct REST fetch members failed with status:', res.status);
+      }
+    } catch (err) {
+      console.error('[DiscordBot] Direct REST fetch members exception:', err);
+    }
+  }
+
+  return [];
+}
+
+
 

@@ -13,7 +13,7 @@ import { createFlowForgeEmbed, createFinalLockEmbed } from './embeds/flowForgeEm
 import { createAnalyticsEmbed } from './embeds/analyticsEmbed';
 import { fetchLiveMarketOverview, MarketOverview } from './services/marketData';
 import { handleDashboardCommand } from './commands/dashboard';
-import { assignDiscordRoleToUser } from './discordBotService';
+import { assignDiscordRoleToUser, setServiceDiscordClient } from './discordBotService';
 import { REST, Routes, SlashCommandBuilder, Interaction, TextChannel } from 'discord.js';
 
 export interface DiscordBotState {
@@ -208,6 +208,9 @@ export async function initializeDiscordBot(): Promise<boolean> {
     return false;
   }
 
+  // Set the service client reference
+  setServiceDiscordClient(discordClient);
+
   const token = process.env.DISCORD_BOT_TOKEN!;
   const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
   const guildId = process.env.DISCORD_GUILD_ID;
@@ -329,7 +332,8 @@ export async function broadcastSignalToDiscord(signalData: {
   return { success: false, method: 'NONE', message: 'No active Discord Bot Token or Webhook configured.' };
 }
 
-export { assignDiscordRoleToUser, removeDiscordRoleFromUser, runDiscordDiagnostics, getDiscordHealthReport } from './discordBotService';
+export { assignDiscordRoleToUser, removeDiscordRoleFromUser, runDiscordDiagnostics, getDiscordHealthReport, fetchDiscordGuildMembers } from './discordBotService';
+export { discordClient } from './client';
 
 export async function assignDiscordVipRole(
   discordUserId: string,

@@ -18,6 +18,8 @@ import {
   runDiscordDiagnostics,
   getDiscordHealthReport,
   validateDiscordEnv,
+  fetchDiscordGuildMembers,
+  discordClient,
 } from './src/bot';
 import { AutomationScheduler } from './src/bot/services/automationScheduler';
 
@@ -1149,43 +1151,31 @@ app.post(['/api/admin/resync-entitlement', '/api/admin/resync-discord'], require
 
   console.log(`[Admin Resync Request] Manual entitlement re-sync triggered for: "${query}"`);
 
-  let targetEmail = query;
-  let targetDiscordUserId = query;
-
-  const profileByEmail = userDiscordProfiles.get(query);
-  const profileGlobal = userDiscordProfiles.get('global_active_user');
-
-  let profile = profileByEmail || profileGlobal;
-
-  if (profile && profile.discordUserId) {
-    targetDiscordUserId = profile.discordUserId;
-  } else {
-    const foundUser = serverUsers.find(u => u.email.toLowerCase() === query || u.id === query || u.discordId === query);
-    if (foundUser && foundUser.discordId) {
-      targetDiscordUserId = foundUser.discordId;
-    } else {
-      for (const [pEmail, pData] of userDiscordProfiles.entries()) {
-        if (pEmail === query || pData.email?.toLowerCase() === query) {
-          if (pData.discordUserId) {
-            targetDiscordUserId = pData.discordUserId;
-            break;
-          }
-        }
-      }
-    }
+  const foundUser = serverUsers.find(u => u.email.toLowerCase() === query || u.id === query || u.discordId === query);
+  if (!foundUser) {
+    console.error(`[Admin Resync] ❌ Error: User "${query}" not found in serverUsers.`);
+    return res.status(404).json({
+      success: false,
+      message: `User "${query}" not found in system directory.`,
+      code: 'USER_NOT_FOUND',
+    });
   }
+
+  const targetEmail = foundUser.email;
+  const profile = userDiscordProfiles.get(targetEmail.toLowerCase());
+  const targetDiscordUserId = foundUser.discordId || profile?.discordUserId;
 
   if (!targetDiscordUserId || !/^\d{17,20}$/.test(targetDiscordUserId)) {
     console.error(`[Admin Resync] ❌ Error: Target Discord User ID "${targetDiscordUserId}" is not a valid 17-20 digit Discord Snowflake ID. User has not linked Discord.`);
     return res.status(400).json({
       success: false,
-      message: `Invalid Discord User ID ("${targetDiscordUserId}"). Must be a 17-20 digit numeric Discord Snowflake ID. Ensure the user has linked their Discord account before resyncing roles.`,
-      code: 'INVALID_DISCORD_USER_ID',
+      message: `Discord account is not linked or invalid Discord User ID ("${targetDiscordUserId || 'none'}"). Ensure the user has linked their Discord account before resyncing roles.`,
+      code: 'DISCORD_NOT_LINKED',
     });
   }
 
-  const sub = userSubscriptions.get(query) || userSubscriptions.get(targetEmail) || { role: 'ELITE', plan: 'ELITE_PASS' };
-  const targetTier = sub.role === 'ELITE' || sub.plan?.includes('ELITE') ? 'ELITE' : sub.role === 'PRO' || sub.plan?.includes('PRO') ? 'PRO' : 'NONE';
+  const sub = userSubscriptions.get(targetEmail.toLowerCase()) || { role: foundUser.role, plan: foundUser.subscription };
+  const targetTier = (sub.role === 'ELITE' || sub.plan?.includes('ELITE')) ? 'ELITE' : (sub.role === 'PRO' || sub.plan?.includes('PRO')) ? 'PRO' : 'NONE';
 
   const syncResult = await assignDiscordRoleToUser(targetDiscordUserId, targetTier);
 
@@ -3255,8 +3245,8 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
   loadPersistentStore();
   const normalizedEmail = String(userEmail || 'vixyvault0@gmail.com').toLowerCase();
   const profileByEmail = userDiscordProfiles.get(normalizedEmail);
-  const globalProfile = userDiscordProfiles.get('global_active_user');
-  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === normalizedEmail ? globalProfile : null);
+  const userRecord = serverUsers.find((u) => u.email.toLowerCase() === normalizedEmail);
+  const profile = profileByEmail || (userRecord?.discordId ? { email: normalizedEmail, discordUserId: userRecord.discordId, discordLinked: true } as any : null);
 
   console.log(`[DISCORD_ENTITLEMENT_SYNC] Processing entitlement sync for email: ${normalizedEmail}`);
 
@@ -3340,6 +3330,150 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
     };
   }
 }
+
+// SYNCHRONIZE DISCORD GUILD MEMBERS WITH USER DIRECTORY
+export async function syncDiscordGuildMembers(): Promise<{ success: boolean; syncedCount: number; message: string }> {
+  console.log('[Discord Sync] Starting VIXY Vault <-> Discord Member Synchronization...');
+  try {
+    const members = await fetchDiscordGuildMembers();
+    if (!members || members.length === 0) {
+      console.warn('[Discord Sync] No guild members fetched from Discord API.');
+      return { success: false, syncedCount: 0, message: 'No guild members fetched. Check bot permissions or guild configuration.' };
+    }
+
+    let syncedCount = 0;
+
+    // Link active members to existing VIXY users
+    serverUsers.forEach((u) => {
+      if (u.discordId) {
+        const match = members.find((m) => m.id === u.discordId);
+        if (match) {
+          // Member is in the guild
+          u.discordLinked = true;
+          u.discordTag = match.tag;
+          
+          // Ensure they have a synced profile in cache
+          let profile = userDiscordProfiles.get(u.email.toLowerCase());
+          if (!profile) {
+            profile = {
+              email: u.email,
+              discordUserId: match.id,
+              discordUsername: match.tag,
+              discordGlobalName: match.tag,
+              discordAvatar: match.avatar || null,
+              discordLinked: true,
+              guildMember: true,
+              guildJoined: true,
+              roleAssigned: 'VERIFIED',
+              guildRoles: ['VERIFIED'],
+              lastSync: new Date().toLocaleTimeString(),
+              subscriptionTier: ['PRO_PASS', 'ELITE_PASS'].includes(u.subscription) ? 'PRO' : 'FREE',
+              verificationStatus: 'VERIFIED',
+              connectedAt: new Date().toISOString(),
+              linkedAt: new Date().toISOString(),
+            };
+          } else {
+            profile.guildMember = true;
+            profile.guildJoined = true;
+            profile.discordLinked = true;
+            profile.verificationStatus = 'VERIFIED';
+            profile.lastSync = new Date().toLocaleTimeString();
+          }
+          userDiscordProfiles.set(u.email.toLowerCase(), profile);
+          syncedCount++;
+        } else {
+          // User has discordId set, but is NOT in the fetched members list (left guild)
+          let profile = userDiscordProfiles.get(u.email.toLowerCase());
+          if (profile) {
+            profile.guildMember = false;
+            profile.guildJoined = false;
+            profile.verificationStatus = 'NEEDS_GUILD';
+            profile.roleAssigned = 'NEEDS_GUILD';
+            profile.lastSync = new Date().toLocaleTimeString();
+            userDiscordProfiles.set(u.email.toLowerCase(), profile);
+          }
+        }
+      }
+    });
+
+    savePersistentStore();
+    console.log(`[Discord Sync] Complete. Synced ${syncedCount} Discord profiles to website users.`);
+    return { success: true, syncedCount, message: `Successfully synchronized ${syncedCount} users.` };
+  } catch (err: any) {
+    console.error('[Discord Sync] Error synchronizing guild members:', err);
+    return { success: false, syncedCount: 0, message: err.message || String(err) };
+  }
+}
+
+// PERIODIC RECONCILIATION FUNCTION
+export async function reconcileDiscordGuildMembers(): Promise<void> {
+  console.log('[Discord Reconciliation] Triggering 5-minute Discord synchronization...');
+  await syncDiscordGuildMembers().catch(err => {
+    console.error('[Discord Reconciliation] Periodic sync failed:', err);
+  });
+}
+
+// Register real-time gateway event listeners
+discordClient.on('guildMemberAdd', async (member) => {
+  console.log(`[Discord Event] guildMemberAdd: @${member.user.tag} (ID: ${member.id}) joined the guild.`);
+  
+  // Find VIXY user by discord ID
+  const matchedUser = serverUsers.find(u => u.discordId === member.id);
+  if (matchedUser) {
+    matchedUser.discordLinked = true;
+    matchedUser.discordTag = member.user.tag;
+    
+    let profile = userDiscordProfiles.get(matchedUser.email.toLowerCase());
+    if (!profile) {
+      profile = {
+        email: matchedUser.email,
+        discordUserId: member.id,
+        discordUsername: member.user.tag,
+        discordGlobalName: member.user.username,
+        discordAvatar: member.user.avatarURL() || null,
+        discordLinked: true,
+        guildMember: true,
+        guildJoined: true,
+        roleAssigned: 'VERIFIED',
+        guildRoles: ['VERIFIED'],
+        lastSync: new Date().toLocaleTimeString(),
+        subscriptionTier: ['PRO_PASS', 'ELITE_PASS'].includes(matchedUser.subscription) ? 'PRO' : 'FREE',
+        verificationStatus: 'VERIFIED',
+        connectedAt: new Date().toISOString(),
+        linkedAt: new Date().toISOString(),
+      };
+    } else {
+      profile.guildMember = true;
+      profile.guildJoined = true;
+      profile.discordLinked = true;
+      profile.verificationStatus = 'VERIFIED';
+      profile.lastSync = new Date().toLocaleTimeString();
+    }
+    userDiscordProfiles.set(matchedUser.email.toLowerCase(), profile);
+    savePersistentStore();
+    console.log(`[Discord Event] Successfully updated directory for joined member @${member.user.tag}.`);
+  }
+});
+
+discordClient.on('guildMemberRemove', async (member) => {
+  console.log(`[Discord Event] guildMemberRemove: @${member.user.tag} (ID: ${member.id}) left the guild.`);
+  
+  // Find VIXY user by discord ID
+  const matchedUser = serverUsers.find(u => u.discordId === member.id);
+  if (matchedUser) {
+    let profile = userDiscordProfiles.get(matchedUser.email.toLowerCase());
+    if (profile) {
+      profile.guildMember = false;
+      profile.guildJoined = false;
+      profile.verificationStatus = 'NEEDS_GUILD';
+      profile.roleAssigned = 'NEEDS_GUILD';
+      profile.lastSync = new Date().toLocaleTimeString();
+      userDiscordProfiles.set(matchedUser.email.toLowerCase(), profile);
+      savePersistentStore();
+      console.log(`[Discord Event] Successfully updated directory for left member @${member.user.tag}.`);
+    }
+  }
+});
 
 // DISCORD OAUTH AUTHORIZATION URL ENDPOINT
 app.get('/api/auth/discord/url', (req, res) => {
@@ -3954,9 +4088,21 @@ app.get('/api/system-status', (req, res) => {
 async function startServer() {
   logStripeDiagnosticMode();
 
-  initializeDiscordBot().catch((err) => {
+  initializeDiscordBot().then(() => {
+    // Run an initial sync once bot is initialized and ready
+    setTimeout(() => {
+      syncDiscordGuildMembers().catch((err) => {
+        console.warn('[Server] Initial Discord sync warning:', err);
+      });
+    }, 10000); // Wait 10 seconds for login & caching to settle
+  }).catch((err) => {
     console.warn('[Server] Discord bot initialization warning:', err);
   });
+
+  // Start periodic 5-minute Discord guild reconciliation
+  setInterval(() => {
+    reconcileDiscordGuildMembers();
+  }, 5 * 60 * 1000); // 5 minutes
 
   AutomationScheduler.startScheduler();
 

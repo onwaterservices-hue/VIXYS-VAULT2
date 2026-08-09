@@ -1025,7 +1025,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                   @{user.discordTag || user.discordId?.slice(0, 8)}
                                 </span>
                               ) : (
-                                <span className="text-slate-500 text-[11px]">NOT LINKED</span>
+                                <span className="text-slate-500 text-[11px] font-mono">DISCORD_PENDING</span>
                               )}
                             </td>
 
