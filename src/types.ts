@@ -154,6 +154,8 @@ export interface UserSubscription {
   renewalDate: string;
   paymentMethod: string;
   billingInterval: 'monthly' | 'annual';
+  email?: string;
+  stripeCustomerId?: string;
 }
 
 export interface SupportTicket {

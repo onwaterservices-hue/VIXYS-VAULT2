@@ -370,6 +370,8 @@ interface ServerUser {
   status: 'ACTIVE' | 'TRIALING' | 'SUSPENDED';
   volumeTrades: number;
   referralCodeUsed?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
 }
 
 const serverUsers: ServerUser[] = [
@@ -1176,41 +1178,137 @@ app.post('/api/create-checkout-session', createCheckoutSessionHandler);
 // Stripe Customer Billing Portal Session Endpoint
 app.post('/api/stripe/create-portal-session', async (req: express.Request, res: express.Response) => {
   const stripe = getStripe();
-  const userEmail = (req.body.userEmail || (req.headers['x-user-email'] as string) || '').toLowerCase();
 
   if (!stripe) {
+    console.warn('[BILLING_PORTAL] Stripe Secret Key missing (STRIPE_SECRET_KEY not set).');
     return res.status(400).json({
       error: 'STRIPE_NOT_CONFIGURED',
       message: 'Stripe is not configured. Customer portal requires process.env.STRIPE_SECRET_KEY.',
     });
   }
 
-  try {
-    const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
-    
-    const customers = await stripe.customers.list({ email: userEmail, limit: 1 });
-    let customerId = customers.data[0]?.id;
+  // Extract user identity safely from headers or request body
+  const rawEmail = (
+    req.body.userEmail ||
+    req.body.email ||
+    (req.headers['x-user-email'] as string) ||
+    ''
+  ).trim();
 
+  if (!rawEmail) {
+    console.warn('[BILLING_PORTAL] Request rejected: missing user email / unauthenticated.');
+    return res.status(401).json({
+      error: 'AUTH_REQUIRED',
+      message: 'You must be logged in to manage your subscription.',
+    });
+  }
+
+  const cleanEmail = rawEmail.toLowerCase();
+
+  try {
+    // 1. Resolve internal user record
+    let userSub = userSubscriptions.get(cleanEmail);
+    let serverUser = serverUsers.find((u) => u.email.toLowerCase() === cleanEmail);
+
+    let customerId = userSub?.stripeCustomerId || serverUser?.stripeCustomerId;
+
+    // 2. Reconcile with Stripe if customer ID is not saved in local record
     if (!customerId) {
-      const customer = await stripe.customers.create({ email: userEmail });
-      customerId = customer.id;
+      console.log(`[BILLING_PORTAL] Customer ID not stored for ${cleanEmail}. Reconciling with Stripe...`);
+      const existingCustomers = await stripe.customers.list({ email: cleanEmail, limit: 1 });
+      const matched = existingCustomers.data[0];
+
+      if (matched) {
+        customerId = matched.id;
+        console.log(`[BILLING_PORTAL] Reconciled customer ID ${customerId} for ${cleanEmail}`);
+
+        if (userSub) {
+          userSub.stripeCustomerId = customerId;
+        } else {
+          userSubscriptions.set(cleanEmail, {
+            email: cleanEmail,
+            role: serverUser?.role || 'PRO',
+            plan: serverUser?.subscription || 'PRO_PASS',
+            status: serverUser?.status || 'ACTIVE',
+            stripeCustomerId: customerId,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
+        if (serverUser) {
+          serverUser.stripeCustomerId = customerId;
+        }
+        savePersistentStore();
+      } else {
+        console.warn(`[BILLING_PORTAL] No Stripe customer found for email: ${cleanEmail}`);
+        return res.status(404).json({
+          error: 'BILLING_CUSTOMER_NOT_FOUND',
+          message: "We couldn't locate your billing profile. Please contact support or subscribe first.",
+        });
+      }
     }
 
+    // 3. Determine Return URL safely
+    let returnUrl = process.env.STRIPE_RETURN_URL;
+    if (!returnUrl) {
+      const host = (req.get('host') || '').toLowerCase();
+      const origin = req.headers.origin || `${req.protocol}://${req.get('host')}`;
+
+      if (host.includes('vixxyvault.com') || process.env.NODE_ENV === 'production') {
+        returnUrl = 'https://www.vixxyvault.com/account';
+      } else {
+        returnUrl = `${origin}/#settings`;
+      }
+    }
+
+    const isLiveKey = (process.env.STRIPE_SECRET_KEY || '').startsWith('sk_live_');
+    console.log(`[BILLING_PORTAL] Creating portal session for customer=${customerId}, email=${cleanEmail}, mode=${isLiveKey ? 'live' : 'test'}, return_url=${returnUrl}`);
+
+    // 4. Create Stripe Billing Portal session
     const portalSession = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: `${origin}/?tab=settings`,
+      return_url: returnUrl,
     });
 
-    res.json({ url: portalSession.url });
+    return res.json({ url: portalSession.url });
   } catch (err: any) {
-    console.error('Error creating Stripe Portal session:', err);
-    res.status(500).json({ error: 'PORTAL_ERROR', message: err.message });
+    if (err instanceof Stripe.errors.StripeError) {
+      console.error('[BILLING_PORTAL_STRIPE_ERROR]', {
+        type: err.type,
+        code: err.code,
+        message: err.message,
+        param: err.param,
+        requestId: err.requestId,
+        email: cleanEmail,
+      });
+      return res.status(500).json({
+        error: 'STRIPE_PORTAL_CONFIGURATION_ERROR',
+        message: err.message || 'Unable to open Stripe Customer Portal. Please try again or contact support.',
+      });
+    }
+
+    console.error('[BILLING_PORTAL_UNHANDLED_ERROR]', err);
+    return res.status(500).json({
+      error: 'PORTAL_ERROR',
+      message: 'An error occurred while creating your billing portal session. Please try again.',
+    });
   }
 });
 
+interface UserSubscriptionRecord {
+  email: string;
+  role: string;
+  plan: string;
+  status: string;
+  referralCode?: string;
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  updatedAt: string;
+}
+
 // In-Memory Database for Subscriptions & Idempotency Store
 const processedWebhookEvents = new Set<string>();
-const userSubscriptions = new Map<string, { email: string; role: string; plan: string; status: string; referralCode?: string; updatedAt: string }>();
+const userSubscriptions = new Map<string, UserSubscriptionRecord>();
 
 userSubscriptions.set('vixyvault0@gmail.com', {
   email: 'vixyvault0@gmail.com',
@@ -1313,22 +1411,34 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
 
       const roleToGrant = plan === 'ELITE' ? 'ELITE' : 'PRO';
       const passName = `${plan}_PASS`;
+      const stripeCustId = typeof session.customer === 'string' ? session.customer : undefined;
+      const stripeSubId = typeof session.subscription === 'string' ? session.subscription : undefined;
 
       // 1. Update Subscription Store
-      userSubscriptions.set(customerEmail, {
+      const currentSubRec: UserSubscriptionRecord = userSubscriptions.get(customerEmail) || {
         email: customerEmail,
         role: roleToGrant,
         plan: passName,
         status: 'ACTIVE',
         referralCode,
         updatedAt: new Date().toISOString(),
-      });
+      };
+      currentSubRec.role = roleToGrant;
+      currentSubRec.plan = passName;
+      currentSubRec.status = 'ACTIVE';
+      currentSubRec.referralCode = referralCode;
+      currentSubRec.updatedAt = new Date().toISOString();
+      if (stripeCustId) currentSubRec.stripeCustomerId = stripeCustId;
+      if (stripeSubId) currentSubRec.stripeSubscriptionId = stripeSubId;
+      userSubscriptions.set(customerEmail, currentSubRec);
 
       // 2. Sync to Server Users Array for Admin Table
       const existingUser = serverUsers.find((u) => u.email.toLowerCase() === customerEmail);
       if (existingUser) {
         existingUser.subscription = passName as any;
         existingUser.status = 'ACTIVE';
+        if (stripeCustId) existingUser.stripeCustomerId = stripeCustId;
+        if (stripeSubId) existingUser.stripeSubscriptionId = stripeSubId;
         if (existingUser.role !== 'OWNER' && existingUser.role !== 'ADMIN') {
           existingUser.role = 'USER';
         }
@@ -1347,6 +1457,8 @@ app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async
           status: 'ACTIVE',
           volumeTrades: 0,
           referralCodeUsed: referralCode,
+          stripeCustomerId: stripeCustId,
+          stripeSubscriptionId: stripeSubId,
         });
       }
 

@@ -16,7 +16,7 @@ import {
   Clock,
   Flame,
 } from 'lucide-react';
-import { UserSubscription } from '../types';
+import { UserSubscription, AuthState } from '../types';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -29,6 +29,7 @@ interface SubscriptionViewProps {
   trialSeconds?: number;
   onResetTrial?: () => void;
   onExpireTrial?: () => void;
+  authState?: AuthState;
 }
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
@@ -39,6 +40,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   trialSeconds = 10800,
   onResetTrial,
   onExpireTrial,
+  authState,
 }) => {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('annual');
   const [showCheckoutModal, setShowCheckoutModal] = useState<boolean>(false);
@@ -258,19 +260,33 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   };
 
   const handleOpenCustomerPortal = async () => {
+    if (isOpeningPortal) return;
     setIsOpeningPortal(true);
     setStripeError('');
     try {
+      const activeUserEmail =
+        authState?.user?.email ||
+        subscription.email ||
+        localStorage.getItem('vixy_user_email') ||
+        'vixyvault0@gmail.com';
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (activeUserEmail) {
+        headers['x-user-email'] = activeUserEmail;
+      }
+
       const res = await fetch('/api/stripe/create-portal-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userEmail: 'vixyvault0@gmail.com' }),
+        headers,
+        body: JSON.stringify({ userEmail: activeUserEmail }),
       });
       const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
+      if (res.ok && data.url) {
+        window.location.assign(data.url);
       } else {
-        setStripeError(data.message || 'Unable to connect to Stripe Customer Portal');
+        setStripeError(data.message || data.error || 'Unable to connect to Stripe Customer Portal');
         setIsOpeningPortal(false);
       }
     } catch (err: any) {

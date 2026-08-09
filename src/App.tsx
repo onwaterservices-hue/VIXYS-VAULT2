@@ -763,6 +763,7 @@ export default function App() {
                     trialSeconds={trialSeconds}
                     onResetTrial={handleResetTrial}
                     onExpireTrial={handleExpireTrial}
+                    authState={authState}
                   />
                 </div>
               ) : (
