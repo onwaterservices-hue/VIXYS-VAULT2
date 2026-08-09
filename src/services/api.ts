@@ -924,6 +924,29 @@ export async function updateUserVerification(userId: string, status: 'VERIFIED' 
   }
 }
 
+export async function syncAuthUserApi(
+  payload: string | { uid?: string; email: string; name?: string; role?: string; subscription?: string },
+  nameArg?: string,
+  roleArg?: string
+) {
+  try {
+    const bodyObj =
+      typeof payload === 'string'
+        ? { email: payload, name: nameArg, role: roleArg }
+        : payload;
+
+    const res = await fetch('/api/auth/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bodyObj),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to sync auth user to server directory', err);
+    return { success: false };
+  }
+}
+
 export async function fetchAdminMe() {
   return await safeFetchJson<{
     authenticated: boolean;
@@ -1074,6 +1097,47 @@ export async function unfreezeUserBotsApi() {
     console.warn('Failed to dispatch unfreeze bots request to server', err);
   }
   return { success: true, message: 'All local and remote user bots successfully unfrozen and active!' };
+}
+
+export async function createCheckoutSessionApi(payload: {
+  plan: string;
+  interval?: 'monthly' | 'annual';
+  promoCode?: string;
+  referralCode?: string;
+  userEmail?: string;
+  uid?: string;
+}) {
+  try {
+    const res = await fetch('/api/stripe/create-checkout-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': payload.userEmail || '',
+        'x-user-uid': payload.uid || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await safeParseJson(res);
+  } catch (err: any) {
+    return { error: 'NETWORK_ERROR', message: err.message || 'Connection error creating checkout session' };
+  }
+}
+
+export async function createPortalSessionApi(payload: { userEmail?: string; uid?: string }) {
+  try {
+    const res = await fetch('/api/stripe/create-portal-session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': payload.userEmail || '',
+        'x-user-uid': payload.uid || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await safeParseJson(res);
+  } catch (err: any) {
+    return { error: 'NETWORK_ERROR', message: err.message || 'Connection error creating customer portal session' };
+  }
 }
 
 

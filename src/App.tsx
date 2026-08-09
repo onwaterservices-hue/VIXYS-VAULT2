@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './lib/firebase';
 import {
   BTCTicker,
   Candle,
@@ -13,7 +15,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, syncAuthUserApi } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -172,7 +174,43 @@ export default function App() {
     };
   }, []);
 
-  // Sync authState to localStorage & userRole
+  // Firebase Authentication boot listener & automatic reconciliation
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+      if (fbUser && fbUser.email) {
+        const cleanEmail = fbUser.email.toLowerCase();
+        const cleanName = fbUser.displayName || cleanEmail.split('@')[0];
+        const uid = fbUser.uid;
+
+        syncAuthUserApi({
+          uid,
+          email: cleanEmail,
+          name: cleanName,
+        }).catch((err) => console.warn('Auth sync error:', err));
+
+        setAuthState((prev) => {
+          if (!prev.isAuthenticated || prev.user?.email?.toLowerCase() !== cleanEmail) {
+            const isAdmin = cleanEmail === 'vixyvault0@gmail.com';
+            return {
+              isAuthenticated: true,
+              user: {
+                id: uid,
+                email: cleanEmail,
+                name: cleanName,
+                role: isAdmin ? 'ADMIN' : (prev.user?.role || 'DEMO'),
+                joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+              },
+            };
+          }
+          return prev;
+        });
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Sync authState to localStorage & userRole & server directory
   useEffect(() => {
     try {
       if (authState.isAuthenticated && authState.user) {
@@ -187,6 +225,15 @@ export default function App() {
           setUserRole(authState.user.role);
         }
         localStorage.setItem('vixy_auth', JSON.stringify(authState));
+
+        if (email) {
+          syncAuthUserApi({
+            uid: authState.user.id,
+            email,
+            name: authState.user.name,
+            role: authState.user.role,
+          }).catch(() => {});
+        }
       } else {
         localStorage.removeItem('vixy_auth');
       }

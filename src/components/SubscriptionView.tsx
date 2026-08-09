@@ -188,14 +188,24 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     }
 
     try {
+      const currentUserEmail = authState?.user?.email || '';
+      const currentUid = authState?.user?.id || '';
+
       const res = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-email': currentUserEmail,
+          'x-user-uid': currentUid,
+        },
         body: JSON.stringify({
           plan: selectedPlanToBuy,
           interval: billingInterval,
           promoCode: appliedPromo?.code || promoCodeInput,
           referralCode: appliedPromo?.code || promoCodeInput,
+          userEmail: currentUserEmail,
+          uid: currentUid,
+          userName: authState?.user?.name,
         }),
       });
 
