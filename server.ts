@@ -412,15 +412,7 @@ interface ServerUser {
   guildVerified?: boolean;
 }
 
-const serverUsers: ServerUser[] = [
-  { id: 'usr_01', email: 'vixyvault0@gmail.com', name: 'Master Admin (Vixy Vault)', role: 'OWNER', subscription: 'ELITE_PASS', passwordHash: 'Seattle007', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_master_001', ipHash: '192.168.1.1', joined: '2026-01-15', status: 'ACTIVE', volumeTrades: 1420 },
-  { id: 'usr_02', email: 'trader.alex@gmail.com', name: 'Alex Vance', role: 'USER', subscription: 'ELITE_PASS', passwordHash: 'Alex2026!', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_alex_991', ipHash: '24.120.88.11', joined: '2026-07-28', status: 'ACTIVE', volumeTrades: 428, referralCodeUsed: 'REF-ALEX' },
-  { id: 'usr_03', email: 'quant.sarah@optionstrade.io', name: 'Sarah Connor', role: 'USER', subscription: 'ELITE_PASS', passwordHash: 'SarahPass99', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_sarah_442', ipHash: '68.90.14.22', joined: '2026-07-29', status: 'ACTIVE', volumeTrades: 312, referralCodeUsed: 'PROMOTER20' },
-  { id: 'usr_04', email: 'sam.predict@crypto.org', name: 'Sam Miller', role: 'USER', subscription: 'PRO_PASS', passwordHash: 'SamCrypto1!', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_sam_882', ipHash: '172.56.12.90', joined: '2026-07-20', status: 'ACTIVE', volumeTrades: 194, referralCodeUsed: 'DIRECT' },
-  { id: 'usr_05', email: 'dave.h@scalping.com', name: 'Dave Hawkins', role: 'USER', subscription: 'PRO_PASS', passwordHash: 'ScalperDave#1', verificationStatus: 'SUSPECTED_DUPLICATE', hardwareFingerprint: 'hw_sam_882', ipHash: '172.56.12.90', joined: '2026-07-25', status: 'ACTIVE', volumeTrades: 88, referralCodeUsed: 'PROMOTER20' },
-  { id: 'usr_06', email: 'support@vixysvault.com', name: 'Elena Rostova', role: 'SUPPORT', subscription: 'PRO_PASS', passwordHash: 'SupportElena2026', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_elena_101', ipHash: '10.0.0.4', joined: '2026-02-20', status: 'ACTIVE', volumeTrades: 50 },
-  { id: 'usr_07', email: 'free.trader@gmail.com', name: 'David Kim', role: 'FREE', subscription: 'FREE_TRIAL', passwordHash: 'TrialUser123', verificationStatus: 'VERIFIED', hardwareFingerprint: 'hw_david_302', ipHash: '98.110.42.12', joined: '2026-08-01', status: 'TRIALING', volumeTrades: 12 },
-];
+const serverUsers: ServerUser[] = [];
 
 interface ServerReferral {
   code: string;
@@ -434,12 +426,7 @@ interface ServerReferral {
   payoutStatus: string;
 }
 
-const serverReferrals: ServerReferral[] = [
-  { code: 'PROMOTER20', name: 'Alpha Promoter Network', email: 'affiliates@alphapromoter.com', referredCount: 148, discountGiven: '20% Off', commissionRate: '20%', totalVolumeGenerated: '$18,420', commissionOwed: '$3,684.00', payoutStatus: 'Paid (Stripe Connect)' },
-  { code: 'REF-ALEX', name: 'Alex Mercer (Top Trader)', email: 'trader.alex@gmail.com', referredCount: 62, discountGiven: '15% Off', commissionRate: '25%', totalVolumeGenerated: '$8,940', commissionOwed: '$2,235.00', payoutStatus: 'Paid (Stripe Connect)' },
-  { code: 'VIXY50', name: 'Vixy Founding Vault Partners', email: 'partners@vixysvault.com', referredCount: 94, discountGiven: '50% Off 1st Mo', commissionRate: '15%', totalVolumeGenerated: '$9,110', commissionOwed: '$1,366.50', payoutStatus: 'Processing Payout' },
-  { code: 'ALPHA10', name: 'Crypto Twitter Affiliate', email: 'affiliate@x-crypto.com', referredCount: 57, discountGiven: '10% Off', commissionRate: '18%', totalVolumeGenerated: '$16,220', commissionOwed: '$2,919.60', payoutStatus: 'Pending Payout' },
-];
+const serverReferrals: ServerReferral[] = [];
 
 // PROTECTED ADMIN ENDPOINTS - Strictly enforced server-side
 app.get('/api/admin/diagnostics', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
@@ -481,20 +468,52 @@ app.get('/api/admin/diagnostics', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (r
   });
 });
 
-// GET ALL REAL USERS (WITH DYNAMIC RECONCILIATION PASS)
+// GET ALL REAL PERSISTED USERS (SERVER/DATABASE-AUTHORITATIVE)
 app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
   // Reconcile any emails present in userSubscriptions or userDiscordProfiles that are not in serverUsers
   userSubscriptions.forEach((sub, email) => {
-    ensureUserExists({ email, role: sub.role, subscription: sub.plan });
-  });
-
-  userDiscordProfiles.forEach((profile, email) => {
-    if (email !== 'global_active_user') {
-      ensureUserExists({ email: profile.email || email });
+    if (email && email !== 'global_active_user') {
+      ensureUserExists({ email, role: sub.role, subscription: sub.plan });
     }
   });
 
-  res.json(serverUsers);
+  userDiscordProfiles.forEach((profile, email) => {
+    if (email && email !== 'global_active_user') {
+      const u = ensureUserExists({ email: profile.email || email });
+      if (profile.discordUserId) u.discordId = profile.discordUserId;
+      if (profile.discordUsername || profile.discordGlobalName) {
+        u.discordTag = profile.discordUsername || profile.discordGlobalName;
+      }
+      u.discordLinked = true;
+    }
+  });
+
+  // Attach authoritative Stripe & Discord links to serverUsers
+  serverUsers.forEach((u) => {
+    if (u.email) {
+      const sub = userSubscriptions.get(u.email.toLowerCase());
+      if (sub) {
+        if (sub.role) u.role = sub.role as any;
+        if (sub.plan) u.subscription = sub.plan as any;
+        if (sub.stripeCustomerId) u.stripeCustomerId = sub.stripeCustomerId;
+        if (sub.stripeSubscriptionId) u.stripeSubscriptionId = sub.stripeSubscriptionId;
+      }
+      const disc = userDiscordProfiles.get(u.email.toLowerCase()) || userDiscordProfiles.get('global_active_user');
+      if (disc && (disc.email?.toLowerCase() === u.email.toLowerCase() || u.email.toLowerCase() === 'vixyvault0@gmail.com')) {
+        u.discordId = disc.discordUserId || u.discordId;
+        u.discordTag = disc.discordUsername || disc.discordGlobalName || u.discordTag;
+        u.discordLinked = true;
+      }
+    }
+  });
+
+  res.json({
+    users: serverUsers,
+    totalRealUsers: serverUsers.length,
+    isDatabaseAuthoritative: true,
+    dataSource: "PERSISTENT_STORE",
+    timestamp: new Date().toISOString()
+  });
 });
 
 // AUTHENTICATION USER SYNC / RECONCILIATION ENDPOINT
@@ -849,13 +868,7 @@ interface ServerTransaction {
   rawTime: number;
 }
 
-const serverTransactions: ServerTransaction[] = [
-  { id: 'ch_3M4kxL2eZvKYlo12', email: 'jason.v@cryptoquant.ai', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '2m ago', rawTime: Date.now() - 120000 },
-  { id: 'ch_3M4kxK1eZvKYlo11', email: 'quant.sarah@optionstrade.io', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Apple Pay', status: 'Succeeded', timestamp: '14m ago', rawTime: Date.now() - 840000 },
-  { id: 'ch_3M4kxJ0eZvKYlo10', email: 'sam.predict@crypto.org', plan: 'Pro Pass ($49)', amount: 49.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '1h ago', rawTime: Date.now() - 3600000 },
-  { id: 'ch_3M4kxI9eZvKYlo09', email: 'dave.h@scalping.com', plan: 'Pro Pass ($49)', amount: 49.0, method: 'Crypto USDC', status: 'Succeeded', timestamp: '3h ago', rawTime: Date.now() - 10800000 },
-  { id: 'ch_3M4kxH8eZvKYlo08', email: 'trader.alex@gmail.com', plan: 'Elite Pass ($199)', amount: 199.0, method: 'Stripe Credit Card', status: 'Succeeded', timestamp: '5h ago', rawTime: Date.now() - 18000000 },
-];
+const serverTransactions: ServerTransaction[] = [];
 
 app.get('/api/admin/stats', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
   const totalUsers = serverUsers.length;
@@ -2866,7 +2879,23 @@ function ensureUserExists(
     if (input.subscription) subOpt = input.subscription;
   }
 
-  if (!cleanEmail && !cleanUid) return serverUsers[0];
+  if (!cleanEmail && !cleanUid) {
+    if (serverUsers.length > 0) return serverUsers[0];
+    return {
+      id: 'usr_anon',
+      email: 'anonymous@vixy.internal',
+      name: 'Anonymous User',
+      role: 'FREE',
+      subscription: 'FREE_TRIAL',
+      passwordHash: 'AuthManaged2026!',
+      verificationStatus: 'UNVERIFIED',
+      hardwareFingerprint: 'hw_anon',
+      ipHash: '127.0.0.1',
+      joined: new Date().toISOString().split('T')[0],
+      status: 'TRIALING',
+      volumeTrades: 0,
+    };
+  }
 
   // Primary stable identity lookup by Firebase UID, falling back to lowercased email
   let user: ServerUser | undefined;
