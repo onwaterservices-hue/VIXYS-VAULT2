@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Flame, Wifi, Zap, Volume2, VolumeX, ShieldCheck, Database, TrendingUp, TrendingDown, Sparkles } from 'lucide-react';
+import { Flame, Wifi, Zap, Volume2, VolumeX, ShieldCheck, Database, TrendingUp, TrendingDown, Sparkles, Maximize2, Minimize2, X } from 'lucide-react';
 import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 import { ModelStatusBadge } from './ModelStatusBadge';
@@ -47,6 +47,18 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
     return points;
   });
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullscreen]);
 
   // Sync spotPrice prop if provided
   useEffect(() => {
@@ -351,7 +363,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
 
   const hasActiveModel = modelStatus?.hasActiveModel ?? false;
 
-  return (
+  const mainContent = (
     <div className="relative bg-[#080414]/90 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_0_35px_rgba(147,51,234,0.15)] space-y-4 overflow-hidden">
       {/* Background Glow */}
       <div className="absolute top-0 right-1/3 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -392,6 +404,14 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
             <span>CHIMES</span>
           </button>
           <ModelStatusBadge asset={asset} desk={desk} />
+          <button
+            onClick={() => setIsFullscreen(!isFullscreen)}
+            className="px-2.5 py-1 rounded-lg bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 border border-purple-500/40 text-xs font-mono font-bold flex items-center gap-1 transition cursor-pointer"
+            title={isFullscreen ? 'Exit Fullscreen (ESC)' : 'Expand Fullscreen View'}
+          >
+            {isFullscreen ? <Minimize2 className="w-3.5 h-3.5 text-purple-300" /> : <Maximize2 className="w-3.5 h-3.5 text-purple-300" />}
+            <span className="hidden sm:inline">{isFullscreen ? 'EXIT' : 'EXPAND'}</span>
+          </button>
         </div>
       </div>
 
@@ -442,9 +462,30 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       </div>
 
       {/* Canvas Neural Flow Ribbon Chart */}
-      <div className="relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] h-80 flex items-center justify-center">
+      <div className={`relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] ${isFullscreen ? 'h-[75vh]' : 'h-80'} flex items-center justify-center`}>
         <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
     </div>
   );
+
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#0a0518]/95 backdrop-blur-md p-6 overflow-y-auto flex flex-col justify-center items-center">
+        <div className="w-full max-w-6xl relative space-y-4">
+          <div className="flex justify-between items-center bg-[#130b28] p-3 rounded-xl border border-purple-500/40">
+            <span className="text-xs font-mono font-bold text-purple-200">EXPANDED NEURAL RIBBON MATRIX (Press ESC to exit)</span>
+            <button
+              onClick={() => setIsFullscreen(false)}
+              className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs flex items-center gap-1.5 transition"
+            >
+              <X className="w-4 h-4" /> Exit Fullscreen
+            </button>
+          </div>
+          {mainContent}
+        </div>
+      </div>
+    );
+  }
+
+  return mainContent;
 };

@@ -419,14 +419,19 @@ export async function assignDiscordRoleToUser(
 
     // Determine role IDs from env (with fallbacks for all configured variable naming variations)
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
+    const proRoleId = process.env.DISCORD_PRO_ROLE_ID || process.env.DISCORD_ROLE_PRO || eliteRoleId;
     const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
     const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
 
     let targetRoleId = verifiedRoleId;
-    if (targetTier === 'ELITE' || targetTier === 'PRO') {
+    if (targetTier === 'ELITE') {
       targetRoleId = eliteRoleId;
+    } else if (targetTier === 'PRO') {
+      targetRoleId = proRoleId;
     } else if (targetTier === 'AI') {
       targetRoleId = aiRoleId;
+    } else if (targetTier === 'VERIFIED') {
+      targetRoleId = verifiedRoleId;
     }
 
     console.log(`\n================ [DISCORD ROLE SYNCHRONIZATION AUDIT] ================`);
@@ -504,6 +509,16 @@ export async function assignDiscordRoleToUser(
           };
         }
 
+        // Handle obsolete/conflicting role cleanup before assigning new target role
+        if (targetTier === 'ELITE' && proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) {
+          await member.roles.remove(proRoleId).catch(() => {});
+        } else if (targetTier === 'PRO' && eliteRoleId !== proRoleId && member.roles.cache.has(eliteRoleId)) {
+          await member.roles.remove(eliteRoleId).catch(() => {});
+        } else if (targetTier === 'VERIFIED') {
+          if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
+        }
+
         // Check idempotency: if user already has role
         if (member.roles.cache.has(targetRoleId)) {
           console.log(`[Discord Role Sync] ✅ Idempotent Success: User ${member.user.tag} already has role "${roleToAssign.name}"`);
@@ -519,6 +534,7 @@ export async function assignDiscordRoleToUser(
         // If tier is NONE, handle role removal
         if (targetTier === 'NONE') {
           if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
           if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
           console.log(`[Discord Role Sync] ✅ Role Removed for ${member.user.tag}`);
           return { success: true, status: 'verified', message: `Removed membership roles for ${member.user.tag}`, code: 'ROLE_REMOVED' };
@@ -607,7 +623,26 @@ export async function assignDiscordRoleToUser(
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
           }
+          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
           return { success: true, status: 'verified', message: `Removed membership roles for user ${discordUserId}`, code: 'ROLE_REMOVED' };
+        }
+
+        // Cleanup conflicting roles before PUT
+        if (targetTier === 'ELITE' && proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+          await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bot ${botToken}` },
+          }).catch(() => {});
+        } else if (targetTier === 'PRO' && eliteRoleId !== proRoleId && existingRoles.includes(eliteRoleId)) {
+          await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bot ${botToken}` },
+          }).catch(() => {});
         }
 
         if (existingRoles.includes(targetRoleId)) {

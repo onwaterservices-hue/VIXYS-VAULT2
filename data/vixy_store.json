@@ -1,47 +1,21 @@
 {
   "users": [
     {
-      "id": "usr_7564_nji",
-      "email": "real.stripe.user@vixyai.com",
-      "name": "real.stripe.user",
-      "role": "FREE",
-      "subscription": "FREE_TRIAL",
-      "passwordHash": "AuthManaged2026!",
+      "id": "usr_8595",
+      "email": "test.pro.user@vixyai.com",
+      "name": "test.pro.user",
+      "role": "USER",
+      "subscription": "ELITE_PASS",
+      "passwordHash": "UserPass2026!",
       "verificationStatus": "VERIFIED",
-      "hardwareFingerprint": "hw_auto_a5rq2g",
-      "ipHash": "127.0.0.1",
+      "hardwareFingerprint": "hw_sub_cae0ck",
+      "ipHash": "172.56.22.10",
       "joined": "2026-08-09",
-      "status": "TRIALING",
-      "volumeTrades": 0
-    },
-    {
-      "id": "usr_2495_tgv",
-      "email": "quant.trader.test@vixyai.com",
-      "name": "quant.trader.test",
-      "role": "FREE",
-      "subscription": "FREE_TRIAL",
-      "passwordHash": "AuthManaged2026!",
-      "verificationStatus": "VERIFIED",
-      "hardwareFingerprint": "hw_auto_w7k8sb",
-      "ipHash": "127.0.0.1",
-      "joined": "2026-08-09",
-      "status": "TRIALING",
-      "volumeTrades": 0
-    },
-    {
-      "id": "uid_test_12345",
-      "uid": "uid_test_12345",
-      "email": "test.trader@vixyai.com",
-      "name": "test.trader",
-      "role": "FREE",
-      "subscription": "FREE_TRIAL",
-      "passwordHash": "AuthManaged2026!",
-      "verificationStatus": "VERIFIED",
-      "hardwareFingerprint": "hw_auto_be9jqw",
-      "ipHash": "127.0.0.1",
-      "joined": "2026-08-09",
-      "status": "TRIALING",
-      "volumeTrades": 0
+      "status": "ACTIVE",
+      "volumeTrades": 0,
+      "referralCodeUsed": "DIRECT",
+      "stripeCustomerId": "cus_pro_test",
+      "stripeSubscriptionId": "sub_pro_test"
     },
     {
       "id": "usr_01",
@@ -145,6 +119,49 @@
       "joined": "2026-08-01",
       "status": "TRIALING",
       "volumeTrades": 12
+    },
+    {
+      "id": "usr_7564_nji",
+      "email": "real.stripe.user@vixyai.com",
+      "name": "real.stripe.user",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_a5rq2g",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
+      "id": "usr_2495_tgv",
+      "email": "quant.trader.test@vixyai.com",
+      "name": "quant.trader.test",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_w7k8sb",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
+      "id": "uid_test_12345",
+      "uid": "uid_test_12345",
+      "email": "test.trader@vixyai.com",
+      "name": "test.trader",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_be9jqw",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-09",
+      "status": "TRIALING",
+      "volumeTrades": 0
     }
   ],
   "profiles": {
@@ -219,6 +236,16 @@
       "plan": "FREE_TRIAL",
       "status": "INACTIVE",
       "updatedAt": "2026-08-09T14:48:37.564Z"
+    },
+    "test.pro.user@vixyai.com": {
+      "email": "test.pro.user@vixyai.com",
+      "role": "ELITE",
+      "plan": "ELITE_PASS",
+      "status": "ACTIVE",
+      "referralCode": "DIRECT",
+      "updatedAt": "2026-08-09T15:44:13.261Z",
+      "stripeCustomerId": "cus_pro_test",
+      "stripeSubscriptionId": "sub_pro_test"
     }
   }
 }

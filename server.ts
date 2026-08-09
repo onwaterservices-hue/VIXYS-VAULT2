@@ -1059,7 +1059,7 @@ app.get('/api/admin/events/stream', (req, res) => {
 });
 
 // ADMIN EMERGENCY MANUAL RESYNC ENTITLEMENT ENDPOINT
-app.post('/api/admin/resync-entitlement', requireRole(['OWNER', 'ADMIN']), async (req, res) => {
+app.post(['/api/admin/resync-entitlement', '/api/admin/resync-discord'], requireRole(['OWNER', 'ADMIN']), async (req, res) => {
   const { identifier } = req.body || {};
   const query = (identifier || 'vixyvault0@gmail.com').toLowerCase().trim();
 
@@ -1502,7 +1502,7 @@ app.get('/api/user/subscription', (req, res) => {
       referralCode: existing.referralCode || 'DIRECT',
       updatedAt: existing.updatedAt,
       permissions: {
-        canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'SUPPORT'].includes(existing.role),
+        canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'ELITE', 'SUPPORT'].includes(existing.role),
         canAccessAdminPanel: ['OWNER', 'ADMIN', 'SUPPORT'].includes(existing.role),
       }
     });
@@ -1517,7 +1517,7 @@ app.get('/api/user/subscription', (req, res) => {
     status: 'ACTIVE',
     updatedAt: new Date().toISOString(),
     permissions: {
-      canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'SUPPORT'].includes(defaultRole),
+      canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'ELITE', 'SUPPORT'].includes(defaultRole),
       canAccessAdminPanel: ['OWNER', 'ADMIN', 'SUPPORT'].includes(defaultRole),
     }
   });
@@ -3023,9 +3023,9 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
   const userRole = (userSub as any)?.role || (userSub as any)?.subscription || 'PRO';
 
   const hasActiveEntitlement = ['ACTIVE', 'TRIALING'].includes(subStatus) && ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes(userRole);
-  const targetTier: 'ELITE' | 'VERIFIED' | 'NONE' = hasActiveEntitlement
-    ? (userRole === 'ELITE' || userRole === 'ELITE_PASS' ? 'ELITE' : 'VERIFIED')
-    : 'NONE';
+  const targetTier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE' = hasActiveEntitlement
+    ? (userRole === 'ELITE' || userRole === 'ELITE_PASS' ? 'ELITE' : 'PRO')
+    : 'VERIFIED';
 
   const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
 

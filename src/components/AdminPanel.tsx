@@ -552,20 +552,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         </div>
 
         <div className="flex items-center space-x-3">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-purple-600/30 hover:bg-purple-600/50 text-purple-100 border border-purple-500/50 font-black text-xs transition shadow-lg hover:shadow-purple-500/20 active:scale-95 cursor-pointer"
+              title="Return to VIXY VAULT Main Dashboard"
+            >
+              <ChevronLeft className="w-4 h-4 text-purple-300" />
+              <span>RETURN TO DASHBOARD</span>
+            </button>
+          )}
+
           <button
             onClick={() => loadAdminData(true)}
             disabled={isRefreshing}
-            className="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700/60 transition"
+            className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700/60 transition"
             title="Force refresh backend state"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`} />
-            <span>{isRefreshing ? 'Refreshing...' : 'Sync Telemetry'}</span>
+            <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Sync Telemetry'}</span>
           </button>
 
           {onClose && (
             <button
               onClick={onClose}
-              className="p-2 rounded-lg bg-slate-800 hover:bg-red-950/50 hover:text-red-400 text-slate-400 border border-slate-700/60 transition"
+              className="p-2 rounded-xl bg-slate-800 hover:bg-red-950/50 hover:text-red-400 text-slate-400 border border-slate-700/60 transition"
               title="Close Control Panel"
             >
               <X className="w-5 h-5" />
