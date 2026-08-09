@@ -242,6 +242,28 @@ export default function App() {
     }
   }, [authState]);
 
+  // Heartbeat effect for active user online presence
+  useEffect(() => {
+    if (!authState.isAuthenticated || !authState.user) return;
+    const sendHeartbeat = async () => {
+      try {
+        await fetch('/api/auth/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: authState.user?.email,
+            uid: authState.user?.id,
+          }),
+        });
+      } catch (e) {
+        // Ignore heartbeat errors
+      }
+    };
+    sendHeartbeat();
+    const interval = setInterval(sendHeartbeat, 30000); // every 30 seconds
+    return () => clearInterval(interval);
+  }, [authState]);
+
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
 
