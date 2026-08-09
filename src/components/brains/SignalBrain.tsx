@@ -52,11 +52,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const bearPct = 100 - bullPct;
 
   // Micro-telemetry values
-  const currentPrice = ticker.price || 64108;
-  const targetPrice = signal.targetPrice || (isBullish ? currentPrice + 120 : currentPrice - 120);
-  const strikeDistanceVal = targetPrice - currentPrice;
-  const strikeDistancePct = (strikeDistanceVal / currentPrice) * 100;
-  const formattedStrikePct = `${strikeDistancePct >= 0 ? '+' : ''}${strikeDistancePct.toFixed(2)}%`;
+  const currentPrice = ticker.price || signal.currentPrice || 64108;
+  const targetPrice = signal.targetPrice || (isBullish ? Math.round(currentPrice + 120) : Math.round(currentPrice - 120));
+  // spotVsStrikeDelta: positive when live spot is above strike, negative when below
+  const spotVsStrikeDelta = currentPrice - targetPrice;
+  const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
+  const formattedSpotVsStrikeVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${Math.abs(spotVsStrikeDelta).toFixed(2)}`;
+  const formattedSpotVsStrikePct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
 
   // Live latency jitter
   const [latency, setLatency] = useState(198);
@@ -130,6 +132,60 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
       </div>
 
+      {/* High-Priority Top-Of-Page Signal Strip */}
+      <div className="bg-[#070314] p-3 rounded-2xl border border-purple-800/80 shadow-lg relative z-10 font-mono text-xs space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-900/40 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-2 w-2 relative">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+            </span>
+            <span className="font-extrabold text-white tracking-wider">VIXY SIGNAL ENGINE</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-500/40">
+              🟢 ONLINE
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3 text-[10px]">
+            <span className="text-purple-300/80 font-bold">MARKET: <span className="text-white">BTC KALSHI {timeframe}</span></span>
+            <span className="text-amber-400 font-bold flex items-center gap-1">
+              <Lock className="w-3 h-3" /> LOCK IN {timeString}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-3 font-black">
+            <span className={`px-2.5 py-1 rounded-lg border text-sm flex items-center gap-1.5 ${
+              isBullish ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60' : 'bg-rose-950/90 text-rose-300 border-rose-500/60'
+            }`}>
+              <span>{isBullish ? '🟢 BUY UP' : '🔴 BUY DOWN'}</span>
+              <span className="text-xs">{liveConfidence.toFixed(0)}%</span>
+            </span>
+            <span className="text-[10px] text-purple-300/70 font-semibold hidden sm:inline">
+              CALIBRATED CONFIDENCE
+            </span>
+          </div>
+
+          {/* LAST 10 Mini Tape Sequence */}
+          <div className="flex items-center gap-2 text-[10px]">
+            <span className="text-purple-400/80 font-bold">LAST 10:</span>
+            <div className="flex items-center gap-1">
+              {['UP', 'UP', 'DOWN', 'UP', 'DOWN', 'DOWN', 'UP', 'DOWN', 'UP', isBullish ? 'UP' : 'DOWN'].map((dir, idx) => (
+                <span
+                  key={idx}
+                  title={`Signal #${idx + 1}: ${dir}`}
+                  className={`w-2.5 h-2.5 rounded-full inline-block ${
+                    dir === 'UP' ? 'bg-emerald-400 shadow-[0_0_6px_#10b981]' : 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
+                  }`}
+                />
+              ))}
+            </div>
+            <span className="text-emerald-300 font-bold ml-1">6 UP • 4 DOWN • 60% RECENT</span>
+          </div>
+        </div>
+      </div>
+
       {/* Main Command Terminal Decision Card Hero */}
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
         {/* Left Column (7 cols): Hero Decision Callout (BUY UP / BUY DOWN) */}
@@ -178,42 +234,39 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               </div>
             </div>
 
-            {/* Segmented VIXY Confidence Field */}
-            <div className="pt-3 space-y-2">
-              <div className="flex justify-between items-center text-[11px] font-mono font-bold">
+            {/* Segmented VIXY Confidence Field - Sleek & Compact */}
+            <div className="pt-2 space-y-1.5">
+              <div className="flex justify-between items-center text-[10px] font-mono font-bold">
                 <span className="text-purple-300/90 uppercase tracking-wider flex items-center gap-1.5">
-                  <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                  <Zap className="w-3 h-3 text-amber-400 animate-pulse" />
                   <span className="bg-gradient-to-r from-purple-200 via-indigo-200 to-purple-300 bg-clip-text text-transparent">VIXY CONFIDENCE FIELD</span>
                 </span>
-                <span className={`px-2.5 py-0.5 rounded-lg font-extrabold text-[11px] border backdrop-blur-md transition-all ${
+                <span className={`px-2 py-0.5 rounded-md font-black text-[10px] border backdrop-blur-md transition-all ${
                   isBullish 
-                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-[0_0_12px_rgba(52,211,153,0.35)]' 
-                    : 'bg-rose-950/80 text-rose-300 border-rose-500/50 shadow-[0_0_12px_rgba(244,63,94,0.35)]'
+                    ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 shadow-[0_0_10px_rgba(52,211,153,0.3)]' 
+                    : 'bg-rose-950/80 text-rose-300 border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.3)]'
                 }`}>
                   {liveConfidence.toFixed(1)}% ({isBullish ? 'HIGH BULL' : 'HIGH BEAR'})
                 </span>
               </div>
 
-              {/* Segmented Blocks Representation */}
-              <div className="flex items-center gap-1.5 w-full bg-[#04010b] p-2 rounded-xl border border-purple-700/50 shadow-[inset_0_2px_10px_rgba(0,0,0,0.9),0_0_15px_rgba(147,51,234,0.15)] relative overflow-hidden">
+              {/* Sleek Segmented Blocks Representation */}
+              <div className="flex items-center gap-1 w-full bg-[#030108] p-1.5 rounded-lg border border-purple-800/60 shadow-[inset_0_2px_8px_rgba(0,0,0,0.9)] relative overflow-hidden">
                 {Array.from({ length: totalBlocks }).map((_, i) => {
                   const isActive = i < activeBlocks;
                   return (
                     <div
                       key={i}
-                      className={`h-4 flex-1 rounded-md transition-all duration-300 relative overflow-hidden ${
+                      className={`h-2.5 flex-1 rounded-xs transition-all duration-300 relative overflow-hidden ${
                         isActive
                           ? isBullish
-                            ? 'bg-gradient-to-t from-emerald-600 via-emerald-400 to-emerald-200 shadow-[0_0_12px_rgba(52,211,153,0.9)] border border-emerald-300/70'
-                            : 'bg-gradient-to-t from-rose-700 via-rose-500 to-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.9)] border border-rose-300/70'
-                          : 'bg-purple-950/20 border border-purple-900/40 opacity-50'
+                            ? 'bg-gradient-to-t from-emerald-600 via-emerald-400 to-emerald-200 shadow-[0_0_8px_rgba(52,211,153,0.8)] border border-emerald-300/80'
+                            : 'bg-gradient-to-t from-rose-700 via-rose-500 to-rose-300 shadow-[0_0_8px_rgba(244,63,94,0.8)] border border-rose-300/80'
+                          : 'bg-purple-950/20 border border-purple-900/40 opacity-40'
                       }`}
                     >
                       {isActive && (
-                        <>
-                          <div className="absolute top-0 inset-x-0 h-0.5 bg-white/80 blur-[0.3px]" />
-                          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-white/20 via-transparent to-transparent" />
-                        </>
+                        <div className="absolute top-0 inset-x-0 h-0.5 bg-white/70 blur-[0.2px]" />
                       )}
                     </div>
                   );
@@ -222,10 +275,46 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </div>
           </div>
 
-          {/* Institutional Edge */}
-          <div className="pt-3 border-t border-purple-900/50 flex items-center justify-between text-xs font-mono">
-            <span className="text-purple-300/80 font-bold uppercase tracking-wider">INSTITUTIONAL EDGE:</span>
-            <span className="text-emerald-400 font-black text-sm tracking-wide">+{signal.edgePct.toFixed(1)}% OVER MARKET</span>
+          {/* Institutional Edge & Evidence Factors */}
+          <div className="pt-3 border-t border-purple-900/50 space-y-2">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-purple-300/80 font-bold uppercase tracking-wider">INSTITUTIONAL EDGE:</span>
+              <span className="text-emerald-400 font-black text-sm tracking-wide">+{signal.edgePct.toFixed(1)}% OVER MARKET</span>
+            </div>
+
+            {/* Technical Evidence Matrix */}
+            <div className="bg-[#03010b] p-2.5 rounded-xl border border-purple-900/60 font-mono text-[10px]">
+              <div className="text-purple-300/70 font-bold uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <span>QUALIFIED EVIDENCE FACTORS</span>
+                <span className="text-cyan-400 font-bold">5 / 5 CONFIRMED</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[9px]">
+                <div className="bg-[#090317] p-1.5 rounded border border-purple-800/40 flex justify-between items-center">
+                  <span className="text-purple-300/70">ORDER FLOW</span>
+                  <span className={`font-black ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isBullish ? 'BULL +18' : 'BEAR +18'}
+                  </span>
+                </div>
+                <div className="bg-[#090317] p-1.5 rounded border border-purple-800/40 flex justify-between items-center">
+                  <span className="text-purple-300/70">MOMENTUM</span>
+                  <span className={`font-black ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {isBullish ? 'BULL +14' : 'BEAR +14'}
+                  </span>
+                </div>
+                <div className="bg-[#090317] p-1.5 rounded border border-purple-800/40 flex justify-between items-center">
+                  <span className="text-purple-300/70">VOLATILITY</span>
+                  <span className="text-emerald-400 font-black">EXP +9</span>
+                </div>
+                <div className="bg-[#090317] p-1.5 rounded border border-purple-800/40 flex justify-between items-center">
+                  <span className="text-purple-300/70">DISTANCE</span>
+                  <span className="text-cyan-300 font-black">STRIKE +3</span>
+                </div>
+                <div className="bg-[#090317] p-1.5 rounded border border-purple-800/40 flex justify-between items-center col-span-2 sm:col-span-1">
+                  <span className="text-purple-300/70">REGIME</span>
+                  <span className="text-purple-200 font-black">TREND +12</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -233,38 +322,50 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="lg:col-span-5 grid grid-cols-2 gap-3 items-stretch">
           {/* Target Strike */}
           <div className="bg-[#080318] p-4 rounded-2xl border border-purple-800/70 shadow-xl flex flex-col justify-between">
-            <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
-              TARGET STRIKE
-            </span>
-            <div className="my-1">
-              <span className="text-xl sm:text-2xl font-black text-white font-mono block">
-                ${targetPrice.toLocaleString()}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
+                TARGET STRIKE
               </span>
-              <span className={`text-[10px] font-bold block mt-0.5 ${isBullish ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {isBullish ? 'TARGET ABOVE STRIKE' : 'TARGET BELOW STRIKE'}
+              <span className="text-[9px] text-cyan-300 font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30">
+                STRIKE PRICE
               </span>
             </div>
-            <span className="text-[9px] text-purple-400/60 font-mono">Kalshi {timeframe} Contract</span>
+            <div className="my-1.5 space-y-1">
+              <span className="text-2xl sm:text-3xl font-black text-white font-mono block tracking-tight drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">
+                ${targetPrice.toLocaleString()}
+              </span>
+              <div className={`text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wide inline-block border ${
+                isBullish 
+                  ? 'bg-emerald-950 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(52,211,153,0.3)]' 
+                  : 'bg-rose-950 text-rose-300 border-rose-500/40 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+              }`}>
+                {isBullish ? 'MUST EXPIRE ABOVE $' + targetPrice.toLocaleString() : 'MUST EXPIRE BELOW $' + targetPrice.toLocaleString()}
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-[9px] text-purple-300/70 font-mono pt-1 border-t border-purple-900/40">
+              <span>LIVE SPOT: <strong className="text-white">${ticker.price.toLocaleString()}</strong></span>
+              <span className="text-purple-400">Kalshi {timeframe}</span>
+            </div>
           </div>
 
           {/* Strike Distance */}
           <div className="bg-[#080318] p-4 rounded-2xl border border-purple-800/70 shadow-xl flex flex-col justify-between">
             <span className="text-[10px] text-purple-300/80 font-mono font-bold uppercase tracking-wider block">
-              STRIKE DISTANCE
+              DISTANCE TO STRIKE
             </span>
             <div className="my-1">
               <span
                 className={`text-xl sm:text-2xl font-black font-mono block ${
-                  strikeDistanceVal >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 }`}
               >
-                {formattedStrikePct}
+                {formattedSpotVsStrikeVal} ({formattedSpotVsStrikePct})
               </span>
-              <span className="text-[10px] text-purple-300/90 font-bold block mt-0.5">
-                ${Math.abs(strikeDistanceVal).toFixed(1)} DELTA
+              <span className="text-[10px] text-purple-300/90 font-bold block mt-0.5 uppercase">
+                {spotVsStrikeDelta >= 0 ? 'LIVE SPOT ABOVE STRIKE' : 'LIVE SPOT BELOW STRIKE'}
               </span>
             </div>
-            <span className="text-[9px] text-purple-400/60 font-mono">From Spot Price</span>
+            <span className="text-[9px] text-purple-400/60 font-mono">Spot vs Reference Strike</span>
           </div>
 
           {/* Time Remaining */}
@@ -370,6 +471,79 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               }`}>
                 {lockEvaluation.qualified ? 'DIRECTION SECURED' : 'LOCKED GATE ACTIVE'}
               </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 15M Expiration Condition & Strike Settlement HUD */}
+      <div className="bg-[#05020f] p-4 rounded-2xl border border-purple-800/80 space-y-3 relative z-10 shadow-2xl font-mono text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-purple-900/50 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-purple-950 text-purple-200 border border-purple-700/60">
+              15M EXPIRATION CONDITION
+            </span>
+            <span className="text-[10px] text-purple-300/80 font-bold">
+              CONTRACT: <strong className="text-white">BTC {timeframe} KALSHI</strong>
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[10px]">
+            <span className="text-purple-300/80 font-bold">LIVE SPOT: <strong className="text-white">${currentPrice.toLocaleString()}</strong></span>
+            <span className="text-purple-300/80 font-bold">STRIKE: <strong className="text-cyan-300">${targetPrice.toLocaleString()}</strong></span>
+            <span className="text-amber-300 font-bold">EXPIRY IN: {timeString}</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+          {/* Left (5 cols): Expiration Condition Banner */}
+          <div className={`md:col-span-5 p-3 rounded-xl border flex items-center justify-between gap-2 ${
+            isBullish 
+              ? 'bg-emerald-950/70 border-emerald-500/60 text-emerald-200 shadow-[0_0_15px_rgba(52,211,153,0.2)]'
+              : 'bg-rose-950/70 border-rose-500/60 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
+          }`}>
+            <div className="space-y-0.5">
+              <div className="text-[10px] text-purple-300/70 font-bold uppercase tracking-wider">SETTLEMENT REQUIREMENT</div>
+              <div className="text-xs sm:text-sm font-black tracking-tight text-white">
+                {isBullish ? `SETTLE ABOVE $${targetPrice.toLocaleString()}` : `SETTLE BELOW $${targetPrice.toLocaleString()}`}
+              </div>
+            </div>
+            <div className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase border shrink-0 ${
+              isBullish ? 'bg-emerald-500 text-black border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.5)]' : 'bg-rose-500 text-white border-rose-300 shadow-[0_0_10px_rgba(244,63,94,0.5)]'
+            }`}>
+              {isBullish ? 'BUY UP' : 'BUY DOWN'}
+            </div>
+          </div>
+
+          {/* Right (7 cols): Mini Gauge & Distance Delta */}
+          <div className="md:col-span-7 bg-[#030109] p-3 rounded-xl border border-purple-900/60 space-y-2">
+            <div className="flex items-center justify-between text-[10px] font-bold">
+              <span className="text-purple-300/80">DISTANCE TO STRIKE:</span>
+              <span className={`font-black ${spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {formattedSpotVsStrikeVal} ({formattedSpotVsStrikePct})
+              </span>
+            </div>
+
+            {/* Mini Visual Line Gauge */}
+            <div className="relative w-full bg-[#080318] h-3 rounded-full border border-purple-800/60 overflow-hidden flex items-center px-2">
+              <div className="absolute inset-x-0 h-0.5 bg-purple-900/40" />
+              {/* Strike Marker */}
+              <div className="absolute left-1/2 -translate-x-1/2 h-full w-1 bg-cyan-400 shadow-[0_0_6px_#22d3ee] z-10" title={`Strike: $${targetPrice.toLocaleString()}`} />
+              {/* Current Spot Dot */}
+              <div 
+                className={`absolute h-2.5 w-2.5 rounded-full z-20 transition-all duration-500 shadow-md -translate-x-1/2 ${
+                  spotVsStrikeDelta >= 0 ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]' : 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
+                }`}
+                style={{
+                  left: `${Math.min(90, Math.max(10, 50 + (spotVsStrikePct * 10)))}%`
+                }}
+                title={`Spot: $${currentPrice.toLocaleString()}`}
+              />
+            </div>
+
+            <div className="flex items-center justify-between text-[9px] text-purple-400/80 font-mono">
+              <span>● LIVE SPOT (${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
+              <span className="text-cyan-300 font-bold">│ STRIKE (${targetPrice.toLocaleString()})</span>
+              <span>{isBullish ? '↑ MUST SETTLE ABOVE' : '↓ MUST SETTLE BELOW'}</span>
             </div>
           </div>
         </div>

@@ -298,8 +298,13 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         ws.onerror = null;
         ws.onmessage = null;
         try {
-          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          if (ws.readyState === WebSocket.OPEN) {
             ws.close();
+          } else if (ws.readyState === WebSocket.CONNECTING) {
+            ws.onopen = () => {
+              try { ws.close(); } catch (_) {}
+            };
+            ws.onerror = () => {};
           }
         } catch (_) {}
       }
@@ -447,26 +452,54 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           }
         };
 
-      // Compute Price Range (min/max)
-      let minP = Math.min(...candles.map((c) => c.low));
-      let maxP = Math.max(...candles.map((c) => c.high));
-      const range = maxP - minP || 10;
-      const padding = range * 0.15;
-      minP -= padding;
-      maxP += padding;
+      // Filter valid candles to prevent any 0 or corrupt price data from blowing up scale
+      const validCandles = candles.filter(
+        (c) => c && typeof c.low === 'number' && typeof c.high === 'number' && c.low > 100 && c.high > 100 && !isNaN(c.close)
+      );
 
-      const chartWidth = width - 70; // Leave room for Y-axis scale
-      const candleWidth = chartWidth / candles.length;
+      if (validCandles.length < 2) {
+        animId = requestAnimationFrame(render);
+        return;
+      }
+
+      // Compute Price Range (min/max) safely
+      let rawMinP = Math.min(...validCandles.map((c) => c.low));
+      let rawMaxP = Math.max(...validCandles.map((c) => c.high));
+
+      if (currentPrice > 100) {
+        rawMinP = Math.min(rawMinP, currentPrice);
+        rawMaxP = Math.max(rawMaxP, currentPrice);
+      }
+      if (strikePrice > 100) {
+        rawMinP = Math.min(rawMinP, strikePrice);
+        rawMaxP = Math.max(rawMaxP, strikePrice);
+      }
+
+      let priceSpan = rawMaxP - rawMinP;
+      if (priceSpan < 20) {
+        const mid = (rawMaxP + rawMinP) / 2;
+        rawMinP = mid - 10;
+        rawMaxP = mid + 10;
+        priceSpan = 20;
+      }
+
+      const pad = priceSpan * 0.12;
+      const minP = rawMinP - pad;
+      const maxP = rawMaxP + pad;
+      const totalRange = maxP - minP || 10;
+
+      const chartWidth = width - 75; // Leave 75px for Y-axis scale
+      const candleWidth = chartWidth / validCandles.length;
 
       const getY = (price: number) => {
-        return height - ((price - minP) / (maxP - minP)) * (height - 30) - 15;
+        return height - 25 - ((price - minP) / totalRange) * (height - 50);
       };
 
       // 1. Draw Smoothed AI Momentum Ribbon under candles
       ctx.beginPath();
       const ribbonPoints: { x: number; y: number; ratio: number }[] = [];
 
-      candles.forEach((c, i) => {
+      validCandles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const y = getY((c.open + c.close) / 2);
         ribbonPoints.push({ x, y, ratio: c.takerBuyRatio });
@@ -482,7 +515,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           ctx.quadraticCurveTo(ribbonPoints[i].x, ribbonPoints[i].y, xc, yc);
         }
 
-        const avgRatio = candles.reduce((acc, c) => acc + c.takerBuyRatio, 0) / candles.length;
+        const avgRatio = validCandles.reduce((acc, c) => acc + c.takerBuyRatio, 0) / validCandles.length;
         const isBullish = avgRatio >= 0.5;
 
         ctx.lineWidth = 6;
@@ -504,11 +537,12 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       }
 
       // 2. Render Forward Probability Cone ("Future Projection Band")
-      const lastX = (candles.length - 1) * candleWidth + candleWidth / 2;
-      const lastY = getY(candles[candles.length - 1].close);
+      const lastCandle = validCandles[validCandles.length - 1];
+      const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
+      const lastY = getY(lastCandle.close);
       const coneWidth = 60;
-      const upperY = getY(candles[candles.length - 1].close + (upProbability / 100) * 18);
-      const lowerY = getY(candles[candles.length - 1].close - ((100 - upProbability) / 100) * 18);
+      const upperY = getY(lastCandle.close + (upProbability / 100) * 18);
+      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * 18);
 
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
@@ -540,9 +574,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.setLineDash([]); // reset
 
       // 3. Render Volume Bars at Bottom
-      const maxVol = Math.max(...candles.map((c) => c.volume)) || 1;
+      const maxVol = Math.max(...validCandles.map((c) => c.volume)) || 1;
       const volAreaHeight = 45;
-      candles.forEach((c, i) => {
+      validCandles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const isUp = c.close >= c.open;
         const vHeight = (c.volume / maxVol) * volAreaHeight;
@@ -554,7 +588,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       });
 
       // 4. Render OHLC Candles & TradingView Indicator Buy/Sell Pills
-      candles.forEach((c, i) => {
+      validCandles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const openY = getY(c.open);
         const closeY = getY(c.close);
@@ -633,19 +667,19 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
       // Strike Price Label Badge
       ctx.fillStyle = strikeCrossed ? '#fbbf24' : '#1e0c38';
-      ctx.fillRect(chartWidth + 5, strikeY - 10, 60, 20);
+      ctx.fillRect(chartWidth + 4, strikeY - 10, 65, 20);
       ctx.fillStyle = strikeCrossed ? '#000000' : '#c084fc';
-      ctx.font = 'bold 10px monospace';
-      ctx.fillText(`STRIKE`, chartWidth + 10, strikeY + 3);
+      ctx.font = 'bold 9px monospace';
+      ctx.fillText(`STRIKE`, chartWidth + 8, strikeY + 3);
 
-      // Y-Axis Price Scale
+      // Y-Axis Price Scale (Mathematically Aligned)
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '10px monospace';
+      ctx.font = 'bold 9px monospace';
       const steps = 5;
       for (let i = 0; i <= steps; i++) {
-        const p = minP + (range / steps) * i;
+        const p = minP + (totalRange / steps) * i;
         const y = getY(p);
-        ctx.fillText(`$${p.toFixed(1)}`, chartWidth + 5, y + 3);
+        ctx.fillText(`$${p.toFixed(1)}`, chartWidth + 6, y + 3);
       }
       } catch (err) {
         console.warn('Render loop exception:', err);
@@ -714,10 +748,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
       </div>
 
-      {/* Main Grid: Chart Canvas (Left) + Synced Probability Bar & BUY Capsules (Right) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        {/* Left Column: Live Canvas Chart */}
-        <div className="lg:col-span-8 relative rounded-xl bg-[#050210] border border-purple-900/40 p-2 overflow-hidden h-[430px] flex flex-col justify-between">
+      {/* Main Container: Chart Canvas (Top) + Execution Deck & BUY Capsules (Below Chart) */}
+      <div className="space-y-3.5">
+        {/* Full-Width Live Canvas Chart */}
+        <div className="relative rounded-xl bg-[#050210] border border-purple-900/40 p-2 overflow-hidden h-[340px] sm:h-[380px] flex flex-col justify-between">
           <div ref={containerRef} className="w-full h-full relative">
             <canvas ref={canvasRef} className="w-full h-full block" />
 
@@ -736,10 +770,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
         </div>
 
-        {/* Right Column: High-Dopamine BUY UP / BUY DOWN Capsules & Probability Bar */}
-        <div className="lg:col-span-4 flex flex-col justify-between space-y-3">
-          {/* Probability Bar Header */}
-          <div className="p-3.5 rounded-xl bg-[#0e0622] border border-purple-500/30 space-y-2">
+        {/* Execution Metrics Deck (Below Chart) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+          {/* REAL-TIME IMPLIED ODDS Card */}
+          <div className="p-3.5 rounded-xl bg-[#0e0622] border border-purple-500/30 space-y-2.5 flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs font-bold text-slate-300">
               <span className="flex items-center gap-1.5">
                 <Target className="w-4 h-4 text-cyan-400" />
@@ -749,7 +783,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </div>
 
             {/* Dual Color Scalping Bar */}
-            <div className="space-y-1">
+            <div className="space-y-1.5">
               <div className="flex justify-between text-xs font-black">
                 <span className="text-emerald-400 flex items-center gap-1">
                   <ArrowUpRight className="w-3.5 h-3.5" /> BUY UP ({upProbability}%)
@@ -772,8 +806,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </div>
           </div>
 
-          {/* Live Strike Target Distance Gauge */}
-          <div className="bg-[#0b051c] p-3 rounded-xl border border-purple-800/50 flex flex-col gap-2 font-mono">
+          {/* STRIKE TARGET GAP Card */}
+          <div className="bg-[#0b051c] p-3.5 rounded-xl border border-purple-800/50 flex flex-col justify-between gap-2 font-mono">
             <div className="flex items-center justify-between text-xs font-bold text-purple-200">
               <span className="flex items-center gap-1.5 text-cyan-300">
                 <Target className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
@@ -811,42 +845,44 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               </span>
             </div>
           </div>
+        </div>
 
+        {/* Action Capsules Deck: High-Dopamine BUY UP / BUY DOWN Action Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           {/* Glowing BUY UP Capsule Button */}
           <button
             onClick={() => handleActionSound('UP')}
-            className={`group relative overflow-hidden p-5 sm:p-6 rounded-2xl transition-all duration-300 text-left border ${
+            className={`group relative overflow-hidden p-4 sm:p-5 rounded-2xl transition-all duration-300 text-left border cursor-pointer ${
               selectedDirection === 'UP'
-                ? 'bg-gradient-to-r from-emerald-950/90 via-[#072418] to-emerald-900/60 border-emerald-400 shadow-[0_0_35px_rgba(52,211,153,0.45)] scale-[1.02]'
+                ? 'bg-gradient-to-r from-emerald-950/90 via-[#072418] to-emerald-900/60 border-emerald-400 shadow-[0_0_35px_rgba(52,211,153,0.45)] scale-[1.01]'
                 : 'bg-[#0a1813]/60 border-emerald-900/40 hover:border-emerald-500/50'
             }`}
           >
-            {/* Pulsing Glow Background overlay if selected */}
             {selectedDirection === 'UP' && (
               <div className="absolute inset-0 bg-emerald-500/10 animate-pulse pointer-events-none rounded-2xl" />
             )}
-            <div className="flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center justify-center font-black text-xl shadow-inner shrink-0">
                   ▲
                 </div>
-                <div>
-                  <div className="text-base sm:text-lg font-black text-emerald-300 flex items-center gap-2">
-                    <span>▲ BUY UP CAPSULE</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-200 border border-emerald-500/30">
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-black text-emerald-300 flex items-center gap-2 flex-wrap">
+                    <span className="whitespace-nowrap">BUY UP CAPSULE</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-200 border border-emerald-500/30 whitespace-nowrap">
                       +14.2% EDGE
                     </span>
                   </div>
-                  <span className="text-xs text-emerald-200/70 font-sans block mt-0.5">
+                  <span className="text-xs text-emerald-200/80 font-sans block mt-0.5">
                     Institutional Order Flow Sweeping Bids
                   </span>
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <span className="text-3xl font-black text-emerald-300 block tracking-tight font-mono">
+              <div className="text-right shrink-0 font-mono">
+                <span className="text-2xl sm:text-3xl font-black text-emerald-300 block tracking-tight whitespace-nowrap">
                   {upProbability}%
                 </span>
-                <span className="text-[10px] text-emerald-400 font-mono font-bold">★★★★☆ AI AGREE</span>
+                <span className="text-[10px] text-emerald-400 font-bold block whitespace-nowrap">★★★★☆ AI AGREE</span>
               </div>
             </div>
           </button>
@@ -854,38 +890,37 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           {/* Glowing BUY DOWN Capsule Button */}
           <button
             onClick={() => handleActionSound('DOWN')}
-            className={`group relative overflow-hidden p-5 sm:p-6 rounded-2xl transition-all duration-300 text-left border ${
+            className={`group relative overflow-hidden p-4 sm:p-5 rounded-2xl transition-all duration-300 text-left border cursor-pointer ${
               selectedDirection === 'DOWN'
-                ? 'bg-gradient-to-r from-rose-950/90 via-[#260a12] to-rose-900/60 border-rose-400 shadow-[0_0_35px_rgba(248,113,113,0.45)] scale-[1.02]'
+                ? 'bg-gradient-to-r from-rose-950/90 via-[#260a12] to-rose-900/60 border-rose-400 shadow-[0_0_35px_rgba(248,113,113,0.45)] scale-[1.01]'
                 : 'bg-[#18080f]/60 border-rose-900/40 hover:border-rose-500/50'
             }`}
           >
-            {/* Pulsing Glow Background overlay if selected */}
             {selectedDirection === 'DOWN' && (
               <div className="absolute inset-0 bg-rose-500/10 animate-pulse pointer-events-none rounded-2xl" />
             )}
-            <div className="flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between gap-3 relative z-10">
+              <div className="flex items-center gap-3 min-w-0">
                 <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-300 border border-rose-500/40 flex items-center justify-center font-black text-xl shadow-inner shrink-0">
                   ▼
                 </div>
-                <div>
-                  <div className="text-base sm:text-lg font-black text-rose-300 flex items-center gap-2">
-                    <span>▼ BUY DOWN CAPSULE</span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-200 border border-rose-500/30">
+                <div className="min-w-0">
+                  <div className="text-sm sm:text-base font-black text-rose-300 flex items-center gap-2 flex-wrap">
+                    <span className="whitespace-nowrap">BUY DOWN CAPSULE</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-200 border border-rose-500/30 whitespace-nowrap">
                       -0.38% MOVE
                     </span>
                   </div>
-                  <span className="text-xs text-rose-200/70 font-sans block mt-0.5">
+                  <span className="text-xs text-rose-200/80 font-sans block mt-0.5">
                     Momentum Weakening • Liquidity Swept
                   </span>
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <span className="text-3xl font-black text-rose-300 block tracking-tight font-mono">
+              <div className="text-right shrink-0 font-mono">
+                <span className="text-2xl sm:text-3xl font-black text-rose-300 block tracking-tight whitespace-nowrap">
                   {100 - upProbability}%
                 </span>
-                <span className="text-[10px] text-rose-400 font-mono font-bold">SECONDARY</span>
+                <span className="text-[10px] text-rose-400 font-bold block whitespace-nowrap">SECONDARY</span>
               </div>
             </div>
           </button>

@@ -8,8 +8,11 @@ import {
   TrendingUp, 
   TrendingDown,
   Radar,
-  Lock,
-  ChevronRight
+  Terminal,
+  Zap,
+  Check,
+  XCircle,
+  Crosshair
 } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 
@@ -24,275 +27,383 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   ticker,
   isDiscordVerified = false
 }) => {
-  // Calculate Position Survival Risk score based on signal confidence & volatility
+  // Live spot and reference strike math
+  const currentPrice = ticker.price || signal.currentPrice || 64108;
+  const isUp = signal.direction === 'YES';
+  const targetPrice = signal.targetPrice || (isUp ? Math.round(currentPrice + 120) : Math.round(currentPrice - 120));
+  
+  const spotVsStrikeDelta = currentPrice - targetPrice;
+  const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
+  const formattedDeltaVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${Math.abs(spotVsStrikeDelta).toFixed(2)}`;
+  const formattedDeltaPct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
+
+  // Calculate Position Survival & Reversal Risk score based on signal confidence & spot dynamics
   const rawReversalRisk = Math.min(
     95,
     Math.max(12, Math.round(100 - signal.confidence + Math.abs((ticker.price % 30) / 2)))
   );
 
-  const getRiskStatus = (risk: number) => {
-    if (risk < 30) return { label: 'SAFE', color: 'text-emerald-400', bg: 'bg-emerald-950/80', border: 'border-emerald-500/40', badgeBg: 'bg-emerald-500/20' };
-    if (risk < 60) return { label: 'WATCH', color: 'text-amber-300', bg: 'bg-amber-950/80', border: 'border-amber-500/40', badgeBg: 'bg-amber-500/20' };
-    if (risk < 80) return { label: 'DANGER', color: 'text-orange-400', bg: 'bg-orange-950/80', border: 'border-orange-500/40', badgeBg: 'bg-orange-500/20' };
-    return { label: 'EXIT RECOMMENDED', color: 'text-rose-400', bg: 'bg-rose-950/80', border: 'border-rose-500/40', badgeBg: 'bg-rose-500/20' };
+  const survivalScore = Math.max(5, 100 - rawReversalRisk);
+
+  // Position State determination
+  const positionState: 'PROTECTED' | 'WATCH' | 'THREATENED' =
+    survivalScore >= 70 ? 'PROTECTED' : survivalScore >= 45 ? 'WATCH' : 'THREATENED';
+
+  // Survival Level Label & Styling
+  const getSurvivalMeta = (score: number) => {
+    if (score >= 85) return { label: 'STRONG', color: 'text-emerald-400', border: 'border-emerald-500/80', bg: 'bg-emerald-950/80', bar: 'bg-emerald-400' };
+    if (score >= 70) return { label: 'HEALTHY', color: 'text-emerald-300', border: 'border-emerald-500/60', bg: 'bg-emerald-950/60', bar: 'bg-emerald-400' };
+    if (score >= 50) return { label: 'GUARDED', color: 'text-cyan-300', border: 'border-cyan-500/60', bg: 'bg-cyan-950/60', bar: 'bg-cyan-400' };
+    if (score >= 30) return { label: 'ELEVATED', color: 'text-amber-300', border: 'border-amber-500/60', bg: 'bg-amber-950/60', bar: 'bg-amber-400' };
+    return { label: 'CRITICAL', color: 'text-rose-400', border: 'border-rose-500/80', bg: 'bg-rose-950/80', bar: 'bg-rose-500' };
   };
 
-  const riskInfo = getRiskStatus(rawReversalRisk);
-  const positionHealthPct = Math.max(10, 100 - rawReversalRisk);
+  const survivalMeta = getSurvivalMeta(survivalScore);
 
-  // Dynamic Sentinel Guardian Action
-  const activeGuardianAction: 'ENTER' | 'WAIT' | 'SCALE IN' | 'MOVE STOP' | 'TAKE 50%' | 'EXIT NOW' =
-    rawReversalRisk > 75
-      ? 'EXIT NOW'
-      : rawReversalRisk > 55
-      ? 'TAKE 50%'
-      : rawReversalRisk > 40
+  // Reversal Threat Meta
+  const getReversalMeta = (risk: number) => {
+    if (risk < 30) return { label: 'LOW THREAT', color: 'text-emerald-400', badgeBg: 'bg-emerald-950/80 border-emerald-500/60' };
+    if (risk < 50) return { label: 'ELEVATED', color: 'text-amber-300', badgeBg: 'bg-amber-950/80 border-amber-500/60' };
+    if (risk < 70) return { label: 'HIGH THREAT', color: 'text-orange-400', badgeBg: 'bg-orange-950/80 border-orange-500/60' };
+    return { label: 'CRITICAL THREAT', color: 'text-rose-400', badgeBg: 'bg-rose-950/80 border-rose-500/60' };
+  };
+
+  const reversalMeta = getReversalMeta(rawReversalRisk);
+
+  // Guardian Action Recommendation
+  const guardianAction: 'HOLD POSITION' | 'PROTECT POSITION' | 'WATCH REVERSAL' | 'EXIT RISK' =
+    survivalScore >= 75
+      ? 'HOLD POSITION'
+      : survivalScore >= 55
+      ? 'PROTECT POSITION'
+      : survivalScore >= 35
+      ? 'WATCH REVERSAL'
+      : 'EXIT RISK';
+
+  // Highlighted action for action strip
+  const activeStripAction =
+    guardianAction === 'HOLD POSITION'
+      ? 'TAKE PROFIT'
+      : guardianAction === 'PROTECT POSITION'
       ? 'MOVE STOP'
-      : rawReversalRisk > 25
-      ? 'SCALE IN'
-      : 'ENTER';
+      : guardianAction === 'WATCH REVERSAL'
+      ? 'WAIT'
+      : 'EXIT';
 
-  // Break State Determination from actual model confidence
-  const breakState = signal.confidence >= 75
-    ? 'BREAK CONFIRMED'
-    : signal.confidence >= 60
-    ? 'BREAK DEVELOPING'
-    : 'WAITING FOR CONFIRMATION';
-
-  const isUp = signal.direction === 'YES';
+  // Real-time Scanning Matrix item statuses
+  const matrixChecks = [
+    {
+      name: 'MOMENTUM ALIGN',
+      status: signal.confidence >= 65 ? 'PASS' : signal.confidence >= 50 ? 'WARNING' : 'FAIL',
+      detail: `Confidence: ${signal.confidence}%`
+    },
+    {
+      name: 'VWAP SUPPORT',
+      status: isUp ? (currentPrice >= targetPrice ? 'PASS' : 'WARNING') : (currentPrice <= targetPrice ? 'PASS' : 'WARNING'),
+      detail: spotVsStrikeDelta >= 0 ? 'Above Strike' : 'Below Strike'
+    },
+    {
+      name: 'FLOW CONFIRMED',
+      status: signal.confidence >= 60 ? 'PASS' : 'WARNING',
+      detail: 'Taker Delta Positive'
+    },
+    {
+      name: 'REVERSAL MONITOR',
+      status: rawReversalRisk < 40 ? 'PASS' : rawReversalRisk < 65 ? 'WARNING' : 'FAIL',
+      detail: `Risk: ${rawReversalRisk}%`
+    }
+  ];
 
   return (
-    <div className="bg-[#05020c]/95 rounded-2xl border border-purple-500/30 p-5 space-y-5 font-mono shadow-[0_0_30px_rgba(112,26,238,0.12)] relative overflow-hidden backdrop-blur-md">
-      {/* Subtle Background Glow Accent */}
-      <div className="absolute top-0 right-0 -mt-16 -mr-16 w-72 h-72 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 -mb-16 -ml-16 w-64 h-64 bg-cyan-600/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="bg-[#030109] rounded-2xl border border-purple-800/80 p-5 space-y-4 font-mono shadow-[0_0_35px_rgba(112,26,238,0.18)] relative overflow-hidden backdrop-blur-xl">
+      {/* HUD Corner Brackets */}
+      <div className="absolute top-0 left-0 w-3 h-3 border-t-2 border-l-2 border-cyan-400/80 pointer-events-none" />
+      <div className="absolute top-0 right-0 w-3 h-3 border-t-2 border-r-2 border-cyan-400/80 pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-3 h-3 border-b-2 border-l-2 border-purple-500/80 pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-3 h-3 border-b-2 border-r-2 border-purple-500/80 pointer-events-none" />
+      
+      {/* Background Radial Glow */}
+      <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-72 h-72 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Top Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/40 pb-4 relative z-10">
+      {/* TOP HEADER: Title, Subtitle, Badges */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/60 pb-3 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 font-mono text-xs font-black text-cyan-300 bg-cyan-950/80 px-3 py-1.5 rounded-lg border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.15)]">
-            <ShieldCheck className="w-4 h-4 text-cyan-400" />
-            <span className="tracking-wide">VIXY PROTECTION™</span>
+          <div className="flex items-center gap-2 font-mono text-xs font-black text-cyan-300 bg-cyan-950/90 px-3 py-1.5 rounded-lg border border-cyan-400/60 shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+            <ShieldCheck className="w-4 h-4 text-cyan-400 animate-pulse" />
+            <span className="tracking-widest">VIXY PROTECTION™</span>
           </div>
-          <span className="text-[11px] text-purple-300/70 hidden sm:inline tracking-wider font-semibold uppercase">
-            LIVE POSITION GUARDIAN
+          <span className="text-[10px] text-purple-300/80 font-bold tracking-widest uppercase">
+            // AUTOMATED POSITION GUARDIAN
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-            <span>PROTECTION ACTIVE</span>
+        {/* Status Badges */}
+        <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-emerald-950/90 text-emerald-300 border-emerald-500/60 shadow-[0_0_10px_rgba(52,211,153,0.25)]">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
+            <span>GUARDIAN ACTIVE</span>
           </div>
 
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${riskInfo.bg} ${riskInfo.color} ${riskInfo.border}`}>
+          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${reversalMeta.badgeBg} ${reversalMeta.color} shadow-sm`}>
             <Activity className="w-3.5 h-3.5" />
             <span>REVERSAL THREAT: {rawReversalRisk}%</span>
+          </div>
+
+          <div className={`px-2.5 py-1 rounded-md border font-black ${
+            positionState === 'PROTECTED'
+              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60'
+              : positionState === 'WATCH'
+              ? 'bg-amber-950/90 text-amber-300 border-amber-500/60'
+              : 'bg-rose-950/90 text-rose-300 border-rose-500/60'
+          }`}>
+            STATE: {positionState}
           </div>
         </div>
       </div>
 
-      {/* Main Body Container */}
-      <div className="space-y-4 relative z-10">
-        {/* Directional Confirmation Ribbon */}
-        <div className={`p-3.5 rounded-xl border flex flex-wrap items-center justify-between gap-3 transition-all ${
-          isUp 
-            ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-100 shadow-[0_0_15px_rgba(16,185,129,0.05)]' 
-            : 'bg-rose-950/30 border-rose-500/30 text-rose-100 shadow-[0_0_15px_rgba(244,63,94,0.05)]'
-        }`}>
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-lg border ${
-              isUp 
-                ? 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300' 
-                : 'bg-rose-500/15 border-rose-400/40 text-rose-300'
-            }`}>
-              {isUp ? <TrendingUp className="w-5 h-5 animate-pulse" /> : <TrendingDown className="w-5 h-5 animate-pulse" />}
-            </div>
-            <div>
-              <div className="text-xs font-bold uppercase tracking-wider flex items-center gap-2 flex-wrap">
-                <span className="text-white font-extrabold">
-                  {isUp ? '🟢 UPSIDE DIRECTIONAL CONFIRMATION' : '🔴 DOWNSIDE DIRECTIONAL CONFIRMATION'}
-                </span>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-black tracking-wide ${
-                  breakState === 'BREAK CONFIRMED' 
-                    ? 'bg-emerald-500 text-black shadow-[0_0_10px_rgba(52,211,153,0.6)]' 
-                    : breakState === 'BREAK DEVELOPING'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                    : 'bg-purple-950 text-purple-300 border border-purple-800/40'
-                }`}>
-                  {breakState}
-                </span>
-              </div>
-              <div className="text-[11px] text-purple-200/80 font-sans mt-0.5">
-                VIXY Protection confirms <span className="font-semibold text-white">{isUp ? 'BUY UP' : 'BUY DOWN'}</span> signal strike trajectory with <span className="font-semibold text-cyan-300">{signal.confidence}%</span> model alignment.
-              </div>
-            </div>
-          </div>
-
-          <div className="text-right sm:border-l sm:border-purple-800/30 sm:pl-4">
-            <div className="text-[10px] text-purple-300/60 font-semibold uppercase tracking-wider">SENTINEL STATE</div>
-            <div className="text-xs font-black text-amber-300 tracking-wide mt-0.5">{activeGuardianAction}</div>
-          </div>
-        </div>
-
-        {/* Sentinel Telemetry Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          {/* Left 6 cols: Position Health Meter & Scanning Checklist */}
-          <div className="lg:col-span-6 bg-[#080314]/90 p-4 rounded-xl border border-purple-800/40 space-y-3.5">
+      {/* MAIN PROTECTION SCORE & REVERSAL THREAT */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 relative z-10">
+        {/* Left (6 cols): POSITION SURVIVAL SCORE */}
+        <div className="md:col-span-6 bg-[#060212] p-4 rounded-xl border border-purple-800/60 space-y-3 shadow-xl flex flex-col justify-between">
+          <div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-purple-300/80 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-purple-400" />
-                Position Survival Score
+              <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                POSITION SURVIVAL SCORE
               </span>
-              <span className={`font-black text-xs px-2 py-0.5 rounded ${riskInfo.badgeBg} ${riskInfo.color}`}>
-                {positionHealthPct}% ({riskInfo.label})
+              <span className={`font-black text-xs px-2.5 py-0.5 rounded border ${survivalMeta.border} ${survivalMeta.color} ${survivalMeta.bg}`}>
+                {survivalMeta.label}
               </span>
             </div>
 
-            {/* Block Visual Progress Bar */}
-            <div className="space-y-1">
-              <div className="w-full bg-[#100624] h-4 rounded-lg overflow-hidden border border-purple-800/50 p-0.5 flex gap-1">
-                {Array.from({ length: 10 }).map((_, i) => {
-                  const filled = (i + 1) * 10 <= positionHealthPct;
+            {/* Dominant Score Display */}
+            <div className="flex items-baseline justify-between my-3 flex-wrap gap-2">
+              <div className="flex items-baseline gap-3">
+                <span className={`text-5xl sm:text-6xl font-black font-mono tracking-tight drop-shadow-[0_0_20px_rgba(6,182,212,0.4)] ${survivalMeta.color}`}>
+                  {survivalScore}%
+                </span>
+                <span className={`text-sm font-black uppercase px-3 py-1 rounded-md border ${survivalMeta.border} ${survivalMeta.bg} ${survivalMeta.color} shadow-md`}>
+                  {survivalMeta.label}
+                </span>
+              </div>
+              <div className="text-right">
+                <div className="text-[9px] text-purple-400 font-bold uppercase tracking-widest">POSITION STATE</div>
+                <div className={`text-xs font-black tracking-wider ${
+                  positionState === 'PROTECTED' ? 'text-emerald-400' : positionState === 'WATCH' ? 'text-amber-300' : 'text-rose-400'
+                }`}>
+                  [{positionState}]
+                </div>
+              </div>
+            </div>
+
+            {/* Segmented LED Protection Meter (20 high-resolution blocks) */}
+            <div className="space-y-1.5 my-3">
+              <div className="w-full bg-[#020008] h-6 sm:h-7 rounded-lg overflow-hidden border border-purple-800/90 p-1 flex gap-0.5 shadow-[inset_0_2px_8px_rgba(0,0,0,0.8)]">
+                {Array.from({ length: 20 }).map((_, i) => {
+                  const blockPct = (i + 1) * 5;
+                  const filled = blockPct <= survivalScore;
                   return (
                     <div
                       key={i}
                       className={`flex-1 rounded-xs transition-all duration-300 ${
                         filled
-                          ? positionHealthPct > 70
-                            ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
-                            : positionHealthPct > 40
-                            ? 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.7)]'
-                            : 'bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.7)]'
-                          : 'bg-purple-950/30'
+                          ? survivalScore >= 85
+                            ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,1)] border border-emerald-200'
+                            : survivalScore >= 70
+                            ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] border border-emerald-300'
+                            : survivalScore >= 50
+                            ? 'bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)] border border-cyan-300'
+                            : survivalScore >= 30
+                            ? 'bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] border border-amber-300'
+                            : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,1)] border border-rose-300'
+                          : 'bg-purple-950/20 border border-purple-900/30 opacity-20'
                       }`}
                     />
                   );
                 })}
               </div>
-            </div>
-
-            {/* Sentinel Scanning Verification Matrix */}
-            <div className="space-y-2 pt-2 border-t border-purple-900/30">
-              <div className="text-[10px] text-purple-300/70 font-bold uppercase tracking-wider flex items-center justify-between">
-                <span className="flex items-center gap-1">
-                  <Radar className="w-3 h-3 text-cyan-400" />
-                  Real-Time Scanning Matrix
-                </span>
-                <span className="text-emerald-400 font-bold flex items-center gap-1 text-[9px]">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  SENTINEL ACTIVE
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 text-[11px] text-purple-100">
-                <div className="flex items-center gap-1.5 bg-purple-950/20 px-2.5 py-1.5 rounded-lg border border-purple-800/30">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">Momentum Aligned</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-purple-950/20 px-2.5 py-1.5 rounded-lg border border-purple-800/30">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">VWAP Support Intact</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-purple-950/20 px-2.5 py-1.5 rounded-lg border border-purple-800/30">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">Flow Confirming</span>
-                </div>
-                <div className="flex items-center gap-1.5 bg-purple-950/20 px-2.5 py-1.5 rounded-lg border border-purple-800/30">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span className="truncate">Reversal Monitored</span>
-                </div>
+              <div className="flex justify-between text-[8.5px] text-purple-300/80 font-mono font-bold px-0.5">
+                <span className="text-rose-400">0 (CRITICAL)</span>
+                <span className="text-amber-400">30 (ELEVATED)</span>
+                <span className="text-cyan-400">50 (GUARDED)</span>
+                <span className="text-emerald-400">70 (HEALTHY)</span>
+                <span className="text-emerald-300">100 (STRONG)</span>
               </div>
             </div>
           </div>
 
-          {/* Right 6 cols: Reversal Risk Alert & Suggested Action */}
-          <div className="lg:col-span-6 bg-[#080314]/90 p-4 rounded-xl border border-purple-800/40 space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-purple-300/80 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  Reversal Threat Matrix
+          {/* REAL-TIME SCANNING MATRIX */}
+          <div className="pt-2 border-t border-purple-900/50 space-y-2">
+            <div className="text-[10px] text-purple-300/80 font-bold uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Radar className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
+                REAL-TIME SCANNING MATRIX
+              </span>
+              <span className="text-emerald-400 font-extrabold flex items-center gap-1 text-[9px]">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                ACTIVE
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              {matrixChecks.map((check) => {
+                const isPass = check.status === 'PASS';
+                const isWarn = check.status === 'WARNING';
+                return (
+                  <div
+                    key={check.name}
+                    className={`flex items-center justify-between px-2.5 py-1.5 rounded-md border ${
+                      isPass
+                        ? 'bg-[#020d08] border-emerald-500/40 text-emerald-300'
+                        : isWarn
+                        ? 'bg-[#120d02] border-amber-500/40 text-amber-300'
+                        : 'bg-[#140208] border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    <span className="truncate font-bold text-[9px]">{check.name}</span>
+                    <span className={`px-1.5 py-0.2 text-[8px] font-black rounded ${
+                      isPass
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50'
+                        : isWarn
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-400/50'
+                        : 'bg-rose-500/20 text-rose-300 border border-rose-400/50'
+                    }`}>
+                      {check.status}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Right (6 cols): REVERSAL THREAT & POSITION RELATION */}
+        <div className="md:col-span-6 bg-[#060212] p-4 rounded-xl border border-purple-800/60 space-y-3 shadow-xl flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-purple-200 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                <ShieldAlert className="w-4 h-4 text-amber-400" />
+                REVERSAL THREAT
+              </span>
+              <span className={`px-2.5 py-0.5 rounded font-black text-[10px] border ${reversalMeta.badgeBg} ${reversalMeta.color}`}>
+                {rawReversalRisk}% [{reversalMeta.label}]
+              </span>
+            </div>
+
+            {/* Dynamic Driving Factors Explanation */}
+            <div className={`p-3 rounded-lg border text-xs space-y-1.5 ${
+              rawReversalRisk >= 50 
+                ? 'bg-rose-950/30 border-rose-500/50 text-rose-200' 
+                : 'bg-emerald-950/30 border-emerald-500/50 text-emerald-200'
+            }`}>
+              <div className="font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+                {rawReversalRisk >= 50 ? <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> : <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
+                <span>DRIVING RISK FACTORS:</span>
+              </div>
+              <ul className="text-[10px] font-mono space-y-0.5 text-purple-200/90">
+                <li>• Momentum alignment: <span className="font-bold text-white">{signal.confidence}% confidence</span></li>
+                <li>• VWAP support: <span className="font-bold text-white">{spotVsStrikeDelta >= 0 ? 'Intact above strike' : 'Monitoring strike delta'}</span></li>
+                <li>• Flow confirmation: <span className="font-bold text-white">{signal.confidence >= 65 ? 'Positive Taker Delta' : 'Neutral Order Flow'}</span></li>
+                <li>• Reversal trigger: <span className="font-bold text-white">{rawReversalRisk < 40 ? 'Zero reversal triggers active' : 'Elevated counter-trend pressure'}</span></li>
+              </ul>
+            </div>
+          </div>
+
+          {/* POSITION RELATION TABLE */}
+          <div className="bg-[#020008] p-3 rounded-lg border border-purple-800/50 space-y-2">
+            <div className="text-[9px] text-purple-300/80 font-bold uppercase tracking-wider flex items-center justify-between">
+              <span>POSITION RELATION</span>
+              <span className="text-cyan-300 font-mono">SPOT VS REFERENCE STRIKE</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div>
+                <span className="text-[9px] text-purple-400/80 block">LIVE SPOT</span>
+                <span className="font-black text-white text-xs">${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div>
+                <span className="text-[9px] text-purple-400/80 block">REFERENCE STRIKE</span>
+                <span className="font-black text-cyan-300 text-xs">${targetPrice.toLocaleString()}</span>
+              </div>
+              <div>
+                <span className="text-[9px] text-purple-400/80 block">DISTANCE TO STRIKE</span>
+                <span className={`font-black text-xs ${spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {formattedDeltaVal} ({formattedDeltaPct})
                 </span>
-                <span
-                  className={`px-2 py-0.5 rounded font-black text-[10px] tracking-wide ${
-                    rawReversalRisk > 60
-                      ? 'bg-rose-950/90 text-rose-300 border border-rose-500/50 animate-pulse'
-                      : 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/50'
+              </div>
+              <div>
+                <span className="text-[9px] text-purple-400/80 block">EXPIRATION CONDITION</span>
+                <span className={`font-black text-[10px] ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {isUp ? `MUST EXPIRE ABOVE $${targetPrice.toLocaleString()}` : `MUST EXPIRE BELOW $${targetPrice.toLocaleString()}`}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* GUARDIAN DECISION & ACTION STRIP */}
+      <div className="bg-[#060212] p-4 rounded-xl border border-purple-800/60 space-y-3 shadow-xl relative z-10">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-2">
+          <div className="flex items-center gap-2">
+            <Crosshair className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs text-purple-200 font-bold uppercase tracking-wider">
+              GUARDIAN DECISION RECOMMENDATION
+            </span>
+          </div>
+
+          <div className={`px-4 py-1.5 rounded-lg border font-black text-xs tracking-wider shadow-lg ${
+            guardianAction === 'HOLD POSITION'
+              ? 'bg-emerald-950 text-emerald-300 border-emerald-400 shadow-[0_0_15px_rgba(52,211,153,0.4)]'
+              : guardianAction === 'PROTECT POSITION'
+              ? 'bg-cyan-950 text-cyan-300 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.4)]'
+              : guardianAction === 'WATCH REVERSAL'
+              ? 'bg-amber-950 text-amber-300 border-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.4)]'
+              : 'bg-rose-950 text-rose-300 border-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.4)]'
+          }`}>
+            GUARDIAN ACTION: {guardianAction}
+          </div>
+        </div>
+
+        {/* ACTION STRIP: ENTER, WAIT, SCALE IN, MOVE STOP, TAKE PROFIT, EXIT */}
+        <div className="space-y-1">
+          <div className="text-[9px] text-purple-300/80 font-bold uppercase tracking-wider flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <Terminal className="w-3 h-3 text-cyan-400" />
+              GUARDIAN ACTION CONSOLE
+            </span>
+            <span className="text-cyan-300 font-mono text-[9px]">RECOMMENDED: {activeStripAction}</span>
+          </div>
+
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1">
+            {[
+              { name: 'ENTER', desc: 'Qualified' },
+              { name: 'WAIT', desc: 'Patience' },
+              { name: 'SCALE IN', desc: 'Add Size' },
+              { name: 'MOVE STOP', desc: 'Protect' },
+              { name: 'TAKE PROFIT', desc: 'Lock Profit' },
+              { name: 'EXIT', desc: 'Bail Out' },
+            ].map((action) => {
+              const isRecommended = action.name === activeStripAction;
+              return (
+                <div
+                  key={action.name}
+                  className={`px-2 py-2 rounded-lg border text-center transition-all cursor-pointer ${
+                    isRecommended
+                      ? 'bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 text-black border-amber-200 shadow-[0_0_20px_rgba(251,191,36,0.9)] font-black scale-[1.03]'
+                      : 'bg-[#020008] text-purple-300/70 border-purple-900/50 font-semibold hover:border-purple-700'
                   }`}
                 >
-                  REVERSAL RISK {rawReversalRisk}%
-                </span>
-              </div>
-
-              {rawReversalRisk > 50 ? (
-                <div className="bg-rose-950/30 border border-rose-500/30 rounded-xl p-3 space-y-2 text-xs">
-                  <div className="flex items-center gap-2 text-rose-300 font-bold">
-                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-bounce" />
-                    <span className="text-[11px]">⚠ VIXY PROTECTION: Reversal Risk Elevated ({rawReversalRisk}%)</span>
+                  <div className="text-[10px] font-black uppercase tracking-tight whitespace-nowrap leading-none">
+                    {action.name}
                   </div>
-                  <ul className="space-y-1 text-purple-200 text-[10.5px] pl-5 list-disc font-sans">
-                    <li>Whale absorption detected near key resistance boundary</li>
-                    <li>Net selling delta building in Binance order flow</li>
-                  </ul>
-                  <div className="pt-2 border-t border-rose-900/30 flex items-center justify-between">
-                    <span className="text-purple-300/70 font-semibold text-[10px] uppercase">SENTINEL ACTION:</span>
-                    <span className="bg-rose-500 text-white font-black px-2.5 py-1 rounded-md text-[11px]">
-                      REDUCE EXPOSURE / LOCK PROFITS
-                    </span>
+                  <div className={`text-[8px] font-mono leading-none mt-1 ${isRecommended ? 'text-black/90 font-bold' : 'text-purple-400/60'}`}>
+                    {action.desc}
                   </div>
                 </div>
-              ) : (
-                <div className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-3 space-y-2 text-xs">
-                  <div className="flex items-center gap-2 text-emerald-300 font-bold">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span className="text-[11px]">✓ REVERSAL THREAT LOW ({rawReversalRisk}%)</span>
-                  </div>
-                  <ul className="space-y-1 text-purple-200 text-[10.5px] pl-5 list-disc font-sans">
-                    <li>Taker momentum aligned with predicted strike direction</li>
-                    <li>VWAP support fully intact with zero delta exhaustion</li>
-                  </ul>
-                  <div className="pt-2 border-t border-emerald-900/30 flex items-center justify-between">
-                    <span className="text-purple-300/70 font-semibold text-[10px] uppercase">SENTINEL ACTION:</span>
-                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-bold px-2.5 py-1 rounded-md text-[11px]">
-                      HOLD POSITION / STAY IN TRADE
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Action Command Badges - No Ellipsis Truncation! */}
-            <div className="space-y-1.5 pt-1">
-              <div className="text-[10px] text-purple-300/70 font-bold uppercase tracking-wider">
-                Sentinel Command Actions:
-              </div>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
-                {[
-                  { name: 'ENTER', desc: 'Qualified' },
-                  { name: 'WAIT', desc: 'Patience' },
-                  { name: 'SCALE IN', desc: 'Add Size' },
-                  { name: 'MOVE STOP', desc: 'Protect' },
-                  { name: 'TAKE 50%', desc: 'Lock Profit' },
-                  { name: 'EXIT NOW', desc: 'Bail Out' },
-                ].map((action) => {
-                  const isActive = activeGuardianAction.startsWith(action.name.substring(0, 4));
-                  return (
-                    <div
-                      key={action.name}
-                      className={`px-1 py-1.5 rounded-lg border text-center transition-all ${
-                        isActive
-                          ? 'bg-amber-400 text-black border-amber-300 shadow-[0_0_12px_rgba(251,191,36,0.7)] font-black scale-[1.02]'
-                          : 'bg-[#090417] text-purple-300/70 border-purple-900/30 font-semibold'
-                      }`}
-                    >
-                      <div className="text-[9.5px] whitespace-nowrap leading-tight">{action.name}</div>
-                      <div className="text-[7.5px] opacity-75 font-sans leading-none mt-0.5">{action.desc}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+              );
+            })}
           </div>
         </div>
       </div>

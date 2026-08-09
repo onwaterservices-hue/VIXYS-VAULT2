@@ -23,6 +23,7 @@ interface AIPatternEngineProps {
   ticker?: BTCTicker;
   timeframe?: '15M' | '1H';
   appMode?: 'SIMPLE' | 'PRO';
+  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
 }
@@ -49,6 +50,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   ticker = { price: 64108, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5 },
   timeframe = '15M',
   appMode = 'SIMPLE',
+  userRole = 'DEMO',
   alertSettings,
   onOpenDiscordModal,
 }) => {
@@ -58,7 +60,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   const [lastScanTime, setLastScanTime] = useState<string>('Just now');
   const [scanCount, setScanCount] = useState<number>(1420);
 
-  const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isUnlocked = userRole === 'ADMIN' || userRole === 'PRO' || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
 
   // Auto Refresh Simulation
   useEffect(() => {
@@ -254,7 +256,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
   return (
     <IntelligenceLockGate
-      isVerified={isDiscordVerified}
+      isVerified={isUnlocked}
       onOpenDiscordModal={onOpenDiscordModal}
       title="AI PATTERN RECOGNITION LOCKED"
       subtitle="Verify your VIXY Vault Discord membership to unlock live AI microstructure patterns, liquidity sweeps, and L2 order book detection."

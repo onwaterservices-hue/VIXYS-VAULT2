@@ -98,6 +98,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   // Candle Countdown Timers (15m = 900s, 1h = 3600s)
   const [secondsRemaining15M, setSecondsRemaining15M] = useState<number>(542);
   const [secondsRemaining1H, setSecondsRemaining1H] = useState<number>(2054);
+
+  // Access Unlock Logic: Admin, Pro, or Discord-linked users automatically unlock
+  const isAccessUnlocked = userRole === 'ADMIN' || userRole === 'PRO' || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);
   const [isBailedOut, setIsBailedOut] = useState<boolean>(false);
 
@@ -254,6 +257,16 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     similarSetupsBullishPct: 91.4,
     status: 'PENDING',
   });
+
+  // Sync signal current price live with incoming WebSocket ticker price
+  useEffect(() => {
+    if (ticker?.price && ticker.price > 0) {
+      setSignal((prev) => ({
+        ...prev,
+        currentPrice: ticker.price,
+      }));
+    }
+  }, [ticker?.price]);
 
   // Timeframe-adjusted candles (1H vs 15M)
   const displayCandles = useMemo(() => {
@@ -519,13 +532,13 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
       {/* 🎯 PROTECTED VIXY INTELLIGENCE CORE */}
       <IntelligenceLockGate
-        isVerified={Boolean(alertSettings?.discordLinked && alertSettings?.guildMember)}
+        isVerified={isAccessUnlocked}
         onOpenDiscordModal={onOpenAlerts}
         title="VIXY VAULT INTELLIGENCE LOCKED"
         subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."
       >
         <div className="space-y-6">
-          {/* 🎯 BRAIN 1: SIGNAL BRAIN (Direction, Confidence, Strike, Lock Score Progress) */}
+          {/* 5. PRIMARY DECISION CENTER */}
           <div>
             <SignalBrain
               signal={signal}
@@ -536,22 +549,61 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             />
           </div>
 
-          {/* 🛡 BRAIN 2 & 🐋 BRAIN 3: PROTECTION BRAIN & WHALE RADAR BRAIN */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-              <ProtectionBrain 
-                signal={signal} 
-                ticker={ticker} 
-                isDiscordVerified={Boolean(alertSettings?.discordLinked && alertSettings?.guildMember)} 
-              />
+          {/* 6. INSTITUTIONAL INTELLIGENCE MODULE: VIXY PROTECTION (LEFT) + WHALE WATCH (RIGHT) */}
+          <div className="space-y-3">
+            {/* Shared Institutional Module Section Connector Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-cyan-300">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+                  <span>INSTITUTIONAL INTELLIGENCE MATRIX</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  POSITION DEFENSE ↔ INSTITUTIONAL FLOW
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-[10px] text-purple-300/80 font-bold flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className="text-cyan-400 font-mono">POSITION DEFENSE:</span> HEALTH • RISK • GUARDIAN
+                </span>
+                <span className="hidden lg:inline text-purple-700">|</span>
+                <span className="hidden lg:flex items-center gap-1">
+                  <span className="text-cyan-400 font-mono">INSTITUTIONAL FLOW:</span> DARK POOL • DESK • IMPACT
+                </span>
+              </div>
             </div>
-            <div>
-              <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+              <div className="h-full">
+                <ProtectionBrain 
+                  signal={signal} 
+                  ticker={ticker} 
+                  isDiscordVerified={isAccessUnlocked} 
+                />
+              </div>
+              <div className="h-full">
+                <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
+              </div>
             </div>
           </div>
 
-          {/* PROMINENT LIVE CANDLESTICK CHART */}
+          {/* 7. STAGE 1: MARKET EVIDENCE & NEURAL ORDER FLOW */}
           <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-purple-300">
+                  <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_#c084fc]" />
+                  <span>STAGE 1 // MARKET EVIDENCE & ORDER FLOW</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  REAL-TIME CANDLE TAPE & TAKER FLOW RIBBON
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-cyan-300 bg-purple-950/60 px-2.5 py-0.5 rounded border border-purple-800/60">
+                15M / 1H GRANULARITY
+              </span>
+            </div>
+
             <CandleChart
               candles={displayCandles}
               targetPrice={signal.targetPrice}
@@ -563,35 +615,90 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               }}
               predictedDirection={signal.direction}
             />
+            <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="BTC 15M • AI NEURAL RIBBON & ORDER FLOW" />
           </div>
 
-          {/* 📈 BRAIN 4 & 🧠 BRAIN 5: EXECUTION BRAIN & AI THINKING BRAIN */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
+          {/* 8. STAGE 2: MARKET STRUCTURE & PATTERN DETECTION */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-amber-300">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_#fbbf24]" />
+                  <span>STAGE 2 // MARKET STRUCTURE & PATTERN DETECTION</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  DNA CLUSTERS & SCALP PROBABILITY CONE
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 px-2.5 py-0.5 rounded border border-amber-800/60">
+                MULTI-TIMEFRAME ALIGNMENT
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <AIPatternEngine
+                ticker={ticker}
+                timeframe={timeframe}
+                appMode={appMode}
+                userRole={userRole}
+                alertSettings={alertSettings}
+                onOpenDiscordModal={onOpenAlerts}
+              />
+              <ScalpDecisionChart
+                asset={selectedAsset}
+                desk={timeframe.toLowerCase()}
+                title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
+              />
+            </div>
+          </div>
+
+          {/* 9. STAGE 3: EXECUTION INTELLIGENCE & RISK SIZING */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-emerald-300">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
+                  <span>STAGE 3 // EXECUTION INTELLIGENCE & RISK SIZING</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  OPTIMAL BIDS, SCALING GUIDANCE & HEALTH WATCH
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-800/60">
+                DYNAMIC KELLY CRITERION
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <ExecutionBrain signal={signal} ticker={ticker} />
+              <PredictionHealthWatch
+                currentPrice={ticker.price}
+                timeframe={timeframe}
+                onBuyOutPosition={() => setIsBailedOut(true)}
+                appMode={appMode}
+              />
             </div>
-            <div>
+          </div>
+
+          {/* 10. STAGE 4: MODEL REASONING & COMMAND SYNTHESIS */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-cyan-300">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+                  <span>STAGE 4 // MODEL REASONING & COMMAND SYNTHESIS</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  QUANT SYNTHESIS, CONFLUENCE DRIVERS & STEP LOG
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-950/60 px-2.5 py-0.5 rounded border border-cyan-800/60">
+                LIVE MODEL REASONING STREAM
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <AiThinkingBrain signal={signal} ticker={ticker} timeframe={timeframe} />
-            </div>
-          </div>
-
-          {/* 4. ADVANCED QUANT INTELLIGENCE TOGGLE (PROGRESSIVE DISCLOSURE ACCORDION) */}
-          <div className="pt-4 border-t border-purple-900/50 text-center">
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="inline-flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-[#12072b] hover:bg-[#1a0b3e] border border-purple-500/40 hover:border-purple-400 text-purple-200 text-xs font-mono font-extrabold shadow-lg transition-all active:scale-95 cursor-pointer"
-            >
-              <Sliders className="w-4 h-4 text-purple-300" />
-              <span>{showAdvanced ? 'Hide Advanced Quant Intelligence ▲' : 'Show Advanced Quant Intelligence (Venues, Order Flow, Reversal, Brain Vault) ▼'}</span>
-            </button>
-          </div>
-
-          {showAdvanced && (
-            <div className="space-y-6 pt-4 border-t border-purple-900/40">
-              {/* Vixy AI Status */}
-              <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
-
-              {/* Executive Command Center */}
               <ExecutiveCommandCenter
                 ticker={ticker}
                 signal={signal}
@@ -602,32 +709,31 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 appMode={appMode}
                 setAppMode={setAppMode}
               />
-
-              {/* Scalp Decision Matrix */}
-              <ScalpDecisionChart
-                asset={selectedAsset}
-                desk={timeframe.toLowerCase()}
-                title={`${selectedAsset} SCALPING DECISION MATRIX & PROBABILITY CONE`}
-              />
-
-              {/* Neural Ribbon Chart */}
-              <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="AI Neural Ribbon & Order Flow" />
-
-              {/* AI Brain Memory Vault */}
-              <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
-
-              {/* Prediction Health Watch */}
-              <PredictionHealthWatch
-                currentPrice={ticker.price}
-                timeframe={timeframe}
-                onBuyOutPosition={() => setIsBailedOut(true)}
-                appMode={appMode}
-              />
-
-              {/* AI Pattern Engine */}
-              <AIPatternEngine ticker={ticker} timeframe={timeframe} appMode={appMode} />
             </div>
-          )}
+          </div>
+
+          {/* 11. STAGE 5: AI STATUS & CONTINUOUS NEURAL LEARNING */}
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 font-black text-rose-300">
+                  <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shadow-[0_0_8px_#fb7185]" />
+                  <span>STAGE 5 // AI STATUS & CONTINUOUS NEURAL LEARNING</span>
+                </div>
+                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
+                  MODELS ONLINE, NEURAL MEMORY VAULT & FEATURE VOTE
+                </span>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-rose-300 bg-rose-950/60 px-2.5 py-0.5 rounded border border-rose-800/60">
+                RECURSIVE WEIGHT RECALIBRATION
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
+              <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
+            </div>
+          </div>
         </div>
       </IntelligenceLockGate>
     </div>

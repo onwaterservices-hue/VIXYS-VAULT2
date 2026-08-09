@@ -245,8 +245,13 @@ export function connectLiveCryptoStream(
       socket.onerror = null;
       socket.onclose = null;
       try {
-        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        if (socket.readyState === WebSocket.OPEN) {
           socket.close();
+        } else if (socket.readyState === WebSocket.CONNECTING) {
+          socket.onopen = () => {
+            try { socket.close(); } catch (_) {}
+          };
+          socket.onerror = () => {};
         }
       } catch (_) {}
       ws = null;
