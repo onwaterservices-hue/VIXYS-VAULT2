@@ -33,8 +33,8 @@ export const ExecutionBrain: React.FC<ExecutionBrainProps> = ({ signal, ticker }
         </span>
       </div>
 
-      {/* Entry Zone & Scaling Parameters Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Entry Zone & Scaling Parameters Grid (2x2 grid) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {/* Ideal Bid / Ask */}
         <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/60 space-y-1">
           <div className="text-[10px] text-purple-300/70 uppercase font-bold">Optimal Limit Bid</div>

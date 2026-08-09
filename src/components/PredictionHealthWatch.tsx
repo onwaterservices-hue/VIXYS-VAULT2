@@ -85,30 +85,30 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
       <div className="absolute -left-10 -bottom-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300 shadow-lg shadow-purple-500/10">
+      <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className="p-3 rounded-2xl bg-purple-500/20 border border-purple-400/30 text-purple-300 shadow-lg shadow-purple-500/10 shrink-0">
             <ShieldCheck className="w-6 h-6 text-emerald-400 animate-pulse" />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-black uppercase tracking-wider text-purple-300/80">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] font-black uppercase tracking-wider text-purple-300/80 whitespace-nowrap">
                 PREDICTION SETUP HEALTH WATCH
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1.5 shadow-sm">
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-bold flex items-center gap-1.5 shadow-sm whitespace-nowrap">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
                 HEALTHY ENVIRONMENT
               </span>
             </div>
-            <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2 mt-0.5">
-              <span>PREDICTION BLOCK READINESS:</span>
+            <h3 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2 mt-0.5 flex-wrap">
+              <span className="whitespace-nowrap">PREDICTION BLOCK READINESS:</span>
               <span className="text-emerald-400 font-extrabold text-2xl drop-shadow-[0_0_12px_rgba(52,211,153,0.3)]">{healthScore}/100</span>
-              <span className="text-xs text-purple-200/80 font-normal">[{status} SETUP]</span>
+              <span className="text-xs text-purple-200/80 font-normal whitespace-nowrap">[{status} SETUP]</span>
             </h3>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 self-stretch sm:self-auto justify-between sm:justify-end flex-wrap">
+        <div className="flex items-center gap-3 self-stretch xl:self-auto justify-between xl:justify-end flex-wrap shrink-0">
           {/* Auto-Update Sync Toggle Button */}
           <button
             onClick={() => setAutoUpdateActive(!autoUpdateActive)}
@@ -134,16 +134,16 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
         </div>
       </div>
 
-      {/* Health Metric Cards Grid (4 Key Diagnostics) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* Health Metric Cards Grid (4 Key Diagnostics - 2x2 grid when in side-by-side desktop layout) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {/* Metric 1: Microstructure & Order Book */}
         <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5">
-              <Layers className="w-4 h-4 text-cyan-400" />
-              {appMode === 'SIMPLE' ? 'Buyer Support Strength' : 'Order Book Depth'}
+          <div className="flex items-center justify-between text-xs gap-1">
+            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
+              <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span className="truncate">{appMode === 'SIMPLE' ? 'Buyer Support Strength' : 'Order Book Depth'}</span>
             </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
               HEALTHY
             </span>
           </div>
@@ -153,20 +153,20 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
           <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
             <div className="bg-gradient-to-r from-emerald-400 to-cyan-400 h-full w-[88%] rounded-full" />
           </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans">
+          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
             <span>{appMode === 'SIMPLE' ? 'Heavy buyers under price' : 'Bid Absorption: High'}</span>
-            <span className="text-cyan-300 font-bold font-mono">88/100 Score</span>
+            <span className="text-cyan-300 font-bold font-mono shrink-0">88/100 Score</span>
           </div>
         </div>
 
         {/* Metric 2: Spoofing & Manipulation Risk */}
         <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5">
-              <Lock className="w-4 h-4 text-emerald-400" />
-              {appMode === 'SIMPLE' ? 'Fake Order / Scam Check' : 'Spoofing / Wash Risk'}
+          <div className="flex items-center justify-between text-xs gap-1">
+            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
+              <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">{appMode === 'SIMPLE' ? 'Fake Order / Scam Check' : 'Spoofing / Wash Risk'}</span>
             </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
               CLEAN LIQUIDITY
             </span>
           </div>
@@ -176,20 +176,20 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
           <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
             <div className="bg-emerald-400 h-full w-[96%] rounded-full" />
           </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans">
+          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
             <span>{appMode === 'SIMPLE' ? 'Zero fake trap orders' : 'Fake Liquidity: None'}</span>
-            <span className="text-emerald-400 font-bold font-mono">96/100 Score</span>
+            <span className="text-emerald-400 font-bold font-mono shrink-0">96/100 Score</span>
           </div>
         </div>
 
         {/* Metric 3: Volatility & Trend Stability */}
         <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5">
-              <TrendingUp className="w-4 h-4 text-amber-400" />
-              {appMode === 'SIMPLE' ? 'Price Trend Speed' : 'Directional Momentum'}
+          <div className="flex items-center justify-between text-xs gap-1">
+            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
+              <TrendingUp className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="truncate">{appMode === 'SIMPLE' ? 'Price Trend Speed' : 'Directional Momentum'}</span>
             </span>
-            <span className="text-amber-300 font-extrabold text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">
+            <span className="text-amber-300 font-extrabold text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30 shrink-0 whitespace-nowrap">
               EXPANDING
             </span>
           </div>
@@ -199,20 +199,20 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
           <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
             <div className="bg-gradient-to-r from-amber-500 to-amber-300 h-full w-[92%] rounded-full" />
           </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans">
+          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
             <span>{appMode === 'SIMPLE' ? 'Holding strong above floor' : 'Sustained Breakout'}</span>
-            <span className="text-amber-300 font-bold font-mono">92/100 Score</span>
+            <span className="text-amber-300 font-bold font-mono shrink-0">92/100 Score</span>
           </div>
         </div>
 
         {/* Metric 4: Kalshi Contract Spread & Slippage */}
         <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5">
-              <Zap className="w-4 h-4 text-cyan-400" />
-              {appMode === 'SIMPLE' ? 'Trade Speed & Cost' : 'Execution Spread'}
+          <div className="flex items-center justify-between text-xs gap-1">
+            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
+              <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
+              <span className="truncate">{appMode === 'SIMPLE' ? 'Trade Speed & Cost' : 'Execution Spread'}</span>
             </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">
+            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
               OPTIMAL
             </span>
           </div>
@@ -222,28 +222,31 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
           <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
             <div className="bg-emerald-400 h-full w-[95%] rounded-full" />
           </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans">
+          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
             <span>{appMode === 'SIMPLE' ? 'Fast fills with zero gap' : 'Slippage Risk: Minimal'}</span>
-            <span className="text-cyan-300 font-bold font-mono">95/100 Score</span>
+            <span className="text-cyan-300 font-bold font-mono shrink-0">95/100 Score</span>
           </div>
         </div>
       </div>
 
       {/* AI Health Summary & Recommendation */}
-      <div className="bg-[#070312] p-4 rounded-2xl border border-purple-900/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs shadow-inner">
+      <div className="bg-[#070312] p-4 rounded-2xl border border-purple-900/50 space-y-3.5 text-xs shadow-inner">
         <div className="flex items-start gap-3">
           <Sparkles className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-          <span className="text-purple-200/90 font-sans leading-relaxed">
-            <strong className="text-white font-mono">
+          <div className="text-purple-200/90 font-sans leading-relaxed text-xs">
+            <strong className="text-white font-mono font-bold mr-2 uppercase tracking-wide">
               {appMode === 'SIMPLE' ? '💡 BEGINNER SUMMARY:' : 'HEALTH WATCH VERDICT:'}
-            </strong>{' '}
-            {appMode === 'SIMPLE'
-              ? 'Everything looks great for this trade setup! Big buyers are holding up price, there are no fake scam orders in the market, and orders are executing instantly.'
-              : 'High-integrity prediction environment detected. Low order spoofing, strong taker buy volume (+1,467 BTC), and clear VWAP support make this setup optimal for execution.'}
-          </span>
+            </strong>
+            <span>
+              {appMode === 'SIMPLE'
+                ? 'Everything looks great for this trade setup! Big buyers are holding up price, there are no fake scam orders in the market, and orders are executing instantly.'
+                : 'High-integrity prediction environment detected. Low order spoofing, strong taker buy volume (+1,467 BTC), and clear VWAP support make this setup optimal for execution.'}
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
-          <span className="text-[11px] text-purple-300/60 font-mono hidden md:inline">Last Sync: {lastSyncTime}</span>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-purple-900/40">
+          <span className="text-[11px] text-purple-300/60 font-mono">Last Sync: {lastSyncTime}</span>
           
           {isBailedOut ? (
             <div className="flex items-center gap-2 text-rose-300 font-extrabold bg-rose-500/20 px-3.5 py-2 rounded-xl border border-rose-500/40 text-xs shadow-lg animate-pulse">
@@ -251,7 +254,7 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
               <span>POSITION EXITED (BAIL-OUT ACTIVE)</span>
             </div>
           ) : (
-            <div className="flex items-center gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
               <button
                 onClick={handleExecuteBailOut}
                 className="bg-rose-950/80 hover:bg-rose-900 text-rose-200 px-4 py-2.5 rounded-xl font-bold text-xs border border-rose-500/40 flex items-center gap-2 transition-all active:scale-95 cursor-pointer shadow-md"
