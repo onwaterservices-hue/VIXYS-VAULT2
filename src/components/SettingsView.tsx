@@ -5,9 +5,11 @@ import { UserSubscription, AuthState, AlertSettings, ExchangeApiKeys, ExchangeCr
 interface SettingsViewProps {
   authState: AuthState;
   setAuthState?: React.Dispatch<React.SetStateAction<AuthState>>;
+  apiKeys?: any[];
+  setApiKeys?: React.Dispatch<React.SetStateAction<any[]>>;
   subscription: UserSubscription;
-  alertSettings: AlertSettings;
-  setAlertSettings: React.Dispatch<React.SetStateAction<AlertSettings>>;
+  alertSettings?: AlertSettings;
+  setAlertSettings?: React.Dispatch<React.SetStateAction<AlertSettings>>;
   exchangeKeys: ExchangeApiKeys;
   setExchangeKeys: React.Dispatch<React.SetStateAction<ExchangeApiKeys>>;
   onOpenPricing: () => void;

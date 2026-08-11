@@ -320,8 +320,8 @@ export const Header: React.FC<HeaderProps> = ({
                     exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
                   }`}
                 />
-                <span className={exchangeKeys?.polymarket.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>
-                  Poly {exchangeKeys?.latencyMs ? `${apiSignal ? apiSignal.latencyMs + 6 : 18}ms` : '18ms'}
+                <span className={exchangeKeys?.polymarket?.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>
+                  Poly {exchangeKeys?.polymarket?.latencyMs ? `${apiSignal ? apiSignal.latencyMs + 6 : 18}ms` : '18ms'}
                 </span>
               </span>
             </span>

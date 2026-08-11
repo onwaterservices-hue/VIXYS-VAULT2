@@ -24,11 +24,11 @@ import {
   VolumeX,
   WifiOff,
 } from 'lucide-react';
-import { Candle } from '../types';
+import { Candle, SignalDirection } from '../types';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 
 export interface ModelSignalInfo {
-  direction: 'YES' | 'NO';
+  direction: SignalDirection;
   confidence: number;
   targetPrice?: number;
   n?: number;
@@ -40,7 +40,7 @@ export interface CandleChartProps {
   currentPrice: number;
   timeframe?: '15M' | '1H';
   onTimeframeChange?: (tf: '15M' | '1H') => void;
-  predictedDirection?: 'YES' | 'NO';
+  predictedDirection?: SignalDirection;
   dataSource?: 'mock' | 'live';
   modelSignal?: ModelSignalInfo;
   venue?: string;

@@ -161,8 +161,8 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
   // Sorted Dataset
   const sortedHistory = useMemo(() => {
     return [...filteredHistory].sort((a, b) => {
-      let valA = a[sortField] ?? 0;
-      let valB = b[sortField] ?? 0;
+      let valA: any = a[sortField] ?? 0;
+      let valB: any = b[sortField] ?? 0;
       if (typeof valA === 'string') valA = (valA as string).toLowerCase();
       if (typeof valB === 'string') valB = (valB as string).toLowerCase();
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;

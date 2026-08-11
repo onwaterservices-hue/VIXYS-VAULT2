@@ -6,10 +6,11 @@ import { syncAuthUserApi } from '../services/api';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  authState: AuthState;
+  authState?: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
   onSuccessRole?: (role: 'PRO' | 'DEMO' | 'ADMIN') => void;
+  setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'DEMO' | 'ADMIN' | 'OWNER'>>;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({

@@ -126,9 +126,11 @@ export interface UserItem {
   stripeSubscriptionId?: string;
   discordId?: string;
   discordTag?: string;
+  discordGlobalName?: string;
   discordLinked?: boolean;
   guildVerified?: boolean;
   lastSeen?: string;
+  authStatus?: string;
 }
 
 export interface TransactionItem {
@@ -181,6 +183,9 @@ export type UserFilterOption =
 interface AdminPanelProps {
   onClose?: () => void;
   currentUserId?: string;
+  stats?: any;
+  tickets?: SupportTicket[];
+  setTickets?: React.Dispatch<React.SetStateAction<SupportTicket[]>>;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }) => {

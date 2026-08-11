@@ -2,7 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { BookOpen, Plus, TrendingUp, TrendingDown, DollarSign, Tag, Check, Trash2, Zap, ArrowUpRight, ShieldCheck, Key, Shield, AlertTriangle } from 'lucide-react';
 import { fetchJournal, createJournalEntry, deleteJournalEntry } from '../services/api';
 
-export const TradeJournalView: React.FC = () => {
+interface TradeJournalViewProps {
+  entries?: any[];
+  setEntries?: React.Dispatch<React.SetStateAction<any[]>>;
+}
+
+export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [journalSummary, setJournalSummary] = useState<{

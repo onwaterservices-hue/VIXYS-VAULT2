@@ -7,8 +7,8 @@ export interface BTCTicker {
   low24h: number;
   volume24h: number;
   timestamp: number;
-  marketImpliedYes: number; // e.g. 52% on Polymarket/Kalshi
-  marketImpliedNo: number; // e.g. 48%
+  marketImpliedYes?: number; // e.g. 52% on Polymarket/Kalshi
+  marketImpliedNo?: number; // e.g. 48%
 }
 
 export interface Candle {
@@ -109,14 +109,25 @@ export interface JournalEntry {
   timestamp: number;
   market: string; // e.g. "BTC 15M Kalshi #4829"
   direction: 'YES' | 'NO';
-  entryOdds: number; // e.g. $0.52
-  exitOdds: number; // e.g. $0.88 or $0.00
-  stakeUSD: number;
-  pnlUSD: number;
-  confidence: number;
-  edge: number;
-  notes: string;
-  tags: string[];
+  entryOdds?: number; // e.g. $0.52
+  exitOdds?: number; // e.g. $0.88 or $0.00
+  entryPrice?: number;
+  exitPrice?: number;
+  targetPrice?: number;
+  positionSizeUSD?: number;
+  pnlPct?: number;
+  confidenceScore?: number;
+  tradeGrade?: string;
+  status?: string;
+  stakeUSD?: number;
+  pnlUSD?: number;
+  confidence?: number;
+  edge?: number;
+  notes?: string;
+  tags?: string[];
+  outcome?: 'WIN' | 'LOSS' | 'OPEN';
+  pnl?: number;
+  hash?: string;
 }
 
 export interface AlertSettings {
@@ -132,7 +143,7 @@ export interface AlertSettings {
   roleAssigned?: string;
   subscriptionActive?: boolean;
   lastSyncTimestamp?: string;
-  syncStatus?: 'HEALTHY' | 'SYNCING' | 'ACTION_REQUIRED' | 'DISCONNECTED';
+  syncStatus?: 'HEALTHY' | 'SYNCING' | 'ACTION_REQUIRED' | 'DISCONNECTED' | 'NEEDS_GUILD';
   webhookStatus?: 'ACTIVE' | 'TESTING' | 'OFFLINE';
   telegramBotToken: string;
   telegramChatId: string;
@@ -149,7 +160,7 @@ export interface AlertSettings {
 }
 
 export interface UserSubscription {
-  plan: 'STARTER' | 'PRO' | 'ELITE';
+  plan: 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS';
   status: 'active' | 'canceling' | 'trial';
   renewalDate: string;
   paymentMethod: string;
@@ -185,7 +196,7 @@ export interface AuthState {
     id: string;
     email: string;
     name: string;
-    role: 'DEMO' | 'PRO' | 'ADMIN';
+    role: 'DEMO' | 'PRO' | 'ADMIN' | 'OWNER';
     apiKey?: string;
     joinedDate: string;
   } | null;

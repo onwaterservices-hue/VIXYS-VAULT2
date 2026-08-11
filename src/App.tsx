@@ -1001,7 +1001,7 @@ export default function App() {
                     userRole === 'ADMIN' ? (
                       <DiscordBotHubView />
                     ) : (
-                      <NotFoundView />
+                      <NotFoundView onReturnToTerminal={() => setActiveTab('terminal')} />
                     )
                   )}
 

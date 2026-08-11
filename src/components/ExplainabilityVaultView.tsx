@@ -268,7 +268,9 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
         <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
             <span>CALIBRATED PROBABILITY</span>
-            <HelpCircle className="w-3.5 h-3.5 text-purple-400" title="Historical success rate under matching market conditions" />
+            <span title="Historical success rate under matching market conditions">
+              <HelpCircle className="w-3.5 h-3.5 text-purple-400" />
+            </span>
           </div>
           <div className="flex items-baseline gap-2 font-mono">
             <span className="text-3xl font-black text-emerald-400">78.4%</span>

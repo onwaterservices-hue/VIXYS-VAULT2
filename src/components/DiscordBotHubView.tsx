@@ -5,6 +5,7 @@ import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRole
 interface DiscordBotHubViewProps {
   onClose?: () => void;
   adminEvents?: any[];
+  currentUserId?: string;
 }
 
 export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvents: externalEvents }) => {
