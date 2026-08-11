@@ -55,8 +55,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         { wasCorrect: false, direction: 'DOWN' },
       ];
 
-  const upWins = displayLogs.filter((s: any) => s.wasCorrect && (s.direction === 'UP' || s.direction === 'YES')).length;
-  const downWins = displayLogs.filter((s: any) => s.wasCorrect && (s.direction === 'DOWN' || s.direction === 'NO')).length;
+  const upCount = displayLogs.filter((s: any) => {
+    const d = (s.direction || '').toUpperCase();
+    return d === 'UP' || d === 'YES' || d === 'BUY UP' || d === 'BUY_UP';
+  }).length;
+  const downCount = displayLogs.length - upCount;
   const totalWins = displayLogs.filter((s: any) => s.wasCorrect).length;
   const winRatePct = displayLogs.length > 0 ? Math.round((totalWins / displayLogs.length) * 100) : 60;
 
@@ -144,7 +147,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               ))}
             </div>
             <span className="text-purple-300 font-mono font-bold ml-1">
-              {upWins} UP • {downWins} DOWN • {winRatePct}% RECENT
+              {upCount} UP • {downCount} DOWN • {winRatePct}% RECENT
             </span>
           </div>
         </div>
