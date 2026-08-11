@@ -68,7 +68,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
     setIsLinkingDiscord(true);
     setTestResult(null);
     try {
-      const authData = await getDiscordAuthUrlApi();
+      const authData = await getDiscordAuthUrlApi(settings.emailAddress);
       if (authData && authData.url) {
         const width = 600;
         const height = 700;

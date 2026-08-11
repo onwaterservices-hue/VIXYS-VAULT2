@@ -65,7 +65,7 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      const authData = await getDiscordAuthUrlApi();
+      const authData = await getDiscordAuthUrlApi(settings.emailAddress);
       if (authData && authData.url) {
         const width = 600;
         const height = 700;
@@ -96,7 +96,7 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      const res = await verifyDiscordMembershipApi(settings.discordUserId);
+      const res = await verifyDiscordMembershipApi(settings.discordUserId, settings.emailAddress);
       if (res && res.success && res.profile) {
         setSettings((prev) => ({
           ...prev,

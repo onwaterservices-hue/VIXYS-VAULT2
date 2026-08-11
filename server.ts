@@ -4507,10 +4507,15 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
       isGuildMember = Array.isArray(userGuilds) && userGuilds.some((g: any) => g.id === targetGuildId);
     }
 
-    // 1. Find the VIXY canonical user by email (from auth session)
-    let vixyUser = serverUsers.find(u => u.email?.toLowerCase() === userEmail);
+    // 1. Find the VIXY canonical user by Discord ID first (to prevent duplicate accounts), then by email
+    let vixyUser = serverUsers.find(u => u.discordId === discordUser.id) || serverUsers.find(u => u.email?.toLowerCase() === userEmail);
     if (!vixyUser) {
         vixyUser = ensureUserExists({ email: userEmail, name: discordUser.username });
+    } else {
+        // Ensure email is attached to canonical account
+        if (userEmail && (!vixyUser.email || vixyUser.email === 'vixyvault0@gmail.com' || vixyUser.email === 'anonymous@vixy.internal')) {
+          vixyUser.email = userEmail;
+        }
     }
     
     const firebaseUid = vixyUser.id; // Or actual firebase UID if we have it
@@ -4519,29 +4524,22 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
     if (db) {
       try {
         const discordProfileRef = doc(db, 'discordProfiles', discordUser.id);
-        const discordProfileSnap = await getDoc(discordProfileRef);
+        await setDoc(discordProfileRef, {
+          firebaseUid,
+          discordUserId: discordUser.id,
+          username: discordUser.username,
+          globalName: discordUser.global_name || discordUser.username,
+          avatar: discordUser.avatar,
+          guildId: targetGuildId,
+          isGuildMember,
+          roleIds: guildRoles,
+          verifiedAt: new Date().toISOString(),
+          lastCheckedAt: new Date().toISOString()
+        }, { merge: true });
         
-        if (discordProfileSnap.exists() && discordProfileSnap.data().firebaseUid !== firebaseUid) {
-          console.error('[Discord OAuth Callback Audit] ❌ Discord ID already linked to another account');
-          oauthError = 'DISCORD ID ALREADY LINKED';
-        } else {
-          await setDoc(discordProfileRef, {
-            firebaseUid,
-            discordUserId: discordUser.id,
-            username: discordUser.username,
-            globalName: discordUser.global_name || discordUser.username,
-            avatar: discordUser.avatar,
-            guildId: targetGuildId,
-            isGuildMember,
-            roleIds: guildRoles,
-            verifiedAt: new Date().toISOString(),
-            lastCheckedAt: new Date().toISOString()
-          }, { merge: true });
-          
-          const userRef = doc(db, 'users', firebaseUid);
-          await setDoc(userRef, { discordUserId: discordUser.id }, { merge: true });
-          console.log('[Discord OAuth Callback Audit] ✅ Successfully persisted identity link to Firestore');
-        }
+        const userRef = doc(db, 'users', firebaseUid);
+        await setDoc(userRef, { discordUserId: discordUser.id, discordLinked: true, email: vixyUser.email }, { merge: true });
+        console.log('[Discord OAuth Callback Audit] ✅ Successfully persisted identity link to Firestore');
       } catch (e) {
         console.error('[Discord OAuth Callback Audit] Firestore error linking Discord identity:', e);
       }
@@ -4558,7 +4556,7 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
     const avatarUrl = vixyUser.discordAvatar || `https://cdn.discordapp.com/embed/avatars/0.png`;
 
     const profile: DiscordAuthProfile = {
-      email: userEmail,
+      email: vixyUser.email || userEmail,
       discordUserId: vixyUser.discordId!,
       discordUsername: vixyUser.discordTag!,
       discordGlobalName: vixyUser.discordGlobalName || vixyUser.discordTag!,
@@ -4576,6 +4574,8 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
     };
 
     userDiscordProfiles.set(userEmail, profile);
+    if (vixyUser.email) userDiscordProfiles.set(vixyUser.email.toLowerCase(), profile);
+    userDiscordProfiles.set(discordUser.id, profile);
     userDiscordProfiles.set('global_active_user', profile);
     savePersistentStore();
 
@@ -4644,12 +4644,51 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
   }
 });
 
+// Helper to get or restore Discord profile for a given email or UID
+function getOrRestoreDiscordProfile(userEmail: string): DiscordAuthProfile | null {
+  const cleanEmail = (userEmail || '').toLowerCase();
+  
+  let profile = userDiscordProfiles.get(cleanEmail) || userDiscordProfiles.get('global_active_user');
+  
+  if (!profile || !profile.discordUserId) {
+    const user = serverUsers.find(u => 
+      (u.email && u.email.toLowerCase() === cleanEmail) || 
+      u.discordId === cleanEmail ||
+      (cleanEmail === 'vixyvault0@gmail.com' && (u.discordId || u.discordLinked))
+    );
+
+    if (user && (user.discordId || user.discordLinked)) {
+      const hasActiveSub = ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes(user.subscription || user.role || '');
+      profile = {
+        email: user.email || cleanEmail,
+        discordUserId: user.discordId!,
+        discordUsername: user.discordTag || 'Discord User',
+        discordGlobalName: user.discordGlobalName || user.discordTag || 'Discord User',
+        discordAvatar: user.discordAvatar || null,
+        discordLinked: true,
+        guildMember: !!user.guildVerified,
+        guildJoined: !!user.guildVerified,
+        roleAssigned: user.guildVerified ? (hasActiveSub ? 'PRO' : 'MEMBER') : 'NONE',
+        guildRoles: user.guildVerified ? [(hasActiveSub ? 'PRO' : 'MEMBER')] : [],
+        lastSync: new Date().toLocaleTimeString(),
+        subscriptionTier: hasActiveSub ? 'PRO' : 'FREE',
+        verificationStatus: user.guildVerified ? 'VERIFIED' : 'NEEDS_GUILD',
+        connectedAt: new Date().toISOString(),
+        linkedAt: new Date().toISOString(),
+      };
+      userDiscordProfiles.set(cleanEmail, profile);
+      if (user.email) userDiscordProfiles.set(user.email.toLowerCase(), profile);
+      if (user.discordId) userDiscordProfiles.set(user.discordId, profile);
+    }
+  }
+  
+  return profile && profile.discordUserId ? profile : null;
+}
+
 // DISCORD USER PROFILE ENDPOINT
 app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
-  const profileByEmail = userDiscordProfiles.get(userEmail);
-  const globalProfile = userDiscordProfiles.get('global_active_user');
-  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === userEmail ? globalProfile : null);
+  const profile = getOrRestoreDiscordProfile(userEmail);
 
   res.json({
     linked: !!(profile && profile.discordUserId),
@@ -4660,9 +4699,7 @@ app.get(['/api/discord/user-profile', '/api/discord/profile'], (req, res) => {
 // DISCORD AUTH STATUS ENDPOINT
 app.get(['/api/auth/discord/status', '/api/discord/status'], async (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
-  const profileByEmail = userDiscordProfiles.get(userEmail);
-  const globalProfile = userDiscordProfiles.get('global_active_user');
-  const profile = profileByEmail || (globalProfile?.email?.toLowerCase() === userEmail ? globalProfile : null);
+  const profile = getOrRestoreDiscordProfile(userEmail);
   const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
 
   if (!profile || !profile.discordUserId) {
@@ -4685,6 +4722,8 @@ app.get(['/api/auth/discord/status', '/api/discord/status'], async (req, res) =>
     connected: true,
     discordUserId: profile.discordUserId,
     username: profile.discordUsername,
+    globalName: profile.discordGlobalName,
+    avatar: profile.discordAvatar,
     inServer: profile.guildMember,
     guildId: targetGuildId,
     roles,
@@ -4814,7 +4853,19 @@ app.post(['/api/subscription/event', '/api/purchase/event', '/api/payments/webho
 
 // DISCORD UNLINK / DISCONNECT ENDPOINT
 app.post('/api/discord/disconnect', (req, res) => {
-  const userEmail = ((req.headers['x-user-email'] as string) || 'vixyvault0@gmail.com').toLowerCase();
+  const userEmail = ((req.headers['x-user-email'] as string) || (req.body?.email as string) || 'vixyvault0@gmail.com').toLowerCase();
+  
+  const user = serverUsers.find(u => u.email?.toLowerCase() === userEmail || u.discordId === userEmail);
+  if (user) {
+    if (user.discordId) userDiscordProfiles.delete(user.discordId);
+    user.discordId = undefined;
+    user.discordTag = undefined;
+    user.discordGlobalName = undefined;
+    user.discordAvatar = undefined;
+    user.discordLinked = false;
+    user.guildVerified = false;
+  }
+
   userDiscordProfiles.delete(userEmail);
   userDiscordProfiles.delete('global_active_user');
   savePersistentStore();

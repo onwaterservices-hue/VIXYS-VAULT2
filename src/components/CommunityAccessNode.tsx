@@ -60,7 +60,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   const loadProfile = async () => {
     setIsLoadingProfile(true);
     try {
-      const res = await getDiscordUserProfileApi();
+      const savedEmail = settings?.emailAddress;
+      const res = await getDiscordUserProfileApi(savedEmail);
       if (res && res.linked && res.profile) {
         setProfile(res.profile);
         if (setSettings) {
@@ -150,7 +151,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     }, 15000);
 
     try {
-      const authData = await getDiscordAuthUrlApi();
+      const authData = await getDiscordAuthUrlApi(settings?.emailAddress);
       if (authData && authData.url) {
         const width = 600;
         const height = 700;

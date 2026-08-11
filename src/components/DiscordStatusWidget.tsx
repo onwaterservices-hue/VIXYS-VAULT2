@@ -25,7 +25,18 @@ export const DiscordStatusWidget: React.FC<DiscordStatusWidgetProps> = ({
     setShowSuccess(false);
 
     try {
-      const authData = await getDiscordAuthUrlApi();
+      let savedEmail: string | undefined;
+      try {
+        const savedAuth = localStorage.getItem('vixy_auth');
+        if (savedAuth) {
+          const parsed = JSON.parse(savedAuth);
+          savedEmail = parsed.user?.email;
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      const authData = await getDiscordAuthUrlApi(savedEmail);
       if (authData && authData.url) {
         const width = 600;
         const height = 700;

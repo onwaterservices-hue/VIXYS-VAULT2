@@ -371,22 +371,31 @@ export async function fetchPrediction(
   };
 }
 
-export async function getDiscordAuthUrlApi() {
-  const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>('/api/auth/discord/url');
+export async function getDiscordAuthUrlApi(userEmail?: string) {
+  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+  const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>(`/api/auth/discord/url${query}`, {
+    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+  });
   return data;
 }
 
-export async function getDiscordUserProfileApi() {
-  const data = await safeFetchJson<{ linked: boolean; profile: any }>('/api/discord/user-profile');
+export async function getDiscordUserProfileApi(userEmail?: string) {
+  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+  const data = await safeFetchJson<{ linked: boolean; profile: any }>(`/api/discord/user-profile${query}`, {
+    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+  });
   return data;
 }
 
-export async function verifyDiscordMembershipApi(discordUserId?: string) {
+export async function verifyDiscordMembershipApi(discordUserId?: string, userEmail?: string) {
   try {
     const res = await fetch('/api/discord/verify-membership', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ discordUserId }),
+      headers: {
+        'Content-Type': 'application/json',
+        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+      },
+      body: JSON.stringify({ discordUserId, email: userEmail }),
     });
     return await safeParseJson(res);
   } catch {
@@ -394,11 +403,15 @@ export async function verifyDiscordMembershipApi(discordUserId?: string) {
   }
 }
 
-export async function disconnectDiscordApi() {
+export async function disconnectDiscordApi(userEmail?: string) {
   try {
     const res = await fetch('/api/discord/disconnect', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+      },
+      body: JSON.stringify({ email: userEmail }),
     });
     return await safeParseJson(res);
   } catch {

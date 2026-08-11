@@ -418,22 +418,25 @@ export default function App() {
     };
   });
 
-  // Sync Discord profile from real backend API on mount
+  // Sync Discord profile from real backend API on mount & user auth changes
   useEffect(() => {
     async function syncProfile() {
       try {
-        const res = await getDiscordUserProfileApi();
+        const activeEmail = authState.user?.email || alertSettings.emailAddress;
+        const res = await getDiscordUserProfileApi(activeEmail);
         if (res && res.linked && res.profile) {
           setAlertSettings((prev) => ({
             ...prev,
             discordLinked: true,
-            discordUsername: res.profile.discordUsername,
-            discordUserId: res.profile.discordUserId,
-            guildMember: res.profile.guildMember,
+            discordUsername: res.profile.discordUsername || prev.discordUsername,
+            discordUserId: res.profile.discordUserId || prev.discordUserId,
+            guildMember: res.profile.guildMember ?? prev.guildMember,
             roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
+        } else if (alertSettings.discordLinked) {
+          // Keep locally stored linked state if server is momentarily sync-pending
         } else {
           setAlertSettings((prev) => ({
             ...prev,
@@ -446,11 +449,11 @@ export default function App() {
           }));
         }
       } catch (e) {
-        console.warn('Discord profile sync on mount notice:', e);
+        console.warn('Discord profile sync notice:', e);
       }
     }
     syncProfile();
-  }, []);
+  }, [authState.user?.email, alertSettings.emailAddress]);
 
   useEffect(() => {
     try {
