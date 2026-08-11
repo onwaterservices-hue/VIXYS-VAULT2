@@ -3672,25 +3672,40 @@ try {
 
 const STORE_FILE_PATH = path.join(process.cwd(), 'data', 'vixy_store.json');
 
+function sanitizeForFirestore(obj: any): any {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore).filter((v) => v !== undefined);
+  }
+  const clean: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      clean[key] = sanitizeForFirestore(value);
+    }
+  }
+  return clean;
+}
+
 async function savePersistentStoreAsync() {
   if (!db) return;
   try {
     // Save users
     for (const u of serverUsers) {
       if (u.id) {
-        await setDoc(doc(db, 'users', u.id), u);
+        await setDoc(doc(db, 'users', u.id), sanitizeForFirestore(u));
       }
     }
     // Save subscriptions
     for (const [email, sub] of userSubscriptions.entries()) {
       if (email && email !== 'global_active_user') {
-        await setDoc(doc(db, 'subscriptions', email), sub);
+        await setDoc(doc(db, 'subscriptions', email), sanitizeForFirestore(sub));
       }
     }
     // Save profiles
     for (const [email, profile] of userDiscordProfiles.entries()) {
       if (email && email !== 'global_active_user') {
-        await setDoc(doc(db, 'discord_profiles', email), profile);
+        await setDoc(doc(db, 'discord_profiles', email), sanitizeForFirestore(profile));
       }
     }
     console.log('[Firestore] Successfully saved entire state to Firestore.');
@@ -3978,6 +3993,7 @@ function seedInitialUsers() {
   const seedUsers: Partial<ServerUser>[] = [
     {
       id: 'usr_owner_00',
+      uid: 'usr_owner_00',
       email: 'onwaterservices@gmail.com',
       name: 'Master Admin (onwaterservices)',
       role: 'OWNER',
