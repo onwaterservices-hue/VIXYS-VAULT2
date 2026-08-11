@@ -77,7 +77,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         const email = parsed?.user?.email?.toLowerCase();
-        if (email === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
+        if (email === 'vixyvault0@gmail.com' || email === 'onwaterservices@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
           return 'ADMIN';
         }
         return parsed?.user?.role || 'ADMIN';
@@ -190,7 +190,7 @@ export default function App() {
 
         setAuthState((prev) => {
           if (!prev.isAuthenticated || prev.user?.email?.toLowerCase() !== cleanEmail) {
-            const isAdmin = cleanEmail === 'vixyvault0@gmail.com';
+            const isAdmin = cleanEmail === 'vixyvault0@gmail.com' || cleanEmail === 'onwaterservices@gmail.com';
             return {
               isAuthenticated: true,
               user: {
@@ -217,6 +217,7 @@ export default function App() {
         const email = authState.user.email?.toLowerCase();
         if (
           email === 'vixyvault0@gmail.com' ||
+          email === 'onwaterservices@gmail.com' ||
           authState.user.role === 'ADMIN' ||
           authState.user.role === 'OWNER'
         ) {

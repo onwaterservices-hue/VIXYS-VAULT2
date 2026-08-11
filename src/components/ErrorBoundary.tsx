@@ -11,29 +11,23 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
-// @ts-ignore
-export class ErrorBoundary extends (Component as new (props: Props) => Component<Props, State>) {
-  // @ts-ignore
-  declare setState: (state: Partial<State> | ((prevState: State) => Partial<State>)) => void;
-  // @ts-ignore
-  declare props: Props;
-
-  state: State = {
+export class ErrorBoundary extends Component<Props, State> {
+  public override state: State = {
     hasError: false,
     error: null,
     errorInfo: null,
   };
 
-  static getDerivedStateFromError(error: Error): Partial<State> {
+  public static getDerivedStateFromError(error: Error): Partial<State> {
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  public override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error caught by ErrorBoundary:', error, errorInfo);
     this.setState({ errorInfo });
   }
 
-  handleReset = () => {
+  private handleReset = () => {
     try {
       window.location.hash = '';
       window.location.reload();
@@ -42,7 +36,7 @@ export class ErrorBoundary extends (Component as new (props: Props) => Component
     }
   };
 
-  handleClearData = () => {
+  private handleClearData = () => {
     try {
       localStorage.clear();
       sessionStorage.clear();
@@ -53,7 +47,7 @@ export class ErrorBoundary extends (Component as new (props: Props) => Component
     }
   };
 
-  render() {
+  public override render() {
     if (this.state.hasError) {
       return (
         <div className="min-h-screen bg-[#070410] text-slate-100 flex items-center justify-center p-6 font-sans">
