@@ -17,6 +17,7 @@ import {
   Radio,
   Clock,
 } from 'lucide-react';
+import { VaultCard } from './VaultCard';
 
 interface PredictionHealthWatchProps {
   currentPrice: number;
@@ -136,96 +137,52 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
       {/* Health Metric Cards Grid (4 Key Diagnostics - 2x2 grid when in side-by-side desktop layout) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         {/* Metric 1: Microstructure & Order Book */}
-        <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs gap-1">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
-              <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span className="truncate">{appMode === 'SIMPLE' ? 'Buyer Support Strength' : 'Order Book Depth'}</span>
-            </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
-              HEALTHY
-            </span>
-          </div>
-          <div className="text-lg font-black text-white">
-            {appMode === 'SIMPLE' ? 'Strong Buyer Floor' : '+18.4% Bid Cushion'}
-          </div>
-          <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
-            <div className="bg-gradient-to-r from-emerald-400 to-cyan-400 h-full w-[88%] rounded-full" />
-          </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
-            <span>{appMode === 'SIMPLE' ? 'Heavy buyers under price' : 'Bid Absorption: High'}</span>
-            <span className="text-cyan-300 font-bold font-mono shrink-0">88/100 Score</span>
-          </div>
-        </div>
+        <VaultCard
+          accent="purple"
+          icon={<Layers className="w-4 h-4 text-purple-300 inline" />}
+          title={appMode === 'SIMPLE' ? 'BUYER SUPPORT STRENGTH' : 'ORDER BOOK DEPTH'}
+          statusText="HEALTHY"
+          heroValue={appMode === 'SIMPLE' ? 'Strong Buyer Floor' : '+18.4% Bid Cushion'}
+          subLabel={appMode === 'SIMPLE' ? 'Heavy buyers under price' : 'Bid Absorption: High'}
+          subValue="88/100 Score"
+          progressPct={88}
+        />
 
         {/* Metric 2: Spoofing & Manipulation Risk */}
-        <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs gap-1">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
-              <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span className="truncate">{appMode === 'SIMPLE' ? 'Fake Order / Scam Check' : 'Spoofing / Wash Risk'}</span>
-            </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
-              CLEAN LIQUIDITY
-            </span>
-          </div>
-          <div className="text-lg font-black text-white">
-            {appMode === 'SIMPLE' ? 'Clean & Safe (No Traps)' : '0.04 Index (Clean)'}
-          </div>
-          <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
-            <div className="bg-emerald-400 h-full w-[96%] rounded-full" />
-          </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
-            <span>{appMode === 'SIMPLE' ? 'Zero fake trap orders' : 'Fake Liquidity: None'}</span>
-            <span className="text-emerald-400 font-bold font-mono shrink-0">96/100 Score</span>
-          </div>
-        </div>
+        <VaultCard
+          accent="green"
+          icon={<Lock className="w-4 h-4 text-emerald-400 inline" />}
+          title={appMode === 'SIMPLE' ? 'FAKE ORDER / SCAM CHECK' : 'SPOOFING / WASH RISK'}
+          statusText="CLEAN LIQUIDITY"
+          heroValue={appMode === 'SIMPLE' ? 'Clean & Safe (No Traps)' : '0.04 Index (Clean)'}
+          subLabel={appMode === 'SIMPLE' ? 'Zero fake trap orders' : 'Fake Liquidity: None'}
+          subValue="96/100 Score"
+          progressPct={96}
+        />
 
         {/* Metric 3: Volatility & Trend Stability */}
-        <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs gap-1">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
-              <TrendingUp className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="truncate">{appMode === 'SIMPLE' ? 'Price Trend Speed' : 'Directional Momentum'}</span>
-            </span>
-            <span className="text-amber-300 font-extrabold text-[10px] bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30 shrink-0 whitespace-nowrap">
-              EXPANDING
-            </span>
-          </div>
-          <div className="text-lg font-black text-white">
-            {appMode === 'SIMPLE' ? 'Steady Upward Drive' : 'Optimal VWAP Drift'}
-          </div>
-          <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
-            <div className="bg-gradient-to-r from-amber-500 to-amber-300 h-full w-[92%] rounded-full" />
-          </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
-            <span>{appMode === 'SIMPLE' ? 'Holding strong above floor' : 'Sustained Breakout'}</span>
-            <span className="text-amber-300 font-bold font-mono shrink-0">92/100 Score</span>
-          </div>
-        </div>
+        <VaultCard
+          accent="amber"
+          icon={<TrendingUp className="w-4 h-4 text-amber-400 inline" />}
+          title={appMode === 'SIMPLE' ? 'PRICE TREND SPEED' : 'DIRECTIONAL MOMENTUM'}
+          statusText="EXPANDING"
+          heroValue={appMode === 'SIMPLE' ? 'Steady Upward Drive' : 'Optimal VWAP Drift'}
+          subLabel={appMode === 'SIMPLE' ? 'Holding strong above floor' : 'Sustained Breakout'}
+          subValue="92/100 Score"
+          progressPct={92}
+        />
 
         {/* Metric 4: Kalshi Contract Spread & Slippage */}
-        <div className="bg-[#0b051b] rounded-2xl p-4 border border-purple-900/50 hover:border-purple-500/40 space-y-2.5 relative overflow-hidden transition-all shadow-md">
-          <div className="flex items-center justify-between text-xs gap-1">
-            <span className="text-purple-200/80 font-bold flex items-center gap-1.5 min-w-0">
-              <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
-              <span className="truncate">{appMode === 'SIMPLE' ? 'Trade Speed & Cost' : 'Execution Spread'}</span>
-            </span>
-            <span className="text-emerald-400 font-extrabold text-[10px] bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30 shrink-0 whitespace-nowrap">
-              OPTIMAL
-            </span>
-          </div>
-          <div className="text-lg font-black text-white">
-            {appMode === 'SIMPLE' ? 'Instant Fill / Lowest Fee' : '1.0¢ Order Spread'}
-          </div>
-          <div className="w-full bg-purple-950/80 rounded-full h-2 overflow-hidden border border-purple-900/60">
-            <div className="bg-emerald-400 h-full w-[95%] rounded-full" />
-          </div>
-          <div className="text-[11px] text-purple-300/70 flex items-center justify-between font-sans gap-2">
-            <span>{appMode === 'SIMPLE' ? 'Fast fills with zero gap' : 'Slippage Risk: Minimal'}</span>
-            <span className="text-cyan-300 font-bold font-mono shrink-0">95/100 Score</span>
-          </div>
-        </div>
+        <VaultCard
+          accent="purple"
+          icon={<Zap className="w-4 h-4 text-cyan-400 inline" />}
+          title={appMode === 'SIMPLE' ? 'TRADE SPEED & COST' : 'EXECUTION SPREAD'}
+          statusText="OPTIMAL"
+          heroValue={appMode === 'SIMPLE' ? 'Instant Fill / Lowest Fee' : '1.0¢ Order Spread'}
+          subLabel={appMode === 'SIMPLE' ? 'Fast fills with zero gap' : 'Slippage Risk: Minimal'}
+          subValue="95/100 Score"
+          progressPct={95}
+        />
       </div>
 
       {/* AI Health Summary & Recommendation */}

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Clock, Radio } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
+import { VaultCard } from '../VaultCard';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -269,54 +270,34 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         {/* Right Column (5 cols): 4 Cards 2x2 Grid */}
         <div className="lg:col-span-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
           {/* Card 1: TARGET STRIKE */}
-          <div className="bg-[#060312] p-4 rounded-2xl border border-purple-800/70 space-y-2 flex flex-col justify-between shadow-xl">
-            <div className="flex items-center justify-between text-[10px] font-mono font-bold text-purple-300 uppercase">
-              <span>TARGET STRIKE</span>
-              <span className="text-purple-400/70">STRIKE PRICE</span>
-            </div>
-            <div className="text-3xl font-black font-mono text-purple-300 tracking-tight">
-              ${targetPrice ? Math.round(targetPrice).toLocaleString() : '64,160'}
-            </div>
-            <div className="px-2.5 py-1 rounded-md bg-purple-950/90 border border-purple-700/60 text-[10px] font-black text-purple-200 uppercase tracking-wider text-center">
-              {isBullish ? `MUST EXPIRE ABOVE $${targetPrice?.toLocaleString()}` : `MUST EXPIRE BELOW $${targetPrice?.toLocaleString()}`}
-            </div>
-            <div className="flex items-center justify-between text-[10px] font-mono text-purple-400/80 pt-1 border-t border-purple-900/40">
-              <span>LIVE SPOT: <strong className="text-purple-200">${currentPrice?.toLocaleString()}</strong></span>
-              <span>{displayVenue} {timeframe}</span>
-            </div>
-          </div>
+          <VaultCard
+            accent="purple"
+            title="TARGET STRIKE"
+            titleRight="STRIKE PRICE"
+            heroValue={`$${targetPrice ? Math.round(targetPrice).toLocaleString() : '64,160'}`}
+            actionPill={isBullish ? `MUST EXPIRE ABOVE $${targetPrice?.toLocaleString()}` : `MUST EXPIRE BELOW $${targetPrice?.toLocaleString()}`}
+            footerLeft={<>LIVE SPOT: <strong className="text-purple-200">${currentPrice?.toLocaleString()}</strong></>}
+            footerRight={`${displayVenue} ${timeframe}`}
+          />
 
           {/* Card 2: DISTANCE TO STRIKE */}
-          <div className="bg-[#060312] p-4 rounded-2xl border border-purple-800/70 space-y-2 flex flex-col justify-between shadow-xl">
-            <div className="text-[10px] font-mono font-bold text-purple-300 uppercase">
-              DISTANCE TO STRIKE
-            </div>
-            <div className={`text-2xl font-black font-mono tracking-tight ${spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-purple-300'}`}>
-              {formattedSpotVsStrikeVal} ({formattedSpotVsStrikePct})
-            </div>
-            <div className="px-2.5 py-1 rounded-md bg-purple-950/90 border border-purple-700/60 text-[10px] font-black text-purple-200 uppercase tracking-wider text-center">
-              {spotVsStrikeDelta >= 0 ? 'SPOT VS REFERENCE STRIKE' : 'LIVE SPOT BELOW STRIKE'}
-            </div>
-            <div className="text-[10px] font-mono text-purple-400/80 pt-1 border-t border-purple-900/40">
-              Spot vs Reference Strike
-            </div>
-          </div>
+          <VaultCard
+            accent={spotVsStrikeDelta >= 0 ? 'green' : 'red'}
+            title="DISTANCE TO STRIKE"
+            heroValue={`${formattedSpotVsStrikeVal} (${formattedSpotVsStrikePct})`}
+            actionPill={spotVsStrikeDelta >= 0 ? 'SPOT VS REFERENCE STRIKE' : 'LIVE SPOT BELOW STRIKE'}
+            footerLeft="Spot vs Reference Strike"
+          />
 
           {/* Card 3: TIME REMAINING */}
-          <div className="bg-[#060312] p-4 rounded-2xl border border-purple-800/70 space-y-2 flex flex-col justify-between shadow-xl">
-            <div className="text-[10px] font-mono font-bold text-purple-300 uppercase">
-              TIME REMAINING
-            </div>
-            <div className="text-4xl font-black font-mono text-purple-300 tracking-tight">
-              {timeString}
-            </div>
-            <div className="px-2 py-0.5 rounded bg-purple-950/90 border border-purple-700/60 text-[10px] font-black text-purple-200 uppercase tracking-wider text-center">
-              {timeframe} CANDLE CLOSE
-            </div>
-            <div className="text-[10px] font-mono text-purple-400/80 pt-1 border-t border-purple-900/40">
-              Live Ticking
-            </div>
-          </div>
+          <VaultCard
+            accent="purple"
+            title="TIME REMAINING"
+            heroValue={timeString}
+            actionPill={`${timeframe} CANDLE CLOSE`}
+            footerLeft="Live Ticking"
+            isPulsingPill
+          />
 
           {/* Card 4: VIXY LOCK (Distinct Cyan/Electric-Blue Accent Glow) */}
           <div className="bg-gradient-to-b from-[#081a2e] via-[#051120] to-[#040314] p-4 rounded-2xl border-2 border-cyan-500/80 shadow-[0_0_25px_rgba(6,182,212,0.35)] space-y-2 flex flex-col justify-between relative overflow-hidden">
