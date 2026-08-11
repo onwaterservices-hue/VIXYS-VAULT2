@@ -28,7 +28,7 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ onComplete }) =>
           }, 300);
           return 100;
         }
-        const next = prev + Math.floor(Math.random() * 12) + 5;
+        const next = prev + 15;
         const bounded = Math.min(100, next);
 
         if (bounded > 20 && bounded < 45) setStatusIndex(1);

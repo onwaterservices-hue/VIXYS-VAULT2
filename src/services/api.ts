@@ -148,13 +148,14 @@ export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Pr
   return fetchCryptoKlines('BTC', interval);
 }
 
+// NEVER return synthetic/placeholder OHLC data. On failure, throw or return null — the UI layer is responsible for the empty/stale state, not this function.
 export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string = '15m'): Promise<Candle[]> {
   try {
     const data = await safeFetchJson<Candle[]>(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=${encodeURIComponent(interval)}&_t=${Date.now()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
-    if (data && Array.isArray(data)) return data;
+    if (data && Array.isArray(data) && data.length > 0) return data;
   } catch (err) {
     // Fallthrough to public fallback
   }
@@ -180,33 +181,9 @@ export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string
     // Fallback
   }
 
-  const now = Date.now();
-  const periodMs = interval === '1h' ? 60 * 60 * 1000 : 15 * 60 * 1000;
-  const candles: Candle[] = [];
-  const basePrice = symbol === 'BTC' ? 63850 : symbol === 'ETH' ? 3450 : symbol === 'SOL' ? 180 : 10;
-  let currentClose = basePrice;
-
-  for (let i = 29; i >= 0; i--) {
-    const time = now - i * periodMs;
-    const open = currentClose;
-    const change = (Math.random() - 0.46) * (basePrice * 0.003);
-    const close = open + change;
-    const high = Math.max(open, close) + Math.random() * (basePrice * 0.001);
-    const low = Math.min(open, close) - Math.random() * (basePrice * 0.001);
-    const volume = 250 + Math.random() * 500;
-
-    candles.push({
-      time,
-      open: Math.round(open * 100) / 100,
-      high: Math.round(high * 100) / 100,
-      low: Math.round(low * 100) / 100,
-      close: Math.round(close * 100) / 100,
-      volume: Math.round(volume * 10) / 10,
-    });
-
-    currentClose = close;
-  }
-  return candles;
+  // Return empty array when live market feed is unreachable.
+  // The UI layer will render CHART DATA UNAVAILABLE.
+  return [];
 }
 
 /**

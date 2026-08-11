@@ -1,6 +1,21 @@
 {
   "users": [
     {
+      "id": "usr_7754_ihg",
+      "uid": "uid_test_123",
+      "email": "test_new_user_123@vixy.test",
+      "name": "test_new_user_123",
+      "role": "FREE",
+      "subscription": "FREE_TRIAL",
+      "passwordHash": "AuthManaged2026!",
+      "verificationStatus": "VERIFIED",
+      "hardwareFingerprint": "hw_auto_a8s6n3",
+      "ipHash": "127.0.0.1",
+      "joined": "2026-08-11",
+      "status": "TRIALING",
+      "volumeTrades": 0
+    },
+    {
       "id": "usr_master_001",
       "uid": "usr_a37wk50",
       "email": "vixyvault0@gmail.com",
@@ -16,39 +31,48 @@
       "volumeTrades": 1420,
       "discordTag": "vixyvault_owner",
       "discordId": "766312591915483156",
-      "discordLinked": true
+      "discordLinked": true,
+      "onlineStatus": "ACTIVE",
+      "lastSeenAt": 1786425226530
     }
   ],
   "profiles": {
     "vixyvault0@gmail.com": {
-      "email": "vixyvault0@gmail.com",
-      "discordUserId": "766312591915483156",
       "discordUsername": "vixyvault_owner",
-      "discordGlobalName": "VIXY Vault Owner",
-      "discordLinked": true,
-      "guildMember": true,
-      "guildJoined": true,
-      "roleAssigned": "PRO",
-      "assignedRoleName": "PRO",
+      "lastVerifiedAt": "2026-08-09T20:55:46.183Z",
       "guildRoles": [
         "PRO"
       ],
-      "lastSync": "8:55:46 PM",
+      "discordLinked": true,
+      "guildMember": true,
+      "email": "vixyvault0@gmail.com",
+      "lastRoleSyncAt": "2026-08-09T20:55:46.183Z",
       "subscriptionTier": "ELITE",
-      "verificationStatus": "VERIFIED",
       "connectedAt": "2026-08-08T14:28:15.943Z",
-      "linkedAt": "2026-08-08T14:28:15.943Z",
-      "lastVerifiedAt": "2026-08-09T20:55:46.183Z",
-      "lastRoleSyncAt": "2026-08-09T20:55:46.183Z"
+      "assignedRoleName": "PRO",
+      "verificationStatus": "VERIFIED",
+      "discordUserId": "766312591915483156",
+      "guildJoined": true,
+      "roleAssigned": "PRO",
+      "discordGlobalName": "VIXY Vault Owner",
+      "lastSync": "8:55:46 PM",
+      "linkedAt": "2026-08-08T14:28:15.943Z"
     }
   },
   "subscriptions": {
     "vixyvault0@gmail.com": {
+      "updatedAt": "2026-08-08T15:03:21.053Z",
       "email": "vixyvault0@gmail.com",
       "role": "OWNER",
       "plan": "ELITE_PASS",
-      "status": "ACTIVE",
-      "updatedAt": "2026-08-08T15:03:21.053Z"
+      "status": "ACTIVE"
+    },
+    "test_new_user_123@vixy.test": {
+      "email": "test_new_user_123@vixy.test",
+      "role": "FREE",
+      "plan": "FREE_TRIAL",
+      "status": "INACTIVE",
+      "updatedAt": "2026-08-11T05:16:07.754Z"
     }
   }
 }

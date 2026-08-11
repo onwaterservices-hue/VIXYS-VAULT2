@@ -112,12 +112,6 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
     const interval = setInterval(() => {
       setLastUpdatedTs(new Date().toLocaleTimeString());
       // Refresh simulated latency & live ticker
-      setLiveFeedSignals((prev) =>
-        prev.map((sig, idx) => ({
-          ...sig,
-          latencyMs: Math.floor(40 + Math.random() * 80),
-        }))
-      );
     }, 4000);
     return () => clearInterval(interval);
   }, [liveStreamActive]);

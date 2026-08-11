@@ -31,21 +31,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING...');
   const initialSpot = spotPrice || (asset === 'ETH' ? 3480.5 : 64160.5);
   const [lastPrice, setLastPrice] = useState<number>(initialSpot);
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>(() => {
-    const points: PricePoint[] = [];
-    const now = Date.now();
-    let p = initialSpot - 15;
-    for (let i = 50; i >= 0; i--) {
-      p += (Math.random() - 0.48) * 6;
-      points.push({
-        time: now - i * 1000,
-        price: p,
-        buyVolume: Math.random() * 2.5,
-        sellVolume: Math.random() * 2.2,
-      });
-    }
-    return points;
-  });
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -116,20 +102,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
         setLastPrice(currentP);
         setConnectionStatus('LIVE (REST)');
 
-        const initialPoints: PricePoint[] = [];
-        const now = Date.now();
-        let p = currentP - 25;
-
-        for (let i = 50; i >= 0; i--) {
-          p += (Math.random() - 0.48) * 8;
-          initialPoints.push({
-            time: now - i * 1000,
-            price: p,
-            buyVolume: Math.random() * 2.5,
-            sellVolume: Math.random() * 2.2,
-          });
-        }
-        setPriceHistory(initialPoints);
+        setPriceHistory([{ time: Date.now(), price: currentP, buyVolume: 0, sellVolume: 0 }]);
       })
       .catch(() => {
         if (!isCancelled) setConnectionStatus('LIVE (SIM)');

@@ -48,7 +48,6 @@ export const PredictionHealthWatch: React.FC<PredictionHealthWatchProps> = ({
       setNextUpdateSec((prev) => {
         if (prev <= 1) {
           // Trigger subtle auto recalculation
-          setHealthScore((old) => Math.min(98, Math.max(89, old + (Math.random() > 0.5 ? 1 : -1))));
           setLastSyncTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
           return 5;
         }

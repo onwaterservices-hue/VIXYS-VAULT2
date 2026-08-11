@@ -116,7 +116,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </h1>
 
           <p className="text-slate-300 text-base max-w-lg leading-relaxed font-sans font-normal">
-            Trade probability, not hope. Institutional 15-minute prediction market decision engine powered by a calibrated probability model trained on momentum, volatility, and order-book depth features, benchmarked against live market pricing.
+            VIXY’s Vault is a real-time prediction market decision terminal for BTC traders, delivering auditable 15-minute signals backed by live orderbook depth, momentum factors, and walk-forward model calibration.
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2 font-mono">

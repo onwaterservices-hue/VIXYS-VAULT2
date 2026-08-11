@@ -50,31 +50,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
 // Data & Signals
-  const generateInitialCandles = (basePrice = 64160.5) => {
-    const now = Date.now();
-    const list: Candle[] = [];
-    let p = basePrice - 40;
-    for (let i = 35; i >= 0; i--) {
-      const delta = (Math.random() - 0.47) * 14;
-      const open = p;
-      const close = open + delta;
-      const high = Math.max(open, close) + Math.random() * 8;
-      const low = Math.min(open, close) - Math.random() * 8;
-      p = close;
-      list.push({
-        time: now - i * 5000,
-        open,
-        high,
-        low,
-        close,
-        volume: Math.random() * 8 + 2.5,
-        takerBuyRatio: 0.48 + Math.random() * 0.25,
-      });
-    }
-    return list;
-  };
-
-  const [candles, setCandles] = useState<Candle[]>(() => generateInitialCandles());
+  const [candles, setCandles] = useState<Candle[]>([]);
   const [currentPrice, setCurrentPrice] = useState<number>(64160.5);
   const [wsStatus, setWsStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'OFFLINE'>('CONNECTED');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
@@ -163,30 +139,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         setCurrentPrice(p);
         setStrikePrice(Math.round((p - 10) * 10) / 10);
 
-        // Seed 35 candles
-        const now = Date.now();
-        const initialCandles: Candle[] = [];
-        let runningP = p - 35;
-
-        for (let i = 35; i >= 0; i--) {
-          const delta = (Math.random() - 0.47) * 12;
-          const open = runningP;
-          const close = open + delta;
-          const high = Math.max(open, close) + Math.random() * 8;
-          const low = Math.min(open, close) - Math.random() * 8;
-          runningP = close;
-
-          initialCandles.push({
-            time: now - i * 5000,
-            open,
-            high,
-            low,
-            close,
-            volume: Math.random() * 4.5 + 1.2,
-            takerBuyRatio: 0.45 + Math.random() * 0.25,
-          });
-        }
-        setCandles(initialCandles);
+        setCandles([{ time: Date.now(), open: p, high: p, low: p, close: p, volume: 0, takerBuyRatio: 0.5 }]);
       })
       .catch(() => {
         if (!isCancelled) {
@@ -222,11 +175,6 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
             setCurrentPrice(p);
 
-            // Smoothly drift probability
-            setUpProbability((prev) => {
-              const shift = (isBuyer ? 0.3 : -0.3) + (Math.random() - 0.49) * 0.4;
-              return Math.min(94, Math.max(22, Math.round(prev + shift)));
-            });
 
             // Append or update current 5-second candle
             setCandles((prev) => {
@@ -268,30 +216,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       if (!isCancelled) setWsStatus('RECONNECTING');
     }
 
-    // Live tick simulator interval to ensure continuous chart motion regardless of network
-    const liveTickTimer = setInterval(() => {
-      if (isCancelled) return;
-      const delta = (Math.random() - 0.47) * 3.8;
-      setCurrentPrice((prevP) => {
-        const nextP = Math.round((prevP + delta) * 100) / 100;
-        setCandles((prev) => {
-          if (prev.length === 0) return prev;
-          const updated = [...prev];
-          const last = { ...updated[updated.length - 1] };
-          last.close = nextP;
-          last.high = Math.max(last.high, nextP);
-          last.low = Math.min(last.low, nextP);
-          last.volume += Math.random() * 0.4;
-          updated[updated.length - 1] = last;
-          return updated;
-        });
-        return nextP;
-      });
-    }, 1200);
 
     return () => {
       isCancelled = true;
-      clearInterval(liveTickTimer);
       if (ws) {
         ws.onopen = null;
         ws.onclose = null;

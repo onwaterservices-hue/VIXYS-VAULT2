@@ -62,14 +62,6 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
   const isUnlocked = userRole === 'ADMIN' || userRole === 'PRO' || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
 
-  // Auto Refresh Simulation
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setScanCount((prev) => prev + Math.floor(Math.random() * 2) + 1);
-      setLastScanTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
 
   const handleManualScan = () => {
     setIsScanning(true);

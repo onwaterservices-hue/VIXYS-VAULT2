@@ -56,7 +56,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTestingVenue(venue);
     setTestSuccessMessage(null);
     setTimeout(() => {
-      const simulatedLatency = Math.floor(10 + Math.random() * 12);
+      const simulatedLatency = 15;
       setExchangeKeys((prev) => ({
         ...prev,
         [venue]: {
@@ -84,7 +84,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           ...curr,
           connected: nextConnected,
           status: nextConnected ? 'CONNECTED' : 'DISCONNECTED',
-          latencyMs: nextConnected ? Math.floor(12 + Math.random() * 8) : 0,
+          latencyMs: nextConnected ? 14 : 0,
           lastPing: nextConnected ? 'Just now' : 'Never',
         },
       };

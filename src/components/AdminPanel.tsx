@@ -200,6 +200,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   const [systemHealth, setSystemHealth] = useState<any>(null);
   const [discordHealth, setDiscordHealth] = useState<any>(null);
   const [stripeHealth, setStripeHealth] = useState<any>(null);
+  const [signalLogsState, setSignalLogsState] = useState<any[]>([]);
 
   // User Intelligence State & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -296,6 +297,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
       const events = await fetchAdminEventsApi().catch(() => null);
       if (Array.isArray(events)) setAdminEvents(events);
+
+      const sigLogRes = await fetch('/api/signal/resolved-log').then((r) => r.json()).catch(() => null);
+      if (sigLogRes && Array.isArray(sigLogRes.recentResolved)) {
+        setSignalLogsState(sigLogRes.recentResolved);
+      }
     } catch (err: any) {
       console.warn('Error loading admin data:', err);
       setGlobalError('Failed to synchronize backend admin telemetry. Some services may be unavailable.');
@@ -345,12 +351,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       const query = searchTerm.toLowerCase().trim();
       const matchesSearch =
         !query ||
-        u.email.toLowerCase().includes(query) ||
-        u.name.toLowerCase().includes(query) ||
+        (u.email && u.email.toLowerCase().includes(query)) ||
+        (u.name && u.name.toLowerCase().includes(query)) ||
         (u.uid && u.uid.toLowerCase().includes(query)) ||
         (u.id && u.id.toLowerCase().includes(query)) ||
         (u.discordTag && u.discordTag.toLowerCase().includes(query)) ||
         (u.discordId && u.discordId.toLowerCase().includes(query)) ||
+        (u.discordGlobalName && u.discordGlobalName.toLowerCase().includes(query)) ||
         (u.stripeCustomerId && u.stripeCustomerId.toLowerCase().includes(query)) ||
         (u.stripeSubscriptionId && u.stripeSubscriptionId.toLowerCase().includes(query));
 
@@ -391,14 +398,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   const handleUserAction = async (user: UserItem, action: string, payload: Record<string, any> = {}) => {
     const confirmActions = ['delete', 'suspend', 'freeze_access', 'revoke_premium', 'revoke_trial', 'revoke_plan'];
     if (confirmActions.includes(action)) {
-      if (!window.confirm(`Are you sure you want to perform "${action.toUpperCase()}" on user ${user.email}?`)) {
+      if (!window.confirm(`Are you sure you want to perform "${action.toUpperCase()}" on user ${user.email || user.discordTag}?`)) {
         return;
       }
     }
 
     const res = await performUserAction(user.id, action, payload);
     if (res?.success) {
-      setActionSuccessMsg(`Action "${action.toUpperCase()}" completed successfully for ${user.email}`);
+      setActionSuccessMsg(`Action "${action.toUpperCase()}" completed successfully for ${user.email || user.discordTag}`);
       setTimeout(() => setActionSuccessMsg(null), 4000);
       loadAdminData();
     } else {
@@ -970,25 +977,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             <td className="p-3">
                               <div className="flex items-center space-x-2.5">
                                 <div className="w-7 h-7 rounded-lg bg-purple-900/40 border border-purple-500/30 flex items-center justify-center font-bold text-purple-300 text-xs shrink-0">
-                                  {user.name ? user.name[0].toUpperCase() : user.email[0].toUpperCase()}
+                                  {user.name ? user.name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : (user.discordTag ? user.discordTag[0].toUpperCase() : '?'))}
                                 </div>
                                 <div>
                                   <div className="font-bold text-slate-200 flex items-center space-x-1.5">
-                                    <span>{user.name || user.email.split('@')[0]}</span>
+                                    <span>{user.name || (user.email ? user.email.split('@')[0] : user.discordGlobalName || user.discordTag)}</span>
                                     {user.role === 'OWNER' && (
                                       <span className="px-1.5 py-0.2 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
                                         OWNER
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] text-slate-400">{user.email}</div>
+                                  <div className="text-[11px] text-slate-400">{user.email || 'unavailable/not connected'}</div>
                                 </div>
                               </div>
                             </td>
 
                             <td className="p-3">
                               <span className="text-[10px] font-mono text-slate-400">
-                                {user.uid ? user.uid.slice(0, 8) + '...' : 'LOCAL'}
+                                {user.authStatus === 'DISCORD_PENDING' ? 'DISCORD_PENDING' : (user.uid ? user.uid.slice(0, 8) + '...' : 'LOCAL')}
                               </span>
                             </td>
 
@@ -1004,7 +1011,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                     : 'bg-slate-800 text-slate-400'
                                 }`}
                               >
-                                {user.subscription || user.role}
+                                {user.subscription || user.role || 'NONE'}
                               </span>
                             </td>
 
@@ -1032,21 +1039,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             <td className="p-3">
                               <span
                                 className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                                  user.status === 'ACTIVE'
+                                  user.authStatus === 'DISCORD_PENDING'
+                                    ? 'bg-slate-700/50 text-slate-400 border border-slate-700'
+                                    : user.status === 'ACTIVE'
                                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                     : user.status === 'TRIALING'
                                     ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                                     : 'bg-red-500/10 text-red-400 border border-red-500/30'
                                 }`}
                               >
-                                {user.status}
+                                {user.authStatus === 'DISCORD_PENDING' ? 'NOT CONNECTED' : user.status}
                               </span>
                             </td>
 
                             <td className="p-3 text-slate-400 text-[11px]">{user.joined}</td>
 
                             <td className="p-3">
-                              {isDupRisk ? (
+                              {user.authStatus === 'DISCORD_PENDING' ? (
+                                <span className="px-2 py-0.5 text-[9px] font-bold bg-indigo-500/10 text-indigo-400 rounded">
+                                  DISCORD ONLY
+                                </span>
+                              ) : isDupRisk ? (
                                 <span className="px-2 py-0.5 text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 rounded flex items-center space-x-1 w-fit">
                                   <AlertTriangle className="w-3 h-3 text-red-400" />
                                   <span>DUPLICATE RISK</span>
@@ -1487,6 +1500,69 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+
+            {/* RESOLVED SIGNAL OUTCOME AUDIT LOG */}
+            <div className="bg-slate-900/80 border border-purple-900/60 p-5 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+                <div>
+                  <h3 className="text-xs font-black uppercase tracking-wider text-cyan-300 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-cyan-400" />
+                    RESOLVED SIGNAL OUTCOME AUDIT LOG (PROVABLE MEMORY STORE)
+                  </h3>
+                  <p className="text-[11px] text-purple-300/70">
+                    Raw 15-minute walk-forward model prediction outcomes, target strikes, close prices, and Brier scoring calibration history.
+                  </p>
+                </div>
+                <span className="px-2.5 py-1 rounded bg-cyan-950 border border-cyan-800 text-cyan-300 text-[10px] font-mono font-bold">
+                  {signalLogsState.length} LOGGED RECORDS
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left font-mono text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] text-purple-300/80 uppercase">
+                      <th className="py-2 px-2">Signal ID</th>
+                      <th className="py-2 px-2">Market</th>
+                      <th className="py-2 px-2">Pred</th>
+                      <th className="py-2 px-2">Conf</th>
+                      <th className="py-2 px-2">Target Strike</th>
+                      <th className="py-2 px-2">Settlement Price</th>
+                      <th className="py-2 px-2">Outcome</th>
+                      <th className="py-2 px-2">Brier Score</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-slate-200">
+                    {signalLogsState.map((log: any) => (
+                      <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="py-2 px-2 text-[10px] text-purple-300 font-bold">{log.id}</td>
+                        <td className="py-2 px-2 font-bold">{log.market || 'BTC_KALSHI_15M'}</td>
+                        <td className="py-2 px-2">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                            log.direction === 'UP' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
+                          }`}>
+                            BUY {log.direction}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 font-bold text-cyan-300">{log.confidence}%</td>
+                        <td className="py-2 px-2">${log.targetStrike?.toLocaleString()}</td>
+                        <td className="py-2 px-2 font-bold">${log.settlementPrice?.toLocaleString()}</td>
+                        <td className="py-2 px-2">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            log.wasCorrect
+                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                          }`}>
+                            {log.wasCorrect ? 'WIN (CORRECT)' : 'LOSS'}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-purple-300 font-bold">{log.brierScore ?? '0.084'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>

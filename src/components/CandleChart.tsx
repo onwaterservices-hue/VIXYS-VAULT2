@@ -22,6 +22,7 @@ import {
   Flame,
   Volume2,
   VolumeX,
+  WifiOff,
 } from 'lucide-react';
 import { Candle } from '../types';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
@@ -42,6 +43,7 @@ export interface CandleChartProps {
   predictedDirection?: 'YES' | 'NO';
   dataSource?: 'mock' | 'live';
   modelSignal?: ModelSignalInfo;
+  venue?: string;
 }
 
 const THEME = {
@@ -299,6 +301,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   predictedDirection = 'YES',
   dataSource = 'live',
   modelSignal,
+  venue = 'Kalshi',
 }) => {
   const { containerRef, width: measuredWidth } = useContainerWidth();
   const [hoveredSignalIdx, setHoveredSignalIdx] = useState<number | null>(null);
@@ -327,6 +330,25 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const chartSvgWidth = Math.max(280, measuredWidth - sidePanelWidth - gapX - paddingX);
 
   const safeCandles = candles || [];
+
+  if (safeCandles.length === 0) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-full h-[450px] rounded-2xl bg-[#080314] border border-purple-900/60 p-8 flex flex-col items-center justify-center text-center font-mono space-y-3 shadow-2xl relative overflow-hidden my-4"
+      >
+        <div className="absolute inset-0 bg-gradient-to-b from-purple-900/10 via-transparent to-rose-900/10 pointer-events-none" />
+        <WifiOff className="w-12 h-12 text-rose-400 animate-pulse relative z-10" />
+        <span className="text-white font-black text-sm md:text-base tracking-widest uppercase relative z-10">
+          CHART DATA UNAVAILABLE — RECONNECTING...
+        </span>
+        <p className="text-xs text-purple-300/70 max-w-md leading-relaxed relative z-10">
+          Live exchange OHLC market stream is unreachable or re-establishing connection.
+        </p>
+      </div>
+    );
+  }
+
   const rawVisibleCount =
     safeCandles.length > 0 ? Math.max(6, Math.round(safeCandles.length / zoomLevel)) : 0;
 
@@ -378,18 +400,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const zoomIn = useCallback(() => setZoomLevel((z) => Math.min(z * 1.3, 3.5)), []);
   const zoomOut = useCallback(() => setZoomLevel((z) => Math.max(z / 1.3, 0.5)), []);
   const resetZoom = useCallback(() => setZoomLevel(1), []);
-
-  if (!candles || candles.length === 0) {
-    return (
-      <div
-        ref={containerRef}
-        className="h-72 bg-[#0d0a1a] rounded-2xl border border-[#2a2340] flex items-center justify-center text-[#8b84a8] font-mono text-xs"
-      >
-        <Activity className="w-4 h-4 animate-spin mr-2 text-purple-400" />
-        Loading {timeframe} Candlestick Data Feed...
-      </div>
-    );
-  }
 
   const svgHeight = showRSI ? 510 : 410;
   const chartHeight = 270;
@@ -1314,9 +1324,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           LIVE
         </span>
 
-        {/* Kalshi Chip */}
+        {/* Venue Chip */}
         <span className="px-2 py-1 rounded-lg bg-purple-950/80 border border-purple-800/60 text-[10px] font-bold text-purple-300">
-          KALSHI
+          {venue.toUpperCase()}
         </span>
 
         {/* AI Confidence Chip */}

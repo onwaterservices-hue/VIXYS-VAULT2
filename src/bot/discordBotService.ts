@@ -159,7 +159,7 @@ async function handleInteraction(interaction: Interaction) {
     const isBullish = change24h >= 0;
     const direction = isBullish ? 'BUY UP (YES)' : 'BUY DOWN (NO)';
     const confidence = Math.round(75 + Math.abs(change24h) * 2);
-    const edge = (Math.random() * 4 + 6).toFixed(1);
+    const edge = "8.4";
 
     const embed = new EmbedBuilder()
       .setTitle(`⚡ VIXY AI Prediction Signal: ${asset} 15M Contract`)
@@ -234,8 +234,6 @@ export async function initializeDiscordBot(): Promise<boolean> {
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMembers,
       ],
     });
 
@@ -986,7 +984,7 @@ export function setServiceDiscordClient(client: Client) {
 }
 
 // Fetch guild members from Discord server
-export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promise<Array<{ id: string, tag: string, roles: string[], avatar?: string | null }>> {
+export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promise<Array<{ id: string, tag: string, username: string, globalName: string | null, roles: string[], avatar?: string | null }>> {
   const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const botToken = process.env.DISCORD_BOT_TOKEN;
 
@@ -1001,6 +999,8 @@ export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promis
         return Array.from(membersCollection.values()).map(m => ({
           id: m.id,
           tag: m.user.tag,
+          username: m.user.username,
+          globalName: m.user.globalName || null,
           roles: Array.from(m.roles.cache.keys()),
           avatar: m.user.avatarURL() || null
         }));
@@ -1023,11 +1023,17 @@ export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promis
         return membersData.map((m: any) => ({
           id: m.user.id,
           tag: m.user.username + (m.user.discriminator && m.user.discriminator !== '0' ? `#${m.user.discriminator}` : ''),
+          username: m.user.username,
+          globalName: m.user.global_name || null,
           roles: m.roles || [],
           avatar: m.user.avatar ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png` : null
         }));
       } else {
-        console.error('[DiscordBot] Direct REST fetch members failed with status:', res.status);
+        if (res.status === 403) {
+          console.warn('[DiscordBot] Direct REST fetch members failed with 403. The bot likely lacks the GUILD_MEMBERS intent. Returning empty member list.');
+        } else {
+          console.error('[DiscordBot] Direct REST fetch members failed with status:', res.status);
+        }
       }
     } catch (err) {
       console.error('[DiscordBot] Direct REST fetch members exception:', err);

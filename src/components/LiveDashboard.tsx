@@ -110,6 +110,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   // Quantitative Engine Real-Time Telemetry & Lock State
   const [engineState, setEngineState] = useState<string>('MONITORING');
   const [feedStatus, setFeedStatus] = useState<'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED'>('CONNECTED');
+  const [rawApiData, setRawApiData] = useState<any>(null);
   const [lockEvaluation, setLockEvaluation] = useState<{
     qualified: boolean;
     direction: 'UP' | 'DOWN' | 'NEUTRAL';
@@ -145,50 +146,74 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     let isMounted = true;
 
     async function pollLiveSignal() {
+      const startTs = Date.now();
       const data = await fetchLiveSignalData(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
+      const endTs = Date.now();
+      if (isMounted) setLatencyMs(endTs - startTs);
       if (data && isMounted) {
+        setRawApiData(data);
         if (data.engineState) setEngineState(data.engineState);
         if (data.feedStatus) setFeedStatus(data.feedStatus);
         if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
 
         if (data.direction) {
           const isBull = data.direction === 'UP';
-          const kalshiProbPct = Math.round((data.kalshiImpliedProbability || 0.54) * 1000) / 10;
-          const kalshiProbDec = (data.kalshiImpliedProbability || 0.54);
-
-          setSignal((prev) => ({
-            ...prev,
-            timestamp: Date.now(),
-            direction: isBull ? 'YES' : 'NO',
-            confidence: data.confidence || prev.confidence,
-            modelProb: data.modelProbability ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb,
-            marketProb: kalshiProbPct,
-            edgePct: data.edgePct !== undefined ? data.edgePct : prev.edgePct,
-            targetPrice: data.features?.crossVenue?.kalshiStrike || prev.targetPrice,
-          }));
-
-          setVenueOdds((prev) => ({
-            ...prev,
-            kalshiYesPrice: Math.round(kalshiProbDec * 100) / 100,
-            kalshiNoPrice: Math.round((1 - kalshiProbDec) * 100) / 100,
-            polymarketYesPct: Math.round((kalshiProbDec - 0.02) * 1000) / 10,
-            polymarketNoPct: Math.round((1 - (kalshiProbDec - 0.02)) * 1000) / 10,
-            bestEdgeValue: data.edgePct !== undefined ? Math.abs(data.edgePct) : prev.bestEdgeValue,
-          }));
+          const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
+          const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
+          
+          if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
+            setSecondsRemaining15M(data.features.crossVenue.timeRemainingSec);
+          }
+          
+          setSignal((prev) => {
+            const newConfidence = Number.isFinite(data.confidence) ? data.confidence : prev.confidence;
+            const newModelProb = Number.isFinite(data.modelProbability) ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb;
+            const newEdgePct = Number.isFinite(data.edgePct) ? data.edgePct : prev.edgePct;
+            const newTargetPrice = Number.isFinite(data.features?.crossVenue?.kalshiStrike) ? data.features.crossVenue.kalshiStrike : prev.targetPrice;
+            
+            return {
+              ...prev,
+              timestamp: Date.now(),
+              direction: isBull ? 'YES' : 'NO',
+              confidence: newConfidence,
+              modelProb: newModelProb,
+              marketProb: kalshiProbPct,
+              edgePct: newEdgePct,
+              targetPrice: newTargetPrice,
+            };
+          });
+          
+          setVenueOdds((prev) => {
+            const newBestEdge = Number.isFinite(data.edgePct) ? Math.abs(data.edgePct) : prev.bestEdgeValue;
+            return {
+              ...prev,
+              kalshiYesPrice: Math.round(validKalshiProb * 100) / 100,
+              kalshiNoPrice: Math.round((1 - validKalshiProb) * 100) / 100,
+              polymarketYesPct: Math.round((validKalshiProb - 0.02) * 1000) / 10,
+              polymarketNoPct: Math.round((1 - (validKalshiProb - 0.02)) * 1000) / 10,
+              bestEdgeValue: newBestEdge,
+            };
+          });
         }
       }
     }
 
-    pollLiveSignal();
-    const interval = setInterval(pollLiveSignal, 2000);
+    let timeoutId: any;
+    async function loop() {
+      if (!isMounted) return;
+      await pollLiveSignal();
+      if (isMounted) timeoutId = setTimeout(loop, 2000);
+    }
+    loop();
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      clearTimeout(timeoutId);
     };
   }, [selectedAsset, timeframe]);
 
   // Live UTC timestamp for Data Freshness indicator
   const [lastUpdateUtc, setLastUpdateUtc] = useState<string>(() => new Date().toISOString().substring(11, 19) + ' UTC');
+  const [latencyMs, setLatencyMs] = useState<number>(0);
   useEffect(() => {
     const timer = setInterval(() => {
       setLastUpdateUtc(new Date().toISOString().substring(11, 19) + ' UTC');
@@ -294,54 +319,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     }
     return h1Candles.length > 0 ? h1Candles : candles;
   }, [candles, timeframe]);
-  useEffect(() => {
-    if (!autoSyncActive) return;
-
-    // Dynamically adjust model probability, delta, reasoning & key factors in real time as price moves
-    setSignal((prev) => {
-      const priceDelta = ticker.price - prev.currentPrice;
-      const newNetDelta = Math.round(prev.orderFlow.netDelta + priceDelta * 1.8);
-      const newBullPct = Math.min(92, Math.max(25, Math.round(prev.orderFlow.bullVolumePct + priceDelta * 0.08)));
-      const newModelProb = Math.min(95, Math.max(35, Math.round((prev.modelProb + priceDelta * 0.05) * 10) / 10));
-      const newTarget = Math.round(ticker.price + (prev.direction === 'YES' ? 120 : -120));
-      const isBull = prev.direction === 'YES';
-      const edge = Math.round((newModelProb - venueOdds.kalshiYesPrice * 100) * 10) / 10;
-      const ratio = prev.orderFlow.takerBuyRatio.toFixed(2);
-      const formattedDelta = newNetDelta >= 0 ? `+${newNetDelta.toLocaleString()} BTC` : `${newNetDelta.toLocaleString()} BTC`;
-      const supportPrice = Math.round(ticker.price - 80);
-
-      const liveReasoning = `${timeframe} candle opened with elevated taker ${isBull ? 'buy' : 'sell'} volume (${ratio}x ratio) and net delta (${formattedDelta}). Order book depth shows clear ${isBull ? 'bid side absorption' : 'ask pressure'} at $${supportPrice.toLocaleString()}, creating a high probability for close ${isBull ? 'above' : 'below'} $${newTarget.toLocaleString()} target.`;
-
-      const liveKeyFactors = [
-        `Net Taker Delta ${formattedDelta} in last 10m`,
-        `VWAP support holding with high volume confluence`,
-        `Kalshi / Polymarket odds underpricing model by +${edge}%`,
-        `Order book ${isBull ? 'bid depth imbalance +' : 'ask pressure '}${prev.orderFlow.orderBookImbalancePct}%`,
-      ];
-
-      return {
-        ...prev,
-        currentPrice: ticker.price,
-        targetPrice: newTarget,
-        modelProb: newModelProb,
-        edgePct: edge,
-        reasoning: liveReasoning,
-        keyFactors: liveKeyFactors,
-        orderFlow: {
-          ...prev.orderFlow,
-          netDelta: newNetDelta,
-          bullVolumePct: newBullPct,
-          bearVolumePct: 100 - newBullPct,
-        },
-      };
-    });
-  }, [ticker.price, autoSyncActive, timeframe]);
 
   // Ticking Countdown Timers
   useEffect(() => {
     const timer = setInterval(() => {
-      setSecondsRemaining15M((prev) => (prev <= 1 ? 900 : prev - 1));
-      setSecondsRemaining1H((prev) => (prev <= 1 ? 3600 : prev - 1));
+      setSecondsRemaining15M((prev) => Math.max(0, prev - 1));
+      setSecondsRemaining1H((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
@@ -356,48 +339,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     setActiveMarket(marketKey);
     if (marketKey === 'BTC1H') {
       setTimeframe('1H');
-      setSignal((prev) => ({
-        ...prev,
-        id: 'VAULT-1H-BTC-7721',
-        direction: 'YES',
-        targetPrice: Math.round(ticker.price + 480),
-        confidence: 94,
-        modelProb: 71.8,
-        marketProb: 54.5,
-        edgePct: 17.3,
-        tradeGrade: 'A+',
-        reasoning:
-          '1-Hour BTC macro candle displaying strong institutional delta accumulation (+3,850 BTC) above $63,900 VWAP. Orderbook shows massive bid wall at $63,800 with high probability of closing above $64,580 target by top of the hour.',
-        keyFactors: [
-          '1-Hour Net Taker Delta +3,850 BTC',
-          'NY Institutional Session Volume Spike (+42%)',
-          'Clean Reversal Buy Pointer confirmed on 1H kline',
-          'Kalshi 1H contract underpriced at 54.5%',
-        ],
-        orderFlow: {
-          bullVolumePct: 74,
-          bearVolumePct: 26,
-          netDelta: 3850,
-          takerBuyRatio: 1.68,
-          orderBookImbalancePct: 24.2,
-          bidDepthUSD: 28400000,
-          askDepthUSD: 12100000,
-          bookPressureScore: 94,
-        },
-      }));
     } else if (marketKey === 'BTC15M') {
       setTimeframe('15M');
-      setSignal((prev) => ({
-        ...prev,
-        id: 'VAULT-SIG-9843',
-        direction: 'YES',
-        targetPrice: Math.round(ticker.price + 120),
-        confidence: 91,
-        modelProb: 64.2,
-        marketProb: 52.0,
-        edgePct: 12.2,
-        tradeGrade: 'A+',
-      }));
     }
   };
 
@@ -546,6 +489,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               timeString={timeString}
               timeframe={timeframe}
               lockEvaluation={lockEvaluation}
+              feedStatus={feedStatus}
+              latencyMs={latencyMs}
+              venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
             />
           </div>
 
@@ -614,6 +560,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 handleMarketChange(tf === '1H' ? 'BTC1H' : 'BTC15M');
               }}
               predictedDirection={signal.direction}
+              venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
             />
             <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="BTC 15M • AI NEURAL RIBBON & ORDER FLOW" />
           </div>
