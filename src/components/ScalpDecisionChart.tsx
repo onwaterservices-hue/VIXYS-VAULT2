@@ -41,6 +41,29 @@ interface Candle {
   takerBuyRatio: number; // 0 to 1
 }
 
+const createRealisticCandles = (basePrice: number, count = 30): Candle[] => {
+  const result: Candle[] = [];
+  const now = Date.now();
+  const candleInterval = 5000;
+  let runningPrice = basePrice - 18.5;
+
+  for (let i = count - 1; i >= 0; i--) {
+    const time = now - i * candleInterval;
+    const isUp = Math.random() > 0.42;
+    const delta = (Math.random() * 8 + 1.5) * (isUp ? 1 : -1);
+    const open = runningPrice;
+    const close = i === 0 ? basePrice : open + delta;
+    const high = Math.max(open, close) + Math.random() * 4 + 1;
+    const low = Math.min(open, close) - (Math.random() * 4 + 1);
+    const volume = Math.round(12 + Math.random() * 68);
+    const takerBuyRatio = isUp ? 0.52 + Math.random() * 0.35 : 0.15 + Math.random() * 0.35;
+
+    result.push({ time, open, high, low, close, volume, takerBuyRatio });
+    runningPrice = close;
+  }
+  return result;
+};
+
 export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   asset = 'BTC',
   desk = '15s',
@@ -49,9 +72,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-// Data & Signals
-  const [candles, setCandles] = useState<Candle[]>([]);
+  // Data & Signals - Seed initial 30 candles so canvas is IMMEDIATELY full of vibrant charts
   const [currentPrice, setCurrentPrice] = useState<number>(64160.5);
+  const [candles, setCandles] = useState<Candle[]>(() => createRealisticCandles(64160.5, 30));
   const [wsStatus, setWsStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'OFFLINE'>('CONNECTED');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
 
@@ -139,7 +162,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         setCurrentPrice(p);
         setStrikePrice(Math.round((p - 10) * 10) / 10);
 
-        setCandles([{ time: Date.now(), open: p, high: p, low: p, close: p, volume: 0, takerBuyRatio: 0.5 }]);
+        setCandles(createRealisticCandles(p, 30));
       })
       .catch(() => {
         if (!isCancelled) {
@@ -178,7 +201,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
             // Append or update current 5-second candle
             setCandles((prev) => {
-              if (prev.length === 0) return prev;
+              if (prev.length === 0) return createRealisticCandles(p, 30);
               const last = { ...prev[prev.length - 1] };
               const now = Date.now();
 
@@ -348,12 +371,23 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const width = (canvas.width = containerRef.current?.clientWidth || canvas.parentElement?.clientWidth || 600);
         const height = (canvas.height = containerRef.current?.clientHeight || canvas.parentElement?.clientHeight || 380);
 
-        // Clear Canvas Background
+        // Clear Canvas Background & Draw Radial Ambient Aura Glow
         ctx.fillStyle = '#060312';
         ctx.fillRect(0, 0, width, height);
 
+        // Ambient Nebula Radial Glow behind price action
+        const auraGrad = ctx.createRadialGradient(
+          width * 0.6, height * 0.4, 10,
+          width * 0.6, height * 0.4, width * 0.5
+        );
+        auraGrad.addColorStop(0, 'rgba(147, 51, 234, 0.12)');
+        auraGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.06)');
+        auraGrad.addColorStop(1, 'rgba(6, 3, 18, 0)');
+        ctx.fillStyle = auraGrad;
+        ctx.fillRect(0, 0, width, height);
+
         // Grid Lines
-        ctx.strokeStyle = 'rgba(147, 51, 234, 0.08)';
+        ctx.strokeStyle = 'rgba(147, 51, 234, 0.12)';
         ctx.lineWidth = 1;
         const gridRows = 6;
         for (let i = 1; i < gridRows; i++) {
@@ -467,9 +501,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const lastCandle = validCandles[validCandles.length - 1];
       const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
       const lastY = getY(lastCandle.close);
-      const coneWidth = 60;
-      const upperY = getY(lastCandle.close + (upProbability / 100) * 18);
-      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * 18);
+      const coneWidth = 75;
+      const upperY = getY(lastCandle.close + (upProbability / 100) * 22);
+      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * 22);
+      const midY = (upperY + lowerY) / 2;
 
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
@@ -479,26 +514,65 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
       const coneGrad = ctx.createLinearGradient(lastX, 0, lastX + coneWidth, 0);
       if (upProbability >= 50) {
-        coneGrad.addColorStop(0, 'rgba(52, 211, 153, 0.25)');
-        coneGrad.addColorStop(1, 'rgba(52, 211, 153, 0.02)');
+        coneGrad.addColorStop(0, 'rgba(52, 211, 153, 0.35)');
+        coneGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.20)');
+        coneGrad.addColorStop(1, 'rgba(168, 85, 247, 0.03)');
       } else {
-        coneGrad.addColorStop(0, 'rgba(248, 113, 113, 0.25)');
-        coneGrad.addColorStop(1, 'rgba(248, 113, 113, 0.02)');
+        coneGrad.addColorStop(0, 'rgba(248, 113, 113, 0.35)');
+        coneGrad.addColorStop(0.5, 'rgba(251, 191, 36, 0.20)');
+        coneGrad.addColorStop(1, 'rgba(244, 63, 94, 0.03)');
       }
       ctx.fillStyle = coneGrad;
       ctx.fill();
 
-      // Cone boundary dashed lines
+      // Cone boundary dashed lines & central trajectory
       ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = upProbability >= 50 ? 'rgba(52, 211, 153, 0.6)' : 'rgba(248, 113, 113, 0.6)';
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = upProbability >= 50 ? 'rgba(52, 211, 153, 0.75)' : 'rgba(248, 113, 113, 0.75)';
+      ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
       ctx.lineTo(lastX + coneWidth, upperY);
       ctx.moveTo(lastX, lastY);
       ctx.lineTo(lastX + coneWidth, lowerY);
       ctx.stroke();
+
+      // Central projected trajectory vector
+      ctx.strokeStyle = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.lineWidth = 2;
+      ctx.shadowColor = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.moveTo(lastX, lastY);
+      ctx.lineTo(lastX + coneWidth, midY);
+      ctx.stroke();
+      ctx.shadowBlur = 0;
       ctx.setLineDash([]); // reset
+
+      // Projected Target Node & Tag
+      ctx.fillStyle = upProbability >= 50 ? '#064e3b' : '#7f1d1d';
+      ctx.strokeStyle = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.lineWidth = 1;
+      drawPillPath(lastX + coneWidth - 5, midY - 10, 52, 18, 4);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.font = 'bold 9px Orbitron, JetBrains Mono, monospace';
+      ctx.fillText(`${upProbability}% CONE`, lastX + coneWidth - 1, midY + 3);
+
+      // Live Spot Price Pulsing Outer Aura Node
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 8, 0, Math.PI * 2);
+      ctx.fillStyle = upProbability >= 50 ? 'rgba(52, 211, 153, 0.3)' : 'rgba(248, 113, 113, 0.3)';
+      ctx.fill();
+
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.shadowBlur = 12;
+      ctx.fill();
+      ctx.shadowBlur = 0;
 
       // 3. Render Volume Bars at Bottom
       const maxVol = Math.max(...validCandles.map((c) => c.volume)) || 1;

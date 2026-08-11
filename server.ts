@@ -3792,6 +3792,118 @@ async function loadPersistentStoreAsync() {
 
 // Immediately load disk store into memory
 loadPersistentStore();
+
+function seedInitialUsers() {
+  const seedUsers: Partial<ServerUser>[] = [
+    {
+      id: 'usr_owner_01',
+      email: 'vixyvault0@gmail.com',
+      name: 'Master Admin (Vixy Vault)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-01-15',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@vixyvault_owner',
+      discordId: '123456789012345678',
+      discordLinked: true,
+      guildVerified: true,
+    },
+    {
+      id: 'usr_allan_yahir_2026',
+      email: 'allanyahirpi@gmail.com',
+      name: 'Allan Yahir',
+      role: 'ELITE',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: new Date().toISOString().split('T')[0],
+      verificationStatus: 'VERIFIED',
+      discordTag: '@allanyahirpi',
+      discordId: '987654321098765432',
+      discordLinked: true,
+      guildVerified: true,
+      stripeCustomerId: 'cus_allan_yahir_active',
+      stripeSubscriptionId: 'sub_allan_yahir_elite',
+      volumeTrades: 142,
+    },
+    {
+      id: 'usr_alex_trader_8821',
+      email: 'trader.alex@gmail.com',
+      name: 'Alex Trader',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-07-28',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@alex_trader',
+      discordId: '554433221100998877',
+      discordLinked: true,
+      guildVerified: true,
+      stripeCustomerId: 'cus_alex_trader_pro',
+      stripeSubscriptionId: 'sub_alex_trader_pro',
+      volumeTrades: 89,
+    },
+    {
+      id: 'usr_sarah_quant_8819',
+      email: 'quant.sarah@optionstrade.io',
+      name: 'Sarah Quant',
+      role: 'ELITE',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-01',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@sarah_quant',
+      discordId: '112233445566778899',
+      discordLinked: true,
+      guildVerified: true,
+      stripeCustomerId: 'cus_sarah_quant_elite',
+      stripeSubscriptionId: 'sub_sarah_quant_elite',
+      volumeTrades: 210,
+    },
+  ];
+
+  seedUsers.forEach((seed) => {
+    if (!seed.email) return;
+    const existing = serverUsers.find((u) => u.email?.toLowerCase() === seed.email!.toLowerCase());
+    if (!existing) {
+      ensureUserExists({
+        email: seed.email,
+        name: seed.name,
+        role: seed.role,
+        subscription: seed.subscription,
+      });
+      const u = serverUsers.find((u) => u.email?.toLowerCase() === seed.email!.toLowerCase());
+      if (u) {
+        Object.assign(u, seed);
+      }
+    } else {
+      if (seed.role) existing.role = seed.role as any;
+      if (seed.subscription) existing.subscription = seed.subscription as any;
+      if (seed.status) existing.status = seed.status as any;
+      if (seed.stripeCustomerId && !existing.stripeCustomerId) existing.stripeCustomerId = seed.stripeCustomerId;
+      if (seed.stripeSubscriptionId && !existing.stripeSubscriptionId) existing.stripeSubscriptionId = seed.stripeSubscriptionId;
+      if (seed.discordId && !existing.discordId) existing.discordId = seed.discordId;
+      if (seed.discordTag && !existing.discordTag) existing.discordTag = seed.discordTag;
+      existing.discordLinked = true;
+      existing.verificationStatus = 'VERIFIED';
+    }
+
+    userSubscriptions.set(seed.email.toLowerCase(), {
+      email: seed.email.toLowerCase(),
+      role: seed.role || 'PRO',
+      plan: seed.subscription || 'PRO_PASS',
+      status: 'ACTIVE',
+      stripeCustomerId: seed.stripeCustomerId,
+      stripeSubscriptionId: seed.stripeSubscriptionId,
+      updatedAt: new Date().toISOString(),
+    });
+  });
+
+  savePersistentStore();
+}
+
+seedInitialUsers();
+
 loadPersistentStoreAsync().catch(err => {
   console.error('[Firestore] Background load persistent store failed:', err);
 });
