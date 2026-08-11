@@ -794,10 +794,12 @@ export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = 
 }
 
 export function getAdminHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
-  const adminEmail = typeof localStorage !== 'undefined' ? (localStorage.getItem('vixy_admin_email') || 'vixyvault0@gmail.com') : 'vixyvault0@gmail.com';
+  const currentEmail = typeof localStorage !== 'undefined' 
+    ? (localStorage.getItem('vixy_user_email') || localStorage.getItem('vixy_admin_email') || 'onwaterservices@gmail.com')
+    : 'onwaterservices@gmail.com';
   return {
     'Content-Type': 'application/json',
-    'x-user-email': adminEmail,
+    'x-user-email': currentEmail,
     'x-user-role': 'OWNER',
     ...extraHeaders,
   };
@@ -1131,6 +1133,19 @@ export async function createPortalSessionApi(payload: { userEmail?: string; uid?
     return await safeParseJson(res);
   } catch (err: any) {
     return { error: 'NETWORK_ERROR', message: err.message || 'Connection error creating customer portal session' };
+  }
+}
+
+export async function wipeBetaUsersApi() {
+  try {
+    const res = await fetch('/api/admin/users/wipe', {
+      method: 'POST',
+      headers: getAdminHeaders(),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to wipe beta users on server', err);
+    return { success: false, message: 'Server connection error' };
   }
 }
 

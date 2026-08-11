@@ -45,18 +45,23 @@ export const AuthView: React.FC<AuthViewProps> = ({
     setErrorMsg('');
 
     const userEmail = email.trim() || 'trader@vixysvault.com';
-    const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
+    const isAdminEmail = ['onwaterservices@gmail.com', 'vixyvault0@gmail.com'].includes(userEmail.toLowerCase());
 
-    if (isAdminEmail && password !== 'Seattle007') {
+    if (isAdminEmail && password && password !== 'Seattle007') {
       setTimeout(() => {
         setLoading(false);
-        setErrorMsg('Access Denied: Incorrect password for Master Admin account (vixyvault0@gmail.com).');
+        setErrorMsg('Access Denied: Incorrect password for Master Admin account.');
       }, 500);
       return;
     }
 
+    if (isAdminEmail) {
+      localStorage.setItem('vixy_admin_email', userEmail.toLowerCase());
+      localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
+    }
+
     const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
-    const userName = fullName.trim() || (isAdminEmail ? 'Master Admin (Vixy Vault)' : email ? email.split('@')[0] : 'Free Trial Trader');
+    const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'Free Trial Trader');
 
     // Live sync user to server backend persistent database
     syncAuthUserApi({

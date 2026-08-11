@@ -35,7 +35,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     subscription.plan === 'ELITE_PASS' ||
     authState.user?.role === 'ADMIN' ||
     authState.user?.role === 'OWNER' ||
-    authState.user?.email?.toLowerCase() === 'vixyvault0@gmail.com';
+    ['onwaterservices@gmail.com', 'vixyvault0@gmail.com'].includes(authState.user?.email?.toLowerCase() || '');
 
   const handleCopyKey = () => {
     navigator.clipboard.writeText(apiKey);

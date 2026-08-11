@@ -72,6 +72,7 @@ import {
   fetchDiscordHealthApi,
   fetchStripeHealthApi,
   resyncEntitlementApi,
+  wipeBetaUsersApi,
   AdminDiagnosticsResponse,
 } from '../services/api';
 
@@ -574,6 +575,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     }
   };
 
+  // Wipe Old/Beta Test Users
+  const [isWipingUsers, setIsWipingUsers] = useState(false);
+  const handleWipeBetaUsers = async () => {
+    if (!window.confirm('Wipe all old/beta users? This will clear out non-Master-Admin test accounts so new users can create clean accounts.')) return;
+    setIsWipingUsers(true);
+    const res = await wipeBetaUsersApi();
+    setIsWipingUsers(false);
+    if (res?.success) {
+      setActionSuccessMsg(res.message || 'Wiped old/beta users successfully!');
+      loadAdminData();
+    } else {
+      setGlobalError(res?.message || 'Failed to wipe beta users');
+    }
+  };
+
   // Compute Real Overview Metrics from Backend State
   const paidUsersCount = useMemo(() => {
     return users.filter((u) => u.subscription === 'PRO_PASS' || u.subscription === 'ELITE_PASS' || u.role === 'PRO' || u.role === 'ELITE').length;
@@ -966,6 +982,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleWipeBetaUsers}
+                  disabled={isWipingUsers}
+                  className="px-3.5 py-2 rounded-xl bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/30 text-xs font-bold transition flex items-center space-x-2 disabled:opacity-50"
+                  title="Wipe old test accounts so only Master Admin remains"
+                >
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span>{isWipingUsers ? 'Wiping Users...' : 'Wipe Beta Users'}</span>
+                </button>
                 <button
                   onClick={() => setIsAddUserOpen(true)}
                   className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center space-x-2 shadow-lg shadow-purple-950/50"

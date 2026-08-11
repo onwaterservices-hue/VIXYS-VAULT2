@@ -103,6 +103,18 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
+// Master Admin Email Helper
+function isMasterAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = String(email).trim().toLowerCase();
+  const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'vixyvault0@gmail.com').toLowerCase();
+  return (
+    clean === 'onwaterservices@gmail.com' ||
+    clean === 'vixyvault0@gmail.com' ||
+    clean === configuredAdminEmail
+  );
+}
+
 // Role Enforcement & Authorization Middleware
 const requireRole = (allowedRoles: string[]) => {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -114,13 +126,11 @@ const requireRole = (allowedRoles: string[]) => {
       ''
     ).toLowerCase();
 
-    const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'vixyvault0@gmail.com').toLowerCase();
     const configuredAdminId = (process.env.ADMIN_USER_ID || '').toLowerCase();
 
     // 1. Admin Email / ID override check
     if (
-      userEmail === configuredAdminEmail ||
-      userEmail === 'vixyvault0@gmail.com' ||
+      isMasterAdminEmail(userEmail) ||
       (configuredAdminId && (userEmail === configuredAdminId || req.headers['x-user-id'] === configuredAdminId))
     ) {
       return next();
@@ -754,6 +764,52 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
     success: true,
     user: newUser,
     message: `Account for ${cleanEmail} created successfully with assigned password and ${verificationStatus} badge.`,
+  });
+});
+
+// WIPE BETA / OLD NON-ADMIN USERS
+app.post('/api/admin/users/wipe', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const initialCount = serverUsers.length;
+  
+  // Filter serverUsers to keep only master admins
+  const adminUsers = serverUsers.filter((u) => {
+    return isMasterAdminEmail(u.email);
+  });
+
+  serverUsers.length = 0;
+  serverUsers.push(...adminUsers);
+
+  // Clean userSubscriptions
+  const subKeysToDelete: string[] = [];
+  userSubscriptions.forEach((_, email) => {
+    if (!isMasterAdminEmail(email)) {
+      subKeysToDelete.push(email);
+    }
+  });
+  subKeysToDelete.forEach((k) => userSubscriptions.delete(k));
+
+  // Clean userDiscordProfiles
+  const profileKeysToDelete: string[] = [];
+  userDiscordProfiles.forEach((prof, email) => {
+    if (email !== 'global_active_user' && !isMasterAdminEmail(email) && !isMasterAdminEmail(prof.email)) {
+      profileKeysToDelete.push(email);
+    }
+  });
+  profileKeysToDelete.forEach((k) => userDiscordProfiles.delete(k));
+
+  // Ensure Master Admins are guaranteed present and elevated
+  ensureUserExists({ email: 'onwaterservices@gmail.com', role: 'OWNER', subscription: 'ELITE_PASS', name: 'Master Admin (onwaterservices)' });
+  ensureUserExists({ email: 'vixyvault0@gmail.com', role: 'OWNER', subscription: 'ELITE_PASS', name: 'Master Admin (Vixy Vault)' });
+
+  savePersistentStore();
+
+  const removedCount = Math.max(0, initialCount - serverUsers.length);
+
+  res.json({
+    success: true,
+    removedCount,
+    remainingUsers: serverUsers,
+    message: `Successfully wiped ${removedCount} beta/test users. Only Master Admin accounts remain.`,
   });
 });
 
@@ -1779,6 +1835,14 @@ interface UserSubscriptionRecord {
 // In-Memory Database for Subscriptions & Idempotency Store
 const processedWebhookEvents = new Set<string>();
 const userSubscriptions = new Map<string, UserSubscriptionRecord>();
+
+userSubscriptions.set('onwaterservices@gmail.com', {
+  email: 'onwaterservices@gmail.com',
+  role: 'OWNER',
+  plan: 'ELITE_PASS',
+  status: 'ACTIVE',
+  updatedAt: new Date().toISOString(),
+});
 
 userSubscriptions.set('vixyvault0@gmail.com', {
   email: 'vixyvault0@gmail.com',
@@ -3724,8 +3788,8 @@ function ensureUserExists(
   if (!user) {
     created = true;
     const sub = cleanEmail ? userSubscriptions.get(cleanEmail) : undefined;
-    const defaultRole = cleanEmail === 'vixyvault0@gmail.com' ? 'OWNER' : ((roleOpt || sub?.role || 'FREE') as any);
-    const defaultSub = cleanEmail === 'vixyvault0@gmail.com' ? 'ELITE_PASS' : ((subOpt || sub?.plan || 'FREE_TRIAL') as any);
+    const defaultRole = isMasterAdminEmail(cleanEmail) ? 'OWNER' : ((roleOpt || sub?.role || 'FREE') as any);
+    const defaultSub = isMasterAdminEmail(cleanEmail) ? 'ELITE_PASS' : ((subOpt || sub?.plan || 'FREE_TRIAL') as any);
     const primaryId = cleanUid || `usr_${Date.now().toString().slice(-4)}_${Math.random().toString(36).slice(2, 5)}`;
 
     user = {
@@ -3762,6 +3826,13 @@ function ensureUserExists(
   } else {
     // Preserve existing account data! Never overwrite subscription, Stripe, Discord, trial state, or referral info
     let updated = false;
+
+    if (isMasterAdminEmail(cleanEmail)) {
+      user.role = 'OWNER';
+      user.subscription = 'ELITE_PASS';
+      user.status = 'ACTIVE';
+      updated = true;
+    }
 
     if (cleanUid && !user.uid) {
       user.uid = cleanUid;
@@ -3905,6 +3976,19 @@ loadPersistentStore();
 
 function seedInitialUsers() {
   const seedUsers: Partial<ServerUser>[] = [
+    {
+      id: 'usr_owner_00',
+      email: 'onwaterservices@gmail.com',
+      name: 'Master Admin (onwaterservices)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-01-01',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@onwaterservices',
+      discordLinked: true,
+      guildVerified: true,
+    },
     {
       id: 'usr_owner_01',
       email: 'vixyvault0@gmail.com',
