@@ -30,7 +30,7 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   // Live spot and reference strike math
   const currentPrice = ticker.price || signal.currentPrice || 64108;
   const isUp = signal.direction === 'YES';
-  const targetPrice = signal.targetPrice || (isUp ? Math.round(currentPrice + 120) : Math.round(currentPrice - 120));
+  const targetPrice = Math.round(signal.targetPrice || (isUp ? currentPrice + 120 : currentPrice - 120));
   
   const spotVsStrikeDelta = currentPrice - targetPrice;
   const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;

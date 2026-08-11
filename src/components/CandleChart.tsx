@@ -784,7 +784,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                   fontWeight="900"
                   className="font-mono tracking-wider"
                 >
-                  TARGET ${activeSignal.targetPrice.toFixed(0)}
+                  TARGET ${Math.round(activeSignal.targetPrice).toLocaleString()}
                 </text>
                 <text
                   x={marginLeft + plotWidth + 10}

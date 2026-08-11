@@ -231,7 +231,7 @@ export const CompactSignalChart: React.FC<CompactSignalChartProps> = ({
         {targetPrice && (
           <div
             onMouseEnter={() =>
-              setActiveTooltip(`Target $${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}: Model target price based on delta accumulation`)
+              setActiveTooltip(`Target $${Math.round(targetPrice).toLocaleString()}: Model target price based on delta accumulation`)
             }
             onMouseLeave={() => setActiveTooltip(null)}
             className="px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-300 border border-amber-500/30 text-[10px] font-bold cursor-pointer hover:bg-amber-500/25 transition-all"

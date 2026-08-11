@@ -33,7 +33,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const currentConfidence = rawApiData?.confidence || signal.confidence || 72;
   const currentDirection = rawApiData?.direction || signal.direction || 'NO';
   const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker.price || 64036.72;
-  const targetPrice = rawApiData?.features?.crossVenue?.kalshiStrike || signal.targetPrice || 64160;
+  const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal.targetPrice || 64160);
 
   const isBullish = currentDirection === 'UP' || currentDirection === 'YES';
   const displayConfidence = Math.round(currentConfidence);
@@ -274,8 +274,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             accent="purple"
             title="TARGET STRIKE"
             titleRight="STRIKE PRICE"
-            heroValue={`$${targetPrice ? Math.round(targetPrice).toLocaleString() : '64,160'}`}
-            actionPill={isBullish ? `MUST EXPIRE ABOVE $${targetPrice?.toLocaleString()}` : `MUST EXPIRE BELOW $${targetPrice?.toLocaleString()}`}
+            heroValue={`$${targetPrice ? targetPrice.toLocaleString() : '64,160'}`}
+            actionPill={isBullish ? `MUST EXPIRE ABOVE $${targetPrice ? targetPrice.toLocaleString() : '64,160'}` : `MUST EXPIRE BELOW $${targetPrice ? targetPrice.toLocaleString() : '64,160'}`}
             footerLeft={<>LIVE SPOT: <strong className="text-purple-200">${currentPrice?.toLocaleString()}</strong></>}
             footerRight={`${displayVenue} ${timeframe}`}
           />
