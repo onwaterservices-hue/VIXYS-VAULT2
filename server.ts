@@ -1167,6 +1167,116 @@ app.post('/api/admin/users/role', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   });
 });
 
+// FULL COMPREHENSIVE ADMIN USER EDIT ENDPOINT
+app.post('/api/admin/users/update', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const {
+    userId,
+    name,
+    email,
+    role,
+    subscription,
+    status,
+    password,
+    discordTag,
+    discordGlobalName,
+    discordId,
+    verificationStatus,
+    stripeCustomerId,
+    stripeSubscriptionId,
+  } = req.body || {};
+
+  if (!userId) {
+    return res.status(400).json({ error: 'USER_ID_REQUIRED', message: 'userId is required for editing' });
+  }
+
+  const user = serverUsers.find((u) => u.id === userId || u.email?.toLowerCase() === String(userId).toLowerCase());
+  if (!user) {
+    return res.status(404).json({ error: 'USER_NOT_FOUND', message: `User ${userId} not found` });
+  }
+
+  const prevEmail = user.email;
+
+  if (name !== undefined) user.name = String(name).trim();
+  if (email !== undefined && String(email).trim()) user.email = String(email).trim().toLowerCase();
+  if (role !== undefined) user.role = role;
+  if (subscription !== undefined) user.subscription = subscription;
+  if (status !== undefined) user.status = status;
+  if (password !== undefined && String(password).trim()) user.passwordHash = String(password);
+  if (discordTag !== undefined) user.discordTag = String(discordTag).trim();
+  if (discordGlobalName !== undefined) (user as any).discordGlobalName = String(discordGlobalName).trim();
+  if (discordId !== undefined) user.discordId = String(discordId).trim();
+  if (verificationStatus !== undefined) user.verificationStatus = verificationStatus;
+  if (stripeCustomerId !== undefined) user.stripeCustomerId = String(stripeCustomerId).trim();
+  if (stripeSubscriptionId !== undefined) user.stripeSubscriptionId = String(stripeSubscriptionId).trim();
+
+  if (user.discordId || user.discordTag) {
+    user.discordLinked = true;
+  }
+
+  // Update userSubscriptions Map
+  const activeEmail = user.email || prevEmail;
+  if (activeEmail) {
+    const subRecord = userSubscriptions.get(activeEmail.toLowerCase()) || {
+      email: activeEmail.toLowerCase(),
+      role: user.role,
+      plan: user.subscription,
+      status: user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE',
+      updatedAt: new Date().toISOString(),
+    };
+    subRecord.role = user.role;
+    subRecord.plan = user.subscription;
+    subRecord.status = user.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE';
+    if (user.stripeCustomerId) subRecord.stripeCustomerId = user.stripeCustomerId;
+    if (user.stripeSubscriptionId) subRecord.stripeSubscriptionId = user.stripeSubscriptionId;
+    subRecord.updatedAt = new Date().toISOString();
+    userSubscriptions.set(activeEmail.toLowerCase(), subRecord);
+  }
+
+  // Update userDiscordProfiles Map
+  if (activeEmail) {
+    const rawStatus = String(user.verificationStatus || '');
+    const validVerificationStatus: 'VERIFIED' | 'NEEDS_GUILD' | 'UNLINKED' =
+      rawStatus === 'VERIFIED'
+        ? 'VERIFIED'
+        : rawStatus === 'NEEDS_GUILD'
+        ? 'NEEDS_GUILD'
+        : 'UNLINKED';
+
+    const discordProfile: any = userDiscordProfiles.get(activeEmail.toLowerCase()) || {
+      email: activeEmail.toLowerCase(),
+      discordUserId: user.discordId || '315284910382911234',
+      discordUsername: user.discordTag || 'discord_user',
+      discordGlobalName: (user as any).discordGlobalName || user.name,
+      discordAvatar: null,
+      discordLinked: Boolean(user.discordId || user.discordTag),
+      guildMember: user.verificationStatus === 'VERIFIED',
+      guildJoined: user.verificationStatus === 'VERIFIED',
+      guildRoles: [user.subscription || 'PRO'],
+      lastSync: new Date().toLocaleTimeString(),
+      subscriptionTier: user.subscription || 'PRO',
+      verificationStatus: validVerificationStatus,
+      connectedAt: new Date().toISOString(),
+      linkedAt: new Date().toISOString(),
+      roleAssigned: user.subscription || 'PRO',
+    };
+    if (user.discordId) discordProfile.discordUserId = user.discordId;
+    if (user.discordTag) discordProfile.discordUsername = user.discordTag;
+    if ((user as any).discordGlobalName) discordProfile.discordGlobalName = (user as any).discordGlobalName;
+    discordProfile.verificationStatus = validVerificationStatus;
+    discordProfile.guildMember = user.verificationStatus === 'VERIFIED';
+    userDiscordProfiles.set(activeEmail.toLowerCase(), discordProfile as any);
+  }
+
+  savePersistentStore();
+  addServerAuditLog('ADMIN', 'USER_RECORD_EDITED', `Admin updated full user record for ${user.email} (${user.id})`);
+
+  res.json({
+    success: true,
+    user,
+    message: `User record for ${user.email} successfully updated.`,
+  });
+});
+
 app.get('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
   res.json(serverAuditLogs);
 });
@@ -3812,14 +3922,15 @@ function seedInitialUsers() {
     {
       id: 'usr_allan_yahir_2026',
       email: 'allanyahirpi@gmail.com',
-      name: 'Allan Yahir',
+      name: 'allan305 (Allan Yahir)',
       role: 'ELITE',
       subscription: 'ELITE_PASS',
       status: 'ACTIVE',
-      joined: new Date().toISOString().split('T')[0],
+      joined: '2017-05-20',
       verificationStatus: 'VERIFIED',
-      discordTag: '@allanyahirpi',
-      discordId: '987654321098765432',
+      discordTag: 'allan048135',
+      discordGlobalName: 'allan305',
+      discordId: '315284910382911234',
       discordLinked: true,
       guildVerified: true,
       stripeCustomerId: 'cus_allan_yahir_active',
@@ -3877,13 +3988,15 @@ function seedInitialUsers() {
         Object.assign(u, seed);
       }
     } else {
+      if (seed.name) existing.name = seed.name;
       if (seed.role) existing.role = seed.role as any;
       if (seed.subscription) existing.subscription = seed.subscription as any;
       if (seed.status) existing.status = seed.status as any;
-      if (seed.stripeCustomerId && !existing.stripeCustomerId) existing.stripeCustomerId = seed.stripeCustomerId;
-      if (seed.stripeSubscriptionId && !existing.stripeSubscriptionId) existing.stripeSubscriptionId = seed.stripeSubscriptionId;
-      if (seed.discordId && !existing.discordId) existing.discordId = seed.discordId;
-      if (seed.discordTag && !existing.discordTag) existing.discordTag = seed.discordTag;
+      if (seed.stripeCustomerId) existing.stripeCustomerId = seed.stripeCustomerId;
+      if (seed.stripeSubscriptionId) existing.stripeSubscriptionId = seed.stripeSubscriptionId;
+      if (seed.discordId) existing.discordId = seed.discordId;
+      if (seed.discordTag) existing.discordTag = seed.discordTag;
+      if (seed.discordGlobalName) (existing as any).discordGlobalName = seed.discordGlobalName;
       existing.discordLinked = true;
       existing.verificationStatus = 'VERIFIED';
     }
@@ -3897,6 +4010,26 @@ function seedInitialUsers() {
       stripeSubscriptionId: seed.stripeSubscriptionId,
       updatedAt: new Date().toISOString(),
     });
+
+    if (seed.email.toLowerCase() === 'allanyahirpi@gmail.com') {
+      userDiscordProfiles.set('allanyahirpi@gmail.com', {
+        email: 'allanyahirpi@gmail.com',
+        discordUserId: '315284910382911234',
+        discordUsername: 'allan048135',
+        discordGlobalName: 'allan305',
+        discordAvatar: null,
+        discordLinked: true,
+        guildMember: true,
+        guildJoined: true,
+        guildRoles: ['ELITE', 'MEMBER'],
+        lastSync: new Date().toLocaleTimeString(),
+        subscriptionTier: 'ELITE',
+        verificationStatus: 'VERIFIED',
+        connectedAt: '2017-05-20T00:00:00.000Z',
+        linkedAt: new Date().toISOString(),
+        roleAssigned: 'ELITE',
+      });
+    }
   });
 
   savePersistentStore();

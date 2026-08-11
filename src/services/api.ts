@@ -1017,6 +1017,20 @@ export async function performUserAction(userId: string, action: string, extraPay
   }
 }
 
+export async function updateAdminUserRecord(userPayload: Record<string, any>) {
+  try {
+    const res = await fetch('/api/admin/users/update', {
+      method: 'POST',
+      headers: getAdminHeaders(),
+      body: JSON.stringify(userPayload),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to update admin user record', err);
+    return { success: false, message: 'Server connection error' };
+  }
+}
+
 export async function fetchAdminAuditLogs() {
   return await safeFetchJson<any[]>(`/api/admin/audit-logs?_t=${Date.now()}`, {
     cache: 'no-store',

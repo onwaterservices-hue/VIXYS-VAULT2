@@ -99,8 +99,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   const [secondsRemaining15M, setSecondsRemaining15M] = useState<number>(542);
   const [secondsRemaining1H, setSecondsRemaining1H] = useState<number>(2054);
 
-  // Access Unlock Logic: Admin, Pro, or Discord-linked users automatically unlock
-  const isAccessUnlocked = userRole === 'ADMIN' || userRole === 'PRO' || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
+  // Access Unlock Logic: Admin or Discord-linked + Guild member users automatically unlock
+  const isDiscordVerified = Boolean(alertSettings?.discordLinked) && Boolean(alertSettings?.guildMember);
+  const isAccessUnlocked = userRole === 'ADMIN' || isDiscordVerified;
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);
   const [isBailedOut, setIsBailedOut] = useState<boolean>(false);
 

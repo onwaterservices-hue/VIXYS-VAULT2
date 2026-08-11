@@ -65,6 +65,7 @@ import {
   fetchAdminStats,
   fetchAdminTransactions,
   performUserAction,
+  updateAdminUserRecord,
   fetchAdminAuditLogs,
   fetchSystemHealth,
   fetchAdminEventsApi,
@@ -211,6 +212,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   // Selected User Modal / Detail Drawer (User Inspector)
   const [inspectorUser, setInspectorUser] = useState<UserItem | null>(null);
   const [userEvents, setUserEvents] = useState<any[] | null>(null);
+
+  // Edit User Modal State
+  const [editingUser, setEditingUser] = useState<UserItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editRole, setEditRole] = useState('USER');
+  const [editTier, setEditTier] = useState('PRO_PASS');
+  const [editStatus, setEditStatus] = useState('ACTIVE');
+  const [editDiscordTag, setEditDiscordTag] = useState('');
+  const [editDiscordGlobalName, setEditDiscordGlobalName] = useState('');
+  const [editDiscordId, setEditDiscordId] = useState('');
+  const [editVerificationStatus, setEditVerificationStatus] = useState('VERIFIED');
+  const [editStripeCustomerId, setEditStripeCustomerId] = useState('');
+  const [editStripeSubscriptionId, setEditStripeSubscriptionId] = useState('');
+
+  const openEditUserModal = (user: UserItem) => {
+    setEditingUser(user);
+    setEditName(user.name || '');
+    setEditEmail(user.email || '');
+    setEditPassword('');
+    setEditRole(user.role || 'USER');
+    setEditTier(user.subscription || 'FREE_TRIAL');
+    setEditStatus(user.status || 'ACTIVE');
+    setEditDiscordTag(user.discordTag || '');
+    setEditDiscordGlobalName((user as any).discordGlobalName || '');
+    setEditDiscordId(user.discordId || '');
+    setEditVerificationStatus(user.verificationStatus || 'VERIFIED');
+    setEditStripeCustomerId(user.stripeCustomerId || '');
+    setEditStripeSubscriptionId(user.stripeSubscriptionId || '');
+  };
+
+  const handleSaveUserEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+
+    const res = await updateAdminUserRecord({
+      userId: editingUser.id || editingUser.email,
+      name: editName,
+      email: editEmail,
+      password: editPassword || undefined,
+      role: editRole,
+      subscription: editTier,
+      status: editStatus,
+      discordTag: editDiscordTag,
+      discordGlobalName: editDiscordGlobalName,
+      discordId: editDiscordId,
+      verificationStatus: editVerificationStatus,
+      stripeCustomerId: editStripeCustomerId,
+      stripeSubscriptionId: editStripeSubscriptionId,
+    });
+
+    if (res?.success) {
+      setActionSuccessMsg(`Successfully updated user record for ${editEmail || editName}`);
+      setTimeout(() => setActionSuccessMsg(null), 4000);
+      setEditingUser(null);
+      loadAdminData();
+    } else {
+      setGlobalError(res?.message || 'Failed to update user record.');
+    }
+  };
 
   // Add User Modal State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -1074,6 +1136,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             <td className="p-3 text-right">
                               <div className="flex items-center justify-end space-x-1.5">
                                 <button
+                                  onClick={() => openEditUserModal(user)}
+                                  className="px-2.5 py-1 rounded bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 text-[11px] font-bold border border-purple-500/40 transition flex items-center gap-1"
+                                  title="Edit User Record"
+                                >
+                                  <Edit3 className="w-3 h-3 text-purple-400" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
                                   onClick={() => setInspectorUser(user)}
                                   className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] font-semibold border border-slate-700 transition"
                                 >
@@ -1735,6 +1805,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             {/* Quick Actions Footer */}
             <div className="border-t border-slate-800 pt-4 flex flex-wrap gap-2 justify-end">
               <button
+                onClick={() => {
+                  const u = inspectorUser;
+                  setInspectorUser(null);
+                  openEditUserModal(u);
+                }}
+                className="px-3 py-1.5 rounded bg-purple-600/40 hover:bg-purple-600/60 text-purple-200 border border-purple-500/50 font-bold text-xs flex items-center gap-1.5"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-purple-300" />
+                <span>EDIT USER RECORD</span>
+              </button>
+              <button
                 onClick={() => handleUserAction(inspectorUser, 'extend_trial')}
                 className="px-3 py-1.5 rounded bg-amber-600/30 text-amber-300 border border-amber-500/40 font-bold text-xs"
               >
@@ -1866,6 +1947,197 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </button>
                 <button type="submit" className="px-4 py-1.5 bg-purple-600 text-white font-bold rounded">
                   Save Code
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER RECORD MODAL (MASTER CONTROL) */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#120B28] border border-purple-500/50 rounded-3xl max-w-2xl w-full p-6 sm:p-8 space-y-6 text-xs font-mono shadow-2xl text-purple-100 my-8">
+            <div className="flex items-center justify-between border-b border-purple-900/60 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-purple-600/30 border border-purple-500/50 text-purple-300">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-white text-base">EDIT USER RECORD</h3>
+                  <p className="text-[11px] text-purple-300/70 font-sans">
+                    Master Admin override for <strong className="text-white">{editingUser.email}</strong> ({editingUser.id})
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="p-2 rounded-xl bg-[#0B061A] border border-purple-900/60 hover:text-white text-purple-300/70"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveUserEditSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">User Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">User Email Address</label>
+                  <input
+                    type="email"
+                    required
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Password (Leave blank to keep)</label>
+                  <input
+                    type="password"
+                    placeholder="••••••••••••"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none placeholder-purple-300/30"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Subscription Tier</label>
+                  <select
+                    value={editTier}
+                    onChange={(e) => setEditTier(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  >
+                    <option value="ELITE_PASS">ELITE_PASS ($99/mo - Full Bot & Signal Access)</option>
+                    <option value="PRO_PASS">PRO_PASS ($49/mo - Standard Access)</option>
+                    <option value="FREE_TRIAL">FREE_TRIAL (3-Hour Access Pass)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">System Role</label>
+                  <select
+                    value={editRole}
+                    onChange={(e) => setEditRole(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  >
+                    <option value="USER">USER (Regular Trader)</option>
+                    <option value="PRO">PRO (Premium Member)</option>
+                    <option value="ELITE">ELITE (High Frequency Trader)</option>
+                    <option value="SUPPORT">SUPPORT (Help Desk Operator)</option>
+                    <option value="ADMIN">ADMIN (System Administrator)</option>
+                    <option value="OWNER">OWNER (Master Vault Owner)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Account Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  >
+                    <option value="ACTIVE">ACTIVE (Full Platform Privileges)</option>
+                    <option value="TRIALING">TRIALING (Temporary Trial Access)</option>
+                    <option value="SUSPENDED">SUSPENDED / FROZEN (Blocked)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Discord Tag / Username</label>
+                  <input
+                    type="text"
+                    placeholder="allan048135"
+                    value={editDiscordTag}
+                    onChange={(e) => setEditDiscordTag(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Discord Display / Global Name</label>
+                  <input
+                    type="text"
+                    placeholder="allan305"
+                    value={editDiscordGlobalName}
+                    onChange={(e) => setEditDiscordGlobalName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Discord User ID</label>
+                  <input
+                    type="text"
+                    placeholder="315284910382911234"
+                    value={editDiscordId}
+                    onChange={(e) => setEditDiscordId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Guild Verification Status</label>
+                  <select
+                    value={editVerificationStatus}
+                    onChange={(e) => setEditVerificationStatus(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  >
+                    <option value="VERIFIED">VERIFIED (Guild Member - Unlocked)</option>
+                    <option value="NEEDS_GUILD">NEEDS_GUILD (Joined Discord required)</option>
+                    <option value="UNVERIFIED">UNVERIFIED (Pending)</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Stripe Customer ID</label>
+                  <input
+                    type="text"
+                    placeholder="cus_live_..."
+                    value={editStripeCustomerId}
+                    onChange={(e) => setEditStripeCustomerId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-purple-300/80 font-bold block">Stripe Subscription ID</label>
+                  <input
+                    type="text"
+                    placeholder="sub_live_..."
+                    value={editStripeSubscriptionId}
+                    onChange={(e) => setEditStripeSubscriptionId(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-purple-900/60">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 hover:bg-purple-900/30 text-purple-300 font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-6 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold shadow-lg shadow-purple-600/30 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>Save Record Changes</span>
                 </button>
               </div>
             </form>
