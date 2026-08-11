@@ -114,7 +114,7 @@ export default function App() {
     'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
     'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
     'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
-    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about'
+    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot'
   ];
 
   const getTabFromLocation = (): string => {
