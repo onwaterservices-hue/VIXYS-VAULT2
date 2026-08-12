@@ -371,48 +371,31 @@ export async function fetchPrediction(
   };
 }
 
-function getActiveUserEmailFallback(providedEmail?: string): string | undefined {
-  if (providedEmail && providedEmail.trim()) return providedEmail.trim();
-  try {
-    const savedAuth = localStorage.getItem('vixy_auth');
-    if (savedAuth) {
-      const parsed = JSON.parse(savedAuth);
-      if (parsed?.user?.email) return parsed.user.email.trim();
-    }
-  } catch (e) {
-    console.error(e);
-  }
-  return undefined;
-}
-
 export async function getDiscordAuthUrlApi(userEmail?: string) {
-  const activeEmail = getActiveUserEmailFallback(userEmail);
-  const query = activeEmail ? `?email=${encodeURIComponent(activeEmail.toLowerCase())}` : '';
+  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
   const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>(`/api/auth/discord/url${query}`, {
-    headers: activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : undefined,
+    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
   });
   return data;
 }
 
 export async function getDiscordUserProfileApi(userEmail?: string) {
-  const activeEmail = getActiveUserEmailFallback(userEmail);
-  const query = activeEmail ? `?email=${encodeURIComponent(activeEmail.toLowerCase())}` : '';
+  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
   const data = await safeFetchJson<{ linked: boolean; profile: any }>(`/api/discord/user-profile${query}`, {
-    headers: activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : undefined,
+    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
   });
   return data;
 }
 
 export async function verifyDiscordMembershipApi(discordUserId?: string, userEmail?: string) {
-  const activeEmail = getActiveUserEmailFallback(userEmail);
   try {
     const res = await fetch('/api/discord/verify-membership', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : {}),
+        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
       },
-      body: JSON.stringify({ discordUserId, email: activeEmail }),
+      body: JSON.stringify({ discordUserId, email: userEmail }),
     });
     return await safeParseJson(res);
   } catch {
@@ -421,15 +404,14 @@ export async function verifyDiscordMembershipApi(discordUserId?: string, userEma
 }
 
 export async function disconnectDiscordApi(userEmail?: string) {
-  const activeEmail = getActiveUserEmailFallback(userEmail);
   try {
     const res = await fetch('/api/discord/disconnect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : {}),
+        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
       },
-      body: JSON.stringify({ email: activeEmail }),
+      body: JSON.stringify({ email: userEmail }),
     });
     return await safeParseJson(res);
   } catch {

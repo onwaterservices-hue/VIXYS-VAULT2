@@ -453,13 +453,10 @@ export default function App() {
     async function syncProfile() {
       try {
         const activeEmail = authState.user?.email || alertSettings.emailAddress;
-        if (!activeEmail) return;
-        
         const res = await getDiscordUserProfileApi(activeEmail);
         if (res && res.linked && res.profile) {
           setAlertSettings((prev) => ({
             ...prev,
-            emailAddress: activeEmail,
             discordLinked: true,
             discordUsername: res.profile.discordUsername || prev.discordUsername,
             discordUserId: res.profile.discordUserId || prev.discordUserId,
@@ -468,10 +465,11 @@ export default function App() {
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
+        } else if (alertSettings.discordLinked) {
+          // Keep locally stored linked state if server is momentarily sync-pending
         } else {
           setAlertSettings((prev) => ({
             ...prev,
-            emailAddress: activeEmail,
             discordLinked: false,
             discordUsername: undefined,
             discordUserId: undefined,
@@ -485,7 +483,7 @@ export default function App() {
       }
     }
     syncProfile();
-  }, [authState.user?.email]);
+  }, [authState.user?.email, alertSettings.emailAddress]);
 
   useEffect(() => {
     try {

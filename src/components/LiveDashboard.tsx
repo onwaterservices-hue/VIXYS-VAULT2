@@ -447,7 +447,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       {/* 📡 COMMUNITY ACCESS NODE (SECURE IDENTITY LINK & DISCORD GATEWAY) */}
       <div id="vixy-discord-gateway">
         <CommunityAccessNode
-          userEmail={alertSettings?.emailAddress}
           settings={alertSettings}
           setSettings={setAlertSettings}
           onOpenDiscordModal={onOpenAlerts}
