@@ -155,8 +155,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     if (data.feedStatus) setFeedStatus(data.feedStatus as any);
     if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
 
-    if (data.direction) {
-      const isBull = data.direction === 'UP';
+    if (data.direction !== undefined) {
+      const isBull = data.direction === 'UP' || data.direction === 'YES';
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
@@ -165,15 +165,17 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       }
       
       setSignal((prev) => {
-        const newConfidence = Number.isFinite(data.confidence) ? data.confidence : prev.confidence;
-        const newModelProb = Number.isFinite(data.modelProbability) ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb;
-        const newEdgePct = Number.isFinite(data.edgePct) ? data.edgePct : prev.edgePct;
-        const newTargetPrice = Number.isFinite(data.features?.crossVenue?.kalshiStrike) ? data.features.crossVenue.kalshiStrike : prev.targetPrice;
+        // Authoritative backend wins! If data says null, it's 0 or we keep it depending on UX, but the prompt says:
+        // "The authoritative backend must win over client cache."
+        const newConfidence = data.confidence !== null ? data.confidence : 0;
+        const newModelProb = data.modelProbability !== null ? Math.round(data.modelProbability * 1000) / 10 : 0;
+        const newEdgePct = data.edgePct !== null ? data.edgePct : 0;
+        const newTargetPrice = data.features?.crossVenue?.kalshiStrike || prev.targetPrice;
         
         return {
           ...prev,
           timestamp: Date.now(),
-          direction: isBull ? 'YES' : 'NO',
+          direction: data.direction ? (isBull ? 'YES' : 'NO') : 'NO',
           confidence: newConfidence,
           modelProb: newModelProb,
           marketProb: kalshiProbPct,
@@ -181,6 +183,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           targetPrice: newTargetPrice,
         };
       });
+
       
       setVenueOdds((prev) => {
         const newBestEdge = Number.isFinite(data.edgePct) ? Math.abs(data.edgePct) : prev.bestEdgeValue;

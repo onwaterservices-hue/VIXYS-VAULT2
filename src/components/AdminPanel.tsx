@@ -132,6 +132,8 @@ export interface UserItem {
   guildVerified?: boolean;
   lastSeen?: string;
   authStatus?: string;
+  lastSeenAt?: number;
+  lastActiveAt?: number;
 }
 
 export interface TransactionItem {
@@ -658,6 +660,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     return users.filter((u) => u.discordLinked || u.guildVerified || u.discordId).length;
   }, [users]);
 
+  const usersActiveLast5Min = useMemo(() => {
+    const now = Date.now();
+    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 5 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 5 * 60 * 1000)).length;
+  }, [users]);
+
+  const usersActiveLast15Min = useMemo(() => {
+    const now = Date.now();
+    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 15 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 15 * 60 * 1000)).length;
+  }, [users]);
+
+  const usersActiveToday = useMemo(() => {
+    const now = Date.now();
+    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 24 * 60 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 24 * 60 * 60 * 1000)).length;
+  }, [users]);
+
+  const newlyRegisteredUsers = useMemo(() => {
+    const now = Date.now();
+    return users.filter(u => {
+      const joinDate = new Date(u.joined).getTime();
+      return !isNaN(joinDate) && now - joinDate <= 24 * 60 * 60 * 1000;
+    }).length;
+  }, [users]);
+
+  const currentlyConnectedSessions = systemHealth?.realtimeConnections || 0;
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md overflow-y-auto font-sans text-slate-100 flex flex-col">
       {/* Top Fixed Command Header */}
@@ -790,28 +817,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {activeSection === 'overview' && (
           <div className="space-y-6">
             {/* Top 8 KPI Cards Row */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {[
                 {
-                  title: 'TOTAL USERS',
+                  title: 'TOTAL REG USERS',
                   value: users.length.toString(),
                   icon: Users,
                   color: 'text-purple-400',
                   targetTab: 'users',
                 },
                 {
-                  title: 'PAID USERS',
-                  value: paidUsersCount.toString(),
-                  icon: UserCheck,
+                  title: 'ACTIVE (5 MIN)',
+                  value: usersActiveLast5Min.toString(),
+                  icon: Activity,
                   color: 'text-emerald-400',
-                  targetTab: 'billing',
+                  targetTab: 'users',
                 },
                 {
-                  title: 'ACTIVE TRIALS',
-                  value: activeTrialsCount.toString(),
+                  title: 'ACTIVE (15 MIN)',
+                  value: usersActiveLast15Min.toString(),
                   icon: Clock,
                   color: 'text-amber-400',
-                  targetTab: 'trials',
+                  targetTab: 'users',
+                },
+                {
+                  title: 'ACTIVE TODAY',
+                  value: usersActiveToday.toString(),
+                  icon: UserCheck,
+                  color: 'text-indigo-400',
+                  targetTab: 'users',
+                },
+                {
+                  title: 'NEW REG (24H)',
+                  value: newlyRegisteredUsers.toString(),
+                  icon: Sparkles,
+                  color: 'text-violet-400',
+                  targetTab: 'users',
+                },
+                {
+                  title: 'CONNECTED SESSIONS',
+                  value: currentlyConnectedSessions.toString(),
+                  icon: Radio,
+                  color: 'text-cyan-400',
+                  targetTab: 'system_health',
                 },
                 {
                   title: 'MRR / ARR',
@@ -819,34 +867,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   icon: DollarSign,
                   color: 'text-emerald-400',
                   targetTab: 'billing',
-                },
-                {
-                  title: "TODAY'S REV",
-                  value: `$${todayRevenue.toLocaleString()}`,
-                  icon: TrendingUp,
-                  color: 'text-purple-300',
-                  targetTab: 'billing',
-                },
-                {
-                  title: 'PREDICTIONS',
-                  value: stats?.predictionsGeneratedToday ? stats.predictionsGeneratedToday.toString() : '1,842',
-                  icon: Sparkles,
-                  color: 'text-violet-400',
-                  targetTab: 'quant_controls',
-                },
-                {
-                  title: 'SYSTEM LATENCY',
-                  value: systemHealth?.apiLatencyMs ? `${systemHealth.apiLatencyMs}ms` : '14ms',
-                  icon: Cpu,
-                  color: 'text-cyan-400',
-                  targetTab: 'system_health',
-                },
-                {
-                  title: 'DISCORD MEMS',
-                  value: activeDiscordMembersCount.toString(),
-                  icon: Bot,
-                  color: 'text-indigo-400',
-                  targetTab: 'discord',
                 },
               ].map((kpi, idx) => {
                 const Icon = kpi.icon;
