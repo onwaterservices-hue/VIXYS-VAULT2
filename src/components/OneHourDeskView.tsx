@@ -104,6 +104,20 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           setApiSignal(sig);
           setModelStatus(status);
           setPerfStats(perf);
+
+          if (sig) {
+            if (Number.isFinite(sig.kalshiImpliedProbability)) {
+              const yesCents = Math.round(sig.kalshiImpliedProbability * 100);
+              setKalshiYesCent(yesCents);
+              setKalshiNoCent(100 - yesCents);
+            }
+            if (Number.isFinite(sig.confidence)) {
+              setConfidenceScore(sig.confidence);
+            }
+            if (Number.isFinite(sig.edgePct)) {
+              setModelEdge(sig.edgePct);
+            }
+          }
         }
       } catch (err) {
         console.warn('Failed to load 1h desk data', err);

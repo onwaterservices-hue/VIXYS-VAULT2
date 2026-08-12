@@ -15,7 +15,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, syncAuthUserApi , safeFetchJson } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi , safeFetchJson } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -455,7 +455,30 @@ export default function App() {
     async function syncProfile() {
       try {
         const activeEmail = authState.user?.email || alertSettings.emailAddress;
-        const res = await getDiscordUserProfileApi(activeEmail);
+        const activeUserId = authState.user?.id;
+
+        // 1. Fetch authoritative account state
+        const accountRes = await getAccountMeApi(activeEmail, activeUserId);
+        if (accountRes && accountRes.authenticated && accountRes.discord) {
+          const d = accountRes.discord as any;
+          if (d.linked || d.discordUserId) {
+            const isGuildMember = d.guildMember ?? d.profile?.guildMember ?? false;
+            setAlertSettings((prev) => ({
+              ...prev,
+              discordLinked: true,
+              discordUsername: d.discordUsername || d.profile?.discordUsername || prev.discordUsername,
+              discordUserId: d.discordUserId || d.profile?.discordUserId || prev.discordUserId,
+              guildMember: isGuildMember ?? prev.guildMember,
+              roleAssigned: d.profile?.guildRoles?.[0] || (isGuildMember ? 'PRO' : 'None'),
+              lastSyncTimestamp: new Date().toLocaleTimeString(),
+              syncStatus: isGuildMember ? 'HEALTHY' : 'NEEDS_GUILD',
+            }));
+            return;
+          }
+        }
+
+        // 2. Direct Discord profile query fallback
+        const res = await getDiscordUserProfileApi(activeEmail, activeUserId);
         if (res && res.linked && res.profile) {
           setAlertSettings((prev) => ({
             ...prev,
@@ -468,7 +491,7 @@ export default function App() {
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
         } else if (alertSettings.discordLinked) {
-          // Keep locally stored linked state if server is momentarily sync-pending
+          // Keep existing linked state across temporary network hiccups
         } else {
           setAlertSettings((prev) => ({
             ...prev,
@@ -485,7 +508,7 @@ export default function App() {
       }
     }
     syncProfile();
-  }, [authState.user?.email, alertSettings.emailAddress]);
+  }, [authState.user?.email, authState.user?.id, alertSettings.emailAddress]);
 
   useEffect(() => {
     try {

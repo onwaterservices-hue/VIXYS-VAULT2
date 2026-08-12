@@ -156,7 +156,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
 
     if (data.direction !== undefined) {
-      const isBull = data.direction === 'UP' || data.direction === 'YES';
+      const isBull = (data.direction as string) === 'UP' || (data.direction as string) === 'YES';
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
@@ -475,6 +475,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               lockEvaluation={lockEvaluation}
               feedStatus={feedStatus}
               latencyMs={latencyMs}
+              rawApiData={rawApiData}
               venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
             />
           </div>

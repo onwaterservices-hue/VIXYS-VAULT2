@@ -371,31 +371,79 @@ export async function fetchPrediction(
   };
 }
 
-export async function getDiscordAuthUrlApi(userEmail?: string) {
-  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+export async function getAccountMeApi(userEmail?: string, userId?: string) {
+  let email = userEmail;
+  let uid = userId;
+  if (!email || !uid) {
+    try {
+      const auth = localStorage.getItem('vixy_auth');
+      if (auth) {
+        const parsed = JSON.parse(auth);
+        if (parsed?.user?.email) email = email || parsed.user.email;
+        if (parsed?.user?.id) uid = uid || parsed.user.id;
+        if (parsed?.user?.uid) uid = uid || parsed.user.uid;
+      }
+    } catch (_) {}
+  }
+  const params = new URLSearchParams();
+  if (email) params.append('email', email.toLowerCase());
+  if (uid) params.append('userId', uid);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  const headers: Record<string, string> = {};
+  if (email) headers['x-user-email'] = email.toLowerCase();
+  if (uid) headers['x-user-id'] = uid;
+
+  return await safeFetchJson<{
+    authenticated: boolean;
+    user: any;
+    discord: { linked: boolean; discordUserId: string; discordUsername: string; profile: any };
+    subscription: any;
+  }>(`/api/account/me${query}`, { headers });
+}
+
+export async function getDiscordAuthUrlApi(userEmail?: string, userId?: string) {
+  const params = new URLSearchParams();
+  if (userEmail) params.append('email', userEmail.toLowerCase());
+  if (userId) params.append('userId', userId);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  const headers: Record<string, string> = {};
+  if (userEmail) headers['x-user-email'] = userEmail.toLowerCase();
+  if (userId) headers['x-user-id'] = userId;
+
   const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>(`/api/auth/discord/url${query}`, {
-    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+    headers,
   });
   return data;
 }
 
-export async function getDiscordUserProfileApi(userEmail?: string) {
-  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+export async function getDiscordUserProfileApi(userEmail?: string, userId?: string) {
+  const params = new URLSearchParams();
+  if (userEmail) params.append('email', userEmail.toLowerCase());
+  if (userId) params.append('userId', userId);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  const headers: Record<string, string> = {};
+  if (userEmail) headers['x-user-email'] = userEmail.toLowerCase();
+  if (userId) headers['x-user-id'] = userId;
+
   const data = await safeFetchJson<{ linked: boolean; profile: any }>(`/api/discord/user-profile${query}`, {
-    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+    headers,
   });
   return data;
 }
 
-export async function verifyDiscordMembershipApi(discordUserId?: string, userEmail?: string) {
+export async function verifyDiscordMembershipApi(discordUserId?: string, userEmail?: string, userId?: string) {
   try {
     const res = await fetch('/api/discord/verify-membership', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+        ...(userId ? { 'x-user-id': userId } : {}),
       },
-      body: JSON.stringify({ discordUserId, email: userEmail }),
+      body: JSON.stringify({ discordUserId, email: userEmail, userId }),
     });
     return await safeParseJson(res);
   } catch {
@@ -403,15 +451,16 @@ export async function verifyDiscordMembershipApi(discordUserId?: string, userEma
   }
 }
 
-export async function disconnectDiscordApi(userEmail?: string) {
+export async function disconnectDiscordApi(userEmail?: string, userId?: string) {
   try {
     const res = await fetch('/api/discord/disconnect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+        ...(userId ? { 'x-user-id': userId } : {}),
       },
-      body: JSON.stringify({ email: userEmail }),
+      body: JSON.stringify({ email: userEmail, userId }),
     });
     return await safeParseJson(res);
   } catch {

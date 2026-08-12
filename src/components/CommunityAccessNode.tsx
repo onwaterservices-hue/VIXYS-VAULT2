@@ -24,6 +24,7 @@ import { AlertSettings } from '../types';
 import {
   getDiscordAuthUrlApi,
   getDiscordUserProfileApi,
+  getAccountMeApi,
   verifyDiscordMembershipApi,
   disconnectDiscordApi
 } from '../services/api';
@@ -61,6 +62,36 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     setIsLoadingProfile(true);
     try {
       const savedEmail = settings?.emailAddress;
+      
+      // 1. Try authoritative account state API
+      const accRes = await getAccountMeApi(savedEmail);
+      if (accRes && accRes.authenticated && accRes.discord?.linked) {
+        const d = accRes.discord as any;
+        const prof = d.profile || {
+          discordUserId: d.discordUserId,
+          discordUsername: d.discordUsername,
+          discordGlobalName: d.discordGlobalName,
+          guildMember: d.guildMember,
+          guildRoles: [d.guildMember ? 'PRO' : 'MEMBER'],
+          verificationStatus: d.guildMember ? 'VERIFIED' : 'NEEDS_GUILD',
+        };
+        setProfile(prof);
+        if (setSettings) {
+          setSettings((prev) => ({
+            ...prev,
+            discordLinked: true,
+            discordUsername: prof.discordUsername || prev.discordUsername,
+            discordUserId: prof.discordUserId || prev.discordUserId,
+            guildMember: prof.guildMember ?? prev.guildMember,
+            roleAssigned: prof.guildRoles?.[0] || (prof.guildMember ? 'PRO' : 'None'),
+            lastSyncTimestamp: new Date().toLocaleTimeString(),
+            syncStatus: prof.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
+          }));
+        }
+        return;
+      }
+
+      // 2. Direct Discord profile query fallback
       const res = await getDiscordUserProfileApi(savedEmail);
       if (res && res.linked && res.profile) {
         setProfile(res.profile);

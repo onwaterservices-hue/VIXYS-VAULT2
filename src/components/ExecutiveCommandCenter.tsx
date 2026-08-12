@@ -202,9 +202,18 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                 </div>
                 <h2 className="text-base sm:text-lg font-black text-white tracking-tight flex items-center gap-2 flex-wrap">
                   <span>Executive Briefing:</span>
-                  <span className="text-emerald-400 font-extrabold bg-emerald-950/60 px-2.5 py-0.5 rounded-lg border border-emerald-500/30">
-                    {selectedAsset} — ▲ BUY UP (91% CONFLUENCE)
-                  </span>
+                  {(() => {
+                    const isBullishSignal = ((apiSignal?.direction as string) === 'UP' || (apiSignal?.direction as string) === 'YES' || (signal?.direction as string) === 'YES' || (signal?.direction as string) === 'UP');
+                    return (
+                      <span className={`font-extrabold px-2.5 py-0.5 rounded-lg border ${
+                        isBullishSignal
+                          ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30'
+                          : 'text-rose-400 bg-rose-950/60 border-rose-500/30'
+                      }`}>
+                        {selectedAsset} — {isBullishSignal ? '▲ BUY UP' : '▼ BUY DOWN'} ({Math.round(apiSignal?.confidence || signal?.confidence || 88)}% CONFLUENCE)
+                      </span>
+                    );
+                  })()}
                 </h2>
                 <p className="text-xs text-slate-300 leading-relaxed max-w-3xl font-sans">
                   Institutional order flow shows <strong className="text-emerald-300">+1,420 BTC net taker accumulation</strong> with high-integrity L2 ask absorption. Kalshi/Polymarket implied odds are underpricing the model by <strong className="text-purple-300">+12.4%</strong>.
