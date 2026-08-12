@@ -1575,7 +1575,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const mainViewContent = (
     <div
       ref={containerRef}
-      className="w-full h-full min-h-[520px] md:min-h-[580px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
+      className="w-full h-[520px] md:h-[650px] lg:h-[750px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
     >
       {controlsBar}
       {candleHudHeader}

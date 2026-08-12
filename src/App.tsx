@@ -31,7 +31,6 @@ import { SubscriptionView } from './components/SubscriptionView';
 import { AdminPanel } from './components/AdminPanel';
 import { LandingPage } from './components/LandingPage';
 import { CURRENT_DATA_SOURCE } from './utils/statGating';
-import { DiscordRequiredOverlay } from './components/DiscordRequiredOverlay';
 import { AuthModal } from './components/AuthModal';
 import { TradeJournalView } from './components/TradeJournalView';
 import { SettingsView } from './components/SettingsView';
@@ -120,11 +119,14 @@ export default function App() {
             setAuthState(prev => {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
-              const updatedUser = {
+              const updatedUser: NonNullable<AuthState['user']> = {
                 ...prev.user,
+                // @ts-ignore
                 discordLinked: res.user.discordLinked,
+                // @ts-ignore
                 discordId: res.user.discordId,
                 role: (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO',
+                // @ts-ignore
                 subscription: res.user.subscription
               };
               
