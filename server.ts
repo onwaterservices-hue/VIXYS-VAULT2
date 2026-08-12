@@ -80,7 +80,7 @@ const serverJournalEntries: ServerJournalEntry[] = [
 ];
 
 export const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use((req, res, next) => {
   if (req.originalUrl === '/api/stripe/webhook' || req.path === '/api/stripe/webhook') {
