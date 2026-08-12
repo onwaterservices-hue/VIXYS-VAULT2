@@ -357,6 +357,31 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     return { lineD: line, areaD: area };
   }, [probabilityTimeline]);
 
+  
+  // Resize Observer for robust canvas sizing
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const container = containerRef.current || canvas?.parentElement;
+    if (!canvas || !container) return;
+    
+    const updateDimensions = () => {
+      const rect = container.getBoundingClientRect();
+      const w = Math.floor(rect.width) || container.clientWidth || 600;
+      const h = Math.floor(rect.height) || container.clientHeight || 360;
+      
+      const safeW = Math.max(300, w);
+      const safeH = Math.max(250, h);
+      
+      if (canvas.width !== safeW) canvas.width = safeW;
+      if (canvas.height !== safeH) canvas.height = safeH;
+    };
+    
+    updateDimensions();
+    const observer = new ResizeObserver(updateDimensions);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   // High-frame-rate Canvas Render Engine
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -368,8 +393,13 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
     const render = () => {
       try {
-        const width = (canvas.width = containerRef.current?.clientWidth || canvas.parentElement?.clientWidth || 600);
-        const height = (canvas.height = containerRef.current?.clientHeight || canvas.parentElement?.clientHeight || 380);
+        const width = canvas.width || 600;
+        const height = canvas.height || 360;
+
+        if (width <= 0 || height <= 0) {
+          animId = requestAnimationFrame(render);
+          return;
+        }
 
         // Clear Canvas Background & Draw Radial Ambient Aura Glow
         ctx.fillStyle = '#060312';
@@ -378,7 +408,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         // Ambient Nebula Radial Glow behind price action
         const auraGrad = ctx.createRadialGradient(
           width * 0.6, height * 0.4, 10,
-          width * 0.6, height * 0.4, width * 0.5
+          width * 0.6, height * 0.4, Math.max(20, width * 0.5)
         );
         auraGrad.addColorStop(0, 'rgba(147, 51, 234, 0.12)');
         auraGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.06)');
@@ -394,7 +424,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           const y = (height / gridRows) * i;
           ctx.beginPath();
           ctx.moveTo(0, y);
-          ctx.lineTo(width - 60, y);
+          ctx.lineTo(Math.max(0, width - 60), y);
           ctx.stroke();
         }
 
@@ -413,9 +443,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           }
         };
 
-      // Filter valid candles to prevent any 0 or corrupt price data from blowing up scale
+      // Filter valid candles (allow any positive price > 0, supporting DOGE, XRP, SUI, etc.)
       const validCandles = candles.filter(
-        (c) => c && typeof c.low === 'number' && typeof c.high === 'number' && c.low > 100 && c.high > 100 && !isNaN(c.close)
+        (c) => c && typeof c.low === 'number' && typeof c.high === 'number' && c.low > 0 && c.high > 0 && !isNaN(c.close)
       );
 
       if (validCandles.length < 2) {
@@ -427,11 +457,11 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       let rawMinP = Math.min(...validCandles.map((c) => c.low));
       let rawMaxP = Math.max(...validCandles.map((c) => c.high));
 
-      if (currentPrice > 100) {
+      if (currentPrice > 0) {
         rawMinP = Math.min(rawMinP, currentPrice);
         rawMaxP = Math.max(rawMaxP, currentPrice);
       }
-      if (strikePrice > 100) {
+      if (strikePrice > 0) {
         rawMinP = Math.min(rawMinP, strikePrice);
         rawMaxP = Math.max(rawMaxP, strikePrice);
       }

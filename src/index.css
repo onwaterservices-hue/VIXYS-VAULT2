@@ -195,3 +195,12 @@
   background: #4c228a;
 }
 
+
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+.animate-scan {
+  animation: scan 2.5s ease-in-out infinite alternate;
+}

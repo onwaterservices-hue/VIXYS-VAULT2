@@ -47,7 +47,7 @@ const INITIAL_WHALE_ORDERS: WhaleOrder[] = [
     asset: 'BTC',
     action: 'BUY_SWEEP',
     sizeUSD: 2480000,
-    contractPrice: '$96,500 Strike YES',
+    contractPrice: '$64,500 Strike YES',
     venue: 'Kalshi',
     confidence: 94,
     entityName: 'Institutional Volume Cluster #02',
@@ -59,7 +59,7 @@ const INITIAL_WHALE_ORDERS: WhaleOrder[] = [
     asset: 'BTC',
     action: 'STRIKE_DEFENSE',
     sizeUSD: 1850000,
-    contractPrice: '$96,000 Floor Support',
+    contractPrice: '$64,000 Floor Support',
     venue: 'Polymarket',
     confidence: 91,
     entityName: 'Apex Quant Liquidity #14',
@@ -116,7 +116,7 @@ const INITIAL_WHALE_ORDERS: WhaleOrder[] = [
 ];
 
 const STRIKE_WALLS = [
-  { asset: 'BTC', strike: '$96,000', type: 'SUPPORT FLOOR', volume: '$18.4M', whaleBias: 92, status: 'HEAVILY DEFENDED' },
+  { asset: 'BTC', strike: '$64,000', type: 'SUPPORT FLOOR', volume: '$18.4M', whaleBias: 92, status: 'HEAVILY DEFENDED' },
   { asset: 'BTC', strike: '$97,500', type: 'RESISTANCE CEILING', volume: '$12.1M', whaleBias: 38, status: 'TESTING LIQUIDITY' },
   { asset: 'ETH', strike: '$3,400', type: 'SUPPORT FLOOR', volume: '$8.9M', whaleBias: 86, status: 'WHALE ACCUMULATING' },
   { asset: 'SOL', strike: '$190', type: 'SUPPORT FLOOR', volume: '$6.2M', whaleBias: 88, status: 'HEAVILY DEFENDED' },

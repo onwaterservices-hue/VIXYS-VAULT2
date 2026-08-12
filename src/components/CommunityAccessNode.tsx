@@ -29,6 +29,7 @@ import {
 } from '../services/api';
 
 interface CommunityAccessNodeProps {
+  userEmail?: string;
   settings?: AlertSettings;
   setSettings?: React.Dispatch<React.SetStateAction<AlertSettings>>;
   onOpenDiscordModal?: () => void;
@@ -39,6 +40,7 @@ interface CommunityAccessNodeProps {
 }
 
 export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
+  userEmail,
   settings,
   setSettings,
   onOpenDiscordModal,
@@ -60,8 +62,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   const loadProfile = async () => {
     setIsLoadingProfile(true);
     try {
-      const savedEmail = settings?.emailAddress;
-      const res = await getDiscordUserProfileApi(savedEmail);
+      const activeEmail = userEmail || settings?.emailAddress;
+      const res = await getDiscordUserProfileApi(activeEmail);
       if (res && res.linked && res.profile) {
         setProfile(res.profile);
         if (setSettings) {
@@ -74,6 +76,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
+            emailAddress: activeEmail || prev.emailAddress,
           }));
         }
       } else {
@@ -87,6 +90,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             guildMember: false,
             roleAssigned: 'NONE',
             syncStatus: 'DISCONNECTED',
+            emailAddress: activeEmail || prev.emailAddress,
           }));
         }
       }
@@ -151,7 +155,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     }, 15000);
 
     try {
-      const authData = await getDiscordAuthUrlApi(settings?.emailAddress);
+      const activeEmail = userEmail || settings?.emailAddress;
+      const authData = await getDiscordAuthUrlApi(activeEmail);
       if (authData && authData.url) {
         const width = 600;
         const height = 700;
@@ -184,7 +189,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     setStatusMessage('Querying Discord server membership & verifying roles...');
 
     try {
-      const res = await verifyDiscordMembershipApi(profile?.discordUserId);
+      const activeEmail = userEmail || settings?.emailAddress;
+      const res = await verifyDiscordMembershipApi(profile?.discordUserId, activeEmail);
       if (res && res.success && res.profile) {
         setProfile(res.profile);
         setStatusMessage(res.message);
@@ -196,6 +202,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
             lastSyncTimestamp: new Date().toLocaleTimeString(),
             syncStatus: res.profile.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
+            emailAddress: activeEmail || prev.emailAddress,
           }));
         }
       } else {
@@ -211,7 +218,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   // Disconnect Identity
   const handleDisconnect = async () => {
     try {
-      await disconnectDiscordApi();
+      const activeEmail = userEmail || settings?.emailAddress;
+      await disconnectDiscordApi(activeEmail);
       setProfile(null);
       setStatusMessage('Discord identity disconnected.');
       if (setSettings) {

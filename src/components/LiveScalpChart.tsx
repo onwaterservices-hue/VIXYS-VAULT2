@@ -30,7 +30,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
   // Connection & Data State
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING...');
-  const [lastPrice, setLastPrice] = useState<number | null>(spotPrice || (asset === 'ETH' ? 3480.5 : 64160.5));
+  const [lastPrice, setLastPrice] = useState<number | null>(spotPrice || (asset === 'ETH' ? 3480.5 : 0));
   const [priceChange, setPriceChange] = useState<number>(0);
 
   // Sync spotPrice prop

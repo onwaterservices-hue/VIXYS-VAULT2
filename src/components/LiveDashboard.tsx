@@ -24,7 +24,8 @@ import { BTCTicker, Candle, PredictionSignal, ExchangeApiKeys, AlertSettings } f
 import { CandleChart } from './CandleChart';
 import { PredictionHealthWatch } from './PredictionHealthWatch';
 import { AIPatternEngine } from './AIPatternEngine';
-import { fetchPrediction, fetchLiveSignalData } from '../services/api';
+import { fetchPrediction } from '../services/api';
+import { useLiveSignal } from '../hooks/useLiveSignal';
 import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
 import { CompactSignalChart } from './CompactSignalChart';
 import { ModelStatusBadge } from './ModelStatusBadge';
@@ -101,7 +102,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
   // Access Unlock Logic: Admin or Discord-linked + Guild member users automatically unlock
   const isDiscordVerified = Boolean(alertSettings?.discordLinked) && Boolean(alertSettings?.guildMember);
-  const isAccessUnlocked = userRole === 'ADMIN' || isDiscordVerified;
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);
   const [isBailedOut, setIsBailedOut] = useState<boolean>(false);
 
@@ -110,7 +110,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
   // Quantitative Engine Real-Time Telemetry & Lock State
   const [engineState, setEngineState] = useState<string>('MONITORING');
-  const [feedStatus, setFeedStatus] = useState<'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED'>('CONNECTED');
+  const [feedStatus, setFeedStatus] = useState<string>('CONNECTED');
   const [rawApiData, setRawApiData] = useState<any>(null);
   const [lockEvaluation, setLockEvaluation] = useState<{
     qualified: boolean;
@@ -142,75 +142,55 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     requiredPersistenceSeconds: 15,
   });
 
-  // Poll backend prediction engine signal & lock evaluation every 2 seconds
+  // Synchronize with global live signal hook
+  const { signal: liveApiData } = useLiveSignal(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
+  
   useEffect(() => {
-    let isMounted = true;
+    if (!liveApiData) return;
+    const data = liveApiData;
+    
+    if (data.latencyMs !== undefined) setLatencyMs(data.latencyMs);
+    setRawApiData(data);
+    if (data.engineState) setEngineState(data.engineState);
+    if (data.feedStatus) setFeedStatus(data.feedStatus as any);
+    if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
 
-    async function pollLiveSignal() {
-      const startTs = Date.now();
-      const data = await fetchLiveSignalData(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
-      const endTs = Date.now();
-      if (isMounted) setLatencyMs(endTs - startTs);
-      if (data && isMounted) {
-        setRawApiData(data);
-        if (data.engineState) setEngineState(data.engineState);
-        if (data.feedStatus) setFeedStatus(data.feedStatus);
-        if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
-
-        if (data.direction) {
-          const isBull = data.direction === 'UP';
-          const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
-          const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
-          
-          if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
-            setSecondsRemaining15M(data.features.crossVenue.timeRemainingSec);
-          }
-          
-          setSignal((prev) => {
-            const newConfidence = Number.isFinite(data.confidence) ? data.confidence : prev.confidence;
-            const newModelProb = Number.isFinite(data.modelProbability) ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb;
-            const newEdgePct = Number.isFinite(data.edgePct) ? data.edgePct : prev.edgePct;
-            const newTargetPrice = Number.isFinite(data.features?.crossVenue?.kalshiStrike) ? data.features.crossVenue.kalshiStrike : prev.targetPrice;
-            
-            return {
-              ...prev,
-              timestamp: Date.now(),
-              direction: isBull ? 'YES' : 'NO',
-              confidence: newConfidence,
-              modelProb: newModelProb,
-              marketProb: kalshiProbPct,
-              edgePct: newEdgePct,
-              targetPrice: newTargetPrice,
-            };
-          });
-          
-          setVenueOdds((prev) => {
-            const newBestEdge = Number.isFinite(data.edgePct) ? Math.abs(data.edgePct) : prev.bestEdgeValue;
-            return {
-              ...prev,
-              kalshiYesPrice: Math.round(validKalshiProb * 100) / 100,
-              kalshiNoPrice: Math.round((1 - validKalshiProb) * 100) / 100,
-              polymarketYesPct: Math.round((validKalshiProb - 0.02) * 1000) / 10,
-              polymarketNoPct: Math.round((1 - (validKalshiProb - 0.02)) * 1000) / 10,
-              bestEdgeValue: newBestEdge,
-            };
-          });
-        }
+    if (data.direction) {
+      const isBull = data.direction === 'UP';
+      const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
+      const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
+      
+      if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
+        setSecondsRemaining15M(data.features.crossVenue.timeRemainingSec);
       }
+      
+      setSignal((prev) => {
+        const newConfidence = Number.isFinite(data.confidence) ? data.confidence : prev.confidence;
+        const newModelProb = Number.isFinite(data.modelProbability) ? Math.round(data.modelProbability * 1000) / 10 : prev.modelProb;
+        const newEdgePct = Number.isFinite(data.edgePct) ? data.edgePct : prev.edgePct;
+        const newTargetPrice = Number.isFinite(data.features?.crossVenue?.kalshiStrike) ? data.features.crossVenue.kalshiStrike : prev.targetPrice;
+        
+        return {
+          ...prev,
+          timestamp: Date.now(),
+          direction: isBull ? 'YES' : 'NO',
+          confidence: newConfidence,
+          modelProb: newModelProb,
+          marketProb: kalshiProbPct,
+          edgePct: newEdgePct,
+          targetPrice: newTargetPrice,
+        };
+      });
+      
+      setVenueOdds((prev) => {
+        const newBestEdge = Number.isFinite(data.edgePct) ? Math.abs(data.edgePct) : prev.bestEdgeValue;
+        return {
+          ...prev,
+          bestEdgeValue: newBestEdge
+        };
+      });
     }
-
-    let timeoutId: any;
-    async function loop() {
-      if (!isMounted) return;
-      await pollLiveSignal();
-      if (isMounted) timeoutId = setTimeout(loop, 2000);
-    }
-    loop();
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, [selectedAsset, timeframe]);
+  }, [liveApiData]);
 
   // Live UTC timestamp for Data Freshness indicator
   const [lastUpdateUtc, setLastUpdateUtc] = useState<string>(() => new Date().toISOString().substring(11, 19) + ' UTC');
@@ -467,6 +447,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       {/* 📡 COMMUNITY ACCESS NODE (SECURE IDENTITY LINK & DISCORD GATEWAY) */}
       <div id="vixy-discord-gateway">
         <CommunityAccessNode
+          userEmail={alertSettings?.emailAddress}
           settings={alertSettings}
           setSettings={setAlertSettings}
           onOpenDiscordModal={onOpenAlerts}
@@ -476,7 +457,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
       {/* 🎯 PROTECTED VIXY INTELLIGENCE CORE */}
       <IntelligenceLockGate
-        isVerified={isAccessUnlocked}
+        isVerified={isDiscordVerified}
         onOpenDiscordModal={onOpenAlerts}
         title="VIXY VAULT INTELLIGENCE LOCKED"
         subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."
@@ -525,7 +506,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 <ProtectionBrain 
                   signal={signal} 
                   ticker={ticker} 
-                  isDiscordVerified={isAccessUnlocked} 
+                  isDiscordVerified={isDiscordVerified} 
                 />
               </div>
               <div className="h-full">

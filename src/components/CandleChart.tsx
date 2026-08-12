@@ -68,27 +68,30 @@ const WIDE_BREAKPOINT = 760;
 const MIN_CANDLE_SLOT_PX = 12;
 
 // Container Width Hook
-function useContainerWidth() {
+function useContainerSize() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState<number>(800);
+  const [height, setHeight] = useState<number>(550);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
 
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.contentRect && entry.contentRect.width > 0) {
-          setWidth(Math.floor(entry.contentRect.width));
-        }
-      }
-    });
+    const updateDimensions = () => {
+      const rect = element.getBoundingClientRect();
+      const w = Math.floor(rect.width) || element.clientWidth || 800;
+      const h = Math.floor(rect.height) || element.clientHeight || 550;
+      if (w > 0) setWidth(Math.max(320, w));
+      if (h > 0) setHeight(Math.max(450, h));
+    };
 
+    updateDimensions();
+    const observer = new ResizeObserver(updateDimensions);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
 
-  return { containerRef, width };
+  return { containerRef, width, height };
 }
 
 // Indicator Calculations
@@ -185,7 +188,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
     if (c.close > trailingHigh) {
       signals.push({
         idx: i,
-        time: String(c.time || `Bar #${i + 1}`),
+        time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
         price: c.close,
         type: 'breakout',
         label: `Candle #${i + 1}: Resistance Break`,
@@ -196,7 +199,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
     } else if (c.close < trailingLow) {
       signals.push({
         idx: i,
-        time: String(c.time || `Bar #${i + 1}`),
+        time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
         price: c.close,
         type: 'breakdown',
         label: `Candle #${i + 1}: Support Break`,
@@ -224,7 +227,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         if (hasNext && nextCandle && nextCandle.close > c.close) {
           signals.push({
             idx: i,
-            time: String(c.time || `Bar #${i + 1}`),
+            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
             price: c.close,
             type: 'doji_reversal_bull',
             label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
@@ -235,7 +238,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         } else {
           signals.push({
             idx: i,
-            time: String(c.time || `Bar #${i + 1}`),
+            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
             price: c.close,
             type: 'doji_hold',
             label:
@@ -251,7 +254,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         if (hasNext && nextCandle && nextCandle.close < c.close) {
           signals.push({
             idx: i,
-            time: String(c.time || `Bar #${i + 1}`),
+            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
             price: c.close,
             type: 'doji_reversal_bear',
             label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
@@ -262,7 +265,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         } else {
           signals.push({
             idx: i,
-            time: String(c.time || `Bar #${i + 1}`),
+            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
             price: c.close,
             type: 'doji_hold',
             label:
@@ -277,7 +280,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
       } else {
         signals.push({
           idx: i,
-          time: String(c.time || `Bar #${i + 1}`),
+          time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
           price: c.close,
           type: 'doji',
           label: `Candle #${i + 1}: Doji Pivot`,
@@ -303,7 +306,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   modelSignal,
   venue = 'Kalshi',
 }) => {
-  const { containerRef, width: measuredWidth } = useContainerWidth();
+  const { containerRef, width: measuredWidth, height: measuredHeight } = useContainerSize();
   const [hoveredSignalIdx, setHoveredSignalIdx] = useState<number | null>(null);
   const [hoveredCandleIndex, setHoveredCandleIndex] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -401,11 +404,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     );
   }
 
-  const svgHeight = showRSI ? 510 : 410;
-  const chartHeight = 270;
   const volumeHeight = 60;
-  const rsiHeight = 70;
+  const rsiHeight = showRSI ? 75 : 0;
   const marginTop = 25;
+  const marginBottom = 35;
+  const svgHeight = Math.max(480, measuredHeight - 160);
+  const chartHeight = Math.max(250, svgHeight - volumeHeight - rsiHeight - marginTop - marginBottom);
 
   const lowPrices = visibleCandles.map((c) => c.low);
   const highPrices = visibleCandles.map((c) => c.high);
@@ -512,7 +516,10 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         Math.max(0, Math.floor(relX / candleSlot))
       );
       const priceVal = yMax - ((mouseY - marginTop) / chartHeight) * (yMax - yMin);
-      const timeVal = String(visibleCandles[candleIdx]?.time || `Bar #${candleIdx + 1}`);
+      const rawTime = visibleCandles[candleIdx]?.time;
+      const timeVal = typeof rawTime === 'number'
+        ? new Date(rawTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : String(rawTime || `Bar #${candleIdx + 1}`);
 
       setCrosshairPos({
         x: mouseX,
@@ -537,7 +544,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       width={chartSvgWidth}
       height={svgHeight}
       viewBox={`0 0 ${chartSvgWidth} ${svgHeight}`}
-      className="w-full max-w-full h-auto overflow-visible select-none cursor-crosshair"
+      className="w-full h-full overflow-visible select-none cursor-crosshair block"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
     >
@@ -1218,42 +1225,53 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       {/* Bottom X-Axis Time Ticks & Time-State Badges */}
       <g className="font-mono">
-        {[
-          { pct: 0.1, label: '10:15', badge: 'OPEN' },
-          { pct: 0.35, label: '10:30', badge: 'LIVE' },
-          { pct: 0.6, label: '10:45', badge: '+15M' },
-          { pct: 0.85, label: '11:00', badge: 'STRIKE' },
-        ].map((t, idx) => {
-          const tickX = marginLeft + plotWidth * t.pct;
-          const tickY = marginTop + chartHeight + 12;
-          return (
-            <g key={idx}>
-              <text x={tickX} y={tickY} fill="#8b84a8" fontSize="8" textAnchor="middle" fontWeight="bold">
-                {t.label}
-              </text>
-              <rect
-                x={tickX - 16}
-                y={tickY + 3}
-                width="32"
-                height="10"
-                rx="3"
-                fill={t.badge === 'STRIKE' ? '#3b0764' : '#0d0a1a'}
-                stroke={t.badge === 'STRIKE' ? '#c084fc' : '#2a2340'}
-                strokeWidth="0.75"
-              />
-              <text
-                x={tickX}
-                y={tickY + 10}
-                fill={t.badge === 'STRIKE' ? '#c084fc' : '#8b84a8'}
-                fontSize="6.5"
-                fontWeight="extrabold"
-                textAnchor="middle"
-              >
-                {t.badge}
-              </text>
-            </g>
-          );
-        })}
+        {(() => {
+          if (visibleCandles.length === 0) return null;
+          const ticksCount = 4;
+          return Array.from({ length: ticksCount }).map((_, idx) => {
+            const candleIdx = Math.min(
+              visibleCandles.length - 1,
+              Math.floor((idx / (ticksCount - 1)) * (visibleCandles.length - 1))
+            );
+            const c = visibleCandles[candleIdx];
+            if (!c) return null;
+            const pct = (candleIdx + 0.5) / visibleCandles.length;
+            const tickX = marginLeft + plotWidth * pct;
+            const tickY = marginTop + chartHeight + 12;
+            const timeFormatted = typeof c.time === 'number'
+              ? new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : String(c.time || '');
+            const badge = idx === ticksCount - 1 ? 'LIVE' : idx === 0 ? 'OPEN' : `+${idx * 15}M`;
+
+            return (
+              <g key={idx}>
+                <text x={tickX} y={tickY} fill="#8b84a8" fontSize="8" textAnchor="middle" fontWeight="bold">
+                  {timeFormatted}
+                </text>
+                <rect
+                  x={tickX - 16}
+                  y={tickY + 3}
+                  width="32"
+                  height="10"
+                  rx="3"
+                  fill={badge === 'LIVE' ? '#064e3b' : '#0d0a1a'}
+                  stroke={badge === 'LIVE' ? '#10b981' : '#2a2340'}
+                  strokeWidth="0.75"
+                />
+                <text
+                  x={tickX}
+                  y={tickY + 10}
+                  fill={badge === 'LIVE' ? '#34d399' : '#8b84a8'}
+                  fontSize="6.5"
+                  fontWeight="extrabold"
+                  textAnchor="middle"
+                >
+                  {badge}
+                </text>
+              </g>
+            );
+          });
+        })()}
       </g>
     </svg>
   );
@@ -1558,14 +1576,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const mainViewContent = (
     <div
       ref={containerRef}
-      className="w-full bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
+      className="w-full h-full min-h-[520px] md:min-h-[580px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
     >
       {controlsBar}
       {candleHudHeader}
       {indicatorToolbar}
 
-      <div className={`grid gap-4 ${isWide ? 'grid-cols-[1fr_260px]' : 'grid-cols-1'}`}>
-        <div className="w-full overflow-hidden flex justify-center">{mainSvgContent}</div>
+      <div className={`flex-1 grid gap-4 overflow-hidden ${isWide ? 'grid-cols-[1fr_260px]' : 'grid-cols-1'}`}>
+        <div className="w-full h-full overflow-hidden flex justify-center items-center">{mainSvgContent}</div>
         <div>{annotationPanel}</div>
       </div>
 

@@ -66,6 +66,7 @@ import {
   fetchAdminTransactions,
   performUserAction,
   updateAdminUserRecord,
+  getAdminHeaders,
   fetchAdminAuditLogs,
   fetchSystemHealth,
   fetchAdminEventsApi,
@@ -245,7 +246,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     setEditDiscordTag(user.discordTag || '');
     setEditDiscordGlobalName((user as any).discordGlobalName || '');
     setEditDiscordId(user.discordId || '');
-    setEditVerificationStatus(user.verificationStatus || 'VERIFIED');
+    setEditVerificationStatus(user.verificationStatus || ((user.discordLinked || user.discordId) ? 'VERIFIED' : 'UNVERIFIED'));
     setEditStripeCustomerId(user.stripeCustomerId || '');
     setEditStripeSubscriptionId(user.stripeSubscriptionId || '');
   };
@@ -583,16 +584,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   // Wipe Old/Beta Test Users
   const [isWipingUsers, setIsWipingUsers] = useState(false);
   const handleWipeBetaUsers = async () => {
-    if (!window.confirm('Wipe all old/beta users? This will clear out non-Master-Admin test accounts so new users can create clean accounts.')) return;
-    setIsWipingUsers(true);
-    const res = await wipeBetaUsersApi();
-    setIsWipingUsers(false);
-    if (res?.success) {
-      setActionSuccessMsg(res.message || 'Wiped old/beta users successfully!');
-      loadAdminData();
-    } else {
-      setGlobalError(res?.message || 'Failed to wipe beta users');
+    // 1. Filter out users that would be wiped (i.e. those without Stripe IDs and not Master Admins)
+    const vulnerableUsers = filteredUsers.filter(u => {
+      const isMasterAdmin = u.email === 'onwaterservices@gmail.com' || u.email === 'vixyvault0@gmail.com';
+      const hasStripe = Boolean(u.stripeCustomerId || u.stripeSubscriptionId);
+      return !isMasterAdmin && !hasStripe;
+    });
+
+    if (vulnerableUsers.length === 0) {
+      alert("No vulnerable test accounts found. (Active Stripe customers are protected).");
+      return;
     }
+
+    const confirmPhrase = `wipe ${vulnerableUsers.length}`;
+    const userInput = window.prompt(`WARNING: You are about to permanently delete ${vulnerableUsers.length} beta/test user accounts.\n\nActive Stripe customers (e.g. Sarah Quant, Alex Trader, Allan Yahir) are PROTECTED and will not be deleted.\n\nType "${confirmPhrase}" to proceed:`);
+    
+    if (userInput !== confirmPhrase) {
+      alert("Confirmation phrase did not match. Aborting wipe.");
+      return;
+    }
+
+    setIsWipingUsers(true);
+    
+    // Pass the target IDs to the backend just in case, but our backend also verifies Stripe protections natively
+    const targetUserIds = vulnerableUsers.map(u => u.id);
+    
+    try {
+      const res = await fetch('/api/admin/users/wipe', {
+        method: 'POST',
+        headers: getAdminHeaders(),
+        body: JSON.stringify({ targetUserIds })
+      });
+      const data = await res.json();
+      
+      if (data?.success) {
+        setActionSuccessMsg(data.message || 'Wiped old/beta users successfully!');
+        loadAdminData();
+      } else {
+        setGlobalError(data?.message || 'Failed to wipe beta users');
+      }
+    } catch (e) {
+      setGlobalError('Network error while wiping users');
+    }
+    
+    setIsWipingUsers(false);
   };
 
   // Compute Real Overview Metrics from Backend State
@@ -1087,7 +1122,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
                             <td className="p-3">
                               <span className="text-[10px] font-mono text-slate-400">
-                                {user.authStatus === 'DISCORD_PENDING' ? 'DISCORD_PENDING' : (user.uid ? user.uid.slice(0, 8) + '...' : 'LOCAL')}
+                                {user.uid ? user.uid.slice(0, 8) + '...' : 'LOCAL'}
                               </span>
                             </td>
 
@@ -1131,30 +1166,32 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             <td className="p-3">
                               <span
                                 className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                                  user.authStatus === 'DISCORD_PENDING'
-                                    ? 'bg-slate-700/50 text-slate-400 border border-slate-700'
-                                    : user.status === 'ACTIVE'
+                                  user.status === 'ACTIVE'
                                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
                                     : user.status === 'TRIALING'
                                     ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
                                     : 'bg-red-500/10 text-red-400 border border-red-500/30'
                                 }`}
                               >
-                                {user.authStatus === 'DISCORD_PENDING' ? 'NOT CONNECTED' : user.status}
+                                {user.status}
                               </span>
                             </td>
 
                             <td className="p-3 text-slate-400 text-[11px]">{user.joined}</td>
 
                             <td className="p-3">
-                              {user.authStatus === 'DISCORD_PENDING' ? (
-                                <span className="px-2 py-0.5 text-[9px] font-bold bg-indigo-500/10 text-indigo-400 rounded">
-                                  DISCORD ONLY
-                                </span>
-                              ) : isDupRisk ? (
+                              {isDupRisk ? (
                                 <span className="px-2 py-0.5 text-[9px] font-bold bg-red-500/20 text-red-300 border border-red-500/40 rounded flex items-center space-x-1 w-fit">
                                   <AlertTriangle className="w-3 h-3 text-red-400" />
                                   <span>DUPLICATE RISK</span>
+                                </span>
+                              ) : user.verificationStatus === 'UNVERIFIED' || (!user.discordLinked && !user.discordId) ? (
+                                <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-700/50 text-slate-400 border border-slate-700 rounded">
+                                  UNVERIFIED
+                                </span>
+                              ) : (user.verificationStatus as string) === 'NEEDS_GUILD' ? (
+                                <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/10 text-amber-400 rounded">
+                                  NEEDS GUILD
                                 </span>
                               ) : (
                                 <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/10 text-emerald-400 rounded">
@@ -2089,7 +2126,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <label className="text-purple-300/80 font-bold block">Discord Tag / Username</label>
                   <input
                     type="text"
-                    placeholder="allan048135"
+                    placeholder="Discord username"
                     value={editDiscordTag}
                     onChange={(e) => setEditDiscordTag(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
@@ -2100,7 +2137,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <label className="text-purple-300/80 font-bold block">Discord Display / Global Name</label>
                   <input
                     type="text"
-                    placeholder="allan305"
+                    placeholder="Display name"
                     value={editDiscordGlobalName}
                     onChange={(e) => setEditDiscordGlobalName(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
@@ -2111,7 +2148,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <label className="text-purple-300/80 font-bold block">Discord User ID</label>
                   <input
                     type="text"
-                    placeholder="315284910382911234"
+                    placeholder="Discord User ID"
                     value={editDiscordId}
                     onChange={(e) => setEditDiscordId(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"

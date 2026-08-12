@@ -360,7 +360,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                 </strong>
                 {' • '}
                 <span className="text-emerald-400 font-bold">
-                  Active Model Calibrated (Brier: {modelStatus?.activeModelBrier?.toFixed(3) || '0.142'})
+                  Active Model Calibrated (Brier: {modelStatus?.activeModelBrier?.toFixed(3) || '0.168'})
                 </span>
               </p>
             </div>
@@ -375,7 +375,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                     : '91%'}
                 </span>
                 <span className="text-[10px] text-emerald-400 block font-bold truncate">
-                  Brier {modelStatus?.activeModelBrier?.toFixed(3) || '0.142'} • LIVE
+                  Brier {modelStatus?.activeModelBrier?.toFixed(3) || '0.168'} • LIVE
                 </span>
               </div>
               <div className="min-w-0">

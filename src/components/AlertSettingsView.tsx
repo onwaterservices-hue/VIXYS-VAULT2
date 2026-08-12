@@ -176,7 +176,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
           </div>
 
           {/* Community Access Node (Discord Gateway) */}
-          <CommunityAccessNode settings={settings} setSettings={setSettings} mode="settings" />
+          <CommunityAccessNode userEmail={settings.emailAddress} settings={settings} setSettings={setSettings} mode="settings" />
 
           {/* Sound & Audio Notifications */}
           <div className="p-4 bg-[#0B061A] rounded-xl border border-purple-900/60 space-y-3">

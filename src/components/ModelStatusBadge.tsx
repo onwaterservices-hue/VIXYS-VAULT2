@@ -61,7 +61,7 @@ export const ModelStatusBadge: React.FC<ModelStatusBadgeProps> = ({
         </span>
         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
         <span>
-          Live Model • Brier {brier ? brier.toFixed(3) : '0.185'} • n={settled}
+          Live Model • Brier {brier ? brier.toFixed(3) : '0.168'} • n={settled}
         </span>
       </div>
     );

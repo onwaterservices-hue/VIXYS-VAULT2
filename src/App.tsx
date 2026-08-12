@@ -15,7 +15,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, syncAuthUserApi } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, syncAuthUserApi , safeFetchJson } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -31,6 +31,7 @@ import { SubscriptionView } from './components/SubscriptionView';
 import { AdminPanel } from './components/AdminPanel';
 import { LandingPage } from './components/LandingPage';
 import { CURRENT_DATA_SOURCE } from './utils/statGating';
+import { DiscordRequiredOverlay } from './components/DiscordRequiredOverlay';
 import { AuthModal } from './components/AuthModal';
 import { TradeJournalView } from './components/TradeJournalView';
 import { SettingsView } from './components/SettingsView';
@@ -71,26 +72,6 @@ export default function App() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
   const [isDiscordModalOpen, setIsDiscordModalOpen] = useState<boolean>(false);
 
-  const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>(() => {
-    try {
-      const saved = localStorage.getItem('vixy_auth');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const email = parsed?.user?.email?.toLowerCase();
-        if (email === 'vixyvault0@gmail.com' || email === 'onwaterservices@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
-          return 'ADMIN';
-        }
-        return parsed?.user?.role || 'ADMIN';
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return 'ADMIN';
-  });
-
-  // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
-  const [trialSeconds, setTrialSeconds] = useState<number>(10800);
-
   // Auth State (persisted or defaults to unauthenticated for visitors)
   const [authState, setAuthState] = useState<AuthState>(() => {
     try {
@@ -109,6 +90,55 @@ export default function App() {
       user: null,
     };
   });
+
+  const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const email = parsed?.user?.email?.toLowerCase();
+        if (email === 'vixyvault0@gmail.com' || email === 'onwaterservices@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
+          return 'ADMIN';
+        }
+        return parsed?.user?.role || 'DEMO';
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return 'DEMO';
+  });
+
+  // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
+  const [trialSeconds, setTrialSeconds] = useState<number>(10800);
+  useEffect(() => {
+    if (authState.isAuthenticated && authState.user?.email) {
+      safeFetchJson<{authenticated: boolean, user: any}>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
+        .then(res => {
+          if (res && res.authenticated && res.user) {
+            setTrialSeconds(res.user.trialSecondsRemaining || 0);
+            
+            setAuthState(prev => {
+              if (!prev.isAuthenticated || !prev.user) return prev;
+              
+              const updatedUser = {
+                ...prev.user,
+                discordLinked: res.user.discordLinked,
+                discordId: res.user.discordId,
+                role: (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO',
+                subscription: res.user.subscription
+              };
+              
+              localStorage.setItem('vixy_auth', JSON.stringify({ ...prev, user: updatedUser }));
+              return { ...prev, user: updatedUser };
+            });
+            
+            setUserRole(['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO'));
+          }
+        })
+        .catch(console.error);
+    }
+  }, [authState.isAuthenticated, authState.user?.email]);
+
 
   const VALID_ROUTES = [
     'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
@@ -423,10 +453,13 @@ export default function App() {
     async function syncProfile() {
       try {
         const activeEmail = authState.user?.email || alertSettings.emailAddress;
+        if (!activeEmail) return;
+        
         const res = await getDiscordUserProfileApi(activeEmail);
         if (res && res.linked && res.profile) {
           setAlertSettings((prev) => ({
             ...prev,
+            emailAddress: activeEmail,
             discordLinked: true,
             discordUsername: res.profile.discordUsername || prev.discordUsername,
             discordUserId: res.profile.discordUserId || prev.discordUserId,
@@ -435,11 +468,10 @@ export default function App() {
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
-        } else if (alertSettings.discordLinked) {
-          // Keep locally stored linked state if server is momentarily sync-pending
         } else {
           setAlertSettings((prev) => ({
             ...prev,
+            emailAddress: activeEmail,
             discordLinked: false,
             discordUsername: undefined,
             discordUserId: undefined,
@@ -453,7 +485,7 @@ export default function App() {
       }
     }
     syncProfile();
-  }, [authState.user?.email, alertSettings.emailAddress]);
+  }, [authState.user?.email]);
 
   useEffect(() => {
     try {
@@ -1056,6 +1088,8 @@ export default function App() {
         onSelectAsset={(sym) => setSelectedAsset(sym)}
         onNavigateTab={(tab) => setActiveTab(tab)}
       />
+
+      
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
       {userRole === 'DEMO' && trialSeconds <= 0 && (

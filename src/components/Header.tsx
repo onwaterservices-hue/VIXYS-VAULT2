@@ -20,6 +20,7 @@ import {
 import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys, AlertSettings } from '../types';
 import { Logo } from './Logo';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
+import { useLiveSignal } from '../hooks/useLiveSignal';
 import { DiscordCompactBadge } from './DiscordCompactBadge';
 
 interface HeaderProps {
@@ -89,29 +90,8 @@ export const Header: React.FC<HeaderProps> = ({
 
   const { tzName: userTzName, abbr: userTzAbbr } = getLocalTimezone();
 
-  const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
-  const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
+  const { signal: apiSignal, status: modelStatus } = useLiveSignal(selectedAsset || 'BTC', selectedTimeframe || '15M');
 
-  useEffect(() => {
-    let active = true;
-    const loadSignal = async () => {
-      const desk = selectedTimeframe.toLowerCase();
-      const [sig, status] = await Promise.all([
-        fetchApiSignal(selectedAsset, desk),
-        fetchModelStatus(selectedAsset, desk),
-      ]);
-      if (active) {
-        setApiSignal(sig);
-        setModelStatus(status);
-      }
-    };
-    loadSignal();
-    const interval = setInterval(loadSignal, 10000);
-    return () => {
-      active = false;
-      clearInterval(interval);
-    };
-  }, [selectedAsset, selectedTimeframe]);
 
   if (activeTab === 'landing') {
     return (
@@ -268,17 +248,17 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <span className="text-purple-700">•</span>
             <span>
-              {modelStatus?.hasActiveModel && apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined ? (
+              {modelStatus?.hasActiveModel && apiSignal?.confidence !== null && apiSignal?.confidence !== undefined ? (
                 <>
                   VIXY Confidence{' '}
-                  <strong className="text-white font-black text-xs font-mono px-1.5 py-0.5 rounded bg-purple-950 border border-purple-700/40">
-                    {Math.round(apiSignal.modelProbability * 100)}%
+                  <strong className="text-white font-black text-xs font-mono tabular-nums transition-all duration-300 px-1.5 py-0.5 rounded bg-purple-950 border border-purple-700/40">
+                    {Math.round(apiSignal.confidence || 0)}%
                   </strong>
                 </>
               ) : (
                 <strong className="text-amber-300 font-extrabold">
                   {modelStatus?.hasActiveModel
-                    ? `VIXY Engine (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.185'})`
+                    ? `VIXY Engine (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.168'})`
                     : `Telemetry (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
                 </strong>
               )}

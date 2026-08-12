@@ -371,31 +371,48 @@ export async function fetchPrediction(
   };
 }
 
+function getActiveUserEmailFallback(providedEmail?: string): string | undefined {
+  if (providedEmail && providedEmail.trim()) return providedEmail.trim();
+  try {
+    const savedAuth = localStorage.getItem('vixy_auth');
+    if (savedAuth) {
+      const parsed = JSON.parse(savedAuth);
+      if (parsed?.user?.email) return parsed.user.email.trim();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  return undefined;
+}
+
 export async function getDiscordAuthUrlApi(userEmail?: string) {
-  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+  const activeEmail = getActiveUserEmailFallback(userEmail);
+  const query = activeEmail ? `?email=${encodeURIComponent(activeEmail.toLowerCase())}` : '';
   const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>(`/api/auth/discord/url${query}`, {
-    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+    headers: activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : undefined,
   });
   return data;
 }
 
 export async function getDiscordUserProfileApi(userEmail?: string) {
-  const query = userEmail ? `?email=${encodeURIComponent(userEmail.toLowerCase())}` : '';
+  const activeEmail = getActiveUserEmailFallback(userEmail);
+  const query = activeEmail ? `?email=${encodeURIComponent(activeEmail.toLowerCase())}` : '';
   const data = await safeFetchJson<{ linked: boolean; profile: any }>(`/api/discord/user-profile${query}`, {
-    headers: userEmail ? { 'x-user-email': userEmail.toLowerCase() } : undefined,
+    headers: activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : undefined,
   });
   return data;
 }
 
 export async function verifyDiscordMembershipApi(discordUserId?: string, userEmail?: string) {
+  const activeEmail = getActiveUserEmailFallback(userEmail);
   try {
     const res = await fetch('/api/discord/verify-membership', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+        ...(activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : {}),
       },
-      body: JSON.stringify({ discordUserId, email: userEmail }),
+      body: JSON.stringify({ discordUserId, email: activeEmail }),
     });
     return await safeParseJson(res);
   } catch {
@@ -404,14 +421,15 @@ export async function verifyDiscordMembershipApi(discordUserId?: string, userEma
 }
 
 export async function disconnectDiscordApi(userEmail?: string) {
+  const activeEmail = getActiveUserEmailFallback(userEmail);
   try {
     const res = await fetch('/api/discord/disconnect', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
+        ...(activeEmail ? { 'x-user-email': activeEmail.toLowerCase() } : {}),
       },
-      body: JSON.stringify({ email: userEmail }),
+      body: JSON.stringify({ email: activeEmail }),
     });
     return await safeParseJson(res);
   } catch {
@@ -501,11 +519,16 @@ export interface ApiSignalResponse {
   minSamplesNeeded: number;
   generatedAt: string;
   disclaimer: string;
-  action: 'BUY_YES' | 'BUY_NO' | 'HOLD';
+  action: 'BUY_YES' | 'BUY_NO' | 'HOLD' | null;
+  direction?: 'UP' | 'DOWN' | 'NEUTRAL' | null;
   modelProbability: number | null;
-  confidence?: number;
+  confidence?: number | null;
   kalshiImpliedProbability: number | null;
   edge: number | null;
+  edgePct?: number | null;
+  engineState?: 'MONITORING' | 'EVALUATING' | 'LOCKED' | 'SETTLED' | 'STALE';
+  feedStatus?: 'LIVE' | 'DEGRADED' | 'STALE' | 'INVALID' | 'OFFLINE';
+  lockEvaluation?: any;
   modelValidation?: {
     trainedAt: string;
     brierScore: number;
@@ -513,22 +536,7 @@ export interface ApiSignalResponse {
   };
   status: string;
   rawLean?: string;
-  features: {
-    asset: string;
-    desk: string;
-    orderBookImbalance: number;
-    momentum5m: number;
-    momentum15m: number;
-    volatility15m: number;
-    crossVenue: {
-      spot: number;
-      kalshiStrike: number;
-      kalshiImpliedProb: number;
-      polymarketImpliedProb: number;
-      spreadPct: number;
-    };
-    computedAt?: string;
-  };
+  features?: any;
   hasActiveModel?: boolean;
   latencyMs?: number;
 }
@@ -561,7 +569,7 @@ export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15
     settledCount: 148,
     minRequired: 500,
     hasActiveModel: true,
-    activeModelBrier: 0.182,
+    activeModelBrier: 0.168,
     activeModelTrainedAt: new Date().toISOString(),
     lifetimeObservations: 18427,
     modelVersion: 'v4.3-INCREMENTAL',
@@ -807,13 +815,29 @@ export async function fetchLiveSignalData(asset: string = 'BTC', desk: string = 
 }
 
 export function getAdminHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
-  const currentEmail = typeof localStorage !== 'undefined' 
-    ? (localStorage.getItem('vixy_user_email') || localStorage.getItem('vixy_admin_email') || 'onwaterservices@gmail.com')
-    : 'onwaterservices@gmail.com';
+  let currentEmail = '';
+  let currentRole = 'OWNER'; // default for backwards compat
+  
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const auth = localStorage.getItem('vixy_auth');
+      if (auth) {
+        const parsed = JSON.parse(auth);
+        if (parsed?.user?.email) currentEmail = parsed.user.email;
+        if (parsed?.user?.role) currentRole = parsed.user.role;
+      }
+    } catch (e) {}
+    
+    if (!currentEmail) {
+      currentEmail = localStorage.getItem('vixy_user_email') || localStorage.getItem('vixy_admin_email') || 'onwaterservices@gmail.com';
+    }
+  }
+
   return {
     'Content-Type': 'application/json',
     'x-user-email': currentEmail,
-    'x-user-role': 'OWNER',
+    'x-user-role': currentRole,
+    'x-admin-role': currentRole,
     ...extraHeaders,
   };
 }

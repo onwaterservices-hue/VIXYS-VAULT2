@@ -49,5 +49,28 @@ service cloud.firestore {
       allow read: if true;
       allow write: if isSignedIn() && isValidId(predictionId);
     }
+
+    // Persistent Signal Logs
+    match /signal_logs/{signalId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Telemetry Observations
+    match /telemetry_observations/{obsId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // User Subscriptions & Discord Profiles
+    match /subscriptions/{subId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /discord_profiles/{profileId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

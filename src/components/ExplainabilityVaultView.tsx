@@ -74,7 +74,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       weight: +0.34,
       lean: 'BULLISH',
       confidence: 91,
-      observedFact: 'Aggressive buy market orders swallowing ask liquidity at $96,200.',
+      observedFact: 'Aggressive buy market orders swallowing ask liquidity at $64,200.',
       keyMetric: 'Cumulative Delta',
       keyMetricValue: '+1,820 BTC (5m)',
     },
@@ -92,7 +92,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       weight: +0.14,
       lean: 'BULLISH',
       confidence: 85,
-      observedFact: '$18.4M bid floor stacked beneath $96,000 strike floor.',
+      observedFact: '$18.4M bid floor stacked beneath $64,000 strike floor.',
       keyMetric: 'Bid-Ask Imbalance',
       keyMetricValue: '3.4x Bull Dominance',
     },
@@ -110,7 +110,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       weight: -0.06,
       lean: 'BEARISH',
       confidence: 62,
-      observedFact: 'Minor rejection near $96,650 upper Bollinger channel boundary.',
+      observedFact: 'Minor rejection near $64,650 upper Bollinger channel boundary.',
       keyMetric: 'Channel Compression',
       keyMetricValue: 'Overbought Short-term',
     },
@@ -140,7 +140,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       confidence: '75.2%',
       delta: '+4.1%',
       direction: 'UP',
-      reasons: ['Support floor established at $96,000 with 3.4x bid imbalance'],
+      reasons: ['Support floor established at $64,000 with 3.4x bid imbalance'],
       regime: 'Bullish Floor Lock',
     },
     {
@@ -148,7 +148,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
       confidence: '71.1%',
       delta: '-1.5%',
       direction: 'DOWN',
-      reasons: ['Short-term pattern engine signaled resistance at $96,650'],
+      reasons: ['Short-term pattern engine signaled resistance at $64,650'],
       regime: 'Channel Compression',
     },
     {
@@ -203,7 +203,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
   // Opportunity Ranking Matrix
   const opportunityRankings = [
-    { asset: 'BTC', strike: '$96,000 YES', rawScore: '84%', calibratedScore: '78.4%', edge: '+12.4%', harmony: 'HIGH (88%)', bias: 'BULLISH' },
+    { asset: 'BTC', strike: '$64,000 YES', rawScore: '84%', calibratedScore: '78.4%', edge: '+12.4%', harmony: 'HIGH (88%)', bias: 'BULLISH' },
     { asset: 'NVDA', strike: '$135,00 YES', rawScore: '89%', calibratedScore: '82.1%', edge: '+15.1%', harmony: 'VERY HIGH (94%)', bias: 'BULLISH' },
     { asset: 'ETH', strike: '$3,400 YES', rawScore: '76%', calibratedScore: '71.5%', edge: '+8.2%', harmony: 'MEDIUM (74%)', bias: 'BULLISH' },
     { asset: 'SOL', strike: '$190 YES', rawScore: '78%', calibratedScore: '73.0%', edge: '+9.5%', harmony: 'HIGH (82%)', bias: 'BULLISH' },
@@ -470,7 +470,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                     Divergent Signal Detected:
                   </span>
                   <p className="text-xs text-purple-300/80 leading-snug">
-                    Pattern Engine indicates short-term overbought channel test at $96,650, while Order Flow and Whales continue aggressive net buying.
+                    Pattern Engine indicates short-term overbought channel test at $64,650, while Order Flow and Whales continue aggressive net buying.
                   </p>
                 </div>
               </div>
@@ -489,7 +489,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                     ▲ WOULD INCREASE CONFIDENCE TO 85%+
                   </span>
                   <p className="text-purple-200/80 leading-snug">
-                    Clean spot price breakout above $96,650 with +500 BTC volume acceleration.
+                    Clean spot price breakout above $64,650 with +500 BTC volume acceleration.
                   </p>
                 </div>
 

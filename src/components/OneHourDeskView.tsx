@@ -117,7 +117,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
     };
   }, []);
 
-  const spotPrice = spotPrices?.[selectedAsset] || spotPrices?.['BTC'] || ticker?.price || 64160.5;
+  const spotPrice = spotPrices?.[selectedAsset] || spotPrices?.['BTC'] || ticker?.price || 0;
 
   useEffect(() => {
     let active = true;

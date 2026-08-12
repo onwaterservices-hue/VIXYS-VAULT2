@@ -60,6 +60,47 @@
         "timestamp": { "type": "number" }
       },
       "required": ["direction", "targetPrice", "confidence", "timestamp"]
+    },
+    "signalLog": {
+      "title": "Persistent 15M Signal Log",
+      "description": "15-minute prediction cycle record with settlement and outcome tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "market": { "type": "string", "maxLength": 100 },
+        "intervalStart": { "type": "string", "maxLength": 100 },
+        "intervalEnd": { "type": "string", "maxLength": 100 },
+        "direction": { "type": "string", "maxLength": 10 },
+        "confidence": { "type": "number" },
+        "targetStrike": { "type": "number" },
+        "spotAtLock": { "type": "number" },
+        "status": { "type": "string", "maxLength": 20 },
+        "settlementPrice": { "type": "number" },
+        "actualOutcome": { "type": "string", "maxLength": 10 },
+        "wasCorrect": { "type": "boolean" },
+        "brierScore": { "type": "number" }
+      },
+      "required": ["id", "market", "intervalStart", "direction", "confidence", "targetStrike", "status"]
+    },
+    "telemetryObservation": {
+      "title": "Telemetry Observation",
+      "description": "Real-time tick and observation telemetry snapshot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "timestampMs": { "type": "number" },
+        "asset": { "type": "string", "maxLength": 20 },
+        "btcPrice": { "type": "number" },
+        "kalshiStrike": { "type": "number" },
+        "kalshiImpliedProb": { "type": "number" },
+        "modelProb": { "type": "number" },
+        "edgePct": { "type": "number" },
+        "confidence": { "type": "number" },
+        "direction": { "type": "string", "maxLength": 20 },
+        "engineState": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "timestamp", "timestampMs", "asset", "btcPrice", "modelProb", "engineState"]
     }
   },
   "firestore": {
@@ -78,6 +119,14 @@
     "/predictions/{predictionId}": {
       "schema": { "$ref": "#/entities/predictionSignal" },
       "description": "Market prediction signals"
+    },
+    "/signal_logs/{signalId}": {
+      "schema": { "$ref": "#/entities/signalLog" },
+      "description": "Persistent 15M signal cycle logs"
+    },
+    "/telemetry_observations/{obsId}": {
+      "schema": { "$ref": "#/entities/telemetryObservation" },
+      "description": "Real-time telemetry observations"
     }
   }
 }
