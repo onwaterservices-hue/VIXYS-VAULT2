@@ -71,22 +71,21 @@ const MIN_CANDLE_SLOT_PX = 12;
 function useContainerSize() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState<number>(800);
-  const [height, setHeight] = useState<number>(550);
+  const [height, setHeight] = useState<number>(510);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
 
-    const updateDimensions = () => {
-      const rect = element.getBoundingClientRect();
-      const w = Math.floor(rect.width) || element.clientWidth || 800;
-      const h = Math.floor(rect.height) || element.clientHeight || 550;
-      if (w > 0) setWidth(Math.max(320, w));
-      if (h > 0) setHeight(Math.max(450, h));
-    };
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect && entry.contentRect.width > 0) {
+          setHeight(Math.floor(entry.contentRect.height));
+          setWidth(Math.floor(entry.contentRect.width));
+        }
+      }
+    });
 
-    updateDimensions();
-    const observer = new ResizeObserver(updateDimensions);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);

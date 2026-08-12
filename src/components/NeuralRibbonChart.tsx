@@ -36,28 +36,19 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
   // Resize Observer for robust canvas sizing
   useEffect(() => {
     const canvas = canvasRef.current;
-    const container = containerRef.current || canvas?.parentElement;
+    const container = canvas?.parentElement;
     if (!canvas || !container) return;
     
-    const updateDimensions = () => {
-      const rect = container.getBoundingClientRect();
-      const w = Math.floor(rect.width) || container.clientWidth || 700;
-      const h = Math.floor(rect.height) || container.clientHeight || 320;
-      
-      const safeW = Math.max(300, w);
-      const safeH = Math.max(200, h);
-      
-      if (canvas.width !== safeW) canvas.width = safeW;
-      if (canvas.height !== safeH) canvas.height = safeH;
+    const handleResize = () => {
+      canvas.width = container.clientWidth || 700;
+      canvas.height = container.clientHeight || 320;
     };
     
-    updateDimensions();
-    const observer = new ResizeObserver(updateDimensions);
+    handleResize(); // Initial sizing
+    const observer = new ResizeObserver(handleResize);
     observer.observe(container);
     return () => observer.disconnect();
   }, []);
@@ -216,13 +207,8 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       try {
         particleOffset = (particleOffset + 0.8) % 30;
 
-        const width = canvas.width || 700;
-        const height = canvas.height || 320;
-
-        if (width <= 0 || height <= 0) {
-          animationFrameId = requestAnimationFrame(render);
-          return;
-        }
+        const width = canvas.width;
+        const height = canvas.height;
 
         // Fill background
         ctx.fillStyle = '#060312';
@@ -236,7 +222,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           const y = (height / gridRows) * i;
           ctx.beginPath();
           ctx.moveTo(0, y);
-          ctx.lineTo(Math.max(0, width - 60), y);
+          ctx.lineTo(width - 60, y);
           ctx.stroke();
         }
 
@@ -246,11 +232,10 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           let minP = Math.min(...prices);
           let maxP = Math.max(...prices);
           if (maxP === minP) {
-            const pad = maxP > 0 ? maxP * 0.02 : 1;
-            maxP += pad;
-            minP -= pad;
+            maxP += 10;
+            minP -= 10;
           }
-          const pRange = maxP - minP || 1;
+          const pRange = maxP - minP;
 
           const points = priceHistory.map((pt, index) => {
             const x = (index / (priceHistory.length - 1)) * (width - 80) + 20;
@@ -468,10 +453,8 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       </div>
 
       {/* Canvas Neural Flow Ribbon Chart */}
-      <div className={`relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] ${isFullscreen ? 'h-[75vh] min-h-[500px]' : 'h-80 min-h-[320px]'} flex items-center justify-center`}>
-        <div ref={containerRef} className="w-full h-full relative">
-          <canvas ref={canvasRef} className="w-full h-full block" />
-        </div>
+      <div className={`relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] ${isFullscreen ? 'h-[75vh]' : 'h-80'} flex items-center justify-center`}>
+        <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
     </div>
   );
