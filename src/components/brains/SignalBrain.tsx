@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layers, Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff, Lock, Unlock } from 'lucide-react';
+import { Layers, Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff, Lock, Unlock, ShieldAlert } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 import { VaultCard } from '../VaultCard';
 
@@ -37,7 +37,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const connectionLabel = isOfflineStatus ? 'OFFLINE' : isDegradedStatus ? 'DEGRADED' : 'CONNECTED';
 
   // Dynamic Lock evaluation metrics
-  const lockScorePct = lockEvaluation?.lockScore ?? lockEvaluation?.lockPercentage ?? Math.min(98, Math.max(50, Math.round((rawApiData?.confidence || signal.confidence || 72) * 0.95)));
+  const lockScorePct = lockEvaluation?.lockScore ?? lockEvaluation?.lockPercentage ?? Math.min(98, Math.max(50, Math.round((rawApiData?.confidence || signal.confidence || 0) * 0.95)));
   const verifiedCriteriaCount = lockEvaluation?.verifiedCriteria ?? lockEvaluation?.criteriaVerified ?? (signal.confidence > 75 ? 5 : 4);
   const totalCriteriaCount = lockEvaluation?.totalCriteria ?? 6;
 
@@ -62,7 +62,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const lockState = sigAny?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
   const decision = sigAny?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
   const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
-  const correlationPenalty = sigAny?.correlationPenalty ?? rawApiData?.correlationPenalty ?? 'ACTIVE (-3.2%)';
+  const edgePct = sigAny?.edgePct ?? rawApiData?.edgePct ?? 0;
+  const edgeDisplay = edgePct > 0 ? `+${edgePct.toFixed(1)}% OVER MARKET` : `${edgePct.toFixed(1)}% OVER MARKET`;
 
   const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
   const currentDirection = signal?.direction ?? rawApiData?.direction ?? (upProbability >= downProbability ? 'UP' : 'DOWN');
@@ -76,9 +77,44 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const showLockPassState = !isQualifiedLock || lockState === 'PASS' || isStaleOrInvalid;
   const showPassState = isModelPass; // fallback for other usages
 
-  const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 64036.72;
-  const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 64160);
+  const reversalRisk = Number(
+    (signal as any)?.reversalRisk ??
+    rawApiData?.guardianDecision?.reversalThreat ??
+    rawApiData?.guardianDecision?.reversalThreatPct ??
+    rawApiData?.features?.reversalRisk ??
+    0
+  );
+  const isProtectState = rawApiData?.guardianDecision?.action === 'EXIT' || rawApiData?.guardianDecision?.thesisInvalidated || reversalRisk >= 50;
+  const isCautionState = rawApiData?.guardianDecision?.action === 'WATCH' || (reversalRisk >= 30 && reversalRisk < 50);
+  
+  // lockDisplayMode maps to the 3 visual states described in the prompt
+  const lockDisplayMode = isProtectState ? 'EXIT' : (isCautionState || showLockPassState) ? 'CAUTION' : 'LOCKED';
+
+  const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 0;
+  const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 0);
   const displayConfidence = Math.round(currentConfidence);
+
+  const rawCalibStatus = rawApiData?.calibrationStatus || rawApiData?.calibration?.calibrationStatus;
+  const calibrationStatus = rawCalibStatus === 'ACTIVE' 
+      ? 'CALIBRATED' 
+      : (rawCalibStatus || 'CALIBRATION WARMUP');
+
+  const displayOrderFlow = rawApiData?.features?.orderBookImbalance ?? 0;
+  const orderFlowStr = displayOrderFlow > 0 ? `+${displayOrderFlow.toFixed(3)}` : displayOrderFlow.toFixed(3);
+  
+  const displayMomentum = rawApiData?.features?.momentum5m ?? 0;
+  const momentumStr = displayMomentum > 0 ? `+${(displayMomentum * 100).toFixed(1)}` : (displayMomentum * 100).toFixed(1);
+  
+  const displayVolatility = rawApiData?.features?.volatility15m ?? 0;
+  const volatilityStr = (displayVolatility * 100).toFixed(2);
+  
+  const displayDistance = rawApiData?.features?.crossVenue?.distance ?? 0;
+  const distanceStr = displayDistance > 0 ? `+${Math.round(displayDistance)}` : `${Math.round(displayDistance)}`;
+  
+  const displayRegime = rawApiData?.features?.regime?.split('_')[0] || 'UNKNOWN';
+
+  const takerBuyersPct = Math.max(0, Math.min(100, Math.round((displayOrderFlow + 1) * 50)));
+  const takerSellersPct = 100 - takerBuyersPct;
 
   // Compute LAST 10 dots dynamically from real resolved signal outcome logs
   const resolvedLogs = rawApiData?.recentResolvedLogs || [];
@@ -103,11 +139,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   }).length;
   const downCount = displayLogs.length - upCount;
   const totalWins = displayLogs.filter((s: any) => s.wasCorrect).length;
-  const winRatePct = displayLogs.length > 0 ? Math.round((totalWins / displayLogs.length) * 100) : 60;
+  const winRatePct = displayLogs.length > 0 ? Math.round((totalWins / displayLogs.length) * 100) : 0;
 
   // Micro-telemetry values
-  const spotVsStrikeDelta = currentPrice && targetPrice ? currentPrice - targetPrice : -123.28;
-  const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : -0.19;
+  const spotVsStrikeDelta = currentPrice && targetPrice ? currentPrice - targetPrice : 0;
+  const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
   const formattedSpotVsStrikeVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${Math.abs(spotVsStrikeDelta).toFixed(2)}`;
   const formattedSpotVsStrikePct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
 
@@ -130,7 +166,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div className={`px-3 py-1.5 rounded-full border ${isBullish ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' : showPassState ? 'bg-purple-950/30 border-purple-900/60 text-purple-400' : 'bg-[#1a050a] border-rose-900/60 text-rose-400'} flex items-center gap-2 font-black shadow-lg`}>
             <span className={`w-2 h-2 rounded-full ${isBullish ? 'bg-emerald-400' : showPassState ? 'bg-purple-400' : 'bg-rose-500'} shadow-sm`} />
             {showPassState ? 'PASS' : (isBullish ? 'BUY UP' : 'BUY DOWN')} {displayConfidence}% 
-            <span className="text-[8px] opacity-70 ml-1 font-normal">CALIBRATED</span>
+            <span className="text-[8px] opacity-70 ml-1 font-normal">{calibrationStatus}</span>
           </div>
         </div>
 
@@ -212,22 +248,24 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                }`} style={{ textShadow: isModelPass ? '0 0 15px rgba(168,85,247,0.4)' : isBullish ? '0 0 15px rgba(0,255,157,0.4)' : '0 0 15px rgba(255,51,102,0.4)' }}>{displayConfidence}%</span>
                <span className={`text-[10px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded border ${
                  isModelPass ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isBullish ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
-               }`}>CALIBRATED</span>
+               }`}>{calibrationStatus}</span>
              </div>
            </div>
         </div>
 
         {/* ULTRA-PROMINENT VIXY LOCK */}
         <div className={`mt-2 mb-6 p-[1px] rounded-xl relative z-10 overflow-hidden ${
-          showLockPassState
+          lockDisplayMode === 'EXIT'
+            ? 'bg-gradient-to-b from-rose-600/60 to-rose-950/20 shadow-[0_0_50px_rgba(244,63,94,0.3)]'
+            : lockDisplayMode === 'CAUTION'
             ? 'bg-gradient-to-b from-amber-500/40 to-amber-900/10 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
             : 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.3)]'
         }`}>
           <div className={`w-full h-full rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-1000 relative ${
-            showLockPassState ? 'bg-[#0f0902]' : 'bg-[#010a0c]'
+            lockDisplayMode === 'EXIT' ? 'bg-[#0a0002]' : lockDisplayMode === 'CAUTION' ? 'bg-[#0f0902]' : 'bg-[#010a0c]'
           }`}>
              {/* Cybernetic background accents */}
-             {!showLockPassState && (
+             {lockDisplayMode === 'LOCKED' && (
                <>
                  <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.04)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
                  <div className="absolute inset-0 bg-cyan-500/10 animate-[pulse_4s_ease-in-out_infinite]" />
@@ -237,28 +275,45 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                  <div className="absolute -right-1 -bottom-1 w-4 h-4 border-b-2 border-r-2 border-cyan-400"></div>
                </>
              )}
+             {lockDisplayMode === 'EXIT' && (
+               <>
+                 <div className="absolute inset-0 bg-[linear-gradient(rgba(244,63,94,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(244,63,94,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+                 <div className="absolute inset-0 bg-rose-500/5 animate-[pulse_3s_ease-in-out_infinite]" />
+                 <div className="absolute top-0 left-0 w-full h-[1px] bg-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.8)]" />
+               </>
+             )}
 
              <div className="flex items-center gap-6 relative z-10">
                <div className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border-2 shadow-2xl ${
-                 showLockPassState 
-                   ? 'bg-[#1a0f00] border-amber-500/50 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]' 
-                   : 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
+                 lockDisplayMode === 'EXIT'
+                    ? 'bg-[#1a0005] border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]'
+                    : lockDisplayMode === 'CAUTION'
+                    ? 'bg-[#1a0f00] border-amber-500/50 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                    : 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
                }`}>
-                 <Lock className="w-8 h-8" />
+                 {lockDisplayMode === 'EXIT' ? <ShieldAlert className="w-8 h-8" /> : lockDisplayMode === 'CAUTION' ? <AlertTriangle className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                </div>
                <div>
                  <div className="flex items-center gap-3 mb-1">
-                   <span className={`text-[13px] font-black tracking-[0.25em] uppercase ${showLockPassState ? 'text-amber-500/80' : 'text-cyan-400/90'}`}>VIXY LOCK</span>
-                   <span className={`text-[32px] font-black tracking-widest uppercase leading-none ${showLockPassState ? 'text-amber-500' : 'text-cyan-300'}`} style={{ textShadow: showLockPassState ? '0 0 15px rgba(245,158,11,0.5)' : '0 0 20px rgba(34,211,238,0.9)' }}>
-                     {showLockPassState ? 'PASS' : 'LOCKED'}
+                   <span className={`text-[13px] font-black tracking-[0.25em] uppercase ${
+                     lockDisplayMode === 'EXIT' ? 'text-rose-500/90' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/80' : 'text-cyan-400/90'
+                   }`}>{lockDisplayMode === 'EXIT' ? '🚨 VIXY LOCK' : 'VIXY LOCK'}</span>
+                   <span className={`text-[32px] font-black tracking-widest uppercase leading-none ${
+                     lockDisplayMode === 'EXIT' ? 'text-rose-500' : lockDisplayMode === 'CAUTION' ? 'text-amber-500' : 'text-cyan-300'
+                   }`} style={{ textShadow: lockDisplayMode === 'EXIT' ? '0 0 20px rgba(244,63,94,0.6)' : lockDisplayMode === 'CAUTION' ? '0 0 15px rgba(245,158,11,0.5)' : '0 0 20px rgba(34,211,238,0.9)' }}>
+                     {lockDisplayMode === 'EXIT' ? 'EXIT / PROTECT' : lockDisplayMode === 'CAUTION' ? 'CAUTION' : 'LOCKED'}
                    </span>
                  </div>
                  <div className="hidden sm:block mt-2">
-                   <span className={`text-[11px] font-black tracking-[0.2em] uppercase mb-1 block ${showLockPassState ? 'text-amber-500/80' : 'text-cyan-400'}`}>
-                     {showLockPassState ? 'ENTRY BLOCKED' : 'QUALIFIED ENTRY'}
+                   <span className={`text-[11px] font-black tracking-[0.2em] uppercase mb-1 block ${
+                     lockDisplayMode === 'EXIT' ? 'text-rose-400' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/80' : 'text-cyan-400'
+                   }`}>
+                     {lockDisplayMode === 'EXIT' ? 'THESIS INVALIDATED' : lockDisplayMode === 'CAUTION' ? 'EDGE DETERIORATING' : 'QUALIFIED ENTRY'}
                    </span>
-                   <span className={`text-[11px] font-mono block ${showLockPassState ? 'text-amber-500/60' : 'text-slate-300'}`}>
-                     {showLockPassState ? 'Qualification not met.' : 'All entry conditions met. Edge threshold exceeded.'}
+                   <span className={`text-[11px] font-mono block ${
+                     lockDisplayMode === 'EXIT' ? 'text-rose-300/80' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/60' : 'text-slate-300'
+                   }`}>
+                     {lockDisplayMode === 'EXIT' ? 'Original entry conditions are no longer satisfied. Protect capital.' : lockDisplayMode === 'CAUTION' ? 'Market conditions are weakening. Monitor position closely.' : 'All entry conditions met. Edge threshold exceeded.'}
                    </span>
                  </div>
                </div>
@@ -266,20 +321,50 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              
              <div className="relative z-10 flex flex-col items-end justify-center">
                <div className={`px-8 py-4 rounded-lg border-2 text-lg font-black tracking-[0.15em] uppercase flex items-center justify-center ${
-                 showLockPassState
+                 lockDisplayMode === 'EXIT'
+                   ? 'bg-[#1a0005] border-rose-600/80 text-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.4)]'
+                   : lockDisplayMode === 'CAUTION'
                    ? 'bg-[#140b00] border-amber-900/60 text-amber-500/80'
                    : isBullish
                    ? 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
                    : 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
-               }`} style={{ textShadow: !showLockPassState && isBullish ? '0 0 10px rgba(0,255,157,0.5)' : !showLockPassState && !isBullish ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
-                 {showLockPassState ? 'VIXY PASS → WAIT' : (isBullish ? 'BUY UP → ENTER' : 'BUY DOWN → ENTER')}
+               }`} style={{ textShadow: lockDisplayMode === 'EXIT' ? '0 0 15px rgba(244,63,94,0.6)' : lockDisplayMode === 'LOCKED' && isBullish ? '0 0 10px rgba(0,255,157,0.5)' : lockDisplayMode === 'LOCKED' && !isBullish ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
+                 {lockDisplayMode === 'EXIT' ? 'PROTECT CAPITAL → EXIT' : lockDisplayMode === 'CAUTION' ? 'ENTRY NOT RECOMMENDED' : (isBullish ? 'BUY UP → ENTER' : 'BUY DOWN → ENTER')}
                </div>
-               <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${showLockPassState ? 'text-amber-500/60' : 'text-cyan-400'}`}>
-                 {showLockPassState ? 'GATE CLOSED' : 'EXECUTION AUTHORIZED'}
-                 {!showLockPassState && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
+               <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${
+                 lockDisplayMode === 'EXIT' ? 'text-rose-400' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/60' : 'text-cyan-400'
+               }`}>
+                 {lockDisplayMode === 'EXIT' ? 'RISK STATE: CRITICAL' : lockDisplayMode === 'CAUTION' ? 'GATE CLOSED' : 'EXECUTION AUTHORIZED'}
+                 {lockDisplayMode === 'LOCKED' && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
                </div>
              </div>
           </div>
+          
+          {(lockDisplayMode === 'EXIT' || lockDisplayMode === 'CAUTION') && (
+            <div className={`relative z-10 border-t ${lockDisplayMode === 'EXIT' ? 'border-rose-900/40 bg-[#0a0002]/90' : 'border-amber-900/30 bg-[#0f0902]/90'} px-5 py-3`}>
+              <div className={`text-[9px] font-bold tracking-[0.2em] uppercase mb-2 ${lockDisplayMode === 'EXIT' ? 'text-rose-500/70' : 'text-amber-500/70'}`}>
+                RISK TELEMETRY
+              </div>
+              <div className="flex flex-wrap items-center gap-4 sm:gap-8">
+                <div>
+                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>REVERSAL THREAT</div>
+                  <div className={`text-xs font-black ${lockDisplayMode === 'EXIT' ? 'text-rose-400' : 'text-amber-400'}`}>{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
+                </div>
+                <div>
+                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>ORDER FLOW</div>
+                  <div className={`text-xs font-black ${displayOrderFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
+                  </div>
+                </div>
+                <div>
+                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>POSITION STATE</div>
+                  <div className={`text-xs font-black ${lockDisplayMode === 'EXIT' ? 'text-rose-400' : 'text-amber-400'}`}>
+                    {lockDisplayMode === 'EXIT' ? 'PROTECT' : 'WATCH'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* EVIDENCE ACCUMULATION */}
@@ -324,16 +409,20 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">ORDER FLOW</span>
              <div className="relative z-10">
                <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.orderBookImbalance >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                 {rawApiData?.features?.orderBookImbalance >= 0 ? '+' : ''}{rawApiData?.features?.orderBookImbalance?.toFixed(3) || '+0.400'}
+                 {orderFlowStr}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.orderBookImbalance >= 0 ? 'text-[#00FF9D]/80' : 'text-[#FF3366]/80'}`}>
-                 {rawApiData?.features?.orderBookImbalance >= 0 ? 'BULLISH' : 'BEARISH'}
+                 {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
                </div>
              </div>
-             <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
-               <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 10C5 10 7 12 10 12C14 12 16 7 20 7C24 7 26 13 30 13C34 13 37 4 39 4" stroke={rawApiData?.features?.orderBookImbalance >= 0 ? "#00FF9D" : "#FF3366"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-               </svg>
+             <div className="absolute bottom-2 right-2 opacity-40 group-hover:opacity-70 transition-opacity flex items-end gap-[2px] h-4">
+               {[20, 35, 50, 75, 90, 80, 60, 40].map((h, i) => {
+                   const isBull = (rawApiData?.features?.orderBookImbalance ?? 0) >= 0;
+                   const actualH = isBull ? h : [90, 75, 60, 40, 35, 30, 20, 15][i];
+                   return (
+                     <div key={i} className={`w-1 rounded-t-sm ${isBull ? 'bg-[#00FF9D]' : 'bg-[#FF3366]'}`} style={{ height: `${actualH}%` }} />
+                   )
+               })}
              </div>
            </div>
            
@@ -342,10 +431,10 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">MOMENTUM</span>
              <div className="relative z-10">
                <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.momentum5m >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                 {rawApiData?.features?.momentum5m >= 0 ? '+' : ''}{(rawApiData?.features?.momentum5m * 100)?.toFixed(1) || '-68.7'}%
+                 {momentumStr}%
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.momentum5m >= 0 ? 'text-[#00FF9D]/80' : 'text-[#FF3366]/80'}`}>
-                 STRONG
+                 {Math.abs(displayMomentum) > 0.4 ? 'STRONG' : 'NEUTRAL'}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
@@ -360,7 +449,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">VOLATILITY</span>
              <div className="relative z-10">
                <div className="text-xl font-black tracking-wider text-slate-200">
-                 {(rawApiData?.features?.volatility15m * 100)?.toFixed(2) || '68.90'}%
+                 {volatilityStr}%
                </div>
                <div className="text-[10px] font-bold tracking-widest uppercase mt-1 text-[#00FF9D]/80">
                  ELEVATED
@@ -378,7 +467,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
              <div className="relative z-10">
                <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.crossVenue?.distance >= 0 ? 'text-[#00FF9D]' : 'text-[#00FF9D]'}`}>
-                 {rawApiData?.features?.crossVenue?.distance > 0 ? '+' : ''}{Math.round(rawApiData?.features?.crossVenue?.distance || 24)}
+                 {distanceStr}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 text-[#00FF9D]/80`}>
                  FAVORABLE
@@ -396,7 +485,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">REGIME</span>
              <div className="relative z-10">
                <div className="text-xl font-black tracking-wider text-slate-200 truncate">
-                 {rawApiData?.features?.regime?.split('_')[0] || 'TRENDING'}
+                 {displayRegime}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.regime?.includes('BEAR') ? 'text-[#FF3366]/80' : 'text-[#00FF9D]/80'}`}>
                  {rawApiData?.features?.regime?.includes('BEAR') ? 'BEARISH' : 'BULLISH'}
@@ -414,7 +503,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-6 border-t border-purple-900/30 relative z-10">
            <div className="flex items-center gap-4 text-[10px] font-bold tracking-[0.15em] uppercase">
              <span className="text-purple-400/60">INSTITUTIONAL EDGE</span>
-             <span className="text-cyan-400">{correlationPenalty || '+1.5% OVER MARKET'}</span>
+             <span className="text-cyan-400">{edgeDisplay}</span>
            </div>
            <div className="flex items-center gap-4 text-[10px] font-bold tracking-[0.15em] uppercase">
              <span className="text-purple-400/60">QUALIFIED EVIDENCE FACTORS</span>
@@ -441,36 +530,36 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                <div className="flex justify-between items-end">
                   <div>
                      <div className="text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-1">TAKER BUYERS</div>
-                     <div className="text-3xl font-black text-[#00FF9D]">{Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%</div>
+                     <div className="text-3xl font-black text-[#00FF9D]">{takerBuyersPct}%</div>
                   </div>
                   <div className="text-right">
                      <div className="text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-1">TAKER SELLERS</div>
-                     <div className="text-3xl font-black text-[#FF3366]">{100 - Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%</div>
+                     <div className="text-3xl font-black text-[#FF3366]">{takerSellersPct}%</div>
                   </div>
                </div>
                
                <div className="h-3 w-full bg-[#1a050a] rounded-full overflow-hidden flex relative shadow-inner">
                   <div 
                     className="h-full bg-[#00FF9D] shadow-[0_0_10px_rgba(0,255,157,0.5)] transition-all duration-1000" 
-                    style={{ width: `${Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%` }} 
+                    style={{ width: `${takerBuyersPct}%` }} 
                   />
                   <div 
                     className="h-full bg-[#FF3366] transition-all duration-1000" 
-                    style={{ width: `${100 - Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%` }} 
+                    style={{ width: `${takerSellersPct}%` }} 
                   />
                </div>
 
                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
                   <div>
                      <div className="text-[9px] font-bold tracking-[0.15em] text-purple-400/60 uppercase mb-1">NET FLOW (DELTA)</div>
-                     <div className={`text-lg font-black ${Number(rawApiData?.features?.orderBookImbalance) >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                        {Number(rawApiData?.features?.orderBookImbalance) >= 0 ? '+' : ''}{Number(rawApiData?.features?.orderBookImbalance || 0.400).toFixed(3)}
+                     <div className={`text-lg font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
+                        {displayOrderFlow >= 0 ? '+' : ''}{Math.abs(displayOrderFlow).toFixed(3)}
                      </div>
                   </div>
                   <div>
                      <div className="text-[9px] font-bold tracking-[0.15em] text-purple-400/60 uppercase mb-1">DELTA (EST. USD)</div>
-                     <div className={`text-lg font-black ${Number(rawApiData?.features?.orderBookImbalance) >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                        {Number(rawApiData?.features?.orderBookImbalance) >= 0 ? '+' : '-'}${Math.abs((Number(rawApiData?.features?.orderBookImbalance || 0.4) * 6.2)).toFixed(2)}M
+                     <div className={`text-lg font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
+                        {displayOrderFlow >= 0 ? '+' : '-'}${Math.abs(displayOrderFlow * 6.2).toFixed(2)}M
                      </div>
                   </div>
                   <div>
@@ -481,8 +570,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                   </div>
                   <div>
                      <div className="text-[9px] font-bold tracking-[0.15em] text-purple-400/60 uppercase mb-1">FLOW STATE</div>
-                     <div className={`text-lg font-black ${Number(rawApiData?.features?.orderBookImbalance) >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                        {Number(rawApiData?.features?.orderBookImbalance) >= 0 ? 'BULLISH' : 'BEARISH'}
+                     <div className={`text-lg font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
+                        {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
                      </div>
                   </div>
                </div>
@@ -492,19 +581,19 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-bold tracking-[0.2em] uppercase">
                      <span className="text-purple-400/70">BUY VOLUME</span>
-                     <span className="text-[#00FF9D]">{Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%</span>
+                     <span className="text-[#00FF9D]">{takerBuyersPct}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-[#06020c] rounded-full overflow-hidden">
-                     <div className="h-full bg-[#00FF9D]" style={{ width: `${Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%` }} />
+                     <div className="h-full bg-[#00FF9D]" style={{ width: `${takerBuyersPct}%` }} />
                   </div>
                </div>
                <div className="space-y-2">
                   <div className="flex justify-between text-[10px] font-bold tracking-[0.2em] uppercase">
                      <span className="text-purple-400/70">SELL VOLUME</span>
-                     <span className="text-[#FF3366]">{100 - Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%</span>
+                     <span className="text-[#FF3366]">{takerSellersPct}%</span>
                   </div>
                   <div className="h-1.5 w-full bg-[#06020c] rounded-full overflow-hidden">
-                     <div className="h-full bg-[#FF3366]" style={{ width: `${100 - Math.max(0, Math.min(100, Math.round((Number(rawApiData?.features?.orderBookImbalance || signal?.confidence / 100 || 0.6) + 1) * 50)))}%` }} />
+                     <div className="h-full bg-[#FF3366]" style={{ width: `${takerSellersPct}%` }} />
                   </div>
                </div>
             </div>
@@ -517,13 +606,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="bg-[#06020c] border border-purple-900/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg">
           <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">TARGET STRIKE</div>
           <div className="flex items-center gap-3">
-            <div className="text-3xl font-black text-purple-200 tracking-tighter">${targetPrice ? targetPrice.toLocaleString() : '64,160'}</div>
+            <div className="text-3xl font-black text-purple-200 tracking-tighter">${targetPrice ? targetPrice.toLocaleString() : '---'}</div>
             <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isBullish ? 'bg-purple-900/30 text-purple-300 border border-purple-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
-              MUST EXPIRE {isBullish ? 'ABOVE' : 'BELOW'} ${targetPrice ? targetPrice.toLocaleString() : '64,160'}
+              MUST EXPIRE {isBullish ? 'ABOVE' : 'BELOW'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
             </div>
           </div>
           <div className="flex justify-between items-end text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30">
-            <span className="text-purple-500/80">LIVE SPOT: <span className="text-purple-300">${currentPrice?.toLocaleString()}</span></span>
+            <span className="text-purple-500/80">LIVE SPOT: <span className="text-purple-300">${currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
             <span className="text-slate-400">{displayVenue} {timeframe}</span>
           </div>
         </div>

@@ -6,7 +6,8 @@ let globalRateLimitExpiresAt = 0;
 let rateLimitBackoffMs = 1000;
 
 export async function safeFetchJson<T>(url: string, options?: RequestInit): Promise<T | null> {
-  const cacheKey = `${options?.method || 'GET'}:${url}:${options?.body ? String(options.body) : ''}`;
+  const cleanUrl = url.replace(/([?&])_t=\d+/g, '').replace(/\?$/, '').replace(/&$/, '');
+  const cacheKey = `${options?.method || 'GET'}:${cleanUrl}:${options?.body ? String(options.body) : ''}`;
   const now = Date.now();
 
   // 1. If global rate limit is active and this is a GET request, serve cached copy if available
@@ -17,10 +18,10 @@ export async function safeFetchJson<T>(url: string, options?: RequestInit): Prom
     }
   }
 
-  // 2. Check cache for valid non-expired data (TTL: 5000ms for high-frequency tickers, 15000ms for heavy diagnostics/status, 8000ms for others)
-  const ttl = url.includes('/ticker') || url.includes('/all-tickers') || url.includes('/live-signal')
-    ? 5000
-    : (url.includes('/diagnostics') || url.includes('/status') || url.includes('/health') ? 15000 : 8000);
+  // 2. Check cache for valid non-expired data (TTL: 2500ms for high-frequency tickers/signals, 15000ms for heavy diagnostics/status, 5000ms for others)
+  const ttl = url.includes('/ticker') || url.includes('/all-tickers') || url.includes('/signal') || url.includes('/live-engine')
+    ? 2500
+    : (url.includes('/diagnostics') || url.includes('/status') || url.includes('/health') || url.includes('/daily-report') ? 15000 : 5000);
   const cached = cacheStore.get(cacheKey);
   if (cached && now - cached.timestamp < ttl) {
     return cached.data as T;
@@ -818,17 +819,31 @@ export async function fetchJournal(userId: string = 'usr_owner_01') {
 }
 
 export async function createJournalEntry(entry: any) {
-  const res = await fetch('/api/journal', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(entry),
-  });
-  return await res.json();
+  try {
+    const res = await fetch('/api/journal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      return await res.json();
+    }
+    return { ok: false, error: 'Non-JSON response received' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 export async function deleteJournalEntry(id: string) {
-  const res = await fetch(`/api/journal/${encodeURIComponent(id)}`, { method: 'DELETE' });
-  return await res.json();
+  try {
+    const res = await fetch(`/api/journal/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      return await res.json();
+    }
+    return { ok: false, error: 'Non-JSON response received' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 export interface LeaderboardUser {
@@ -857,12 +872,19 @@ export async function fetchSignalSnapshots(asset: string, desk: string) {
 }
 
 export async function calculatePositionSize(body: any) {
-  const res = await fetch('/api/position-size', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return await res.json();
+  try {
+    const res = await fetch('/api/position-size', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.headers.get('content-type')?.includes('application/json')) {
+      return await res.json();
+    }
+    return { ok: false, error: 'Non-JSON response received' };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
 }
 
 export interface AdminDiagnosticsResponse {

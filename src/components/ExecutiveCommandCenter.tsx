@@ -349,17 +349,17 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
                 <h1
                   className={`text-2xl sm:text-3xl font-black tracking-tight ${
-                    apiSignal?.action === 'BUY_NO'
+                    apiSignal?.direction === 'DOWN' || apiSignal?.action === 'BUY_NO'
                       ? 'text-rose-400'
                       : 'text-emerald-400'
                   }`}
                 >
-                  SIGNAL: {apiSignal?.action === 'BUY_NO' ? '▼ BUY DOWN' : '▲ BUY UP'}
+                  SIGNAL: {apiSignal?.direction === 'DOWN' || apiSignal?.action === 'BUY_NO' ? '▼ BUY DOWN' : '▲ BUY UP'}
                 </h1>
                 <span className="text-xs font-mono font-extrabold px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 shrink-0">
-                  CONFLUENCE: {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
+                  CONFLUENCE: {apiSignal?.confidence ? `${Math.round(apiSignal.confidence)}%` : apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `${Math.round(apiSignal.modelProbability * 100)}%`
-                    : '91%'}
+                    : `${Math.round(signal.confidence || 50)}%`}
                 </span>
               </div>
               <p className="text-xs text-slate-300 mt-1">
@@ -379,9 +379,9 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <div className="min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase block truncate">Confidence</span>
                 <span className="text-xl font-black text-white truncate block">
-                  {apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
+                  {apiSignal?.confidence ? `${Math.round(apiSignal.confidence)}%` : apiSignal?.modelProbability !== null && apiSignal?.modelProbability !== undefined
                     ? `${Math.round(apiSignal.modelProbability * 100)}%`
-                    : '91%'}
+                    : `${Math.round(signal.confidence || 50)}%`}
                 </span>
                 <span className="text-[10px] text-emerald-400 block font-bold truncate">
                   Brier {modelStatus?.activeModelBrier?.toFixed(3) || '0.168'} • LIVE
@@ -390,9 +390,11 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
               <div className="min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase block truncate">Model Edge</span>
                 <span className="text-xl font-black text-emerald-400 truncate block">
-                  {apiSignal?.edge !== null && apiSignal?.edge !== undefined
+                  {apiSignal?.edgePct !== null && apiSignal?.edgePct !== undefined
+                    ? `${apiSignal.edgePct >= 0 ? '+' : ''}${apiSignal.edgePct.toFixed(1)}%`
+                    : apiSignal?.edge !== null && apiSignal?.edge !== undefined
                     ? `+${(Math.abs(apiSignal.edge) * (apiSignal.edge < 1 ? 100 : 1)).toFixed(1)}%`
-                    : '+12.4%'}
+                    : `+${(signal.edgePct || 0).toFixed(1)}%`}
                 </span>
                 <span className="text-[10px] text-slate-400 block truncate">vs Kalshi / Poly</span>
               </div>
