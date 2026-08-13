@@ -800,6 +800,24 @@ export interface AdminDiagnosticsResponse {
     confidence: number;
     edgePct: number;
   };
+  calibration?: {
+    rawModelProbability: number;
+    calibratedModelProbability: number;
+    calibrationStatus: 'WARMING_UP' | 'ACTIVE';
+    calibrationSampleSize: number;
+    calibrationMinimumSamples: number;
+    brierScore: number;
+    historicalAccuracy: number;
+    calibrationAuthority: 'AUTHORITATIVE' | 'TRACKING_ONLY';
+    lifetimeObservations: number;
+  };
+  deduplication?: {
+    totalDocuments: number;
+    canonicalUsers: number;
+    duplicateRecords: number;
+    legacyAccounts: number;
+    unresolvedRecords: number;
+  };
   activeContract: string;
   lockStatus: {
     qualified: boolean;

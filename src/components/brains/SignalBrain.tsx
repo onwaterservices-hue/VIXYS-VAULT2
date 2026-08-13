@@ -55,13 +55,26 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     triggerHapticPulse();
   }, [lockScorePct, feedStatus, triggerHapticPulse]);
 
-  // Extract values
-  const currentConfidence = rawApiData?.confidence || signal.confidence || 72;
-  const currentDirection = rawApiData?.direction || signal.direction || 'NO';
-  const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker.price || 64036.72;
-  const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal.targetPrice || 64160);
+  // Safe backend-authoritative fallback variables (preventing undefined crashes)
+  const upProbability = Number(signal?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
+  const downProbability = Number(signal?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
+  const lockState = signal?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
+  const decision = signal?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
 
-  const isBullish = currentDirection === 'UP' || currentDirection === 'YES';
+  const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
+  const currentDirection = signal?.direction ?? rawApiData?.direction ?? (upProbability >= downProbability ? 'UP' : 'DOWN');
+  const isBullish = String(currentDirection).toUpperCase().includes('UP') || String(currentDirection).toUpperCase().includes('YES');
+
+  const upProbNum = Number(upProbability || 50);
+  const downProbNum = Number(downProbability || 50);
+
+  const isQualifiedLock = Boolean(lockEvaluation?.qualified ?? (lockState === 'LOCKED' || lockState === 'LOCKED_UP' || lockState === 'LOCKED_DOWN'));
+  const lockReason = lockEvaluation?.reason ?? (isQualifiedLock ? 'Signal qualified across institutional edge and persistence' : 'Insufficient edge or persistence');
+  
+  const showPassState = !isQualifiedLock || decision === 'PASS' || lockState === 'PASS' || Math.abs(upProbNum - 50) < 6;
+
+  const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 64036.72;
+  const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 64160);
   const displayConfidence = Math.round(currentConfidence);
 
   // Compute LAST 10 dots dynamically from real resolved signal outcome logs
@@ -101,11 +114,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       <div className="absolute inset-0 bg-[linear-gradient(rgba(18,10,38,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px] pointer-events-none opacity-40 z-0" />
 
       {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/60 pb-4 relative z-10">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-4 relative z-10">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#0b051b] border border-purple-800/80 shadow-md">
             <span className="font-extrabold text-white uppercase text-xs tracking-wider flex items-center gap-1.5">
-              🐻 VIXY PREDICTION DIRECTION
+              🐻 VIXY PREDICTION ENGINE
             </span>
           </div>
           <span className="px-2.5 py-1 rounded-lg bg-purple-950/80 border border-purple-800/60 text-[11px] font-black text-purple-200 tracking-widest uppercase">
@@ -138,7 +151,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-cyan-950/80 border border-cyan-500/40 text-cyan-400 text-[11px] font-extrabold uppercase">
             <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            VIXY SIGNAL ENGINE <span className="text-cyan-300 font-mono ml-1">ONLINE</span>
+            VIXY SIGNAL <span className="text-cyan-300 font-mono ml-1">ONLINE</span>
           </div>
 
           <div className={`px-3 py-1 rounded-full border text-xs font-black uppercase flex items-center gap-2 transition-all duration-300 tabular-nums ${
@@ -148,22 +161,16 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${isBullish ? 'bg-emerald-400 shadow-[0_0_5px_#34d399]' : 'bg-rose-400 shadow-[0_0_5px_#fb7185]'}`} />
             {isBullish ? 'BUY UP' : 'BUY DOWN'} <span className="font-mono">{displayConfidence}%</span>
-            <span className="text-[9px] opacity-80 font-normal">CALIBRATED CONFIDENCE</span>
+            <span className="text-[9px] opacity-80 font-normal">CALIBRATED</span>
           </div>
-        </div>
 
-        <div className="flex items-center gap-4 flex-wrap text-[11px]">
-          <div className="text-purple-200">
-            <span className="text-purple-400/80 font-bold">MARKET:</span> <strong className="text-white">BTC {displayVenue.toUpperCase()} {timeframe}</strong>
-            <span className="ml-2 px-3 py-1 rounded-full tabular-nums bg-amber-950/60 border border-amber-500/40 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.15)] text-[11px] font-mono font-bold transition-all">🔒 LOCK IN {timeString}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] bg-[#0c0620] px-2.5 py-1 rounded-lg border border-purple-800/50">
+          <div className="flex items-center gap-1.5 text-[10px] bg-[#0c0620] px-3 py-1 rounded-xl border border-purple-800/60 shadow-sm">
             <span className="text-purple-400 font-bold">LAST 10:</span>
             <div className="flex items-center gap-1">
               {displayLogs.map((item: any, idx: number) => (
                 <span
                   key={idx}
-                  className={`w-2 h-2 rounded-full transition-all ${
+                  className={`w-2 h-2 rounded-full transition-all animate-pulse ${
                     item.wasCorrect
                       ? 'bg-cyan-400 shadow-[0_0_6px_#22d3ee]'
                       : 'bg-rose-500 shadow-[0_0_6px_#f43f5e]'
@@ -175,6 +182,12 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             <span className="text-purple-300 font-mono font-bold ml-1">
               {upCount} UP • {downCount} DOWN • {winRatePct}% RECENT
             </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 flex-wrap text-[11px]">
+          <div className="flex items-center gap-2 text-purple-200">
+            <span className="text-purple-400/80 font-bold">MARKET:</span> <strong className="text-white">BTC {displayVenue.toUpperCase()} {timeframe}</strong>
           </div>
         </div>
       </div>
@@ -200,24 +213,54 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </span>
           </div>
 
-          {/* GIANT ACTION & CONFIDENCE */}
-          <div className="flex items-center justify-between gap-4 my-2 flex-wrap">
-            <div className={`text-5xl sm:text-6xl lg:text-7xl font-black font-mono tracking-tight uppercase flex items-center gap-2 drop-shadow-[0_0_35px_rgba(0,0,0,0.9)] ${
-              isStaleOrInvalid ? 'text-slate-400' : isBullish ? 'text-emerald-400' : 'text-rose-400'
+          {/* GIANT ACTION & PROBABILITY ACCUMULATION */}
+          <div className="grid grid-cols-2 gap-4 my-2">
+            <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+              showPassState
+                ? 'bg-slate-950/80 border-slate-800 opacity-60'
+                : upProbNum >= downProbNum
+                ? 'bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_20px_rgba(52,211,153,0.2)]'
+                : 'bg-slate-950/60 border-slate-800'
             }`}>
-              {isBullish ? 'BUY UP ▲' : 'BUY DOWN ▼'}
+              <div className="text-[10px] font-bold uppercase text-slate-400">BUY UP PROBABILITY</div>
+              <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-400 tabular-nums">
+                {Number(upProbNum).toFixed(0)}%
+              </div>
+              <div className="text-[9px] font-mono text-emerald-300/80">
+                {upProbNum === 50 ? 'ANALYZING (50/50)' : upProbNum > 70 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE'}
+              </div>
             </div>
 
-            <div className="text-right">
-              <div className={`text-5xl sm:text-6xl lg:text-7xl font-black font-mono tabular-nums transition-all duration-300 drop-shadow-[0_0_35px_rgba(0,0,0,0.9)] ${
-                isBullish ? 'text-emerald-300' : 'text-rose-300'
-              }`}>
-                {displayConfidence}%
+            <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
+              showPassState
+                ? 'bg-slate-950/80 border-slate-800 opacity-60'
+                : downProbNum > upProbNum
+                ? 'bg-rose-950/40 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
+                : 'bg-slate-950/60 border-slate-800'
+            }`}>
+              <div className="text-[10px] font-bold uppercase text-slate-400">BUY DOWN PROBABILITY</div>
+              <div className="text-3xl sm:text-4xl font-black font-mono text-rose-400 tabular-nums">
+                {Number(downProbNum).toFixed(0)}%
               </div>
-              <div className="text-[10px] font-bold tracking-widest uppercase text-purple-300/80">
-                VIXY CONFIDENCE
+              <div className="text-[9px] font-mono text-rose-300/80">
+                {downProbNum === 50 ? 'ANALYZING (50/50)' : downProbNum > 70 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE'}
               </div>
             </div>
+          </div>
+
+          {/* VIXY LOCK PERMISSION GATE STATUS */}
+          <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono font-bold ${
+            showPassState
+              ? 'bg-amber-950/40 border-amber-500/60 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.2)]'
+              : 'bg-cyan-950/40 border-cyan-500/60 text-cyan-300 shadow-[0_0_15px_rgba(34,211,238,0.25)]'
+          }`}>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${showPassState ? 'bg-amber-400 animate-pulse' : 'bg-cyan-400 shadow-[0_0_8px_#22d3ee]'}`} />
+              <span>VIXY LOCK: {showPassState ? 'PASS (NOT QUALIFIED / INSUFFICIENT EDGE)' : 'LOCKED (QUALIFIED ENTRY)'}</span>
+            </div>
+            <span className="text-[10px] opacity-90 uppercase font-extrabold px-2 py-0.5 rounded bg-black/40">
+              {showPassState ? 'PASS' : (isBullish ? 'BUY UP → ENTER' : 'BUY DOWN → ENTER')}
+            </span>
           </div>
 
           {/* CONFIDENCE FIELD BAR */}

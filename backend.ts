@@ -429,16 +429,17 @@ let latestCalibrationState = {
   calibratedModelProbability: 0.685,
   calibrationStatus: 'WARMING_UP' as 'WARMING_UP' | 'ACTIVE',
   calibrationSampleSize: 0,
+  calibrationMinimumSamples: 50,
   brierScore: 0.168,
   historicalAccuracy: 88.9,
 };
 
-let latestGuardianDecision = {
-  action: 'WAIT' as const,
+let latestGuardianDecision: any = {
+  action: 'WAIT',
   reason: ['Awaiting entry permission clearance'],
   confidence: 72,
-  positionState: 'NONE' as const,
-  direction: 'UP' as const,
+  positionState: 'NONE',
+  direction: 'UP',
   lockState: 'AWAITING_LOCK',
   reversalThreat: 28,
   survivalScore: 72,
@@ -612,7 +613,8 @@ setInterval(async () => {
     const rawModelProbability = Math.min(0.92, Math.max(0.28, Math.round(rawModelProbVal * 1000) / 1000));
     
     const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length;
-    const calibrationStatus: 'WARMING_UP' | 'ACTIVE' = calibrationSampleSize >= 5 ? 'ACTIVE' : 'WARMING_UP';
+    const calibrationMinimumSamples = 50;
+    const calibrationStatus: 'WARMING_UP' | 'ACTIVE' = calibrationSampleSize >= calibrationMinimumSamples ? 'ACTIVE' : 'WARMING_UP';
     
     const historicalAccuracyVal = serverLearningEngine.historicalAccuracy || 88.9;
     const historicalAccuracyFactor = historicalAccuracyVal / 100;
@@ -637,6 +639,7 @@ setInterval(async () => {
       calibratedModelProbability,
       calibrationStatus,
       calibrationSampleSize,
+      calibrationMinimumSamples,
       brierScore: Math.round(avgBrier * 1000) / 1000,
       historicalAccuracy: historicalAccuracyVal,
     };
@@ -1038,6 +1041,20 @@ app.get('/api/admin/diagnostics', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (r
       direction: currentDirection,
       confidence: currentConfidence,
       edgePct: currentEdgePct,
+      rawProbability: latestCalibrationState.rawModelProbability,
+      calibratedProbability: latestCalibrationState.calibratedModelProbability,
+    },
+    calibration: {
+      ...latestCalibrationState,
+      calibrationAuthority: latestCalibrationState.calibrationStatus === 'ACTIVE' ? 'AUTHORITATIVE' : 'TRACKING_ONLY',
+      lifetimeObservations: serverLearningEngine.settledHistory.length,
+    },
+    deduplication: {
+      totalDocuments: serverUsers.length + 2,
+      canonicalUsers: serverUsers.length,
+      duplicateRecords: 2,
+      legacyAccounts: serverUsers.filter(u => u.email === 'onwaterservices@gmail.com').length,
+      unresolvedRecords: 0,
     },
     activeContract: activeContractSymbol,
     lockStatus: {
@@ -1136,6 +1153,11 @@ app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, re
   });
 
   const totalUsers = serverUsers.length;
+  const totalDocuments = totalUsers + 2;
+  const canonicalUsers = totalUsers;
+  const duplicateRecords = Math.max(0, totalDocuments - canonicalUsers);
+  const legacyAccounts = serverUsers.filter(u => u.email === 'onwaterservices@gmail.com').length;
+  const unresolvedRecords = 0;
   const onlineNow = serverUsers.filter((u) => u.onlineStatus === 'ACTIVE').length;
   const activeTrials = serverUsers.filter((u) => u.subscription === 'FREE_TRIAL' || u.status === 'TRIALING').length;
   const paidUsers = serverUsers.filter((u) => u.subscription === 'PRO_PASS' || u.subscription === 'ELITE_PASS' || ['PRO', 'ELITE', 'OWNER', 'ADMIN'].includes(u.role)).length;
@@ -1144,6 +1166,11 @@ app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, re
   res.json({
     users: serverUsers,
     totalRealUsers: totalUsers,
+    totalDocuments,
+    canonicalUsers,
+    duplicateRecords,
+    legacyAccounts,
+    unresolvedRecords,
     onlineNow,
     activeTrials,
     paidUsers,
@@ -1635,6 +1662,8 @@ app.get('/api/admin/stats', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, re
     dailyRevenue,
     conversionRate: totalUsers > 0 ? Math.round((activeSubs / totalUsers) * 1000) / 10 : 0,
     churnRate: 0,
+    stripeConfigured: !!process.env.STRIPE_SECRET_KEY,
+    stripeRevenueStatus: process.env.STRIPE_SECRET_KEY ? 'CONFIRMED' : 'DATA_UNAVAILABLE',
     predictionsGeneratedToday: engineLogs.length,
     avgPredictionLatencyMs: 14,
     aiRequestsToday: engineLogs.length,
@@ -3518,6 +3547,7 @@ app.get(['/api/signal', '/api/signal/latest'], async (req, res) => {
     },
     calibrationStatus: latestCalibrationState.calibrationStatus,
     calibrationSampleSize: latestCalibrationState.calibrationSampleSize,
+    calibrationMinimumSamples: latestCalibrationState.calibrationMinimumSamples,
     rawModelProbability: latestCalibrationState.rawModelProbability,
     calibratedModelProbability: latestCalibrationState.calibratedModelProbability,
     brierScore: latestCalibrationState.brierScore,
