@@ -20,12 +20,14 @@ interface ProtectionBrainProps {
   signal: PredictionSignal;
   ticker: BTCTicker;
   isDiscordVerified?: boolean;
+  rawApiData?: any;
 }
 
 export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({ 
   signal, 
   ticker,
-  isDiscordVerified = false
+  isDiscordVerified = false,
+  rawApiData
 }) => {
   // Live spot and reference strike math
   const currentPrice = ticker.price || signal.currentPrice || 64108;
@@ -38,12 +40,12 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   const formattedDeltaPct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
 
   // Calculate Position Survival & Reversal Risk score based on signal confidence & spot dynamics
-  const rawReversalRisk = Math.min(
+  const rawReversalRisk = rawApiData?.guardianDecision?.reversalThreat ?? Math.min(
     95,
     Math.max(12, Math.round(100 - signal.confidence + Math.abs((ticker.price % 30) / 2)))
   );
 
-  const survivalScore = Math.max(5, 100 - rawReversalRisk);
+  const survivalScore = rawApiData?.guardianDecision?.survivalScore ?? Math.max(5, 100 - rawReversalRisk);
 
   // Position State determination
   const positionState: 'PROTECTED' | 'WATCH' | 'THREATENED' =
@@ -70,25 +72,27 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
 
   const reversalMeta = getReversalMeta(rawReversalRisk);
 
-  // Guardian Action Recommendation
-  const guardianAction: 'HOLD POSITION' | 'PROTECT POSITION' | 'WATCH REVERSAL' | 'EXIT RISK' =
+  // Guardian Action Recommendation (Authoritative from backend if available)
+  const backendGuardianAction = rawApiData?.guardianDecision?.action; // 'ENTER' | 'WAIT' | 'SCALE_IN' | 'MOVE_STOP' | 'TAKE_PROFIT' | 'EXIT'
+
+  const activeStripAction = backendGuardianAction || (
     survivalScore >= 75
-      ? 'HOLD POSITION'
+      ? 'TAKE PROFIT'
       : survivalScore >= 55
-      ? 'PROTECT POSITION'
+      ? 'MOVE STOP'
       : survivalScore >= 35
+      ? 'WAIT'
+      : 'EXIT'
+  );
+
+  const guardianAction: 'HOLD POSITION' | 'PROTECT POSITION' | 'WATCH REVERSAL' | 'EXIT RISK' =
+    activeStripAction === 'TAKE_PROFIT' || activeStripAction === 'SCALE_IN' || activeStripAction === 'ENTER'
+      ? 'HOLD POSITION'
+      : activeStripAction === 'MOVE_STOP'
+      ? 'PROTECT POSITION'
+      : activeStripAction === 'WAIT'
       ? 'WATCH REVERSAL'
       : 'EXIT RISK';
-
-  // Highlighted action for action strip
-  const activeStripAction =
-    guardianAction === 'HOLD POSITION'
-      ? 'TAKE PROFIT'
-      : guardianAction === 'PROTECT POSITION'
-      ? 'MOVE STOP'
-      : guardianAction === 'WATCH REVERSAL'
-      ? 'WAIT'
-      : 'EXIT';
 
   // Real-time Scanning Matrix item statuses
   const matrixChecks = [

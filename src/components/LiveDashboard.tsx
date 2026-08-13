@@ -510,6 +510,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   signal={signal} 
                   ticker={ticker} 
                   isDiscordVerified={isDiscordVerified} 
+                  rawApiData={rawApiData}
                 />
               </div>
               <div className="h-full">

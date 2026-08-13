@@ -1,5 +1,5 @@
-import React from 'react';
-import { Clock, Radio, Key, Activity, ShieldCheck } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 import { VaultCard } from '../VaultCard';
 
@@ -28,6 +28,32 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 }) => {
   const isStaleOrInvalid = feedStatus === 'STALE' || feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
   const displayVenue = venue || 'Kalshi';
+
+  // Backend-authoritative connection status evaluation
+  const isOfflineStatus = isStaleOrInvalid || feedStatus === 'DISCONNECTED';
+  const isDegradedStatus = feedStatus === 'DEGRADED' || (latencyMs > 600 && !isOfflineStatus);
+  const isConnectedStatus = !isOfflineStatus && !isDegradedStatus;
+
+  const connectionLabel = isOfflineStatus ? 'OFFLINE' : isDegradedStatus ? 'DEGRADED' : 'CONNECTED';
+
+  // Dynamic Lock evaluation metrics
+  const lockScorePct = lockEvaluation?.lockScore ?? lockEvaluation?.lockPercentage ?? Math.min(98, Math.max(50, Math.round((rawApiData?.confidence || signal.confidence || 72) * 0.95)));
+  const verifiedCriteriaCount = lockEvaluation?.verifiedCriteria ?? lockEvaluation?.criteriaVerified ?? (signal.confidence > 75 ? 5 : 4);
+  const totalCriteriaCount = lockEvaluation?.totalCriteria ?? 6;
+
+  // Event-driven micro-vibration trigger (runs 350ms on click or signal criteria updates)
+  const [isVibrating, setIsVibrating] = useState(false);
+
+  const triggerHapticPulse = useCallback(() => {
+    setIsVibrating(true);
+    const timer = setTimeout(() => setIsVibrating(false), 350);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Trigger brief micro-vibration when lock percentage or feed status updates
+  useEffect(() => {
+    triggerHapticPulse();
+  }, [lockScorePct, feedStatus, triggerHapticPulse]);
 
   // Extract values
   const currentConfidence = rawApiData?.confidence || signal.confidence || 72;
@@ -304,55 +330,122 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           />
 
           {/* Card 4: CRAZY ADDICTING VIXY LOCK BUTTON */}
-          <button className="group relative w-full text-left bg-gradient-to-b from-[#06182c] via-[#05111c] to-[#030914] p-4 rounded-xl border-2 border-cyan-400/80 shadow-[0_0_40px_rgba(34,211,238,0.4),inset_0_0_20px_rgba(34,211,238,0.2)] hover:shadow-[0_0_60px_rgba(34,211,238,0.7),inset_0_0_40px_rgba(34,211,238,0.4)] hover:border-cyan-300 hover:scale-[1.02] active:scale-95 transition-all duration-300 space-y-3 flex flex-col justify-between overflow-hidden cursor-pointer">
+          <button
+            onClick={() => triggerHapticPulse()}
+            className={`group relative w-full text-left bg-gradient-to-b from-[#08223d] via-[#051627] to-[#030d18] p-4 rounded-xl border-2 hover:scale-[1.02] active:scale-95 transition-all duration-300 space-y-3 flex flex-col justify-between overflow-hidden cursor-pointer ${
+              isOfflineStatus
+                ? 'border-rose-500/90 animate-vixy-glow-rose shadow-[0_0_40px_rgba(244,63,94,0.5)]'
+                : isDegradedStatus
+                ? 'border-amber-400/90 animate-vixy-glow-amber shadow-[0_0_45px_rgba(245,158,11,0.55)]'
+                : 'border-cyan-400 animate-vixy-glow shadow-[0_0_50px_rgba(34,211,238,0.65),inset_0_0_25px_rgba(34,211,238,0.35)]'
+            } ${isVibrating ? 'animate-vixy-vibrate' : ''}`}
+          >
             {/* Animated Laser Scanning Line */}
-            <div className="absolute inset-0 z-0 bg-gradient-to-b from-transparent via-cyan-400/20 to-transparent h-[150%] w-full animate-scan pointer-events-none" style={{ animation: 'scan 2.5s ease-in-out infinite alternate' }} />
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-cyan-500/20 blur-[50px] pointer-events-none rounded-full group-hover:bg-cyan-400/40 transition-colors duration-500" />
+            <div className={`absolute inset-0 z-0 bg-gradient-to-b from-transparent h-[150%] w-full animate-vixy-laser pointer-events-none ${
+              isOfflineStatus ? 'via-rose-500/20' : isDegradedStatus ? 'via-amber-400/20' : 'via-cyan-400/30'
+            }`} />
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-52 h-52 blur-[45px] pointer-events-none rounded-full animate-pulse transition-colors duration-500 ${
+              isOfflineStatus ? 'bg-rose-500/20' : isDegradedStatus ? 'bg-amber-400/20' : 'bg-cyan-400/25'
+            }`} />
             
             <div className="flex items-center justify-between relative z-10">
-              <div className="px-3 py-1.5 rounded-full border border-cyan-400 bg-cyan-950/80 text-cyan-300 text-xs font-black tracking-widest flex items-center gap-2 shadow-[0_0_15px_rgba(34,211,238,0.5)] group-hover:bg-cyan-400 group-hover:text-black transition-colors">
-                <Key className="w-4 h-4" />
+              <div className={`px-3 py-1.5 rounded-full border-2 bg-slate-950/90 text-xs font-black tracking-widest flex items-center gap-2 shadow-lg ${
+                isOfflineStatus
+                  ? 'border-rose-400 text-rose-200 shadow-rose-900/50'
+                  : isDegradedStatus
+                  ? 'border-amber-300 text-amber-200 shadow-amber-900/50'
+                  : 'border-cyan-300 text-cyan-200 shadow-[0_0_20px_rgba(34,211,238,0.8)] text-glow-cyan'
+              }`}>
+                <Key className={`w-4 h-4 ${isOfflineStatus ? 'text-rose-400' : isDegradedStatus ? 'text-amber-300' : 'text-cyan-300 animate-pulse'}`} />
                 <span>VIXY LOCK</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-cyan-300 font-bold uppercase tracking-widest animate-pulse">Scanning</span>
-                <span className="w-3 h-3 rounded-full bg-cyan-400 shadow-[0_0_12px_#22d3ee] animate-ping" />
+
+              {/* Backend-Authoritative Connection Badge */}
+              <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-black tracking-widest bg-slate-950/90 ${
+                isOfflineStatus
+                  ? 'border-rose-500/80 text-rose-300 shadow-[0_0_12px_rgba(244,63,94,0.5)]'
+                  : isDegradedStatus
+                  ? 'border-amber-400/80 text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.5)]'
+                  : 'border-cyan-400/80 text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.6)]'
+              }`}>
+                {isOfflineStatus ? (
+                  <>
+                    <WifiOff className="w-3 h-3 text-rose-400" />
+                    <span className="text-rose-400 font-extrabold tracking-wider">OFFLINE</span>
+                  </>
+                ) : isDegradedStatus ? (
+                  <>
+                    <AlertTriangle className="w-3 h-3 text-amber-400 animate-pulse" />
+                    <span className="text-amber-300 font-extrabold tracking-wider">DEGRADED</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
+                    </span>
+                    <span className="text-emerald-300 font-extrabold tracking-wider">CONNECTED</span>
+                  </>
+                )}
               </div>
             </div>
 
             <div className="flex items-end justify-between relative z-10 mt-1">
-              <div className="text-5xl font-black font-mono text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.8)] leading-none group-hover:text-white transition-colors">
-                67%
+              <div className={`text-5xl font-black font-mono leading-none ${
+                isOfflineStatus
+                  ? 'text-rose-300 drop-shadow-[0_0_20px_rgba(244,63,94,0.8)]'
+                  : isDegradedStatus
+                  ? 'text-amber-200 drop-shadow-[0_0_20px_rgba(245,158,11,0.8)]'
+                  : 'text-cyan-200 drop-shadow-[0_0_25px_rgba(34,211,238,0.95)] text-glow-cyan animate-pulse'
+              }`}>
+                {lockScorePct}%
               </div>
-              <span className="px-2.5 py-1 rounded border border-cyan-400/60 bg-cyan-500/10 text-cyan-300 text-[10px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(34,211,238,0.3)]">
-                LOCKED
+              <span className={`px-2.5 py-1 rounded border-2 text-[10px] font-black tracking-widest uppercase ${
+                isOfflineStatus
+                  ? 'border-rose-500 bg-rose-950/60 text-rose-200'
+                  : isDegradedStatus
+                  ? 'border-amber-400 bg-amber-950/60 text-amber-200'
+                  : 'border-cyan-400 bg-cyan-500/20 text-cyan-200 shadow-[0_0_15px_rgba(34,211,238,0.6)] text-glow-cyan'
+              }`}>
+                {isOfflineStatus ? 'STANDBY' : 'LOCKED'}
               </span>
             </div>
 
             <div className="space-y-2 relative z-10">
-              <div className="text-[10px] font-black text-cyan-300 flex justify-between tracking-widest uppercase drop-shadow-md">
+              <div className="text-[10px] font-black text-slate-200 flex justify-between tracking-widest uppercase drop-shadow-md">
                 <span>CRITERIA VERIFIED:</span>
-                <span className="text-white">4 / 6</span>
+                <span className="text-white font-mono">{verifiedCriteriaCount} / {totalCriteriaCount}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                {Array.from({ length: 6 }).map((_, i) => (
+                {Array.from({ length: totalCriteriaCount }).map((_, i) => (
                   <div
                     key={i}
                     className={`h-2 flex-1 rounded-full transition-all duration-300 ${
-                      i < 4
-                        ? 'bg-cyan-400 shadow-[0_0_10px_#22d3ee] group-hover:bg-white group-hover:shadow-[0_0_15px_#ffffff]'
-                        : 'bg-cyan-950/80 border border-cyan-900/60'
+                      i < verifiedCriteriaCount
+                        ? isOfflineStatus
+                          ? 'bg-rose-400 shadow-[0_0_8px_#f43f5e]'
+                          : isDegradedStatus
+                          ? 'bg-amber-400 shadow-[0_0_8px_#f59e0b]'
+                          : 'bg-cyan-300 shadow-[0_0_12px_#22d3ee] animate-pulse'
+                        : 'bg-slate-800/80 border border-slate-700/60'
                     }`}
                   />
                 ))}
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-[10px] font-black text-cyan-400/90 pt-2 border-t border-cyan-500/30 relative z-10 uppercase tracking-widest mt-1">
-              <span className="flex items-center gap-1.5 drop-shadow-[0_0_5px_rgba(34,211,238,0.5)]">
-                <ShieldCheck className="w-3.5 h-3.5 text-cyan-300" /> VIXY Engine 17
+            <div className={`flex items-center justify-between text-[10px] font-black pt-2 border-t relative z-10 uppercase tracking-widest mt-1 ${
+              isOfflineStatus ? 'border-rose-900/50 text-rose-300' : isDegradedStatus ? 'border-amber-900/50 text-amber-300' : 'border-cyan-400/40 text-cyan-300'
+            }`}>
+              <span className="flex items-center gap-1.5 drop-shadow-md">
+                <ShieldCheck className="w-3.5 h-3.5" /> VIXY Engine 17
               </span>
-              <span className="text-cyan-300 group-hover:text-white transition-colors">GATE ACTIVE</span>
+              <span className="font-bold flex items-center gap-1">
+                {isConnectedStatus && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                )}
+                {isOfflineStatus ? 'GATE STANDBY' : isDegradedStatus ? 'GATE DEGRADED' : 'GATE ACTIVE • LIVE'}
+              </span>
             </div>
           </button>
         </div>

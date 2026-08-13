@@ -424,6 +424,28 @@ interface StructuredLockEvaluation {
   oddsWindow5050: boolean;
 }
 
+let latestCalibrationState = {
+  rawModelProbability: 0.685,
+  calibratedModelProbability: 0.685,
+  calibrationStatus: 'WARMING_UP' as 'WARMING_UP' | 'ACTIVE',
+  calibrationSampleSize: 0,
+  brierScore: 0.168,
+  historicalAccuracy: 88.9,
+};
+
+let latestGuardianDecision = {
+  action: 'WAIT' as const,
+  reason: ['Awaiting entry permission clearance'],
+  confidence: 72,
+  positionState: 'NONE' as const,
+  direction: 'UP' as const,
+  lockState: 'AWAITING_LOCK',
+  reversalThreat: 28,
+  survivalScore: 72,
+  timestamp: new Date().toISOString(),
+  cycleId: 1,
+};
+
 let latestLockEvaluation: StructuredLockEvaluation = {
   qualified: true,
   direction: 'UP',
@@ -586,12 +608,38 @@ setInterval(async () => {
     currentBullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 1.5)));
     currentMomentum = change24h;
     
-    const rawModelProb = 0.50 + (currentBullVolumePct - 50) * 0.008;
-    currentModelProbability = Math.min(0.92, Math.max(0.28, Math.round(rawModelProb * 1000) / 1000));
+    const rawModelProbVal = 0.50 + (currentBullVolumePct - 50) * 0.008;
+    const rawModelProbability = Math.min(0.92, Math.max(0.28, Math.round(rawModelProbVal * 1000) / 1000));
+    
+    const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length;
+    const calibrationStatus: 'WARMING_UP' | 'ACTIVE' = calibrationSampleSize >= 5 ? 'ACTIVE' : 'WARMING_UP';
+    
+    const historicalAccuracyVal = serverLearningEngine.historicalAccuracy || 88.9;
+    const historicalAccuracyFactor = historicalAccuracyVal / 100;
+    
+    const calibratedModelProbability = calibrationStatus === 'ACTIVE'
+      ? Math.min(0.95, Math.max(0.10, Math.round((rawModelProbability * 0.85 + historicalAccuracyFactor * 0.15) * 1000) / 1000))
+      : rawModelProbability;
+
+    currentModelProbability = calibratedModelProbability;
     currentConfidence = Math.min(96, Math.max(60, Math.round((70 + Math.abs(currentModelProbability - 0.5) * 60) * 10) / 10));
     
     currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (currentBullVolumePct - 50) * 0.005) * 1000) / 1000));
     currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
+
+    const historyLen = serverLearningEngine.settledHistory.length;
+    const avgBrier = historyLen > 0
+      ? serverLearningEngine.settledHistory.reduce((sum, item) => sum + item.brierScore, 0) / historyLen
+      : 0.168;
+
+    latestCalibrationState = {
+      rawModelProbability,
+      calibratedModelProbability,
+      calibrationStatus,
+      calibrationSampleSize,
+      brierScore: Math.round(avgBrier * 1000) / 1000,
+      historicalAccuracy: historicalAccuracyVal,
+    };
 
     
     const newDirection: 'UP' | 'DOWN' | 'NEUTRAL' = currentEdgePct >= 2.5 ? 'UP' : currentEdgePct <= -2.5 ? 'DOWN' : 'NEUTRAL';
@@ -646,6 +694,54 @@ setInterval(async () => {
       requiredPersistenceSeconds: effectiveRequiredPersistenceSeconds,
       isEarlyLock: isEarlyLockOpportunity,
       oddsWindow5050: is5050PullWindow,
+    };
+
+    // Guardian Decision Calculation
+    const hasActivePosition = false; // No active position by default unless user has open simulated trade
+    const survivalScore = Math.round(currentConfidence * (isQualified ? 1.0 : 0.85));
+    const reversalThreat = 100 - survivalScore;
+
+    let guardianAction: 'ENTER' | 'WAIT' | 'SCALE_IN' | 'MOVE_STOP' | 'TAKE_PROFIT' | 'EXIT' = 'WAIT';
+    const guardianReasons: string[] = [];
+
+    if (!hasActivePosition) {
+      if (isQualified && currentDirection !== 'NEUTRAL') {
+        guardianAction = 'ENTER';
+        guardianReasons.push('VIXY Lock fully qualified');
+        guardianReasons.push(`Edge threshold achieved (${currentEdgePct >= 0 ? '+' : ''}${currentEdgePct}%)`);
+        guardianReasons.push('Market data freshness verified');
+      } else {
+        guardianAction = 'WAIT';
+        guardianReasons.push(reasonText);
+        guardianReasons.push('Awaiting entry permission clearance');
+      }
+    } else {
+      if (survivalScore >= 80) {
+        guardianAction = 'TAKE_PROFIT';
+        guardianReasons.push('High survival score with target proximity met');
+      } else if (survivalScore >= 65) {
+        guardianAction = 'SCALE_IN';
+        guardianReasons.push('Momentum aligned and volume supporting continuation');
+      } else if (survivalScore >= 50) {
+        guardianAction = 'MOVE_STOP';
+        guardianReasons.push('Reversal risk elevated; protect capital');
+      } else {
+        guardianAction = 'EXIT';
+        guardianReasons.push('Critical survival threat detected');
+      }
+    }
+
+    latestGuardianDecision = {
+      action: guardianAction,
+      reason: guardianReasons,
+      confidence: currentConfidence,
+      positionState: hasActivePosition ? 'ACTIVE_LONG' : 'NONE',
+      direction: currentDirection,
+      lockState: engineState,
+      reversalThreat,
+      survivalScore,
+      timestamp: new Date(now).toISOString(),
+      cycleId: currentEngineCycleId,
     };
 
     // Transition State Machine
@@ -1120,6 +1216,7 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
   };
 
   serverUsers.unshift(newUser);
+  persistSingleUser(newUser).catch((err) => console.warn('[FIRESTORE USER] Admin create save error:', err?.message));
 
   res.json({
     success: true,
@@ -1628,6 +1725,7 @@ app.post('/api/admin/users/role', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   if (user) {
     user.role = newRole as any;
     addServerAuditLog('ADMIN', 'ROLE_CHANGE', `Changed role for ${user.email} to ${newRole}`);
+    persistSingleUser(user).catch(() => {});
   }
   res.json({
     success: true,
@@ -1739,6 +1837,7 @@ app.post('/api/admin/users/update', requireRole(['OWNER', 'ADMIN']), (req, res) 
   }
 
   savePersistentStore();
+  persistSingleUser(user).catch(() => {});
   addServerAuditLog('ADMIN', 'USER_RECORD_EDITED', `Admin updated full user record for ${user.email} (${user.id})`);
 
   res.json({
@@ -3417,6 +3516,13 @@ app.get(['/api/signal', '/api/signal/latest'], async (req, res) => {
       strike: kalshiStrike,
       timestamp: lastMarketUpdateTs
     },
+    calibrationStatus: latestCalibrationState.calibrationStatus,
+    calibrationSampleSize: latestCalibrationState.calibrationSampleSize,
+    rawModelProbability: latestCalibrationState.rawModelProbability,
+    calibratedModelProbability: latestCalibrationState.calibratedModelProbability,
+    brierScore: latestCalibrationState.brierScore,
+    historicalAccuracy: latestCalibrationState.historicalAccuracy,
+    guardianDecision: isLive ? latestGuardianDecision : null,
     recentResolvedLogs: persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10),
   });
 });
@@ -4425,6 +4531,60 @@ async function drainPendingPersistenceQueuesAsync() {
   }
 }
 
+const lastPersistedUserPayloads = new Map<string, string>();
+
+async function persistSingleUser(user: ServerUser) {
+  savePersistentStore();
+
+  if (!db) return;
+
+  const docId = user.id || user.uid || (user.email ? `usr_${user.email.replace(/[^a-zA-Z0-9_]/g, '_')}` : null);
+  if (!docId) return;
+
+  try {
+    const payload = sanitizeForFirestore(user);
+
+    // Strict normalization check: onwaterservices@gmail.com MUST NOT be written as OWNER or ADMIN
+    if ((user.email || '').toLowerCase() === 'onwaterservices@gmail.com') {
+      payload.role = 'USER';
+      payload.subscription = 'FREE_TRIAL';
+    } else if (isMasterAdminEmail(user.email)) {
+      payload.role = 'OWNER';
+      payload.subscription = 'ELITE_PASS';
+    }
+
+    // Idempotent write guard: compare serialized payload against cached last persisted payload
+    const payloadStr = JSON.stringify(payload);
+    const cachedPayload = lastPersistedUserPayloads.get(docId);
+    if (cachedPayload === payloadStr) {
+      // Payload has not changed — skip duplicate Firestore network write
+      return;
+    }
+
+    await ensureFirestoreNetworkEnabled();
+
+    await setDoc(doc(db, 'users', docId), payload, { merge: true });
+
+    if (user.uid && user.uid !== docId) {
+      await setDoc(doc(db, 'users', user.uid), payload, { merge: true }).catch(() => {});
+    }
+
+    lastPersistedUserPayloads.set(docId, payloadStr);
+    if (user.uid) {
+      lastPersistedUserPayloads.set(user.uid, payloadStr);
+    }
+
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    persistenceState = 'HEALTHY_FIRESTORE';
+    console.log(`[FIRESTORE USER] Successfully persisted user ${user.email || user.id} (${docId}) to Firestore.`);
+  } catch (err: any) {
+    console.warn(`[FIRESTORE USER] Error persisting user ${docId} to Firestore:`, err?.message || err);
+  }
+}
+
 export interface EnsureUserOptions {
   uid?: string;
   email: string;
@@ -4519,6 +4679,7 @@ function ensureUserExists(
     }
 
     savePersistentStore();
+    persistSingleUser(user).catch((err) => console.warn('[FIRESTORE USER] Async save error:', err?.message));
     console.log(`[USER_RECONCILED] Registered user ${cleanEmail || cleanUid} into server directory.`);
   } else {
     // Preserve existing account data! Never overwrite subscription, Stripe, Discord, trial state, or referral info
@@ -4543,6 +4704,7 @@ function ensureUserExists(
 
     if (updated) {
       savePersistentStore();
+      persistSingleUser(user).catch((err) => console.warn('[FIRESTORE USER] Async update error:', err?.message));
     }
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -168,6 +168,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
   // Loading & Global Status
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const isFetchingDataRef = useRef(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [isAccessDenied, setIsAccessDenied] = useState(false);
@@ -298,6 +299,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
   // Load All Admin Data from Real Backend Endpoints
   const loadAdminData = useCallback(async (isManualRefresh = false) => {
+    if (isFetchingDataRef.current) return;
+    isFetchingDataRef.current = true;
     if (isManualRefresh) setIsRefreshing(true);
     setGlobalError(null);
 
@@ -369,6 +372,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       console.warn('Error loading admin data:', err);
       setGlobalError('Failed to synchronize backend admin telemetry. Some services may be unavailable.');
     } finally {
+      isFetchingDataRef.current = false;
       if (isManualRefresh) setIsRefreshing(false);
     }
   }, []);
