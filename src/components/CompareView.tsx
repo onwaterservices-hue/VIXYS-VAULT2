@@ -7,12 +7,14 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface CompareViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
+  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
 export const CompareView: React.FC<CompareViewProps> = ({
   onSelectAssetAndNavigate,
   alertSettings,
+  userRole = 'DEMO',
   onOpenDiscordModal,
 }) => {
   const [assetA, setAssetA] = useState<string>('BTC');
@@ -22,7 +24,10 @@ export const CompareView: React.FC<CompareViewProps> = ({
   const configB = ASSET_DATABASE[assetB] || ASSET_DATABASE.ETH;
 
   const allAssets = Object.keys(ASSET_DATABASE);
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
   // Quick preset pairs for fast switching
   const presetPairs = [
@@ -126,7 +131,9 @@ export const CompareView: React.FC<CompareViewProps> = ({
 
       {/* GATED COMPARISON GRID */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="ASSET COMPARE INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock split-screen quantitative probability comparisons and order flow telemetry."

@@ -249,6 +249,8 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   return (
     <IntelligenceLockGate
       isVerified={isUnlocked}
+      isAdmin={userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin)}
+      userRole={userRole}
       onOpenDiscordModal={onOpenDiscordModal}
       title="AI PATTERN RECOGNITION LOCKED"
       subtitle="Verify your VIXY Vault Discord membership to unlock live AI microstructure patterns, liquidity sweeps, and L2 order book detection."

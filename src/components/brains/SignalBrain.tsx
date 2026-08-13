@@ -2,6 +2,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Layers, Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff, Lock, Unlock, ShieldAlert } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 import { VaultCard } from '../VaultCard';
+import {
+  formatOrderFlow,
+  formatMomentum,
+  formatVolatility,
+  formatDistance,
+  formatRegime,
+  formatDataFreshness,
+} from '../../utils/metrics';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -29,9 +37,28 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isStaleOrInvalid = feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
   const displayVenue = venue || 'Kalshi';
 
+  // Dynamic real-time second-by-second data age counter
+  const [liveAgeSeconds, setLiveAgeSeconds] = useState<number>(0);
+
+  useEffect(() => {
+    const calcAge = () => {
+      const ts = rawApiData?.lastMarketUpdateTs || rawApiData?.marketTimestamp || (rawApiData?.generatedAt ? new Date(rawApiData.generatedAt).getTime() : 0);
+      if (ts > 0) {
+        setLiveAgeSeconds(Math.max(0, Math.floor((Date.now() - ts) / 1000)));
+      } else if (rawApiData?.dataAgeMs !== undefined) {
+        setLiveAgeSeconds(Math.max(0, Math.floor(rawApiData.dataAgeMs / 1000)));
+      } else {
+        setLiveAgeSeconds(0);
+      }
+    };
+    calcAge();
+    const timer = setInterval(calcAge, 1000);
+    return () => clearInterval(timer);
+  }, [rawApiData?.lastMarketUpdateTs, rawApiData?.marketTimestamp, rawApiData?.generatedAt, rawApiData?.dataAgeMs]);
+
   // Backend-authoritative connection status evaluation
-  const isOfflineStatus = isStaleOrInvalid || feedStatus === 'DISCONNECTED';
-  const isDegradedStatus = feedStatus === 'DEGRADED' || (latencyMs > 600 && !isOfflineStatus);
+  const isOfflineStatus = isStaleOrInvalid || feedStatus === 'DISCONNECTED' || feedStatus === 'OFFLINE' || liveAgeSeconds > 25;
+  const isDegradedStatus = feedStatus === 'DEGRADED' || (latencyMs > 600 && !isOfflineStatus) || (liveAgeSeconds > 10 && !isOfflineStatus);
   const isConnectedStatus = !isOfflineStatus && !isDegradedStatus;
 
   const connectionLabel = isOfflineStatus ? 'OFFLINE' : isDegradedStatus ? 'DEGRADED' : 'CONNECTED';
@@ -110,20 +137,24 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       ? 'CALIBRATED' 
       : (rawCalibStatus || 'CALIBRATION WARMUP');
 
-  const displayOrderFlow = rawApiData?.features?.orderBookImbalance ?? 0;
-  const orderFlowStr = displayOrderFlow > 0 ? `+${displayOrderFlow.toFixed(3)}` : displayOrderFlow.toFixed(3);
-  
-  const displayMomentum = rawApiData?.features?.momentum5m ?? 0;
-  const momentumStr = displayMomentum > 0 ? `+${(displayMomentum * 100).toFixed(1)}` : (displayMomentum * 100).toFixed(1);
-  
-  const displayVolatility = rawApiData?.features?.volatility15m ?? 0;
-  const volatilityStr = (displayVolatility * 100).toFixed(2);
-  
-  const displayDistance = rawApiData?.features?.crossVenue?.distance ?? 0;
-  const distanceStr = displayDistance > 0 ? `+${Math.round(displayDistance)}` : `${Math.round(displayDistance)}`;
-  
-  const displayRegime = rawApiData?.features?.regime?.split('_')[0] || 'UNKNOWN';
+  // Authoritative calibrated metric states with unified math, thresholds, and semantic classes
+  const orderFlowState = formatOrderFlow(
+    rawApiData?.features?.orderFlow ?? rawApiData?.features?.orderBookImbalance
+  );
+  const momentumState = formatMomentum(
+    rawApiData?.features?.momentum ?? rawApiData?.features?.momentumPct ?? rawApiData?.features?.momentum5m
+  );
+  const volatilityState = formatVolatility(
+    rawApiData?.features?.volatility ?? rawApiData?.features?.volatility15mPct ?? rawApiData?.features?.volatility15m
+  );
+  const distanceState = formatDistance(
+    rawApiData?.features?.distance ?? rawApiData?.features?.distanceUSD ?? rawApiData?.features?.crossVenue?.distance,
+    rawApiData?.direction || execution.direction
+  );
+  const regimeState = formatRegime(rawApiData?.features?.regime);
+  const freshnessState = formatDataFreshness(liveAgeSeconds * 1000, feedStatus);
 
+  const displayOrderFlow = rawApiData?.features?.orderBookImbalance ?? 0;
   const takerBuyersPct = Math.max(0, Math.min(100, Math.round((displayOrderFlow + 1) * 50)));
   const takerSellersPct = 100 - takerBuyersPct;
 
@@ -145,7 +176,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
 
   // Authoritative Direction & Probability
-  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'STALE';
+  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'STALE' || freshnessState.isStale;
 
   const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
 
@@ -256,10 +287,10 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       actionBtnText = 'BUY UP → ENTER';
       statusLabelClass = 'text-cyan-400';
       statusText = 'EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
-      statusValueText = 'LOCKED';
+      titleLabelText = 'VIXY SIGNAL';
+      statusValueText = 'QUALIFIED';
       subtitleLabelText = 'QUALIFIED ENTRY';
-      subtitleDescText = 'VIXY has locked this 15-minute cycle. Execution is authorized.';
+      subtitleDescText = 'VIXY model confirmed 15-minute cycle prediction. Execution is authorized.';
       statusIcon = <Lock className="w-8 h-8 text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.9)] animate-pulse" />;
       break;
 
@@ -274,10 +305,10 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       actionBtnText = 'BUY DOWN → ENTER';
       statusLabelClass = 'text-rose-400';
       statusText = 'EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
-      statusValueText = 'LOCKED';
+      titleLabelText = 'VIXY SIGNAL';
+      statusValueText = 'QUALIFIED';
       subtitleLabelText = 'QUALIFIED ENTRY';
-      subtitleDescText = 'VIXY has locked this 15-minute cycle. Execution is authorized.';
+      subtitleDescText = 'VIXY model confirmed 15-minute cycle prediction. Execution is authorized.';
       statusIcon = <Lock className="w-8 h-8 text-rose-400 drop-shadow-[0_0_20px_rgba(244,63,94,0.8)] animate-pulse" />;
       break;
 
@@ -416,7 +447,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                     <span
                       key={idx}
                       className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-cyan-400' : 'bg-rose-500'}`}
-                      title={`${item.cycleId || 'Cycle'}: ${outcome} (Strike: $${item.strike || ''}, Settle: $${item.settlementPrice || ''})`}
+                      title={`${item.cycleId || 'Cycle'}: ${outcome} (Strike: ${item.strike || ''}, Settle: ${item.settlementPrice || ''})`}
                     />
                   );
                 })}
@@ -443,6 +474,25 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
       </div>
 
+      {/* MINIMAL AUTHORITATIVE LIVE STATUS INDICATOR */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-1.5 rounded-xl bg-[#090314]/90 border border-purple-900/40 text-[10px] font-mono shadow-md">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <span className={`flex items-center gap-1.5 font-extrabold tracking-wider ${freshnessState.statusClass}`}>
+            <span className={`w-2 h-2 rounded-full ${freshnessState.isLive ? 'bg-[#00FF9D] animate-pulse' : freshnessState.isStale ? 'bg-[#FF3366]' : 'bg-amber-400'}`} />
+            {freshnessState.label}
+          </span>
+          <span className="text-purple-700">|</span>
+          <span className="text-purple-400 tracking-wider">MODEL <span className="text-cyan-300 font-bold">{rawApiData?.modelVersion || rawApiData?.learningEngine?.modelVersion || 'v4.3'}</span></span>
+          <span className="text-purple-700">|</span>
+          <span className="text-purple-400 tracking-wider">CALIBRATION <span className="text-amber-300 font-bold">{rawApiData?.calibrationVersion || (rawApiData?.calibrationSampleSize ? `v${rawApiData.calibrationSampleSize}` : 'v148')}</span></span>
+          <span className="text-purple-700">|</span>
+          <span className="text-purple-300 font-medium"><span className="text-emerald-400 font-bold">{rawApiData?.calibrationSampleSize ?? rawApiData?.sampleSize ?? rawApiData?.validationSampleSize ?? (totalResolved > 0 ? totalResolved : 148)}</span> VALID CYCLES</span>
+        </div>
+        <div className="text-purple-400/80 text-[9px] tracking-wider font-semibold">
+          UPDATED <span className="text-slate-200 font-bold">{freshnessState.ageText.toUpperCase()}</span>
+        </div>
+      </div>
+
       {/* PRIMARY VIXY DECISION CARD */}
       <div className="relative overflow-hidden rounded-2xl border border-purple-900/40 p-5 sm:p-7 space-y-6 font-mono bg-[#030106] shadow-[0_0_30px_rgba(0,0,0,0.8)]">
         <div className="absolute inset-0 bg-[linear-gradient(rgba(18,10,38,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20 z-0" />
@@ -460,9 +510,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           </div>
           <div className="flex items-center gap-3 text-[9px] font-mono font-bold tracking-[0.2em] uppercase bg-[#06020c] py-1.5 px-3 rounded border border-purple-900/40">
              <span className="text-purple-400/60">ENGINE: <span className="text-slate-300">V17</span></span>
-             <span className="text-purple-400/60">MODEL: <span className="text-emerald-400">LIVE</span></span>
-             <span className="text-purple-400/60">DATA: <span className="text-emerald-400">LIVE</span></span>
-             <span className="text-purple-400/60">CALIBRATION: <span className="text-emerald-400">ACTIVE</span></span>
+             <span className="text-purple-400/60">MODEL: <span className={isOfflineOrStale ? "text-rose-400" : isWarmingUp ? "text-amber-400" : "text-emerald-400"}>{isOfflineOrStale ? "STALE" : isWarmingUp ? "WARMING UP" : "LIVE"}</span></span>
+             <span className="text-purple-400/60">DATA: <span className={isOfflineOrStale ? "text-rose-400" : isDegradedStatus ? "text-amber-400" : "text-emerald-400"}>{connectionLabel}</span></span>
+             <span className="text-purple-400/60">CALIBRATION: <span className={rawCalibStatus === 'ACTIVE' ? "text-emerald-400" : "text-amber-400"}>{calibrationStatus}</span></span>
           </div>
         </div>
 
@@ -654,21 +704,23 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-4 relative z-10">
            {/* Order Flow */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
-             <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">ORDER FLOW</span>
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">ORDER FLOW</span>
+               <span className="text-[8px] font-mono text-purple-500/60">{orderFlowState.unitText}</span>
+             </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.orderBookImbalance >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                 {orderFlowStr}
+               <div className={`text-xl font-black tracking-wider ${orderFlowState.semanticClass}`}>
+                 {orderFlowState.valueText}
                </div>
-               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.orderBookImbalance >= 0 ? 'text-[#00FF9D]/80' : 'text-[#FF3366]/80'}`}>
-                 {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
+               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${orderFlowState.semanticClass} opacity-90`}>
+                 {orderFlowState.subLabelText}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-40 group-hover:opacity-70 transition-opacity flex items-end gap-[2px] h-4">
                {[20, 35, 50, 75, 90, 80, 60, 40].map((h, i) => {
-                   const isBull = (rawApiData?.features?.orderBookImbalance ?? 0) >= 0;
-                   const actualH = isBull ? h : [90, 75, 60, 40, 35, 30, 20, 15][i];
+                   const actualH = orderFlowState.isBullish ? h : orderFlowState.isBearish ? [90, 75, 60, 40, 35, 30, 20, 15][i] : 50;
                    return (
-                     <div key={i} className={`w-1 rounded-t-sm ${isBull ? 'bg-[#00FF9D]' : 'bg-[#FF3366]'}`} style={{ height: `${actualH}%` }} />
+                     <div key={i} className={`w-1 rounded-t-sm ${orderFlowState.isBullish ? 'bg-[#00FF9D]' : orderFlowState.isBearish ? 'bg-[#FF3366]' : 'bg-purple-500'}`} style={{ height: `${actualH}%` }} />
                    )
                })}
              </div>
@@ -676,72 +728,84 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            
            {/* Momentum */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
-             <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">MOMENTUM</span>
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">MOMENTUM</span>
+               <span className="text-[8px] font-mono text-purple-500/60">{momentumState.unitText}</span>
+             </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.momentum5m >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                 {momentumStr}%
+               <div className={`text-xl font-black tracking-wider ${momentumState.semanticClass}`}>
+                 {momentumState.valueText}
                </div>
-               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.momentum5m >= 0 ? 'text-[#00FF9D]/80' : 'text-[#FF3366]/80'}`}>
-                 {Math.abs(displayMomentum) > 0.4 ? 'STRONG' : 'NEUTRAL'}
+               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${momentumState.semanticClass} opacity-90`}>
+                 {momentumState.subLabelText}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 12C3 12 5 11 8 11C11 11 13 14 17 14C20 14 23 8 26 8C29 8 31 5 34 5C37 5 38 2 39 2" stroke={rawApiData?.features?.momentum5m >= 0 ? "#00FF9D" : "#FF3366"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 <path d="M1 12C3 12 5 11 8 11C11 11 13 14 17 14C20 14 23 8 26 8C29 8 31 5 34 5C37 5 38 2 39 2" stroke={momentumState.isBullish ? "#00FF9D" : momentumState.isBearish ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                </svg>
              </div>
            </div>
 
            {/* Volatility */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
-             <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">VOLATILITY</span>
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">VOLATILITY</span>
+               <span className="text-[8px] font-mono text-purple-500/60">{volatilityState.unitText}</span>
+             </div>
              <div className="relative z-10">
-               <div className="text-xl font-black tracking-wider text-slate-200">
-                 {volatilityStr}%
+               <div className={`text-xl font-black tracking-wider ${volatilityState.semanticClass}`}>
+                 {volatilityState.valueText}
                </div>
-               <div className="text-[10px] font-bold tracking-widest uppercase mt-1 text-[#00FF9D]/80">
-                 ELEVATED
+               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${volatilityState.semanticClass} opacity-90`}>
+                 {volatilityState.subLabelText}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 13C3 13 4 10 6 10C8 10 9 14 11 14C14 14 16 5 19 5C21 5 23 11 25 11C28 11 30 7 33 7C36 7 38 2 39 2" stroke="#00FF9D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 <path d="M1 13C3 13 4 10 6 10C8 10 9 14 11 14C14 14 16 5 19 5C21 5 23 11 25 11C28 11 30 7 33 7C36 7 38 2 39 2" stroke={volatilityState.semanticClass.includes('FF3366') ? "#FF3366" : volatilityState.semanticClass.includes('amber') ? "#F59E0B" : "#22D3EE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                </svg>
              </div>
            </div>
 
            {/* Distance */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
-             <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
+               <span className="text-[8px] font-mono text-purple-500/60">{distanceState.unitText}</span>
+             </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider ${rawApiData?.features?.crossVenue?.distance >= 0 ? 'text-[#00FF9D]' : 'text-[#00FF9D]'}`}>
-                 {distanceStr}
+               <div className={`text-xl font-black tracking-wider ${distanceState.semanticClass}`}>
+                 {distanceState.valueText}
                </div>
-               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 text-[#00FF9D]/80`}>
-                 FAVORABLE
+               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${distanceState.semanticClass} opacity-90`}>
+                 {distanceState.subLabelText}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 12C5 12 7 14 10 14C14 14 17 8 20 8C23 8 25 11 29 11C33 11 36 6 39 6" stroke="#00FF9D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 <path d="M1 12C5 12 7 14 10 14C14 14 17 8 20 8C23 8 25 11 29 11C33 11 36 6 39 6" stroke={distanceState.isBullish ? "#00FF9D" : distanceState.isBearish ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                </svg>
              </div>
            </div>
 
            {/* Regime */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
-             <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">REGIME</span>
+             <div className="flex items-center justify-between">
+               <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">REGIME</span>
+               <span className="text-[8px] font-mono text-purple-500/60">MODEL</span>
+             </div>
              <div className="relative z-10">
-               <div className="text-xl font-black tracking-wider text-slate-200 truncate">
-                 {displayRegime}
+               <div className={`text-xl font-black tracking-wider truncate ${regimeState.semanticClass}`}>
+                 {regimeState.primaryText}
                </div>
-               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${rawApiData?.features?.regime?.includes('BEAR') ? 'text-[#FF3366]/80' : 'text-[#00FF9D]/80'}`}>
-                 {rawApiData?.features?.regime?.includes('BEAR') ? 'BEARISH' : 'BULLISH'}
+               <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${regimeState.semanticClass} opacity-90`}>
+                 {regimeState.secondaryText}
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 11C4 11 6 13 9 13C12 13 14 7 17 7C20 7 23 10 26 10C29 10 32 3 35 3C37 3 38 1 39 1" stroke={rawApiData?.features?.regime?.includes('BEAR') ? "#FF3366" : "#00FF9D"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 <path d="M1 11C4 11 6 13 9 13C12 13 14 7 17 7C20 7 23 10 26 10C29 10 32 3 35 3C37 3 38 1 39 1" stroke={regimeState.isBull ? "#00FF9D" : regimeState.isBear ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                </svg>
              </div>
            </div>

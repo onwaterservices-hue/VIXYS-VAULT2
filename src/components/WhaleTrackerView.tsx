@@ -24,6 +24,7 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface WhaleTrackerViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
+  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
@@ -133,6 +134,7 @@ const TOP_WHALE_ENTITIES = [
 export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   onSelectAssetAndNavigate,
   alertSettings,
+  userRole = 'DEMO',
   onOpenDiscordModal,
 }) => {
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');
@@ -142,7 +144,10 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
   // Real live whale order feed effect from /api/whales
   useEffect(() => {
@@ -288,7 +293,9 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
 
       {/* GATED MAIN CONTENT GRID */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="WHALE RADAR INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live institutional block trades, iceberg accumulation alerts, and strike walls."

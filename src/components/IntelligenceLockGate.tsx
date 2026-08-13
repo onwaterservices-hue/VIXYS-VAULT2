@@ -3,6 +3,8 @@ import { Lock, ShieldAlert, MessageSquare, ArrowRight } from 'lucide-react';
 
 interface IntelligenceLockGateProps {
   isVerified: boolean;
+  isAdmin?: boolean;
+  userRole?: string;
   onOpenDiscordModal?: () => void;
   children: React.ReactNode;
   title?: string;
@@ -12,13 +14,17 @@ interface IntelligenceLockGateProps {
 
 export const IntelligenceLockGate: React.FC<IntelligenceLockGateProps> = ({
   isVerified,
+  isAdmin = false,
+  userRole,
   onOpenDiscordModal,
   children,
   title = 'VIXY VAULT INTELLIGENCE LOCKED',
   subtitle = 'Discord verification required to unlock live predictions, probabilities, order flow telemetry, and AI signals.',
   className = '',
 }) => {
-  if (isVerified) {
+  // Authoritative Admin bypass - Admin has immediate unconditional access
+  const isPrivileged = isAdmin || userRole === 'ADMIN' || userRole === 'OWNER';
+  if (isPrivileged || isVerified) {
     return <>{children}</>;
   }
 

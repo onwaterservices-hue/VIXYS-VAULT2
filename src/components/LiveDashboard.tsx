@@ -100,8 +100,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   const [secondsRemaining15M, setSecondsRemaining15M] = useState<number>(542);
   const [secondsRemaining1H, setSecondsRemaining1H] = useState<number>(2054);
 
-  // Access Unlock Logic: Admin or Discord-linked + Guild member users automatically unlock
+  // Authoritative Access Unlock Logic:
+  // ADMIN -> FULL ACCESS (no lock gate, no subscription gate, no discord gate)
+  // ELITE / PRO / Active subscription -> UNLOCKED
+  // Discord-linked + Guild member -> UNLOCKED
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked) && Boolean(alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);
   const [isBailedOut, setIsBailedOut] = useState<boolean>(false);
 
@@ -460,7 +466,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
       {/* 🎯 PROTECTED VIXY INTELLIGENCE CORE */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenAlerts}
         title="VIXY VAULT INTELLIGENCE LOCKED"
         subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."

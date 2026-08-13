@@ -131,6 +131,7 @@ export interface JournalEntry {
 }
 
 export interface AlertSettings {
+  isAdmin?: boolean;
   discordWebhook: string;
   discordEnabled: boolean;
   discordUserId?: string;

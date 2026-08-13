@@ -1012,6 +1012,7 @@ export default function App() {
                         setActiveTab('terminal');
                       }}
                       alertSettings={alertSettings}
+                      userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
@@ -1045,6 +1046,7 @@ export default function App() {
                       ticker={ticker}
                       timeframe={selectedTimeframe as any}
                       alertSettings={alertSettings}
+                      userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
@@ -1056,6 +1058,7 @@ export default function App() {
                         setActiveTab('terminal');
                       }}
                       alertSettings={alertSettings}
+                      userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}
@@ -1065,6 +1068,7 @@ export default function App() {
                       currentSymbol={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
                       alertSettings={alertSettings}
+                      userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
                   )}

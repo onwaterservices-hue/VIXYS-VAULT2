@@ -32,6 +32,7 @@ interface ExplainabilityVaultViewProps {
   currentSymbol?: string;
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;
+  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
@@ -59,13 +60,17 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
   currentSymbol = 'BTC',
   onSelectAsset,
   alertSettings,
+  userRole = 'DEMO',
   onOpenDiscordModal,
 }) => {
   const [selectedAsset, setSelectedAsset] = useState<string>(currentSymbol);
   const [activeTab, setActiveTab] = useState<'evidence' | 'timeline' | 'historical' | 'ranking'>('evidence');
   const [showRawVsCalibrated, setShowRawVsCalibrated] = useState<boolean>(true);
 
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
   // Layer 3 Independent Engine Breakdown Data
   const engineModules: EngineModule[] = [
@@ -256,7 +261,9 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
       {/* GATED EXPLAINABILITY VAULT CONTENT */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="EXPLAINABILITY VAULT LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock signal decomposition, independent engine weightings, and historical setup matching."

@@ -69,7 +69,10 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const [timeRemainingMin, setTimeRemainingMin] = useState<number>(24);
   const [timeRemainingSec, setTimeRemainingSec] = useState<number>(18);
 
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
   // 1H Probabilities & Odds
   const [kalshiYesCent, setKalshiYesCent] = useState<number>(72.0);
@@ -226,7 +229,9 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
       {/* GATED INTELLIGENCE BODY */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="1-HOUR DESK INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live 1H macro trend probability, strike targets, and directional conviction."

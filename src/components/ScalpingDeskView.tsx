@@ -52,7 +52,10 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
 
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
   useEffect(() => {
     let active = true;
@@ -125,7 +128,9 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
 
       {/* GATED INTELLIGENCE BODY */}
       <IntelligenceLockGate
-        isVerified={isDiscordVerified}
+        isVerified={isIntelligenceUnlocked}
+        isAdmin={isUserAdmin}
+        userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="15S SCALPING INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live 15s probability cones, micro-delta sweeps, and AI conviction signals."

@@ -1,0 +1,288 @@
+/**
+ * VIXY VAULT — AUTHORITATIVE METRICS, THRESHOLDS, UNITS & SEMANTIC FORMATTERS
+ * 
+ * Single source of truth for all metric calculations, unit definitions,
+ * threshold classifications, and semantic state color styling.
+ */
+
+export interface MetricFormattedState {
+  valueText: string;
+  unitText: string;
+  subLabelText: string;
+  semanticClass: string;
+  isBullish: boolean;
+  isBearish: boolean;
+  isNeutral: boolean;
+  isWarning: boolean;
+}
+
+/**
+ * ORDER FLOW: Normalized order book and taker volume imbalance score [-1.000, +1.000]
+ * Raw Data: Coinbase/Binance L2 orderbook delta & taker trade flow
+ * Positive: Bullish buy absorption pressure (+0.050 to +1.000)
+ * Negative: Bearish sell distribution pressure (-0.050 to -1.000)
+ */
+export function formatOrderFlow(imbalanceVal?: number | null): MetricFormattedState {
+  const val = typeof imbalanceVal === 'number' && !isNaN(imbalanceVal) ? imbalanceVal : 0;
+  const isBullish = val >= 0.05;
+  const isBearish = val <= -0.05;
+  const isNeutral = !isBullish && !isBearish;
+
+  const valueText = val > 0 ? `+${val.toFixed(3)}` : val.toFixed(3);
+  const subLabelText = isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
+  const semanticClass = isBullish ? 'text-[#00FF9D]' : isBearish ? 'text-[#FF3366]' : 'text-purple-400';
+
+  return {
+    valueText,
+    unitText: 'SCORE',
+    subLabelText,
+    semanticClass,
+    isBullish,
+    isBearish,
+    isNeutral,
+    isWarning: false,
+  };
+}
+
+/**
+ * MOMENTUM: Realized return percentage over 5m/15m cycle
+ * Raw Data: Spot price delta vs 5-minute rolling window open
+ * Unit: Percentage (%)
+ * Do NOT multiply by 100 twice!
+ */
+export function formatMomentum(momentumVal?: number | null): MetricFormattedState {
+  const val = typeof momentumVal === 'number' && !isNaN(momentumVal) ? momentumVal : 0;
+  // If value comes in as raw fraction (e.g. 0.0032), convert to percentage; if already percentage (e.g. 0.32 or -1.13), keep as is
+  const pct = Math.abs(val) < 0.05 && val !== 0 ? val * 100 : val;
+
+  const isStrongBull = pct >= 0.40;
+  const isBullish = pct >= 0.10;
+  const isStrongBear = pct <= -0.40;
+  const isBearish = pct <= -0.10;
+  const isNeutral = !isBullish && !isBearish;
+
+  const valueText = pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
+  const subLabelText = isStrongBull ? 'STRONG BULL' : isBullish ? 'BULLISH' : isStrongBear ? 'STRONG BEAR' : isBearish ? 'BEARISH' : 'NEUTRAL';
+  const semanticClass = isBullish ? 'text-[#00FF9D]' : isBearish ? 'text-[#FF3366]' : 'text-purple-400';
+
+  return {
+    valueText,
+    unitText: '5M RETURN',
+    subLabelText,
+    semanticClass,
+    isBullish,
+    isBearish,
+    isNeutral,
+    isWarning: false,
+  };
+}
+
+/**
+ * VOLATILITY: Rolling 15-Minute Realized Volatility (%)
+ * Raw Data: 15-minute rolling standard deviation / true range percentage
+ * Unit: Percentage (%)
+ * Ranges:
+ *  - Low: < 0.60%
+ *  - Normal: 0.60% - 1.50%
+ *  - Elevated: 1.50% - 3.00%
+ *  - Extreme: > 3.00%
+ */
+export function formatVolatility(volVal?: number | null): MetricFormattedState {
+  const val = typeof volVal === 'number' && !isNaN(volVal) ? volVal : 1.13;
+  const pct = Math.abs(val) < 0.05 && val !== 0 ? val * 100 : val;
+
+  const isLow = pct < 0.60;
+  const isNormal = pct >= 0.60 && pct <= 1.50;
+  const isElevated = pct > 1.50 && pct <= 3.00;
+  const isExtreme = pct > 3.00;
+
+  const valueText = `${pct.toFixed(2)}%`;
+  const subLabelText = isLow ? 'LOW VOL' : isNormal ? 'NORMAL' : isElevated ? 'ELEVATED' : 'EXTREME';
+  const semanticClass = isLow ? 'text-purple-300' : isNormal ? 'text-cyan-300' : isElevated ? 'text-amber-400' : 'text-[#FF3366]';
+
+  return {
+    valueText,
+    unitText: 'REALIZED VOL (15M)',
+    subLabelText,
+    semanticClass,
+    isBullish: false,
+    isBearish: false,
+    isNeutral: isNormal || isLow,
+    isWarning: isElevated || isExtreme,
+  };
+}
+
+/**
+ * DISTANCE: Dollar difference from current Spot Price to Kalshi 15M Strike Price
+ * Raw Data: spotPrice - kalshiStrikePrice ($ USD)
+ * Unit: USD ($)
+ * Favorable logic is tied to the current directional prediction:
+ *  - If BUY UP: Spot > Strike (+$) is In The Money (Favorable)
+ *  - If BUY DOWN: Spot < Strike (-$) is In The Money (Favorable)
+ */
+export function formatDistance(
+  distanceVal?: number | null,
+  predictedDirection?: 'UP' | 'DOWN' | 'BUY UP' | 'BUY DOWN' | 'NEUTRAL' | string
+): MetricFormattedState {
+  const val = typeof distanceVal === 'number' && !isNaN(distanceVal) ? distanceVal : 0;
+  const dirUpper = (predictedDirection || '').toUpperCase();
+  const isUp = dirUpper.includes('UP') || dirUpper.includes('YES');
+  const isDown = dirUpper.includes('DOWN') || dirUpper.includes('NO');
+
+  const absVal = Math.abs(val);
+  const sign = val > 0 ? '+' : val < 0 ? '-' : '';
+  const valueText = `${sign}$${absVal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
+
+  let subLabelText = 'AT THE MONEY';
+  let isBullish = false;
+  let isBearish = false;
+  let isNeutral = true;
+  let semanticClass = 'text-purple-300';
+
+  if (isUp) {
+    if (val >= 10) {
+      subLabelText = 'IN THE MONEY';
+      isBullish = true;
+      isNeutral = false;
+      semanticClass = 'text-[#00FF9D]';
+    } else if (val <= -10) {
+      subLabelText = 'OUT OF MONEY';
+      isBearish = true;
+      isNeutral = false;
+      semanticClass = 'text-amber-400';
+    } else {
+      subLabelText = 'AT THE MONEY';
+      semanticClass = 'text-cyan-300';
+    }
+  } else if (isDown) {
+    if (val <= -10) {
+      subLabelText = 'IN THE MONEY';
+      isBullish = true; // Favorable for down contract
+      isNeutral = false;
+      semanticClass = 'text-[#00FF9D]';
+    } else if (val >= 10) {
+      subLabelText = 'OUT OF MONEY';
+      isBearish = true;
+      isNeutral = false;
+      semanticClass = 'text-amber-400';
+    } else {
+      subLabelText = 'AT THE MONEY';
+      semanticClass = 'text-cyan-300';
+    }
+  } else {
+    subLabelText = val > 0 ? 'ABOVE STRIKE' : val < 0 ? 'BELOW STRIKE' : 'AT STRIKE';
+    semanticClass = 'text-purple-300';
+  }
+
+  return {
+    valueText,
+    unitText: 'STRIKE GAP',
+    subLabelText,
+    semanticClass,
+    isBullish,
+    isBearish,
+    isNeutral,
+    isWarning: subLabelText === 'OUT OF MONEY',
+  };
+}
+
+/**
+ * REGIME: Authoritative market structure classification from model
+ * Valid states:
+ *  - TRENDING_BULL -> TRENDING / BULLISH (Neon Green)
+ *  - TRENDING_BEAR -> TRENDING / BEARISH (Neon Red)
+ *  - BREAKOUT_BULL -> BREAKOUT / BULLISH (Neon Green)
+ *  - BREAKOUT_BEAR -> BREAKOUT / BEARISH (Neon Red)
+ *  - RANGING_LOW_VOL -> RANGING / LOW VOL (Purple)
+ *  - RANGING_NEUTRAL -> RANGING / NEUTRAL (Purple)
+ *  - HIGH_VOLATILITY -> HIGH VOL / EXPANSION (Amber)
+ *  - REVERSAL_RISK -> REVERSAL / DEFENSE (Rose)
+ */
+export function formatRegime(regimeRaw?: string | null): {
+  primaryText: string;
+  secondaryText: string;
+  semanticClass: string;
+  isBull: boolean;
+  isBear: boolean;
+} {
+  const reg = (regimeRaw || 'RANGING_NEUTRAL').toUpperCase();
+
+  if (reg.includes('BULL')) {
+    const primary = reg.includes('BREAKOUT') ? 'BREAKOUT' : 'TRENDING';
+    return {
+      primaryText: primary,
+      secondaryText: 'BULLISH',
+      semanticClass: 'text-[#00FF9D]',
+      isBull: true,
+      isBear: false,
+    };
+  }
+
+  if (reg.includes('BEAR')) {
+    const primary = reg.includes('BREAKOUT') ? 'BREAKOUT' : 'TRENDING';
+    return {
+      primaryText: primary,
+      secondaryText: 'BEARISH',
+      semanticClass: 'text-[#FF3366]',
+      isBull: false,
+      isBear: true,
+    };
+  }
+
+  if (reg.includes('HIGH_VOL') || reg.includes('VOLATILITY')) {
+    return {
+      primaryText: 'HIGH VOL',
+      secondaryText: 'EXPANSION',
+      semanticClass: 'text-amber-400',
+      isBull: false,
+      isBear: false,
+    };
+  }
+
+  if (reg.includes('REVERSAL')) {
+    return {
+      primaryText: 'REVERSAL',
+      secondaryText: 'DEFENSE',
+      semanticClass: 'text-rose-400',
+      isBull: false,
+      isBear: false,
+    };
+  }
+
+  return {
+    primaryText: 'RANGING',
+    secondaryText: reg.includes('LOW') ? 'LOW VOL' : 'NEUTRAL',
+    semanticClass: 'text-purple-300',
+    isBull: false,
+    isBear: false,
+  };
+}
+
+/**
+ * LIVE DATA FRESHNESS: Dynamic second-by-second age formatting
+ */
+export function formatDataFreshness(dataAgeMs: number, feedStatus?: string): {
+  label: string;
+  ageText: string;
+  statusClass: string;
+  isLive: boolean;
+  isStale: boolean;
+} {
+  const seconds = Math.max(0, Math.round(dataAgeMs / 1000));
+  const ageText = `${seconds}s ago`;
+
+  if (feedStatus === 'OFFLINE') {
+    return { label: 'OFFLINE', ageText, statusClass: 'text-rose-400', isLive: false, isStale: true };
+  }
+
+  if (seconds <= 4) {
+    return { label: 'LIVE', ageText, statusClass: 'text-[#00FF9D]', isLive: true, isStale: false };
+  }
+  if (seconds <= 12) {
+    return { label: 'LIVE', ageText, statusClass: 'text-emerald-400', isLive: true, isStale: false };
+  }
+  if (seconds <= 20) {
+    return { label: 'DELAYED', ageText, statusClass: 'text-amber-400', isLive: false, isStale: false };
+  }
+  return { label: 'STALE', ageText, statusClass: 'text-rose-400', isLive: false, isStale: true };
+}

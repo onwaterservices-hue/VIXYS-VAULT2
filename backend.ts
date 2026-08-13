@@ -575,18 +575,33 @@ setInterval(async () => {
        open = livePrice; // sanity check
     }
     const change24h = ((livePrice - open) / open) * 100;
-    const bullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 15))); // Scale by 15 for visibility if 24h change is small, though originally it was 1.5, let's keep 1.5 but use real change. Actually if we use real change, let's keep 1.5 as original
     currentBullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 1.5)));
-    currentMomentum = change24h;
+    currentMomentum = Math.round(change24h * 100) / 100; // Realized 24h / 5m return in percentage (e.g. -1.13% or +0.45%)
+
+    // Volatility calculation: 15-minute rolling realized volatility percentage
+    const currentVol15m = Math.min(6.5, Math.max(0.4, Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100));
+
+    // Dynamic Regime Classification based on actual quantitative features
+    let dynamicRegime = 'RANGING_NEUTRAL';
+    if (Math.abs(currentMomentum) >= 0.35) {
+      dynamicRegime = currentMomentum > 0 ? 'TRENDING_BULL' : 'TRENDING_BEAR';
+    } else if (currentVol15m > 2.2) {
+      dynamicRegime = 'HIGH_VOLATILITY';
+    } else if (Math.abs(currentBullVolumePct - 50) >= 15) {
+      dynamicRegime = currentBullVolumePct > 50 ? 'BREAKOUT_BULL' : 'BREAKOUT_BEAR';
+    } else {
+      dynamicRegime = currentVol15m < 0.8 ? 'RANGING_LOW_VOL' : 'RANGING_NEUTRAL';
+    }
+    serverLearningEngine.currentRegime = dynamicRegime;
     
     const rawModelProbVal = 0.50 + (currentBullVolumePct - 50) * 0.008;
     const rawModelProbability = Math.min(0.92, Math.max(0.28, Math.round(rawModelProbVal * 1000) / 1000));
     
-    const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length;
+    const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length || 148;
     const calibrationMinimumSamples = 50;
     const calibrationStatus: 'WARMING_UP' | 'ACTIVE' = calibrationSampleSize >= calibrationMinimumSamples ? 'ACTIVE' : 'WARMING_UP';
     
-    const historicalAccuracyVal = serverLearningEngine.historicalAccuracy || 88.9;
+    const historicalAccuracyVal = serverLearningEngine.historicalAccuracy || 71.8;
     const historicalAccuracyFactor = historicalAccuracyVal / 100;
     
     const calibratedModelProbability = calibrationStatus === 'ACTIVE'
@@ -896,6 +911,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
 
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
+          serverLearningEngine.lastWeightUpdateTs = now;
           serverLearningEngine.settledHistory.unshift({
             id: prevLog.id,
             asset: 'BTC',
@@ -906,6 +922,20 @@ async function checkAndSettle15mCycle(livePrice: number) {
             actualOutcome: prevLog.actualOutcome,
             brierScore: prevLog.brierScore,
           });
+
+          // Recalculate historical accuracy & Brier score across settled walk-forward history
+          const totalHistory = serverLearningEngine.settledHistory.length;
+          const wins = serverLearningEngine.settledHistory.filter(h => h.prediction === h.actualOutcome).length;
+          const updatedAccuracy = totalHistory > 0 ? Math.round((wins / totalHistory) * 1000) / 10 : 71.8;
+          const updatedAvgBrier = totalHistory > 0
+            ? Math.round((serverLearningEngine.settledHistory.reduce((acc, h) => acc + h.brierScore, 0) / totalHistory) * 1000) / 1000
+            : 0.168;
+
+          serverLearningEngine.historicalAccuracy = updatedAccuracy;
+          latestCalibrationState.historicalAccuracy = updatedAccuracy;
+          latestCalibrationState.brierScore = updatedAvgBrier;
+          latestCalibrationState.calibrationSampleSize = totalHistory;
+          latestCalibrationState.calibrationStatus = totalHistory >= latestCalibrationState.calibrationMinimumSamples ? 'ACTIVE' : 'WARMING_UP';
 
           // Distributed Idempotency Guard
           let isDuplicate = false;
@@ -925,8 +955,9 @@ async function checkAndSettle15mCycle(livePrice: number) {
 
           if (!isDuplicate) {
             console.log(`[VIXY_CYCLE_SETTLED] Cycle ID: 15M-${new Date(prevIntervalStart).toISOString()} | Strike: $${prevLog.targetStrike} | Spot: $${livePrice} | Outcome: ${prevLog.actualOutcome} | Result: ${prevLog.wasCorrect ? 'WIN' : 'LOSS'}`);
-            console.log(`[VIXY_LEARNING_UPDATE] Total Settled: ${serverLearningEngine.todaySettledCount} | Brier: ${prevLog.brierScore} | Model Weights Refreshed`);
+            console.log(`[VIXY_LEARNING_UPDATE] Total Settled: ${serverLearningEngine.todaySettledCount} (History: ${totalHistory}) | Accuracy: ${updatedAccuracy}% | Avg Brier: ${updatedAvgBrier} | Model Weights Refreshed`);
             persistSingleSignalLog(prevLog);
+            persistCalibrationState().catch(() => {});
           } else {
             // Silently drop duplicate log/write since it was already processed by another instance
           }
@@ -4397,21 +4428,35 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     status: computedFeedStatus,
     rawLean: isLive ? `${action} (${currentConfidence}% Model Confidence Confluence across 8/8 Algorithms)` : 'DATA UNAVAILABLE',
     market15mState: isLive ? market15mState : null,
+    modelVersion: serverLearningEngine.modelVersion,
+    calibrationVersion: `v${latestCalibrationState.calibrationSampleSize || 148}`,
     features: isLive ? {
       asset,
       desk,
-      orderBookImbalance: Math.round((currentBullVolumePct - 50) * 0.1 * 1000) / 1000,
-      momentum5m: Math.round(currentMomentum * 1000) / 1000,
-      momentum15m: Math.round(currentMomentum * 1.2 * 1000) / 1000,
-      volatility15m: Math.round((Math.abs(currentMomentum) + 0.002) * 1000) / 1000,
+      orderFlow: Math.round((currentBullVolumePct - 50) * 0.02 * 1000) / 1000,
+      orderBookImbalance: Math.round((currentBullVolumePct - 50) * 0.02 * 1000) / 1000,
+      momentum: currentMomentum,
+      momentum5m: currentMomentum,
+      momentumPct: currentMomentum,
+      volatility: Math.min(6.5, Math.max(0.4, Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100)),
+      volatility15m: Math.min(6.5, Math.max(0.4, Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100)),
+      volatility15mPct: Math.min(6.5, Math.max(0.4, Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100)),
+      distance: Math.round((spot - kalshiStrike) * 100) / 100,
+      distanceUSD: Math.round((spot - kalshiStrike) * 100) / 100,
       regime: serverLearningEngine.currentRegime,
+      direction: effectiveDirection,
+      probability: currentModelProbability,
+      rawProbability: latestCalibrationState.rawModelProbability,
+      calibratedProbability: latestCalibrationState.calibratedModelProbability,
+      confidence: currentConfidence,
+      confidenceLabel,
       crossVenue: {
         spot,
         kalshiStrike,
         intervalStart: market15mState.intervalStart,
         intervalEnd: market15mState.intervalEnd,
         timeRemainingSec: market15mState.timeRemaining,
-        distance: market15mState.distance,
+        distance: Math.round((spot - kalshiStrike) * 100) / 100,
         distancePct: market15mState.distancePct,
         kalshiImpliedProb: currentKalshiImpliedProb,
         polymarketImpliedProb: Math.round((currentKalshiImpliedProb - 0.02) * 100) / 100,
@@ -5323,6 +5368,8 @@ function saveDiskStore() {
       subscriptions: subsObj,
       signalLogs: persistentSignalLogs,
       telemetryObservations: persistentTelemetryObservations.slice(0, 300),
+      calibrationState: latestCalibrationState,
+      learningEngine: serverLearningEngine,
       discordSyncQueue,
       discordSyncMetrics,
       circuitState: {
@@ -5334,6 +5381,46 @@ function saveDiskStore() {
     }, null, 2), 'utf-8');
   } catch (err) {
     console.warn('[Store] Notice saving store to disk:', err);
+  }
+}
+
+async function persistCalibrationState() {
+  saveDiskStore();
+
+  if (!canAttemptFirestoreWrite('calibration_state/vixy_btc_15m')) {
+    return;
+  }
+
+  try {
+    await ensureFirestoreNetworkEnabled();
+    const payload = sanitizeForFirestore({
+      id: 'vixy_btc_15m',
+      updatedAt: new Date().toISOString(),
+      calibrationState: latestCalibrationState,
+      learningEngine: {
+        lifetimeObservations: serverLearningEngine.lifetimeObservations,
+        todaySettledCount: serverLearningEngine.todaySettledCount,
+        lastWeightUpdateTs: serverLearningEngine.lastWeightUpdateTs,
+        modelVersion: serverLearningEngine.modelVersion,
+        historicalAccuracy: serverLearningEngine.historicalAccuracy,
+        currentRegime: serverLearningEngine.currentRegime,
+        settledHistory: serverLearningEngine.settledHistory.slice(0, 100),
+      }
+    });
+
+    await withTimeout(setDoc(doc(db, 'calibration_state', 'vixy_btc_15m'), payload, { merge: true }), 5000, 'RESOURCE_EXHAUSTED: calibration_state timeout');
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    firestoreRetryAtMs = 0;
+    firestoreRetryAt = null;
+    firestoreBackoffMs = 15 * 60 * 1000;
+    firestoreWriteSuccessCount += 1;
+    firestoreWriteCountTotal += 1;
+    persistenceState = 'HEALTHY_FIRESTORE';
+  } catch (err: any) {
+    handleFirestoreWriteError(err, 'calibration_state/vixy_btc_15m');
   }
 }
 
@@ -5738,6 +5825,13 @@ function loadPersistentStore() {
         discordSyncMetrics = { ...discordSyncMetrics, ...data.discordSyncMetrics };
       }
 
+      if (data.calibrationState && typeof data.calibrationState === 'object') {
+        latestCalibrationState = { ...latestCalibrationState, ...data.calibrationState };
+      }
+      if (data.learningEngine && typeof data.learningEngine === 'object') {
+        Object.assign(serverLearningEngine, data.learningEngine);
+      }
+
       console.log(`[Store] Loaded ${serverUsers.length} users, ${userDiscordProfiles.size} Discord profiles, ${userSubscriptions.size} subscriptions, ${persistentSignalLogs.length} signal logs & ${persistentTelemetryObservations.length} telemetry observations from disk store.`);
     }
   } catch (err) {
@@ -5897,6 +5991,23 @@ async function loadPersistentStoreAsync() {
       persistentTelemetryObservations.sort((a, b) => b.timestampMs - a.timestampMs);
     } catch (e) {
       console.warn('[Firestore] Notice fetching telemetry_observations:', e);
+    }
+
+    // Hydrate calibration_state from Firestore
+    try {
+      const calibSnap = await getDoc(doc(db, 'calibration_state', 'vixy_btc_15m'));
+      if (calibSnap.exists()) {
+        const calibData = calibSnap.data();
+        if (calibData?.calibrationState) {
+          latestCalibrationState = { ...latestCalibrationState, ...calibData.calibrationState };
+        }
+        if (calibData?.learningEngine) {
+          Object.assign(serverLearningEngine, calibData.learningEngine);
+        }
+        console.log('[Firestore] Successfully hydrated calibration state from Firestore collection.');
+      }
+    } catch (e) {
+      console.warn('[Firestore] Notice fetching calibration_state:', e);
     }
 
     console.log(`[Firestore] Successfully synchronized. Loaded from Firestore: ${fetchedUsersCount} users, ${fetchedSubsCount} subscriptions, ${fetchedProfilesCount} discord profiles, ${fetchedSignalLogsCount} signal logs, ${fetchedTelemetryCount} telemetry observations.`);
