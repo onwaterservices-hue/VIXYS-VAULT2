@@ -62,15 +62,23 @@ service cloud.firestore {
       allow write: if true;
     }
 
-    // User Subscriptions & Discord Profiles
+    // User Subscriptions & Webhook Events (Strictly server-side authoritative writes)
     match /subscriptions/{subId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email);
+      allow write: if false;
+    }
+
+    match /webhook_events/{eventId} {
+      allow read, write: if false;
+    }
+
+    match /settlement_locks/{lockId} {
+      allow read, write: if false;
     }
 
     match /discord_profiles/{profileId} {
-      allow read: if true;
-      allow write: if true;
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

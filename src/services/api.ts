@@ -476,6 +476,92 @@ export async function getAccountMeApi(userEmail?: string, userId?: string) {
   }>(`/api/account/me${query}`, { headers });
 }
 
+export interface EntitlementsResponse {
+  authenticated: boolean;
+  userId: string;
+  email: string;
+  stripeVerified: boolean;
+  plan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
+  logicalPlan: 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
+  billing: 'MONTHLY' | 'YEARLY' | 'NONE';
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired';
+  stripeCustomerId?: string;
+  subscriptionId?: string;
+  stripePriceId?: string;
+  currentPeriodStart?: number;
+  currentPeriodEnd?: number;
+  cancelAtPeriodEnd?: boolean;
+  discordVerified: boolean;
+  discordUserId?: string;
+  guildMember: boolean;
+  entitlements: {
+    starter: boolean;
+    proQuant: boolean;
+    eliteQuant: boolean;
+    scalping15s: boolean;
+    canAccessProDesks: boolean;
+    canAccessAdminPanel: boolean;
+  };
+  trial: {
+    active: boolean;
+    consumed: boolean;
+    expiresAt?: string;
+    secondsRemaining: number;
+  };
+  updatedAt: string;
+}
+
+export async function getEntitlementsApi(userEmail?: string, userId?: string): Promise<EntitlementsResponse | null> {
+  let email = userEmail;
+  let uid = userId;
+  if (!email || !uid) {
+    try {
+      const auth = localStorage.getItem('vixy_auth');
+      if (auth) {
+        const parsed = JSON.parse(auth);
+        if (parsed?.user?.email) email = email || parsed.user.email;
+        if (parsed?.user?.id) uid = uid || parsed.user.id;
+        if (parsed?.user?.uid) uid = uid || parsed.user.uid;
+      }
+    } catch (_) {}
+  }
+  const params = new URLSearchParams();
+  if (email) params.append('email', email.toLowerCase());
+  if (uid) params.append('userId', uid);
+  const query = params.toString() ? `?${params.toString()}` : '';
+
+  const headers: Record<string, string> = {
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+  };
+  if (email) headers['x-user-email'] = email.toLowerCase();
+  if (uid) headers['x-user-id'] = uid;
+
+  return await safeFetchJson<EntitlementsResponse>(`/api/entitlements${query}`, { headers, cache: 'no-store' });
+}
+
+export async function getStripeHealthApi() {
+  return await safeFetchJson<{
+    status: 'HEALTHY' | 'STANDBY' | 'DEGRADED';
+    stripe: {
+      secretKeyConfigured: boolean;
+      webhookSecretConfigured: boolean;
+      liveApiWorking: boolean;
+      liveApiError: string | null;
+      environment: string;
+    };
+    planLinks: Array<{
+      plan: string;
+      monthly: { url: string; validFormat: boolean; configuredPriceId: string | null };
+      annual: { url: string; validFormat: boolean; configuredPriceId: string | null };
+    }>;
+    firestore: { connected: boolean; status: string };
+    discord: { botReady: boolean; guildAccessible: boolean; roleHierarchyValid: boolean; botTag: string };
+    processedEventsCount: number;
+    subscribers: { starter: number; proQuant: number; eliteQuant: number; total: number };
+    timestamp: string;
+  }>('/api/stripe/health', { cache: 'no-store' });
+}
+
 export async function getDiscordAuthUrlApi(userEmail?: string, userId?: string) {
   const params = new URLSearchParams();
   if (userEmail) params.append('email', userEmail.toLowerCase());

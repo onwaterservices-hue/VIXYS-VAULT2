@@ -15,7 +15,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi , safeFetchJson } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi, safeFetchJson, getEntitlementsApi, EntitlementsResponse } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -109,14 +109,58 @@ export default function App() {
 
   // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
+  const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
+    starter: true,
+    proQuant: true,
+    eliteQuant: true,
+    scalping15s: true,
+    canAccessProDesks: true,
+    canAccessAdminPanel: false,
+  });
+
   useEffect(() => {
+    const userEmail = authState.user?.email || localStorage.getItem('vixy_user_email') || 'vixyvault0@gmail.com';
+    const userId = authState.user?.id || undefined;
+
+    getEntitlementsApi(userEmail, userId)
+      .then((ent) => {
+        if (ent) {
+          setEntitlements(ent.entitlements);
+          if (ent.trial && typeof ent.trial.secondsRemaining === 'number') {
+            setTrialSeconds(ent.trial.secondsRemaining);
+          }
+
+          const resolvedPlan = ent.plan === 'ELITE_QUANT' ? 'ELITE' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
+          setSubscription({
+            plan: resolvedPlan as any,
+            status: (ent.status === 'active' || ent.status === 'trialing' ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,
+            renewalDate: '30 days from now',
+            paymentMethod: 'Stripe Credit Card',
+            billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
+          });
+
+          if (ent.entitlements.canAccessAdminPanel) {
+            setUserRole('ADMIN');
+          } else if (ent.entitlements.proQuant || ent.entitlements.eliteQuant) {
+            setUserRole('PRO');
+          } else if (ent.status === 'active' || ent.status === 'trialing') {
+            setUserRole('PRO');
+          } else {
+            setUserRole('DEMO');
+          }
+        }
+      })
+      .catch((err) => console.warn('Authoritative entitlements check warning:', err));
+
     if (authState.isAuthenticated && authState.user?.email) {
-      safeFetchJson<{authenticated: boolean, user: any, discord: any}>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
-        .then(res => {
+      safeFetchJson<{ authenticated: boolean; user: any; discord: any }>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
+        .then((res) => {
           if (res && res.authenticated && res.user) {
-            setTrialSeconds(res.user.trialSecondsRemaining || 0);
+            if (res.user.trialSecondsRemaining !== undefined) {
+              setTrialSeconds(res.user.trialSecondsRemaining);
+            }
             
-            setAuthState(prev => {
+            setAuthState((prev) => {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
               const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO';
@@ -130,7 +174,7 @@ export default function App() {
                 discordTag: res.user.discordTag || res.discord?.discordUsername,
                 role: computedRole,
                 // @ts-ignore
-                subscription: res.user.subscription
+                subscription: res.user.subscription,
               };
               
               localStorage.setItem('vixy_auth', JSON.stringify({ ...prev, user: updatedUser }));
@@ -140,13 +184,11 @@ export default function App() {
               localStorage.setItem('vixy_user_role', computedRole);
               return { ...prev, user: updatedUser };
             });
-            
-            setUserRole(['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO'));
           }
         })
         .catch(console.error);
     }
-  }, [authState.isAuthenticated, authState.user?.email]);
+  }, [authState.isAuthenticated, authState.user?.email, authState.user?.id]);
 
 
   const VALID_ROUTES = [

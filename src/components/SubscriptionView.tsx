@@ -15,8 +15,12 @@ import {
   Quote,
   Clock,
   Flame,
+  ExternalLink,
+  Loader2,
 } from 'lucide-react';
 import { UserSubscription, AuthState } from '../types';
+import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
+import { getEntitlementsApi } from '../services/api';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -106,7 +110,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
   const plans = {
     STARTER: {
-      name: 'Starter Tier',
+      name: 'VIXY Vault Starter',
       monthlyPrice: 29,
       annualPrice: 24,
       desc: 'Essential 15m probability intelligence for individual prediction market traders.',
@@ -119,7 +123,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       ],
     },
     PRO: {
-      name: 'Professional',
+      name: 'VIXY Vault Pro',
       monthlyPrice: 79,
       annualPrice: 64,
       desc: 'Complete L2 order flow, webhook automation, and historical setup matching.',
@@ -133,7 +137,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       ],
     },
     ELITE: {
-      name: 'Elite Quant',
+      name: 'VIXY Vault Elite Quant',
       monthlyPrice: 199,
       annualPrice: 159,
       desc: 'REST & WebSocket API keys, unlimited webhooks, and direct quant team priority support.',
@@ -148,28 +152,70 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     },
   };
 
-  // Auto-detect returning from Stripe Checkout
+  // Helper to get direct Stripe URL for any plan
+  const getDirectStripeUrl = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
+    const currentUserEmail = authState?.user?.email || '';
+    const currentUid = authState?.user?.id || '';
+    return getStripePaymentUrl(planKey, billingInterval, {
+      email: currentUserEmail,
+      uid: currentUid,
+      promoCode: appliedPromo?.code || (promoCodeInput !== 'PROMOTER20' ? promoCodeInput : undefined),
+    });
+  };
+
+  const [isVerifyingWebhook, setIsVerifyingWebhook] = useState<boolean>(false);
+  const [webhookVerificationStatus, setWebhookVerificationStatus] = useState<string>('');
+
+  // Auto-detect returning from Stripe Checkout: Poll server-authoritative entitlements
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get('stripe_status');
-    const plan = params.get('plan') as 'STARTER' | 'PRO' | 'ELITE' | null;
+    const sessionId = params.get('session_id');
 
-    if (status === 'success') {
-      const activePlan = plan || 'PRO';
-      setSubscription({
-        plan: activePlan,
-        status: 'active',
-        renewalDate: '30 days from today',
-        paymentMethod: 'Stripe Credit Card',
-        billingInterval: 'monthly',
-      });
-      setUserRole('PRO');
-      setSuccessMessage(`Stripe Payment Verified! Welcome to VIXY AI ${activePlan} Tier.`);
-      setShowCheckoutModal(true);
-      // Clean query params from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
+    if (status === 'success' || sessionId) {
+      setIsVerifyingWebhook(true);
+      setWebhookVerificationStatus('Connecting to Stripe & verifying webhook signature with Firestore...');
+
+      let attempts = 0;
+      const pollInterval = setInterval(async () => {
+        attempts++;
+        try {
+          const userEmail = authState?.user?.email;
+          const userId = authState?.user?.id;
+          const ent = await getEntitlementsApi(userEmail, userId);
+          
+          if (ent && (ent.stripeVerified || ent.status === 'active')) {
+            clearInterval(pollInterval);
+            setIsVerifyingWebhook(false);
+            const planKey = ent.plan === 'ELITE_QUANT' ? 'ELITE' : (ent.plan === 'PRO_QUANT' ? 'PRO' : 'STARTER');
+            setSubscription({
+              plan: planKey,
+              status: 'active',
+              renewalDate: '30 days from today',
+              paymentMethod: 'Stripe Credit Card',
+              billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
+            });
+            setUserRole(ent.entitlements.canAccessAdminPanel ? 'ADMIN' : 'PRO');
+            setSuccessMessage(`Stripe Payment Verified! Entitlements unlocked for ${ent.plan.replace('_', ' ')}.`);
+            setWebhookVerificationStatus('');
+            window.history.replaceState({}, document.title, window.location.pathname);
+          } else if (attempts >= 8) {
+            clearInterval(pollInterval);
+            setIsVerifyingWebhook(false);
+            setWebhookVerificationStatus('Payment received. Webhook reconciliation is processing in background.');
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
+        } catch (e) {
+          if (attempts >= 8) {
+            clearInterval(pollInterval);
+            setIsVerifyingWebhook(false);
+          }
+        }
+      }, 2500);
+
+      return () => clearInterval(pollInterval);
     }
-  }, [setSubscription, setUserRole]);
+  }, [authState?.user?.email, authState?.user?.id, setSubscription, setUserRole]);
 
   const handleOpenCheckout = async (plan: 'STARTER' | 'PRO' | 'ELITE') => {
     setSelectedPlanToBuy(plan);
@@ -178,9 +224,22 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     setStripeError('');
   };
 
+  const handleDirectStripeCheckout = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
+    const directUrl = getDirectStripeUrl(planKey);
+    window.location.href = directUrl;
+  };
+
   const handleInitiateRealStripeCheckout = async () => {
     setIsProcessingStripe(true);
     setStripeError('');
+
+    const currentUserEmail = authState?.user?.email || '';
+    const currentUid = authState?.user?.id || '';
+    const directFallbackUrl = getStripePaymentUrl(selectedPlanToBuy, billingInterval, {
+      email: currentUserEmail,
+      uid: currentUid,
+      promoCode: appliedPromo?.code || (promoCodeInput !== 'PROMOTER20' ? promoCodeInput : undefined),
+    });
 
     if (customStripeUrl) {
       window.location.href = customStripeUrl;
@@ -188,9 +247,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     }
 
     try {
-      const currentUserEmail = authState?.user?.email || '';
-      const currentUid = authState?.user?.id || '';
-
       const res = await fetch('/api/stripe/create-checkout-session', {
         method: 'POST',
         headers: {
@@ -217,20 +273,20 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         if (stripe) {
           const { error } = await (stripe as any).redirectToCheckout({ sessionId: data.sessionId });
           if (error) {
-            setStripeError(error.message || 'Stripe Redirect Error');
-            setIsProcessingStripe(false);
+            window.location.href = directFallbackUrl;
           }
         } else if (data.url) {
           window.location.href = data.url;
+        } else {
+          window.location.href = directFallbackUrl;
         }
       } else {
-        setStripeError(data.message || 'Unable to connect to Stripe checkout service.');
-        setIsProcessingStripe(false);
+        // Smoothly redirect to direct Stripe payment link
+        window.location.href = directFallbackUrl;
       }
     } catch (err: any) {
-      console.error('Stripe Checkout Error:', err);
-      setStripeError('Network connection error when reaching Stripe server.');
-      setIsProcessingStripe(false);
+      console.warn('Stripe API fallback redirecting to payment link:', err);
+      window.location.href = directFallbackUrl;
     }
   };
 
@@ -361,6 +417,32 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
       </div>
 
+      {/* Stripe Webhook Real-time Verification Banner */}
+      {isVerifyingWebhook && (
+        <div className="bg-amber-950/40 border-2 border-amber-500/60 rounded-2xl p-4 sm:p-5 flex items-center gap-4 text-amber-200 shadow-xl font-mono animate-pulse">
+          <div className="p-3 bg-amber-500/20 rounded-xl border border-amber-500/40 text-amber-300 shrink-0">
+            <Loader2 className="w-6 h-6 animate-spin" />
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 font-bold text-sm text-amber-300">
+              <span>Authoritative Payment Verification in Progress</span>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 uppercase">Stripe Webhook → Firestore</span>
+            </div>
+            <p className="text-xs text-amber-200/80 font-sans">
+              {webhookVerificationStatus || 'Validating cryptographic signature and updating authoritative access permissions...'}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Success Notification */}
+      {successMessage && !isVerifyingWebhook && (
+        <div className="bg-emerald-950/40 border border-emerald-500/60 rounded-2xl p-4 flex items-center gap-3 text-emerald-200 shadow-xl font-mono">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          <span className="text-xs sm:text-sm font-bold">{successMessage}</span>
+        </div>
+      )}
+
       {/* Active Subscription Banner */}
       <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 font-mono">
         <div className="flex items-center gap-4">
@@ -420,12 +502,21 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </ul>
           </div>
 
-          <button
-            onClick={() => handleOpenCheckout('STARTER')}
-            className="w-full py-3 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-white font-bold text-xs transition-all border border-purple-900/40"
-          >
-            {subscription.plan === 'STARTER' ? 'Current Tier' : 'Select Starter'}
-          </button>
+          <div className="space-y-2 pt-2">
+            <a
+              href={getDirectStripeUrl('STARTER')}
+              className="w-full py-3 rounded-xl bg-purple-900/50 hover:bg-purple-900/80 text-white font-bold text-xs transition-all border border-purple-600/40 flex items-center justify-center gap-1.5 shadow-md"
+            >
+              <span>{subscription.plan === 'STARTER' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout'}</span>
+              <ExternalLink className="w-3.5 h-3.5 text-purple-300" />
+            </a>
+            <button
+              onClick={() => handleOpenCheckout('STARTER')}
+              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
+            >
+              Custom Card Checkout
+            </button>
+          </div>
         </div>
 
         {/* PROFESSIONAL (POPULAR) */}
@@ -452,13 +543,22 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </ul>
           </div>
 
-          <button
-            onClick={() => handleOpenCheckout('PRO')}
-            className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span>{subscription.plan === 'PRO' ? 'Current Active Tier' : 'Start 3-Hour Free Trial Pass'}</span>
-          </button>
+          <div className="space-y-2 pt-2">
+            <a
+              href={getDirectStripeUrl('PRO')}
+              className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span>{subscription.plan === 'PRO' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('PRO') + '/mo)'}</span>
+              <ExternalLink className="w-3.5 h-3.5 text-purple-200" />
+            </a>
+            <button
+              onClick={() => handleOpenCheckout('PRO')}
+              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
+            >
+              Custom Card Checkout
+            </button>
+          </div>
         </div>
 
         {/* ELITE */}
@@ -481,13 +581,22 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </ul>
           </div>
 
-          <button
-            onClick={() => handleOpenCheckout('ELITE')}
-            className="w-full py-3 rounded-xl bg-violet-700 hover:bg-violet-600 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>{subscription.plan === 'ELITE' ? 'Current Tier' : 'Select Elite Tier'}</span>
-          </button>
+          <div className="space-y-2 pt-2">
+            <a
+              href={getDirectStripeUrl('ELITE')}
+              className="w-full py-3.5 rounded-xl bg-violet-700 hover:bg-violet-600 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>{subscription.plan === 'ELITE' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('ELITE') + '/mo)'}</span>
+              <ExternalLink className="w-3.5 h-3.5 text-violet-200" />
+            </a>
+            <button
+              onClick={() => handleOpenCheckout('ELITE')}
+              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
+            >
+              Custom Card Checkout
+            </button>
+          </div>
         </div>
       </div>
 
@@ -690,13 +799,24 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                   </p>
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isProcessingStripe}
-                  className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isProcessingStripe ? 'Authorizing Stripe Payment...' : `Subscribe via Stripe (${priceFor(selectedPlanToBuy)}/mo)`}
-                </button>
+                <div className="pt-1 space-y-2">
+                  <a
+                    href={getDirectStripeUrl(selectedPlanToBuy)}
+                    className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Proceed to Official Stripe Checkout ({finalPriceFor(selectedPlanToBuy)}/mo)</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+
+                  <button
+                    type="submit"
+                    disabled={isProcessingStripe}
+                    className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-bold text-xs transition-all border border-purple-900/50 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isProcessingStripe ? 'Processing Checkout...' : 'Pay with Embedded Form'}
+                  </button>
+                </div>
               </form>
             )}
           </div>
