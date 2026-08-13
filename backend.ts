@@ -465,7 +465,7 @@ let latestLockEvaluation: StructuredLockEvaluation = {
   oddsWindow5050: true,
 };
 
-// Continuous Live Market Data Ingestion & Prediction Loop (Every 3 seconds)
+// Continuous Live Market Data Ingestion & Prediction Loop (Every 12 seconds)
 setInterval(async () => {
   try {
     currentEngineCycleId += 1;
@@ -624,6 +624,10 @@ setInterval(async () => {
       : rawModelProbability;
 
     currentModelProbability = calibratedModelProbability;
+    const computedUpProb = Math.round(currentModelProbability * 100 * 10) / 10;
+    const computedDownProb = Math.round((100 - computedUpProb) * 10) / 10;
+    currentDirection = computedUpProb > computedDownProb ? 'UP' : computedDownProb > computedUpProb ? 'DOWN' : 'NEUTRAL';
+
     currentConfidence = Math.min(96, Math.max(60, Math.round((70 + Math.abs(currentModelProbability - 0.5) * 60) * 10) / 10));
     
     currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (currentBullVolumePct - 50) * 0.005) * 1000) / 1000));
@@ -3468,17 +3472,20 @@ app.get(['/api/signal', '/api/signal/latest'], async (req, res) => {
   const market15mState = getKalshi15mMarketState(spot);
   const kalshiStrike = market15mState.strikePrice;
 
-  const effectiveDirection = currentDirection === 'DOWN' ? 'DOWN' : 'UP';
+  const upProbability = Math.round(currentModelProbability * 100 * 10) / 10;
+  const downProbability = Math.round((100 - upProbability) * 10) / 10;
+  const effectiveDirection = upProbability > downProbability ? 'UP' : downProbability > upProbability ? 'DOWN' : 'NEUTRAL';
   const action = effectiveDirection === 'DOWN' ? 'BUY_NO' : 'BUY_YES';
 
-  const rawUpProb = effectiveDirection === 'UP' ? currentModelProbability : (100 - currentModelProbability);
-  const upProbability = Math.round(rawUpProb * 10) / 10;
-  const downProbability = Math.round((100 - upProbability) * 10) / 10;
   const evidenceQuality = Math.min(96, Math.max(45, Math.round(currentConfidence * 0.95)));
   const vixyLockState = latestLockEvaluation.qualified ? 'LOCKED' : (latestLockEvaluation.isEarlyLock ? 'EARLY_LOCKED' : 'PASS');
   const decision = latestLockEvaluation.qualified ? (effectiveDirection === 'UP' ? 'BUY UP' : 'BUY DOWN') : 'PASS';
 
   res.json({
+    predictionId: `pred_${currentEngineCycleId}_${now}`,
+    predictionTimestamp: now,
+    marketTimestamp: lastMarketUpdateTs,
+    sequenceNumber: currentEngineCycleId,
     asset,
     desk,
     cycleId: currentEngineCycleId,
@@ -3490,7 +3497,7 @@ app.get(['/api/signal', '/api/signal/latest'], async (req, res) => {
     dataAgeMs,
     disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
     action: isLive ? action : null,
-    direction: isLive ? currentDirection : null,
+    direction: isLive ? effectiveDirection : null,
     modelProbability: isLive ? currentModelProbability : null,
     upProbability: isLive ? upProbability : 50.0,
     downProbability: isLive ? downProbability : 50.0,
@@ -4308,6 +4315,31 @@ interface DiscordAuthProfile {
 
 const userDiscordProfiles = new Map<string, DiscordAuthProfile>();
 
+interface DiscordSyncQueueItem {
+  id: string;
+  email: string;
+  discordUserId: string;
+  tier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE';
+  attempts: number;
+  lastAttemptAt?: string;
+  status: 'PENDING' | 'SUCCESS' | 'FAILED';
+  lastError?: string;
+}
+
+const discordSyncQueue: DiscordSyncQueueItem[] = [];
+
+let discordSyncMetrics = {
+  botConnected: false,
+  guildFound: false,
+  roleFound: false,
+  roleManageable: false,
+  lastSyncAt: null as string | null,
+  successCount: 0,
+  pendingCount: 0,
+  failedCount: 0,
+  lastError: null as string | null
+};
+
 // Initialize Firebase on the server
 let db: any = null;
 let lastFirestoreWriteTimeMs = 0;
@@ -4443,6 +4475,8 @@ function saveDiskStore() {
       subscriptions: subsObj,
       signalLogs: persistentSignalLogs,
       telemetryObservations: persistentTelemetryObservations.slice(0, 300),
+      discordSyncQueue,
+      discordSyncMetrics,
       circuitState: {
         firestoreBackoffMs,
         firestoreRetryAtMs,
@@ -4849,6 +4883,16 @@ function loadPersistentStore() {
         }
       }
 
+      if (Array.isArray(data.discordSyncQueue)) {
+        discordSyncQueue.length = 0;
+        data.discordSyncQueue.forEach((item: DiscordSyncQueueItem) => {
+          discordSyncQueue.push(item);
+        });
+      }
+      if (data.discordSyncMetrics) {
+        discordSyncMetrics = { ...discordSyncMetrics, ...data.discordSyncMetrics };
+      }
+
       console.log(`[Store] Loaded ${serverUsers.length} users, ${userDiscordProfiles.size} Discord profiles, ${userSubscriptions.size} subscriptions, ${persistentSignalLogs.length} signal logs & ${persistentTelemetryObservations.length} telemetry observations from disk store.`);
     }
   } catch (err) {
@@ -5173,6 +5217,147 @@ function seedInitialUsers() {
   savePersistentStore();
 }
 
+function enqueueDiscordRoleSync(email: string, discordUserId: string, tier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE') {
+  const normalizedEmail = email.toLowerCase().trim();
+  
+  // Idempotency check: check if there's already a pending or successful sync with exact same tier for this user
+  const existingIndex = discordSyncQueue.findIndex(item => item.email === normalizedEmail);
+  if (existingIndex !== -1) {
+    const item = discordSyncQueue[existingIndex];
+    if (item.tier === tier && item.status === 'SUCCESS') {
+      console.log(`[Discord Queue] Job already succeeded for ${normalizedEmail} at tier ${tier}.`);
+      return;
+    }
+    // Update existing job
+    item.tier = tier;
+    item.status = 'PENDING';
+    item.attempts = 0;
+    item.lastError = undefined;
+    console.log(`[Discord Queue] Updated existing job for ${normalizedEmail} to tier ${tier}.`);
+  } else {
+    discordSyncQueue.push({
+      id: `sync_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      email: normalizedEmail,
+      discordUserId,
+      tier,
+      attempts: 0,
+      status: 'PENDING'
+    });
+    console.log(`[Discord Queue] Enqueued new sync job for ${normalizedEmail} at tier ${tier}.`);
+  }
+  
+  savePersistentStore();
+  
+  // Process the queue asynchronously
+  processDiscordSyncQueue().catch(err => {
+    console.error('[Discord Queue] Error running queue process:', err);
+  });
+}
+
+let isProcessingQueue = false;
+
+async function processDiscordSyncQueue() {
+  if (isProcessingQueue) return;
+  isProcessingQueue = true;
+  
+  try {
+    const pendingItems = discordSyncQueue.filter(item => item.status === 'PENDING');
+    
+    // Update metrics counts
+    discordSyncMetrics.pendingCount = pendingItems.length;
+    discordSyncMetrics.successCount = discordSyncQueue.filter(item => item.status === 'SUCCESS').length;
+    discordSyncMetrics.failedCount = discordSyncQueue.filter(item => item.status === 'FAILED').length;
+    
+    for (const item of pendingItems) {
+      const now = Date.now();
+      const lastAttempt = item.lastAttemptAt ? new Date(item.lastAttemptAt).getTime() : 0;
+      // Exponential backoff up to 2 hours
+      const backoffMs = Math.min(Math.pow(2, item.attempts) * 5000, 120 * 60 * 1000); 
+      
+      if (lastAttempt > 0 && now - lastAttempt < backoffMs) {
+        continue;
+      }
+      
+      console.log(`[Discord Queue] Processing job ${item.id} for ${item.email} (Attempt ${item.attempts + 1})`);
+      item.attempts += 1;
+      item.lastAttemptAt = new Date().toISOString();
+      
+      try {
+        const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
+        const syncResult = await assignDiscordRoleToUser(item.discordUserId, item.tier, guildId);
+        
+        discordSyncMetrics.lastSyncAt = new Date().toISOString();
+        
+        if (syncResult.success) {
+          item.status = 'SUCCESS';
+          item.lastError = undefined;
+          console.log(`[Discord Queue] Job ${item.id} SUCCESS`);
+          
+          broadcastAdminEvent({
+            eventType: 'DISCORD_ROLE_ASSIGNED',
+            userEmail: item.email,
+            plan: item.tier,
+            status: 'SUCCESS',
+            message: `Background Sync Queue: successfully assigned ${item.tier} to ${item.email}`
+          });
+        } else {
+          item.lastError = syncResult.message || 'Unknown sync error';
+          discordSyncMetrics.lastError = item.lastError;
+          
+          const isTransient = syncResult.code === 'DISCORD_RATE_LIMITED' || syncResult.code === 'DISCORD_API_ERROR';
+          const maxAttempts = isTransient ? 15 : 4;
+          
+          if (item.attempts >= maxAttempts) {
+            item.status = 'FAILED';
+            console.error(`[Discord Queue] Job ${item.id} FAILED after ${item.attempts} attempts: ${item.lastError}`);
+            
+            broadcastAdminEvent({
+              eventType: 'DISCORD_ROLE_SYNC_FAILED',
+              userEmail: item.email,
+              plan: item.tier,
+              status: 'FAILED',
+              message: `Background Sync Queue: failed to sync ${item.tier} after ${item.attempts} attempts: ${item.lastError}`
+            });
+          } else {
+            console.warn(`[Discord Queue] Job ${item.id} failed temporarily. Will retry. Reason: ${item.lastError}`);
+          }
+        }
+      } catch (err: any) {
+        const errMsg = err?.message || String(err);
+        item.lastError = errMsg;
+        discordSyncMetrics.lastError = errMsg;
+        
+        if (item.attempts >= 6) {
+          item.status = 'FAILED';
+          console.error(`[Discord Queue] Job ${item.id} FAILED with exception: ${errMsg}`);
+        } else {
+          console.warn(`[Discord Queue] Job ${item.id} encountered exception. Will retry. Error: ${errMsg}`);
+        }
+      }
+      
+      savePersistentStore();
+      
+      discordSyncMetrics.pendingCount = discordSyncQueue.filter(i => i.status === 'PENDING').length;
+      discordSyncMetrics.successCount = discordSyncQueue.filter(i => i.status === 'SUCCESS').length;
+      discordSyncMetrics.failedCount = discordSyncQueue.filter(i => i.status === 'FAILED').length;
+    }
+  } finally {
+    isProcessingQueue = false;
+  }
+}
+
+async function updateDiscordDiagnosticsMetrics() {
+  try {
+    const diag = await runDiscordDiagnostics();
+    discordSyncMetrics.botConnected = diag.botConnected;
+    discordSyncMetrics.guildFound = diag.guildAccessible;
+    discordSyncMetrics.roleFound = diag.rolesFound?.eliteRoleFound ?? false;
+    discordSyncMetrics.roleManageable = diag.botHasManageRoles && diag.hierarchySufficient;
+  } catch (err: any) {
+    console.warn('[Discord Diagnostics Metrics] Error running diagnostics:', err);
+  }
+}
+
 seedInitialUsers();
 
 loadPersistentStoreAsync().catch(err => {
@@ -5213,66 +5398,36 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
     ? (userRole === 'ELITE' || userRole === 'ELITE_PASS' ? 'ELITE' : 'PRO')
     : 'VERIFIED';
 
-  const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
+  console.log(`[DISCORD_ROLE_SYNC_ASYNCHRONOUS] Enqueueing role sync to tier ${targetTier} for Discord user ID ${profile.discordUserId}`);
 
-  console.log(`[DISCORD_ROLE_SYNC_START] Syncing Discord user ID ${profile.discordUserId} (@${profile.discordUsername}) to target tier ${targetTier} in guild ${targetGuildId}`);
+  // Push to persistent idempotent background queue instead of blocking network request
+  enqueueDiscordRoleSync(normalizedEmail, profile.discordUserId, targetTier);
 
-  const syncResult = await assignDiscordRoleToUser(profile.discordUserId, targetTier, targetGuildId);
-
+  // Optimistic update to profile for responsive UI
   profile.lastSync = new Date().toLocaleTimeString();
   profile.lastRoleSyncAt = new Date().toISOString();
+  profile.roleAssigned = targetTier;
+  profile.assignedRoleName = targetTier;
+  profile.discordLinked = true;
+  userDiscordProfiles.set(normalizedEmail, profile);
+  userDiscordProfiles.set('global_active_user', profile);
+  
+  const linkedUser = ensureUserExists({
+    email: normalizedEmail,
+    name: profile.discordGlobalName || profile.discordUsername,
+  });
+  linkedUser.discordId = profile.discordUserId;
+  linkedUser.discordTag = profile.discordUsername || profile.discordGlobalName;
+  linkedUser.discordLinked = true;
 
-  if (syncResult.success) {
-    profile.guildMember = true;
-    profile.guildJoined = true;
-    profile.discordLinked = true;
-    profile.roleAssigned = targetTier;
-    profile.assignedRoleName = targetTier;
-    profile.guildRoles = [targetTier];
-    profile.verificationStatus = 'VERIFIED';
-    profile.lastVerifiedAt = new Date().toISOString();
+  savePersistentStore();
 
-    userDiscordProfiles.set(normalizedEmail, profile);
-    userDiscordProfiles.set('global_active_user', profile);
-
-    const linkedUser = ensureUserExists({
-      email: normalizedEmail,
-      name: profile.discordGlobalName || profile.discordUsername,
-    });
-    linkedUser.discordId = profile.discordUserId;
-    linkedUser.discordTag = profile.discordUsername || profile.discordGlobalName;
-    linkedUser.discordLinked = true;
-
-    savePersistentStore();
-
-    console.log(`[DISCORD_ROLE_SYNC_SUCCESS] Successfully synced role ${targetTier} for Discord user ID ${profile.discordUserId}`);
-    return {
-      success: true,
-      code: 'ROLE_SYNC_SUCCESS',
-      message: `Role ${targetTier} successfully synchronized for Discord user ${profile.discordUserId}`,
-      profile,
-    };
-  } else {
-    console.warn(`[DISCORD_ROLE_SYNC_FAILED] Failed to sync role for Discord user ID ${profile.discordUserId}: ${syncResult.message}`);
-
-    if (syncResult.code === 'USER_NOT_IN_SERVER' || syncResult.code === 'USER_NOT_IN_GUILD' || syncResult.status === 'not_in_guild') {
-      profile.guildMember = false;
-      profile.guildJoined = false;
-      profile.verificationStatus = 'NEEDS_GUILD';
-      profile.roleAssigned = 'NEEDS_GUILD';
-    }
-
-    userDiscordProfiles.set(normalizedEmail, profile);
-    userDiscordProfiles.set('global_active_user', profile);
-    savePersistentStore();
-
-    return {
-      success: false,
-      code: syncResult.code || 'ROLE_SYNC_FAILED',
-      message: syncResult.message,
-      profile,
-    };
-  }
+  return {
+    success: true,
+    code: 'SYNC_QUEUED',
+    message: `Role synchronization to ${targetTier} has been enqueued asynchronously.`,
+    profile,
+  };
 }
 
 // SYNCHRONIZE DISCORD GUILD MEMBERS WITH USER DIRECTORY (Disabled bulk whole-guild fetch to avoid GuildMembersTimeout and 403 HTTP errors)
@@ -6077,6 +6232,33 @@ app.get('/api/discord/bot-status', (req, res) => {
     missingRequired: envValidation.missing,
     isValid: envValidation.valid,
     timestamp: Date.now(),
+    diagnostics: {
+      BOT_CONNECTED: discordSyncMetrics.botConnected,
+      GUILD_FOUND: discordSyncMetrics.guildFound,
+      ROLE_FOUND: discordSyncMetrics.roleFound,
+      ROLE_MANAGEABLE: discordSyncMetrics.roleManageable,
+      LAST_SYNC: discordSyncMetrics.lastSyncAt,
+      SUCCESS_COUNT: discordSyncMetrics.successCount,
+      PENDING_COUNT: discordSyncMetrics.pendingCount,
+      FAILED_COUNT: discordSyncMetrics.failedCount,
+      LAST_ERROR: discordSyncMetrics.lastError,
+    }
+  });
+});
+
+app.get('/api/discord/diagnostics', (req, res) => {
+  res.json({
+    success: true,
+    BOT_CONNECTED: discordSyncMetrics.botConnected,
+    GUILD_FOUND: discordSyncMetrics.guildFound,
+    ROLE_FOUND: discordSyncMetrics.roleFound,
+    ROLE_MANAGEABLE: discordSyncMetrics.roleManageable,
+    LAST_SYNC: discordSyncMetrics.lastSyncAt,
+    SUCCESS_COUNT: discordSyncMetrics.successCount,
+    PENDING_COUNT: discordSyncMetrics.pendingCount,
+    FAILED_COUNT: discordSyncMetrics.failedCount,
+    LAST_ERROR: discordSyncMetrics.lastError,
+    queue: discordSyncQueue.slice(-20)
   });
 });
 
@@ -6248,6 +6430,19 @@ async function startServer() {
   initializeDiscordBot().catch((err) => {
     console.warn('[Server] Discord bot initialization warning:', err);
   });
+
+  // Run initial diagnostics metrics update
+  updateDiscordDiagnosticsMetrics().catch(() => {});
+
+  // Discord Asynchronous Sync Queue Ticker (Every 15 seconds)
+  setInterval(() => {
+    processDiscordSyncQueue().catch(console.error);
+  }, 15000);
+
+  // Discord Live Diagnostics Metrics Ticker (Every 60 seconds)
+  setInterval(() => {
+    updateDiscordDiagnosticsMetrics().catch(console.error);
+  }, 60000);
 
   // Start periodic 5-minute Discord guild reconciliation
 

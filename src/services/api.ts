@@ -1,15 +1,88 @@
 import { BTCTicker, Candle, PredictionSignal } from '../types';
 
+const inFlightRequests = new Map<string, Promise<any>>();
+const cacheStore = new Map<string, { data: any; timestamp: number }>();
+let globalRateLimitExpiresAt = 0;
+let rateLimitBackoffMs = 1000;
+
 export async function safeFetchJson<T>(url: string, options?: RequestInit): Promise<T | null> {
-  try {
-    const res = await fetch(url, options);
-    if (!res.ok) return null;
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('application/json')) return null;
-    return await res.json();
-  } catch {
-    return null;
+  const cacheKey = `${options?.method || 'GET'}:${url}:${options?.body ? String(options.body) : ''}`;
+  const now = Date.now();
+
+  // 1. If global rate limit is active and this is a GET request, serve cached copy if available
+  if (now < globalRateLimitExpiresAt && (!options?.method || options.method === 'GET')) {
+    const cached = cacheStore.get(cacheKey);
+    if (cached) {
+      return cached.data as T;
+    }
   }
+
+  // 2. Check cache for valid non-expired data (TTL: 5000ms for high-frequency tickers, 15000ms for heavy diagnostics/status, 8000ms for others)
+  const ttl = url.includes('/ticker') || url.includes('/all-tickers') || url.includes('/live-signal')
+    ? 5000
+    : (url.includes('/diagnostics') || url.includes('/status') || url.includes('/health') ? 15000 : 8000);
+  const cached = cacheStore.get(cacheKey);
+  if (cached && now - cached.timestamp < ttl) {
+    return cached.data as T;
+  }
+
+  // 3. Deduplicate in-flight requests
+  const existingPromise = inFlightRequests.get(cacheKey);
+  if (existingPromise) {
+    return existingPromise as Promise<T | null>;
+  }
+
+  const promise = (async () => {
+    try {
+      // If we are actively rate limited, wait or return cache early
+      if (now < globalRateLimitExpiresAt) {
+        const cached = cacheStore.get(cacheKey);
+        if (cached) return cached.data as T;
+        return null;
+      }
+
+      const res = await fetch(url, options);
+      
+      if (res.status === 429) {
+        console.warn(`[API 429] Rate limited on ${url}. Activating client-side backoff.`);
+        globalRateLimitExpiresAt = Date.now() + rateLimitBackoffMs;
+        rateLimitBackoffMs = Math.min(rateLimitBackoffMs * 2, 60000); // Exponential backoff up to 1 min
+        
+        const cached = cacheStore.get(cacheKey);
+        if (cached) return cached.data as T;
+        return null;
+      }
+
+      if (res.ok) {
+        rateLimitBackoffMs = 1000; // Reset on success
+      } else {
+        const cached = cacheStore.get(cacheKey);
+        if (cached) return cached.data as T;
+        return null;
+      }
+
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        const cached = cacheStore.get(cacheKey);
+        if (cached) return cached.data as T;
+        return null;
+      }
+
+      const data = await res.json();
+      cacheStore.set(cacheKey, { data, timestamp: Date.now() });
+      return data as T;
+    } catch (err) {
+      console.warn(`[API Fetch Warning] Graceful handling for ${url}:`, err);
+      const cached = cacheStore.get(cacheKey);
+      if (cached) return cached.data as T;
+      return null;
+    } finally {
+      inFlightRequests.delete(cacheKey);
+    }
+  })();
+
+  inFlightRequests.set(cacheKey, promise);
+  return promise;
 }
 
 export interface CryptoTickerData {

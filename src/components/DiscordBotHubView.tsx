@@ -12,6 +12,8 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
   const [loading, setLoading] = useState(true);
   const [statusData, setStatusData] = useState<any>(null);
   const [healthData, setHealthData] = useState<any>(null);
+  const [diagnostics, setDiagnostics] = useState<any>(null);
+  const [syncQueue, setSyncQueue] = useState<any[]>([]);
   const [localEvents, setLocalEvents] = useState<any[]>(externalEvents || []);
   const [testSymbol, setTestSymbol] = useState('BTC/USDT 15M');
   const [testDirection, setTestDirection] = useState<'YES' | 'NO'>('YES');
@@ -46,15 +48,30 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
 
   const loadStatus = async () => {
     setLoading(true);
-    const [data, hData, evs] = await Promise.all([
-      getDiscordBotStatusApi(),
-      fetchDiscordHealthApi().catch(() => null),
-      fetchAdminEventsApi().catch(() => null),
-    ]);
-    setStatusData(data);
-    if (hData) setHealthData(hData);
-    if (evs && Array.isArray(evs)) setLocalEvents(evs);
-    setLoading(false);
+    try {
+      const [data, hData, evs, diagRes] = await Promise.all([
+        getDiscordBotStatusApi(),
+        fetchDiscordHealthApi().catch(() => null),
+        fetchAdminEventsApi().catch(() => null),
+        fetch('/api/discord/diagnostics').then(r => r.json()).catch(() => null)
+      ]);
+      setStatusData(data);
+      if (hData) setHealthData(hData);
+      if (evs && Array.isArray(evs)) setLocalEvents(evs);
+      
+      if (diagRes && diagRes.success) {
+        setDiagnostics(diagRes);
+        if (Array.isArray(diagRes.queue)) {
+          setSyncQueue(diagRes.queue);
+        }
+      } else if (data?.diagnostics) {
+        setDiagnostics(data.diagnostics);
+      }
+    } catch (err) {
+      console.warn('[DiscordBotHub] Failed to load full diagnostics status:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -201,74 +218,176 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         </div>
       )}
 
-      {/* Operational Status Metrics Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-1">
-          <div className="flex items-center justify-between text-xs text-purple-300/60 font-mono">
-            <span>Bot Engine State</span>
-            <Zap className="w-3.5 h-3.5 text-purple-400" />
+      {/* INSTITUTIONAL COMMAND CENTER DIAGNOSTICS */}
+      <div className="bg-[#0B061F] border border-purple-900/60 rounded-2xl p-6 shadow-2xl space-y-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-purple-900/40 pb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse shrink-0" />
+              <h2 className="text-sm font-black text-white uppercase tracking-wider font-mono">
+                VIXY VAULT // INSTANT ROLE & IDENTITY SYNCHRONIZATION TELEMETRY
+              </h2>
+            </div>
+            <p className="text-[11px] text-purple-300/60 font-mono mt-1">
+              Active tracking of asynchronous, decoupled Stripe-to-Discord entitlement queue & bot hierarchy integrity.
+            </p>
           </div>
-          <div className="text-lg font-black text-white flex items-center gap-2">
-            {statusData?.status?.mode === 'ACTIVE_BOT' ? (
-              <span className="text-emerald-400 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                Active Bot Logged In
+          <div className="text-right">
+            <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+              QUEUE WORKER ACTIVE • 15S INGEST
+            </span>
+          </div>
+        </div>
+
+        {/* 9 core fields grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* BOT_CONNECTED */}
+          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+            <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
+              <span>Bot Connected</span>
+              <Activity className="w-3.5 h-3.5 text-purple-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.BOT_CONNECTED ? 'bg-emerald-400 animate-ping' : 'bg-rose-500 animate-pulse'}`} />
+              <span className={`text-base font-black tracking-tight ${diagnostics?.BOT_CONNECTED ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {diagnostics?.BOT_CONNECTED ? 'ONLINE' : 'OFFLINE'}
               </span>
-            ) : statusData?.status?.mode === 'WEBHOOK_FALLBACK' ? (
-              <span className="text-amber-300 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" />
-                Webhook Active
+            </div>
+            <p className="text-[10px] text-purple-400/60 font-mono">
+              Tag: {statusData?.status?.botTag || 'VIXY AI#0000'}
+            </p>
+          </div>
+
+          {/* GUILD_FOUND */}
+          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+            <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
+              <span>Guild Found</span>
+              <Users className="w-3.5 h-3.5 text-indigo-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.GUILD_FOUND ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+              <span className={`text-base font-black tracking-tight ${diagnostics?.GUILD_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {diagnostics?.GUILD_FOUND ? 'ACCESSIBLE' : 'NOT_FOUND'}
               </span>
+            </div>
+            <p className="text-[10px] text-purple-400/60 font-mono truncate">
+              ID: {process.env.DISCORD_GUILD_ID || '1451337712937336985'}
+            </p>
+          </div>
+
+          {/* ROLE_FOUND */}
+          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+            <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
+              <span>Elite Role Found</span>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.ROLE_FOUND ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
+              <span className={`text-base font-black tracking-tight ${diagnostics?.ROLE_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {diagnostics?.ROLE_FOUND ? 'VERIFIED' : 'MISSING_ROLE'}
+              </span>
+            </div>
+            <p className="text-[10px] text-purple-400/60 font-mono truncate">
+              ID: {process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425'}
+            </p>
+          </div>
+
+          {/* ROLE_MANAGEABLE */}
+          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+            <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
+              <span>Hierarchy & Permissions</span>
+              <Lock className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.ROLE_MANAGEABLE ? 'bg-emerald-400' : 'bg-amber-500 animate-pulse'}`} />
+              <span className={`text-base font-black tracking-tight ${diagnostics?.ROLE_MANAGEABLE ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {diagnostics?.ROLE_MANAGEABLE ? 'VALID_HIERARCHY' : 'INSUFFICIENT'}
+              </span>
+            </div>
+            <p className="text-[10px] text-purple-400/60 font-mono">
+              Requires Bot above Elite role
+            </p>
+          </div>
+        </div>
+
+        {/* Telemetry Queue Statistics Panel */}
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
+          {/* Left Column (Stats counts) */}
+          <div className="md:col-span-5 grid grid-cols-3 gap-3">
+            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+              <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Pending Jobs</span>
+              <span className={`text-2xl font-black block ${diagnostics?.PENDING_COUNT > 0 ? 'text-amber-400' : 'text-white/60'}`}>
+                {diagnostics?.PENDING_COUNT ?? 0}
+              </span>
+            </div>
+            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+              <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Synced Success</span>
+              <span className="text-2xl font-black text-emerald-400 block">
+                {diagnostics?.SUCCESS_COUNT ?? 0}
+              </span>
+            </div>
+            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+              <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Failed Jobs</span>
+              <span className={`text-2xl font-black block ${diagnostics?.FAILED_COUNT > 0 ? 'text-rose-400 animate-pulse' : 'text-white/60'}`}>
+                {diagnostics?.FAILED_COUNT ?? 0}
+              </span>
+            </div>
+          </div>
+
+          {/* Right Column (Sync Timestamp and Errors) */}
+          <div className="md:col-span-7 flex flex-col justify-between p-3.5 bg-[#08031A] rounded-xl border border-purple-900/40">
+            <div className="flex items-center justify-between text-[11px] font-mono text-purple-300/70 border-b border-purple-950 pb-2 mb-2">
+              <span className="flex items-center gap-1">
+                <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
+                Last Checked Timestamp (LAST_SYNC):
+              </span>
+              <span className="text-white font-bold">
+                {diagnostics?.LAST_SYNC ? new Date(diagnostics.LAST_SYNC).toLocaleTimeString() : 'N/A'}
+              </span>
+            </div>
+
+            {diagnostics?.LAST_ERROR ? (
+              <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/40 text-[11px] font-mono text-rose-300 flex items-start gap-2">
+                <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="truncate">
+                  <span className="font-bold block uppercase text-[9px] text-rose-400">Last Encountered Sync Error:</span>
+                  <span className="font-bold">{diagnostics.LAST_ERROR}</span>
+                </div>
+              </div>
             ) : (
-              <span className="text-purple-300/60 flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
-                Ready to Plug In
-              </span>
+              <div className="p-2 px-3 rounded-lg bg-emerald-950/35 border border-emerald-900/30 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>All asynchronous queue workers are running idle with zero active system exceptions.</span>
+              </div>
             )}
           </div>
-          <p className="text-[10px] text-purple-400/60 font-mono">
-            {statusData?.status?.botTag ? `@${statusData.status.botTag}` : 'Plug Bot token or Webhook in .env'}
-          </p>
         </div>
 
-        <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-1">
-          <div className="flex items-center justify-between text-xs text-purple-300/60 font-mono">
-            <span>Connected Servers</span>
-            <Users className="w-3.5 h-3.5 text-indigo-400" />
+        {/* Real-time background sync queue active display */}
+        {syncQueue.length > 0 && (
+          <div className="bg-[#09041A] rounded-xl p-4 border border-purple-900/30 space-y-2">
+            <span className="text-[10px] text-purple-400/70 font-mono font-bold uppercase block tracking-wider">
+              Asynchronous Sync Queue Diagnostics:
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto custom-scrollbar pr-1">
+              {syncQueue.map((item: any) => (
+                <div key={item.id} className="p-2.5 rounded-lg bg-[#110A2B] border border-purple-900/40 flex items-center justify-between text-xs font-mono">
+                  <div className="space-y-0.5 truncate max-w-[70%]">
+                    <span className="text-white font-bold block truncate">{item.email}</span>
+                    <span className="text-[10px] text-purple-400">Tier: {item.tier} • Attempts: {item.attempts}</span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    item.status === 'SUCCESS' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' :
+                    item.status === 'FAILED' ? 'bg-rose-950 text-rose-400 border border-rose-800/40' :
+                    'bg-amber-950 text-amber-400 border border-amber-800/40 animate-pulse'
+                  }`}>
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="text-lg font-black text-white">
-            {statusData?.status?.guildCount || 1} <span className="text-xs font-normal text-purple-300/60">Guilds</span>
-          </div>
-          <p className="text-[10px] text-purple-400/60 font-mono">
-            Gateway Ping: {statusData?.status?.pingMs || 14}ms
-          </p>
-        </div>
-
-        <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-1">
-          <div className="flex items-center justify-between text-xs text-purple-300/60 font-mono">
-            <span>Signals Dispatched</span>
-            <Send className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="text-lg font-black text-emerald-400">
-            {statusData?.status?.totalAlertsDispatched || 14} <span className="text-xs font-normal text-purple-300/60">Alerts</span>
-          </div>
-          <p className="text-[10px] text-purple-400/60 font-mono">
-            Last: {statusData?.status?.lastBroadcastAt ? new Date(statusData.status.lastBroadcastAt).toLocaleTimeString() : 'Just now'}
-          </p>
-        </div>
-
-        <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-1">
-          <div className="flex items-center justify-between text-xs text-purple-300/60 font-mono">
-            <span>VIP Role Sync</span>
-            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
-          </div>
-          <div className="text-lg font-black text-purple-200">
-            {statusData?.envConfigured?.hasVipRoleId ? 'ROLE_CONFIGURED' : 'AUTO_SYNC'}
-          </div>
-          <p className="text-[10px] text-purple-400/60 font-mono">
-            Stripe Event Listener Active
-          </p>
-        </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

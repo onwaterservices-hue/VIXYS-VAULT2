@@ -81,7 +81,7 @@ export const useLiveSignal = (asset: string, desk: string) => {
     if (shouldRestart || !pollingInterval) {
       if (pollingInterval) clearInterval(pollingInterval);
       poll(); // initial fetch
-      pollingInterval = setInterval(poll, 10000); // 10-second polling to respect upstream rate limits
+      pollingInterval = setInterval(poll, 15000); // 15-second polling to respect upstream rate limits
     }
 
     const handler = () => {

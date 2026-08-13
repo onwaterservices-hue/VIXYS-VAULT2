@@ -56,12 +56,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   }, [lockScorePct, feedStatus, triggerHapticPulse]);
 
   // Safe backend-authoritative fallback variables (preventing undefined crashes)
-  const upProbability = Number(signal?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
-  const downProbability = Number(signal?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
-  const lockState = signal?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
-  const decision = signal?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
-  const evidenceQuality = Number(signal?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
-  const correlationPenalty = signal?.correlationPenalty ?? rawApiData?.correlationPenalty ?? 'ACTIVE (-3.2%)';
+  const sigAny = signal as any;
+  const upProbability = Number(sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
+  const downProbability = Number(sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
+  const lockState = sigAny?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
+  const decision = sigAny?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
+  const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
+  const correlationPenalty = sigAny?.correlationPenalty ?? rawApiData?.correlationPenalty ?? 'ACTIVE (-3.2%)';
 
   const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
   const currentDirection = signal?.direction ?? rawApiData?.direction ?? (upProbability >= downProbability ? 'UP' : 'DOWN');
@@ -213,41 +214,48 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </span>
           </div>
 
-          {/* GIANT ACTION & PROBABILITY ACCUMULATION */}
-          <div className="grid grid-cols-2 gap-4 my-2">
-            <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
-              showPassState
-                ? 'bg-slate-950/80 border-slate-800 opacity-60'
-                : upProbNum >= downProbNum
-                ? 'bg-emerald-950/40 border-emerald-500/60 shadow-[0_0_20px_rgba(52,211,153,0.2)]'
-                : 'bg-slate-950/60 border-slate-800'
-            }`}>
-              <div className="text-[10px] font-bold uppercase text-slate-400">BUY UP PROBABILITY</div>
-              <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-400 tabular-nums">
-                {Number(upProbNum).toFixed(0)}%
-              </div>
-              <div className="text-[9px] font-mono text-emerald-300/80">
-                {upProbNum === 50 ? 'ANALYZING (50/50)' : upProbNum > 70 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE'}
+          {/* SINGLE AUTHORITATIVE VIXY DECISION CARD */}
+          <div className={`my-2 p-5 rounded-2xl border transition-all duration-500 flex flex-col items-center justify-center text-center space-y-4 shadow-inner relative overflow-hidden ${
+            showPassState
+              ? 'bg-[#0f0a1d]/60 border-purple-900/40 opacity-70'
+              : isBullish
+              ? 'bg-gradient-to-br from-[#062418] to-[#04120c] border-emerald-500/60 shadow-[0_0_20px_rgba(16,185,129,0.15)]'
+              : 'bg-gradient-to-br from-[#2f0815] to-[#140308] border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.15)]'
+          }`}>
+            <div className="space-y-1 relative z-10">
+              <span className="text-[10px] font-mono tracking-[0.2em] text-purple-400/80 uppercase block">
+                CURRENT DECISION BIAS
+              </span>
+              <div className={`text-4xl sm:text-5xl font-black font-mono tracking-tight flex items-center justify-center gap-2 ${
+                showPassState ? 'text-amber-400' : isBullish ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {showPassState ? 'PASS' : (isBullish ? 'BUY UP' : 'BUY DOWN')}
+                {!showPassState && (
+                  <span className="text-3xl font-bold">{isBullish ? '▲' : '▼'}</span>
+                )}
               </div>
             </div>
 
-            <div className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
-              showPassState
-                ? 'bg-slate-950/80 border-slate-800 opacity-60'
-                : downProbNum > upProbNum
-                ? 'bg-rose-950/40 border-rose-500/60 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
-                : 'bg-slate-950/60 border-slate-800'
-            }`}>
-              <div className="text-[10px] font-bold uppercase text-slate-400">BUY DOWN PROBABILITY</div>
-              <div className="text-3xl sm:text-4xl font-black font-mono text-rose-400 tabular-nums">
-                {Number(downProbNum).toFixed(0)}%
+            <div className="space-y-0.5 relative z-10">
+              <div className={`text-5xl sm:text-6xl font-extrabold font-mono tracking-tighter tabular-nums ${
+                showPassState ? 'text-amber-400/80' : isBullish ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                {showPassState ? '50/50' : `${isBullish ? Number(upProbNum).toFixed(0) : Number(downProbNum).toFixed(0)}%`}
               </div>
-              <div className="text-[9px] font-mono text-rose-300/80">
-                {downProbNum === 50 ? 'ANALYZING (50/50)' : downProbNum > 70 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE'}
-              </div>
+              <span className={`text-[10px] font-mono tracking-wider uppercase block ${
+                showPassState ? 'text-amber-400/60' : 'text-purple-300'
+              }`}>
+                {showPassState 
+                  ? 'NO QUALIFIED DIRECTION' 
+                  : (isBullish 
+                      ? (upProbNum >= 90 ? 'EXTREME CONVICTION' : upProbNum >= 75 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE')
+                      : (downProbNum >= 90 ? 'EXTREME CONVICTION' : downProbNum >= 75 ? 'STRONG EVIDENCE' : 'DEVELOPING EDGE')
+                    )
+                }
+              </span>
             </div>
           </div>
-
+ 
           {/* VIXY LOCK PERMISSION GATE STATUS */}
           <div className={`p-3 rounded-xl border flex items-center justify-between text-xs font-mono font-bold ${
             showPassState
