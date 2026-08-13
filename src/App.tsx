@@ -596,8 +596,11 @@ export default function App() {
   // Fetch Live Ticker & Klines for Selected Asset and Connect Live WebSocket Stream
   useEffect(() => {
     let isMounted = true;
+    let isFetchingPrices = false;
 
     const loadData = async () => {
+      if (isFetchingPrices) return;
+      isFetchingPrices = true;
       try {
         const liveTicker = await fetchCryptoTicker(selectedAsset);
         const liveCandles = await fetchCryptoKlines(selectedAsset, selectedTimeframe);
@@ -608,11 +611,13 @@ export default function App() {
         }
       } catch (e) {
         // Fallback or retry silently
+      } finally {
+        isFetchingPrices = false;
       }
     };
 
     loadData();
-    const interval = setInterval(loadData, 2000);
+    const interval = setInterval(loadData, 10000);
 
     // Connect to Live Binance WebSocket Stream for Real Tick Updates
     const unsubscribeWs = connectLiveCryptoStream(selectedAsset, (streamUpdate) => {

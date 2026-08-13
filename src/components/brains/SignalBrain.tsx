@@ -60,6 +60,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const downProbability = Number(signal?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
   const lockState = signal?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
   const decision = signal?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
+  const evidenceQuality = Number(signal?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
+  const correlationPenalty = signal?.correlationPenalty ?? rawApiData?.correlationPenalty ?? 'ACTIVE (-3.2%)';
 
   const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
   const currentDirection = signal?.direction ?? rawApiData?.direction ?? (upProbability >= downProbability ? 'UP' : 'DOWN');
@@ -69,8 +71,6 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const downProbNum = Number(downProbability || 50);
 
   const isQualifiedLock = Boolean(lockEvaluation?.qualified ?? (lockState === 'LOCKED' || lockState === 'LOCKED_UP' || lockState === 'LOCKED_DOWN'));
-  const lockReason = lockEvaluation?.reason ?? (isQualifiedLock ? 'Signal qualified across institutional edge and persistence' : 'Insufficient edge or persistence');
-  
   const showPassState = !isQualifiedLock || decision === 'PASS' || lockState === 'PASS' || Math.abs(upProbNum - 50) < 6;
 
   const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 64036.72;

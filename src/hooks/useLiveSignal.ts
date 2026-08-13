@@ -4,29 +4,35 @@ import { fetchLiveSignalData, fetchModelStatus, ApiSignalResponse, ModelStatusRe
 type SharedSignalState = {
   signal: ApiSignalResponse | null;
   status: ModelStatusResponse | null;
+  isRateLimited?: boolean;
 };
 
 let globalState: SharedSignalState = {
   signal: null,
   status: null,
+  isRateLimited: false,
 };
 
 let globalSubscribers: Set<() => void> = new Set();
 let pollingInterval: any = null;
 let currentAsset = 'BTC';
 let currentDesk = '15m';
+let isFetching = false;
+let consecutiveErrors = 0;
 
 const notifySubscribers = () => {
   globalSubscribers.forEach(sub => sub());
 };
 
 const poll = async () => {
-  if (!currentAsset || !currentDesk) return;
+  if (!currentAsset || !currentDesk || isFetching) return;
+  isFetching = true;
   try {
     const [sig, stat] = await Promise.all([
       fetchLiveSignalData(currentAsset, currentDesk),
       fetchModelStatus(currentAsset, currentDesk)
     ]);
+    consecutiveErrors = 0;
     let changed = false;
     if (sig) {
       globalState.signal = sig;
@@ -36,11 +42,22 @@ const poll = async () => {
       globalState.status = stat;
       changed = true;
     }
+    if (globalState.isRateLimited) {
+      globalState.isRateLimited = false;
+      changed = true;
+    }
     if (changed) {
       notifySubscribers();
     }
-  } catch (err) {
-    console.error('Error fetching live signal', err);
+  } catch (err: any) {
+    consecutiveErrors++;
+    if (err?.message?.includes('429') || err?.status === 429 || String(err).includes('Rate exceeded')) {
+      globalState.isRateLimited = true;
+      notifySubscribers();
+    }
+    console.error('Error fetching live signal (rate limit / network):', err);
+  } finally {
+    isFetching = false;
   }
 };
 
@@ -64,7 +81,7 @@ export const useLiveSignal = (asset: string, desk: string) => {
     if (shouldRestart || !pollingInterval) {
       if (pollingInterval) clearInterval(pollingInterval);
       poll(); // initial fetch
-      pollingInterval = setInterval(poll, 2000); // 2-second polling
+      pollingInterval = setInterval(poll, 10000); // 10-second polling to respect upstream rate limits
     }
 
     const handler = () => {

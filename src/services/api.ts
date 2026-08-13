@@ -553,6 +553,13 @@ export interface ApiSignalResponse {
   action: 'BUY_YES' | 'BUY_NO' | 'HOLD' | null;
   direction?: 'UP' | 'DOWN' | 'NEUTRAL' | null;
   modelProbability: number | null;
+  upProbability?: number;
+  downProbability?: number;
+  evidenceQuality?: number;
+  vixyLockState?: string;
+  decision?: string;
+  correlationPenalty?: string;
+  evidenceMatrix?: Array<{ name: string; strength: string; bias: string }>;
   confidence?: number | null;
   kalshiImpliedProbability: number | null;
   edge: number | null;
