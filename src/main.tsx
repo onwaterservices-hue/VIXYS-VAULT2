@@ -6,6 +6,39 @@ import { ErrorBoundary } from './components/ErrorBoundary.tsx';
 import './index.css';
 
 if (typeof window !== 'undefined') {
+  // Proxy WebSocket constructor to block/mock Vite HMR WebSockets
+  const OriginalWebSocket = window.WebSocket;
+  const CustomWebSocket = function(this: any, url: string | URL, protocols?: string | string[]) {
+    const urlStr = String(url);
+    if (urlStr.includes('vite') || urlStr.includes('hmr') || urlStr.includes('localhost:3000') || (!urlStr.includes('binance') && !urlStr.includes('coinbase') && !urlStr.includes('kraken'))) {
+      const mockWs = {
+        url: urlStr,
+        readyState: 3, // CLOSED
+        bufferedAmount: 0,
+        extensions: "",
+        protocol: "",
+        binaryType: "blob",
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        send: () => {},
+        close: () => {},
+        onopen: null,
+        onmessage: null,
+        onerror: null,
+        onclose: null,
+      };
+      return mockWs;
+    }
+    return new OriginalWebSocket(url, protocols);
+  } as any;
+
+  CustomWebSocket.prototype = OriginalWebSocket.prototype;
+  CustomWebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+  CustomWebSocket.OPEN = OriginalWebSocket.OPEN;
+  CustomWebSocket.CLOSING = OriginalWebSocket.CLOSING;
+  CustomWebSocket.CLOSED = OriginalWebSocket.CLOSED;
+  window.WebSocket = CustomWebSocket;
+
   const isWebSocketError = (err: any) => {
     if (!err) return false;
     const str = String(

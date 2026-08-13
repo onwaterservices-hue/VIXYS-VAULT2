@@ -26,7 +26,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   rawApiData,
   venue = 'Kalshi',
 }) => {
-  const isStaleOrInvalid = feedStatus === 'STALE' || feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
+  const isStaleOrInvalid = feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
   const displayVenue = venue || 'Kalshi';
 
   // Backend-authoritative connection status evaluation
@@ -145,7 +145,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
 
   // Authoritative Direction & Probability
-  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'STALE' || execution.state === 'STALE';
+  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'OFFLINE';
 
   const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
 

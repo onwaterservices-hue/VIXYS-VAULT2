@@ -147,6 +147,16 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   
   useEffect(() => {
     if (!liveApiData) return;
+
+    // Gracefully tolerate temporary API staleness without discarding a valid active VIXY cycle
+    const isNewStateStale = liveApiData.feedStatus === 'STALE' || (liveApiData as any).execution?.state === 'STALE' || (liveApiData as any).dataFreshness === 'STALE';
+    const isNewStateOffline = liveApiData.feedStatus === 'OFFLINE' || liveApiData.feedStatus === 'INVALID';
+    const hasExistingValidCycle = rawApiData && ((rawApiData as any).execution?.state === 'LOCK_UP' || (rawApiData as any).execution?.state === 'LOCK_DOWN' || (rawApiData as any).execution?.state === 'CALIBRATING');
+
+    if (isNewStateStale && hasExistingValidCycle && !isNewStateOffline) {
+      return;
+    }
+
     const data = liveApiData;
     
     if (data.latencyMs !== undefined) setLatencyMs(data.latencyMs);
