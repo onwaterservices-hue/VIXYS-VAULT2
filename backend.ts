@@ -3551,20 +3551,121 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
   const upProbability = Math.round(currentModelProbability * 100 * 10) / 10;
   const downProbability = Math.round((100 - upProbability) * 10) / 10;
   const effectiveDirection = upProbability > downProbability ? 'UP' : downProbability > upProbability ? 'DOWN' : 'NEUTRAL';
-  const action = effectiveDirection === 'DOWN' ? 'BUY_NO' : 'BUY_YES';
 
   const evidenceQuality = Math.min(96, Math.max(45, Math.round(currentConfidence * 0.95)));
-  const vixyLockState = latestLockEvaluation.qualified ? 'LOCKED' : (latestLockEvaluation.isEarlyLock ? 'EARLY_LOCKED' : 'PASS');
-  const decision = latestLockEvaluation.qualified ? (effectiveDirection === 'UP' ? 'BUY UP' : 'BUY DOWN') : 'PASS';
+
+  const isProtectionVeto = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || Boolean(latestGuardianDecision?.reversalThreat && latestGuardianDecision.reversalThreat > 70);
+  const isDataFresh = isLive && computedFeedStatus === 'LIVE';
+  const isQualifiedEntry = Boolean(latestLockEvaluation.qualified) && isDataFresh && !isProtectionVeto;
+
+  let executionState: 'LOCK_UP' | 'LOCK_DOWN' | 'PASS' = 'PASS';
+  let executionDirection: 'UP' | 'DOWN' | 'NONE' = 'NONE';
+  let executionAuthorized = false;
+  let executionActionLabel = 'ENTRY NOT QUALIFIED';
+  let executionReason = 'Entry criteria not satisfied';
+
+  if (isQualifiedEntry) {
+    if (effectiveDirection === 'UP') {
+      executionState = 'LOCK_UP';
+      executionDirection = 'UP';
+      executionAuthorized = true;
+      executionActionLabel = 'BUY UP → ENTER';
+      executionReason = 'Entry criteria qualified & verified';
+    } else if (effectiveDirection === 'DOWN') {
+      executionState = 'LOCK_DOWN';
+      executionDirection = 'DOWN';
+      executionAuthorized = true;
+      executionActionLabel = 'BUY DOWN → ENTER';
+      executionReason = 'Entry criteria qualified & verified';
+    }
+  } else {
+    if (isProtectionVeto) {
+      executionReason = 'Protection Veto Active';
+      executionActionLabel = 'PROTECT CAPITAL → EXIT';
+    } else if (!isDataFresh) {
+      executionReason = 'Data Feed Stale';
+      executionActionLabel = 'DATA STALE';
+    } else {
+      executionReason = 'Entry criteria not satisfied';
+      executionActionLabel = 'ENTRY NOT QUALIFIED';
+    }
+  }
+
+  const confidenceLabel = executionState === 'LOCK_UP' ? 'HIGH BULL' : (executionState === 'LOCK_DOWN' ? 'HIGH BEAR' : 'NEUTRAL');
+
+  const execution = {
+    state: executionState,
+    direction: executionDirection,
+    authorized: executionAuthorized,
+    actionLabel: executionActionLabel,
+    reason: executionReason,
+    qualified: isQualifiedEntry,
+    confidenceLabel: confidenceLabel
+  };
+
+  const vixyLockState = executionState === 'LOCK_UP' || executionState === 'LOCK_DOWN' ? 'LOCKED' : 'PASS';
+  const decision = executionState === 'LOCK_UP' ? 'BUY UP' : (executionState === 'LOCK_DOWN' ? 'BUY DOWN' : 'PASS');
+  const action = executionState === 'LOCK_UP' ? 'BUY_YES' : (executionState === 'LOCK_DOWN' ? 'BUY_NO' : 'PASS');
+
+  const resolvedOnly = persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10);
+  const last10 = resolvedOnly.map((log) => {
+    const actual = log.actualOutcome || (log.settlementPrice && log.targetStrike ? (log.settlementPrice >= log.targetStrike ? 'UP' : 'DOWN') : log.direction);
+    return {
+      cycleId: log.id,
+      direction: actual,
+      predictedDirection: log.direction,
+      outcome: actual,
+      settled: true,
+      wasCorrect: log.wasCorrect ?? (actual === log.direction),
+      strike: log.targetStrike,
+      settlementPrice: log.settlementPrice || log.spotAtLock,
+      timestamp: log.resolvedAt || log.lockedAt || new Date().toISOString()
+    };
+  });
+
+  const last10UpCount = last10.filter((item) => item.outcome === 'UP').length;
+  const last10DownCount = last10.length - last10UpCount;
+  const last10WinCount = last10.filter((item) => item.wasCorrect).length;
+  const last10WinRatePct = last10.length > 0 ? Math.round((last10WinCount / last10.length) * 100) : 0;
 
   res.json({
+    // Standard Authoritative Single Source of Truth Fields
+    market: 'BTC_KALSHI_15M',
+    asset,
+    desk,
+    currentPrice: spot,
+    strike: kalshiStrike,
+    expiry: market15mState.intervalEnd,
+    timeRemaining: market15mState.timeRemaining,
+    direction: decision,
+    confidenceLabel,
+    probability: isLive ? currentModelProbability : null,
+    confidence: isLive ? currentConfidence : null,
+    calibratedProbability: latestCalibrationState.calibratedModelProbability,
+    calibrationStatus: latestCalibrationState.calibrationStatus,
+    buyInState: isQualifiedEntry ? 'QUALIFIED' : 'UNQUALIFIED',
+    protectionState: latestGuardianDecision?.action || 'SAFE',
+    reversalRisk: latestGuardianDecision?.reversalThreat || 0,
+    entryQualification: isQualifiedEntry ? 'QUALIFIED' : 'UNQUALIFIED',
+    dataFreshness: isLive ? 'LIVE' : (computedFeedStatus === 'STALE' ? 'STALE' : 'OFFLINE'),
+    cycleId: `15M-${market15mState.intervalStart}`,
+    cycleStart: market15mState.intervalStart,
+    cycleEnd: market15mState.intervalEnd,
+    execution,
+    last10,
+    last10Summary: {
+      upCount: last10UpCount,
+      downCount: last10DownCount,
+      winCount: last10WinCount,
+      winRatePct: last10WinRatePct,
+      totalCount: last10.length
+    },
+
+    // Legacy and Specialized Nested Fields (Backwards-Compatible)
     predictionId: `pred_${currentEngineCycleId}_${now}`,
     predictionTimestamp: now,
     marketTimestamp: lastMarketUpdateTs,
     sequenceNumber: currentEngineCycleId,
-    asset,
-    desk,
-    cycleId: currentEngineCycleId,
     sampleSize: settledCount,
     lifetimeObservations,
     minSamplesNeeded,
@@ -3573,7 +3674,6 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     dataAgeMs,
     disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
     action: isLive ? action : null,
-    direction: isLive ? effectiveDirection : null,
     modelProbability: isLive ? currentModelProbability : null,
     upProbability: isLive ? upProbability : 50.0,
     downProbability: isLive ? downProbability : 50.0,
@@ -3593,7 +3693,6 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
       { name: 'Market regime', strength: '+', bias: serverLearningEngine.currentRegime },
       { name: 'Signal persistence', strength: '++', bias: latestLockEvaluation.qualified ? 'QUALIFIED' : 'CONFLICTED' },
     ] : [],
-    confidence: isLive ? currentConfidence : null,
     kalshiImpliedProbability: isLive ? currentKalshiImpliedProb : null,
     edge: isLive ? currentEdgePct / 100 : null,
     edgePct: isLive ? currentEdgePct : null,
@@ -3643,8 +3742,6 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
       },
       computedAt: new Date().toISOString(),
     } : null,
-    
-    // Pass the historical valid state so the frontend can display LAST VALID SIGNAL
     lastValidSignal: {
       action: action,
       direction: currentDirection,
@@ -3653,15 +3750,13 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
       strike: kalshiStrike,
       timestamp: lastMarketUpdateTs
     },
-    calibrationStatus: latestCalibrationState.calibrationStatus,
     calibrationSampleSize: latestCalibrationState.calibrationSampleSize,
     calibrationMinimumSamples: latestCalibrationState.calibrationMinimumSamples,
     rawModelProbability: latestCalibrationState.rawModelProbability,
-    calibratedModelProbability: latestCalibrationState.calibratedModelProbability,
     brierScore: latestCalibrationState.brierScore,
     historicalAccuracy: latestCalibrationState.historicalAccuracy,
     guardianDecision: isLive ? latestGuardianDecision : null,
-    recentResolvedLogs: persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10),
+    recentResolvedLogs: resolvedOnly,
   });
 });
 

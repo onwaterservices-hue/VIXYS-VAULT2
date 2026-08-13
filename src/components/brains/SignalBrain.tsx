@@ -55,27 +55,34 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     triggerHapticPulse();
   }, [lockScorePct, feedStatus, triggerHapticPulse]);
 
-  // Safe backend-authoritative fallback variables (preventing undefined crashes)
+  // Safe backend-authoritative execution state
+  const execution = rawApiData?.execution || {
+    state: (rawApiData?.direction === 'BUY UP' ? 'LOCK_UP' : (rawApiData?.direction === 'BUY DOWN' ? 'LOCK_DOWN' : 'PASS')),
+    direction: (rawApiData?.direction === 'BUY UP' ? 'UP' : (rawApiData?.direction === 'BUY DOWN' ? 'DOWN' : 'NONE')),
+    authorized: rawApiData?.direction === 'BUY UP' || rawApiData?.direction === 'BUY DOWN',
+    actionLabel: rawApiData?.direction === 'BUY UP' ? 'BUY UP → ENTER' : (rawApiData?.direction === 'BUY DOWN' ? 'BUY DOWN → ENTER' : 'ENTRY NOT QUALIFIED'),
+    reason: 'Authoritative Engine State',
+    qualified: rawApiData?.entryQualification === 'QUALIFIED'
+  };
+
+  const isLockUp = execution.state === 'LOCK_UP';
+  const isLockDown = execution.state === 'LOCK_DOWN';
+  const isPassState = execution.state === 'PASS';
+
+  const directionalConfidenceLabel = isLockUp
+    ? 'HIGH BULL'
+    : isLockDown
+    ? 'HIGH BEAR'
+    : (execution.confidenceLabel || rawApiData?.confidenceLabel || 'NEUTRAL');
+
   const sigAny = signal as any;
   const upProbability = Number(sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
   const downProbability = Number(sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
-  const lockState = sigAny?.vixyLockState ?? lockEvaluation?.lockState ?? (lockEvaluation?.qualified ? 'LOCKED' : 'ANALYZING');
-  const decision = sigAny?.decision ?? rawApiData?.decision ?? (lockEvaluation?.qualified ? (upProbability >= downProbability ? 'BUY UP' : 'BUY DOWN') : 'PASS');
   const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
   const edgePct = sigAny?.edgePct ?? rawApiData?.edgePct ?? 0;
   const edgeDisplay = edgePct > 0 ? `+${edgePct.toFixed(1)}% OVER MARKET` : `${edgePct.toFixed(1)}% OVER MARKET`;
 
   const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
-  const currentDirection = signal?.direction ?? rawApiData?.direction ?? (upProbability >= downProbability ? 'UP' : 'DOWN');
-  const isBullish = String(currentDirection).toUpperCase().includes('UP') || String(currentDirection).toUpperCase().includes('YES');
-
-  const upProbNum = Number(upProbability || 50);
-  const downProbNum = Number(downProbability || 50);
-
-  const isQualifiedLock = Boolean(lockEvaluation?.qualified ?? (lockState === 'LOCKED' || lockState === 'LOCKED_UP' || lockState === 'LOCKED_DOWN'));
-  const isModelPass = decision === 'PASS' || Math.abs(upProbNum - 50) < 6 || isStaleOrInvalid;
-  const showLockPassState = !isQualifiedLock || lockState === 'PASS' || isStaleOrInvalid;
-  const showPassState = isModelPass; // fallback for other usages
 
   const reversalRisk = Number(
     (signal as any)?.reversalRisk ??
@@ -85,14 +92,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     0
   );
   const isProtectState = rawApiData?.guardianDecision?.action === 'EXIT' || rawApiData?.guardianDecision?.thesisInvalidated || reversalRisk >= 50;
-  const isCautionState = rawApiData?.guardianDecision?.action === 'WATCH' || (reversalRisk >= 30 && reversalRisk < 50);
   
-  // lockDisplayMode maps to the 3 visual states described in the prompt
-  const lockDisplayMode = isProtectState ? 'EXIT' : (isCautionState || showLockPassState) ? 'CAUTION' : 'LOCKED';
-
   const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 0;
   const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 0);
-  const displayConfidence = Math.round(currentConfidence);
 
   const rawCalibStatus = rawApiData?.calibrationStatus || rawApiData?.calibration?.calibrationStatus;
   const calibrationStatus = rawCalibStatus === 'ACTIVE' 
@@ -116,30 +118,41 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const takerBuyersPct = Math.max(0, Math.min(100, Math.round((displayOrderFlow + 1) * 50)));
   const takerSellersPct = 100 - takerBuyersPct;
 
-  // Compute LAST 10 dots dynamically from real resolved signal outcome logs
-  const resolvedLogs = rawApiData?.recentResolvedLogs || [];
-  const displayLogs = resolvedLogs.length > 0
-    ? resolvedLogs.slice(0, 10)
-    : [
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: true, direction: 'UP' },
-        { wasCorrect: false, direction: 'DOWN' },
-        { wasCorrect: false, direction: 'DOWN' },
-        { wasCorrect: false, direction: 'DOWN' },
-        { wasCorrect: false, direction: 'DOWN' },
-      ];
+  // Compute LAST 10 dots dynamically from real resolved signal outcome logs (authoritative backend)
+  const last10List = rawApiData?.last10 || rawApiData?.recentResolvedLogs || [];
+  const displayLogs = last10List.slice(0, 10);
 
   const upCount = displayLogs.filter((s: any) => {
-    const d = (s.direction || '').toUpperCase();
-    return d === 'UP' || d === 'YES' || d === 'BUY UP' || d === 'BUY_UP';
+    const outcome = (s.outcome || s.actualOutcome || s.direction || '').toUpperCase();
+    return outcome === 'UP';
   }).length;
-  const downCount = displayLogs.length - upCount;
-  const totalWins = displayLogs.filter((s: any) => s.wasCorrect).length;
-  const winRatePct = displayLogs.length > 0 ? Math.round((totalWins / displayLogs.length) * 100) : 0;
+  
+  const downCount = displayLogs.filter((s: any) => {
+    const outcome = (s.outcome || s.actualOutcome || s.direction || '').toUpperCase();
+    return outcome === 'DOWN';
+  }).length;
+
+  const totalResolved = displayLogs.length;
+  const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
+
+  // Authoritative Direction & Probability
+  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData;
+
+  let displayDecisionText = 'PASS';
+  if (isOfflineOrStale) {
+    displayDecisionText = 'DATA STALE';
+  } else if (isLockUp) {
+    displayDecisionText = 'BUY UP';
+  } else if (isLockDown) {
+    displayDecisionText = 'BUY DOWN';
+  } else {
+    displayDecisionText = 'PASS';
+  }
+
+  const rawCalibProb = rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability;
+  const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
+    ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
+    : (rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : 'CALIBRATING');
 
   // Micro-telemetry values
   const spotVsStrikeDelta = currentPrice && targetPrice ? currentPrice - targetPrice : 0;
@@ -149,7 +162,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* TOP STATUS BAR (matches image) */}
+      {/* TOP STATUS BAR */}
       <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono tracking-widest uppercase pb-1">
         <div className="flex items-center gap-6">
           <div>
@@ -163,9 +176,17 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               {isConnectedStatus ? 'ONLINE' : 'OFFLINE'}
             </div>
           </div>
-          <div className={`px-3 py-1.5 rounded-full border ${isBullish ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' : showPassState ? 'bg-purple-950/30 border-purple-900/60 text-purple-400' : 'bg-[#1a050a] border-rose-900/60 text-rose-400'} flex items-center gap-2 font-black shadow-lg`}>
-            <span className={`w-2 h-2 rounded-full ${isBullish ? 'bg-emerald-400' : showPassState ? 'bg-purple-400' : 'bg-rose-500'} shadow-sm`} />
-            {showPassState ? 'PASS' : (isBullish ? 'BUY UP' : 'BUY DOWN')} {displayConfidence}% 
+          <div className={`px-3 py-1.5 rounded-full border ${
+            displayDecisionText === 'BUY UP' ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' :
+            displayDecisionText === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/60 text-rose-400' :
+            'bg-purple-950/30 border-purple-900/60 text-purple-300'
+          } flex items-center gap-2 font-black shadow-lg`}>
+            <span className={`w-2 h-2 rounded-full ${
+              displayDecisionText === 'BUY UP' ? 'bg-emerald-400' :
+              displayDecisionText === 'BUY DOWN' ? 'bg-rose-500' :
+              'bg-purple-400'
+            } shadow-sm`} />
+            {displayDecisionText} {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : ''} 
             <span className="text-[8px] opacity-70 ml-1 font-normal">{calibrationStatus}</span>
           </div>
         </div>
@@ -174,14 +195,38 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div>
             <div className="flex items-center gap-1 mb-1">
               <span className="text-purple-500/70">LAST 10</span>
-              <div className="flex gap-0.5 ml-2">
-                {displayLogs.map((item: any, idx: number) => (
-                  <span key={idx} className={`w-1.5 h-1.5 rounded-full ${item.wasCorrect ? 'bg-cyan-400' : 'bg-rose-500'}`} />
-                ))}
+              <div className="flex gap-1 ml-2">
+                {Array.from({ length: 10 }).map((_, idx) => {
+                  const item = displayLogs[idx];
+                  if (!item) {
+                    return (
+                      <span
+                        key={idx}
+                        className="w-1.5 h-1.5 rounded-full bg-purple-900/30 border border-purple-800/40"
+                        title="Pending settlement"
+                      />
+                    );
+                  }
+                  const outcome = (item.outcome || item.actualOutcome || item.direction || '').toUpperCase();
+                  const isUp = outcome === 'UP';
+                  return (
+                    <span
+                      key={idx}
+                      className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-cyan-400' : 'bg-rose-500'}`}
+                      title={`${item.cycleId || 'Cycle'}: ${outcome} (Strike: $${item.strike || ''}, Settle: $${item.settlementPrice || ''})`}
+                    />
+                  );
+                })}
               </div>
             </div>
             <div className="text-cyan-400/80 font-bold">
-              {upCount} UP • {downCount} DOWN • {winRatePct}% RECENT
+              {totalResolved === 10 ? (
+                `${upCount} UP • ${downCount} DOWN • ${recentUpPct}% RECENT`
+              ) : totalResolved > 0 ? (
+                `${upCount} UP • ${downCount} DOWN • ${totalResolved} RESOLVED • ${10 - totalResolved} PENDING`
+              ) : (
+                '0 RESOLVED • CALIBRATING'
+              )}
             </div>
           </div>
           <div>
@@ -231,41 +276,43 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
              {/* Atmospheric Bloom */}
              <div className={`absolute inset-0 blur-[60px] opacity-20 rounded-full transition-colors duration-1000 ${
-               isModelPass ? 'bg-purple-600' : isBullish ? 'bg-emerald-500' : 'bg-rose-500'
+               isPassState ? 'bg-purple-600' : isLockUp ? 'bg-emerald-500' : 'bg-rose-500'
              }`} />
              
              <div className={`text-[85px] sm:text-[110px] leading-none font-black tracking-tighter flex items-center gap-4 relative z-10 transition-colors duration-500 ${
-                isModelPass ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]' : isBullish ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]'
-             }`} style={{ textShadow: isModelPass ? '0 0 30px rgba(168,85,247,0.3)' : isBullish ? '0 0 30px rgba(0,255,157,0.3)' : '0 0 30px rgba(255,51,102,0.3)' }}>
-               {isModelPass ? 'PASS' : (isBullish ? 'BUY UP' : 'BUY DOWN')}
-               {!isModelPass && (
-                 <span className="text-[70px] sm:text-[90px]">{isBullish ? '▲' : '▼'}</span>
+                isPassState ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]' : isLockUp ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]'
+             }`} style={{ textShadow: isPassState ? '0 0 30px rgba(168,85,247,0.3)' : isLockUp ? '0 0 30px rgba(0,255,157,0.3)' : '0 0 30px rgba(255,51,102,0.3)' }}>
+               {isPassState ? 'PASS' : (isLockUp ? 'BUY UP' : 'BUY DOWN')}
+               {!isPassState && (
+                 <span className="text-[70px] sm:text-[90px]">{isLockUp ? '▲' : '▼'}</span>
                )}
              </div>
              <div className="flex items-center gap-3 mt-4 relative z-10">
                <span className={`text-[42px] font-black tracking-tighter ${
-                 isModelPass ? 'text-purple-300' : isBullish ? 'text-[#00FF9D]' : 'text-[#FF3366]'
-               }`} style={{ textShadow: isModelPass ? '0 0 15px rgba(168,85,247,0.4)' : isBullish ? '0 0 15px rgba(0,255,157,0.4)' : '0 0 15px rgba(255,51,102,0.4)' }}>{displayConfidence}%</span>
+                 isPassState ? 'text-purple-300' : isLockUp ? 'text-[#00FF9D]' : 'text-[#FF3366]'
+               }`} style={{ textShadow: isPassState ? '0 0 15px rgba(168,85,247,0.4)' : isLockUp ? '0 0 15px rgba(0,255,157,0.4)' : '0 0 15px rgba(255,51,102,0.4)' }}>{displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}</span>
                <span className={`text-[10px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded border ${
-                 isModelPass ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isBullish ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
-               }`}>{calibrationStatus}</span>
+                 isPassState ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isLockUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
+               }`}>{directionalConfidenceLabel}</span>
              </div>
            </div>
         </div>
 
         {/* ULTRA-PROMINENT VIXY LOCK */}
         <div className={`mt-2 mb-6 p-[1px] rounded-xl relative z-10 overflow-hidden ${
-          lockDisplayMode === 'EXIT'
+          isProtectState
             ? 'bg-gradient-to-b from-rose-600/60 to-rose-950/20 shadow-[0_0_50px_rgba(244,63,94,0.3)]'
-            : lockDisplayMode === 'CAUTION'
-            ? 'bg-gradient-to-b from-amber-500/40 to-amber-900/10 shadow-[0_0_20px_rgba(245,158,11,0.15)]'
-            : 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.3)]'
+            : isLockUp
+            ? 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.3)]'
+            : isLockDown
+            ? 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.3)]'
+            : 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]'
         }`}>
           <div className={`w-full h-full rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-1000 relative ${
-            lockDisplayMode === 'EXIT' ? 'bg-[#0a0002]' : lockDisplayMode === 'CAUTION' ? 'bg-[#0f0902]' : 'bg-[#010a0c]'
+            isProtectState ? 'bg-[#0a0002]' : isLockUp ? 'bg-[#010a0c]' : isLockDown ? 'bg-[#0c0104]' : 'bg-[#0a050f]'
           }`}>
              {/* Cybernetic background accents */}
-             {lockDisplayMode === 'LOCKED' && (
+             {isLockUp && (
                <>
                  <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.04)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
                  <div className="absolute inset-0 bg-cyan-500/10 animate-[pulse_4s_ease-in-out_infinite]" />
@@ -275,7 +322,17 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                  <div className="absolute -right-1 -bottom-1 w-4 h-4 border-b-2 border-r-2 border-cyan-400"></div>
                </>
              )}
-             {lockDisplayMode === 'EXIT' && (
+             {isLockDown && (
+               <>
+                 <div className="absolute inset-0 bg-[linear-gradient(rgba(244,63,94,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(244,63,94,0.04)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
+                 <div className="absolute inset-0 bg-rose-500/10 animate-[pulse_4s_ease-in-out_infinite]" />
+                 <div className="absolute -left-1 -top-1 w-4 h-4 border-t-2 border-l-2 border-rose-500"></div>
+                 <div className="absolute -right-1 -top-1 w-4 h-4 border-t-2 border-r-2 border-rose-500"></div>
+                 <div className="absolute -left-1 -bottom-1 w-4 h-4 border-b-2 border-l-2 border-rose-500"></div>
+                 <div className="absolute -right-1 -bottom-1 w-4 h-4 border-b-2 border-r-2 border-rose-500"></div>
+               </>
+             )}
+             {isProtectState && (
                <>
                  <div className="absolute inset-0 bg-[linear-gradient(rgba(244,63,94,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(244,63,94,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
                  <div className="absolute inset-0 bg-rose-500/5 animate-[pulse_3s_ease-in-out_infinite]" />
@@ -285,35 +342,37 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
              <div className="flex items-center gap-6 relative z-10">
                <div className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border-2 shadow-2xl ${
-                 lockDisplayMode === 'EXIT'
+                 isProtectState
                     ? 'bg-[#1a0005] border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]'
-                    : lockDisplayMode === 'CAUTION'
-                    ? 'bg-[#1a0f00] border-amber-500/50 text-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
-                    : 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
+                    : isLockUp
+                    ? 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
+                    : isLockDown
+                    ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
+                    : 'bg-purple-950/40 border-purple-700/50 text-purple-400'
                }`}>
-                 {lockDisplayMode === 'EXIT' ? <ShieldAlert className="w-8 h-8" /> : lockDisplayMode === 'CAUTION' ? <AlertTriangle className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+                 {isProtectState ? <ShieldAlert className="w-8 h-8" /> : isPassState ? <AlertTriangle className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
                </div>
                <div>
                  <div className="flex items-center gap-3 mb-1">
                    <span className={`text-[13px] font-black tracking-[0.25em] uppercase ${
-                     lockDisplayMode === 'EXIT' ? 'text-rose-500/90' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/80' : 'text-cyan-400/90'
-                   }`}>{lockDisplayMode === 'EXIT' ? '🚨 VIXY LOCK' : 'VIXY LOCK'}</span>
+                     isProtectState ? 'text-rose-500/90' : isLockUp ? 'text-cyan-400/90' : isLockDown ? 'text-rose-400/90' : 'text-purple-400/80'
+                   }`}>{isProtectState ? '🚨 VIXY LOCK' : 'VIXY LOCK'}</span>
                    <span className={`text-[32px] font-black tracking-widest uppercase leading-none ${
-                     lockDisplayMode === 'EXIT' ? 'text-rose-500' : lockDisplayMode === 'CAUTION' ? 'text-amber-500' : 'text-cyan-300'
-                   }`} style={{ textShadow: lockDisplayMode === 'EXIT' ? '0 0 20px rgba(244,63,94,0.6)' : lockDisplayMode === 'CAUTION' ? '0 0 15px rgba(245,158,11,0.5)' : '0 0 20px rgba(34,211,238,0.9)' }}>
-                     {lockDisplayMode === 'EXIT' ? 'EXIT / PROTECT' : lockDisplayMode === 'CAUTION' ? 'CAUTION' : 'LOCKED'}
+                     isProtectState ? 'text-rose-500' : isLockUp ? 'text-cyan-300' : isLockDown ? 'text-rose-400' : 'text-purple-300'
+                   }`} style={{ textShadow: isProtectState ? '0 0 20px rgba(244,63,94,0.6)' : isLockUp ? '0 0 20px rgba(34,211,238,0.9)' : isLockDown ? '0 0 20px rgba(244,63,94,0.9)' : '0 0 15px rgba(168,85,247,0.4)' }}>
+                     {isProtectState ? 'EXIT / PROTECT' : isLockUp || isLockDown ? 'LOCKED' : 'PASS'}
                    </span>
                  </div>
                  <div className="hidden sm:block mt-2">
                    <span className={`text-[11px] font-black tracking-[0.2em] uppercase mb-1 block ${
-                     lockDisplayMode === 'EXIT' ? 'text-rose-400' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/80' : 'text-cyan-400'
+                     isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400'
                    }`}>
-                     {lockDisplayMode === 'EXIT' ? 'THESIS INVALIDATED' : lockDisplayMode === 'CAUTION' ? 'EDGE DETERIORATING' : 'QUALIFIED ENTRY'}
+                     {isProtectState ? 'THESIS INVALIDATED' : isLockUp || isLockDown ? 'QUALIFIED ENTRY' : 'ENTRY NOT QUALIFIED'}
                    </span>
                    <span className={`text-[11px] font-mono block ${
-                     lockDisplayMode === 'EXIT' ? 'text-rose-300/80' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/60' : 'text-slate-300'
+                     isProtectState ? 'text-rose-300/80' : isLockUp ? 'text-slate-300' : isLockDown ? 'text-slate-300' : 'text-purple-300/70'
                    }`}>
-                     {lockDisplayMode === 'EXIT' ? 'Original entry conditions are no longer satisfied. Protect capital.' : lockDisplayMode === 'CAUTION' ? 'Market conditions are weakening. Monitor position closely.' : 'All entry conditions met. Edge threshold exceeded.'}
+                     {isProtectState ? 'Original entry conditions are no longer satisfied. Protect capital.' : isLockUp ? 'All entry conditions met. Upward edge verified.' : isLockDown ? 'All entry conditions met. Downward edge verified.' : (execution.reason || 'Entry conditions not satisfied. Standby for next cycle.')}
                    </span>
                  </div>
                </div>
@@ -321,46 +380,44 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              
              <div className="relative z-10 flex flex-col items-end justify-center">
                <div className={`px-8 py-4 rounded-lg border-2 text-lg font-black tracking-[0.15em] uppercase flex items-center justify-center ${
-                 lockDisplayMode === 'EXIT'
+                 isProtectState
                    ? 'bg-[#1a0005] border-rose-600/80 text-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.4)]'
-                   : lockDisplayMode === 'CAUTION'
-                   ? 'bg-[#140b00] border-amber-900/60 text-amber-500/80'
-                   : isBullish
+                   : isLockUp
                    ? 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
-                   : 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
-               }`} style={{ textShadow: lockDisplayMode === 'EXIT' ? '0 0 15px rgba(244,63,94,0.6)' : lockDisplayMode === 'LOCKED' && isBullish ? '0 0 10px rgba(0,255,157,0.5)' : lockDisplayMode === 'LOCKED' && !isBullish ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
-                 {lockDisplayMode === 'EXIT' ? 'PROTECT CAPITAL → EXIT' : lockDisplayMode === 'CAUTION' ? 'ENTRY NOT RECOMMENDED' : (isBullish ? 'BUY UP → ENTER' : 'BUY DOWN → ENTER')}
+                   : isLockDown
+                   ? 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
+                   : 'bg-purple-950/40 border-purple-800/60 text-purple-300/80'
+               }`} style={{ textShadow: isProtectState ? '0 0 15px rgba(244,63,94,0.6)' : isLockUp ? '0 0 10px rgba(0,255,157,0.5)' : isLockDown ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
+                 {isProtectState ? 'PROTECT CAPITAL → EXIT' : isLockUp ? 'BUY UP → ENTER' : isLockDown ? 'BUY DOWN → ENTER' : (execution.actionLabel || 'ENTRY NOT QUALIFIED')}
                </div>
                <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${
-                 lockDisplayMode === 'EXIT' ? 'text-rose-400' : lockDisplayMode === 'CAUTION' ? 'text-amber-500/60' : 'text-cyan-400'
+                 isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400/70'
                }`}>
-                 {lockDisplayMode === 'EXIT' ? 'RISK STATE: CRITICAL' : lockDisplayMode === 'CAUTION' ? 'GATE CLOSED' : 'EXECUTION AUTHORIZED'}
-                 {lockDisplayMode === 'LOCKED' && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
+                 {isProtectState ? 'RISK STATE: CRITICAL' : (isLockUp || isLockDown) ? 'EXECUTION AUTHORIZED' : 'NO EXECUTION AUTHORIZED'}
+                 {(isLockUp || isLockDown) && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
                </div>
              </div>
           </div>
           
-          {(lockDisplayMode === 'EXIT' || lockDisplayMode === 'CAUTION') && (
-            <div className={`relative z-10 border-t ${lockDisplayMode === 'EXIT' ? 'border-rose-900/40 bg-[#0a0002]/90' : 'border-amber-900/30 bg-[#0f0902]/90'} px-5 py-3`}>
-              <div className={`text-[9px] font-bold tracking-[0.2em] uppercase mb-2 ${lockDisplayMode === 'EXIT' ? 'text-rose-500/70' : 'text-amber-500/70'}`}>
+          {isProtectState && (
+            <div className="relative z-10 border-t border-rose-900/40 bg-[#0a0002]/90 px-5 py-3">
+              <div className="text-[9px] font-bold tracking-[0.2em] uppercase mb-2 text-rose-500/70">
                 RISK TELEMETRY
               </div>
               <div className="flex flex-wrap items-center gap-4 sm:gap-8">
                 <div>
-                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>REVERSAL THREAT</div>
-                  <div className={`text-xs font-black ${lockDisplayMode === 'EXIT' ? 'text-rose-400' : 'text-amber-400'}`}>{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">REVERSAL THREAT</div>
+                  <div className="text-xs font-black text-rose-400">{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
                 </div>
                 <div>
-                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>ORDER FLOW</div>
+                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">ORDER FLOW</div>
                   <div className={`text-xs font-black ${displayOrderFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
                   </div>
                 </div>
                 <div>
-                  <div className={`text-[9px] uppercase tracking-wider ${lockDisplayMode === 'EXIT' ? 'text-rose-400/50' : 'text-amber-400/50'}`}>POSITION STATE</div>
-                  <div className={`text-xs font-black ${lockDisplayMode === 'EXIT' ? 'text-rose-400' : 'text-amber-400'}`}>
-                    {lockDisplayMode === 'EXIT' ? 'PROTECT' : 'WATCH'}
-                  </div>
+                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">POSITION STATE</div>
+                  <div className="text-xs font-black text-rose-400">PROTECT</div>
                 </div>
               </div>
             </div>
@@ -371,27 +428,30 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="pt-6 relative z-10">
           <div className="flex items-center justify-between text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-3">
             <span>VIXY CONFIDENCE FIELD</span>
-            <div className="flex items-center gap-2 text-sm">
-              <span className={isModelPass ? 'text-purple-400' : isBullish ? 'text-emerald-400' : 'text-rose-400'}>
-                {displayConfidence}%
+            <div className="flex items-center gap-2 text-sm font-black">
+              <span className={isPassState ? 'text-purple-400' : isLockUp ? 'text-[#00FF9D]' : 'text-[#FF3366]'}>
+                {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}
               </span>
-              <span className={`text-[9px] ${isModelPass ? 'text-purple-400' : isBullish ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-                {isModelPass ? 'NEUTRAL' : (isBullish ? 'HIGH BULL' : 'HIGH BEAR')}
+              <span className={`text-[9px] uppercase px-2 py-0.5 rounded border ${
+                isPassState ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isLockUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
+              }`}>
+                {directionalConfidenceLabel}
               </span>
             </div>
           </div>
           <div className="flex items-center gap-2 h-3">
             {Array.from({ length: 16 }).map((_, idx) => {
               const fillThreshold = (idx + 1) * (100 / 16);
-              const isFilled = displayConfidence >= fillThreshold;
+              const confVal = rawCalibProb ? Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1)) : Math.round(currentConfidence);
+              const isFilled = confVal >= fillThreshold;
               return (
                 <div
                   key={idx}
                   className={`h-full flex-1 rounded-sm transition-all duration-500 ${
                     isFilled
-                      ? isModelPass 
+                      ? isPassState 
                          ? 'bg-purple-600/80 shadow-[0_0_8px_rgba(147,51,234,0.3)]'
-                         : isBullish
+                         : isLockUp
                          ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]'
                          : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]'
                       : 'bg-[#0a0518] border border-purple-900/30'
@@ -607,8 +667,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">TARGET STRIKE</div>
           <div className="flex items-center gap-3">
             <div className="text-3xl font-black text-purple-200 tracking-tighter">${targetPrice ? targetPrice.toLocaleString() : '---'}</div>
-            <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isBullish ? 'bg-purple-900/30 text-purple-300 border border-purple-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
-              MUST EXPIRE {isBullish ? 'ABOVE' : 'BELOW'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
+            <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isLockUp ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/50' : isLockDown ? 'bg-rose-950/40 text-rose-300 border border-rose-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
+              MUST EXPIRE {isLockUp ? 'ABOVE' : isLockDown ? 'BELOW' : 'RANGE'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
             </div>
           </div>
           <div className="flex justify-between items-end text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30">
