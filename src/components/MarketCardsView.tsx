@@ -40,7 +40,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
 
   useEffect(() => {
     loadLivePrices();
-    const interval = setInterval(loadLivePrices, 5000);
+    const interval = setInterval(loadLivePrices, 15000);
     return () => clearInterval(interval);
   }, []);
 

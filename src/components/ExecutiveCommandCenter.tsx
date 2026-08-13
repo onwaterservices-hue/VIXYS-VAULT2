@@ -94,7 +94,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
       }
     };
     loadAll();
-    const timer = setInterval(loadAll, 10000);
+    const timer = setInterval(loadAll, 15000);
     return () => {
       active = false;
       clearInterval(timer);

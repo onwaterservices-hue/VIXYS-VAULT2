@@ -56,11 +56,20 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   }, [lockScorePct, feedStatus, triggerHapticPulse]);
 
   // Safe backend-authoritative execution state
+  // Safe backend-authoritative execution state
+  // We prefer the explicit `execution` payload from the backend if it exists.
+  // Otherwise, we derive it cleanly from `direction` and `engineState`.
+  const rawDirection = rawApiData?.direction || rawApiData?.action || 'NONE';
+  const isUp = rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES';
+  const isDown = rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO';
+  const isBackendCalibrating = rawApiData?.engineState === 'CALIBRATING' || rawApiData?.engineState === 'EVALUATING' || rawApiData?.calibrationStatus === 'WARMING_UP' || rawDirection === 'CALIBRATING' || rawDirection === 'BUILDING' || rawApiData?.hasActiveModel === false || rawApiData?.status?.includes('Collecting');
+  const isPassExplicit = (rawDirection === 'PASS' || rawDirection === 'HOLD') && !isBackendCalibrating;
+
   const execution = rawApiData?.execution || {
-    state: (rawApiData?.direction === 'BUY UP' ? 'LOCK_UP' : (rawApiData?.direction === 'BUY DOWN' ? 'LOCK_DOWN' : 'PASS')),
-    direction: (rawApiData?.direction === 'BUY UP' ? 'UP' : (rawApiData?.direction === 'BUY DOWN' ? 'DOWN' : 'NONE')),
-    authorized: rawApiData?.direction === 'BUY UP' || rawApiData?.direction === 'BUY DOWN',
-    actionLabel: rawApiData?.direction === 'BUY UP' ? 'BUY UP → ENTER' : (rawApiData?.direction === 'BUY DOWN' ? 'BUY DOWN → ENTER' : 'ENTRY NOT QUALIFIED'),
+    state: isBackendCalibrating ? 'CALIBRATING' : isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : isPassExplicit ? 'PASS' : 'ANALYZING',
+    direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
+    authorized: isUp || isDown,
+    actionLabel: isUp ? 'BUY UP → ENTER' : isDown ? 'BUY DOWN → ENTER' : isPassExplicit ? 'ENTRY NOT QUALIFIED' : 'AWAITING LOCK',
     reason: 'Authoritative Engine State',
     qualified: rawApiData?.entryQualification === 'QUALIFIED'
   };
@@ -136,23 +145,215 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
 
   // Authoritative Direction & Probability
-  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData;
+  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'STALE' || execution.state === 'STALE';
 
-  let displayDecisionText = 'PASS';
+  const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
+
+  let displayDecisionText = 'ANALYZING';
   if (isOfflineOrStale) {
     displayDecisionText = 'DATA STALE';
+  } else if (isWarmingUp) {
+    displayDecisionText = 'CALIBRATING';
   } else if (isLockUp) {
     displayDecisionText = 'BUY UP';
   } else if (isLockDown) {
     displayDecisionText = 'BUY DOWN';
-  } else {
+  } else if (isPassState) {
     displayDecisionText = 'PASS';
+  } else {
+    displayDecisionText = 'ANALYZING';
   }
 
   const rawCalibProb = rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability;
   const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
     ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
     : (rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : 'CALIBRATING');
+
+  // Compute the lock card states
+  let lockCardState: 'STALE' | 'PROTECT' | 'LOCKED_UP' | 'LOCKED_DOWN' | 'CALIBRATING' | 'PASS' | 'QUALIFIED' | 'ANALYZING' = 'ANALYZING';
+  if (isOfflineOrStale) {
+    lockCardState = 'STALE';
+  } else if (isProtectState) {
+    lockCardState = 'PROTECT';
+  } else if (isWarmingUp) {
+    lockCardState = 'CALIBRATING';
+  } else if (isLockUp) {
+    lockCardState = 'LOCKED_UP';
+  } else if (isLockDown) {
+    lockCardState = 'LOCKED_DOWN';
+  } else if (isPassState) {
+    lockCardState = 'PASS';
+  } else if (rawApiData?.entryQualification === 'QUALIFIED') {
+    lockCardState = 'QUALIFIED';
+  } else {
+    lockCardState = 'ANALYZING';
+  }
+
+  const showBuyUp = (lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP') && !isWarmingUp && !isOfflineOrStale;
+  const showBuyDown = (lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isWarmingUp && !isOfflineOrStale;
+
+  let bgGlowClass = '';
+  let bgInnerClass = '';
+  let accentHeaderTitle = '';
+  let accentHeaderValue = '';
+  let accentSubtitleLabel = '';
+  let accentSubtitleDesc = '';
+  let actionBtnClass = '';
+  let actionBtnText = '';
+  let statusLabelClass = '';
+  let statusText = '';
+  let statusIcon: React.ReactNode = null;
+  let titleLabelText = 'VIXY LOCK';
+  let statusValueText = '';
+  let subtitleLabelText = '';
+  let subtitleDescText = '';
+
+  switch (lockCardState) {
+    case 'STALE':
+      bgGlowClass = 'bg-gradient-to-b from-rose-950/40 to-purple-950/20 shadow-[0_0_20px_rgba(244,63,94,0.15)]';
+      bgInnerClass = 'bg-[#0a050f]';
+      accentHeaderTitle = 'text-rose-500/90';
+      accentHeaderValue = 'text-rose-400';
+      accentSubtitleLabel = 'text-rose-400';
+      accentSubtitleDesc = 'text-rose-300/80';
+      actionBtnClass = 'bg-purple-950/40 border-purple-900/60 text-purple-400/80 cursor-not-allowed';
+      actionBtnText = 'ENTRY DISABLED';
+      statusLabelClass = 'text-rose-400';
+      statusText = 'NO EXECUTION AUTHORIZED';
+      titleLabelText = 'DATA STALE';
+      statusValueText = 'FEED OFFLINE';
+      subtitleLabelText = 'DATA FEED STALE / DISCONNECTED';
+      subtitleDescText = 'Live data is stale. VIXY has disabled execution until the feed recovers.';
+      statusIcon = <WifiOff className="w-8 h-8 text-rose-500 animate-pulse" />;
+      break;
+
+    case 'PROTECT':
+      bgGlowClass = 'bg-gradient-to-b from-rose-600/60 to-rose-950/20 shadow-[0_0_50px_rgba(244,63,94,0.3)]';
+      bgInnerClass = 'bg-[#0a0002]';
+      accentHeaderTitle = 'text-rose-500/90';
+      accentHeaderValue = 'text-rose-500';
+      accentSubtitleLabel = 'text-rose-400';
+      accentSubtitleDesc = 'text-rose-300/80';
+      actionBtnClass = 'bg-[#1a0005] border-rose-600/80 text-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.4)]';
+      actionBtnText = 'PROTECT CAPITAL → EXIT';
+      statusLabelClass = 'text-rose-400';
+      statusText = 'RISK STATE: CRITICAL';
+      titleLabelText = '🚨 VIXY LOCK';
+      statusValueText = 'EXIT / PROTECT';
+      subtitleLabelText = 'THESIS INVALIDATED';
+      subtitleDescText = 'Original entry conditions are no longer satisfied. Protect capital.';
+      statusIcon = <ShieldAlert className="w-8 h-8 text-rose-500" />;
+      break;
+
+    case 'LOCKED_UP':
+      bgGlowClass = 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.35)]';
+      bgInnerClass = 'bg-[#010a0c]';
+      accentHeaderTitle = 'text-cyan-400/90';
+      accentHeaderValue = 'text-cyan-300';
+      accentSubtitleLabel = 'text-cyan-400';
+      accentSubtitleDesc = 'text-slate-300';
+      actionBtnClass = 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]';
+      actionBtnText = 'BUY UP → ENTER';
+      statusLabelClass = 'text-cyan-400';
+      statusText = 'EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'LOCKED';
+      subtitleLabelText = 'QUALIFIED ENTRY';
+      subtitleDescText = 'VIXY has locked this 15-minute cycle. Execution is authorized.';
+      statusIcon = <Lock className="w-8 h-8 text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.9)] animate-pulse" />;
+      break;
+
+    case 'LOCKED_DOWN':
+      bgGlowClass = 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.35)]';
+      bgInnerClass = 'bg-[#0c0104]';
+      accentHeaderTitle = 'text-rose-400/90';
+      accentHeaderValue = 'text-rose-400';
+      accentSubtitleLabel = 'text-rose-400';
+      accentSubtitleDesc = 'text-slate-300';
+      actionBtnClass = 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]';
+      actionBtnText = 'BUY DOWN → ENTER';
+      statusLabelClass = 'text-rose-400';
+      statusText = 'EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'LOCKED';
+      subtitleLabelText = 'QUALIFIED ENTRY';
+      subtitleDescText = 'VIXY has locked this 15-minute cycle. Execution is authorized.';
+      statusIcon = <Lock className="w-8 h-8 text-rose-400 drop-shadow-[0_0_20px_rgba(244,63,94,0.8)] animate-pulse" />;
+      break;
+
+    case 'CALIBRATING':
+      bgGlowClass = 'bg-gradient-to-b from-purple-800/20 to-purple-950/10 shadow-[0_0_20px_rgba(168,85,247,0.1)]';
+      bgInnerClass = 'bg-[#05020a]';
+      accentHeaderTitle = 'text-purple-400/60';
+      accentHeaderValue = 'text-purple-300';
+      accentSubtitleLabel = 'text-purple-400';
+      accentSubtitleDesc = 'text-purple-300/70';
+      actionBtnClass = 'bg-purple-950/40 border-purple-900/60 text-purple-400/80 cursor-not-allowed';
+      actionBtnText = 'AWAITING QUALIFICATION';
+      statusLabelClass = 'text-purple-500/70';
+      statusText = 'NO EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'CALIBRATING';
+      subtitleLabelText = '15-MINUTE CYCLE ANALYSIS IN PROGRESS';
+      subtitleDescText = 'VIXY is calibrating against the current 15-minute BTC market cycle.';
+      statusIcon = <Activity className="w-8 h-8 text-purple-400 animate-pulse" />;
+      break;
+
+    case 'PASS':
+      bgGlowClass = 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]';
+      bgInnerClass = 'bg-[#0a050f]';
+      accentHeaderTitle = 'text-purple-400/80';
+      accentHeaderValue = 'text-purple-300';
+      accentSubtitleLabel = 'text-purple-400';
+      accentSubtitleDesc = 'text-purple-300/70';
+      actionBtnClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300/80';
+      actionBtnText = 'ENTRY NOT QUALIFIED';
+      statusLabelClass = 'text-purple-400/70';
+      statusText = 'NO EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'PASS';
+      subtitleLabelText = 'ENTRY NOT QUALIFIED';
+      subtitleDescText = 'VIXY intentionally rejected this cycle because it was not a qualified entry.';
+      statusIcon = <AlertTriangle className="w-8 h-8 text-purple-400/80" />;
+      break;
+
+    case 'QUALIFIED':
+      bgGlowClass = 'bg-gradient-to-b from-cyan-800/40 to-purple-950/20 shadow-[0_0_25px_rgba(34,211,238,0.15)]';
+      bgInnerClass = 'bg-[#06040f]';
+      accentHeaderTitle = 'text-cyan-400/80';
+      accentHeaderValue = 'text-cyan-300';
+      accentSubtitleLabel = 'text-cyan-400';
+      accentSubtitleDesc = 'text-purple-300/70';
+      actionBtnClass = 'bg-[#02181b] border-cyan-800/60 text-cyan-300 animate-pulse';
+      actionBtnText = 'AWAITING LOCK';
+      statusLabelClass = 'text-cyan-400/80';
+      statusText = 'NO EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'QUALIFIED';
+      subtitleLabelText = 'AWAITING FINAL LOCK';
+      subtitleDescText = 'Entry conditions met. Awaiting final lock.';
+      statusIcon = <Unlock className="w-8 h-8 text-cyan-400 animate-bounce" />;
+      break;
+
+    case 'ANALYZING':
+    default:
+      bgGlowClass = 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]';
+      bgInnerClass = 'bg-[#0a050f]';
+      accentHeaderTitle = 'text-purple-400/80';
+      accentHeaderValue = 'text-purple-300';
+      accentSubtitleLabel = 'text-purple-400';
+      accentSubtitleDesc = 'text-purple-300/70';
+      actionBtnClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300/80';
+      actionBtnText = 'AWAITING LOCK';
+      statusLabelClass = 'text-purple-400/70';
+      statusText = 'NO EXECUTION AUTHORIZED';
+      titleLabelText = 'VIXY LOCK';
+      statusValueText = 'ANALYZING';
+      subtitleLabelText = 'AWAITING QUALIFICATION';
+      subtitleDescText = 'Live market data is being evaluated. No entry is authorized yet.';
+      statusIcon = <Layers className="w-8 h-8 text-purple-400 animate-pulse" />;
+      break;
+  }
 
   // Micro-telemetry values
   const spotVsStrikeDelta = currentPrice && targetPrice ? currentPrice - targetPrice : 0;
@@ -179,14 +380,16 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div className={`px-3 py-1.5 rounded-full border ${
             displayDecisionText === 'BUY UP' ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' :
             displayDecisionText === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/60 text-rose-400' :
+            displayDecisionText === 'DATA STALE' ? 'bg-[#1a050a] border-rose-950 text-rose-500' :
             'bg-purple-950/30 border-purple-900/60 text-purple-300'
           } flex items-center gap-2 font-black shadow-lg`}>
             <span className={`w-2 h-2 rounded-full ${
               displayDecisionText === 'BUY UP' ? 'bg-emerald-400' :
               displayDecisionText === 'BUY DOWN' ? 'bg-rose-500' :
+              displayDecisionText === 'DATA STALE' ? 'bg-rose-600' :
               'bg-purple-400'
             } shadow-sm`} />
-            {displayDecisionText} {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : ''} 
+            {displayDecisionText} {displayCalibratedProb !== 'CALIBRATING' && displayDecisionText !== 'CALIBRATING' && displayDecisionText !== 'DATA STALE' ? displayCalibratedProb : ''} 
             <span className="text-[8px] opacity-70 ml-1 font-normal">{calibrationStatus}</span>
           </div>
         </div>
@@ -276,32 +479,32 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
              {/* Atmospheric Bloom */}
              <div className={`absolute inset-0 blur-[60px] opacity-20 rounded-full transition-colors duration-1000 ${
-               isPassState ? 'bg-purple-600' : isLockUp ? 'bg-emerald-500' : 'bg-rose-500'
+               showBuyUp ? 'bg-emerald-500' : showBuyDown ? 'bg-rose-500' : 'bg-purple-600'
              }`} />
              
              <div className={`text-[85px] sm:text-[110px] leading-none font-black tracking-tighter flex items-center gap-4 relative z-10 transition-colors duration-500 ${
-                isPassState ? 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]' : isLockUp ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]'
-             }`} style={{ textShadow: isPassState ? '0 0 30px rgba(168,85,247,0.3)' : isLockUp ? '0 0 30px rgba(0,255,157,0.3)' : '0 0 30px rgba(255,51,102,0.3)' }}>
-               {isPassState ? 'PASS' : (isLockUp ? 'BUY UP' : 'BUY DOWN')}
-               {!isPassState && (
-                 <span className="text-[70px] sm:text-[90px]">{isLockUp ? '▲' : '▼'}</span>
+                showBuyUp ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : showBuyDown ? 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]' : 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]'
+             }`} style={{ textShadow: showBuyUp ? '0 0 30px rgba(0,255,157,0.3)' : showBuyDown ? '0 0 30px rgba(255,51,102,0.3)' : '0 0 30px rgba(168,85,247,0.3)' }}>
+               {isOfflineOrStale ? 'STALE' : isWarmingUp ? 'CALIBRATING' : showBuyUp ? 'BUY UP' : showBuyDown ? 'BUY DOWN' : isPassState ? 'PASS' : 'ANALYZING'}
+               {(showBuyUp || showBuyDown) && (
+                 <span className="text-[70px] sm:text-[90px]">{showBuyUp ? '▲' : '▼'}</span>
                )}
              </div>
              <div className="flex items-center gap-3 mt-4 relative z-10">
                <span className={`text-[42px] font-black tracking-tighter ${
-                 isPassState ? 'text-purple-300' : isLockUp ? 'text-[#00FF9D]' : 'text-[#FF3366]'
-               }`} style={{ textShadow: isPassState ? '0 0 15px rgba(168,85,247,0.4)' : isLockUp ? '0 0 15px rgba(0,255,157,0.4)' : '0 0 15px rgba(255,51,102,0.4)' }}>{displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}</span>
+                 isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : showBuyUp ? 'text-[#00FF9D]' : showBuyDown ? 'text-[#FF3366]' : 'text-purple-300'
+               }`} style={{ textShadow: isOfflineOrStale ? '0 0 15px rgba(244,63,94,0.4)' : isWarmingUp ? '0 0 15px rgba(168,85,247,0.2)' : showBuyUp ? '0 0 15px rgba(0,255,157,0.4)' : showBuyDown ? '0 0 15px rgba(255,51,102,0.4)' : '0 0 15px rgba(168,85,247,0.4)' }}>{displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}</span>
                <span className={`text-[10px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded border ${
-                 isPassState ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isLockUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
+                 isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : showBuyUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : showBuyDown ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
                }`}>{directionalConfidenceLabel}</span>
              </div>
            </div>
         </div>
 
         {/* ULTRA-PROMINENT VIXY LOCK */}
-        <div className={`mt-2 mb-6 p-[1px] rounded-xl relative z-10 overflow-hidden ${
-          isProtectState
-            ? 'bg-gradient-to-b from-rose-600/60 to-rose-950/20 shadow-[0_0_50px_rgba(244,63,94,0.3)]'
+        <div className={`p-1 rounded-2xl transition-all duration-1000 relative ${
+          isProtectState 
+            ? 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.3)]'
             : isLockUp
             ? 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.3)]'
             : isLockDown
@@ -314,126 +517,111 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              {/* Cybernetic background accents */}
              {isLockUp && (
                <>
-                 <div className="absolute inset-0 bg-[linear-gradient(rgba(34,211,238,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(34,211,238,0.04)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-                 <div className="absolute inset-0 bg-cyan-500/10 animate-[pulse_4s_ease-in-out_infinite]" />
-                 <div className="absolute -left-1 -top-1 w-4 h-4 border-t-2 border-l-2 border-cyan-400"></div>
-                 <div className="absolute -right-1 -top-1 w-4 h-4 border-t-2 border-r-2 border-cyan-400"></div>
-                 <div className="absolute -left-1 -bottom-1 w-4 h-4 border-b-2 border-l-2 border-cyan-400"></div>
-                 <div className="absolute -right-1 -bottom-1 w-4 h-4 border-b-2 border-r-2 border-cyan-400"></div>
+                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-cyan-400/30 to-transparent" />
+                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-cyan-400/30 to-transparent" />
                </>
              )}
              {isLockDown && (
                <>
-                 <div className="absolute inset-0 bg-[linear-gradient(rgba(244,63,94,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(244,63,94,0.04)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-                 <div className="absolute inset-0 bg-rose-500/10 animate-[pulse_4s_ease-in-out_infinite]" />
-                 <div className="absolute -left-1 -top-1 w-4 h-4 border-t-2 border-l-2 border-rose-500"></div>
-                 <div className="absolute -right-1 -top-1 w-4 h-4 border-t-2 border-r-2 border-rose-500"></div>
-                 <div className="absolute -left-1 -bottom-1 w-4 h-4 border-b-2 border-l-2 border-rose-500"></div>
-                 <div className="absolute -right-1 -bottom-1 w-4 h-4 border-b-2 border-r-2 border-rose-500"></div>
-               </>
-             )}
-             {isProtectState && (
-               <>
-                 <div className="absolute inset-0 bg-[linear-gradient(rgba(244,63,94,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(244,63,94,0.03)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none" />
-                 <div className="absolute inset-0 bg-rose-500/5 animate-[pulse_3s_ease-in-out_infinite]" />
-                 <div className="absolute top-0 left-0 w-full h-[1px] bg-rose-500/40 shadow-[0_0_10px_rgba(244,63,94,0.8)]" />
+                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-rose-500/30 to-transparent" />
+                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-rose-500/30 to-transparent" />
                </>
              )}
 
-             <div className="flex items-center gap-6 relative z-10">
-               <div className={`w-[72px] h-[72px] rounded-full flex items-center justify-center border-2 shadow-2xl ${
+             <div className="flex items-center gap-4 relative z-10">
+               <div className={`p-3 rounded-xl border flex items-center justify-center transition-all duration-1000 ${
                  isProtectState
-                    ? 'bg-[#1a0005] border-rose-500/80 text-rose-500 shadow-[0_0_30px_rgba(244,63,94,0.4)]'
-                    : isLockUp
-                    ? 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
-                    : isLockDown
-                    ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
-                    : 'bg-purple-950/40 border-purple-700/50 text-purple-400'
+                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
+                   : isLockUp
+                   ? 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
+                   : isLockDown
+                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
+                   : 'bg-purple-950/40 border-purple-700/50 text-purple-400'
                }`}>
-                 {isProtectState ? <ShieldAlert className="w-8 h-8" /> : isPassState ? <AlertTriangle className="w-8 h-8" /> : <Lock className="w-8 h-8" />}
+                 {statusIcon}
                </div>
                <div>
                  <div className="flex items-center gap-3 mb-1">
-                   <span className={`text-[13px] font-black tracking-[0.25em] uppercase ${
+                   <span className={`text-[10px] font-black tracking-[0.25em] uppercase ${
                      isProtectState ? 'text-rose-500/90' : isLockUp ? 'text-cyan-400/90' : isLockDown ? 'text-rose-400/90' : 'text-purple-400/80'
-                   }`}>{isProtectState ? '🚨 VIXY LOCK' : 'VIXY LOCK'}</span>
+                   }`}>{titleLabelText}</span>
                    <span className={`text-[32px] font-black tracking-widest uppercase leading-none ${
                      isProtectState ? 'text-rose-500' : isLockUp ? 'text-cyan-300' : isLockDown ? 'text-rose-400' : 'text-purple-300'
                    }`} style={{ textShadow: isProtectState ? '0 0 20px rgba(244,63,94,0.6)' : isLockUp ? '0 0 20px rgba(34,211,238,0.9)' : isLockDown ? '0 0 20px rgba(244,63,94,0.9)' : '0 0 15px rgba(168,85,247,0.4)' }}>
-                     {isProtectState ? 'EXIT / PROTECT' : isLockUp || isLockDown ? 'LOCKED' : 'PASS'}
+                     {statusValueText}
                    </span>
                  </div>
                  <div className="hidden sm:block mt-2">
-                   <span className={`text-[11px] font-black tracking-[0.2em] uppercase mb-1 block ${
+                   <span className={`text-[10px] font-black tracking-widest uppercase ${
                      isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400'
                    }`}>
-                     {isProtectState ? 'THESIS INVALIDATED' : isLockUp || isLockDown ? 'QUALIFIED ENTRY' : 'ENTRY NOT QUALIFIED'}
+                     {subtitleLabelText}
                    </span>
                    <span className={`text-[11px] font-mono block ${
                      isProtectState ? 'text-rose-300/80' : isLockUp ? 'text-slate-300' : isLockDown ? 'text-slate-300' : 'text-purple-300/70'
                    }`}>
-                     {isProtectState ? 'Original entry conditions are no longer satisfied. Protect capital.' : isLockUp ? 'All entry conditions met. Upward edge verified.' : isLockDown ? 'All entry conditions met. Downward edge verified.' : (execution.reason || 'Entry conditions not satisfied. Standby for next cycle.')}
+                     {subtitleDescText}
                    </span>
                  </div>
                </div>
              </div>
-             
-             <div className="relative z-10 flex flex-col items-end justify-center">
-               <div className={`px-8 py-4 rounded-lg border-2 text-lg font-black tracking-[0.15em] uppercase flex items-center justify-center ${
+
+             <div className="flex flex-col items-end relative z-10">
+               <div className={`text-base font-black tracking-widest px-6 py-3 rounded-xl border ${
                  isProtectState
-                   ? 'bg-[#1a0005] border-rose-600/80 text-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.4)]'
+                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
                    : isLockUp
                    ? 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
                    : isLockDown
                    ? 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
                    : 'bg-purple-950/40 border-purple-800/60 text-purple-300/80'
                }`} style={{ textShadow: isProtectState ? '0 0 15px rgba(244,63,94,0.6)' : isLockUp ? '0 0 10px rgba(0,255,157,0.5)' : isLockDown ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
-                 {isProtectState ? 'PROTECT CAPITAL → EXIT' : isLockUp ? 'BUY UP → ENTER' : isLockDown ? 'BUY DOWN → ENTER' : (execution.actionLabel || 'ENTRY NOT QUALIFIED')}
+                 {actionBtnText}
                </div>
                <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${
                  isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400/70'
                }`}>
-                 {isProtectState ? 'RISK STATE: CRITICAL' : (isLockUp || isLockDown) ? 'EXECUTION AUTHORIZED' : 'NO EXECUTION AUTHORIZED'}
+                 {statusText}
                  {(isLockUp || isLockDown) && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
                </div>
              </div>
           </div>
-          
-          {isProtectState && (
-            <div className="relative z-10 border-t border-rose-900/40 bg-[#0a0002]/90 px-5 py-3">
-              <div className="text-[9px] font-bold tracking-[0.2em] uppercase mb-2 text-rose-500/70">
-                RISK TELEMETRY
+        </div>
+
+        {isProtectState && (
+          <div className="relative z-10 border-t border-rose-900/40 bg-[#0a0002]/90 px-5 py-3">
+            <div className="text-[9px] font-bold tracking-[0.2em] uppercase mb-2 text-rose-500/70">
+              RISK TELEMETRY
+            </div>
+            <div className="flex flex-wrap items-center gap-4 sm:gap-8">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">REVERSAL THREAT</div>
+                <div className="text-xs font-black text-rose-400">{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
               </div>
-              <div className="flex flex-wrap items-center gap-4 sm:gap-8">
-                <div>
-                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">REVERSAL THREAT</div>
-                  <div className="text-xs font-black text-rose-400">{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">ORDER FLOW</div>
+                <div className={`text-xs font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
+                  {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
                 </div>
-                <div>
-                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">ORDER FLOW</div>
-                  <div className={`text-xs font-black ${displayOrderFlow >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                    {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9px] uppercase tracking-wider text-rose-400/50">POSITION STATE</div>
-                  <div className="text-xs font-black text-rose-400">PROTECT</div>
-                </div>
+              </div>
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">POSITION STATE</div>
+                <div className="text-xs font-black text-rose-400">PROTECT</div>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* EVIDENCE ACCUMULATION */}
         <div className="pt-6 relative z-10">
           <div className="flex items-center justify-between text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-3">
             <span>VIXY CONFIDENCE FIELD</span>
             <div className="flex items-center gap-2 text-sm font-black">
-              <span className={isPassState ? 'text-purple-400' : isLockUp ? 'text-[#00FF9D]' : 'text-[#FF3366]'}>
+              <span className={isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP' ? 'text-[#00FF9D]' : lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN' ? 'text-[#FF3366]' : 'text-purple-400'}>
                 {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}
               </span>
               <span className={`text-[9px] uppercase px-2 py-0.5 rounded border ${
-                isPassState ? 'bg-purple-900/30 border-purple-700/50 text-purple-400' : isLockUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]'
+                isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP' ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
               }`}>
                 {directionalConfidenceLabel}
               </span>
@@ -449,7 +637,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                   key={idx}
                   className={`h-full flex-1 rounded-sm transition-all duration-500 ${
                     isFilled
-                      ? isPassState 
+                      ? (isPassState || isWarmingUp || lockCardState === 'ANALYZING')
                          ? 'bg-purple-600/80 shadow-[0_0_8px_rgba(147,51,234,0.3)]'
                          : isLockUp
                          ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]'

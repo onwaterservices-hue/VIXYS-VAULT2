@@ -263,6 +263,7 @@ type EngineStateType =
   | 'SETTLED'
   | 'RESETTING'
   | 'STALE'
+  | 'CALIBRATING'
   | 'ERROR';
 
 type FeedStatusType = 'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED';
@@ -632,6 +633,10 @@ setInterval(async () => {
     const isEarlyLockOpportunity = is5050PullWindow && Math.abs(currentEdgePct) >= 2.5;
     const effectiveRequiredPersistenceSeconds = isEarlyLockOpportunity ? 3 : 12;
 
+    const cycleMarketState = getKalshi15mMarketState(livePrice);
+    const timeRemaining = cycleMarketState.timeRemaining;
+    const isCycleCalibrating = timeRemaining > 840; // First 60 seconds of a 15-minute cycle
+
     const isFresh = now - lastMarketUpdateTs <= 15000;
     const isConfPass = currentConfidence >= 70;
     const isLiquidityPass = true;
@@ -639,10 +644,12 @@ setInterval(async () => {
     const isEdgePass = Math.abs(currentEdgePct) >= 2.5;
     const isPersistPass = persistenceSeconds >= effectiveRequiredPersistenceSeconds;
 
-    const isQualified = isFresh && isConfPass && isLiquidityPass && isSpreadPass && isEdgePass && isPersistPass;
+    const isQualified = !isCycleCalibrating && isFresh && isConfPass && isLiquidityPass && isSpreadPass && isEdgePass && isPersistPass;
 
     let reasonText = 'Signal qualified across all institutional edge and persistence thresholds';
-    if (!isFresh) {
+    if (isCycleCalibrating) {
+      reasonText = 'New 15M cycle calibration in progress';
+    } else if (!isFresh) {
       reasonText = 'Market feed is stale (>15s since last tick update)';
     } else if (!isConfPass) {
       reasonText = `Model confidence (${currentConfidence}%) below minimum required 70% threshold`;
@@ -724,6 +731,8 @@ setInterval(async () => {
     if (!isFresh) {
       engineState = 'STALE';
       engineFeedStatus = 'STALE';
+    } else if (isCycleCalibrating) {
+      engineState = 'CALIBRATING';
     } else if (isQualified) {
       engineState = currentDirection === 'UP' ? 'LOCKED_UP' : 'LOCKED_DOWN';
     } else if (currentDirection !== 'NEUTRAL') {
@@ -3799,9 +3808,12 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
 
   const isProtectionVeto = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || Boolean(latestGuardianDecision?.reversalThreat && latestGuardianDecision.reversalThreat > 70);
   const isDataFresh = isLive && computedFeedStatus === 'LIVE';
-  const isQualifiedEntry = Boolean(latestLockEvaluation.qualified) && isDataFresh && !isProtectionVeto;
 
-  let executionState: 'LOCK_UP' | 'LOCK_DOWN' | 'PASS' = 'PASS';
+  const isCycleCalibrating = market15mState.timeRemaining > 840; // First 60s of the 15M cycle
+
+  const isQualifiedEntry = !isCycleCalibrating && Boolean(latestLockEvaluation.qualified) && isDataFresh && !isProtectionVeto;
+
+  let executionState: 'LOCK_UP' | 'LOCK_DOWN' | 'PASS' | 'CALIBRATING' | 'STALE' = 'PASS';
   let executionDirection: 'UP' | 'DOWN' | 'NONE' = 'NONE';
   let executionAuthorized = false;
   let executionActionLabel = 'ENTRY NOT QUALIFIED';
@@ -3822,14 +3834,20 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
       executionReason = 'Entry criteria qualified & verified';
     }
   } else {
-    if (isProtectionVeto) {
+    if (isCycleCalibrating) {
+      executionState = 'CALIBRATING';
+      executionReason = 'New 15M cycle calibration in progress';
+      executionActionLabel = 'AWAITING QUALIFICATION';
+    } else if (isProtectionVeto) {
       executionReason = 'Protection Veto Active';
       executionActionLabel = 'PROTECT CAPITAL → EXIT';
     } else if (!isDataFresh) {
+      executionState = 'STALE';
       executionReason = 'Data Feed Stale';
       executionActionLabel = 'DATA STALE';
     } else {
-      executionReason = 'Entry criteria not satisfied';
+      executionState = 'PASS';
+      executionReason = 'No qualified edge detected';
       executionActionLabel = 'ENTRY NOT QUALIFIED';
     }
   }
@@ -3846,8 +3864,8 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     confidenceLabel: confidenceLabel
   };
 
-  const vixyLockState = executionState === 'LOCK_UP' || executionState === 'LOCK_DOWN' ? 'LOCKED' : 'PASS';
-  const decision = executionState === 'LOCK_UP' ? 'BUY UP' : (executionState === 'LOCK_DOWN' ? 'BUY DOWN' : 'PASS');
+  const vixyLockState = executionState === 'LOCK_UP' || executionState === 'LOCK_DOWN' ? 'LOCKED' : (executionState === 'CALIBRATING' ? 'CALIBRATING' : (executionState === 'STALE' ? 'STALE' : 'PASS'));
+  const decision = executionState === 'LOCK_UP' ? 'BUY UP' : (executionState === 'LOCK_DOWN' ? 'BUY DOWN' : (executionState === 'CALIBRATING' ? 'CALIBRATING' : (executionState === 'STALE' ? 'DATA STALE' : 'PASS')));
   const action = executionState === 'LOCK_UP' ? 'BUY_YES' : (executionState === 'LOCK_DOWN' ? 'BUY_NO' : 'PASS');
 
   const resolvedOnly = persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10);
@@ -3885,7 +3903,7 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     probability: isLive ? currentModelProbability : null,
     confidence: isLive ? currentConfidence : null,
     calibratedProbability: latestCalibrationState.calibratedModelProbability,
-    calibrationStatus: latestCalibrationState.calibrationStatus,
+    calibrationStatus: isCycleCalibrating ? 'WARMING_UP' : latestCalibrationState.calibrationStatus,
     buyInState: isQualifiedEntry ? 'QUALIFIED' : 'UNQUALIFIED',
     protectionState: latestGuardianDecision?.action || 'SAFE',
     reversalRisk: latestGuardianDecision?.reversalThreat || 0,

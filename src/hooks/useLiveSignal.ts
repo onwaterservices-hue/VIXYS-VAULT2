@@ -7,95 +7,124 @@ type SharedSignalState = {
   isRateLimited?: boolean;
 };
 
-let globalState: SharedSignalState = {
-  signal: null,
-  status: null,
-  isRateLimited: false,
+// Map of "asset:desk" -> SharedSignalState
+const states = new Map<string, SharedSignalState>();
+// Map of "asset:desk" -> Set of listener functions
+const subscribers = new Map<string, Set<() => void>>();
+// Map of "asset:desk" -> Interval object
+const intervals = new Map<string, any>();
+// Map of "asset:desk" -> boolean
+const isFetching = new Map<string, boolean>();
+
+const getCacheKey = (asset: string, desk: string) => {
+  const effAsset = (asset || 'BTC').toUpperCase();
+  const effDesk = (desk || '15m').toLowerCase();
+  return `${effAsset}:${effDesk}`;
 };
 
-let globalSubscribers: Set<() => void> = new Set();
-let pollingInterval: any = null;
-let currentAsset = 'BTC';
-let currentDesk = '15m';
-let isFetching = false;
-let consecutiveErrors = 0;
-
-const notifySubscribers = () => {
-  globalSubscribers.forEach(sub => sub());
+const notifySubscribers = (key: string) => {
+  const subs = subscribers.get(key);
+  if (subs) {
+    subs.forEach(sub => sub());
+  }
 };
 
-const poll = async () => {
-  if (!currentAsset || !currentDesk || isFetching) return;
-  isFetching = true;
+const poll = async (asset: string, desk: string) => {
+  const key = getCacheKey(asset, desk);
+  if (isFetching.get(key)) return;
+  isFetching.set(key, true);
+
   try {
     const [sig, stat] = await Promise.all([
-      fetchLiveSignalData(currentAsset, currentDesk),
-      fetchModelStatus(currentAsset, currentDesk)
+      fetchLiveSignalData(asset, desk),
+      fetchModelStatus(asset, desk)
     ]);
-    consecutiveErrors = 0;
+
+    let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
     let changed = false;
+
     if (sig) {
-      globalState.signal = sig;
+      state.signal = sig;
       changed = true;
     }
     if (stat) {
-      globalState.status = stat;
+      state.status = stat;
       changed = true;
     }
-    if (globalState.isRateLimited) {
-      globalState.isRateLimited = false;
+    if (state.isRateLimited) {
+      state.isRateLimited = false;
       changed = true;
     }
+
     if (changed) {
-      notifySubscribers();
+      states.set(key, state);
+      notifySubscribers(key);
     }
   } catch (err: any) {
-    consecutiveErrors++;
     if (err?.message?.includes('429') || err?.status === 429 || String(err).includes('Rate exceeded')) {
-      globalState.isRateLimited = true;
-      notifySubscribers();
+      let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
+      state.isRateLimited = true;
+      states.set(key, state);
+      notifySubscribers(key);
     }
-    console.error('Error fetching live signal (rate limit / network):', err);
+    console.error(`Error fetching live signal for ${key}:`, err);
   } finally {
-    isFetching = false;
+    isFetching.set(key, false);
   }
 };
 
 export const useLiveSignal = (asset: string, desk: string) => {
-  const [data, setData] = useState<SharedSignalState>(globalState);
+  const effAsset = (asset || 'BTC').toUpperCase();
+  const effDesk = (desk || '15m').toLowerCase();
+  const key = `${effAsset}:${effDesk}`;
+
+  // Initialize state if not present
+  if (!states.has(key)) {
+    states.set(key, { signal: null, status: null, isRateLimited: false });
+  }
+
+  const [data, setData] = useState<SharedSignalState>(states.get(key)!);
 
   useEffect(() => {
-    const effAsset = asset || 'BTC';
-    const effDesk = desk ? desk.toLowerCase() : '15m';
-    let shouldRestart = false;
+    // Add subscriber for this key
+    if (!subscribers.has(key)) {
+      subscribers.set(key, new Set());
+    }
     
-    if (effAsset && currentAsset !== effAsset) {
-      currentAsset = effAsset;
-      shouldRestart = true;
-    }
-    if (effDesk && currentDesk !== effDesk) {
-      currentDesk = effDesk;
-      shouldRestart = true;
-    }
-
-    if (shouldRestart || !pollingInterval) {
-      if (pollingInterval) clearInterval(pollingInterval);
-      poll(); // initial fetch
-      pollingInterval = setInterval(poll, 15000); // 15-second polling to respect upstream rate limits
-    }
-
     const handler = () => {
-      setData({ ...globalState });
+      setData({ ...(states.get(key) || { signal: null, status: null, isRateLimited: false }) });
     };
-    globalSubscribers.add(handler);
-    
-    // Initial sync
-    setData({ ...globalState });
+    subscribers.get(key)!.add(handler);
+
+    // If no interval is active for this key, start one
+    if (!intervals.has(key)) {
+      poll(effAsset, effDesk); // Initial fetch
+      const interval = setInterval(() => {
+        poll(effAsset, effDesk);
+      }, 15000); // 15-second polling to respect upstream rate limits
+      intervals.set(key, interval);
+    }
+
+    // Set initial data
+    setData({ ...(states.get(key) || { signal: null, status: null, isRateLimited: false }) });
 
     return () => {
-      globalSubscribers.delete(handler);
+      const subs = subscribers.get(key);
+      if (subs) {
+        subs.delete(handler);
+        // If no more subscribers for this key, clean up the interval
+        if (subs.size === 0) {
+          const interval = intervals.get(key);
+          if (interval) {
+            clearInterval(interval);
+          }
+          intervals.delete(key);
+          subscribers.delete(key);
+          isFetching.delete(key);
+        }
+      }
     };
-  }, [asset, desk]);
+  }, [key]);
 
   return data;
 };

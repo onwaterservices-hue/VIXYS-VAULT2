@@ -393,7 +393,7 @@ export default function App() {
     };
 
     updateAllPrices();
-    const interval = setInterval(updateAllPrices, 10000);
+    const interval = setInterval(updateAllPrices, 15000);
     return () => {
       isMounted = false;
       clearInterval(interval);

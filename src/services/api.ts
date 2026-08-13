@@ -21,7 +21,7 @@ export async function safeFetchJson<T>(url: string, options?: RequestInit): Prom
   // 2. Check cache for valid non-expired data (TTL: 2500ms for high-frequency tickers/signals, 15000ms for heavy diagnostics/status, 5000ms for others)
   const ttl = url.includes('/ticker') || url.includes('/all-tickers') || url.includes('/signal') || url.includes('/live-engine')
     ? 2500
-    : (url.includes('/diagnostics') || url.includes('/status') || url.includes('/health') || url.includes('/daily-report') ? 15000 : 5000);
+    : (url.includes('/diagnostics') || url.includes('/status') || url.includes('/health') || url.includes('/daily-report') || url.includes('/signal-snapshots') ? 15000 : 5000);
   const cached = cacheStore.get(cacheKey);
   if (cached && now - cached.timestamp < ttl) {
     return cached.data as T;
