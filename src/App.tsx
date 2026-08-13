@@ -96,7 +96,7 @@ export default function App() {
       if (saved) {
         const parsed = JSON.parse(saved);
         const email = parsed?.user?.email?.toLowerCase();
-        if (email === 'vixyvault0@gmail.com' || email === 'onwaterservices@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
+        if (email === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
           return 'ADMIN';
         }
         return parsed?.user?.role || 'DEMO';
@@ -111,7 +111,7 @@ export default function App() {
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
   useEffect(() => {
     if (authState.isAuthenticated && authState.user?.email) {
-      safeFetchJson<{authenticated: boolean, user: any}>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
+      safeFetchJson<{authenticated: boolean, user: any, discord: any}>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
         .then(res => {
           if (res && res.authenticated && res.user) {
             setTrialSeconds(res.user.trialSecondsRemaining || 0);
@@ -119,18 +119,25 @@ export default function App() {
             setAuthState(prev => {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
+              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO';
               const updatedUser: NonNullable<AuthState['user']> = {
                 ...prev.user,
                 // @ts-ignore
-                discordLinked: res.user.discordLinked,
+                discordLinked: !!(res.user.discordLinked || res.discord?.linked),
                 // @ts-ignore
-                discordId: res.user.discordId,
-                role: (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO',
+                discordId: res.user.discordId || res.discord?.discordUserId,
+                // @ts-ignore
+                discordTag: res.user.discordTag || res.discord?.discordUsername,
+                role: computedRole,
                 // @ts-ignore
                 subscription: res.user.subscription
               };
               
               localStorage.setItem('vixy_auth', JSON.stringify({ ...prev, user: updatedUser }));
+              if (res.user.email) {
+                localStorage.setItem('vixy_user_email', res.user.email.toLowerCase());
+              }
+              localStorage.setItem('vixy_user_role', computedRole);
               return { ...prev, user: updatedUser };
             });
             
@@ -222,7 +229,7 @@ export default function App() {
 
         setAuthState((prev) => {
           if (!prev.isAuthenticated || prev.user?.email?.toLowerCase() !== cleanEmail) {
-            const isAdmin = cleanEmail === 'vixyvault0@gmail.com' || cleanEmail === 'onwaterservices@gmail.com';
+            const isAdmin = cleanEmail === 'vixyvault0@gmail.com';
             return {
               isAuthenticated: true,
               user: {
@@ -249,7 +256,6 @@ export default function App() {
         const email = authState.user.email?.toLowerCase();
         if (
           email === 'vixyvault0@gmail.com' ||
-          email === 'onwaterservices@gmail.com' ||
           authState.user.role === 'ADMIN' ||
           authState.user.role === 'OWNER'
         ) {

@@ -860,7 +860,7 @@ export function getAdminHeaders(extraHeaders: Record<string, string> = {}): Reco
     } catch (e) {}
     
     if (!currentEmail) {
-      currentEmail = localStorage.getItem('vixy_user_email') || localStorage.getItem('vixy_admin_email') || 'onwaterservices@gmail.com';
+      currentEmail = localStorage.getItem('vixy_user_email') || localStorage.getItem('vixy_admin_email') || 'vixyvault0@gmail.com';
     }
   }
 
@@ -1106,6 +1106,27 @@ export async function fetchAdminAuditLogs() {
     cache: 'no-store',
     headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
   });
+}
+
+export async function fetchAdminSupportTickets() {
+  return await safeFetchJson<any[]>(`/api/admin/support-tickets?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: getAdminHeaders({ 'Cache-Control': 'no-cache, no-store, must-revalidate' }),
+  });
+}
+
+export async function updateAdminSupportTicket(id: string, status?: string, priority?: string) {
+  try {
+    const res = await fetch('/api/admin/support-tickets/update', {
+      method: 'POST',
+      headers: getAdminHeaders(),
+      body: JSON.stringify({ id, status, priority }),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.warn('Failed to update support ticket on server', err);
+    return { success: false, message: 'Server connection error' };
+  }
 }
 
 export async function fetchSystemHealth() {

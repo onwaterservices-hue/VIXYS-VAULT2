@@ -38,7 +38,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     setErrorMsg('');
 
     const userEmail = email.trim() || 'trader@vixysvault.com';
-    const isAdminEmail = ['onwaterservices@gmail.com', 'vixyvault0@gmail.com'].includes(userEmail.toLowerCase());
+    const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
 
     if (isAdminEmail && password && password !== 'Seattle007') {
       setTimeout(() => {

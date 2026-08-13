@@ -112,21 +112,97 @@ if (process.env.GEMINI_API_KEY) {
   });
 }
 
-// Master Admin Email Helper
+// Master Admin Email Helper - STRICT CANONICAL SINGLE OWNER
 function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'vixyvault0@gmail.com').toLowerCase();
-  return (
-    clean === 'onwaterservices@gmail.com' ||
-    clean === 'vixyvault0@gmail.com' ||
-    clean === configuredAdminEmail
-  );
+  if (clean === 'onwaterservices@gmail.com') return false; // STRICTLY EXCLUDED FROM ADMIN
+  return clean === 'vixyvault0@gmail.com';
+}
+
+// Canonical Authority Sanitizer: Guarantees vixyvault0@gmail.com is sole OWNER and strips admin authority from legacy onwaterservices account
+function sanitizeAndNormalizeServerUsers() {
+  if (typeof serverUsers === 'undefined') return;
+
+  // 1. Ensure vixyvault0@gmail.com exists and is configured as sole OWNER
+  let masterAdmin = serverUsers.find((u) => u.email?.toLowerCase() === 'vixyvault0@gmail.com');
+  if (!masterAdmin) {
+    masterAdmin = {
+      id: 'usr_owner_01',
+      uid: 'usr_owner_01',
+      email: 'vixyvault0@gmail.com',
+      name: 'Master Admin (Vixy Vault)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-01-15',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@vixyvault_owner',
+      discordId: '123456789012345678',
+      discordLinked: true,
+      guildVerified: true,
+    };
+    serverUsers.unshift(masterAdmin);
+  } else {
+    masterAdmin.role = 'OWNER';
+    masterAdmin.subscription = 'ELITE_PASS';
+    masterAdmin.status = 'ACTIVE';
+  }
+
+  if (typeof userSubscriptions !== 'undefined') {
+    userSubscriptions.set('vixyvault0@gmail.com', {
+      email: 'vixyvault0@gmail.com',
+      role: 'OWNER',
+      plan: 'ELITE_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  // 2. Normalize and demote any unauthorized accounts (specifically onwaterservices@gmail.com)
+  serverUsers.forEach((u) => {
+    if (!u.email) return;
+    const cleanEmail = u.email.trim().toLowerCase();
+    if (cleanEmail === 'onwaterservices@gmail.com') {
+      u.role = 'USER';
+      if (u.subscription === 'ELITE_PASS' || !u.subscription) {
+        u.subscription = 'FREE_TRIAL';
+      }
+      if (u.name && u.name.includes('Master Admin')) {
+        u.name = 'Legacy User (onwaterservices)';
+      }
+      if (typeof userSubscriptions !== 'undefined') {
+        userSubscriptions.set('onwaterservices@gmail.com', {
+          email: 'onwaterservices@gmail.com',
+          role: 'USER',
+          plan: u.subscription || 'FREE_TRIAL',
+          status: u.status || 'ACTIVE',
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } else if (cleanEmail !== 'vixyvault0@gmail.com' && u.role === 'OWNER') {
+      u.role = 'USER';
+      if (typeof userSubscriptions !== 'undefined') {
+        const sub = userSubscriptions.get(cleanEmail);
+        if (sub) sub.role = 'USER';
+      }
+    }
+  });
+
+  if (typeof userSubscriptions !== 'undefined') {
+    const legacySub = userSubscriptions.get('onwaterservices@gmail.com');
+    if (legacySub) {
+      legacySub.role = 'USER';
+    }
+  }
 }
 
 // Role Enforcement & Authorization Middleware
 const requireRole = (allowedRoles: string[]) => {
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    // Run real-time normalization before evaluating permissions
+    sanitizeAndNormalizeServerUsers();
+
     const userRole = ((req.headers['x-user-role'] as string) || 'FREE').toUpperCase();
     const userEmail = (
       (req.headers['x-user-email'] as string) ||
@@ -134,6 +210,14 @@ const requireRole = (allowedRoles: string[]) => {
       (req.query && (req.query.email as string)) ||
       ''
     ).toLowerCase();
+
+    // Explicit block: onwaterservices@gmail.com is strictly prohibited from admin access
+    if (userEmail === 'onwaterservices@gmail.com') {
+      return res.status(403).json({
+        error: 'ADMIN_REQUIRED',
+        message: 'Administrator authorization failed. Account onwaterservices@gmail.com does not have administrative clearance.',
+      });
+    }
 
     const configuredAdminId = (process.env.ADMIN_USER_ID || '').toLowerCase();
 
@@ -937,6 +1021,9 @@ app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, re
     }
   });
 
+  // Always sanitize and enforce vixyvault0@gmail.com as sole Master Admin OWNER
+  sanitizeAndNormalizeServerUsers();
+
   // Compute real-time online presence status for each user
   const now = Date.now();
   serverUsers.forEach((u) => {
@@ -1086,8 +1173,7 @@ app.post('/api/admin/users/wipe', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   });
   profileKeysToDelete.forEach((k) => userDiscordProfiles.delete(k));
 
-  // Ensure Master Admins are guaranteed present and elevated
-  ensureUserExists({ email: 'onwaterservices@gmail.com', role: 'OWNER', subscription: 'ELITE_PASS', name: 'Master Admin (onwaterservices)' });
+  // Ensure Master Admin is guaranteed present and elevated
   ensureUserExists({ email: 'vixyvault0@gmail.com', role: 'OWNER', subscription: 'ELITE_PASS', name: 'Master Admin (Vixy Vault)' });
 
   savePersistentStore();
@@ -1357,6 +1443,46 @@ const serverAuditLogs: ServerAuditLog[] = [
   { id: 'log_102', timestamp: new Date(Date.now() - 300000).toISOString(), actor: 'vixyvault0@gmail.com', action: 'UPDATED_ROLE', details: 'Promoted trader.alex@gmail.com to ELITE_PASS', level: 'INFO' },
   { id: 'log_103', timestamp: new Date(Date.now() - 1800000).toISOString(), actor: 'SYSTEM_STRIPE_WEBHOOK', action: 'SUBSCRIPTION_RENEWED', details: 'Pro Pass renewed for quant.sarah@optionstrade.io', level: 'INFO' },
   { id: 'log_104', timestamp: new Date(Date.now() - 3600000).toISOString(), actor: 'SYSTEM_BOT_SCHEDULER', action: 'BOT_HEALTH_CHECK', details: 'Discord signal broadcaster synced successfully', level: 'INFO' },
+];
+
+export interface ServerSupportTicket {
+  id: string;
+  userEmail: string;
+  subject: string;
+  category: string;
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED';
+  date: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+}
+
+const serverSupportTickets: ServerSupportTicket[] = [
+  {
+    id: 'TCK-8821',
+    userEmail: 'trader.alex@gmail.com',
+    subject: 'Kalshi API Latency Spike during 15M Candle Lock',
+    category: 'API Feed',
+    status: 'IN_PROGRESS',
+    date: '2026-08-11 14:22',
+    priority: 'HIGH',
+  },
+  {
+    id: 'TCK-8819',
+    userEmail: 'quant.sarah@optionstrade.io',
+    subject: 'Stripe Webhook Event Entitlement Resync Request',
+    category: 'Billing',
+    status: 'OPEN',
+    date: '2026-08-10 09:15',
+    priority: 'MEDIUM',
+  },
+  {
+    id: 'TCK-8810',
+    userEmail: 'sam.predict@crypto.org',
+    subject: 'Pro Pass Annual Billing Inquiry & Invoice Request',
+    category: 'Billing',
+    status: 'RESOLVED',
+    date: '2026-08-05 18:40',
+    priority: 'LOW',
+  },
 ];
 
 function addServerAuditLog(actor: string, action: string, details: string, level: 'INFO' | 'WARN' | 'ERROR' = 'INFO') {
@@ -1630,6 +1756,22 @@ app.post('/api/admin/audit-logs', requireRole(['OWNER', 'ADMIN']), (req, res) =>
   const { actor = 'ADMIN', action = 'MANUAL_ACTION', details = '', level = 'INFO' } = req.body || {};
   const log = addServerAuditLog(actor, action, details, level);
   res.json({ success: true, log });
+});
+
+app.get('/api/admin/support-tickets', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  res.json(serverSupportTickets);
+});
+
+app.post('/api/admin/support-tickets/update', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  const { id, status, priority } = req.body || {};
+  const ticket = serverSupportTickets.find(t => t.id === id);
+  if (ticket) {
+    if (status) ticket.status = status;
+    if (priority) ticket.priority = priority;
+    savePersistentStore();
+    return res.json({ success: true, ticket });
+  }
+  res.status(404).json({ success: false, message: 'Support ticket not found' });
 });
 
 app.get(['/api/admin/health', '/api/admin/system-health'], requireRole(['OWNER', 'ADMIN', 'SUPPORT']), async (req, res) => {
@@ -2125,14 +2267,6 @@ interface UserSubscriptionRecord {
 // In-Memory Database for Subscriptions & Idempotency Store
 const processedWebhookEvents = new Set<string>();
 const userSubscriptions = new Map<string, UserSubscriptionRecord>();
-
-userSubscriptions.set('onwaterservices@gmail.com', {
-  email: 'onwaterservices@gmail.com',
-  role: 'OWNER',
-  plan: 'ELITE_PASS',
-  status: 'ACTIVE',
-  updatedAt: new Date().toISOString(),
-});
 
 userSubscriptions.set('vixyvault0@gmail.com', {
   email: 'vixyvault0@gmail.com',
@@ -4518,12 +4652,38 @@ async function loadPersistentStoreAsync() {
     console.log('[Firestore] Synchronizing state with Firestore...');
     const usersSnap = await getDocs(collection(db, 'users'));
     let fetchedUsersCount = 0;
-    usersSnap.forEach((docSnap) => {
+    for (const docSnap of usersSnap.docs) {
       const data = docSnap.data() as ServerUser;
-      if (data && data.id) {
+      if (data && (data.id || data.email || docSnap.id)) {
         fetchedUsersCount++;
+        const cleanEmail = (data.email || '').toLowerCase().trim();
+
+        // Strip OWNER/ADMIN authority from onwaterservices@gmail.com or any legacy admin doc in Firestore
+        if (cleanEmail === 'onwaterservices@gmail.com' || docSnap.id === 'usr_owner_00') {
+          data.role = 'USER';
+          data.subscription = 'FREE_TRIAL';
+          if (data.name && data.name.includes('Master Admin')) {
+            data.name = 'Legacy User (onwaterservices)';
+          }
+          try {
+            await setDoc(doc(db, 'users', docSnap.id), {
+              role: 'USER',
+              subscription: 'FREE_TRIAL',
+              name: 'Legacy User (onwaterservices)'
+            }, { merge: true });
+            console.log(`[Firestore Cleanup] ✅ Successfully demoted legacy admin doc ${docSnap.id} (${cleanEmail}) in Firestore.`);
+          } catch (e: any) {
+            console.warn(`[Firestore Cleanup] Notice updating legacy doc ${docSnap.id}:`, e?.message || e);
+          }
+        } else if (cleanEmail !== 'vixyvault0@gmail.com' && data.role === 'OWNER') {
+          data.role = 'USER';
+          try {
+            await setDoc(doc(db, 'users', docSnap.id), { role: 'USER' }, { merge: true });
+          } catch (e: any) {}
+        }
+
         const matchByUid = data.uid && serverUsers.find((u) => u.uid === data.uid || u.id === data.uid);
-        const matchByEmail = data.email && serverUsers.find((u) => u.email?.toLowerCase() === data.email.toLowerCase());
+        const matchByEmail = cleanEmail && serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
         const existing = matchByUid || matchByEmail;
         if (!existing) {
           serverUsers.push(data);
@@ -4532,7 +4692,10 @@ async function loadPersistentStoreAsync() {
           Object.assign(existing, data);
         }
       }
-    });
+    }
+
+    // Always enforce canonical single Master Admin authority after Firestore sync
+    sanitizeAndNormalizeServerUsers();
 
     const subsSnap = await getDocs(collection(db, 'subscriptions'));
     let fetchedSubsCount = 0;
@@ -4663,20 +4826,6 @@ loadPersistentStore();
 
 function seedInitialUsers() {
   const seedUsers: Partial<ServerUser>[] = [
-    {
-      id: 'usr_owner_00',
-      uid: 'usr_owner_00',
-      email: 'onwaterservices@gmail.com',
-      name: 'Master Admin (onwaterservices)',
-      role: 'OWNER',
-      subscription: 'ELITE_PASS',
-      status: 'ACTIVE',
-      joined: '2026-01-01',
-      verificationStatus: 'VERIFIED',
-      discordTag: '@onwaterservices',
-      discordLinked: true,
-      guildVerified: true,
-    },
     {
       id: 'usr_owner_01',
       email: 'vixyvault0@gmail.com',

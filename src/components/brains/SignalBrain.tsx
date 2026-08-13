@@ -201,7 +201,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                 ⚡ VIXY CONFIDENCE FIELD
               </span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-black tabular-nums transition-all duration-300 ${isBullish ? 'text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 shadow-[0_0_10px_rgba(52,211,153,0.2)]' : 'text-rose-400 bg-rose-950/60 border border-rose-500/30 shadow-[0_0_10px_rgba(244,63,94,0.2)]'}`}>
-                {displayConfidence}.4% ({isBullish ? 'HIGH BULL' : 'HIGH BEAR'})
+                {displayConfidence}% ({isBullish ? 'HIGH BULL' : 'HIGH BEAR'})
               </span>
             </div>
 
