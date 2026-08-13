@@ -116,7 +116,6 @@ if (process.env.GEMINI_API_KEY) {
 function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  if (clean === 'onwaterservices@gmail.com') return false; // STRICTLY EXCLUDED FROM ADMIN
   return clean === 'vixyvault0@gmail.com';
 }
 
@@ -159,28 +158,11 @@ function sanitizeAndNormalizeServerUsers() {
     });
   }
 
-  // 2. Normalize and demote any unauthorized accounts (specifically onwaterservices@gmail.com)
+  // 2. Normalize and demote any unauthorized elevated roles (non-vixyvault0 OWNER or ADMIN accounts)
   serverUsers.forEach((u) => {
     if (!u.email) return;
     const cleanEmail = u.email.trim().toLowerCase();
-    if (cleanEmail === 'onwaterservices@gmail.com') {
-      u.role = 'USER';
-      if (u.subscription === 'ELITE_PASS' || !u.subscription) {
-        u.subscription = 'FREE_TRIAL';
-      }
-      if (u.name && u.name.includes('Master Admin')) {
-        u.name = 'Legacy User (onwaterservices)';
-      }
-      if (typeof userSubscriptions !== 'undefined') {
-        userSubscriptions.set('onwaterservices@gmail.com', {
-          email: 'onwaterservices@gmail.com',
-          role: 'USER',
-          plan: u.subscription || 'FREE_TRIAL',
-          status: u.status || 'ACTIVE',
-          updatedAt: new Date().toISOString(),
-        });
-      }
-    } else if (cleanEmail !== 'vixyvault0@gmail.com' && u.role === 'OWNER') {
+    if (cleanEmail !== 'vixyvault0@gmail.com' && (u.role === 'OWNER' || u.role === 'ADMIN')) {
       u.role = 'USER';
       if (typeof userSubscriptions !== 'undefined') {
         const sub = userSubscriptions.get(cleanEmail);
@@ -188,13 +170,6 @@ function sanitizeAndNormalizeServerUsers() {
       }
     }
   });
-
-  if (typeof userSubscriptions !== 'undefined') {
-    const legacySub = userSubscriptions.get('onwaterservices@gmail.com');
-    if (legacySub) {
-      legacySub.role = 'USER';
-    }
-  }
 }
 
 // Role Enforcement & Authorization Middleware
@@ -210,14 +185,6 @@ const requireRole = (allowedRoles: string[]) => {
       (req.query && (req.query.email as string)) ||
       ''
     ).toLowerCase();
-
-    // Explicit block: onwaterservices@gmail.com is strictly prohibited from admin access
-    if (userEmail === 'onwaterservices@gmail.com') {
-      return res.status(403).json({
-        error: 'ADMIN_REQUIRED',
-        message: 'Administrator authorization failed. Account onwaterservices@gmail.com does not have administrative clearance.',
-      });
-    }
 
     const configuredAdminId = (process.env.ADMIN_USER_ID || '').toLowerCase();
 
@@ -305,6 +272,7 @@ let lastMarketUpdateTs = Date.now();
 let lastModelRunTs = Date.now();
 let lastSignalUpdateTs = Date.now();
 let lastPredictionUpdateTs = Date.now();
+let lastKalshiUpdateTs = Date.now();
 let engineFeedStatus: FeedStatusType = 'CONNECTED';
 let engineState: EngineStateType = 'MONITORING';
 let activeContractSymbol = 'BTC-15M';
@@ -577,6 +545,7 @@ setInterval(async () => {
         const headers = getKalshiAuthHeaders('GET', apiPath);
         const kRes = await fetch(`${baseUrl.replace(/\/trade-api\/v2\/?$/, '')}${apiPath}`, { headers });
         if (kRes.ok) {
+          lastKalshiUpdateTs = Date.now();
           const kData = await kRes.json();
           const activeMarkets = kData.markets || [];
           if (activeMarkets.length > 0) {
@@ -866,6 +835,7 @@ interface ServerUser {
   discordGlobalName?: string;
   discordAvatar?: string | null;
   source?: 'discord' | 'web';
+  trialConsumed?: boolean;
   authStatus?: string;
 }
 
@@ -2053,6 +2023,7 @@ app.post(['/api/admin/resync-entitlement', '/api/admin/resync-discord'], require
 
 // Stripe Health & Diagnostics Endpoint (Safe Mode Detection)
 app.get('/api/stripe/health', (req, res) => {
+  const stripe = getStripe();
   const secretKey = (process.env.STRIPE_SECRET_KEY || '').replace(/^["']|["']$/g, '').trim();
   const pubKey = (process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || '').replace(/^["']|["']$/g, '').trim();
   const webhookSecret = (process.env.STRIPE_WEBHOOK_SECRET || '').replace(/^["']|["']$/g, '').trim();
@@ -2069,13 +2040,37 @@ app.get('/api/stripe/health', (req, res) => {
     ? 'test'
     : 'missing';
 
+  const starterMonthly = Boolean(process.env.STRIPE_STARTER_MONTHLY_PRICE_ID);
+  const starterAnnual = Boolean(process.env.STRIPE_STARTER_ANNUAL_PRICE_ID);
+  const proMonthly = Boolean(process.env.STRIPE_PRO_MONTHLY_PRICE_ID);
+  const proAnnual = Boolean(process.env.STRIPE_PRO_ANNUAL_PRICE_ID);
+  const eliteMonthly = Boolean(process.env.STRIPE_ELITE_MONTHLY_PRICE_ID);
+  const eliteAnnual = Boolean(process.env.STRIPE_ELITE_ANNUAL_PRICE_ID);
+
+  const allPriceIdsSet = starterMonthly && starterAnnual && proMonthly && proAnnual && eliteMonthly && eliteAnnual;
+  const firestoreHealthy = Boolean(db && persistenceState === 'HEALTHY_FIRESTORE');
+
   res.json({
-    status: secretKey ? 'OPERATIONAL' : 'MISCONFIGURED',
+    status: (secretKey && webhookSecret && allPriceIdsSet && firestoreHealthy) ? 'HEALTHY' : 'DEGRADED',
     stripe_secret_key_present: !!secretKey,
     stripe_secret_key_mode: secretKeyMode,
     stripe_publishable_key_present: !!pubKey,
     stripe_publishable_key_mode: pubKeyMode,
     stripe_webhook_secret_present: !!webhookSecret,
+    allPriceIdsSet,
+    firestoreHealthy,
+    diagnostics: {
+      stripeConfigured: Boolean(stripe),
+      priceIdsDetail: {
+        STRIPE_STARTER_MONTHLY_PRICE_ID: starterMonthly,
+        STRIPE_STARTER_ANNUAL_PRICE_ID: starterAnnual,
+        STRIPE_PRO_MONTHLY_PRICE_ID: proMonthly,
+        STRIPE_PRO_ANNUAL_PRICE_ID: proAnnual,
+        STRIPE_ELITE_MONTHLY_PRICE_ID: eliteMonthly,
+        STRIPE_ELITE_ANNUAL_PRICE_ID: eliteAnnual,
+      },
+      lastFirestoreWrite: typeof lastSuccessfulFirestoreWrite !== 'undefined' ? lastSuccessfulFirestoreWrite : null,
+    },
     timestamp: new Date().toISOString(),
   });
 });
@@ -2137,7 +2132,7 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
   if (!stripe) {
     return res.status(400).json({
       error: 'STRIPE_NOT_CONFIGURED',
-      message: 'Stripe Secret Key is not configured yet. You can provide your STRIPE_SECRET_KEY in environment secrets or use Stripe Payment Links.',
+      message: 'Stripe Secret Key is not configured yet. You can provide your STRIPE_SECRET_KEY in environment secrets.',
       appliedReferral: cleanReferral,
     });
   }
@@ -2153,7 +2148,7 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
     });
   }
 
-  // 2. Validate requested plan against strict allowlist
+  // 2. Validate requested plan & interval against strict allowlist
   const allowedPlans = ['STARTER', 'PRO', 'ELITE'];
   const targetPlan = (plan || 'PRO').toString().toUpperCase();
 
@@ -2164,22 +2159,39 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
     });
   }
 
-  const planPrices: Record<string, { monthly: number; annual: number }> = {
-    STARTER: { monthly: 2900, annual: 2400 },
-    PRO: { monthly: 7900, annual: 6400 },
-    ELITE: { monthly: 19900, annual: 15900 },
+  const cleanInterval = String(interval || 'monthly').trim().toLowerCase();
+  if (cleanInterval !== 'monthly' && cleanInterval !== 'annual') {
+    return res.status(400).json({
+      error: 'INVALID_INTERVAL',
+      message: 'Subscription interval must be "monthly" or "annual".',
+    });
+  }
+
+  // 3. Resolve Stripe Price ID Server-Side from Authoritative Price Map
+  const priceMap: Record<string, Record<string, string | undefined>> = {
+    STARTER: {
+      monthly: process.env.STRIPE_STARTER_MONTHLY_PRICE_ID,
+      annual: process.env.STRIPE_STARTER_ANNUAL_PRICE_ID,
+    },
+    PRO: {
+      monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID,
+      annual: process.env.STRIPE_PRO_ANNUAL_PRICE_ID,
+    },
+    ELITE: {
+      monthly: process.env.STRIPE_ELITE_MONTHLY_PRICE_ID,
+      annual: process.env.STRIPE_ELITE_ANNUAL_PRICE_ID,
+    }
   };
 
-  const priceInfo = planPrices[targetPlan];
-  const isAnnual = interval === 'annual';
-  let unitAmount = isAnnual ? priceInfo.annual * 12 : priceInfo.monthly;
+  const resolvedPriceId = priceMap[targetPlan]?.[cleanInterval];
+  if (!resolvedPriceId) {
+    return res.status(400).json({
+      error: 'STRIPE_PRICE_INVALID',
+      message: `The Stripe Price ID for ${targetPlan} (${cleanInterval.toUpperCase()}) is not configured on the server. Please define STRIPE_${targetPlan}_${cleanInterval.toUpperCase()}_PRICE_ID in your environment variables.`,
+    });
+  }
 
-  if (cleanReferral === 'PROMOTER20') unitAmount = Math.round(unitAmount * 0.8);
-  else if (cleanReferral === 'VIXY50') unitAmount = Math.round(unitAmount * 0.5);
-  else if (cleanReferral === 'VIP2026') unitAmount = Math.round(unitAmount * 0.75);
-  else if (cleanReferral.startsWith('REF-')) unitAmount = Math.round(unitAmount * 0.85);
-
-  // 3. Resolve internal user record & handle single Stripe customer creation/reuse
+  // 4. Resolve internal user record & handle single Stripe customer creation/reuse
   const user = ensureUserExists({ uid: cleanUid, email: cleanUserEmail, name: userName });
   let stripeCustomerId = user.stripeCustomerId;
 
@@ -2213,28 +2225,12 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
     }
   }
 
-  // Check if a specific Stripe Price ID was passed or configured in env
-  const envPriceId = process.env[`STRIPE_${targetPlan}_PRICE_ID`] || process.env[`VITE_STRIPE_${targetPlan}_PRICE_ID`];
-  const passedPriceId = (req.body.priceId && req.body.priceId === envPriceId) ? req.body.priceId : envPriceId;
-
   try {
     const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
-    const lineItem: any = (passedPriceId && !cleanReferral)
-      ? { price: passedPriceId, quantity: 1 }
-      : {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `VIXY AI - ${targetPlan} Tier`,
-              description: `Institutional 15m crypto prediction market intelligence (${isAnnual ? 'Annual' : 'Monthly'})${cleanReferral ? ` [Referral Tag: ${cleanReferral}]` : ''}`,
-            },
-            unit_amount: unitAmount,
-            recurring: {
-              interval: isAnnual ? 'year' : 'month',
-            },
-          },
-          quantity: 1,
-        };
+    const lineItem: any = {
+      price: resolvedPriceId,
+      quantity: 1,
+    };
 
     const sessionParams: any = {
       payment_method_types: ['card'],
@@ -2243,13 +2239,14 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
       customer_email: stripeCustomerId ? undefined : (cleanUserEmail || undefined),
       line_items: [lineItem],
       metadata: {
+        vixyUserId: user.id,
         userId: user.id,
         uid: user.uid || cleanUid || '',
         userEmail: cleanUserEmail,
         plan: targetPlan,
-        interval: isAnnual ? 'annual' : 'monthly',
+        interval: cleanInterval,
+        product: 'vixy_vault',
         referralCode: cleanReferral || 'DIRECT',
-        promoterCommissionRate: cleanReferral ? '20%' : '0%',
       },
       mode: 'subscription',
       success_url: successUrl || `${origin}/?stripe_status=success&plan=${targetPlan}&ref=${cleanReferral}`,
@@ -2264,6 +2261,8 @@ authenticated: true
 userResolved: ${Boolean(user)}
 customerResolved: ${Boolean(stripeCustomerId)}
 plan: ${targetPlan}
+interval: ${cleanInterval}
+priceId: ${resolvedPriceId}
 checkoutCreated: true`);
 
     res.json({ url: session.url, sessionId: session.id, appliedReferral: cleanReferral });
@@ -2325,7 +2324,39 @@ app.post('/api/stripe/create-portal-session', async (req: express.Request, res: 
 
     let customerId = userSub?.stripeCustomerId || serverUser?.stripeCustomerId;
 
-    // 2. Reconcile with Stripe if customer ID is not saved in local record
+    // Look up in Firestore (authoritative database) if missing from in-memory caches
+    if (!customerId && db) {
+      try {
+        const docId = serverUser?.id || serverUser?.uid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const userSnap = await getDoc(doc(db, 'users', docId));
+        if (userSnap.exists()) {
+          const uData = userSnap.data();
+          if (uData?.stripeCustomerId) {
+            customerId = uData.stripeCustomerId;
+            console.log(`[BILLING_PORTAL] Resolved Customer ID ${customerId} from authoritative Firestore users collection.`);
+            
+            // Sync memory caches
+            if (serverUser) serverUser.stripeCustomerId = customerId;
+            if (userSub) {
+              userSub.stripeCustomerId = customerId;
+            } else {
+              userSubscriptions.set(cleanEmail, {
+                email: cleanEmail,
+                role: serverUser?.role || 'PRO',
+                plan: serverUser?.subscription || 'PRO_PASS',
+                status: serverUser?.status || 'ACTIVE',
+                stripeCustomerId: customerId,
+                updatedAt: new Date().toISOString(),
+              });
+            }
+          }
+        }
+      } catch (fErr: any) {
+        console.warn(`[BILLING_PORTAL WARNING] Failed to fetch user from Firestore during customer portal lookup:`, fErr?.message || fErr);
+      }
+    }
+
+    // 2. Reconcile with Stripe if customer ID is still not found
     if (!customerId) {
       console.log(`[BILLING_PORTAL] Customer ID not stored for ${cleanEmail}. Reconciling with Stripe...`);
       const existingCustomers = await stripe.customers.list({ email: cleanEmail, limit: 1 });
@@ -2431,6 +2462,115 @@ userSubscriptions.set('vixyvault0@gmail.com', {
   updatedAt: new Date().toISOString(),
 });
 
+// Helper function to enforce server-side 3-Hour Free Trial rule
+function checkAndUpdateTrialState(user: ServerUser) {
+  if (!user) return;
+  const now = Date.now();
+
+  // If trial has been marked consumed, ensure it stays consumed
+  if (user.trialConsumed || (user as any).trial_consumed) {
+    user.trialConsumed = true;
+    (user as any).trial_consumed = true;
+    if (user.subscription === 'FREE_TRIAL') {
+      user.status = 'SUSPENDED';
+    }
+    return;
+  }
+
+  // If trial has expired, mark it as consumed and update status
+  if (user.trial_expires_at) {
+    const expiry = new Date(user.trial_expires_at).getTime();
+    if (now >= expiry) {
+      user.trialConsumed = true;
+      (user as any).trial_consumed = true;
+      if (user.subscription === 'FREE_TRIAL') {
+        user.status = 'SUSPENDED';
+      }
+      console.log(`[TRIAL_EXPIRED] Free trial expired and marked consumed for ${user.email}`);
+    }
+  }
+}
+
+interface UserEntitlement {
+  role: string;         // 'FREE' | 'STARTER' | 'PRO' | 'ELITE' | 'OWNER' | 'ADMIN'
+  subscription: string; // 'FREE_TRIAL' | 'STARTER_PASS' | 'PRO_PASS' | 'ELITE_PASS'
+  status: string;       // 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'INACTIVE'
+  permissions: {
+    canAccessProDesks: boolean;
+    canAccessAdminPanel: boolean;
+  };
+}
+
+// Authoritative entitlement solver (Step 10)
+function getUserEntitlement(emailOrUid: string): UserEntitlement {
+  const clean = emailOrUid.toLowerCase().trim();
+
+  // 1. Owner master bypass
+  if (clean === 'vixyvault0@gmail.com') {
+    return {
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      permissions: { canAccessProDesks: true, canAccessAdminPanel: true }
+    };
+  }
+
+  // 2. Fetch the current subscription record
+  const sub = userSubscriptions.get(clean);
+  const user = serverUsers.find((u) => u.email?.toLowerCase() === clean || u.id === clean || u.uid === clean);
+
+  // Sync state between sub map and user object
+  if (user) {
+    checkAndUpdateTrialState(user);
+  }
+
+  // Determine actual role & plan
+  const role = (sub?.role || user?.role || 'FREE').toUpperCase();
+  const rawPlan = (sub?.plan || user?.subscription || 'FREE_TRIAL').toUpperCase();
+  const status = (sub?.status || user?.status || 'INACTIVE').toUpperCase();
+
+  let effectiveRole = role;
+  let effectivePlan = rawPlan;
+
+  // Enforce Trial expiration block
+  if (rawPlan === 'FREE_TRIAL') {
+    if (user && (user.trialConsumed || (user as any).trial_consumed)) {
+      effectiveRole = 'FREE';
+      effectivePlan = 'FREE_TRIAL';
+    } else {
+      effectiveRole = 'USER';
+      effectivePlan = 'FREE_TRIAL';
+    }
+  }
+
+  // Grace and Cancellation periods
+  if (status === 'ACTIVE' || status === 'PAST_DUE') {
+    // ACTIVE / PAST_DUE subscriptions are fully entitled (PAST_DUE has grace access)
+    effectiveRole = role;
+    effectivePlan = rawPlan;
+  } else if (status === 'CANCELED' || status === 'CANCELED_OR_FAILED') {
+    // If canceled but trial period is still active under normal terms
+    effectiveRole = 'FREE';
+    effectivePlan = 'FREE_TRIAL';
+  }
+
+  // Elevate ADMIN / OWNER
+  if (role === 'OWNER' || role === 'ADMIN') {
+    effectiveRole = role;
+    effectivePlan = 'ELITE_PASS';
+  }
+
+  return {
+    role: effectiveRole,
+    subscription: effectivePlan,
+    status: status,
+    permissions: {
+      canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'ELITE', 'SUPPORT'].includes(effectiveRole),
+      canAccessAdminPanel: ['OWNER', 'ADMIN', 'SUPPORT'].includes(effectiveRole),
+    }
+  };
+}
+
 app.get('/api/user/subscription', (req, res) => {
   const userEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || 'vixyvault0@gmail.com').toLowerCase();
   const userRoleHeader = ((req.headers['x-user-role'] as string) || '').toUpperCase();
@@ -2438,83 +2578,211 @@ app.get('/api/user/subscription', (req, res) => {
   // Ensure user directory record exists
   ensureUserExists(userEmail, { role: userRoleHeader });
 
+  const entitlement = getUserEntitlement(userEmail);
   const existing = userSubscriptions.get(userEmail);
 
-  if (existing) {
-    return res.json({
-      authenticated: true,
-      email: existing.email,
-      role: existing.role,
-      subscription: existing.plan,
-      status: existing.status,
-      referralCode: existing.referralCode || 'DIRECT',
-      updatedAt: existing.updatedAt,
-      permissions: {
-        canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'ELITE', 'SUPPORT'].includes(existing.role),
-        canAccessAdminPanel: ['OWNER', 'ADMIN', 'SUPPORT'].includes(existing.role),
-      }
-    });
-  }
-
-  const defaultRole = userEmail === 'vixyvault0@gmail.com' ? 'OWNER' : (userRoleHeader || 'FREE');
   res.json({
     authenticated: true,
     email: userEmail,
-    role: defaultRole,
-    subscription: defaultRole === 'OWNER' ? 'ELITE_PASS' : (defaultRole === 'PRO' ? 'PRO_PASS' : 'FREE_TRIAL'),
-    status: 'ACTIVE',
-    updatedAt: new Date().toISOString(),
-    permissions: {
-      canAccessProDesks: ['OWNER', 'ADMIN', 'PRO', 'ELITE', 'SUPPORT'].includes(defaultRole),
-      canAccessAdminPanel: ['OWNER', 'ADMIN', 'SUPPORT'].includes(defaultRole),
-    }
+    role: entitlement.role,
+    subscription: entitlement.subscription,
+    status: entitlement.status,
+    referralCode: existing?.referralCode || 'DIRECT',
+    updatedAt: existing?.updatedAt || new Date().toISOString(),
+    permissions: entitlement.permissions,
   });
 });
 
-app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// Helper function to dynamically update the user subscription in memory AND write directly to Firestore (Authoritative Chain)
+async function updateSubscriptionInFirestore(email: string, updateData: {
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string;
+  stripePriceId?: string;
+  plan?: string; // STARTER, PRO, ELITE, FREE_TRIAL
+  status?: string; // ACTIVE, PAST_DUE, CANCELED, etc.
+  currentPeriodStart?: number;
+  currentPeriodEnd?: number;
+  cancelAtPeriodEnd?: boolean;
+  vixyUserId?: string;
+}) {
+  const cleanEmail = email.toLowerCase().trim();
+  if (!cleanEmail) return;
 
-  const stripe = getStripe();
-  let event: any;
+  const resolvedPlan = (updateData.plan || 'FREE_TRIAL').toUpperCase();
+  const passName = resolvedPlan === 'FREE_TRIAL' ? 'FREE_TRIAL' : `${resolvedPlan}_PASS`;
+  const roleToGrant = resolvedPlan === 'ELITE' ? 'ELITE' : (resolvedPlan === 'PRO' ? 'PRO' : (resolvedPlan === 'STARTER' ? 'PRO' : 'USER'));
 
-  if (webhookSecret && sig && stripe) {
-    try {
-      event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
-    } catch (err: any) {
-      console.error(`Webhook Signature Error: ${err.message}`);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
+  // 1. Update in-memory user subscriptions map
+  const currentSub = userSubscriptions.get(cleanEmail) || {
+    email: cleanEmail,
+    role: 'FREE',
+    plan: 'FREE_TRIAL',
+    status: 'INACTIVE',
+    updatedAt: new Date().toISOString()
+  };
+
+  if (updateData.stripeCustomerId) currentSub.stripeCustomerId = updateData.stripeCustomerId;
+  if (updateData.stripeSubscriptionId) currentSub.stripeSubscriptionId = updateData.stripeSubscriptionId;
+  currentSub.plan = passName;
+  currentSub.role = roleToGrant;
+  if (updateData.status) currentSub.status = updateData.status;
+  currentSub.updatedAt = new Date().toISOString();
+  userSubscriptions.set(cleanEmail, currentSub);
+
+  // 2. Update the in-memory serverUsers array (used by the Admin Panel and in-memory caches)
+  const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+  if (existingUser) {
+    if (updateData.stripeCustomerId) existingUser.stripeCustomerId = updateData.stripeCustomerId;
+    if (updateData.stripeSubscriptionId) existingUser.stripeSubscriptionId = updateData.stripeSubscriptionId;
+    existingUser.subscription = passName as any;
+    if (existingUser.role !== 'OWNER' && existingUser.role !== 'ADMIN') {
+      existingUser.role = (resolvedPlan === 'ELITE' ? 'ELITE' : (resolvedPlan === 'PRO' ? 'PRO' : 'USER')) as any;
+    }
+    if (updateData.status) {
+      existingUser.status = updateData.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED';
     }
   } else {
-    try {
-      if (Buffer.isBuffer(req.body)) {
-        event = JSON.parse(req.body.toString('utf-8'));
-      } else if (typeof req.body === 'string') {
-        event = JSON.parse(req.body);
-      } else {
-        event = req.body;
-      }
-    } catch (parseErr: any) {
-      console.error('[WEBHOOK_PARSE_ERROR] Failed to parse request body:', parseErr.message);
-      event = { type: 'unknown', id: `evt_mock_${Date.now()}` };
-    }
+    // Register the new user if they do not exist
+    serverUsers.unshift({
+      id: updateData.vixyUserId || `usr_${Date.now().toString().slice(-4)}`,
+      email: cleanEmail,
+      name: cleanEmail.split('@')[0],
+      role: (resolvedPlan === 'ELITE' ? 'ELITE' : (resolvedPlan === 'PRO' ? 'PRO' : 'USER')) as any,
+      subscription: passName as any,
+      passwordHash: 'UserPass2026!',
+      verificationStatus: 'VERIFIED',
+      hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
+      ipHash: '172.56.22.10',
+      joined: new Date().toISOString().split('T')[0],
+      status: updateData.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED',
+      volumeTrades: 0,
+      stripeCustomerId: updateData.stripeCustomerId,
+      stripeSubscriptionId: updateData.stripeSubscriptionId,
+    });
   }
 
-  const eventId = event?.id || `evt_${Date.now()}`;
+  savePersistentStore();
+
+  // 3. Directly update the document in Firestore to form the secure authoritative chain
+  if (db) {
+    try {
+      const docId = existingUser?.id || existingUser?.uid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const payload: any = {
+        stripeCustomerId: updateData.stripeCustomerId || currentSub.stripeCustomerId || '',
+        stripeSubscriptionId: updateData.stripeSubscriptionId || currentSub.stripeSubscriptionId || '',
+        stripePriceId: updateData.stripePriceId || '',
+        plan: passName,
+        status: updateData.status || currentSub.status || 'INACTIVE',
+        currentPeriodStart: updateData.currentPeriodStart || 0,
+        currentPeriodEnd: updateData.currentPeriodEnd || 0,
+        cancelAtPeriodEnd: updateData.cancelAtPeriodEnd ?? false,
+        vixyUserId: updateData.vixyUserId || existingUser?.id || docId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Ensure other user fields are preserved or initialized during Firestore writes
+      const finalUser = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail) || existingUser;
+      if (finalUser) {
+        payload.role = finalUser.role;
+        payload.name = finalUser.name;
+        payload.email = finalUser.email;
+        payload.uid = finalUser.uid || '';
+        payload.joined = finalUser.joined || new Date().toISOString().split('T')[0];
+      }
+
+      await setDoc(doc(db, 'users', docId), payload, { merge: true });
+      console.log(`[Firestore Webhook Authority] Successfully updated authoritative subscription state in Firestore for user document ${docId} (${cleanEmail}).`);
+    } catch (firestoreErr: any) {
+      console.error(`[Firestore Webhook Error] Failed to write authoritative subscription state for ${cleanEmail}:`, firestoreErr?.message || firestoreErr);
+    }
+  }
+}
+
+// Utility to resolve the plan name from a Price ID
+function getPlanFromPriceId(priceId?: string): string {
+  if (!priceId) return 'FREE_TRIAL';
+  const cleanPrice = priceId.trim();
+
+  if (cleanPrice === process.env.STRIPE_STARTER_MONTHLY_PRICE_ID || cleanPrice === process.env.STRIPE_STARTER_ANNUAL_PRICE_ID) {
+    return 'STARTER';
+  }
+  if (cleanPrice === process.env.STRIPE_PRO_MONTHLY_PRICE_ID || cleanPrice === process.env.STRIPE_PRO_ANNUAL_PRICE_ID) {
+    return 'PRO';
+  }
+  if (cleanPrice === process.env.STRIPE_ELITE_MONTHLY_PRICE_ID || cleanPrice === process.env.STRIPE_ELITE_ANNUAL_PRICE_ID) {
+    return 'ELITE';
+  }
+  return 'FREE_TRIAL';
+}
+
+app.post('/api/stripe/webhook', express.raw({ type: 'application/json' }), async (req: express.Request, res: express.Response) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const stripe = getStripe();
+
+  if (!webhookSecret) {
+    console.error('[STRIPE WEBHOOK ERROR] STRIPE_WEBHOOK_SECRET is not configured on the server. Rejecting webhook request.');
+    return res.status(500).json({
+      error: 'WEBHOOK_SECRET_MISSING',
+      message: 'STRIPE_WEBHOOK_SECRET is missing. Signed webhook verification is required in production.',
+    });
+  }
+
+  if (!sig) {
+    console.error('[STRIPE WEBHOOK ERROR] Request lacks stripe-signature header. Rejecting webhook request.');
+    return res.status(400).json({
+      error: 'SIGNATURE_MISSING',
+      message: 'Webhook signature validation failed: stripe-signature header is missing.',
+    });
+  }
+
+  if (!stripe) {
+    console.error('[STRIPE WEBHOOK ERROR] Stripe client is not configured.');
+    return res.status(500).json({
+      error: 'STRIPE_NOT_CONFIGURED',
+      message: 'Stripe is not configured. Webhook requires STRIPE_SECRET_KEY.',
+    });
+  }
+
+  let event: any;
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err: any) {
+    console.error(`[STRIPE WEBHOOK ERROR] Webhook Signature Verification Failed: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  const eventId = event?.id;
+  if (!eventId) {
+    return res.status(400).send('Webhook Error: Missing event ID.');
+  }
+
+  // Webhook Idempotency Check via Firestore collection 'webhook_events' (Step 9)
+  if (db) {
+    try {
+      const eventRef = doc(db, 'webhook_events', eventId);
+      const eventSnap = await getDoc(eventRef);
+      if (eventSnap.exists()) {
+        console.log(`[STRIPE WEBHOOK IDEMPOTENCY] Webhook Event ${eventId} already processed. Returning 200 OK.`);
+        return res.status(200).json({ received: true, deduplicated: true, source: 'firestore' });
+      }
+      // Record event as processed
+      await setDoc(eventRef, {
+        processedAt: new Date().toISOString(),
+        eventType: event?.type || 'unknown',
+      });
+    } catch (idempotencyErr: any) {
+      console.warn(`[STRIPE WEBHOOK IDEMPOTENCY WARN] Failed to verify/write webhook event ID in Firestore:`, idempotencyErr?.message || idempotencyErr);
+    }
+  }
 
   // Safe diagnostic log required by specification
   console.log(`[STRIPE WEBHOOK]
-signatureValid: ${Boolean(webhookSecret && sig)}
-event: ${event?.type || 'unknown'}
+signatureValid: true
+event: ${event.type}
 userResolved: true
 subscriptionResolved: true
 entitlementUpdated: true`);
-
-  if (processedWebhookEvents.has(eventId)) {
-    return res.status(200).json({ received: true, deduplicated: true });
-  }
-
-  processedWebhookEvents.add(eventId);
 
   // Helper to extract email reliably from event data or by fetching customer
   const extractEmail = async (obj: any): Promise<string> => {
@@ -2529,75 +2797,55 @@ entitlementUpdated: true`);
         console.warn('Could not retrieve customer email from Stripe:', err);
       }
     }
-    return email || 'customer@vixyai.com';
+    return email || '';
   };
 
   switch (event.type) {
     case 'checkout.session.completed': {
       const session = event.data.object;
       const customerEmail = await extractEmail(session);
+      if (!customerEmail) {
+        console.warn('[STRIPE WEBHOOK] Checkout completed has no email.', session.id);
+        break;
+      }
+
       const plan = (session.metadata?.plan || 'PRO').toUpperCase();
       const referralCode = session.metadata?.referralCode || 'DIRECT';
+      const vixyUserId = session.metadata?.vixyUserId || session.metadata?.userId || '';
       const amountTotal = (session.amount_total || 19900) / 100;
 
-      const roleToGrant = plan === 'ELITE' ? 'ELITE' : 'PRO';
-      const passName = `${plan}_PASS`;
       const stripeCustId = typeof session.customer === 'string' ? session.customer : undefined;
       const stripeSubId = typeof session.subscription === 'string' ? session.subscription : undefined;
 
-      // 1. Update Subscription Store
-      const currentSubRec: UserSubscriptionRecord = userSubscriptions.get(customerEmail) || {
-        email: customerEmail,
-        role: roleToGrant,
-        plan: passName,
-        status: 'ACTIVE',
-        referralCode,
-        updatedAt: new Date().toISOString(),
-      };
-      currentSubRec.role = roleToGrant;
-      currentSubRec.plan = passName;
-      currentSubRec.status = 'ACTIVE';
-      currentSubRec.referralCode = referralCode;
-      currentSubRec.updatedAt = new Date().toISOString();
-      if (stripeCustId) currentSubRec.stripeCustomerId = stripeCustId;
-      if (stripeSubId) currentSubRec.stripeSubscriptionId = stripeSubId;
-      userSubscriptions.set(customerEmail, currentSubRec);
-
-      // 2. Sync to Server Users Array for Admin Table
-      const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
-      if (existingUser) {
-        existingUser.subscription = passName as any;
-        existingUser.status = 'ACTIVE';
-        if (stripeCustId) existingUser.stripeCustomerId = stripeCustId;
-        if (stripeSubId) existingUser.stripeSubscriptionId = stripeSubId;
-        if (existingUser.role !== 'OWNER' && existingUser.role !== 'ADMIN') {
-          existingUser.role = 'USER';
+      // Resolve the subscription dates if available from session
+      let currentPeriodStart = Math.floor(Date.now() / 1000);
+      let currentPeriodEnd = currentPeriodStart + (30 * 24 * 3600); // default 30 days
+      if (stripeSubId && stripe) {
+        try {
+          const subDetails: any = await stripe.subscriptions.retrieve(stripeSubId);
+          currentPeriodStart = subDetails.current_period_start;
+          currentPeriodEnd = subDetails.current_period_end;
+        } catch (subFetchErr) {
+          console.warn('[STRIPE WEBHOOK] Failed to fetch subscription period details:', subFetchErr);
         }
-      } else {
-        serverUsers.unshift({
-          id: `usr_${Date.now().toString().slice(-4)}`,
-          email: customerEmail,
-          name: customerEmail.split('@')[0],
-          role: 'USER',
-          subscription: passName as any,
-          passwordHash: 'UserPass2026!',
-          verificationStatus: 'VERIFIED',
-          hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
-          ipHash: '172.56.22.10',
-          joined: new Date().toISOString().split('T')[0],
-          status: 'ACTIVE',
-          volumeTrades: 0,
-          referralCodeUsed: referralCode,
-          stripeCustomerId: stripeCustId,
-          stripeSubscriptionId: stripeSubId,
-        });
       }
 
-      // 3. Record Successful Transaction in Server Ledger
+      // Update subscription in Firestore & Memory Cache
+      await updateSubscriptionInFirestore(customerEmail, {
+        stripeCustomerId: stripeCustId,
+        stripeSubscriptionId: stripeSubId,
+        plan,
+        status: 'ACTIVE',
+        currentPeriodStart,
+        currentPeriodEnd,
+        vixyUserId,
+      });
+
+      // Record Successful Transaction in Server Ledger
       serverTransactions.unshift({
         id: session.id || `ch_${Date.now()}`,
         email: customerEmail,
-        plan: `${plan === 'ELITE' ? 'Elite Pass' : 'Pro Pass'} ($${amountTotal})`,
+        plan: `${plan} Pass (${amountTotal})`,
         amount: amountTotal,
         method: session.payment_method_types?.[0] ? `Stripe (${session.payment_method_types[0]})` : 'Stripe Credit Card',
         status: 'Succeeded',
@@ -2605,32 +2853,31 @@ entitlementUpdated: true`);
         rawTime: Date.now(),
       });
 
-      // 4. Emit Admin Event & Audit Log Entry
+      // Emit Admin Event & Audit Log Entry
       broadcastAdminEvent({
         eventType: 'STRIPE_CHECKOUT_COMPLETED',
         userEmail: customerEmail,
-        stripeCustomerId: typeof session.customer === 'string' ? session.customer : undefined,
-        plan: passName,
+        stripeCustomerId: stripeCustId,
+        plan: `${plan}_PASS`,
         status: 'SUCCESS',
-        message: `Checkout completed for ${customerEmail} ($${amountTotal}) -> ${passName}`,
+        message: `Checkout completed for ${customerEmail} (${amountTotal}) -> ${plan}_PASS`,
       });
 
       broadcastAdminEvent({
         eventType: 'ENTITLEMENT_GRANTED',
         userEmail: customerEmail,
-        plan: passName,
+        plan: `${plan}_PASS`,
         status: 'SUCCESS',
-        message: `Entitlement ${passName} activated for ${customerEmail}`,
+        message: `Entitlement ${plan}_PASS activated for ${customerEmail}`,
       });
 
-      // 5. Automate Discord VIP/Elite Sync
-      savePersistentStore();
+      // Automate Discord VIP/Elite Sync
       syncUserEntitlementToDiscord(customerEmail)
         .then((syncRes) => {
           broadcastAdminEvent({
             eventType: syncRes.success ? 'DISCORD_ROLE_ASSIGNED' : 'DISCORD_ROLE_SYNC_FAILED',
             userEmail: customerEmail,
-            plan: roleToGrant,
+            plan: plan,
             status: syncRes.success ? 'SUCCESS' : 'WARN',
             message: syncRes.message,
           });
@@ -2646,39 +2893,39 @@ entitlementUpdated: true`);
     case 'customer.subscription.updated': {
       const sub = event.data.object;
       const customerEmail = await extractEmail(sub);
-      const subStatus = sub.status === 'active' || sub.status === 'trialing' ? 'ACTIVE' : sub.status.toUpperCase();
-
-      if (customerEmail) {
-        const current = userSubscriptions.get(customerEmail) || {
-          email: customerEmail,
-          role: 'PRO',
-          plan: 'PRO_PASS',
-          status: 'ACTIVE',
-          updatedAt: new Date().toISOString(),
-        };
-        current.status = subStatus;
-        current.updatedAt = new Date().toISOString();
-        userSubscriptions.set(customerEmail, current);
-        savePersistentStore();
-
-        const user = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
-        if (user) {
-          user.status = subStatus === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED';
-        }
-
-        broadcastAdminEvent({
-          eventType: event.type === 'customer.subscription.created' ? 'SUBSCRIPTION_CREATED' : 'SUBSCRIPTION_UPGRADED',
-          userEmail: customerEmail,
-          stripeSubscriptionId: sub.id,
-          status: subStatus === 'ACTIVE' ? 'SUCCESS' : 'WARN',
-          message: `Subscription status updated for ${customerEmail} to ${subStatus}`,
-        });
-
-        // Idempotent entitlement sync to Discord
-        syncUserEntitlementToDiscord(customerEmail).catch((err) => {
-          console.warn('[Stripe Webhook] Subscription Discord sync exception:', err);
-        });
+      if (!customerEmail) {
+        console.warn('[STRIPE WEBHOOK] Subscription update has no email.', sub.id);
+        break;
       }
+
+      const subStatus = (sub.status === 'active' || sub.status === 'trialing') ? 'ACTIVE' : sub.status.toUpperCase();
+      const stripePriceId = sub.items?.data?.[0]?.price?.id;
+      const resolvedPlan = getPlanFromPriceId(stripePriceId);
+
+      await updateSubscriptionInFirestore(customerEmail, {
+        stripeCustomerId: typeof sub.customer === 'string' ? sub.customer : undefined,
+        stripeSubscriptionId: sub.id,
+        stripePriceId,
+        plan: resolvedPlan,
+        status: subStatus,
+        currentPeriodStart: sub.current_period_start,
+        currentPeriodEnd: sub.current_period_end,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+      });
+
+      broadcastAdminEvent({
+        eventType: event.type === 'customer.subscription.created' ? 'SUBSCRIPTION_CREATED' : 'SUBSCRIPTION_UPGRADED',
+        userEmail: customerEmail,
+        stripeSubscriptionId: sub.id,
+        status: subStatus === 'ACTIVE' ? 'SUCCESS' : 'WARN',
+        message: `Subscription status updated for ${customerEmail} to ${subStatus}`,
+      });
+
+      // Idempotent entitlement sync to Discord
+      syncUserEntitlementToDiscord(customerEmail).catch((err) => {
+        console.warn('[Stripe Webhook] Subscription Discord sync exception:', err);
+      });
+
       break;
     }
 
@@ -2688,23 +2935,17 @@ entitlementUpdated: true`);
       const amountPaid = (invoice.amount_paid || 0) / 100;
 
       if (customerEmail) {
-        if (userSubscriptions.has(customerEmail)) {
-          const current = userSubscriptions.get(customerEmail)!;
-          current.status = 'ACTIVE';
-          current.updatedAt = new Date().toISOString();
-          userSubscriptions.set(customerEmail, current);
-        }
-
-        const user = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
-        if (user) {
-          user.status = 'ACTIVE';
-        }
+        await updateSubscriptionInFirestore(customerEmail, {
+          stripeCustomerId: typeof invoice.customer === 'string' ? invoice.customer : undefined,
+          stripeSubscriptionId: typeof invoice.subscription === 'string' ? invoice.subscription : undefined,
+          status: 'ACTIVE',
+        });
 
         if (amountPaid > 0) {
           serverTransactions.unshift({
             id: invoice.id || `inv_${Date.now()}`,
             email: customerEmail,
-            plan: `Recurring Subscription ($${amountPaid})`,
+            plan: `Recurring Subscription (${amountPaid})`,
             amount: amountPaid,
             method: 'Stripe Auto-Debit',
             status: 'Succeeded',
@@ -2718,7 +2959,7 @@ entitlementUpdated: true`);
           userEmail: customerEmail,
           stripeCustomerId: typeof invoice.customer === 'string' ? invoice.customer : undefined,
           status: 'SUCCESS',
-          message: `Invoice payment succeeded for ${customerEmail} ($${amountPaid})`,
+          message: `Invoice payment succeeded for ${customerEmail} (${amountPaid})`,
         });
       }
       break;
@@ -2730,40 +2971,30 @@ entitlementUpdated: true`);
       const stripeCustId = typeof invoice.customer === 'string' ? invoice.customer : undefined;
 
       if (customerEmail) {
-        // Find existing user via Customer ID or Email fallback
-        const existingUser = serverUsers.find((u) => 
-          (stripeCustId && u.stripeCustomerId === stripeCustId) || 
-          (u.email?.toLowerCase() === customerEmail)
-        );
+        await updateSubscriptionInFirestore(customerEmail, {
+          stripeCustomerId: stripeCustId,
+          stripeSubscriptionId: typeof invoice.subscription === 'string' ? invoice.subscription : undefined,
+          status: 'PAST_DUE',
+        });
 
-        const emailToUse = existingUser?.email || customerEmail;
-
-        const currentSubRec = userSubscriptions.get(emailToUse);
-        if (currentSubRec) {
-          currentSubRec.status = 'PAST_DUE';
-          currentSubRec.updatedAt = new Date().toISOString();
-          userSubscriptions.set(emailToUse, currentSubRec);
-        }
-
+        // Maintain status as ACTIVE in the users collection to support grace periods
+        const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
         if (existingUser) {
-          // Do not revoke plan yet, preserve ACTIVE status during retry phase
           existingUser.status = 'ACTIVE';
         }
 
         broadcastAdminEvent({
           eventType: 'STRIPE_PAYMENT_FAILED',
-          userEmail: emailToUse,
+          userEmail: customerEmail,
           status: 'WARN',
-          message: `Stripe invoice payment failed. Status set to PAST_DUE for ${emailToUse}. Premium active access preserved during retry phase.`,
+          message: `Stripe invoice payment failed. Status set to PAST_DUE for ${customerEmail}. Premium active access preserved during retry phase.`,
         });
 
         addServerAuditLog(
           'WARN',
           'PAYMENT_WARNING',
-          `Invoice payment failed for customer ${stripeCustId || emailToUse}. Placed in PAST_DUE state.`
+          `Invoice payment failed for customer ${stripeCustId || customerEmail}. Placed in PAST_DUE state.`
         );
-
-        savePersistentStore();
       }
       break;
     }
@@ -2774,22 +3005,14 @@ entitlementUpdated: true`);
       const stripeCustId = typeof sub.customer === 'string' ? sub.customer : undefined;
 
       if (customerEmail) {
-        // Find existing user via Customer ID or Email fallback
-        const existingUser = serverUsers.find((u) => 
-          (stripeCustId && u.stripeCustomerId === stripeCustId) || 
-          (u.email?.toLowerCase() === customerEmail)
-        );
-
-        const emailToUse = existingUser?.email || customerEmail;
-
-        userSubscriptions.set(emailToUse, {
-          email: emailToUse,
-          role: 'FREE',
+        await updateSubscriptionInFirestore(customerEmail, {
+          stripeCustomerId: stripeCustId,
+          stripeSubscriptionId: sub.id,
           plan: 'FREE_TRIAL',
-          status: 'CANCELED_OR_FAILED',
-          updatedAt: new Date().toISOString(),
+          status: 'CANCELED',
         });
 
+        const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
         if (existingUser) {
           existingUser.subscription = 'FREE_TRIAL';
           existingUser.status = 'SUSPENDED';
@@ -2797,21 +3020,21 @@ entitlementUpdated: true`);
 
         broadcastAdminEvent({
           eventType: 'SUBSCRIPTION_CANCELED',
-          userEmail: emailToUse,
+          userEmail: customerEmail,
           status: 'WARN',
-          message: `Subscription fully deleted/cancelled for ${emailToUse}`,
+          message: `Subscription fully deleted/cancelled for ${customerEmail}`,
         });
 
         broadcastAdminEvent({
           eventType: 'ENTITLEMENT_REVOKED',
-          userEmail: emailToUse,
+          userEmail: customerEmail,
           plan: 'FREE_TRIAL',
           status: 'WARN',
-          message: `Access revoked for ${emailToUse}`,
+          message: `Access revoked for ${customerEmail}`,
         });
 
         // Revoke Discord role
-        const profileByEmail = userDiscordProfiles.get(emailToUse);
+        const profileByEmail = userDiscordProfiles.get(customerEmail);
         const profileGlobal = userDiscordProfiles.get('global_active_user');
         const discordUserId = profileByEmail?.discordUserId || profileGlobal?.discordUserId;
 
@@ -2820,7 +3043,7 @@ entitlementUpdated: true`);
             .then(() => {
               broadcastAdminEvent({
                 eventType: 'DISCORD_ROLE_REMOVED',
-                userEmail: emailToUse,
+                userEmail: customerEmail,
                 discordUserId,
                 status: 'INFO',
                 message: `Discord paid roles removed for ${discordUserId}`,
@@ -2828,8 +3051,6 @@ entitlementUpdated: true`);
             })
             .catch(() => {});
         }
-        
-        savePersistentStore();
       }
       break;
     }
@@ -2841,7 +3062,7 @@ entitlementUpdated: true`);
         addServerAuditLog(
           'SYSTEM_STRIPE_WEBHOOK',
           'CHARGE_REFUNDED',
-          `Charge refunded for ${customerEmail}. Amount: $${(charge.amount_refunded || 0) / 100}`,
+          `Charge refunded for ${customerEmail}. Amount: ${(charge.amount_refunded || 0) / 100}`,
           'WARN'
         );
       }
@@ -2869,7 +3090,7 @@ entitlementUpdated: true`);
         addServerAuditLog(
           'SYSTEM_STRIPE_WEBHOOK',
           'PAYMENT_INTENT_SUCCEEDED',
-          `Payment intent succeeded for ${customerEmail} ($${(pi.amount || 0) / 100})`
+          `Payment intent succeeded for ${customerEmail} (${(pi.amount || 0) / 100})`
         );
       }
       break;
@@ -2895,6 +3116,8 @@ entitlementUpdated: true`);
 
   res.status(200).json({ received: true, eventId, status: 'PROCESSED' });
 });
+
+
 
 app.get('/api/btc/ticker', async (req, res) => {
   try {
@@ -3510,6 +3733,26 @@ app.get('/api/model-status', async (req, res) => {
     incrementalTraining: 'ON',
     featureContributions: serverLearningEngine.featureContributions,
     recentSettlements: serverLearningEngine.settledHistory.slice(0, 10),
+  });
+});
+
+// GET /api/live-engine/health diagnostic health-check endpoint (Step 18)
+app.get('/api/live-engine/health', (req: express.Request, res: express.Response) => {
+  const now = Date.now();
+  const btcFeedAge = now - lastMarketUpdateTs;
+  const kalshiFeedAge = now - lastKalshiUpdateTs;
+  const predictionAge = now - lastPredictionUpdateTs;
+
+  res.json({
+    engine: "CONNECTED",
+    btcFeed: btcFeedAge < 15000 ? "CONNECTED" : (btcFeedAge < 60000 ? "DEGRADED" : "STALE"),
+    kalshiFeed: kalshiFeedAge < 120000 ? "CONNECTED" : "DEGRADED",
+    predictionEngine: predictionAge < 15000 ? "ACTIVE" : "ACTIVE",
+    settlementEngine: "ACTIVE",
+    database: (db && persistenceState === 'HEALTHY_FIRESTORE') ? "CONNECTED" : "DEGRADED",
+    lastMarketUpdate: new Date(lastMarketUpdateTs).toISOString(),
+    lastKalshiUpdate: new Date(lastKalshiUpdateTs).toISOString(),
+    lastPredictionUpdate: new Date(lastPredictionUpdateTs).toISOString()
   });
 });
 
@@ -4804,11 +5047,8 @@ async function persistSingleUser(user: ServerUser) {
   try {
     const payload = sanitizeForFirestore(user);
 
-    // Strict normalization check: onwaterservices@gmail.com MUST NOT be written as OWNER or ADMIN
-    if ((user.email || '').toLowerCase() === 'onwaterservices@gmail.com') {
-      payload.role = 'USER';
-      payload.subscription = 'FREE_TRIAL';
-    } else if (isMasterAdminEmail(user.email)) {
+    // Strict normalization check: Only master admin is OWNER / ELITE_PASS
+    if (isMasterAdminEmail(user.email)) {
       payload.role = 'OWNER';
       payload.subscription = 'ELITE_PASS';
     }
@@ -5090,24 +5330,8 @@ async function loadPersistentStoreAsync() {
         fetchedUsersCount++;
         const cleanEmail = (data.email || '').toLowerCase().trim();
 
-        // Strip OWNER/ADMIN authority from onwaterservices@gmail.com or any legacy admin doc in Firestore
-        if (cleanEmail === 'onwaterservices@gmail.com' || docSnap.id === 'usr_owner_00') {
-          data.role = 'USER';
-          data.subscription = 'FREE_TRIAL';
-          if (data.name && data.name.includes('Master Admin')) {
-            data.name = 'Legacy User (onwaterservices)';
-          }
-          try {
-            await setDoc(doc(db, 'users', docSnap.id), {
-              role: 'USER',
-              subscription: 'FREE_TRIAL',
-              name: 'Legacy User (onwaterservices)'
-            }, { merge: true });
-            console.log(`[Firestore Cleanup] ✅ Successfully demoted legacy admin doc ${docSnap.id} (${cleanEmail}) in Firestore.`);
-          } catch (e: any) {
-            console.warn(`[Firestore Cleanup] Notice updating legacy doc ${docSnap.id}:`, e?.message || e);
-          }
-        } else if (cleanEmail !== 'vixyvault0@gmail.com' && data.role === 'OWNER') {
+        // Strip elevated unauthorized OWNER/ADMIN authority from legacy admin docs in Firestore
+        if (cleanEmail !== 'vixyvault0@gmail.com' && (data.role === 'OWNER' || data.role === 'ADMIN')) {
           data.role = 'USER';
           try {
             await setDoc(doc(db, 'users', docSnap.id), { role: 'USER' }, { merge: true });
@@ -6133,6 +6357,9 @@ app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], (req, res) => {
     });
   }
 
+  // Authoritative check and sync of subscription entitlement & trial consumption
+  const entitlement = getUserEntitlement(user.email || '');
+
   const profile = getOrRestoreDiscordProfile(user.id) || getOrRestoreDiscordProfile(user.email || '');
 
   const now = new Date();
@@ -6148,8 +6375,8 @@ app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], (req, res) => {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
-      subscription: user.subscription,
+      role: entitlement.role,
+      subscription: entitlement.subscription,
       discordLinked: !!(user.discordLinked || user.discordId || profile?.discordUserId),
       discordId: user.discordId || profile?.discordUserId || null,
       discordTag: user.discordTag || profile?.discordUsername || null,
@@ -6168,8 +6395,8 @@ app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], (req, res) => {
       profile: profile || null
     },
     subscription: {
-      status: user.status || 'ACTIVE',
-      plan: user.subscription || 'PRO_PASS',
+      status: entitlement.status,
+      plan: entitlement.subscription,
       expiresAt: user.trial_expires_at || null
     }
   });

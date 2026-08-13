@@ -232,11 +232,11 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
             <span className="flex items-center gap-1 font-bold text-purple-300">
               VIXY Signal:
-              {(apiSignal?.execution?.state === 'LOCK_UP' || apiSignal?.action === 'BUY_YES') ? (
+              {((apiSignal as any)?.execution?.state === 'LOCK_UP' || apiSignal?.action === 'BUY_YES') ? (
                 <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
                   🟢 ▲ BUY UP
                 </span>
-              ) : (apiSignal?.execution?.state === 'LOCK_DOWN' || apiSignal?.action === 'BUY_NO') ? (
+              ) : ((apiSignal as any)?.execution?.state === 'LOCK_DOWN' || apiSignal?.action === 'BUY_NO') ? (
                 <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
                   🔴 ▼ BUY DOWN
                 </span>
