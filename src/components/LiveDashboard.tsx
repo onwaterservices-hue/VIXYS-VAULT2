@@ -100,14 +100,18 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   const [secondsRemaining15M, setSecondsRemaining15M] = useState<number>(542);
   const [secondsRemaining1H, setSecondsRemaining1H] = useState<number>(2054);
 
+  // Synchronize with global live signal hook
+  const { signal: liveApiData } = useLiveSignal(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
+
   // Authoritative Access Unlock Logic:
   // ADMIN -> FULL ACCESS (no lock gate, no subscription gate, no discord gate)
   // ELITE / PRO / Active subscription -> UNLOCKED
   // Discord-linked + Guild member -> UNLOCKED
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const apiUserAccess = (liveApiData as any)?.userAccess;
+  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin) || apiUserAccess?.role === 'ADMIN' || apiUserAccess?.accessState === 'ADMIN';
+  const isPaidUser = isUserAdmin || userRole === 'PRO' || apiUserAccess?.accessState === 'SUBSCRIBED' || apiUserAccess?.accessState === 'AUTHORIZED';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked) && Boolean(alertSettings?.guildMember);
-  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
+  const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified || (apiUserAccess && !apiUserAccess.locked);
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);
   const [isBailedOut, setIsBailedOut] = useState<boolean>(false);
 
@@ -147,9 +151,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     persistenceSeconds: 18,
     requiredPersistenceSeconds: 15,
   });
-
-  // Synchronize with global live signal hook
-  const { signal: liveApiData } = useLiveSignal(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
   
   useEffect(() => {
     if (!liveApiData) return;

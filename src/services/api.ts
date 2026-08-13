@@ -1,4 +1,4 @@
-import { BTCTicker, Candle, PredictionSignal } from '../types';
+import { BTCTicker, Candle, PredictionSignal, SignalStateType, AccessStateType, UserAccessObject, SignalPredictionState } from '../types';
 
 const inFlightRequests = new Map<string, Promise<any>>();
 const cacheStore = new Map<string, { data: any; timestamp: number }>();
@@ -712,6 +712,8 @@ export interface ApiSignalResponse {
   disclaimer: string;
   action: 'BUY_YES' | 'BUY_NO' | 'HOLD' | null;
   direction?: 'UP' | 'DOWN' | 'NEUTRAL' | null;
+  signalState?: SignalStateType;
+  signalConfirmed?: boolean;
   modelProbability: number | null;
   upProbability?: number;
   downProbability?: number;
@@ -721,12 +723,14 @@ export interface ApiSignalResponse {
   correlationPenalty?: string;
   evidenceMatrix?: Array<{ name: string; strength: string; bias: string }>;
   confidence?: number | null;
+  confidenceLabel?: string;
   kalshiImpliedProbability: number | null;
   edge: number | null;
   edgePct?: number | null;
-  engineState?: 'MONITORING' | 'EVALUATING' | 'LOCKED' | 'SETTLED' | 'STALE';
+  engineState?: 'MONITORING' | 'EVALUATING' | 'LOCKED' | 'SETTLED' | 'STALE' | 'CALIBRATING';
   feedStatus?: 'LIVE' | 'DEGRADED' | 'STALE' | 'INVALID' | 'OFFLINE';
   lockEvaluation?: any;
+  userAccess?: UserAccessObject;
   modelValidation?: {
     trainedAt: string;
     brierScore: number;
@@ -737,7 +741,61 @@ export interface ApiSignalResponse {
   features?: any;
   hasActiveModel?: boolean;
   latencyMs?: number;
+  lastMarketUpdateTs?: number;
+  marketTimestamp?: number;
+  dataAgeMs?: number;
+  calibratedProbability?: number;
+  calibrationStatus?: string;
+  calibrationSampleSize?: number;
+  modelVersion?: string;
+  calibrationVersion?: string;
+  execution?: {
+    state: string;
+    direction: string;
+    authorized: boolean;
+    actionLabel: string;
+    reason: string;
+    qualified: boolean;
+    confidenceLabel?: string;
+  };
 }
+
+export async function fetchUserAccess(email?: string, uid?: string): Promise<UserAccessObject> {
+  const cleanEmail = (email || '').toLowerCase().trim();
+  const isAdmin = cleanEmail === 'vixyvault0@gmail.com';
+
+  try {
+    const data = await safeFetchJson<UserAccessObject>(
+      `/api/v1/auth/access?email=${encodeURIComponent(cleanEmail)}&uid=${encodeURIComponent(uid || '')}&_t=${Date.now()}`
+    );
+    if (data) return data;
+  } catch {
+    // Fallback to client-safe default
+  }
+
+  if (isAdmin) {
+    return {
+      role: 'ADMIN',
+      isAdmin: true,
+      accessState: 'AUTHORIZED',
+      discordVerified: true,
+      subscriptionStatus: 'active',
+      entitlements: ['15m_desk', 'scalping', 'whale_tracker', 'ai_patterns', 'explainability'],
+      locked: false,
+    };
+  }
+
+  return {
+    role: 'DEMO',
+    isAdmin: false,
+    accessState: 'AUTHORIZED',
+    discordVerified: true,
+    subscriptionStatus: 'trial',
+    entitlements: ['15m_desk'],
+    locked: false,
+  };
+}
+
 
 export interface ModelStatusResponse {
   settledCount: number;

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Layers, Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff, Lock, Unlock, ShieldAlert } from 'lucide-react';
+import { Layers, Clock, Radio, Key, Activity, ShieldCheck, AlertTriangle, WifiOff, Lock, Unlock, ShieldAlert, Zap, CheckCircle2, Crosshair, TrendingUp, TrendingDown } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 import { VaultCard } from '../VaultCard';
 import {
@@ -96,18 +96,18 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     state: isBackendCalibrating ? 'CALIBRATING' : isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : isPassExplicit ? 'PASS' : 'ANALYZING',
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
     authorized: isUp || isDown,
-    actionLabel: isUp ? 'BUY UP → ENTER' : isDown ? 'BUY DOWN → ENTER' : isPassExplicit ? 'ENTRY NOT QUALIFIED' : 'AWAITING LOCK',
+    actionLabel: isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : isPassExplicit ? 'ENTRY NOT QUALIFIED' : 'ANALYZING CYCLE',
     reason: 'Authoritative Engine State',
-    qualified: rawApiData?.entryQualification === 'QUALIFIED'
+    qualified: rawApiData?.entryQualification === 'QUALIFIED' || rawApiData?.signalConfirmed
   };
 
-  const isLockUp = execution.state === 'LOCK_UP';
-  const isLockDown = execution.state === 'LOCK_DOWN';
-  const isPassState = execution.state === 'PASS';
+  const isConfirmedUp = execution.state === 'CONFIRMED_UP' || execution.state === 'LOCK_UP' || (rawApiData?.signalConfirmed && (rawApiData?.direction === 'UP' || rawApiData?.direction === 'BUY UP')) || (rawApiData?.direction === 'BUY UP' && rawApiData?.entryQualification === 'QUALIFIED');
+  const isConfirmedDown = execution.state === 'CONFIRMED_DOWN' || execution.state === 'LOCK_DOWN' || (rawApiData?.signalConfirmed && (rawApiData?.direction === 'DOWN' || rawApiData?.direction === 'BUY DOWN')) || (rawApiData?.direction === 'BUY DOWN' && rawApiData?.entryQualification === 'QUALIFIED');
+  const isPassState = execution.state === 'PASS' || (!isConfirmedUp && !isConfirmedDown && rawApiData?.direction === 'PASS');
 
-  const directionalConfidenceLabel = isLockUp
+  const directionalConfidenceLabel = isConfirmedUp
     ? 'HIGH BULL'
-    : isLockDown
+    : isConfirmedDown
     ? 'HIGH BEAR'
     : (execution.confidenceLabel || rawApiData?.confidenceLabel || 'NEUTRAL');
 
@@ -185,9 +185,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     displayDecisionText = 'DATA STALE';
   } else if (isWarmingUp) {
     displayDecisionText = 'CALIBRATING';
-  } else if (isLockUp) {
+  } else if (isConfirmedUp) {
     displayDecisionText = 'BUY UP';
-  } else if (isLockDown) {
+  } else if (isConfirmedDown) {
     displayDecisionText = 'BUY DOWN';
   } else if (isPassState) {
     displayDecisionText = 'PASS';
@@ -200,28 +200,26 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
     : (rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : 'CALIBRATING');
 
-  // Compute the lock card states
-  let lockCardState: 'STALE' | 'PROTECT' | 'LOCKED_UP' | 'LOCKED_DOWN' | 'CALIBRATING' | 'PASS' | 'QUALIFIED' | 'ANALYZING' = 'ANALYZING';
+  // Compute execution dispatch panel state (STRICTLY INDEPENDENT FROM ACCESS GATE)
+  let executionPanelState: 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING' = 'ANALYZING';
   if (isOfflineOrStale) {
-    lockCardState = 'STALE';
+    executionPanelState = 'STALE';
   } else if (isProtectState) {
-    lockCardState = 'PROTECT';
+    executionPanelState = 'PROTECT';
   } else if (isWarmingUp) {
-    lockCardState = 'CALIBRATING';
-  } else if (isLockUp) {
-    lockCardState = 'LOCKED_UP';
-  } else if (isLockDown) {
-    lockCardState = 'LOCKED_DOWN';
+    executionPanelState = 'CALIBRATING';
+  } else if (isConfirmedUp) {
+    executionPanelState = 'CONFIRMED_UP';
+  } else if (isConfirmedDown) {
+    executionPanelState = 'CONFIRMED_DOWN';
   } else if (isPassState) {
-    lockCardState = 'PASS';
-  } else if (rawApiData?.entryQualification === 'QUALIFIED') {
-    lockCardState = 'QUALIFIED';
+    executionPanelState = 'PASS';
   } else {
-    lockCardState = 'ANALYZING';
+    executionPanelState = 'ANALYZING';
   }
 
-  const showBuyUp = (lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP') && !isOfflineOrStale;
-  const showBuyDown = (lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isOfflineOrStale;
+  const showBuyUp = (executionPanelState === 'CONFIRMED_UP' || rawApiData?.direction === 'BUY UP') && !isOfflineOrStale;
+  const showBuyDown = (executionPanelState === 'CONFIRMED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isOfflineOrStale;
 
   let bgGlowClass = '';
   let bgInnerClass = '';
@@ -234,12 +232,12 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   let statusLabelClass = '';
   let statusText = '';
   let statusIcon: React.ReactNode = null;
-  let titleLabelText = 'VIXY LOCK';
+  let titleLabelText = 'VIXY EXECUTION STATUS';
   let statusValueText = '';
   let subtitleLabelText = '';
   let subtitleDescText = '';
 
-  switch (lockCardState) {
+  switch (executionPanelState) {
     case 'STALE':
       bgGlowClass = 'bg-gradient-to-b from-rose-950/40 to-purple-950/20 shadow-[0_0_20px_rgba(244,63,94,0.15)]';
       bgInnerClass = 'bg-[#0a050f]';
@@ -248,13 +246,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       accentSubtitleLabel = 'text-rose-400';
       accentSubtitleDesc = 'text-rose-300/80';
       actionBtnClass = 'bg-purple-950/40 border-purple-900/60 text-purple-400/80 cursor-not-allowed';
-      actionBtnText = 'ENTRY DISABLED';
+      actionBtnText = 'FEED PAUSED';
       statusLabelClass = 'text-rose-400';
       statusText = 'NO EXECUTION AUTHORIZED';
-      titleLabelText = 'DATA STALE';
+      titleLabelText = 'DATA FEED';
       statusValueText = 'FEED OFFLINE';
       subtitleLabelText = 'DATA FEED STALE / DISCONNECTED';
-      subtitleDescText = 'Live data is stale. VIXY has disabled execution until the feed recovers.';
+      subtitleDescText = 'Live data is reconnecting. VIXY has paused execution until market feed synchronizes.';
       statusIcon = <WifiOff className="w-8 h-8 text-rose-500 animate-pulse" />;
       break;
 
@@ -268,48 +266,48 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       actionBtnClass = 'bg-[#1a0005] border-rose-600/80 text-rose-500 shadow-[0_0_40px_rgba(244,63,94,0.4)]';
       actionBtnText = 'PROTECT CAPITAL → EXIT';
       statusLabelClass = 'text-rose-400';
-      statusText = 'RISK STATE: CRITICAL';
-      titleLabelText = '🚨 VIXY LOCK';
-      statusValueText = 'EXIT / PROTECT';
-      subtitleLabelText = 'THESIS INVALIDATED';
-      subtitleDescText = 'Original entry conditions are no longer satisfied. Protect capital.';
+      statusText = 'GUARDIAN PROTOCOL ENGAGED';
+      titleLabelText = 'GUARDIAN DEFENSE';
+      statusValueText = 'PROTECT CAPITAL';
+      subtitleLabelText = 'REVERSAL THREAT DETECTED';
+      subtitleDescText = 'Market conditions invalidated entry parameters. Capital preservation protocol active.';
       statusIcon = <ShieldAlert className="w-8 h-8 text-rose-500" />;
       break;
 
-    case 'LOCKED_UP':
-      bgGlowClass = 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.35)]';
-      bgInnerClass = 'bg-[#010a0c]';
-      accentHeaderTitle = 'text-cyan-400/90';
-      accentHeaderValue = 'text-cyan-300';
-      accentSubtitleLabel = 'text-cyan-400';
+    case 'CONFIRMED_UP':
+      bgGlowClass = 'bg-gradient-to-b from-[#00FF9D]/40 to-emerald-950/20 shadow-[0_0_40px_rgba(0,255,157,0.25)]';
+      bgInnerClass = 'bg-[#010e0a]';
+      accentHeaderTitle = 'text-[#00FF9D]/90';
+      accentHeaderValue = 'text-[#00FF9D]';
+      accentSubtitleLabel = 'text-[#00FF9D]';
       accentSubtitleDesc = 'text-slate-300';
-      actionBtnClass = 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]';
-      actionBtnText = 'BUY UP → ENTER';
-      statusLabelClass = 'text-cyan-400';
+      actionBtnClass = 'bg-[#041510] border-[#00FF9D]/70 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.35)]';
+      actionBtnText = 'BUY UP → READY';
+      statusLabelClass = 'text-[#00FF9D]';
       statusText = 'EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY SIGNAL';
-      statusValueText = 'QUALIFIED';
-      subtitleLabelText = 'QUALIFIED ENTRY';
-      subtitleDescText = 'VIXY model confirmed 15-minute cycle prediction. Execution is authorized.';
-      statusIcon = <Lock className="w-8 h-8 text-cyan-300 drop-shadow-[0_0_20px_rgba(34,211,238,0.9)] animate-pulse" />;
+      titleLabelText = 'EXECUTION DISPATCH';
+      statusValueText = 'CONFIRMED BUY UP';
+      subtitleLabelText = '15-MINUTE BTC KALSHI ENTRY';
+      subtitleDescText = 'High-conviction bullish edge verified across order flow, momentum, and volume profile.';
+      statusIcon = <Zap className="w-8 h-8 text-[#00FF9D] drop-shadow-[0_0_20px_rgba(0,255,157,0.9)]" />;
       break;
 
-    case 'LOCKED_DOWN':
-      bgGlowClass = 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.35)]';
-      bgInnerClass = 'bg-[#0c0104]';
-      accentHeaderTitle = 'text-rose-400/90';
-      accentHeaderValue = 'text-rose-400';
-      accentSubtitleLabel = 'text-rose-400';
+    case 'CONFIRMED_DOWN':
+      bgGlowClass = 'bg-gradient-to-b from-[#FF3366]/40 to-rose-950/20 shadow-[0_0_40px_rgba(255,51,102,0.25)]';
+      bgInnerClass = 'bg-[#0e0105]';
+      accentHeaderTitle = 'text-[#FF3366]/90';
+      accentHeaderValue = 'text-[#FF3366]';
+      accentSubtitleLabel = 'text-[#FF3366]';
       accentSubtitleDesc = 'text-slate-300';
-      actionBtnClass = 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]';
-      actionBtnText = 'BUY DOWN → ENTER';
-      statusLabelClass = 'text-rose-400';
+      actionBtnClass = 'bg-[#1a050a] border-[#FF3366]/70 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.35)]';
+      actionBtnText = 'BUY DOWN → READY';
+      statusLabelClass = 'text-[#FF3366]';
       statusText = 'EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY SIGNAL';
-      statusValueText = 'QUALIFIED';
-      subtitleLabelText = 'QUALIFIED ENTRY';
-      subtitleDescText = 'VIXY model confirmed 15-minute cycle prediction. Execution is authorized.';
-      statusIcon = <Lock className="w-8 h-8 text-rose-400 drop-shadow-[0_0_20px_rgba(244,63,94,0.8)] animate-pulse" />;
+      titleLabelText = 'EXECUTION DISPATCH';
+      statusValueText = 'CONFIRMED BUY DOWN';
+      subtitleLabelText = '15-MINUTE BTC KALSHI ENTRY';
+      subtitleDescText = 'High-conviction bearish edge verified across order flow, momentum, and volume profile.';
+      statusIcon = <Zap className="w-8 h-8 text-[#FF3366] drop-shadow-[0_0_20px_rgba(255,51,102,0.9)]" />;
       break;
 
     case 'CALIBRATING':
@@ -320,13 +318,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       accentSubtitleLabel = 'text-purple-400';
       accentSubtitleDesc = 'text-purple-300/70';
       actionBtnClass = 'bg-purple-950/40 border-purple-900/60 text-purple-400/80 cursor-not-allowed';
-      actionBtnText = 'AWAITING QUALIFICATION';
+      actionBtnText = 'ANALYZING 15M CYCLE';
       statusLabelClass = 'text-purple-500/70';
-      statusText = 'NO EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
+      statusText = 'SAMPLING ORDER FLOW';
+      titleLabelText = 'CYCLE TELEMETRY';
       statusValueText = 'CALIBRATING';
-      subtitleLabelText = '15-MINUTE CYCLE ANALYSIS IN PROGRESS';
-      subtitleDescText = 'VIXY is calibrating against the current 15-minute BTC market cycle.';
+      subtitleLabelText = '15-MINUTE CYCLE SAMPLING IN PROGRESS';
+      subtitleDescText = 'VIXY is sampling order flow, momentum, and volume profile for the new 15M cycle.';
       statusIcon = <Activity className="w-8 h-8 text-purple-400 animate-pulse" />;
       break;
 
@@ -340,30 +338,12 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       actionBtnClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300/80';
       actionBtnText = 'ENTRY NOT QUALIFIED';
       statusLabelClass = 'text-purple-400/70';
-      statusText = 'NO EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
+      statusText = 'CAPITAL DEFENDED';
+      titleLabelText = 'CYCLE EVALUATION';
       statusValueText = 'PASS';
-      subtitleLabelText = 'ENTRY NOT QUALIFIED';
-      subtitleDescText = 'VIXY intentionally rejected this cycle because it was not a qualified entry.';
-      statusIcon = <AlertTriangle className="w-8 h-8 text-purple-400/80" />;
-      break;
-
-    case 'QUALIFIED':
-      bgGlowClass = 'bg-gradient-to-b from-cyan-800/40 to-purple-950/20 shadow-[0_0_25px_rgba(34,211,238,0.15)]';
-      bgInnerClass = 'bg-[#06040f]';
-      accentHeaderTitle = 'text-cyan-400/80';
-      accentHeaderValue = 'text-cyan-300';
-      accentSubtitleLabel = 'text-cyan-400';
-      accentSubtitleDesc = 'text-purple-300/70';
-      actionBtnClass = 'bg-[#02181b] border-cyan-800/60 text-cyan-300 animate-pulse';
-      actionBtnText = 'AWAITING LOCK';
-      statusLabelClass = 'text-cyan-400/80';
-      statusText = 'NO EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
-      statusValueText = 'QUALIFIED';
-      subtitleLabelText = 'AWAITING FINAL LOCK';
-      subtitleDescText = 'Entry conditions met. Awaiting final lock.';
-      statusIcon = <Unlock className="w-8 h-8 text-cyan-400 animate-bounce" />;
+      subtitleLabelText = 'NO STATISTICAL EDGE DETECTED';
+      subtitleDescText = 'VIXY intentionally rejected this cycle because it did not meet the statistical edge threshold.';
+      statusIcon = <ShieldCheck className="w-8 h-8 text-purple-400/80" />;
       break;
 
     case 'ANALYZING':
@@ -375,13 +355,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       accentSubtitleLabel = 'text-purple-400';
       accentSubtitleDesc = 'text-purple-300/70';
       actionBtnClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300/80';
-      actionBtnText = 'AWAITING LOCK';
+      actionBtnText = 'AWAITING CONFLUENCE';
       statusLabelClass = 'text-purple-400/70';
-      statusText = 'NO EXECUTION AUTHORIZED';
-      titleLabelText = 'VIXY LOCK';
+      statusText = 'MONITORING MARKET';
+      titleLabelText = 'ENGINE TELEMETRY';
       statusValueText = 'ANALYZING';
-      subtitleLabelText = 'AWAITING QUALIFICATION';
-      subtitleDescText = 'Live market data is being evaluated. No entry is authorized yet.';
+      subtitleLabelText = 'CONTINUOUS FEATURE EVALUATION';
+      subtitleDescText = 'Live market features are continuously evaluated across 8 algorithmic models.';
       statusIcon = <Layers className="w-8 h-8 text-purple-400 animate-pulse" />;
       break;
   }
@@ -551,30 +531,30 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
         </div>
 
-        {/* ULTRA-PROMINENT VIXY LOCK */}
+        {/* VIXY AUTHORITATIVE EXECUTION DISPATCH PANEL */}
         <div className={`p-1 rounded-2xl transition-all duration-1000 relative ${
           isProtectState 
             ? 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.3)]'
-            : isLockUp
-            ? 'bg-gradient-to-b from-cyan-400/80 to-cyan-900/20 shadow-[0_0_40px_rgba(34,211,238,0.3)]'
-            : isLockDown
-            ? 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.3)]'
+            : isConfirmedUp
+            ? 'bg-gradient-to-b from-[#00FF9D]/60 to-emerald-950/20 shadow-[0_0_40px_rgba(0,255,157,0.25)]'
+            : isConfirmedDown
+            ? 'bg-gradient-to-b from-[#FF3366]/60 to-rose-950/20 shadow-[0_0_40px_rgba(255,51,102,0.25)]'
             : 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]'
         }`}>
           <div className={`w-full h-full rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-1000 relative ${
-            isProtectState ? 'bg-[#0a0002]' : isLockUp ? 'bg-[#010a0c]' : isLockDown ? 'bg-[#0c0104]' : 'bg-[#0a050f]'
+            isProtectState ? 'bg-[#0a0002]' : isConfirmedUp ? 'bg-[#010e0a]' : isConfirmedDown ? 'bg-[#0e0105]' : 'bg-[#0a050f]'
           }`}>
              {/* Cybernetic background accents */}
-             {isLockUp && (
+             {isConfirmedUp && (
                <>
-                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-cyan-400/30 to-transparent" />
-                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-cyan-400/30 to-transparent" />
+                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-[#00FF9D]/40 to-transparent" />
+                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-[#00FF9D]/40 to-transparent" />
                </>
              )}
-             {isLockDown && (
+             {isConfirmedDown && (
                <>
-                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-rose-500/30 to-transparent" />
-                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-rose-500/30 to-transparent" />
+                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-[#FF3366]/40 to-transparent" />
+                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-[#FF3366]/40 to-transparent" />
                </>
              )}
 
@@ -582,10 +562,10 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                <div className={`p-3 rounded-xl border flex items-center justify-center transition-all duration-1000 ${
                  isProtectState
                    ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
-                   : isLockUp
-                   ? 'bg-[#021f24] border-cyan-400 text-cyan-300 drop-shadow-[0_0_25px_rgba(34,211,238,0.9)]'
-                   : isLockDown
-                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
+                   : isConfirmedUp
+                   ? 'bg-[#021f15] border-[#00FF9D] text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.9)]'
+                   : isConfirmedDown
+                   ? 'bg-[#1f0208] border-[#FF3366] text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.9)]'
                    : 'bg-purple-950/40 border-purple-700/50 text-purple-400'
                }`}>
                  {statusIcon}
@@ -593,22 +573,22 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                <div>
                  <div className="flex items-center gap-3 mb-1">
                    <span className={`text-[10px] font-black tracking-[0.25em] uppercase ${
-                     isProtectState ? 'text-rose-500/90' : isLockUp ? 'text-cyan-400/90' : isLockDown ? 'text-rose-400/90' : 'text-purple-400/80'
+                     isProtectState ? 'text-rose-500/90' : isConfirmedUp ? 'text-[#00FF9D]/90' : isConfirmedDown ? 'text-[#FF3366]/90' : 'text-purple-400/80'
                    }`}>{titleLabelText}</span>
-                   <span className={`text-[32px] font-black tracking-widest uppercase leading-none ${
-                     isProtectState ? 'text-rose-500' : isLockUp ? 'text-cyan-300' : isLockDown ? 'text-rose-400' : 'text-purple-300'
-                   }`} style={{ textShadow: isProtectState ? '0 0 20px rgba(244,63,94,0.6)' : isLockUp ? '0 0 20px rgba(34,211,238,0.9)' : isLockDown ? '0 0 20px rgba(244,63,94,0.9)' : '0 0 15px rgba(168,85,247,0.4)' }}>
+                   <span className={`text-[28px] sm:text-[32px] font-black tracking-widest uppercase leading-none ${
+                     isProtectState ? 'text-rose-500' : isConfirmedUp ? 'text-[#00FF9D]' : isConfirmedDown ? 'text-[#FF3366]' : 'text-purple-300'
+                   }`} style={{ textShadow: isProtectState ? '0 0 20px rgba(244,63,94,0.6)' : isConfirmedUp ? '0 0 20px rgba(0,255,157,0.8)' : isConfirmedDown ? '0 0 20px rgba(255,51,102,0.8)' : '0 0 15px rgba(168,85,247,0.4)' }}>
                      {statusValueText}
                    </span>
                  </div>
                  <div className="hidden sm:block mt-2">
                    <span className={`text-[10px] font-black tracking-widest uppercase ${
-                     isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400'
+                     isProtectState ? 'text-rose-400' : isConfirmedUp ? 'text-[#00FF9D]' : isConfirmedDown ? 'text-[#FF3366]' : 'text-purple-400'
                    }`}>
                      {subtitleLabelText}
                    </span>
                    <span className={`text-[11px] font-mono block ${
-                     isProtectState ? 'text-rose-300/80' : isLockUp ? 'text-slate-300' : isLockDown ? 'text-slate-300' : 'text-purple-300/70'
+                     isProtectState ? 'text-rose-300/80' : isConfirmedUp ? 'text-emerald-100/80' : isConfirmedDown ? 'text-rose-100/80' : 'text-purple-300/70'
                    }`}>
                      {subtitleDescText}
                    </span>
@@ -620,19 +600,23 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                <div className={`text-base font-black tracking-widest px-6 py-3 rounded-xl border ${
                  isProtectState
                    ? 'bg-[#1f0208] border-rose-500 text-rose-400 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
-                   : isLockUp
-                   ? 'bg-[#041510] border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
-                   : isLockDown
-                   ? 'bg-[#1a050a] border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
+                   : isConfirmedUp
+                   ? 'bg-[#041510] border-[#00FF9D]/70 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
+                   : isConfirmedDown
+                   ? 'bg-[#1a050a] border-[#FF3366]/70 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
                    : 'bg-purple-950/40 border-purple-800/60 text-purple-300/80'
-               }`} style={{ textShadow: isProtectState ? '0 0 15px rgba(244,63,94,0.6)' : isLockUp ? '0 0 10px rgba(0,255,157,0.5)' : isLockDown ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
+               }`} style={{ textShadow: isProtectState ? '0 0 15px rgba(244,63,94,0.6)' : isConfirmedUp ? '0 0 10px rgba(0,255,157,0.5)' : isConfirmedDown ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
                  {actionBtnText}
                </div>
                <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${
-                 isProtectState ? 'text-rose-400' : isLockUp ? 'text-cyan-400' : isLockDown ? 'text-rose-400' : 'text-purple-400/70'
+                 isProtectState ? 'text-rose-400' : isConfirmedUp ? 'text-emerald-400' : isConfirmedDown ? 'text-rose-400' : 'text-purple-400/70'
                }`}>
                  {statusText}
-                 {(isLockUp || isLockDown) && <span className="flex items-center gap-1.5 ml-2 bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-900/50"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" /> GATE ACTIVE</span>}
+                 {(isConfirmedUp || isConfirmedDown) && (
+                   <span className="flex items-center gap-1.5 ml-2 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-500/40 text-emerald-400 font-mono text-[9px]">
+                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> SIGNAL ACTIVE
+                   </span>
+                 )}
                </div>
              </div>
           </div>
@@ -667,11 +651,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div className="flex items-center justify-between text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-3">
             <span>VIXY CONFIDENCE FIELD</span>
             <div className="flex items-center gap-2 text-sm font-black">
-              <span className={isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP' ? 'text-[#00FF9D]' : lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN' ? 'text-[#FF3366]' : 'text-purple-400'}>
+              <span className={isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : showBuyUp ? 'text-[#00FF9D]' : showBuyDown ? 'text-[#FF3366]' : 'text-purple-400'}>
                 {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}
               </span>
               <span className={`text-[9px] uppercase px-2 py-0.5 rounded border ${
-                isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP' ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
+                isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : showBuyUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : showBuyDown ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
               }`}>
                 {directionalConfidenceLabel}
               </span>
@@ -919,8 +903,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
           <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">TARGET STRIKE</div>
           <div className="flex items-center gap-3">
             <div className="text-3xl font-black text-purple-200 tracking-tighter">${targetPrice ? targetPrice.toLocaleString() : '---'}</div>
-            <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isLockUp ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/50' : isLockDown ? 'bg-rose-950/40 text-rose-300 border border-rose-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
-              MUST EXPIRE {isLockUp ? 'ABOVE' : isLockDown ? 'BELOW' : 'RANGE'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
+            <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isConfirmedUp ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/50' : isConfirmedDown ? 'bg-rose-950/40 text-rose-300 border border-rose-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
+              MUST EXPIRE {isConfirmedUp ? 'ABOVE' : isConfirmedDown ? 'BELOW' : 'RANGE'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
             </div>
           </div>
           <div className="flex justify-between items-end text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30">

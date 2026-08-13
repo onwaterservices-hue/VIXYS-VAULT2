@@ -229,3 +229,46 @@ export interface ExchangeApiKeys {
   draftkings: ExchangeCredential;
 }
 
+// ==========================================
+// SEPARATE STATE MACHINES (CRITICAL RULE)
+// SIGNAL STATE != ACCESS / AUTHORIZATION STATE
+// ==========================================
+
+export type SignalStateType = 
+  | 'IDLE' 
+  | 'ANALYZING' 
+  | 'SIGNAL_READY' 
+  | 'SIGNAL_CONFIRMED' 
+  | 'EXPIRED' 
+  | 'NO_SIGNAL';
+
+export type AccessStateType = 
+  | 'AUTHORIZED' 
+  | 'TRIAL' 
+  | 'SUBSCRIBED' 
+  | 'ADMIN' 
+  | 'LOCKED';
+
+export interface UserAccessObject {
+  role: 'ADMIN' | 'PRO' | 'DEMO' | 'OWNER' | 'USER';
+  isAdmin: boolean;
+  accessState: AccessStateType;
+  discordVerified: boolean;
+  subscriptionStatus: 'active' | 'trial' | 'canceling' | 'expired' | 'none';
+  entitlements: string[];
+  locked: boolean;
+}
+
+export interface SignalPredictionState {
+  signalState: SignalStateType;
+  direction: 'UP' | 'DOWN' | 'NEUTRAL' | 'BUY UP' | 'BUY DOWN' | 'PASS';
+  probability: number;
+  confidenceLabel: string;
+  confidence: number;
+  cycleId?: string;
+  timestamp: string;
+  modelVersion: string;
+  calibrationVersion: string;
+  signalConfirmed: boolean;
+}
+
