@@ -3807,7 +3807,7 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
   const evidenceQuality = Math.min(96, Math.max(45, Math.round(currentConfidence * 0.95)));
 
   const isProtectionVeto = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || Boolean(latestGuardianDecision?.reversalThreat && latestGuardianDecision.reversalThreat > 70);
-  const isDataFresh = isLive && computedFeedStatus === 'LIVE';
+  const isDataFresh = isLive;
 
   const isCycleCalibrating = market15mState.timeRemaining > 840; // First 60s of the 15M cycle
 

@@ -145,7 +145,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
 
   // Authoritative Direction & Probability
-  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'OFFLINE';
+  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'STALE';
 
   const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
 
