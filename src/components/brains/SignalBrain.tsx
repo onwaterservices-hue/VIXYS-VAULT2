@@ -189,8 +189,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     lockCardState = 'ANALYZING';
   }
 
-  const showBuyUp = (lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP') && !isWarmingUp && !isOfflineOrStale;
-  const showBuyDown = (lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isWarmingUp && !isOfflineOrStale;
+  const showBuyUp = (lockCardState === 'LOCKED_UP' || rawApiData?.direction === 'BUY UP') && !isOfflineOrStale;
+  const showBuyDown = (lockCardState === 'LOCKED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isOfflineOrStale;
 
   let bgGlowClass = '';
   let bgInnerClass = '';
@@ -486,7 +486,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                 showBuyUp ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : showBuyDown ? 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]' : 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]'
              }`} style={{ textShadow: showBuyUp ? '0 0 30px rgba(0,255,157,0.3)' : showBuyDown ? '0 0 30px rgba(255,51,102,0.3)' : '0 0 30px rgba(168,85,247,0.3)' }}>
                {isOfflineOrStale ? 'STALE' : isWarmingUp ? 'CALIBRATING' : showBuyUp ? 'BUY UP' : showBuyDown ? 'BUY DOWN' : isPassState ? 'PASS' : 'ANALYZING'}
-               {(showBuyUp || showBuyDown) && (
+               {(showBuyUp || showBuyDown) && !isWarmingUp && (
                  <span className="text-[70px] sm:text-[90px]">{showBuyUp ? '▲' : '▼'}</span>
                )}
              </div>
@@ -637,11 +637,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                   key={idx}
                   className={`h-full flex-1 rounded-sm transition-all duration-500 ${
                     isFilled
-                      ? (isPassState || isWarmingUp || lockCardState === 'ANALYZING')
-                         ? 'bg-purple-600/80 shadow-[0_0_8px_rgba(147,51,234,0.3)]'
-                         : isLockUp
+                      ? showBuyUp
                          ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]'
-                         : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]'
+                         : showBuyDown
+                         ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]'
+                         : 'bg-purple-600/80 shadow-[0_0_8px_rgba(147,51,234,0.3)]'
                       : 'bg-[#0a0518] border border-purple-900/30'
                   }`}
                 />
