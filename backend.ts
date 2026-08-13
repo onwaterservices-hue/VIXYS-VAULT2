@@ -2701,43 +2701,94 @@ entitlementUpdated: true`);
       break;
     }
 
-    case 'customer.subscription.deleted':
     case 'invoice.payment_failed': {
-      const sub = event.data.object;
-      const customerEmail = await extractEmail(sub);
+      const invoice = event.data.object;
+      const customerEmail = await extractEmail(invoice);
+      const stripeCustId = typeof invoice.customer === 'string' ? invoice.customer : undefined;
 
       if (customerEmail) {
-        userSubscriptions.set(customerEmail, {
-          email: customerEmail,
+        // Find existing user via Customer ID or Email fallback
+        const existingUser = serverUsers.find((u) => 
+          (stripeCustId && u.stripeCustomerId === stripeCustId) || 
+          (u.email?.toLowerCase() === customerEmail)
+        );
+
+        const emailToUse = existingUser?.email || customerEmail;
+
+        const currentSubRec = userSubscriptions.get(emailToUse);
+        if (currentSubRec) {
+          currentSubRec.status = 'PAST_DUE';
+          currentSubRec.updatedAt = new Date().toISOString();
+          userSubscriptions.set(emailToUse, currentSubRec);
+        }
+
+        if (existingUser) {
+          // Do not revoke plan yet, preserve ACTIVE status during retry phase
+          existingUser.status = 'ACTIVE';
+        }
+
+        broadcastAdminEvent({
+          eventType: 'STRIPE_PAYMENT_FAILED',
+          userEmail: emailToUse,
+          status: 'WARN',
+          message: `Stripe invoice payment failed. Status set to PAST_DUE for ${emailToUse}. Premium active access preserved during retry phase.`,
+        });
+
+        addServerAuditLog(
+          'WARN',
+          'PAYMENT_WARNING',
+          `Invoice payment failed for customer ${stripeCustId || emailToUse}. Placed in PAST_DUE state.`
+        );
+
+        savePersistentStore();
+      }
+      break;
+    }
+
+    case 'customer.subscription.deleted': {
+      const sub = event.data.object;
+      const customerEmail = await extractEmail(sub);
+      const stripeCustId = typeof sub.customer === 'string' ? sub.customer : undefined;
+
+      if (customerEmail) {
+        // Find existing user via Customer ID or Email fallback
+        const existingUser = serverUsers.find((u) => 
+          (stripeCustId && u.stripeCustomerId === stripeCustId) || 
+          (u.email?.toLowerCase() === customerEmail)
+        );
+
+        const emailToUse = existingUser?.email || customerEmail;
+
+        userSubscriptions.set(emailToUse, {
+          email: emailToUse,
           role: 'FREE',
           plan: 'FREE_TRIAL',
           status: 'CANCELED_OR_FAILED',
           updatedAt: new Date().toISOString(),
         });
 
-        const user = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
-        if (user) {
-          user.subscription = 'FREE_TRIAL';
-          user.status = 'SUSPENDED';
+        if (existingUser) {
+          existingUser.subscription = 'FREE_TRIAL';
+          existingUser.status = 'SUSPENDED';
         }
 
         broadcastAdminEvent({
           eventType: 'SUBSCRIPTION_CANCELED',
-          userEmail: customerEmail,
+          userEmail: emailToUse,
           status: 'WARN',
-          message: `Subscription cancelled or payment failed for ${customerEmail}`,
+          message: `Subscription fully deleted/cancelled for ${emailToUse}`,
         });
 
         broadcastAdminEvent({
           eventType: 'ENTITLEMENT_REVOKED',
-          userEmail: customerEmail,
+          userEmail: emailToUse,
           plan: 'FREE_TRIAL',
           status: 'WARN',
-          message: `Access revoked for ${customerEmail}`,
+          message: `Access revoked for ${emailToUse}`,
         });
 
         // Revoke Discord role
-        const profileByEmail = userDiscordProfiles.get(customerEmail);
+        const profileByEmail = userDiscordProfiles.get(emailToUse);
         const profileGlobal = userDiscordProfiles.get('global_active_user');
         const discordUserId = profileByEmail?.discordUserId || profileGlobal?.discordUserId;
 
@@ -2746,7 +2797,7 @@ entitlementUpdated: true`);
             .then(() => {
               broadcastAdminEvent({
                 eventType: 'DISCORD_ROLE_REMOVED',
-                userEmail: customerEmail,
+                userEmail: emailToUse,
                 discordUserId,
                 status: 'INFO',
                 message: `Discord paid roles removed for ${discordUserId}`,
@@ -2754,6 +2805,8 @@ entitlementUpdated: true`);
             })
             .catch(() => {});
         }
+        
+        savePersistentStore();
       }
       break;
     }

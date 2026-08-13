@@ -72,7 +72,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const downProbNum = Number(downProbability || 50);
 
   const isQualifiedLock = Boolean(lockEvaluation?.qualified ?? (lockState === 'LOCKED' || lockState === 'LOCKED_UP' || lockState === 'LOCKED_DOWN'));
-  const showPassState = !isQualifiedLock || decision === 'PASS' || lockState === 'PASS' || Math.abs(upProbNum - 50) < 6;
+  const showPassState = !isQualifiedLock || decision === 'PASS' || lockState === 'PASS' || Math.abs(upProbNum - 50) < 6 || isStaleOrInvalid;
 
   const currentPrice = rawApiData?.features?.crossVenue?.spot || ticker?.price || 64036.72;
   const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 64160);
