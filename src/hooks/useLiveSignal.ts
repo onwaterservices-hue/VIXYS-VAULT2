@@ -52,59 +52,49 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
   }
 
   
-  if (state.signal) {
-    state.signal = {
-      ...state.signal,
-      cycleId: snapshot.cycleId || state.signal.cycleId,
-      isLocked: snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED' || state.signal.isLocked,
-      lockedDirection: snapshot.lockedPrediction?.direction || state.signal.lockedDirection,
-      lockedProbability: snapshot.lockedPrediction?.probability !== undefined ? snapshot.lockedPrediction.probability : state.signal.lockedProbability,
-      lockedConfidence: snapshot.lockedPrediction?.confidence !== undefined ? snapshot.lockedPrediction.confidence : state.signal.lockedConfidence,
-      lockedAt: snapshot.lockedPrediction?.lockedAt || state.signal.lockedAt,
-      spotAtLock: snapshot.lockedPrediction?.spotAtLock || state.signal.spotAtLock,
-      strike: snapshot.strike || snapshot.lockedPrediction?.strike || state.signal.strike,
-      currentPrice: snapshot.spot || state.signal.currentPrice,
-      timeRemaining: snapshot.timeRemaining !== undefined ? snapshot.timeRemaining : state.signal.timeRemaining,
-      modelProbability: snapshot.livePrediction?.probability ?? state.signal.modelProbability,
-      confidence: snapshot.livePrediction?.confidence ?? state.signal.confidence,
-      feedStatus: 'LIVE',
-      sequenceNumber: snapshot.sequence || (state.signal as any).sequenceNumber
-    } as any;
-  } else {
-    state.signal = {
-      asset: 'BTC',
-      desk: '15m',
-      cycleId: snapshot.cycleId,
-      isLocked: snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED',
-      lockedDirection: snapshot.lockedPrediction?.direction,
-      lockedProbability: snapshot.lockedPrediction?.probability,
-      lockedConfidence: snapshot.lockedPrediction?.confidence,
-      lockedAt: snapshot.lockedPrediction?.lockedAt,
-      spotAtLock: snapshot.lockedPrediction?.spotAtLock,
-      strike: snapshot.strike || snapshot.lockedPrediction?.strike,
-      currentPrice: snapshot.spot,
-      timeRemaining: snapshot.timeRemaining,
-      modelProbability: snapshot.livePrediction?.probability,
-      confidence: snapshot.livePrediction?.confidence,
-      feedStatus: 'LIVE',
-      sequenceNumber: snapshot.sequence,
-      sampleSize: 148,
-      minSamplesNeeded: 500,
-      hasActiveModel: true,
-      generatedAt: new Date().toISOString(),
-      disclaimer: '',
-      action: snapshot.status === 'LOCKED' ? 'BUY_YES' : 'HOLD',
-      kalshiImpliedProbability: 0.54,
-      edge: 0.14,
-      status: 'LIVE',
-      features: {} as any,
-      execution: {} as any,
-      last10: [],
-      last10Summary: {} as any,
-      modelValidation: {} as any,
-      market15mState: null
-    } as any;
-  }
+  const isNewCycle = snapshot.cycleId && state.signal?.cycleId && snapshot.cycleId !== state.signal.cycleId;
+
+  const baseSignal = (!state.signal || isNewCycle) ? {
+    asset: 'BTC',
+    desk: '15m',
+    sampleSize: 148,
+    minSamplesNeeded: 500,
+    hasActiveModel: true,
+    generatedAt: new Date().toISOString(),
+    disclaimer: '',
+    kalshiImpliedProbability: 0.54,
+    edge: 0.14,
+    status: 'LIVE',
+    features: {} as any,
+    execution: {} as any,
+    last10: [],
+    last10Summary: {} as any,
+    modelValidation: {} as any,
+    market15mState: null
+  } : { ...state.signal };
+
+  const isLocked = snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED';
+
+  state.signal = {
+    ...baseSignal,
+    cycleId: snapshot.cycleId,
+    isLocked: isLocked,
+    status: snapshot.status || 'LIVE',
+    lockedDirection: isLocked ? snapshot.lockedPrediction?.direction : undefined,
+    lockedProbability: isLocked ? snapshot.lockedPrediction?.probability : undefined,
+    lockedConfidence: isLocked ? snapshot.lockedPrediction?.confidence : undefined,
+    lockedAt: isLocked ? snapshot.lockedPrediction?.lockedAt : undefined,
+    spotAtLock: isLocked ? snapshot.lockedPrediction?.spotAtLock : undefined,
+    strike: snapshot.strike || (isLocked ? snapshot.lockedPrediction?.strike : undefined),
+    currentPrice: snapshot.spot,
+    timeRemaining: snapshot.timeRemaining,
+    modelProbability: snapshot.livePrediction?.probability,
+    confidence: snapshot.livePrediction?.confidence,
+    direction: snapshot.livePrediction?.direction,
+    feedStatus: 'LIVE',
+    sequenceNumber: snapshot.sequence,
+    action: isLocked ? 'BUY_YES' : 'HOLD',
+  } as any;
 
   states.set(key, state);
   notifySubscribers(key);
@@ -112,7 +102,6 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
   notifySubscribers('ETH:15m');
   notifySubscribers('SOL:15m');
 };
-
 const connectVixyWebSocket = () => {
   if (wsGlobalInstance || isWsConnecting) return;
   isWsConnecting = true;

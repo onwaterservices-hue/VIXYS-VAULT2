@@ -84,7 +84,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
 
-  const rawDirection = (rawApiData?.lockedDirection || rawApiData?.direction || rawApiData?.execution?.direction || 'UP').toUpperCase();
+  const rawDirection = isServerLocked ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() : (rawApiData?.direction || rawApiData?.execution?.direction || 'UP').toUpperCase();
   const isUp = rawDirection.includes('UP') || rawDirection.includes('YES');
   const isDown = rawDirection.includes('DOWN') || rawDirection.includes('NO');
 

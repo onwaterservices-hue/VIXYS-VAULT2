@@ -168,7 +168,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
-      if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
+      if (Number.isFinite(data.timeRemaining)) { setSecondsRemaining15M(data.timeRemaining); } else if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
         setSecondsRemaining15M(data.features.crossVenue.timeRemainingSec);
       }
       
@@ -485,7 +485,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               lockEvaluation={lockEvaluation}
               feedStatus={feedStatus}
               latencyMs={latencyMs}
-              rawApiData={rawApiData}
+              rawApiData={liveApiData}
               venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
             />
           </div>
@@ -520,7 +520,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   signal={signal} 
                   ticker={ticker} 
                   isDiscordVerified={isDiscordVerified} 
-                  rawApiData={rawApiData}
+                  rawApiData={liveApiData}
                 />
               </div>
               <div className="h-full">
