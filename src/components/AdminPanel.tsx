@@ -1051,9 +1051,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                           <span className="text-emerald-400 font-bold">+{((diagnosticsData?.predictionEngine?.edgePct || 0.185) * 100).toFixed(1)}%</span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">VIXY LOCK STATE</span>
+                          <span className="text-purple-400/70">QUALIFICATION STATE</span>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isLocked ? 'bg-emerald-950 text-emerald-400' : 'bg-amber-950 text-amber-400'}`}>
-                            {isLocked ? 'LOCKED' : 'PASS'}
+                            {isLocked ? 'QUALIFIED' : 'PASS'}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">

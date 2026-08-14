@@ -877,19 +877,133 @@ app.post(['/api/auth/heartbeat', '/api/heartbeat'], (req, res) => {
   res.json({ success: true, timestamp: Date.now() });
 });
 
-// 15-MINUTE KALSHI FIXED STRIKE PRICE ENGINE HELPER
-let current15mIntervalStart = 0;
+// ============================================================================
+// 15-MINUTE KALSHI CYCLE ENGINE (STRICT ONE CYCLE → ONE LOCK → ONE SETTLEMENT)
+// ============================================================================
+
+export interface Active15mCycleState {
+  cycleId: string;
+  intervalStart: number;
+  intervalEnd: number;
+  strikePrice: number;
+  stage: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'SETTLED';
+  isLocked: boolean;
+  lockedAt: string | null;
+  lockedDecision: 'BUY UP' | 'BUY DOWN' | 'PASS' | null;
+  lockedDirection: 'UP' | 'DOWN' | 'PASS' | null;
+  lockedConfidence: number | null;
+  lockedProbability: number | null;
+  lockedStrike: number | null;
+  lockedSpot: number | null;
+  lockedEdgePct: number | null;
+  lockedReason: string | null;
+}
+
+let current15mIntervalStart = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
 let current15mStrikePrice = 64100;
-
-
 const processedSettlements = new Set<string>();
+const lockedCycleIds = new Set<string>();
+
+let active15mCycle: Active15mCycleState = {
+  cycleId: `15M-${new Date(current15mIntervalStart).toISOString()}`,
+  intervalStart: current15mIntervalStart,
+  intervalEnd: current15mIntervalStart + 15 * 60 * 1000,
+  strikePrice: current15mStrikePrice,
+  stage: 'ANALYZING',
+  isLocked: false,
+  lockedAt: null,
+  lockedDecision: null,
+  lockedDirection: null,
+  lockedConfidence: null,
+  lockedProbability: null,
+  lockedStrike: null,
+  lockedSpot: null,
+  lockedEdgePct: null,
+  lockedReason: null,
+};
+
+function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string): boolean {
+  if (active15mCycle.cycleId !== cycleId) {
+    console.warn(`[INVALID_CYCLE_LOCK] Cycle mismatch: target ${cycleId} vs active ${active15mCycle.cycleId}`);
+    return false;
+  }
+
+  // STRICT IMMUTABILITY INVARIANT: Reject duplicate lock attempts server-side
+  if (active15mCycle.isLocked || lockedCycleIds.has(cycleId)) {
+    console.warn(`[INVALID_TRANSITION_REJECTED] Attempted duplicate lock for cycle ${cycleId} at ${new Date().toISOString()}. Existing lock from ${active15mCycle.lockedAt} is immutable.`);
+    return false;
+  }
+
+  const lockedTime = new Date().toISOString();
+  const dir: 'UP' | 'DOWN' = currentDirection === 'DOWN' ? 'DOWN' : 'UP';
+  const decision = dir === 'UP' ? 'BUY UP' : 'BUY DOWN';
+  const conf = Math.max(65, Math.min(96, Math.round(currentConfidence)));
+  const prob = currentModelProbability;
+  const strike = current15mStrikePrice;
+
+  active15mCycle.isLocked = true;
+  active15mCycle.stage = 'LOCKED';
+  active15mCycle.lockedAt = lockedTime;
+  active15mCycle.lockedDirection = dir;
+  active15mCycle.lockedDecision = decision;
+  active15mCycle.lockedConfidence = conf;
+  active15mCycle.lockedProbability = prob;
+  active15mCycle.lockedStrike = strike;
+  active15mCycle.lockedSpot = livePrice;
+  active15mCycle.lockedEdgePct = currentEdgePct;
+  active15mCycle.lockedReason = forcedReason || 'One-cycle immutable neural lock confirmed for 15M expiry';
+
+  lockedCycleIds.add(cycleId);
+
+  const sigId = `sig_lock_${active15mCycle.intervalStart}`;
+  let logItem = persistentSignalLogs.find(s => s.id === sigId);
+  if (!logItem) {
+    logItem = {
+      id: sigId,
+      market: 'BTC_KALSHI_15M',
+      ticker: 'BTC/USD',
+      intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
+      intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
+      direction: dir,
+      confidence: conf,
+      targetStrike: strike,
+      spotAtLock: livePrice,
+      btcPriceAtLock: livePrice,
+      ethPriceAtLock: currentEthPrice,
+      solPriceAtLock: currentSolPrice,
+      lockedAt: lockedTime,
+      expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
+      status: 'LOCKED',
+      modelVersion: serverLearningEngine.modelVersion,
+      dataSource: 'COINBASE_KRAKEN_CASCADE',
+      latencyMs: 12,
+    };
+    persistentSignalLogs.unshift(logItem);
+    if (persistentSignalLogs.length > 50) {
+      persistentSignalLogs.pop();
+    }
+  } else {
+    logItem.lockedAt = lockedTime;
+    logItem.direction = dir;
+    logItem.confidence = conf;
+    logItem.targetStrike = strike;
+    logItem.spotAtLock = livePrice;
+    logItem.status = 'LOCKED';
+  }
+
+  persistSingleSignalLog(logItem);
+  console.log(`[VIXY_ONE_LOCK_FINALIZED] Cycle ID: ${cycleId} | Locked At: ${lockedTime} | Decision: LOCKED — ${decision} | Conf: ${conf}% | Strike: $${strike}`);
+  return true;
+}
 
 async function checkAndSettle15mCycle(livePrice: number) {
   const now = Date.now();
   const intervalMs = 15 * 60 * 1000;
   const intervalStart = Math.floor(now / intervalMs) * intervalMs;
   const intervalEnd = intervalStart + intervalMs;
+  const currentCycleId = `15M-${new Date(intervalStart).toISOString()}`;
 
+  // 1. CYCLE ROLLOVER & SETTLEMENT
   if (current15mIntervalStart !== intervalStart) {
     const prevIntervalStart = current15mIntervalStart;
     current15mIntervalStart = intervalStart;
@@ -958,69 +1072,61 @@ async function checkAndSettle15mCycle(livePrice: number) {
             console.log(`[VIXY_LEARNING_UPDATE] Total Settled: ${serverLearningEngine.todaySettledCount} (History: ${totalHistory}) | Accuracy: ${updatedAccuracy}% | Avg Brier: ${updatedAvgBrier} | Model Weights Refreshed`);
             persistSingleSignalLog(prevLog);
             persistCalibrationState().catch(() => {});
-          } else {
-            // Silently drop duplicate log/write since it was already processed by another instance
           }
         }
       }
     }
 
-    // Initialize new cycle & re-evaluate live signal for the new interval window
+    // Initialize new cycle in ANALYZING stage
     currentEngineCycleId += 1;
-    const formattedCycleString = `15M-${new Date(intervalStart).toISOString()}`;
-    persistenceSeconds = 0; // Reset persistence timer for new cycle
+    persistenceSeconds = 0;
+    active15mCycle = {
+      cycleId: currentCycleId,
+      intervalStart,
+      intervalEnd,
+      strikePrice: current15mStrikePrice,
+      stage: 'ANALYZING',
+      isLocked: false,
+      lockedAt: null,
+      lockedDecision: null,
+      lockedDirection: null,
+      lockedConfidence: null,
+      lockedProbability: null,
+      lockedStrike: null,
+      lockedSpot: null,
+      lockedEdgePct: null,
+      lockedReason: null,
+    };
 
-    // Force recalculation of model features & signal for new cycle
-    const distToStrike = livePrice - current15mStrikePrice;
-    const isBullMomentum = distToStrike >= 0;
-    const rawProb = isBullMomentum ? 0.62 : 0.38;
-    currentModelProbability = rawProb;
-    const upPct = Math.round(currentModelProbability * 100 * 10) / 10;
-    const downPct = Math.round((100 - upPct) * 10) / 10;
-    currentDirection = upPct > downPct ? 'UP' : downPct > upPct ? 'DOWN' : 'NEUTRAL';
-    currentConfidence = Math.min(96, Math.max(60, Math.round((70 + Math.abs(currentModelProbability - 0.5) * 60) * 10) / 10));
-    currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (distToStrike / (current15mStrikePrice || 64000)) * 50) * 1000) / 1000));
-    currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
+    console.log(`[VIXY_CYCLE_CREATED] Cycle ID: ${currentCycleId} (#${currentEngineCycleId}) | Strike: $${current15mStrikePrice} | Spot: $${livePrice} | Stage: ANALYZING`);
+  }
 
-    console.log(`[VIXY_CYCLE_CREATED] Cycle ID: ${formattedCycleString} (#${currentEngineCycleId}) | Strike: $${current15mStrikePrice} | Spot: $${livePrice}`);
-    console.log(`[VIXY_CALIBRATION] Status: ${latestCalibrationState.calibrationStatus} | Calibrated Prob: ${currentModelProbability}`);
-    console.log(`[VIXY_ENTRY_QUALIFICATION] Direction: ${currentDirection} | Confidence: ${currentConfidence}% | Edge: ${currentEdgePct}%`);
-    console.log(`[VIXY_PROTECTION] Action: ${latestGuardianDecision.action} | Reversal Threat: ${latestGuardianDecision.reversalThreat}`);
+  // 2. RECOVERY FROM PERSISTENT STORE (Across Server Restarts, Reconnects, Remounts)
+  const currentSigId = `sig_lock_${intervalStart}`;
+  const existingLog = persistentSignalLogs.find(s => s.id === currentSigId);
+  if (existingLog && existingLog.status === 'LOCKED' && !active15mCycle.isLocked) {
+    active15mCycle.isLocked = true;
+    active15mCycle.stage = 'LOCKED';
+    active15mCycle.lockedAt = existingLog.lockedAt;
+    active15mCycle.lockedDirection = existingLog.direction;
+    active15mCycle.lockedDecision = existingLog.direction === 'UP' ? 'BUY UP' : 'BUY DOWN';
+    active15mCycle.lockedConfidence = existingLog.confidence;
+    active15mCycle.lockedProbability = currentModelProbability;
+    active15mCycle.lockedStrike = existingLog.targetStrike;
+    active15mCycle.lockedSpot = existingLog.spotAtLock;
+    active15mCycle.lockedReason = 'Recovered authoritative locked state from persistent store';
+    lockedCycleIds.add(currentCycleId);
+    console.log(`[VIXY_CYCLE_RECOVERED] Recovered existing immutable lock for cycle ${currentCycleId} (Locked At: ${existingLog.lockedAt})`);
+    return;
+  }
 
-    const newSigId = `sig_lock_${intervalStart}`;
-    let newLogToPersist: PersistentSignalLogItem | null = null;
-    if (!persistentSignalLogs.some(s => s.id === newSigId)) {
-      const newLogItem: PersistentSignalLogItem = {
-        id: newSigId,
-        market: 'BTC_KALSHI_15M',
-        ticker: 'BTC/USD',
-        intervalStart: new Date(intervalStart).toISOString(),
-        intervalEnd: new Date(intervalEnd).toISOString(),
-        direction: currentDirection === 'DOWN' ? 'DOWN' : 'UP',
-        confidence: currentConfidence,
-        targetStrike: current15mStrikePrice,
-        spotAtLock: livePrice,
-        btcPriceAtLock: livePrice,
-        ethPriceAtLock: currentEthPrice,
-        solPriceAtLock: currentSolPrice,
-        lockedAt: new Date().toISOString(),
-        expiresAt: new Date(intervalEnd).toISOString(),
-        status: 'LOCKED',
-        modelVersion: serverLearningEngine.modelVersion,
-        dataSource: 'COINBASE_KRAKEN_CASCADE',
-        latencyMs: 12,
-      };
-      persistentSignalLogs.unshift(newLogItem);
-      if (persistentSignalLogs.length > 50) {
-        persistentSignalLogs.pop();
-      }
-      newLogToPersist = newLogItem;
-    }
-
-    if (newLogToPersist) {
-      persistSingleSignalLog(newLogToPersist);
-    } else {
-      saveDiskStore();
+  // 3. EVALUATE LOCK POINT FOR ACTIVE CYCLE
+  // Before lock (first 45s): ANALYZING stage, model continues updating live features
+  // At official lock point (elapsed >= 45s or qualification confirmed): Lock prediction ONCE
+  const elapsedMs = now - intervalStart;
+  if (!active15mCycle.isLocked) {
+    if (elapsedMs >= 45000 || (latestLockEvaluation.qualified && elapsedMs >= 20000)) {
+      lock15mCycle(currentCycleId, livePrice, 'Official 15M cycle lock finalized after initial sampling');
     }
   }
 }
@@ -4301,91 +4407,71 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
   const minSamplesNeeded = 500;
 
   const spot = asset === 'BTC' ? currentBtcPrice : 100;
+  await checkAndSettle15mCycle(spot);
   const market15mState = getKalshi15mMarketState(spot);
-  const kalshiStrike = market15mState.strikePrice;
-
-  const upProbability = Math.round(currentModelProbability * 100 * 10) / 10;
-  const downProbability = Math.round((100 - upProbability) * 10) / 10;
-  const effectiveDirection = upProbability > downProbability ? 'UP' : downProbability > upProbability ? 'DOWN' : 'NEUTRAL';
-
-  const evidenceQuality = Math.min(96, Math.max(45, Math.round(currentConfidence * 0.95)));
+  const kalshiStrike = active15mCycle.isLocked ? (active15mCycle.lockedStrike || market15mState.strikePrice) : market15mState.strikePrice;
 
   const isProtectionVeto = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || Boolean(latestGuardianDecision?.reversalThreat && latestGuardianDecision.reversalThreat > 70);
-  const isDataFresh = isLive;
 
-  const isCycleCalibrating = market15mState.timeRemaining > 840; // First 60s of the 15M cycle
+  // IMMUTABLE 15-MINUTE CYCLE STATE MACHINE
+  // ONE CYCLE → ONE PREDICTION → ONE LOCK → ONE SETTLEMENT
+  const isLocked = active15mCycle.isLocked;
+  const cycleStage: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'SETTLED' = active15mCycle.stage;
+  const lockedAt = active15mCycle.lockedAt;
+  const lockedDecision = active15mCycle.lockedDecision;
+  const lockedDirection = active15mCycle.lockedDirection;
+  const lockedConfidence = active15mCycle.lockedConfidence;
+  const lockedProbability = active15mCycle.lockedProbability;
+  const lockedStrike = active15mCycle.lockedStrike;
+  const lockedSpot = active15mCycle.lockedSpot;
 
-  const isQualifiedEntry = !isCycleCalibrating && Boolean(latestLockEvaluation.qualified) && isDataFresh && !isProtectionVeto;
-
-  // STRICTLY INDEPENDENT SIGNAL STATE MACHINE
-  // SIGNAL STATE != ACCESS / AUTHORIZATION STATE
-  const signalState: 'IDLE' | 'ANALYZING' | 'SIGNAL_READY' | 'SIGNAL_CONFIRMED' | 'EXPIRED' | 'NO_SIGNAL' = 
-    isQualifiedEntry 
-      ? 'SIGNAL_CONFIRMED' 
-      : isCycleCalibrating 
-      ? 'ANALYZING' 
-      : !isDataFresh 
-      ? 'EXPIRED' 
-      : isProtectionVeto 
-      ? 'NO_SIGNAL' 
-      : 'ANALYZING';
-
-  const signalConfirmed = isQualifiedEntry;
-
-  let executionState: 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'PASS' | 'CALIBRATING' | 'STALE' = 'PASS';
+  let effectiveDirection: 'UP' | 'DOWN' | 'NEUTRAL' = 'NEUTRAL';
+  let decision = 'ANALYZING...';
+  let displayConf = currentConfidence;
+  let displayProb = currentModelProbability;
+  let executionState = 'CALIBRATING';
   let executionDirection: 'UP' | 'DOWN' | 'NONE' = 'NONE';
   let executionAuthorized = false;
-  let executionActionLabel = 'ENTRY NOT QUALIFIED';
-  let executionReason = 'Entry criteria not satisfied';
-
-  if (isQualifiedEntry) {
-    if (effectiveDirection === 'UP') {
-      executionState = 'CONFIRMED_UP';
-      executionDirection = 'UP';
-      executionAuthorized = true;
-      executionActionLabel = 'BUY UP → READY';
-      executionReason = 'Mathematical edge qualified across all 8 algorithms';
-    } else if (effectiveDirection === 'DOWN') {
-      executionState = 'CONFIRMED_DOWN';
-      executionDirection = 'DOWN';
-      executionAuthorized = true;
-      executionActionLabel = 'BUY DOWN → READY';
-      executionReason = 'Mathematical edge qualified across all 8 algorithms';
-    }
-  } else {
-    if (isCycleCalibrating) {
-      executionState = 'CALIBRATING';
-      executionReason = '15M cycle calibration and order flow sampling in progress';
-      executionActionLabel = 'ANALYZING 15M CYCLE';
-    } else if (isProtectionVeto) {
-      executionReason = 'Guardian Protection Active - Capital Defended';
-      executionActionLabel = 'PROTECT CAPITAL → NO TRADE';
-    } else if (!isDataFresh) {
-      executionState = 'STALE';
-      executionReason = 'Data Feed Stale - Awaiting Reconnection';
-      executionActionLabel = 'FEED PAUSED';
-    } else {
-      executionState = 'PASS';
-      executionReason = 'No statistical edge exceeding threshold';
-      executionActionLabel = 'AWAITING CONFLUENCE';
-    }
-  }
-
-  const displayProb = effectiveDirection === 'UP' ? upProbability : effectiveDirection === 'DOWN' ? downProbability : 50;
+  let executionActionLabel = '⚡ VIXY ANALYZING CYCLE...';
+  let executionReason = 'Sampling 15M order flow & confluence matrix';
   let confidenceLabel = 'NEUTRAL EDGE';
-  if (effectiveDirection === 'UP') {
-    if (displayProb >= 90) confidenceLabel = 'VERY HIGH BULLISH CONFIDENCE';
-    else if (displayProb >= 80) confidenceLabel = 'HIGH BULLISH CONFIDENCE';
-    else if (displayProb >= 70) confidenceLabel = 'STRONG BULLISH CONFIDENCE';
-    else if (displayProb >= 60) confidenceLabel = 'MODERATE BULLISH EDGE';
-    else confidenceLabel = 'DEVELOPING BULLISH EDGE';
-  } else if (effectiveDirection === 'DOWN') {
-    if (displayProb >= 90) confidenceLabel = 'VERY HIGH BEARISH CONFIDENCE';
-    else if (displayProb >= 80) confidenceLabel = 'HIGH BEARISH CONFIDENCE';
-    else if (displayProb >= 70) confidenceLabel = 'STRONG BEARISH CONFIDENCE';
-    else if (displayProb >= 60) confidenceLabel = 'MODERATE BEARISH EDGE';
-    else confidenceLabel = 'DEVELOPING BEARISH EDGE';
+  let vixyLockState = 'ANALYZING';
+  let signalState: 'IDLE' | 'ANALYZING' | 'SIGNAL_READY' | 'SIGNAL_CONFIRMED' | 'EXPIRED' | 'NO_SIGNAL' = 'ANALYZING';
+  let signalConfirmed = false;
+
+  if (isLocked) {
+    effectiveDirection = (lockedDirection === 'DOWN' ? 'DOWN' : 'UP');
+    decision = `LOCKED — ${lockedDecision || (effectiveDirection === 'UP' ? 'BUY UP' : 'BUY DOWN')}`;
+    displayConf = lockedConfidence || currentConfidence;
+    displayProb = lockedProbability || currentModelProbability;
+    executionState = effectiveDirection === 'UP' ? 'LOCKED_UP' : 'LOCKED_DOWN';
+    executionDirection = effectiveDirection;
+    executionAuthorized = true;
+    executionActionLabel = `⚡ LOCKED — ${lockedDecision || (effectiveDirection === 'UP' ? 'BUY UP' : 'BUY DOWN')}`;
+    executionReason = active15mCycle.lockedReason || 'One-cycle immutable neural lock confirmed for 15M expiry';
+    confidenceLabel = effectiveDirection === 'UP' ? 'HIGH BULLISH LOCK' : 'HIGH BEARISH LOCK';
+    vixyLockState = 'LOCKED';
+    signalState = 'SIGNAL_CONFIRMED';
+    signalConfirmed = true;
+  } else {
+    const upProbability = Math.round(currentModelProbability * 100 * 10) / 10;
+    const downProbability = Math.round((100 - upProbability) * 10) / 10;
+    effectiveDirection = upProbability > downProbability ? 'UP' : downProbability > upProbability ? 'DOWN' : 'NEUTRAL';
+    displayProb = currentModelProbability;
+    displayConf = currentConfidence;
+    vixyLockState = 'ANALYZING';
+    signalState = 'ANALYZING';
+    signalConfirmed = false;
+    executionState = 'CALIBRATING';
+    executionDirection = 'NONE';
+    executionAuthorized = false;
+    executionActionLabel = '⚡ VIXY ANALYZING CYCLE...';
+    executionReason = 'Sampling 15M order flow & confluence matrix';
+    confidenceLabel = 'ANALYZING CYCLE';
   }
+
+  const evidenceQuality = Math.min(96, Math.max(45, Math.round(displayConf * 0.95)));
+  const action = effectiveDirection === 'UP' ? 'BUY_YES' : (effectiveDirection === 'DOWN' ? 'BUY_NO' : 'HOLD');
 
   const execution = {
     state: executionState,
@@ -4393,15 +4479,9 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     authorized: executionAuthorized,
     actionLabel: executionActionLabel,
     reason: executionReason,
-    qualified: isQualifiedEntry,
+    qualified: isLocked,
     confidenceLabel: confidenceLabel
   };
-
-  const vixyLockState = isQualifiedEntry ? 'CONFIRMED' : (isCycleCalibrating ? 'CALIBRATING' : (!isDataFresh ? 'STALE' : 'PASS'));
-  const decision = isQualifiedEntry 
-    ? (effectiveDirection === 'UP' ? 'BUY UP' : 'BUY DOWN') 
-    : (isCycleCalibrating ? 'CALIBRATING' : (!isDataFresh ? 'DATA STALE' : (effectiveDirection === 'UP' ? 'BUY UP' : effectiveDirection === 'DOWN' ? 'BUY DOWN' : 'PASS')));
-  const action = effectiveDirection === 'UP' ? 'BUY_YES' : (effectiveDirection === 'DOWN' ? 'BUY_NO' : 'PASS');
 
   const resolvedOnly = persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10);
   const last10 = resolvedOnly.map((log) => {
@@ -4438,23 +4518,35 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     strike: kalshiStrike,
     expiry: market15mState.intervalEnd,
     timeRemaining: market15mState.timeRemaining,
+    timeRemainingSec: market15mState.timeRemaining,
     direction: decision,
     confidenceLabel,
     signalState,
     signalConfirmed,
     userAccess,
-    probability: isLive ? currentModelProbability : null,
-    confidence: isLive ? currentConfidence : null,
+    isLocked,
+    lockedAt,
+    lockedDecision,
+    lockedDirection,
+    lockedConfidence,
+    lockedProbability,
+    lockedStrike,
+    lockedSpot,
+    spotAtLock: isLocked ? lockedSpot : spot,
+    targetStrike: kalshiStrike,
+    cycleStage,
+    probability: isLive ? (isLocked ? displayProb : currentModelProbability) : null,
+    confidence: isLive ? (isLocked ? displayConf : currentConfidence) : null,
     calibratedProbability: latestCalibrationState.calibratedModelProbability,
-    calibrationStatus: isCycleCalibrating ? 'WARMING_UP' : latestCalibrationState.calibrationStatus,
-    buyInState: isQualifiedEntry ? 'QUALIFIED' : 'UNQUALIFIED',
+    calibrationStatus: isLocked ? 'LOCKED_ACTIVE' : (cycleStage === 'ANALYZING' ? 'WARMING_UP' : latestCalibrationState.calibrationStatus),
+    buyInState: isLocked ? 'QUALIFIED' : 'UNQUALIFIED',
     protectionState: latestGuardianDecision?.action || 'SAFE',
     reversalRisk: latestGuardianDecision?.reversalThreat || 0,
-    entryQualification: isQualifiedEntry ? 'QUALIFIED' : 'UNQUALIFIED',
+    entryQualification: isLocked ? 'QUALIFIED' : 'UNQUALIFIED',
     dataFreshness: isLive ? 'LIVE' : (computedFeedStatus === 'STALE' ? 'STALE' : 'OFFLINE'),
-    cycleId: `15M-${market15mState.intervalStart}`,
-    cycleStart: market15mState.intervalStart,
-    cycleEnd: market15mState.intervalEnd,
+    cycleId: active15mCycle.cycleId,
+    cycleStart: new Date(active15mCycle.intervalStart).toISOString(),
+    cycleEnd: new Date(active15mCycle.intervalEnd).toISOString(),
     execution,
     last10,
     last10Summary: {
@@ -4478,9 +4570,9 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     dataAgeMs,
     disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
     action: isLive ? action : null,
-    modelProbability: isLive ? currentModelProbability : null,
-    upProbability: isLive ? upProbability : 50.0,
-    downProbability: isLive ? downProbability : 50.0,
+    modelProbability: isLive ? (isLocked ? displayProb : currentModelProbability) : null,
+    upProbability: isLive ? (effectiveDirection === 'UP' ? Math.round(displayProb * 1000) / 10 : Math.round((1 - displayProb) * 1000) / 10) : 50.0,
+    downProbability: isLive ? (effectiveDirection === 'DOWN' ? Math.round(displayProb * 1000) / 10 : Math.round((1 - displayProb) * 1000) / 10) : 50.0,
     evidenceQuality: isLive ? evidenceQuality : 50,
     vixyLockState: isLive ? vixyLockState : 'ANALYZING',
     decision: isLive ? decision : 'PASS',

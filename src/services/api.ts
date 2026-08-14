@@ -711,7 +711,7 @@ export interface ApiSignalResponse {
   generatedAt: string;
   disclaimer: string;
   action: 'BUY_YES' | 'BUY_NO' | 'HOLD' | null;
-  direction?: 'UP' | 'DOWN' | 'NEUTRAL' | null;
+  direction?: 'UP' | 'DOWN' | 'NEUTRAL' | string | null;
   signalState?: SignalStateType;
   signalConfirmed?: boolean;
   modelProbability: number | null;
@@ -749,6 +749,27 @@ export interface ApiSignalResponse {
   calibrationSampleSize?: number;
   modelVersion?: string;
   calibrationVersion?: string;
+  cycleId?: string;
+  cycleStart?: string;
+  cycleEnd?: string;
+  cycleStage?: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'SETTLED';
+  isLocked?: boolean;
+  lockedAt?: string | null;
+  lockedDecision?: 'BUY UP' | 'BUY DOWN' | 'PASS' | string | null;
+  lockedDirection?: 'UP' | 'DOWN' | 'PASS' | string | null;
+  lockedConfidence?: number | null;
+  lockedProbability?: number | null;
+  lockedStrike?: number | null;
+  lockedSpot?: number | null;
+  lockedReason?: string | null;
+  strike?: number;
+  targetStrike?: number;
+  currentPrice?: number;
+  spotAtLock?: number;
+  timeRemaining?: number;
+  timeRemainingSec?: number;
+  last10?: any[];
+  last10Summary?: any;
   execution?: {
     state: string;
     direction: string;

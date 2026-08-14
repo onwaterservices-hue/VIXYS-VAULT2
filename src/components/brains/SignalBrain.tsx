@@ -772,8 +772,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-4 text-[9px] font-mono font-bold tracking-[0.15em] uppercase text-purple-400/60 pt-2 px-2">
         <div className="flex items-center gap-6">
            <div className="flex items-center gap-2">
-             <Key className="w-3 h-3" /> VIXY LOCK STATUS
-             <span className="text-emerald-400 ml-1">CONNECTED</span>
+             <Key className="w-3 h-3 text-purple-400" /> ENGINE DISPATCH STATUS
+             <span className="text-emerald-400 ml-1">ACTIVE</span>
            </div>
            <div className="flex items-center gap-2">
              DATA QUALITY

@@ -22,8 +22,8 @@ export const IntelligenceLockGate: React.FC<IntelligenceLockGateProps> = ({
   subtitle = 'Discord verification required to unlock live predictions, probabilities, order flow telemetry, and AI signals.',
   className = '',
 }) => {
-  // Authoritative Admin bypass - Admin has immediate unconditional access
-  const isPrivileged = isAdmin || userRole === 'ADMIN' || userRole === 'OWNER';
+  // Authoritative Access bypass - Admin & Subscribed Pro users have immediate unconditional access
+  const isPrivileged = isAdmin || userRole === 'ADMIN' || userRole === 'OWNER' || userRole === 'PRO' || userRole === 'ELITE';
   if (isPrivileged || isVerified) {
     return <>{children}</>;
   }

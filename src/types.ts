@@ -266,6 +266,16 @@ export interface SignalPredictionState {
   confidenceLabel: string;
   confidence: number;
   cycleId?: string;
+  cycleStart?: string;
+  cycleEnd?: string;
+  cycleStage?: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'SETTLED';
+  isLocked?: boolean;
+  lockedAt?: string | null;
+  lockedDecision?: 'BUY UP' | 'BUY DOWN' | 'PASS' | null;
+  lockedDirection?: 'UP' | 'DOWN' | 'PASS' | null;
+  lockedConfidence?: number | null;
+  lockedStrike?: number | null;
+  lockedSpot?: number | null;
   timestamp: string;
   modelVersion: string;
   calibrationVersion: string;
