@@ -33,6 +33,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { HistoricalPrediction } from '../types';
+import { VixyPerformanceMatrix } from './VixyPerformanceMatrix';
 
 interface HistoricalAccuracyProps {
   history: HistoricalPrediction[];
@@ -1025,57 +1026,21 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
         </div>
       </div>
 
-      {/* Asset & Timeframe Matrix & Model Drift Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Asset Performance Grid */}
-        <div className="bg-[#120B28] p-5 rounded-2xl border border-purple-500/30 space-y-3 shadow-xl">
-          <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
-            <div className="flex items-center gap-2">
-              <Layers className="w-5 h-5 text-purple-400" />
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                Asset Performance Breakdown
-              </h3>
-            </div>
-            <span className="text-[10px] text-purple-300/60 font-mono">6 Assets Evaluated</span>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left font-mono text-xs">
-              <thead className="bg-[#0B061A] text-purple-300/60 border-b border-purple-900/40 uppercase text-[10px]">
-                <tr>
-                  <th className="p-2.5">Asset</th>
-                  <th className="p-2.5">15S Scalp</th>
-                  <th className="p-2.5">15M Binary</th>
-                  <th className="p-2.5">1H Horizon</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-purple-900/30 text-purple-200">
-                {assetMatrixData.map((row) => (
-                  <tr key={row.asset} className="hover:bg-purple-900/20 transition-colors">
-                    <td className="p-2.5 font-bold text-white">{row.asset}</td>
-                    {row.tfStats.map((st) => (
-                      <td key={st.tf} className="p-2.5">
-                        <button
-                          onClick={() => {
-                            setSelectedAsset(row.asset);
-                            setSelectedTimeframe(st.tf);
-                            setCurrentPage(1);
-                          }}
-                          className="hover:text-cyan-300 text-left transition-colors"
-                        >
-                          <div className="font-bold text-emerald-400">{st.rate}%</div>
-                          <div className="text-[9px] text-purple-300/50">
-                            n={st.count} • Edge +{st.edge}%
-                          </div>
-                        </button>
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {/* VIXY PERFORMANCE MATRIX & MODEL DRIFT SECTION */}
+      <div className="space-y-6">
+        <VixyPerformanceMatrix
+          history={history}
+          selectedAsset={selectedAsset === 'ALL' ? 'BTC' : selectedAsset}
+          onSelectAsset={(ast) => {
+            setSelectedAsset(ast);
+            setCurrentPage(1);
+          }}
+          selectedTimeframe={selectedTimeframe}
+          onSelectTimeframe={(tf) => {
+            setSelectedTimeframe(tf);
+            setCurrentPage(1);
+          }}
+        />
 
         {/* Model Version Tracking & Drift Detector */}
         <div className="bg-[#120B28] p-5 rounded-2xl border border-purple-500/30 space-y-4 shadow-xl">
