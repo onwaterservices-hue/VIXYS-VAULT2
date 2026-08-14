@@ -141,25 +141,25 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
     'vixy-active-cycle'
   );
 
-  // ─── 2. VISIBLE 6-STAGE CALIBRATION SEQUENCE ───
+  // ─── 2. AUTOMATIC 6-STAGE CALIBRATION SEQUENCE & CONTINUOUS LIFECYCLE ───
   // STATE 01: INGESTING MARKET (0 - 1200ms)
   // STATE 02: SIGNAL ANALYSIS (1200 - 2400ms)
   // STATE 03: CALIBRATING SIGNAL (2400 - 3800ms)
   // STATE 04: MODEL VALIDATED (3800 - 5000ms)
   // STATE 05: ACTUAL CONFIDENCE REVEAL (5000 - 6400ms)
-  // STATE 06: DECISION LOCKED (6400ms+ settles to locked if backend is locked)
+  // STATE 06: DECISION LOCKED (6400ms - 20000ms, then automatically begins next cycle)
   type CalibrationStage = 'INGESTING' | 'ANALYSIS' | 'CALIBRATING' | 'VALIDATED' | 'REVEALED' | 'LOCKED';
   const [calibStage, setCalibStage] = useState<CalibrationStage>('INGESTING');
   const [displayedConfNum, setDisplayedConfNum] = useState<number>(50);
   const [lockPulseActive, setLockPulseActive] = useState<boolean>(false);
   const [isCalibratingActive, setIsCalibratingActive] = useState<boolean>(true);
 
-  // Persistent reference to prevent resetting on window resize, scroll, or normal re-renders
-  const lastProcessedCycleRef = useRef<string | null>(null);
+  // Timers and cycle loop references
   const timersRef = useRef<NodeJS.Timeout[]>([]);
+  const isMountedRef = useRef<boolean>(true);
 
   const runCalibrationSequence = useCallback(() => {
-    // Clear any existing timeouts
+    // Clear any pending timeouts
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
 
@@ -176,21 +176,25 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
     // STATE 01 -> STATE 02: SIGNAL ANALYSIS @ 1200ms
     const t1 = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setCalibStage('ANALYSIS');
     }, 1200);
 
     // STATE 02 -> STATE 03: CALIBRATING SIGNAL @ 2400ms
     const t2 = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setCalibStage('CALIBRATING');
     }, 2400);
 
     // STATE 03 -> STATE 04: MODEL VALIDATED @ 3800ms
     const t3 = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setCalibStage('VALIDATED');
     }, 3800);
 
     // STATE 04 -> STATE 05: ACTUAL MODEL CONFIDENCE @ 5000ms
     const t4 = setTimeout(() => {
+      if (!isMountedRef.current) return;
       setCalibStage('REVEALED');
 
       // Smooth count-up strictly to exact backend confidence
@@ -201,6 +205,10 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       let stepCount = 0;
 
       const stepTimer = setInterval(() => {
+        if (!isMountedRef.current) {
+          clearInterval(stepTimer);
+          return;
+        }
         stepCount++;
         const progress = Math.min(1, stepCount / totalSteps);
         const currentVal = Math.round(start + (target - start) * progress);
@@ -209,14 +217,26 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           clearInterval(stepTimer);
           setDisplayedConfNum(target); // Authoritatively exact
 
-          // STATE 05 -> STATE 06: DECISION LOCKED @ 6400ms
+          // STATE 05 -> STATE 06: DECISION LOCKED @ 6200ms
           const t5 = setTimeout(() => {
+            if (!isMountedRef.current) return;
             if (isBackendLocked) {
               setCalibStage('LOCKED');
               setLockPulseActive(true);
-              setTimeout(() => setLockPulseActive(false), 1400);
+              setTimeout(() => {
+                if (isMountedRef.current) setLockPulseActive(false);
+              }, 1400);
             }
             setIsCalibratingActive(false);
+
+            // ─── AUTOMATIC CONTINUOUS RECALIBRATION ───
+            // After holding the locked/settled state for ~15 seconds, automatically begin next live calibration sweep
+            const tAutoRecalibrate = setTimeout(() => {
+              if (isMountedRef.current && !isOfflineOrStale) {
+                runCalibrationSequence();
+              }
+            }, 15000);
+            timersRef.current.push(tAutoRecalibrate);
           }, 600);
           timersRef.current.push(t5);
         }
@@ -226,14 +246,15 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
     timersRef.current.push(t1, t2, t3, t4);
   }, [isOfflineOrStale, exactConfidencePct, isBackendLocked]);
 
-  // Trigger calibration when a new 15M cycle arrives or on initial load
+  // Start automatic calibration lifecycle on mount or when a new 15M cycle arrives
   useEffect(() => {
-    if (lastProcessedCycleRef.current !== currentCycleKey) {
-      lastProcessedCycleRef.current = currentCycleKey;
-      runCalibrationSequence();
-    }
+    isMountedRef.current = true;
+    runCalibrationSequence();
+
     return () => {
+      isMountedRef.current = false;
       timersRef.current.forEach(clearTimeout);
+      timersRef.current = [];
     };
   }, [currentCycleKey, runCalibrationSequence]);
 
