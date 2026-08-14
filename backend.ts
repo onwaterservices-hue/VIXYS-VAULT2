@@ -4371,7 +4371,21 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     }
   }
 
-  const confidenceLabel = effectiveDirection === 'UP' ? 'HIGH BULL' : (effectiveDirection === 'DOWN' ? 'HIGH BEAR' : 'NEUTRAL');
+  const displayProb = effectiveDirection === 'UP' ? upProbability : effectiveDirection === 'DOWN' ? downProbability : 50;
+  let confidenceLabel = 'NEUTRAL EDGE';
+  if (effectiveDirection === 'UP') {
+    if (displayProb >= 90) confidenceLabel = 'VERY HIGH BULLISH CONFIDENCE';
+    else if (displayProb >= 80) confidenceLabel = 'HIGH BULLISH CONFIDENCE';
+    else if (displayProb >= 70) confidenceLabel = 'STRONG BULLISH CONFIDENCE';
+    else if (displayProb >= 60) confidenceLabel = 'MODERATE BULLISH EDGE';
+    else confidenceLabel = 'DEVELOPING BULLISH EDGE';
+  } else if (effectiveDirection === 'DOWN') {
+    if (displayProb >= 90) confidenceLabel = 'VERY HIGH BEARISH CONFIDENCE';
+    else if (displayProb >= 80) confidenceLabel = 'HIGH BEARISH CONFIDENCE';
+    else if (displayProb >= 70) confidenceLabel = 'STRONG BEARISH CONFIDENCE';
+    else if (displayProb >= 60) confidenceLabel = 'MODERATE BEARISH EDGE';
+    else confidenceLabel = 'DEVELOPING BEARISH EDGE';
+  }
 
   const execution = {
     state: executionState,

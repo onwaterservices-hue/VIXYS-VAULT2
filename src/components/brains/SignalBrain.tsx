@@ -9,7 +9,9 @@ import {
   formatDistance,
   formatRegime,
   formatDataFreshness,
+  formatConfidenceLabel,
 } from '../../utils/metrics';
+import { VixyNeuralEngine } from './VixyNeuralEngine';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -105,12 +107,6 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isConfirmedDown = execution.state === 'CONFIRMED_DOWN' || execution.state === 'LOCK_DOWN' || (rawApiData?.signalConfirmed && (rawApiData?.direction === 'DOWN' || rawApiData?.direction === 'BUY DOWN')) || (rawApiData?.direction === 'BUY DOWN' && rawApiData?.entryQualification === 'QUALIFIED');
   const isPassState = execution.state === 'PASS' || (!isConfirmedUp && !isConfirmedDown && rawApiData?.direction === 'PASS');
 
-  const directionalConfidenceLabel = isConfirmedUp
-    ? 'HIGH BULL'
-    : isConfirmedDown
-    ? 'HIGH BEAR'
-    : (execution.confidenceLabel || rawApiData?.confidenceLabel || 'NEUTRAL');
-
   const sigAny = signal as any;
   const upProbability = Number(sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
   const downProbability = Number(sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
@@ -118,7 +114,16 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const edgePct = sigAny?.edgePct ?? rawApiData?.edgePct ?? 0;
   const edgeDisplay = edgePct > 0 ? `+${edgePct.toFixed(1)}% OVER MARKET` : `${edgePct.toFixed(1)}% OVER MARKET`;
 
-  const currentConfidence = Number(rawApiData?.confidence ?? signal?.confidence ?? upProbability);
+  const rawCalibProb = rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability;
+  const authoritativeConfidenceNum = Number(
+    rawCalibProb !== null && rawCalibProb !== undefined
+      ? (rawCalibProb <= 1 ? rawCalibProb * 100 : rawCalibProb)
+      : (rawApiData?.confidence ?? signal?.confidence ?? (isConfirmedUp ? upProbability : isConfirmedDown ? downProbability : 55))
+  );
+  const exactConfidenceVal = Math.min(100, Math.max(50, Math.round(authoritativeConfidenceNum)));
+  const confidenceMeta = formatConfidenceLabel(exactConfidenceVal, isConfirmedUp ? 'UP' : isConfirmedDown ? 'DOWN' : 'NEUTRAL');
+  const directionalConfidenceLabel = confidenceMeta.fullLabel;
+  const currentConfidence = exactConfidenceVal;
 
   const reversalRisk = Number(
     (signal as any)?.reversalRisk ??
@@ -195,7 +200,6 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     displayDecisionText = 'ANALYZING';
   }
 
-  const rawCalibProb = rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability;
   const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
     ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
     : (rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : 'CALIBRATING');
@@ -473,219 +477,44 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
       </div>
 
-      {/* PRIMARY VIXY DECISION CARD */}
-      <div className="relative overflow-hidden rounded-2xl border border-purple-900/40 p-5 sm:p-7 space-y-6 font-mono bg-[#030106] shadow-[0_0_30px_rgba(0,0,0,0.8)]">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(18,10,38,0)_50%,rgba(0,0,0,0.4)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20 z-0" />
-        
-        {/* HEADER */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10 border-b border-purple-900/30 pb-4 mb-4">
-          <div className="flex items-center gap-3">
-             <div className="text-cyan-400 opacity-80">
-               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 12H3m14-5l4 5-4 5"/></svg>
-             </div>
-             <div>
-               <h2 className="text-sm font-black text-slate-100 tracking-[0.25em] uppercase drop-shadow-md">VIXY DECISION ENGINE</h2>
-               <span className="text-[9px] text-purple-400/80 tracking-[0.2em] font-bold uppercase mt-0.5 block">HIGH-CONVICTION SETUP</span>
-             </div>
-          </div>
-          <div className="flex items-center gap-3 text-[9px] font-mono font-bold tracking-[0.2em] uppercase bg-[#06020c] py-1.5 px-3 rounded border border-purple-900/40">
-             <span className="text-purple-400/60">ENGINE: <span className="text-slate-300">V17</span></span>
-             <span className="text-purple-400/60">MODEL: <span className={isOfflineOrStale ? "text-rose-400" : isWarmingUp ? "text-amber-400" : "text-emerald-400"}>{isOfflineOrStale ? "STALE" : isWarmingUp ? "WARMING UP" : "LIVE"}</span></span>
-             <span className="text-purple-400/60">DATA: <span className={isOfflineOrStale ? "text-rose-400" : isDegradedStatus ? "text-amber-400" : "text-emerald-400"}>{connectionLabel}</span></span>
-             <span className="text-purple-400/60">CALIBRATION: <span className={rawCalibStatus === 'ACTIVE' ? "text-emerald-400" : "text-amber-400"}>{calibrationStatus}</span></span>
-          </div>
-        </div>
+      {/* VIXY LIVE NEURAL ENGINE & ADVANCED EXECUTION CORE */}
+      <VixyNeuralEngine
+        rawApiData={rawApiData}
+        orderFlowState={orderFlowState}
+        momentumState={momentumState}
+        volatilityState={volatilityState}
+        distanceState={distanceState}
+        regimeState={regimeState}
+        freshnessState={freshnessState}
+        currentPrice={currentPrice}
+        targetPrice={targetPrice}
+        timeRemainingSec={rawApiData?.timeRemainingSec || rawApiData?.features?.timeRemaining || 540}
+        isProtectState={isProtectState}
+        reversalRisk={reversalRisk}
+        isOfflineOrStale={isOfflineOrStale}
+        onExecute={triggerHapticPulse}
+      />
 
-        {/* DECISION & CONFIDENCE AREA (Clean Vertical Hierarchy) */}
-        <div className="flex flex-col items-center justify-center py-8 relative z-10 space-y-2">
-           <span className="text-[11px] text-purple-300/80 font-black tracking-[0.25em] uppercase mb-1 drop-shadow-sm">CURRENT DECISION BIAS</span>
-           <div className="flex flex-col items-center justify-center relative">
-             {/* Background Grids and Brackets */}
-             <div className="absolute inset-0 -mx-16 -my-8 bg-[linear-gradient(rgba(147,51,234,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.03)_1px,transparent_1px)] bg-[size:30px_30px] pointer-events-none [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_70%)]" />
-             <div className="absolute -left-12 top-0 w-3 h-3 border-t-2 border-l-2 border-purple-500/30 opacity-50"></div>
-             <div className="absolute -right-12 top-0 w-3 h-3 border-t-2 border-r-2 border-purple-500/30 opacity-50"></div>
-             <div className="absolute -left-12 bottom-0 w-3 h-3 border-b-2 border-l-2 border-purple-500/30 opacity-50"></div>
-             <div className="absolute -right-12 bottom-0 w-3 h-3 border-b-2 border-r-2 border-purple-500/30 opacity-50"></div>
-
-             {/* Atmospheric Bloom */}
-             <div className={`absolute inset-0 blur-[60px] opacity-20 rounded-full transition-colors duration-1000 ${
-               showBuyUp ? 'bg-emerald-500' : showBuyDown ? 'bg-rose-500' : 'bg-purple-600'
-             }`} />
-             
-             <div className={`text-[85px] sm:text-[110px] leading-none font-black tracking-tighter flex items-center gap-4 relative z-10 transition-colors duration-500 ${
-                showBuyUp ? 'text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.4)]' : showBuyDown ? 'text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.4)]' : 'text-purple-400 drop-shadow-[0_0_20px_rgba(168,85,247,0.4)]'
-             }`} style={{ textShadow: showBuyUp ? '0 0 30px rgba(0,255,157,0.3)' : showBuyDown ? '0 0 30px rgba(255,51,102,0.3)' : '0 0 30px rgba(168,85,247,0.3)' }}>
-               {isOfflineOrStale ? 'STALE' : isWarmingUp ? 'CALIBRATING' : showBuyUp ? 'BUY UP' : showBuyDown ? 'BUY DOWN' : isPassState ? 'PASS' : 'ANALYZING'}
-               {(showBuyUp || showBuyDown) && !isWarmingUp && (
-                 <span className="text-[70px] sm:text-[90px]">{showBuyUp ? '▲' : '▼'}</span>
-               )}
-             </div>
-             <div className="flex items-center gap-3 mt-4 relative z-10">
-               <span className={`text-[42px] font-black tracking-tighter ${
-                 isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : showBuyUp ? 'text-[#00FF9D]' : showBuyDown ? 'text-[#FF3366]' : 'text-purple-300'
-               }`} style={{ textShadow: isOfflineOrStale ? '0 0 15px rgba(244,63,94,0.4)' : isWarmingUp ? '0 0 15px rgba(168,85,247,0.2)' : showBuyUp ? '0 0 15px rgba(0,255,157,0.4)' : showBuyDown ? '0 0 15px rgba(255,51,102,0.4)' : '0 0 15px rgba(168,85,247,0.4)' }}>{displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}</span>
-               <span className={`text-[10px] font-black tracking-[0.2em] uppercase px-3 py-1.5 rounded border ${
-                 isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : showBuyUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : showBuyDown ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
-               }`}>{directionalConfidenceLabel}</span>
-             </div>
-           </div>
-        </div>
-
-        {/* VIXY AUTHORITATIVE EXECUTION DISPATCH PANEL */}
-        <div className={`p-1 rounded-2xl transition-all duration-1000 relative ${
-          isProtectState 
-            ? 'bg-gradient-to-b from-rose-500/80 to-rose-950/20 shadow-[0_0_40px_rgba(244,63,94,0.3)]'
-            : isConfirmedUp
-            ? 'bg-gradient-to-b from-[#00FF9D]/60 to-emerald-950/20 shadow-[0_0_40px_rgba(0,255,157,0.25)]'
-            : isConfirmedDown
-            ? 'bg-gradient-to-b from-[#FF3366]/60 to-rose-950/20 shadow-[0_0_40px_rgba(255,51,102,0.25)]'
-            : 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]'
-        }`}>
-          <div className={`w-full h-full rounded-xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all duration-1000 relative ${
-            isProtectState ? 'bg-[#0a0002]' : isConfirmedUp ? 'bg-[#010e0a]' : isConfirmedDown ? 'bg-[#0e0105]' : 'bg-[#0a050f]'
-          }`}>
-             {/* Cybernetic background accents */}
-             {isConfirmedUp && (
-               <>
-                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-[#00FF9D]/40 to-transparent" />
-                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-[#00FF9D]/40 to-transparent" />
-               </>
-             )}
-             {isConfirmedDown && (
-               <>
-                 <div className="absolute top-0 right-0 w-32 h-[1px] bg-gradient-to-l from-[#FF3366]/40 to-transparent" />
-                 <div className="absolute bottom-0 left-0 w-32 h-[1px] bg-gradient-to-r from-[#FF3366]/40 to-transparent" />
-               </>
-             )}
-
-             <div className="flex items-center gap-4 relative z-10">
-               <div className={`p-3 rounded-xl border flex items-center justify-center transition-all duration-1000 ${
-                 isProtectState
-                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 drop-shadow-[0_0_25px_rgba(244,63,94,0.9)]'
-                   : isConfirmedUp
-                   ? 'bg-[#021f15] border-[#00FF9D] text-[#00FF9D] drop-shadow-[0_0_25px_rgba(0,255,157,0.9)]'
-                   : isConfirmedDown
-                   ? 'bg-[#1f0208] border-[#FF3366] text-[#FF3366] drop-shadow-[0_0_25px_rgba(255,51,102,0.9)]'
-                   : 'bg-purple-950/40 border-purple-700/50 text-purple-400'
-               }`}>
-                 {statusIcon}
-               </div>
-               <div>
-                 <div className="flex items-center gap-3 mb-1">
-                   <span className={`text-[10px] font-black tracking-[0.25em] uppercase ${
-                     isProtectState ? 'text-rose-500/90' : isConfirmedUp ? 'text-[#00FF9D]/90' : isConfirmedDown ? 'text-[#FF3366]/90' : 'text-purple-400/80'
-                   }`}>{titleLabelText}</span>
-                   <span className={`text-[28px] sm:text-[32px] font-black tracking-widest uppercase leading-none ${
-                     isProtectState ? 'text-rose-500' : isConfirmedUp ? 'text-[#00FF9D]' : isConfirmedDown ? 'text-[#FF3366]' : 'text-purple-300'
-                   }`} style={{ textShadow: isProtectState ? '0 0 20px rgba(244,63,94,0.6)' : isConfirmedUp ? '0 0 20px rgba(0,255,157,0.8)' : isConfirmedDown ? '0 0 20px rgba(255,51,102,0.8)' : '0 0 15px rgba(168,85,247,0.4)' }}>
-                     {statusValueText}
-                   </span>
-                 </div>
-                 <div className="hidden sm:block mt-2">
-                   <span className={`text-[10px] font-black tracking-widest uppercase ${
-                     isProtectState ? 'text-rose-400' : isConfirmedUp ? 'text-[#00FF9D]' : isConfirmedDown ? 'text-[#FF3366]' : 'text-purple-400'
-                   }`}>
-                     {subtitleLabelText}
-                   </span>
-                   <span className={`text-[11px] font-mono block ${
-                     isProtectState ? 'text-rose-300/80' : isConfirmedUp ? 'text-emerald-100/80' : isConfirmedDown ? 'text-rose-100/80' : 'text-purple-300/70'
-                   }`}>
-                     {subtitleDescText}
-                   </span>
-                 </div>
-               </div>
-             </div>
-
-             <div className="flex flex-col items-end relative z-10">
-               <div className={`text-base font-black tracking-widest px-6 py-3 rounded-xl border ${
-                 isProtectState
-                   ? 'bg-[#1f0208] border-rose-500 text-rose-400 shadow-[0_0_30px_rgba(244,63,94,0.3)]'
-                   : isConfirmedUp
-                   ? 'bg-[#041510] border-[#00FF9D]/70 text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.3)]'
-                   : isConfirmedDown
-                   ? 'bg-[#1a050a] border-[#FF3366]/70 text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.3)]'
-                   : 'bg-purple-950/40 border-purple-800/60 text-purple-300/80'
-               }`} style={{ textShadow: isProtectState ? '0 0 15px rgba(244,63,94,0.6)' : isConfirmedUp ? '0 0 10px rgba(0,255,157,0.5)' : isConfirmedDown ? '0 0 10px rgba(255,51,102,0.5)' : 'none' }}>
-                 {actionBtnText}
-               </div>
-               <div className={`flex items-center gap-2 text-[10px] font-bold tracking-[0.2em] uppercase mt-3 ${
-                 isProtectState ? 'text-rose-400' : isConfirmedUp ? 'text-emerald-400' : isConfirmedDown ? 'text-rose-400' : 'text-purple-400/70'
-               }`}>
-                 {statusText}
-                 {(isConfirmedUp || isConfirmedDown) && (
-                   <span className="flex items-center gap-1.5 ml-2 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-500/40 text-emerald-400 font-mono text-[9px]">
-                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> SIGNAL ACTIVE
-                   </span>
-                 )}
-               </div>
-             </div>
-          </div>
-        </div>
-
-        {isProtectState && (
-          <div className="relative z-10 border-t border-rose-900/40 bg-[#0a0002]/90 px-5 py-3">
-            <div className="text-[9px] font-bold tracking-[0.2em] uppercase mb-2 text-rose-500/70">
-              RISK TELEMETRY
+      {/* 5 EVIDENCE METRICS & REAL-TIME FEATURE SIGNALS */}
+      <div className="relative overflow-hidden rounded-2xl border border-purple-900/40 p-4 sm:p-5 space-y-4 font-mono bg-[#030106] shadow-[0_0_30px_rgba(0,0,0,0.8)]">
+        <div className="flex items-center justify-between border-b border-purple-900/30 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-6 h-6 rounded-md bg-purple-950/80 border border-purple-600/40 flex items-center justify-center">
+              <Zap className="w-3.5 h-3.5 text-purple-300" />
             </div>
-            <div className="flex flex-wrap items-center gap-4 sm:gap-8">
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">REVERSAL THREAT</div>
-                <div className="text-xs font-black text-rose-400">{reversalRisk}% {reversalRisk >= 50 ? 'CRITICAL' : 'HIGH'}</div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">ORDER FLOW</div>
-                <div className={`text-xs font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                  {displayOrderFlow >= 0 ? 'BULLISH' : 'BEARISH'}
-                </div>
-              </div>
-              <div>
-                <div className="text-[9px] uppercase tracking-wider text-rose-400/50">POSITION STATE</div>
-                <div className="text-xs font-black text-rose-400">PROTECT</div>
-              </div>
+            <div>
+              <h3 className="text-xs font-black text-slate-100 tracking-[0.2em] uppercase">MARKET EVIDENCE TELEMETRY</h3>
+              <span className="text-[8px] text-purple-400/80 tracking-[0.15em] font-bold uppercase block">LIVE 15M QUANTITATIVE VECTORS</span>
             </div>
           </div>
-        )}
-
-        {/* EVIDENCE ACCUMULATION */}
-        <div className="pt-6 relative z-10">
-          <div className="flex items-center justify-between text-[10px] font-bold tracking-[0.2em] text-purple-400/70 uppercase mb-3">
-            <span>VIXY CONFIDENCE FIELD</span>
-            <div className="flex items-center gap-2 text-sm font-black">
-              <span className={isOfflineOrStale ? 'text-rose-400' : isWarmingUp ? 'text-purple-400/60' : showBuyUp ? 'text-[#00FF9D]' : showBuyDown ? 'text-[#FF3366]' : 'text-purple-400'}>
-                {displayCalibratedProb !== 'CALIBRATING' ? displayCalibratedProb : `${Math.round(currentConfidence)}%`}
-              </span>
-              <span className={`text-[9px] uppercase px-2 py-0.5 rounded border ${
-                isOfflineOrStale ? 'bg-rose-950/30 border-rose-900/50 text-rose-400' : isWarmingUp ? 'bg-purple-950/20 border-purple-900/30 text-purple-400/60' : showBuyUp ? 'bg-[#041510] border-emerald-900/50 text-[#00FF9D]' : showBuyDown ? 'bg-[#1a050a] border-rose-900/50 text-[#FF3366]' : 'bg-purple-900/30 border-purple-700/50 text-purple-400'
-              }`}>
-                {directionalConfidenceLabel}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 h-3">
-            {Array.from({ length: 16 }).map((_, idx) => {
-              const fillThreshold = (idx + 1) * (100 / 16);
-              const confVal = rawCalibProb ? Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1)) : Math.round(currentConfidence);
-              const isFilled = confVal >= fillThreshold;
-              return (
-                <div
-                  key={idx}
-                  className={`h-full flex-1 rounded-sm transition-all duration-500 ${
-                    isFilled
-                      ? showBuyUp
-                         ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.4)]'
-                         : showBuyDown
-                         ? 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.4)]'
-                         : 'bg-purple-600/80 shadow-[0_0_8px_rgba(147,51,234,0.3)]'
-                      : 'bg-[#0a0518] border border-purple-900/30'
-                  }`}
-                />
-              );
-            })}
+          <div className="flex items-center gap-2 text-[9px] font-mono font-bold tracking-[0.15em] uppercase bg-[#06020c] py-1 px-2.5 rounded border border-purple-900/40">
+            <span className="text-purple-400/60">MODEL: <span className={isOfflineOrStale ? "text-rose-400" : isWarmingUp ? "text-amber-400" : "text-emerald-400"}>{isOfflineOrStale ? "STALE" : isWarmingUp ? "WARMING UP" : "LIVE"}</span></span>
+            <span className="text-purple-400/60">LINK: <span className={isOfflineOrStale ? "text-rose-400" : isDegradedStatus ? "text-amber-400" : "text-emerald-400"}>{connectionLabel}</span></span>
           </div>
         </div>
 
         {/* 5 EVIDENCE METRICS */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-4 relative z-10">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 relative z-10">
            {/* Order Flow */}
            <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
              <div className="flex items-center justify-between">

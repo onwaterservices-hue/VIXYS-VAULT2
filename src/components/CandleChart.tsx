@@ -70,12 +70,29 @@ const MIN_CANDLE_SLOT_PX = 12;
 // Container Width Hook
 function useContainerSize() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [width, setWidth] = useState<number>(800);
+  const [width, setWidth] = useState<number>(() => {
+    if (typeof window !== 'undefined') {
+      return Math.min(Math.max(window.innerWidth - 32, 320), 1400);
+    }
+    return 800;
+  });
   const [height, setHeight] = useState<number>(510);
 
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
+
+    const updateSize = () => {
+      const rect = element.getBoundingClientRect();
+      if (rect.width > 0) {
+        setWidth(Math.floor(rect.width));
+      }
+      if (rect.height > 0) {
+        setHeight(Math.floor(rect.height));
+      }
+    };
+
+    updateSize();
 
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -87,7 +104,11 @@ function useContainerSize() {
     });
 
     observer.observe(element);
-    return () => observer.disconnect();
+    window.addEventListener('resize', updateSize);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateSize);
+    };
   }, []);
 
   return { containerRef, width, height };
@@ -325,19 +346,20 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Mouse Crosshair Position State
   const [crosshairPos, setCrosshairPos] = useState<{ x: number; y: number; price: number; timeLabel: string } | null>(null);
 
+  const isMobile = measuredWidth < 600;
   const isWide = measuredWidth >= WIDE_BREAKPOINT;
   const sidePanelWidth = isWide ? 260 : 0;
   const gapX = isWide ? 16 : 0;
-  const paddingX = 32;
-  const chartSvgWidth = Math.max(280, measuredWidth - sidePanelWidth - gapX - paddingX);
+  const paddingX = isMobile ? 16 : 32;
+  const chartSvgWidth = Math.max(300, isWide ? measuredWidth - sidePanelWidth - gapX - paddingX : measuredWidth - paddingX);
 
   const safeCandles = candles || [];
 
   const rawVisibleCount =
     safeCandles.length > 0 ? Math.max(6, Math.round(safeCandles.length / zoomLevel)) : 0;
 
-  const marginLeft = 65;
-  const marginRight = 80; // Extra room for right Y-axis tags & target badges
+  const marginLeft = isMobile ? 42 : 65;
+  const marginRight = isMobile ? 55 : 80; // Extra room for right Y-axis tags & target badges
   const plotWidth = Math.max(100, chartSvgWidth - marginLeft - marginRight);
 
   const maxFitCandles = Math.max(6, Math.floor(plotWidth / MIN_CANDLE_SLOT_PX));
@@ -394,7 +416,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         <div className="absolute inset-0 bg-gradient-to-b from-purple-900/10 via-transparent to-rose-900/10 pointer-events-none" />
         <WifiOff className="w-12 h-12 text-rose-400 animate-pulse relative z-10" />
         <span className="text-white font-black text-sm md:text-base tracking-widest uppercase relative z-10">
-          CHART DATA UNAVAILABLE — RECONNECTING...
+          MYTHIC CHART DATA UNAVAILABLE — RECONNECTING...
         </span>
         <p className="text-xs text-purple-300/70 max-w-md leading-relaxed relative z-10">
           Live exchange OHLC market stream is unreachable or re-establishing connection.
@@ -403,12 +425,16 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     );
   }
 
-  const volumeHeight = 60;
-  const rsiHeight = showRSI ? 75 : 0;
-  const marginTop = 25;
-  const marginBottom = 35;
-  const svgHeight = Math.max(480, measuredHeight - 160);
-  const chartHeight = Math.max(250, svgHeight - volumeHeight - rsiHeight - marginTop - marginBottom);
+  const volumeHeight = isMobile ? 45 : 60;
+  const rsiHeight = showRSI ? (isMobile ? 55 : 75) : 0;
+  const marginTop = isMobile ? 15 : 25;
+  const marginBottom = isMobile ? 25 : 35;
+  const svgHeight = isWide
+    ? Math.max(480, measuredHeight - 160)
+    : isMobile
+    ? 380
+    : 440;
+  const chartHeight = Math.max(180, svgHeight - volumeHeight - rsiHeight - marginTop - marginBottom);
 
   const lowPrices = visibleCandles.map((c) => c.low);
   const highPrices = visibleCandles.map((c) => c.high);
@@ -1415,14 +1441,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
   // Indicator Overlay Toolbar
   const indicatorToolbar = (
-    <div className="flex flex-wrap items-center gap-2 p-2 bg-[#0d0a1a] rounded-lg border border-[#2a2340] mb-3 text-[10px] font-mono">
-      <span className="text-[#8b84a8] font-bold flex items-center gap-1 pr-1">
+    <div className="flex items-center gap-1.5 p-2 bg-[#0d0a1a] rounded-lg border border-[#2a2340] mb-3 text-[10px] font-mono overflow-x-auto no-scrollbar whitespace-nowrap flex-nowrap sm:flex-wrap">
+      <span className="text-[#8b84a8] font-bold flex items-center gap-1 pr-1 shrink-0">
         <Sliders className="w-3 h-3 text-purple-400" /> Overlays:
       </span>
 
       <button
         onClick={() => setShowTikTokAiOverlay(!showTikTokAiOverlay)}
-        className={`px-2.5 py-1 rounded-md border transition-all flex items-center gap-1.5 font-extrabold ${
+        className={`px-2.5 py-1 rounded-md border transition-all flex items-center gap-1.5 font-extrabold shrink-0 ${
           showTikTokAiOverlay
             ? 'bg-gradient-to-r from-emerald-950 via-purple-950 to-rose-950 text-emerald-300 border-emerald-400 shadow-lg shadow-emerald-500/20'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1434,7 +1460,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setAudioEnabled(!audioEnabled)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           audioEnabled
             ? 'bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1447,7 +1473,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowEMA(!showEMA)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showEMA
             ? 'bg-purple-900/40 text-purple-200 border-purple-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1459,7 +1485,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowVWAP(!showVWAP)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showVWAP
             ? 'bg-cyan-950/40 text-cyan-200 border-cyan-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1471,7 +1497,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowBollinger(!showBollinger)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showBollinger
             ? 'bg-indigo-950/40 text-indigo-200 border-indigo-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1483,7 +1509,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowSRLevels(!showSRLevels)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showSRLevels
             ? 'bg-teal-950/40 text-teal-200 border-teal-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1495,7 +1521,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowRSI(!showRSI)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showRSI
             ? 'bg-amber-950/40 text-amber-200 border-amber-500/40 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1507,7 +1533,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
       <button
         onClick={() => setShowCrosshair(!showCrosshair)}
-        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 ${
+        className={`px-2 py-0.5 rounded border transition-all flex items-center gap-1 shrink-0 ${
           showCrosshair
             ? 'bg-slate-800 text-purple-300 border-purple-500/30 font-bold'
             : 'bg-[#150f28] text-slate-500 border-[#2a2340]'
@@ -1521,9 +1547,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
   // Top Dynamic OHLC HUD readout
   const candleHudHeader = (
-    <div className="flex flex-wrap items-center justify-between gap-3 p-2.5 bg-[#150f28] rounded-xl border border-[#2a2340] mb-3 font-mono text-[11px] text-purple-200/90">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-[#8b84a8] font-bold text-[10px] uppercase tracking-wider flex items-center gap-1">
+    <div className="flex flex-wrap items-center justify-between gap-2 p-2 sm:p-2.5 bg-[#150f28] rounded-xl border border-[#2a2340] mb-3 font-mono text-[10px] sm:text-[11px] text-purple-200/90">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <span className="text-[#8b84a8] font-bold text-[9px] sm:text-[10px] uppercase tracking-wider flex items-center gap-1">
           <Activity className="w-3 h-3 text-teal-400 animate-pulse" />
           BAR READOUT:
         </span>
@@ -1549,7 +1575,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 text-[10px]">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-[9px] sm:text-[10px]">
         {showEMA && (
           <div>
             <span className="text-purple-400">EMA9: </span>
@@ -1575,16 +1601,27 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const mainViewContent = (
     <div
       ref={containerRef}
-      className="w-full h-[520px] md:h-[650px] lg:h-[750px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-4 text-[#e5e0f5] font-mono shadow-2xl"
+      className="w-full min-h-[580px] md:h-[650px] lg:h-[750px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-3 sm:p-4 text-[#e5e0f5] font-mono shadow-2xl"
     >
       {controlsBar}
       {candleHudHeader}
       {indicatorToolbar}
 
-      <div className={`flex-1 grid gap-4 overflow-hidden ${isWide ? 'grid-cols-[1fr_260px]' : 'grid-cols-1'}`}>
-        <div className="w-full h-full overflow-hidden flex justify-center items-center">{mainSvgContent}</div>
-        <div>{annotationPanel}</div>
-      </div>
+      {isWide ? (
+        <div className="flex-1 grid grid-cols-[1fr_260px] gap-4 overflow-hidden min-h-[380px]">
+          <div className="w-full h-full overflow-hidden flex justify-center items-center relative">
+            {mainSvgContent}
+          </div>
+          <div className="overflow-y-auto max-h-[500px]">{annotationPanel}</div>
+        </div>
+      ) : (
+        <div className="flex-1 flex flex-col space-y-3 min-h-[380px]">
+          <div className="w-full h-[380px] sm:h-[440px] flex justify-center items-center relative overflow-hidden">
+            {mainSvgContent}
+          </div>
+          <div className="w-full border-t border-[#2a2340] pt-3">{annotationPanel}</div>
+        </div>
+      )}
 
       {/* Legend Footer */}
       <div className="mt-3 pt-3 border-t border-[#2a2340] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#8b84a8]">

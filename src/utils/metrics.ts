@@ -286,3 +286,130 @@ export function formatDataFreshness(dataAgeMs: number, feedStatus?: string): {
   }
   return { label: 'STALE', ageText, statusClass: 'text-rose-400', isLive: false, isStale: true };
 }
+
+/**
+ * CONFIDENCE BANDS & SEMANTIC DESCRIPTORS (VIXY VAULT STRICT CALIBRATION)
+ *
+ * Strict Calibration Bands:
+ *  - 50–59% → LOW / DEVELOPING EDGE (e.g., DEVELOPING BULLISH EDGE or DEVELOPING BEARISH EDGE)
+ *  - 60–69% → MODERATE BULLISH / BEARISH EDGE (e.g., MODERATE BULLISH EDGE or MODERATE BEARISH EDGE)
+ *  - 70–79% → STRONG BULLISH / BEARISH CONFIDENCE (e.g., STRONG BULLISH CONFIDENCE or STRONG BEARISH CONFIDENCE)
+ *  - 80–89% → HIGH BULLISH / BEARISH CONFIDENCE (e.g., HIGH BULLISH CONFIDENCE or HIGH BEARISH CONFIDENCE)
+ *  - 90–100% → VERY HIGH BULLISH / BEARISH CONFIDENCE (e.g., VERY HIGH BULLISH CONFIDENCE or VERY HIGH BEARISH CONFIDENCE)
+ */
+export function formatConfidenceLabel(
+  confidencePct: number | null | undefined,
+  direction?: 'UP' | 'DOWN' | 'BUY UP' | 'BUY DOWN' | 'NEUTRAL' | 'PASS' | string
+): {
+  tierLabel: string;
+  fullLabel: string;
+  badgeClass: string;
+  accentClass: string;
+  meterPct: number;
+} {
+  const val = typeof confidencePct === 'number' && !isNaN(confidencePct) ? confidencePct : 50;
+  // Standardize 0.0-1.0 fraction vs 0-100 percentage
+  const pct = val <= 1 && val > 0 ? Math.round(val * 100) : Math.round(val);
+  const clamped = Math.min(100, Math.max(0, pct));
+
+  const dirUpper = (direction || '').toUpperCase();
+  const isUp = dirUpper.includes('UP') || dirUpper.includes('YES');
+  const isDown = dirUpper.includes('DOWN') || dirUpper.includes('NO');
+
+  let tier = 'LOW';
+  let tierLabel = 'DEVELOPING EDGE';
+  let fullLabel = 'DEVELOPING EDGE';
+  let badgeClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300';
+  let accentClass = 'text-purple-400';
+
+  if (clamped >= 90) {
+    tier = 'VERY HIGH';
+    tierLabel = 'VERY HIGH CONFIDENCE';
+    if (isUp) {
+      fullLabel = 'VERY HIGH BULLISH CONFIDENCE';
+      badgeClass = 'bg-[#00FF9D]/15 border-[#00FF9D]/60 text-[#00FF9D] shadow-[0_0_15px_rgba(0,255,157,0.3)]';
+      accentClass = 'text-[#00FF9D]';
+    } else if (isDown) {
+      fullLabel = 'VERY HIGH BEARISH CONFIDENCE';
+      badgeClass = 'bg-[#FF3366]/15 border-[#FF3366]/60 text-[#FF3366] shadow-[0_0_15px_rgba(255,51,102,0.3)]';
+      accentClass = 'text-[#FF3366]';
+    } else {
+      fullLabel = 'VERY HIGH CONFIDENCE';
+      badgeClass = 'bg-purple-900/40 border-purple-500/60 text-purple-200';
+      accentClass = 'text-purple-300';
+    }
+  } else if (clamped >= 80) {
+    tier = 'HIGH';
+    tierLabel = 'HIGH CONFIDENCE';
+    if (isUp) {
+      fullLabel = 'HIGH BULLISH CONFIDENCE';
+      badgeClass = 'bg-[#041510] border-emerald-500/50 text-[#00FF9D]';
+      accentClass = 'text-[#00FF9D]';
+    } else if (isDown) {
+      fullLabel = 'HIGH BEARISH CONFIDENCE';
+      badgeClass = 'bg-[#1a050a] border-rose-500/50 text-[#FF3366]';
+      accentClass = 'text-[#FF3366]';
+    } else {
+      fullLabel = 'HIGH CONFIDENCE';
+      badgeClass = 'bg-purple-900/30 border-purple-600/50 text-purple-300';
+      accentClass = 'text-purple-300';
+    }
+  } else if (clamped >= 70) {
+    tier = 'STRONG';
+    tierLabel = 'STRONG CONFIDENCE';
+    if (isUp) {
+      fullLabel = 'STRONG BULLISH CONFIDENCE';
+      badgeClass = 'bg-[#041510]/80 border-emerald-700/50 text-emerald-300';
+      accentClass = 'text-emerald-400';
+    } else if (isDown) {
+      fullLabel = 'STRONG BEARISH CONFIDENCE';
+      badgeClass = 'bg-[#1a050a]/80 border-rose-700/50 text-rose-300';
+      accentClass = 'text-rose-400';
+    } else {
+      fullLabel = 'STRONG CONFIDENCE';
+      badgeClass = 'bg-purple-900/30 border-purple-700/50 text-purple-300';
+      accentClass = 'text-purple-400';
+    }
+  } else if (clamped >= 60) {
+    tier = 'MODERATE';
+    tierLabel = 'MODERATE EDGE';
+    if (isUp) {
+      fullLabel = 'MODERATE BULLISH EDGE';
+      badgeClass = 'bg-emerald-950/30 border-emerald-800/40 text-emerald-400';
+      accentClass = 'text-emerald-400';
+    } else if (isDown) {
+      fullLabel = 'MODERATE BEARISH EDGE';
+      badgeClass = 'bg-rose-950/30 border-rose-800/40 text-rose-400';
+      accentClass = 'text-rose-400';
+    } else {
+      fullLabel = 'MODERATE EDGE';
+      badgeClass = 'bg-purple-950/30 border-purple-800/40 text-purple-400';
+      accentClass = 'text-purple-400';
+    }
+  } else {
+    tier = 'DEVELOPING';
+    tierLabel = 'DEVELOPING EDGE';
+    if (isUp) {
+      fullLabel = 'DEVELOPING BULLISH EDGE';
+      badgeClass = 'bg-emerald-950/20 border-emerald-900/40 text-emerald-400/90';
+      accentClass = 'text-emerald-400/90';
+    } else if (isDown) {
+      fullLabel = 'DEVELOPING BEARISH EDGE';
+      badgeClass = 'bg-rose-950/20 border-rose-900/40 text-rose-400/90';
+      accentClass = 'text-rose-400/90';
+    } else {
+      fullLabel = 'DEVELOPING EDGE';
+      badgeClass = 'bg-purple-950/20 border-purple-900/40 text-purple-400/80';
+      accentClass = 'text-purple-400';
+    }
+  }
+
+  return {
+    tierLabel,
+    fullLabel,
+    badgeClass,
+    accentClass,
+    meterPct: clamped,
+  };
+}
+
