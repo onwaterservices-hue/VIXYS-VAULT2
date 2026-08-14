@@ -178,6 +178,8 @@ export interface SupportTicket {
   status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
   date: string;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
+  message?: string;
+  description?: string;
 }
 
 export interface AdminStats {

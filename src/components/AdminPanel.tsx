@@ -1040,15 +1040,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
                           <span className="text-purple-400/70">ROLLING BRIER SCORE</span>
-                          <span className="text-white font-bold">{diagnosticsData?.calibration?.brierScore || 0.168}</span>
+                          <span className="text-white font-bold">
+                            {diagnosticsData?.calibration?.brierScore != null ? Number(diagnosticsData.calibration.brierScore).toFixed(3) : 'N/A'}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
                           <span className="text-purple-400/70">TOTAL HISTORIC EVIDENCE</span>
-                          <span className="text-purple-300 font-bold">{diagnosticsData?.calibration?.lifetimeObservations || 128} SNAPSHOTS</span>
+                          <span className="text-purple-300 font-bold">
+                            {diagnosticsData?.calibration?.lifetimeObservations != null ? `${diagnosticsData.calibration.lifetimeObservations} SNAPSHOTS` : 'N/A'}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
                           <span className="text-purple-400/70">CURRENT SIGNAL EDGE</span>
-                          <span className="text-emerald-400 font-bold">+{((diagnosticsData?.predictionEngine?.edgePct || 0.185) * 100).toFixed(1)}%</span>
+                          <span className="text-emerald-400 font-bold">
+                            {diagnosticsData?.predictionEngine?.edgePct != null ? `+${(Number(diagnosticsData.predictionEngine.edgePct) * 100).toFixed(1)}%` : 'N/A'}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
                           <span className="text-purple-400/70">QUALIFICATION STATE</span>
@@ -1715,7 +1721,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                         <tr key={u.id} className="hover:bg-slate-800/40">
                           <td className="p-3 text-slate-200 font-bold">{u.email}</td>
                           <td className="p-3 text-slate-400">{u.joined}</td>
-                          <td className="p-3 text-slate-500">{u.hardwareFingerprint || 'hw_gen_991'}</td>
+                          <td className="p-3 text-slate-500">{u.hardwareFingerprint || 'UNAVAILABLE'}</td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
                               TRIALING
@@ -1980,7 +1986,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             {log.wasCorrect ? 'WIN (CORRECT)' : 'LOSS'}
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-purple-300 font-bold">{log.brierScore ?? '0.084'}</td>
+                        <td className="py-2 px-2 text-purple-300 font-bold">{log.brierScore != null ? Number(log.brierScore).toFixed(4) : 'N/A'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -2037,7 +2043,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     </div>
 
                     <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300">
-                      Sample ticket details for inquiry {selectedTicket.id}. Requested investigation into API feed timing during market lock.
+                      {selectedTicket.message || (selectedTicket as any).description || selectedTicket.subject || 'No inquiry description recorded.'}
                     </div>
 
                     <div className="space-y-2">

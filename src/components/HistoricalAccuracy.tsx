@@ -181,20 +181,28 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
   }, [sortedHistory, currentPage, pageSize]);
 
   // Dynamic High-Level Performance Metrics
-  const totalPredictions = filteredHistory.length;
+  const totalSignals = filteredHistory.length;
+  const resolvedTrades = filteredHistory.filter((h) => h.result === 'WIN' || h.result === 'LOSS');
   const wins = filteredHistory.filter((h) => h.result === 'WIN').length;
   const losses = filteredHistory.filter((h) => h.result === 'LOSS').length;
-  const winRate = totalPredictions > 0 ? Math.round((wins / totalPredictions) * 1000) / 10 : 0;
-  const totalPnl = filteredHistory.reduce((sum, h) => sum + h.pnlPct, 0);
+  const noTradeCount = filteredHistory.filter(
+    (h) => h.result === 'CANCELLED' || (h.result as string) === 'NO_TRADE' || (h.result as string) === 'INSUFFICIENT DATA' || (h.direction as string) === 'NEUTRAL'
+  ).length;
+  const resolvedCount = resolvedTrades.length;
+  const totalPredictions = resolvedCount > 0 ? resolvedCount : totalSignals;
+  const winRate = resolvedCount > 0 ? Math.round((wins / resolvedCount) * 1000) / 10 : 0;
+  const totalPnl = filteredHistory.reduce((sum, h) => sum + (h.pnlPct || 0), 0);
+
+  const isLimitedSample = resolvedCount < 30;
 
   const avgConfidence =
-    totalPredictions > 0
-      ? Math.round((filteredHistory.reduce((sum, h) => sum + h.confidence, 0) / totalPredictions) * 10) / 10
+    totalSignals > 0
+      ? Math.round((filteredHistory.reduce((sum, h) => sum + (h.confidence || 0), 0) / totalSignals) * 10) / 10
       : 0;
 
   const avgEdge =
-    totalPredictions > 0
-      ? Math.round((filteredHistory.reduce((sum, h) => sum + h.edge, 0) / totalPredictions) * 10) / 10
+    totalSignals > 0
+      ? Math.round((filteredHistory.reduce((sum, h) => sum + (h.edge || 0), 0) / totalSignals) * 10) / 10
       : 0;
 
   // Wilson Score 95% Confidence Interval for Win Rate
@@ -684,11 +692,18 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
         {/* Top Executive KPI Row */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mt-6">
           {/* Win Rate & CI */}
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/60 text-xs font-mono block">Verified Win Rate</span>
+          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1 relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-purple-300/60 text-xs font-mono block">Verified Win Rate</span>
+              {isLimitedSample && (
+                <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[8px] font-bold">
+                  LIMITED SAMPLE
+                </span>
+              )}
+            </div>
             <div className="font-mono font-black text-2xl text-emerald-400">{winRate}%</div>
             <div className="text-[10px] text-purple-300/50 font-mono block">
-              {wins} Wins / {losses} Losses (n={totalPredictions})
+              {wins}W / {losses}L (n={resolvedCount})
             </div>
             <div className="text-[9px] text-emerald-300/80 font-mono">
               95% CI: [{wilsonCI.lower}%, {wilsonCI.upper}%]
@@ -697,10 +712,12 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
 
           {/* Total Signals Count */}
           <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/60 text-xs font-mono block">Filtered Signal Volume</span>
-            <div className="font-mono font-black text-2xl text-white">{totalPredictions}</div>
-            <div className="text-[10px] text-purple-300/50 font-mono block">100% Evaluated</div>
-            <div className="text-[9px] text-purple-300/70 font-mono">Chronological Audit</div>
+            <span className="text-purple-300/60 text-xs font-mono block">Signal Volume</span>
+            <div className="font-mono font-black text-2xl text-white">{totalSignals}</div>
+            <div className="text-[10px] text-purple-300/50 font-mono block">
+              {resolvedCount} Resolved • {noTradeCount} No-Trade
+            </div>
+            <div className="text-[9px] text-purple-300/70 font-mono">Authoritative Ledger</div>
           </div>
 
           {/* Avg Market Edge */}
@@ -1377,7 +1394,11 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
                         </span>
                       </td>
                       <td className="p-4 text-center">
-                        {isWin ? (
+                        {item.result === 'CANCELLED' || (item.result as string) === 'NO_TRADE' || (item.result as string) === 'INSUFFICIENT DATA' ? (
+                          <span className="inline-flex items-center gap-1 bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full text-[10px] font-bold border border-slate-700">
+                            <ShieldCheck className="w-3.5 h-3.5 text-slate-400" /> NO TRADE
+                          </span>
+                        ) : isWin ? (
                           <span className="inline-flex items-center gap-1 bg-purple-500/20 text-purple-300 px-2.5 py-1 rounded-full text-[10px] font-bold border border-purple-500/30">
                             <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" /> WIN
                           </span>

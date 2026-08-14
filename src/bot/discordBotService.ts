@@ -330,15 +330,11 @@ export async function assignDiscordRoleToUser(
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
     const proRoleId = process.env.DISCORD_PRO_ROLE_ID || process.env.DISCORD_ROLE_PRO || eliteRoleId;
     const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
-    const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
+    const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
     let targetRoleId = verifiedRoleId;
-    if (targetTier === 'ELITE') {
+    if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
       targetRoleId = eliteRoleId;
-    } else if (targetTier === 'PRO') {
-      targetRoleId = proRoleId;
-    } else if (targetTier === 'AI') {
-      targetRoleId = aiRoleId;
     } else if (targetTier === 'VERIFIED') {
       targetRoleId = verifiedRoleId;
     }
@@ -423,10 +419,9 @@ export async function assignDiscordRoleToUser(
         }
 
         // Handle obsolete/conflicting role cleanup before assigning new target role
-        if (targetTier === 'ELITE' && proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) {
-          await member.roles.remove(proRoleId).catch(() => {});
-        } else if (targetTier === 'PRO' && eliteRoleId !== proRoleId && member.roles.cache.has(eliteRoleId)) {
-          await member.roles.remove(eliteRoleId).catch(() => {});
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
+          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
         } else if (targetTier === 'VERIFIED') {
           if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
           if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
@@ -546,16 +541,32 @@ export async function assignDiscordRoleToUser(
         }
 
         // Cleanup conflicting roles before PUT
-        if (targetTier === 'ELITE' && proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
-          await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bot ${botToken}` },
-          }).catch(() => {});
-        } else if (targetTier === 'PRO' && eliteRoleId !== proRoleId && existingRoles.includes(eliteRoleId)) {
-          await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bot ${botToken}` },
-          }).catch(() => {});
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+          if (existingRoles.includes(verifiedRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+        } else if (targetTier === 'VERIFIED') {
+          if (existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
         }
 
         if (existingRoles.includes(targetRoleId)) {
@@ -700,7 +711,7 @@ export async function getDiscordHealthReport(): Promise<{
   const botToken = process.env.DISCORD_BOT_TOKEN;
   const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
-  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
+  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
   const health = {
     discordConfigured: !!(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET),
@@ -759,7 +770,7 @@ export async function runDiscordDiagnostics(): Promise<{
   const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
   const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
-  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1535025983093215425';
+  const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
   const report = {
     botTokenConfigured: !!botToken,
