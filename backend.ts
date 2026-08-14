@@ -569,52 +569,38 @@ setInterval(async () => {
       }
     }
 
-    // Continuous Model & Market Odds Calculation
-    let open = currentBtcOpenPrice || (livePrice - 40); // Fallback to avoid division by zero early on
+    // Continuous Model & Market Odds Calibration (Spot vs Strike Moneyness & Real-Time Momentum)
+    const spotStrikeDist = livePrice - current15mStrikePrice;
+    const moneynessPct = (spotStrikeDist / current15mStrikePrice) * 100;
+    const intervalMomentum = Math.round(((livePrice - current15mStrikePrice) / current15mStrikePrice) * 10000) / 100; // e.g. +0.15% or -0.22%
+    currentMomentum = intervalMomentum;
+
+    let open = currentBtcOpenPrice || (livePrice - 40);
     if (Math.abs(open - livePrice) > livePrice * 0.1) {
-       open = livePrice; // sanity check
+       open = livePrice;
     }
     const change24h = ((livePrice - open) / open) * 100;
-    currentBullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 1.5)));
-    currentMomentum = Math.round(change24h * 100) / 100; // Realized 24h / 5m return in percentage (e.g. -1.13% or +0.45%)
+    currentBullVolumePct = Math.min(90, Math.max(10, Math.round(50 + moneynessPct * 25 + intervalMomentum * 15)));
 
     // Volatility calculation: 15-minute rolling realized volatility percentage
     const currentVol15m = Math.min(6.5, Math.max(0.4, Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100));
 
     // Dynamic Regime Classification based on actual quantitative features
     let dynamicRegime = 'RANGING_NEUTRAL';
-    if (Math.abs(currentMomentum) >= 0.35) {
-      dynamicRegime = currentMomentum > 0 ? 'TRENDING_BULL' : 'TRENDING_BEAR';
+    if (Math.abs(currentMomentum) >= 0.08 || Math.abs(moneynessPct) >= 0.05) {
+      dynamicRegime = (moneynessPct > 0 || currentMomentum > 0) ? 'TRENDING_BULL' : 'TRENDING_BEAR';
     } else if (currentVol15m > 2.2) {
       dynamicRegime = 'HIGH_VOLATILITY';
-    } else if (Math.abs(currentBullVolumePct - 50) >= 15) {
-      dynamicRegime = currentBullVolumePct > 50 ? 'BREAKOUT_BULL' : 'BREAKOUT_BEAR';
     } else {
-      dynamicRegime = currentVol15m < 0.8 ? 'RANGING_LOW_VOL' : 'RANGING_NEUTRAL';
+      dynamicRegime = 'RANGING_NEUTRAL';
     }
     serverLearningEngine.currentRegime = dynamicRegime;
     
-    // Evidence Reconciliation & Contradiction Detection Protocol
-    const spotStrikeDist = livePrice - current15mStrikePrice;
-    const isSpotBelowStrike = spotStrikeDist < -10;
-    const isSpotAboveStrike = spotStrikeDist > 10;
-    const isMomentumBearish = currentMomentum <= -0.12;
-    const isMomentumBullish = currentMomentum >= 0.12;
-    const isRegimeBearish = dynamicRegime.includes('BEAR');
-    const isRegimeBullish = dynamicRegime.includes('BULL');
+    // Rigorous Probability & Moneyness Integration
+    let baseRawModelProb = 0.50 + (moneynessPct * 0.35) + (currentMomentum * 0.15);
+    baseRawModelProb = Math.min(0.95, Math.max(0.05, baseRawModelProb));
 
-    let baseRawModelProb = 0.50 + (currentBullVolumePct - 50) * 0.008;
-
-    // Cross-Signal Conflict & Contradiction Penalty
-    let conflictPenalty = 0;
-    if (baseRawModelProb > 0.52 && (isSpotBelowStrike && isMomentumBearish && isRegimeBearish)) {
-      conflictPenalty = 0.12; // Reconcile bullish model probe down when fundamental evidence is strongly bearish
-    } else if (baseRawModelProb < 0.48 && (isSpotAboveStrike && isMomentumBullish && isRegimeBullish)) {
-      conflictPenalty = -0.12; // Reconcile bearish model probe up when fundamental evidence is strongly bullish
-    }
-
-    const rawModelProbVal = baseRawModelProb - conflictPenalty;
-    const rawModelProbability = Math.min(0.92, Math.max(0.20, Math.round(rawModelProbVal * 1000) / 1000));
+    const rawModelProbability = Math.round(baseRawModelProb * 1000) / 1000;
     
     const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length || 148;
     const calibrationMinimumSamples = 50;
@@ -624,20 +610,19 @@ setInterval(async () => {
     const historicalAccuracyFactor = historicalAccuracyVal / 100;
     
     const calibratedModelProbability = calibrationStatus === 'ACTIVE'
-      ? Math.min(0.95, Math.max(0.10, Math.round((rawModelProbability * 0.85 + historicalAccuracyFactor * 0.15) * 1000) / 1000))
+      ? Math.min(0.96, Math.max(0.05, Math.round((rawModelProbability * 0.85 + historicalAccuracyFactor * 0.15) * 1000) / 1000))
       : rawModelProbability;
 
     currentModelProbability = calibratedModelProbability;
     const computedUpProb = Math.round(currentModelProbability * 100 * 10) / 10;
     const computedDownProb = Math.round((100 - computedUpProb) * 10) / 10;
-    currentDirection = computedUpProb > computedDownProb ? 'UP' : computedDownProb > computedUpProb ? 'DOWN' : 'NEUTRAL';
+    currentDirection = computedUpProb > 51.0 ? 'UP' : computedDownProb > 51.0 ? 'DOWN' : 'NEUTRAL';
 
-    // Evidence-Adjusted Confidence Calculation (Penalize confidence on high-conflict states)
-    const evidenceAgreementBonus = conflictPenalty === 0 ? 8 : -14;
-    const computedConfidence = 70 + Math.abs(currentModelProbability - 0.5) * 55 + evidenceAgreementBonus;
-    currentConfidence = Math.min(95, Math.max(50, Math.round(computedConfidence * 10) / 10));
+    // Evidence-Adjusted Confidence Calculation
+    const computedConfidence = 72 + Math.abs(currentModelProbability - 0.5) * 50;
+    currentConfidence = Math.min(96, Math.max(50, Math.round(computedConfidence * 10) / 10));
     
-    currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (currentBullVolumePct - 50) * 0.005) * 1000) / 1000));
+    currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round(currentModelProbability * 1000) / 1000));
     currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
 
     const historyLen = serverLearningEngine.settledHistory.length;
@@ -1045,6 +1030,13 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
     logItem.status = 'LOCKED';
   }
 
+  active15mCycle.lockedSnapshot = {
+    direction: dir,
+    decision: decision,
+    probability: prob,
+    confidence: conf,
+  };
+
   persistSingleSignalLog(logItem);
   console.log(`[VIXY_CYCLE] cycleId=${cycleId} status=LOCKED sequence=${active15mCycle.sequence}`);
   console.log(`[VIXY_LOCK] cycleId=${cycleId} direction=${dir} probability=${prob} confidence=${conf}% lockedAt=${lockedTime} action=LOCKED_ONCE`);
@@ -1230,9 +1222,12 @@ async function checkAndSettle15mCycle(livePrice: number) {
   console.log(`[VIXY_INTELLIGENCE] cycle=${currentCycleId} state=${active15mCycle.stage} spot=$${livePrice} strike=$${current15mStrikePrice} timeRemaining=${timeRemainingSec}s momentum=${currentMomentum}% regime=${serverLearningEngine.currentRegime} marketProbability=${currentKalshiImpliedProb} modelProbability=${currentModelProbability} evidenceAgreement=${currentConfidence >= 65 ? 'HIGH' : 'MODERATE'} confidence=${currentConfidence}%`);
 
   if (!active15mCycle.isLocked) {
-    console.log(`[VIXY_LOCK_GATE] cycle=${currentCycleId} decision=${currentDirection} confidence=${currentConfidence}% evidenceComplete=true contractVerified=true dataFresh=true contradictionDetected=false lockEligible=${elapsedMs >= 45000 || (latestLockEvaluation.qualified && elapsedMs >= 20000)}`);
-    if (elapsedMs >= 45000 || (latestLockEvaluation.qualified && elapsedMs >= 20000)) {
-      lock15mCycle(currentCycleId, livePrice, 'Official 15M cycle lock finalized after initial sampling');
+    const lockThresholdMs = 7 * 60 * 1000; // 7 minutes (within 6-10 min window requested)
+    const lockEligible = elapsedMs >= lockThresholdMs || (latestLockEvaluation.qualified && elapsedMs >= 300000);
+    console.log(`[VIXY_LOCK_GATE] cycle=${currentCycleId} decision=${currentDirection} confidence=${currentConfidence}% elapsedSec=${Math.floor(elapsedMs/1000)}s lockEligible=${lockEligible}`);
+    if (lockEligible) {
+      const lockReasonType = elapsedMs >= lockThresholdMs ? 'TIME_THRESHOLD' : 'QUALIFIED_SIGNAL';
+      lock15mCycle(currentCycleId, livePrice, `Official 15M cycle lock finalized via ${lockReasonType} after ${Math.floor(elapsedMs/1000)}s`);
     }
   } else if (active15mCycle.isLocked && !active15mCycle.isCriticallyInvalidated) {
     // 4. MONITOR ONLY MODE (Immutable lock protection against normal market noise)
