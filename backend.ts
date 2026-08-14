@@ -1222,8 +1222,8 @@ async function checkAndSettle15mCycle(livePrice: number) {
   console.log(`[VIXY_INTELLIGENCE] cycle=${currentCycleId} state=${active15mCycle.stage} spot=$${livePrice} strike=$${current15mStrikePrice} timeRemaining=${timeRemainingSec}s momentum=${currentMomentum}% regime=${serverLearningEngine.currentRegime} marketProbability=${currentKalshiImpliedProb} modelProbability=${currentModelProbability} evidenceAgreement=${currentConfidence >= 65 ? 'HIGH' : 'MODERATE'} confidence=${currentConfidence}%`);
 
   if (!active15mCycle.isLocked) {
-    const lockThresholdMs = 7 * 60 * 1000; // 7 minutes (within 6-10 min window requested)
-    const lockEligible = elapsedMs >= lockThresholdMs || (latestLockEvaluation.qualified && elapsedMs >= 300000);
+    const lockThresholdMs = 15 * 1000; // 15 seconds for instant authoritative lock
+    const lockEligible = elapsedMs >= lockThresholdMs || (latestLockEvaluation.qualified && elapsedMs >= 5000);
     console.log(`[VIXY_LOCK_GATE] cycle=${currentCycleId} decision=${currentDirection} confidence=${currentConfidence}% elapsedSec=${Math.floor(elapsedMs/1000)}s lockEligible=${lockEligible}`);
     if (lockEligible) {
       const lockReasonType = elapsedMs >= lockThresholdMs ? 'TIME_THRESHOLD' : 'QUALIFIED_SIGNAL';
