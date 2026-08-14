@@ -7744,9 +7744,9 @@ async function startServer() {
       console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
       console.log("Discord Redirect URI:", process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback');
     });
+  } else {
+    console.log("[Vercel] Serverless function initialized successfully.");
   }
 }
 
-if (!process.env.VERCEL) {
-  startServer();
-}
+startServer();
