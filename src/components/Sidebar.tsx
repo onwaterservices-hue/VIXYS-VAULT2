@@ -84,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'INTELLIGENCE',
       items: [
-        { id: 'history', label: 'Signals & Analytics', icon: BarChart2, badge: 'VIXY' },
+        { id: 'history', label: 'VIXY LOCKS', icon: BarChart2, badge: 'VIXY' },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
         { id: 'markets', label: 'Markets', icon: TrendingUp },
         { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },

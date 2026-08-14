@@ -5132,14 +5132,15 @@ persistentSignalLogs.forEach((item) => {
 });
 
 app.get('/api/signal/resolved-log', (req, res) => {
-  const resolved = persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 30);
-  const upWins = resolved.filter((s) => s.wasCorrect && s.direction === 'UP').length;
-  const downWins = resolved.filter((s) => s.wasCorrect && s.direction === 'DOWN').length;
-  const winCount = resolved.filter((s) => s.wasCorrect).length;
-  const totalCount = resolved.length;
-  const winRatePct = totalCount > 0 ? Math.round((winCount / totalCount) * 100) : 60;
-  const brierSum = resolved.reduce((acc, s) => acc + (s.brierScore || 0.1), 0);
-  const avgBrierScore = totalCount > 0 ? Math.round((brierSum / totalCount) * 1000) / 1000 : 0.088;
+  const limit = Math.min(200, parseInt((req.query.limit as string) || '200', 10));
+  const resolved = persistentSignalLogs.filter((s) => s.status === 'RESOLVED' || s.status === 'LOCKED').slice(0, limit);
+  const upWins = resolved.filter((s) => s.status === 'RESOLVED' && s.wasCorrect && s.direction === 'UP').length;
+  const downWins = resolved.filter((s) => s.status === 'RESOLVED' && s.wasCorrect && s.direction === 'DOWN').length;
+  const winCount = resolved.filter((s) => s.status === 'RESOLVED' && s.wasCorrect).length;
+  const totalCount = resolved.filter((s) => s.status === 'RESOLVED').length;
+  const winRatePct = totalCount > 0 ? Math.round((winCount / totalCount) * 100) : 0;
+  const brierSum = resolved.reduce((acc, s) => acc + (s.brierScore || 0), 0);
+  const avgBrierScore = totalCount > 0 ? Math.round((brierSum / totalCount) * 1000) / 1000 : 0;
 
   res.json({
     recentResolved: resolved,

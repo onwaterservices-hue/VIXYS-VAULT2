@@ -421,7 +421,7 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
           >
             <BarChart2 className="w-4 h-4 text-purple-300" />
-            <span>Signals & Analytics</span>
+            <span>VIXY LOCKS</span>
           </button>
 
           <button
@@ -584,7 +584,7 @@ export const Header: React.FC<HeaderProps> = ({
           className={`flex flex-col items-center gap-1 px-2 py-1 ${activeTab === 'history' ? 'text-purple-400 font-bold' : 'text-purple-300/60'}`}
         >
           <BarChart2 className="w-4 h-4" />
-          Signals
+          VIXY LOCKS
         </button>
         <button
           onClick={() => setActiveTab('journal')}

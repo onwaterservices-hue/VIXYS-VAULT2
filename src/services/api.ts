@@ -1560,6 +1560,14 @@ export async function wipeBetaUsersApi() {
   }
 }
 
+export async function fetchResolvedLogApi(): Promise<any> {
+  const data = await safeFetchJson<any>(`/api/signal/resolved-log?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  return data;
+}
+
 export async function fetchVixyStateApi(): Promise<any> {
   const data = await safeFetchJson<any>(`/api/vixy/state?_t=${Date.now()}`, {
     cache: 'no-store',
