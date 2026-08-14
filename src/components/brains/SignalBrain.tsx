@@ -88,36 +88,49 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   // Safe backend-authoritative execution state
   // We prefer the explicit `execution` payload from the backend if it exists.
   // Otherwise, we derive it cleanly from `direction` and `engineState`.
-  const rawDirection = rawApiData?.direction || rawApiData?.action || 'NONE';
+  const isActuallyLocked = Boolean(rawApiData?.isLocked || rawApiData?.status === 'LOCKED');
+  const rawDirection = isActuallyLocked
+    ? (rawApiData?.lockedDirection || 'NONE')
+    : (rawApiData?.direction || rawApiData?.action || 'NONE');
+
   const isUp = rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES';
   const isDown = rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO';
   const isBackendCalibrating = rawApiData?.engineState === 'CALIBRATING' || rawApiData?.engineState === 'EVALUATING' || rawApiData?.calibrationStatus === 'WARMING_UP' || rawDirection === 'CALIBRATING' || rawDirection === 'BUILDING' || rawApiData?.hasActiveModel === false || rawApiData?.status?.includes('Collecting');
   const isPassExplicit = (rawDirection === 'PASS' || rawDirection === 'HOLD') && !isBackendCalibrating;
 
   const execution = rawApiData?.execution || {
-    state: isBackendCalibrating ? 'CALIBRATING' : isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : isPassExplicit ? 'PASS' : 'ANALYZING',
+    state: isBackendCalibrating ? 'CALIBRATING' : (isActuallyLocked ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS') : (isUp ? 'CONFIRMED_UP' : isDown ? 'CONFIRMED_DOWN' : isPassExplicit ? 'PASS' : 'ANALYZING')),
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
     authorized: isUp || isDown,
     actionLabel: isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : isPassExplicit ? 'ENTRY NOT QUALIFIED' : 'ANALYZING CYCLE',
-    reason: 'Authoritative Engine State',
-    qualified: rawApiData?.entryQualification === 'QUALIFIED' || rawApiData?.signalConfirmed
+    reason: isActuallyLocked ? (rawApiData?.lockReason || 'IMMUTABLE LOCK') : 'Authoritative Engine State',
+    qualified: isActuallyLocked || rawApiData?.entryQualification === 'QUALIFIED' || rawApiData?.signalConfirmed
   };
 
-  const isConfirmedUp = execution.state === 'CONFIRMED_UP' || execution.state === 'LOCK_UP' || (rawApiData?.signalConfirmed && (rawApiData?.direction === 'UP' || rawApiData?.direction === 'BUY UP')) || (rawApiData?.direction === 'BUY UP' && rawApiData?.entryQualification === 'QUALIFIED');
-  const isConfirmedDown = execution.state === 'CONFIRMED_DOWN' || execution.state === 'LOCK_DOWN' || (rawApiData?.signalConfirmed && (rawApiData?.direction === 'DOWN' || rawApiData?.direction === 'BUY DOWN')) || (rawApiData?.direction === 'BUY DOWN' && rawApiData?.entryQualification === 'QUALIFIED');
-  const isPassState = execution.state === 'PASS' || (!isConfirmedUp && !isConfirmedDown && rawApiData?.direction === 'PASS');
+  const isConfirmedUp = execution.state === 'CONFIRMED_UP' || execution.state === 'LOCK_UP' || (rawApiData?.signalConfirmed && (rawDirection === 'UP' || rawDirection === 'BUY UP')) || (rawDirection === 'BUY UP' && rawApiData?.entryQualification === 'QUALIFIED');
+  const isConfirmedDown = execution.state === 'CONFIRMED_DOWN' || execution.state === 'LOCK_DOWN' || (rawApiData?.signalConfirmed && (rawDirection === 'DOWN' || rawDirection === 'BUY DOWN')) || (rawDirection === 'BUY DOWN' && rawApiData?.entryQualification === 'QUALIFIED');
+  const isPassState = execution.state === 'PASS' || (!isConfirmedUp && !isConfirmedDown && rawDirection === 'PASS');
 
   const sigAny = signal as any;
-  const upProbability = Number(sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
-  const downProbability = Number(sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability));
+  const rawEffectiveProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
+    ? rawApiData.lockedProbability
+    : (sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
+
+  const effectiveProbability = rawEffectiveProb <= 1 ? rawEffectiveProb * 100 : rawEffectiveProb;
+  const upProbability = Number(effectiveProbability);
+  const downProbability = Number(isActuallyLocked && rawApiData?.lockedProbability !== undefined ? 100 - upProbability : (sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability)));
+  
   const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
   const edgePct = sigAny?.edgePct ?? rawApiData?.edgePct ?? 0;
   const edgeDisplay = edgePct > 0 ? `+${edgePct.toFixed(1)}% OVER MARKET` : `${edgePct.toFixed(1)}% OVER MARKET`;
 
-  const rawCalibProb = rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability;
+  const rawCalibProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
+    ? rawApiData.lockedProbability
+    : (rawApiData?.calibratedProbability ?? rawApiData?.calibratedModelProbability);
+
   const authoritativeConfidenceNum = Number(
-    rawCalibProb !== null && rawCalibProb !== undefined
-      ? (rawCalibProb <= 1 ? rawCalibProb * 100 : rawCalibProb)
+    isActuallyLocked && rawApiData?.lockedConfidence !== undefined
+      ? rawApiData.lockedConfidence
       : (rawApiData?.confidence ?? signal?.confidence ?? (isConfirmedUp ? upProbability : isConfirmedDown ? downProbability : 55))
   );
   const exactConfidenceVal = Math.min(100, Math.max(50, Math.round(authoritativeConfidenceNum)));

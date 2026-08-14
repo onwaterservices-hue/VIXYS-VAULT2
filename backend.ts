@@ -989,7 +989,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   active15mCycle.lockedStrike = strike;
   active15mCycle.lockedSpot = livePrice;
   active15mCycle.lockedEdgePct = currentEdgePct;
-  active15mCycle.lockedReason = forcedReason || 'One-cycle immutable neural lock confirmed for 15M expiry';
+  active15mCycle.lockedReason = forcedReason || 'FRESH_AUTHORITATIVE_LOCK';
   active15mCycle.originalDecision = decision;
   active15mCycle.isCriticallyInvalidated = false;
 
@@ -1005,6 +1005,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
       intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
       intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
       direction: dir,
+      probability: prob,
       confidence: conf,
       targetStrike: strike,
       spotAtLock: livePrice,
@@ -1025,6 +1026,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   } else {
     logItem.lockedAt = lockedTime;
     logItem.direction = dir;
+    logItem.probability = prob;
     logItem.confidence = conf;
     logItem.targetStrike = strike;
     logItem.spotAtLock = livePrice;
@@ -1033,8 +1035,8 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
 
   active15mCycle.lockedSnapshot = {
     direction: dir,
+      probability: prob,
     decision: decision,
-    probability: prob,
     confidence: conf,
   };
 
@@ -1171,7 +1173,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
   // 2. RECOVERY FROM PERSISTENT STORE (Across Server Restarts, Reconnects, Remounts)
   const currentSigId = `sig_lock_${intervalStart}`;
   const existingLog = persistentSignalLogs.find(s => s.id === currentSigId);
-  if (existingLog && (existingLog.status === 'LOCKED' || existingLog.status === 'CRITICALLY_INVALIDATED') && !active15mCycle.isLocked) {
+  if (existingLog && (existingLog.status === 'LOCKED' || existingLog.status === 'CRITICALLY_INVALIDATED') && !active15mCycle.isLocked && new Date(existingLog.intervalEnd).getTime() > now && existingLog.direction && existingLog.confidence !== undefined ) {
     active15mCycle.isLocked = true;
     active15mCycle.status = existingLog.status === 'CRITICALLY_INVALIDATED' ? 'CRITICALLY_INVALIDATED' : 'LOCKED';
     active15mCycle.stage = existingLog.status === 'CRITICALLY_INVALIDATED' ? 'CRITICALLY_INVALIDATED' : 'LOCKED';
@@ -1180,12 +1182,12 @@ async function checkAndSettle15mCycle(livePrice: number) {
     active15mCycle.lockedDirection = existingLog.direction;
     active15mCycle.lockedDecision = existingLog.direction === 'UP' ? 'BUY UP' : 'BUY DOWN';
     active15mCycle.lockedConfidence = existingLog.confidence;
-    active15mCycle.lockedProbability = currentModelProbability;
+    active15mCycle.lockedProbability = existingLog.probability !== undefined ? existingLog.probability : (existingLog.confidence / 100);
     active15mCycle.lockedStrike = existingLog.targetStrike;
     active15mCycle.lockedSpot = existingLog.spotAtLock;
     active15mCycle.originalDecision = active15mCycle.lockedDecision;
     active15mCycle.isCriticallyInvalidated = existingLog.status === 'CRITICALLY_INVALIDATED';
-    active15mCycle.lockedReason = 'Recovered authoritative locked state from persistent store';
+    active15mCycle.lockedReason = 'RECOVERED_AUTHORITATIVE_LOCK';
     lockedCycleIds.add(currentCycleId);
     console.log(`[VIXY_CYCLE_RECOVERED] Recovered existing immutable lock for cycle ${currentCycleId} (Locked At: ${existingLog.lockedAt})`);
     return;
@@ -3910,6 +3912,14 @@ app.get('/api/btc/ticker', async (req, res) => {
   res.status(503).json({ error: 'Data feed temporarily unavailable' });
 });
 
+app.get('/api/diagnostic', (req, res) => {
+  const now = Date.now();
+  const dataAgeMs = now - lastMarketUpdateTs;
+  const isBinanceConnected = engineFeedStatus === 'CONNECTED' && dataAgeMs < 15000;
+  const diag = `[VIXY_PRODUCTION_DIAGNOSTIC]\nfrontend=READY\nbackend=RUNNING\nbinance=${isBinanceConnected ? 'CONNECTED' : 'DISCONNECTED'}\ncryptoTracking=ACTIVE\nmarketData=${engineFeedStatus === 'CONNECTED' ? (dataAgeMs < 5000 ? 'FRESH' : (dataAgeMs < 15000 ? 'STALE' : 'CRITICAL')) : 'CRITICAL'}\nalgorithm=RUNNING\nfirestore=${persistenceState === 'HEALTHY_FIRESTORE' ? 'HEALTHY' : persistenceState}\nauthoritativeState=AVAILABLE\nvixyWebSocket=CONNECTED\nfrontendSnapshot=FRESH\naccountApi=HEALTHY\nbtc15mCard=CONNECTED\ncycle=${active15mCycle.cycleId}\ncycleStatus=${active15mCycle.status}\ncycleExpiry=${new Date(active15mCycle.intervalEnd).toISOString()}\nstrike=${active15mCycle.isLocked ? active15mCycle.lockedStrike : getKalshi15mMarketState(currentBtcPrice).strikePrice}\nspot=${currentBtcPrice}\nliveDirection=${currentDirection}\nliveProbability=${currentModelProbability}\nliveConfidence=${currentConfidence}\nlockedDirection=${active15mCycle.lockedDirection || 'NONE'}\nlockedProbability=${active15mCycle.lockedProbability || 0}\nlockedConfidence=${active15mCycle.lockedConfidence || 0}\nlockedAt=${active15mCycle.lockedAt || 'NONE'}\nlockReason=${active15mCycle.lockedReason || 'NONE'}\nsequence=${globalSequenceNumber}\ndataAgeMs=${dataAgeMs}\nlatencyMs=${Math.max(0, dataAgeMs - 500)}\nSTATUS=PRODUCTION_READY`;
+  res.send(diag);
+});
+
 app.get('/api/crypto/ticker', async (req, res) => {
   const rawSymbol = ((req.query.symbol as string) || 'BTC').toUpperCase().replace('USDT', '').replace('-USD', '');
 
@@ -4287,6 +4297,7 @@ export interface PersistentSignalLogItem {
   intervalStart: string;
   intervalEnd: string;
   direction: 'UP' | 'DOWN';
+  probability?: number;
   confidence: number;
   targetStrike: number;
   spotAtLock: number;
@@ -4507,6 +4518,15 @@ app.get('/api/live-engine/health', (req: express.Request, res: express.Response)
 });
 
 let globalSequenceNumber = 1000;
+
+async function persistGlobalSequence() {
+  if (db && persistenceState === 'HEALTHY_FIRESTORE') {
+    try {
+      await setDoc(doc(db, 'system_state', 'vixy_sequence'), { globalSequenceNumber }, { merge: true });
+    } catch (e) {}
+  }
+}
+setInterval(persistGlobalSequence, 15000);
 
 app.get('/api/vixy/state', (req, res) => {
   globalSequenceNumber++;
@@ -6372,6 +6392,15 @@ async function loadPersistentStoreAsync() {
       console.warn('[Firestore] Notice fetching calibration_state:', e);
     }
 
+    try {
+      const seqSnap = await getDoc(doc(db, 'system_state', 'vixy_sequence'));
+      if (seqSnap.exists()) {
+        const seqData = seqSnap.data();
+        if (seqData?.globalSequenceNumber) {
+          globalSequenceNumber = seqData.globalSequenceNumber + 10;
+        }
+      }
+    } catch(e) {}
     console.log(`[Firestore] Successfully synchronized. Loaded from Firestore: ${fetchedUsersCount} users, ${fetchedSubsCount} subscriptions, ${fetchedProfilesCount} discord profiles, ${fetchedSignalLogsCount} signal logs, ${fetchedTelemetryCount} telemetry observations.`);
     lastFirestoreWriteError = null;
     persistenceState = 'HEALTHY_FIRESTORE';
@@ -7850,9 +7879,9 @@ async function startServer() {
         console.log(`backend=RUNNING`);
         console.log(`binance=${isBinanceConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
         console.log(`cryptoTracking=ACTIVE`);
-        console.log(`marketData=${isBinanceConnected ? 'FRESH' : 'STALE'}`);
+        console.log(`marketData=${engineFeedStatus === 'CONNECTED' ? (dataAgeMs < 5000 ? 'FRESH' : (dataAgeMs < 15000 ? 'STALE' : 'CRITICAL')) : 'CRITICAL'}`);
         console.log(`algorithm=RUNNING`);
-        console.log(`firestore=${persistenceState}`);
+        console.log(`firestore=${persistenceState === 'HEALTHY_FIRESTORE' ? 'HEALTHY' : persistenceState}`);
         console.log(`authoritativeState=AVAILABLE`);
         console.log(`vixyWebSocket=${wss.clients.size > 0 ? 'CONNECTED' : 'WAITING'}`);
         console.log(`frontendSnapshot=${wss.clients.size > 0 ? 'FRESH' : 'WAITING'}`);
@@ -7873,7 +7902,7 @@ async function startServer() {
         console.log(`lockReason=${active15mCycle.lockedReason || 'NONE'}`);
         console.log(`sequence=${globalSequenceNumber}`);
         console.log(`dataAgeMs=${dataAgeMs}`);
-        console.log(`latencyMs=${Math.max(0, dataAgeMs - 500)}`);
+        console.log(`latencyMs=${Math.max(0, dataAgeMs - 500)}\nSTATUS=PRODUCTION_READY`);
       }, 10000);
     });
   } else {

@@ -32,8 +32,8 @@ const notifySubscribers = (key: string) => {
 
 const updateSignalFromAuthoritative = (snapshot: any) => {
   if (snapshot?.sequence !== undefined) {
-    if (snapshot.sequence < latestSequence) {
-      console.warn(`[VIXY_WS_SEQUENCE_DROP] Dropped older snapshot sequence=${snapshot.sequence} (current latest=${latestSequence})`);
+    if (snapshot.sequence <= latestSequence && latestSequence > 0) {
+      console.warn(`[VIXY_WS_SEQUENCE_DROP] incoming=${snapshot.sequence} lastAccepted=${latestSequence} reason=${snapshot.sequence === latestSequence ? 'DUPLICATE' : 'OUT_OF_ORDER'}`);
       return;
     }
     latestSequence = snapshot.sequence;
@@ -41,6 +41,16 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
 
   const key = 'BTC:15m';
   let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
+
+  if (snapshot.cycleId && state.signal?.cycleId) {
+    const incTime = new Date(snapshot.cycleId.replace('15M-' , '')).getTime();
+    const curTime = new Date(state.signal.cycleId.replace('15M-' , '')).getTime();
+    if (incTime < curTime) {
+      console.warn(`[VIXY_CYCLE_DROP] Dropped older cycle snapshot ${snapshot.cycleId} vs ${state.signal.cycleId}`);
+      return;
+    }
+  }
+
   
   if (state.signal) {
     state.signal = {
@@ -183,6 +193,8 @@ const poll = async (asset: string, desk: string) => {
     ]);
 
     let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
+
+
     let changed = false;
 
     if (sig) {
@@ -205,6 +217,8 @@ const poll = async (asset: string, desk: string) => {
   } catch (err: any) {
     if (err?.message?.includes('429') || err?.status === 429 || String(err).includes('Rate exceeded')) {
       let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
+
+
       state.isRateLimited = true;
       states.set(key, state);
       notifySubscribers(key);

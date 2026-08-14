@@ -22,6 +22,7 @@ import {
   Plus,
   Minus,
 } from 'lucide-react';
+import { useLiveSignal } from "../hooks/useLiveSignal";
 import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 
