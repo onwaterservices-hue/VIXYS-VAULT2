@@ -13,6 +13,7 @@ const intervals = new Map<string, any>();
 const isFetching = new Map<string, boolean>();
 
 let latestSequence = 0;
+let currentServerSessionId: string | null = null;
 let wsGlobalInstance: WebSocket | null = null;
 let reconnectAttempt = 0;
 let isWsConnecting = false;
@@ -31,7 +32,14 @@ const notifySubscribers = (key: string) => {
 };
 
 const updateSignalFromAuthoritative = (snapshot: any) => {
-  if (snapshot?.sequence !== undefined) {
+  if (!snapshot) return;
+
+  // Reconcile server epoch/session if server was restarted
+  if (snapshot.sessionId && snapshot.sessionId !== currentServerSessionId) {
+    console.log(`[VIXY_EPOCH_SYNC] Server session changed from ${currentServerSessionId} to ${snapshot.sessionId}. Reconciling sequence tracker.`);
+    currentServerSessionId = snapshot.sessionId;
+    latestSequence = typeof snapshot.sequence === 'number' ? snapshot.sequence : 0;
+  } else if (snapshot.sequence !== undefined) {
     if (snapshot.sequence <= latestSequence && latestSequence > 0) {
       console.warn(`[VIXY_WS_SEQUENCE_DROP] incoming=${snapshot.sequence} lastAccepted=${latestSequence} reason=${snapshot.sequence === latestSequence ? 'DUPLICATE' : 'OUT_OF_ORDER'}`);
       return;
@@ -96,6 +104,7 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     modelProbability: snapshot.livePrediction?.probability,
     confidence: snapshot.livePrediction?.confidence,
     direction: isLocked ? snapshot.lockedPrediction?.direction : snapshot.livePrediction?.direction,
+    crossAssetContext: snapshot.crossAssetContext || (baseSignal as any).crossAssetContext,
     feedStatus: 'LIVE',
     sequenceNumber: snapshot.sequence,
     action: isLocked ? (snapshot.lockedPrediction?.direction === 'UP' ? 'BUY_YES' : 'BUY_NO') : 'HOLD',

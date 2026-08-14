@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import { HistoricalPrediction } from '../types';
 import { VixyPerformanceMatrix } from './VixyPerformanceMatrix';
+import { safeToFixed, safeNumber } from '../utils/numeric';
 
 interface HistoricalAccuracyProps {
   history: HistoricalPrediction[];
@@ -312,10 +313,10 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
     const lossCount = last10.filter((item) => item.result === 'LOSS').length;
 
     const last10WinRateNum = last10.length > 0 ? (winCount / last10.length) * 100 : 0;
-    const last10WinRate = last10WinRateNum.toFixed(1);
+    const last10WinRate = safeToFixed(last10WinRateNum, 1);
 
     const deltaNum = last10WinRateNum - winRate;
-    const deltaStr = (deltaNum >= 0 ? '+' : '') + deltaNum.toFixed(1) + ' pts';
+    const deltaStr = (deltaNum >= 0 ? '+' : '') + safeToFixed(deltaNum, 1) + ' pts';
 
     const recentBias = upCount > downCount ? 'UP BIAS' : downCount > upCount ? 'DOWN BIAS' : 'NEUTRAL / MIXED';
 
@@ -440,8 +441,8 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
       item.platform || 'Kalshi',
       item.direction,
       item.confidence,
-      item.modelProbability ?? (item.confidence / 100).toFixed(3),
-      item.marketProbability ?? ((item.confidence - item.edge) / 100).toFixed(3),
+      item.modelProbability ?? safeToFixed(item.confidence / 100, 3),
+      item.marketProbability ?? safeToFixed((item.confidence - item.edge) / 100, 3),
       item.edge,
       item.targetPrice,
       item.actualClose,
@@ -727,7 +728,7 @@ export const HistoricalAccuracy: React.FC<HistoricalAccuracyProps> = ({ history 
               }`}
             >
               {totalPnl >= 0 ? '+' : ''}
-              {totalPnl.toFixed(1)}%
+              {safeToFixed(totalPnl, 1)}%
             </div>
             <div className="text-[10px] text-purple-300/50 font-mono block">Unleveraged YES/NO</div>
             <div className="text-[9px] text-purple-300/70 font-mono font-semibold">Verified Backtest</div>

@@ -11,6 +11,7 @@ import {
   formatDataFreshness,
   formatConfidenceLabel,
 } from '../../utils/metrics';
+import { safeToFixed, safeNumber } from '../../utils/numeric';
 import { VixyNeuralEngine } from './VixyNeuralEngine';
 
 interface SignalBrainProps {
@@ -167,8 +168,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const downProbability = Number(isActuallyLocked && rawApiData?.lockedProbability !== undefined ? 100 - upProbability : (sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability)));
   
   const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
-  const edgePct = sigAny?.edgePct ?? rawApiData?.edgePct ?? 0;
-  const edgeDisplay = edgePct > 0 ? `+${edgePct.toFixed(1)}% OVER MARKET` : `${edgePct.toFixed(1)}% OVER MARKET`;
+  const edgePct = Number(sigAny?.edgePct ?? rawApiData?.edgePct ?? 0);
+  const edgeDisplay = edgePct > 0 ? `+${safeToFixed(edgePct, 1)}% OVER MARKET` : `${safeToFixed(edgePct, 1)}% OVER MARKET`;
 
   const rawCalibProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
     ? rawApiData.lockedProbability
@@ -436,8 +437,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   // Micro-telemetry values
   const spotVsStrikeDelta = currentPrice && targetPrice ? currentPrice - targetPrice : 0;
   const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
-  const formattedSpotVsStrikeVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${Math.abs(spotVsStrikeDelta).toFixed(2)}`;
-  const formattedSpotVsStrikePct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
+  const formattedSpotVsStrikeVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${safeToFixed(Math.abs(spotVsStrikeDelta), 2)}`;
+  const formattedSpotVsStrikePct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${safeToFixed(Math.abs(spotVsStrikePct), 2)}%`;
 
   return (
     <div className="space-y-4">
@@ -741,13 +742,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                   <div>
                      <div className="text-[9px] font-bold tracking-[0.15em] text-purple-400/60 uppercase mb-1">NET FLOW (DELTA)</div>
                      <div className={`text-lg font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                        {displayOrderFlow >= 0 ? '+' : ''}{Math.abs(displayOrderFlow).toFixed(3)}
+                        {displayOrderFlow >= 0 ? '+' : ''}{safeToFixed(Math.abs(displayOrderFlow), 3)}
                      </div>
                   </div>
                   <div>
                      <div className="text-[9px] font-bold tracking-[0.15em] text-purple-400/60 uppercase mb-1">DELTA (EST. USD)</div>
                      <div className={`text-lg font-black ${displayOrderFlow >= 0 ? 'text-[#00FF9D]' : 'text-[#FF3366]'}`}>
-                        {displayOrderFlow >= 0 ? '+' : '-'}${Math.abs(displayOrderFlow * 6.2).toFixed(2)}M
+                        {displayOrderFlow >= 0 ? '+' : '-'}${safeToFixed(Math.abs(displayOrderFlow * 6.2), 2)}M
                      </div>
                   </div>
                   <div>

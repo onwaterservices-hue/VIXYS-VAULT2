@@ -36,6 +36,7 @@ import {
   DailyReportResponse,
   ModelStatusResponse,
 } from '../services/api';
+import { safeToFixed, safeNumber } from '../utils/numeric';
 
 interface ExecutiveCommandCenterProps {
   ticker: BTCTicker;
@@ -369,7 +370,7 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                 </strong>
                 {' • '}
                 <span className="text-emerald-400 font-bold">
-                  Active Model Calibrated (Brier: {modelStatus?.activeModelBrier?.toFixed(3) || '0.168'})
+                  Active Model Calibrated (Brier: {safeToFixed(modelStatus?.activeModelBrier, 3, '0.168')})
                 </span>
               </p>
             </div>
@@ -384,17 +385,17 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                     : `${Math.round(signal.confidence || 50)}%`}
                 </span>
                 <span className="text-[10px] text-emerald-400 block font-bold truncate">
-                  Brier {modelStatus?.activeModelBrier?.toFixed(3) || '0.168'} • LIVE
+                  Brier {safeToFixed(modelStatus?.activeModelBrier, 3, '0.168')} • LIVE
                 </span>
               </div>
               <div className="min-w-0">
                 <span className="text-[10px] text-slate-400 uppercase block truncate">Model Edge</span>
                 <span className="text-xl font-black text-emerald-400 truncate block">
                   {apiSignal?.edgePct !== null && apiSignal?.edgePct !== undefined
-                    ? `${apiSignal.edgePct >= 0 ? '+' : ''}${apiSignal.edgePct.toFixed(1)}%`
+                    ? `${apiSignal.edgePct >= 0 ? '+' : ''}${safeToFixed(apiSignal.edgePct, 1)}%`
                     : apiSignal?.edge !== null && apiSignal?.edge !== undefined
-                    ? `+${(Math.abs(apiSignal.edge) * (apiSignal.edge < 1 ? 100 : 1)).toFixed(1)}%`
-                    : `+${(signal.edgePct || 0).toFixed(1)}%`}
+                    ? `+${safeToFixed(Math.abs(apiSignal.edge) * (apiSignal.edge < 1 ? 100 : 1), 1)}%`
+                    : `+${safeToFixed(signal.edgePct, 1, '0.0')}%`}
                 </span>
                 <span className="text-[10px] text-slate-400 block truncate">vs Kalshi / Poly</span>
               </div>
@@ -465,15 +466,19 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                     </span>
                     <p className="text-slate-200 leading-relaxed font-sans">
                       {apiSignal?.features
-                        ? `Order book imbalance is +${(apiSignal.features.orderBookImbalance * 100).toFixed(
+                        ? `Order book imbalance is +${safeToFixed(
+                            (apiSignal.features.orderBookImbalance || 0) * 100,
                             1
-                          )}% (bid-heavy buy depth). 5m momentum is +${(
-                            apiSignal.features.momentum5m * 100
-                          ).toFixed(2)}% with 15m volatility at ${(
-                            apiSignal.features.volatility15m * 100
-                          ).toFixed(2)}%. Kalshi implied odds are ${(
-                            (apiSignal.features.crossVenue?.kalshiImpliedProb || 0.54) * 100
-                          ).toFixed(0)}%.`
+                          )}% (bid-heavy buy depth). 5m momentum is +${safeToFixed(
+                            (apiSignal.features.momentum5m || 0) * 100,
+                            2
+                          )}% with 15m volatility at ${safeToFixed(
+                            (apiSignal.features.volatility15m || 0) * 100,
+                            2
+                          )}%. Kalshi implied odds are ${safeToFixed(
+                            ((apiSignal.features.crossVenue?.kalshiImpliedProb || 0.54) * 100),
+                            0
+                          )}%.`
                         : 'Order book depth is showing strong bid support with low sell-side pressure.'}
                     </p>
                   </div>

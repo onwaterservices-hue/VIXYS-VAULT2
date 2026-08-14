@@ -767,6 +767,29 @@ export interface ApiSignalResponse {
   cycleStart?: string;
   cycleEnd?: string;
   cycleStage?: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'SETTLED';
+  sessionId?: string;
+  crossAssetContext?: {
+    state: string;
+    btcLeaderReturn15m: number;
+    btcMomentum: number;
+    rollingCorrelation: number;
+    directionalAgreementRatio: number;
+    divergenceMagnitude: number;
+    regime: string;
+    contextContribution: number;
+    riskPenalty: number;
+    evidenceSummary: string;
+    lastUpdated: string;
+    assets: Record<string, {
+      symbol: string;
+      price: number;
+      return15m: number;
+      momentum: number;
+      correlationToBtc: number;
+      agreesWithBtc: boolean;
+      weight: number;
+    }>;
+  };
   isLocked?: boolean;
   lockedAt?: string | null;
   lockedDecision?: 'BUY UP' | 'BUY DOWN' | 'PASS' | string | null;

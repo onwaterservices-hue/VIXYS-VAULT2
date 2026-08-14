@@ -315,6 +315,51 @@ def run_tests():
     except Exception as e:
         results.append(("TEST 20: Safe Numeric Normalization & Hydration Robustness", False, str(e)))
 
+    # TEST 21: Cross-Asset Market Context Layer & Multi-Asset Tracking
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/signal")
+        sig = json.loads(req.read().decode('utf-8'))
+        cac = sig.get('crossAssetContext')
+        
+        has_cac = (
+            cac is not None and
+            cac.get('state') in ['CONFIRMED_BULLISH', 'CONFIRMED_BEARISH', 'MIXED', 'BTC_DIVERGENCE', 'HIGH_VOLATILITY_DIVERGENCE', 'INSUFFICIENT_DATA'] and
+            isinstance(cac.get('rollingCorrelation'), (int, float)) and
+            isinstance(cac.get('directionalAgreementRatio'), (int, float)) and
+            isinstance(cac.get('assets'), dict)
+        )
+        results.append(("TEST 21: Cross-Asset Market Context Layer & Multi-Asset Tracking", has_cac, f"state={cac.get('state') if cac else 'None'}, corr={cac.get('rollingCorrelation') if cac else 0}, assetsCount={len(cac.get('assets', {})) if cac else 0}"))
+    except Exception as e:
+        results.append(("TEST 21: Cross-Asset Market Context Layer & Multi-Asset Tracking", False, str(e)))
+
+    # TEST 22: Dynamic Lead-Lag Correlation & Divergence Protection
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
+        diag = req.read().decode('utf-8')
+        has_ca_context = "crossAssetContext=READY" in diag
+        has_ca_corr = "crossAssetCorrelation=READY" in diag
+        has_ca_div = "crossAssetDivergence=READY" in diag
+        
+        test22_passed = has_ca_context and has_ca_corr and has_ca_div
+        results.append(("TEST 22: Lead-Lag Dynamic Correlation & Divergence Gate", test22_passed, "All cross-asset diagnostic gates active and synchronized"))
+    except Exception as e:
+        results.append(("TEST 22: Lead-Lag Dynamic Correlation & Divergence Gate", False, str(e)))
+
+    # TEST 23: Server Session Epoch & Sequence Integrity
+    try:
+        req_vixy = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
+        vixy_data = json.loads(req_vixy.read().decode('utf-8'))
+        sess_id = vixy_data.get('sessionId')
+        
+        req_sig = urllib.request.urlopen("http://localhost:3000/api/signal")
+        sig_data = json.loads(req_sig.read().decode('utf-8'))
+        sess_id_sig = sig_data.get('sessionId')
+        
+        test23_passed = bool(sess_id and sess_id_sig and sess_id == sess_id_sig and sess_id.startswith('sess_'))
+        results.append(("TEST 23: Session Epoch Synchronization & Sequence Integrity", test23_passed, f"sessionId={sess_id} matched across endpoints"))
+    except Exception as e:
+        results.append(("TEST 23: Session Epoch Synchronization & Sequence Integrity", False, str(e)))
+
     # Print summary
     print("\n--- RESULTS ---")
     all_passed = True
@@ -326,7 +371,7 @@ def run_tests():
 
     print("==================================================")
     if all_passed:
-        print("ALL 20 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
+        print("ALL 23 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
     else:
         print("SOME TESTS FAILED.")
     print("==================================================")
