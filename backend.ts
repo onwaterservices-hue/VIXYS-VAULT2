@@ -1106,7 +1106,7 @@ function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
   // 1. HARD TIME-BASED OBSERVATION GATE (Minimum 360 seconds / 6 minutes elapsed)
   const minimumObservationWindowPassed = elapsedSeconds >= 360;
   if (!minimumObservationWindowPassed) {
-    reasons.push(`MINIMUM_OBSERVATION_WINDOW (elapsed=${elapsedSeconds}s < 360s)`);
+    reasons.push(`OBSERVATION_TIME_INSUFFICIENT (elapsed=${elapsedSeconds}s < 360s)`);
   }
 
   // 2. ENTRY WINDOW EXPIRATION GATE (Must have at least 300 seconds / 5 minutes remaining)
@@ -1233,14 +1233,23 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
     return false;
   }
 
-  // STRICT IMMUTABILITY INVARIANT: Reject duplicate lock attempts server-side
+  // HARD INVARIANT 1: Observation time < 360 seconds is strictly impossible
+  const now = Date.now();
+  const elapsedSeconds = Math.max(0, Math.floor((now - active15mCycle.intervalStart) / 1000));
+  if (elapsedSeconds < 360) {
+    console.error(`[VIXY_LOCK_GATE] eligible=false elapsed=${elapsedSeconds} required=360 reason=OBSERVATION_TIME_INSUFFICIENT`);
+    return false;
+  }
+
+  // HARD INVARIANT 2: Reject duplicate lock attempts server-side (idempotency key: cycleId)
   if (active15mCycle.isLocked || lockedCycleIds.has(cycleId)) {
     console.warn(`[INVALID_TRANSITION_REJECTED] Attempted duplicate lock for cycle ${cycleId} at ${new Date().toISOString()}. Existing lock from ${active15mCycle.lockedAt} is immutable.`);
     return false;
   }
 
+  // HARD INVARIANT 3: Validation gate must pass
   const gate = canLockCurrentCycle(livePrice);
-  if (!gate.allowed && !forcedReason?.includes('AUTHORITATIVE')) {
+  if (!gate.allowed) {
     console.warn(`[VIXY_LOCK_REJECTED] Validation gate failed for cycle ${cycleId}: ${gate.reasons.join(', ')}`);
     return false;
   }
@@ -1491,12 +1500,14 @@ async function checkAndSettle15mCycle(livePrice: number) {
     console.log(`[VIXY_CYCLE_CREATED] Cycle ID: ${currentCycleId} (#${currentEngineCycleId}) | Strike: $${current15mStrikePrice} | Spot: $${livePrice} | Stage: OBSERVING`);
   }
 
-  // 2. RECOVERY FROM PERSISTENT STORE (Only for EXACT current cycle with complete valid fields)
+  // 2. RECOVERY FROM PERSISTENT STORE (Only for EXACT current cycle with complete valid fields & >= 360s elapsed)
   const currentSigId = `sig_lock_${intervalStart}`;
   const existingLog = persistentSignalLogs.find(s => s.id === currentSigId);
+  const lockElapsedSec = existingLog && existingLog.lockedAt ? Math.floor((new Date(existingLog.lockedAt).getTime() - intervalStart) / 1000) : 0;
   const isValidLockedLog = existingLog &&
     (existingLog.status === 'LOCKED' || existingLog.status === 'CRITICALLY_INVALIDATED') &&
     new Date(existingLog.intervalEnd).getTime() > now &&
+    lockElapsedSec >= 360 &&
     (existingLog.direction === 'UP' || existingLog.direction === 'DOWN') &&
     typeof existingLog.confidence === 'number' &&
     existingLog.confidence >= 50 &&
@@ -4808,8 +4819,9 @@ export interface PersistentSignalLogItem {
 const base15mMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
 const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 }).map((_, i) => {
   const seq = 10 - i;
-  const lockedTimeMs = base15mMs - seq * 15 * 60 * 1000;
-  const expiresTimeMs = lockedTimeMs + 15 * 60 * 1000;
+  const cycleStartMs = base15mMs - seq * 15 * 60 * 1000;
+  const lockedTimeMs = cycleStartMs + 412 * 1000; // 412s elapsed (~6.8 minutes in)
+  const expiresTimeMs = cycleStartMs + 15 * 60 * 1000;
   // Seed with realistic 6 UP / 4 DOWN outcomes matching historical walk-forward accuracy
   const isUpSequence = i % 2 === 0 || i === 1 || i === 3 || i === 7;
   const direction: 'UP' | 'DOWN' = isUpSequence ? 'UP' : 'DOWN';
@@ -4824,9 +4836,9 @@ const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 
   const brierScore = Math.round(Math.pow((confidence / 100) - (wasCorrect ? 1 : 0), 2) * 1000) / 1000;
 
   return {
-    id: `sig_lock_${lockedTimeMs}`,
+    id: `sig_lock_${cycleStartMs}`,
     market: 'BTC_KALSHI_15M',
-    intervalStart: new Date(lockedTimeMs).toISOString(),
+    intervalStart: new Date(cycleStartMs).toISOString(),
     intervalEnd: new Date(expiresTimeMs).toISOString(),
     direction,
     confidence,

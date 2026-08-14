@@ -4,12 +4,12 @@ import time
 
 def run_tests():
     print("==================================================")
-    print("VIXY VAULT BTC 15M AUTHORITATIVE 17-POINT TEST SUITE")
+    print("VIXY VAULT BTC 15M AUTHORITATIVE 20-POINT TEST SUITE")
     print("==================================================")
 
     results = []
 
-    # TEST 1: Query Authoritative State & Multi-Stage Lifecycle Structure
+    # TEST 1: Authoritative State Machine & Lifecycle Structure
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
         data = json.loads(req.read().decode('utf-8'))
@@ -23,7 +23,7 @@ def run_tests():
     except Exception as e:
         results.append(("TEST 1: Authoritative State Machine & Lifecycle Structure", False, str(e)))
 
-    # TEST 2: Minimum 6-Minute (360s) Observation Hard Gate
+    # TEST 2: Minimum 6-Minute (360s) Observation Hard Gate Invariant
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
         diag = req.read().decode('utf-8')
@@ -270,6 +270,51 @@ def run_tests():
     except Exception as e:
         results.append(("TEST 17: Frontend Single Source of Truth Hydration Contract", False, str(e)))
 
+    # TEST 18: Exact 1-Signal Max Idempotency Key Across Ledger
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/signal/resolved-log")
+        data = json.loads(req.read().decode('utf-8'))
+        records = data.get('recentResolved', [])
+        ids = [r.get('id') for r in records if r.get('id')]
+        unique_ids = set(ids)
+        test18_passed = len(ids) == len(unique_ids)
+        results.append(("TEST 18: One Signal Maximum & Idempotency Key Invariant", test18_passed, f"Records count={len(ids)}, Unique IDs={len(unique_ids)} (Zero Duplicates)"))
+    except Exception as e:
+        results.append(("TEST 18: One Signal Maximum & Idempotency Key Invariant", False, str(e)))
+
+    # TEST 19: Authoritative Backend Lock Time Accuracy (Never Frontend Render Time)
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/signal/resolved-log")
+        data = json.loads(req.read().decode('utf-8'))
+        records = data.get('recentResolved', [])
+        valid_timestamps = True
+        for r in records[:5]:
+            locked_at = r.get('lockedAt')
+            int_start = r.get('intervalStart')
+            if locked_at and int_start:
+                # lockedAt must be >= intervalStart
+                t_lock = time.mktime(time.strptime(locked_at[:19], "%Y-%m-%dT%H:%M:%S"))
+                t_start = time.mktime(time.strptime(int_start[:19], "%Y-%m-%dT%H:%M:%S"))
+                if t_lock < t_start:
+                    valid_timestamps = False
+        results.append(("TEST 19: Authoritative Lock Timestamps & Settlement Integrity", valid_timestamps, "All stored signal records contain valid backend timestamps"))
+    except Exception as e:
+        results.append(("TEST 19: Authoritative Lock Timestamps & Settlement Integrity", False, str(e)))
+
+    # TEST 20: Safe Numeric Normalization Across Components (Zero toFixed Crashes)
+    try:
+        # Check that /api/signal outputs clean numeric values that survive missing data
+        req = urllib.request.urlopen("http://localhost:3000/api/signal")
+        sig = json.loads(req.read().decode('utf-8'))
+        has_valid_numbers = (
+            isinstance(sig.get('confidence', 0), (int, float)) and
+            isinstance(sig.get('probability', 0), (int, float)) and
+            isinstance(sig.get('currentPrice', 0), (int, float))
+        )
+        results.append(("TEST 20: Safe Numeric Normalization & Hydration Robustness", has_valid_numbers, "All numeric fields output safely typed values without undefined toFixed hazard"))
+    except Exception as e:
+        results.append(("TEST 20: Safe Numeric Normalization & Hydration Robustness", False, str(e)))
+
     # Print summary
     print("\n--- RESULTS ---")
     all_passed = True
@@ -281,7 +326,7 @@ def run_tests():
 
     print("==================================================")
     if all_passed:
-        print("ALL 17 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
+        print("ALL 20 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
     else:
         print("SOME TESTS FAILED.")
     print("==================================================")

@@ -101,8 +101,8 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   const matrixChecks = [
     {
       name: 'MOMENTUM ALIGN',
-      status: signal.confidence >= 65 ? 'PASS' : signal.confidence >= 50 ? 'WARNING' : 'FAIL',
-      detail: `Confidence: ${signal.confidence}%`
+      status: signalConf >= 65 ? 'PASS' : signalConf >= 50 ? 'WARNING' : 'FAIL',
+      detail: `Confidence: ${signalConf}%`
     },
     {
       name: 'VWAP SUPPORT',
@@ -111,7 +111,7 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
     },
     {
       name: 'FLOW CONFIRMED',
-      status: signal.confidence >= 60 ? 'PASS' : 'WARNING',
+      status: signalConf >= 60 ? 'PASS' : 'WARNING',
       detail: 'Taker Delta Positive'
     },
     {
