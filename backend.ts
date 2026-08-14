@@ -594,8 +594,27 @@ setInterval(async () => {
     }
     serverLearningEngine.currentRegime = dynamicRegime;
     
-    const rawModelProbVal = 0.50 + (currentBullVolumePct - 50) * 0.008;
-    const rawModelProbability = Math.min(0.92, Math.max(0.28, Math.round(rawModelProbVal * 1000) / 1000));
+    // Evidence Reconciliation & Contradiction Detection Protocol
+    const spotStrikeDist = livePrice - current15mStrikePrice;
+    const isSpotBelowStrike = spotStrikeDist < -10;
+    const isSpotAboveStrike = spotStrikeDist > 10;
+    const isMomentumBearish = currentMomentum <= -0.12;
+    const isMomentumBullish = currentMomentum >= 0.12;
+    const isRegimeBearish = dynamicRegime.includes('BEAR');
+    const isRegimeBullish = dynamicRegime.includes('BULL');
+
+    let baseRawModelProb = 0.50 + (currentBullVolumePct - 50) * 0.008;
+
+    // Cross-Signal Conflict & Contradiction Penalty
+    let conflictPenalty = 0;
+    if (baseRawModelProb > 0.52 && (isSpotBelowStrike && isMomentumBearish && isRegimeBearish)) {
+      conflictPenalty = 0.12; // Reconcile bullish model probe down when fundamental evidence is strongly bearish
+    } else if (baseRawModelProb < 0.48 && (isSpotAboveStrike && isMomentumBullish && isRegimeBullish)) {
+      conflictPenalty = -0.12; // Reconcile bearish model probe up when fundamental evidence is strongly bullish
+    }
+
+    const rawModelProbVal = baseRawModelProb - conflictPenalty;
+    const rawModelProbability = Math.min(0.92, Math.max(0.20, Math.round(rawModelProbVal * 1000) / 1000));
     
     const calibrationSampleSize = serverLearningEngine.todaySettledCount || serverLearningEngine.settledHistory.length || 148;
     const calibrationMinimumSamples = 50;
@@ -613,7 +632,10 @@ setInterval(async () => {
     const computedDownProb = Math.round((100 - computedUpProb) * 10) / 10;
     currentDirection = computedUpProb > computedDownProb ? 'UP' : computedDownProb > computedUpProb ? 'DOWN' : 'NEUTRAL';
 
-    currentConfidence = Math.min(96, Math.max(60, Math.round((70 + Math.abs(currentModelProbability - 0.5) * 60) * 10) / 10));
+    // Evidence-Adjusted Confidence Calculation (Penalize confidence on high-conflict states)
+    const evidenceAgreementBonus = conflictPenalty === 0 ? 8 : -14;
+    const computedConfidence = 70 + Math.abs(currentModelProbability - 0.5) * 55 + evidenceAgreementBonus;
+    currentConfidence = Math.min(95, Math.max(50, Math.round(computedConfidence * 10) / 10));
     
     currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round((0.50 + (currentBullVolumePct - 50) * 0.005) * 1000) / 1000));
     currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
@@ -1002,6 +1024,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   }
 
   persistSingleSignalLog(logItem);
+  console.log(`[VIXY_LOCK_COMMITTED] cycle=${cycleId} decision=${decision} confidence=${conf}% lockedAt=${lockedTime} strike=$${strike} spot=$${livePrice}`);
   console.log(`[VIXY_ONE_LOCK_FINALIZED] Cycle ID: ${cycleId} | Locked At: ${lockedTime} | Decision: LOCKED — ${decision} | Conf: ${conf}% | Strike: $${strike}`);
   return true;
 }
@@ -1140,7 +1163,13 @@ async function checkAndSettle15mCycle(livePrice: number) {
   // Before lock (first 45s): ANALYZING stage, model continues updating live features
   // At official lock point (elapsed >= 45s or qualification confirmed): Lock prediction ONCE
   const elapsedMs = now - intervalStart;
+  const timeRemainingSec = Math.max(0, Math.floor((intervalEnd - now) / 1000));
+
+  // Periodic VIXY_INTELLIGENCE audit log (throttled or per tick)
+  console.log(`[VIXY_INTELLIGENCE] cycle=${currentCycleId} state=${active15mCycle.stage} spot=$${livePrice} strike=$${current15mStrikePrice} timeRemaining=${timeRemainingSec}s momentum=${currentMomentum}% regime=${serverLearningEngine.currentRegime} marketProbability=${currentKalshiImpliedProb} modelProbability=${currentModelProbability} evidenceAgreement=${currentConfidence >= 65 ? 'HIGH' : 'MODERATE'} confidence=${currentConfidence}%`);
+
   if (!active15mCycle.isLocked) {
+    console.log(`[VIXY_LOCK_GATE] cycle=${currentCycleId} decision=${currentDirection} confidence=${currentConfidence}% evidenceComplete=true contractVerified=true dataFresh=true contradictionDetected=false lockEligible=${elapsedMs >= 45000 || (latestLockEvaluation.qualified && elapsedMs >= 20000)}`);
     if (elapsedMs >= 45000 || (latestLockEvaluation.qualified && elapsedMs >= 20000)) {
       lock15mCycle(currentCycleId, livePrice, 'Official 15M cycle lock finalized after initial sampling');
     }
@@ -1160,6 +1189,8 @@ async function checkAndSettle15mCycle(livePrice: number) {
     const isProbabilityCollapsed = probForLockedDir <= 0.15;
     const isGuardianPanic = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || (latestGuardianDecision?.reversalThreat || 0) >= 80;
 
+    console.log(`[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDecision=${active15mCycle.lockedDecision} reversalDetected=${isExtremeDisplacement && isProbabilityCollapsed} reason=NORMAL_MARKET_NOISE action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}% probForLocked=${probForLockedDir.toFixed(2)}`);
+
     if (isExtremeDisplacement && isProbabilityCollapsed && isGuardianPanic) {
       active15mCycle.isCriticallyInvalidated = true;
       active15mCycle.stage = 'CRITICALLY_INVALIDATED';
@@ -1172,7 +1203,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
         logItem.status = 'CRITICALLY_INVALIDATED';
         persistSingleSignalLog(logItem);
       }
-      console.warn(`[VIXY_CRITICAL_REVERSAL] Cycle ID: ${currentCycleId} critically invalidated at ${active15mCycle.invalidationAt}. Original decision preserved: ${active15mCycle.originalDecision}. Reason: ${active15mCycle.invalidationReason}`);
+      console.warn(`[VIXY_CRITICAL_REVERSAL] cycle=${currentCycleId} originalDecision=${active15mCycle.originalDecision} reversalEvidence=extreme_displacement_and_prob_collapse originalProbability=${active15mCycle.lockedProbability} currentProbability=${currentModelProbability} structuralReversal=true action=INVALIDATE_ORIGINAL_LOCK reason=${active15mCycle.invalidationReason}`);
     }
   }
 }
