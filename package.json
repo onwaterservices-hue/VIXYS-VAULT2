@@ -21,6 +21,7 @@
     "@types/pg": "^8.20.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@types/ws": "^8.18.1",
     "@vercel/analytics": "^2.0.1",
     "@vitejs/plugin-react": "^5.0.4",
     "autoprefixer": "^10.4.21",
@@ -40,6 +41,7 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.3",
+    "ws": "^8.21.3",
     "zod": "^4.4.3"
   },
   "devDependencies": {},

@@ -4,6 +4,47 @@
     <meta charset="UTF-8" />
     <script>
       (function() {
+        // Intercept WebSocket for Vite HMR to prevent failed connection errors
+        const OriginalWebSocket = window.WebSocket;
+        window.WebSocket = function(url, protocols) {
+          const urlStr = String(url || '');
+          if (
+            urlStr.includes('vite') ||
+            urlStr.includes('hmr') ||
+            (urlStr.includes(window.location.host) && !urlStr.includes('/api/ws') && !urlStr.includes('binance'))
+          ) {
+            console.log('[Vite HMR WebSocket Intercepted & Mocked]', urlStr);
+            const mockWs = {
+              readyState: 1, // OPEN
+              send: function() {},
+              close: function() {},
+              addEventListener: function(type, listener) {
+                if (type === 'open') {
+                  setTimeout(() => {
+                    try { listener({ type: 'open' }); } catch(e){}
+                  }, 10);
+                }
+              },
+              removeEventListener: function() {},
+              onopen: null,
+              onclose: null,
+              onerror: null,
+              onmessage: null
+            };
+            setTimeout(() => {
+              if (typeof mockWs.onopen === 'function') {
+                try { mockWs.onopen({ type: 'open' }); } catch(e){}
+              }
+            }, 10);
+            return mockWs;
+          }
+          return new OriginalWebSocket(url, protocols);
+        };
+        window.WebSocket.CONNECTING = 0;
+        window.WebSocket.OPEN = 1;
+        window.WebSocket.CLOSING = 2;
+        window.WebSocket.CLOSED = 3;
+
         var isViteError = function(err) {
           if (!err) return false;
           var str = String(

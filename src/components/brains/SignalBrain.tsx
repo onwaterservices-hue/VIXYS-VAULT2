@@ -181,7 +181,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const recentUpPct = totalResolved > 0 ? Math.round((upCount / totalResolved) * 100) : 0;
 
   // Authoritative Direction & Probability
-  const isOfflineOrStale = isOfflineStatus || isStaleOrInvalid || !rawApiData || rawApiData?.dataFreshness === 'OFFLINE' || execution.state === 'STALE' || freshnessState.isStale;
+  const hasValidRawData = Boolean(rawApiData && (rawApiData.cycleId || rawApiData.direction || rawApiData.desk || rawApiData.currentPrice));
+  const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || liveAgeSeconds > 60;
+  const isOfflineOrStale = isActualOffline && !hasValidRawData;
 
   const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
 

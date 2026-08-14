@@ -445,7 +445,15 @@ export async function fetchPrediction(
   };
 }
 
+let lastAccountFetchTs = 0;
+let cachedAccountResult: any = null;
+
 export async function getAccountMeApi(userEmail?: string, userId?: string) {
+  const now = Date.now();
+  if (cachedAccountResult && now - lastAccountFetchTs < 5000) {
+    return cachedAccountResult;
+  }
+
   let email = userEmail;
   let uid = userId;
   if (!email || !uid) {
@@ -468,12 +476,18 @@ export async function getAccountMeApi(userEmail?: string, userId?: string) {
   if (email) headers['x-user-email'] = email.toLowerCase();
   if (uid) headers['x-user-id'] = uid;
 
-  return await safeFetchJson<{
+  const res = await safeFetchJson<{
     authenticated: boolean;
     user: any;
     discord: { linked: boolean; discordUserId: string; discordUsername: string; profile: any };
     subscription: any;
   }>(`/api/account/me${query}`, { headers });
+
+  if (res) {
+    cachedAccountResult = res;
+    lastAccountFetchTs = Date.now();
+  }
+  return res;
 }
 
 export interface EntitlementsResponse {
@@ -1522,5 +1536,14 @@ export async function wipeBetaUsersApi() {
     return { success: false, message: 'Server connection error' };
   }
 }
+
+export async function fetchVixyStateApi(): Promise<any> {
+  const data = await safeFetchJson<any>(`/api/vixy/state?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  return data;
+}
+
 
 

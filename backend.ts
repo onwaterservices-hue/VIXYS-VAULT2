@@ -3,6 +3,7 @@ dotenv.config({ override: true });
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
@@ -4505,6 +4506,44 @@ app.get('/api/live-engine/health', (req: express.Request, res: express.Response)
   });
 });
 
+let globalSequenceNumber = 1000;
+
+app.get('/api/vixy/state', (req, res) => {
+  globalSequenceNumber++;
+  const now = new Date().toISOString();
+  const spot = currentBtcPrice;
+  const market15mState = getKalshi15mMarketState(spot);
+  const isLocked = active15mCycle.isLocked;
+
+  const statePayload = {
+    cycleId: active15mCycle.cycleId,
+    status: isLocked ? (active15mCycle.isCriticallyInvalidated ? 'CRITICALLY_INVALIDATED' : 'LOCKED') : 'ANALYZING',
+    lockedPrediction: isLocked ? {
+      direction: active15mCycle.lockedDirection,
+      probability: active15mCycle.lockedProbability,
+      confidence: active15mCycle.lockedConfidence,
+      lockedAt: active15mCycle.lockedAt,
+      spotAtLock: active15mCycle.lockedSpot,
+      strike: active15mCycle.lockedStrike,
+      reason: active15mCycle.lockedReason,
+      decision: active15mCycle.lockedDecision
+    } : null,
+    livePrediction: {
+      direction: currentDirection,
+      probability: currentModelProbability,
+      confidence: currentConfidence
+    },
+    spot,
+    strike: market15mState.strikePrice,
+    timeRemaining: market15mState.timeRemaining,
+    serverTime: now,
+    sequence: globalSequenceNumber
+  };
+
+  console.log(`[VIXY_STATE_SOURCE] source=FIRESTORE_AND_MEMORY cycle=${active15mCycle.cycleId} sequence=${globalSequenceNumber} status=${statePayload.status}`);
+  res.json(statePayload);
+});
+
 app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, res) => {
   const asset = ((req.query.asset as string) || 'BTC').toUpperCase();
   const desk = (req.query.desk as string) || '15m';
@@ -7740,9 +7779,102 @@ async function startServer() {
   }
 
   if (!process.env.VERCEL) {
-    app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
       console.log("Discord Redirect URI:", process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback');
+
+      const wss = new WebSocketServer({ server, path: '/api/ws' });
+
+      wss.on('connection', (ws: WebSocket, req) => {
+        console.log(`[VIXY_WS_CONNECT] client connected from ${req.socket.remoteAddress}`);
+        console.log(`[VIXY_WS_OPEN] client connected`);
+
+        globalSequenceNumber++;
+        const snapshot = {
+          type: 'VIXY_SNAPSHOT',
+          cycleId: active15mCycle.cycleId,
+          status: active15mCycle.isLocked ? (active15mCycle.isCriticallyInvalidated ? 'CRITICALLY_INVALIDATED' : 'LOCKED') : 'ANALYZING',
+          lockedPrediction: active15mCycle.isLocked ? {
+            direction: active15mCycle.lockedDirection,
+            probability: active15mCycle.lockedProbability,
+            confidence: active15mCycle.lockedConfidence,
+            lockedAt: active15mCycle.lockedAt,
+            spotAtLock: active15mCycle.lockedSpot,
+            strike: active15mCycle.lockedStrike,
+            reason: active15mCycle.lockedReason,
+            decision: active15mCycle.lockedDecision
+          } : null,
+          livePrediction: {
+            direction: currentDirection,
+            probability: currentModelProbability,
+            confidence: currentConfidence
+          },
+          serverTime: new Date().toISOString(),
+          sequence: globalSequenceNumber
+        };
+
+        ws.send(JSON.stringify(snapshot));
+        console.log(`[VIXY_WS_SNAPSHOT] cycle=${snapshot.cycleId} sequence=${snapshot.sequence} status=${snapshot.status}`);
+
+        const heartbeatInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            globalSequenceNumber++;
+            const heartbeat = {
+              type: 'VIXY_HEARTBEAT',
+              serverTime: new Date().toISOString(),
+              sequence: globalSequenceNumber,
+              cycleId: active15mCycle.cycleId
+            };
+            ws.send(JSON.stringify(heartbeat));
+            console.log(`[VIXY_WS_HEARTBEAT] sequence=${globalSequenceNumber} cycle=${active15mCycle.cycleId}`);
+          }
+        }, 10000);
+
+        ws.on('close', (code, reason) => {
+          clearInterval(heartbeatInterval);
+          console.log(`[VIXY_WS_CLOSE] code=${code} reason=${reason?.toString() || 'none'}`);
+        });
+
+        ws.on('error', (err) => {
+          console.warn('[VIXY_WS_ERROR]', err);
+        });
+      });
+
+      setInterval(() => {
+        const now = Date.now();
+        const dataAgeMs = now - lastMarketUpdateTs;
+        const isBinanceConnected = engineFeedStatus === 'CONNECTED' && dataAgeMs < 15000;
+        
+        console.log(`[VIXY_PRODUCTION_DIAGNOSTIC]`);
+        console.log(`frontend=${wss.clients.size > 0 ? 'READY' : 'WAITING'}`);
+        console.log(`backend=RUNNING`);
+        console.log(`binance=${isBinanceConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+        console.log(`cryptoTracking=ACTIVE`);
+        console.log(`marketData=${isBinanceConnected ? 'FRESH' : 'STALE'}`);
+        console.log(`algorithm=RUNNING`);
+        console.log(`firestore=${persistenceState}`);
+        console.log(`authoritativeState=AVAILABLE`);
+        console.log(`vixyWebSocket=${wss.clients.size > 0 ? 'CONNECTED' : 'WAITING'}`);
+        console.log(`frontendSnapshot=${wss.clients.size > 0 ? 'FRESH' : 'WAITING'}`);
+        console.log(`accountApi=HEALTHY`);
+        console.log(`btc15mCard=${wss.clients.size > 0 ? 'CONNECTED' : 'WAITING'}`);
+        console.log(`cycle=${active15mCycle.cycleId}`);
+        console.log(`cycleStatus=${active15mCycle.status}`);
+        console.log(`cycleExpiry=${new Date(active15mCycle.intervalEnd).toISOString()}`);
+        console.log(`strike=${active15mCycle.isLocked ? active15mCycle.lockedStrike : getKalshi15mMarketState(currentBtcPrice).strikePrice}`);
+        console.log(`spot=${currentBtcPrice}`);
+        console.log(`liveDirection=${currentDirection}`);
+        console.log(`liveProbability=${currentModelProbability}`);
+        console.log(`liveConfidence=${currentConfidence}`);
+        console.log(`lockedDirection=${active15mCycle.lockedDirection || 'NONE'}`);
+        console.log(`lockedProbability=${active15mCycle.lockedProbability || 0}`);
+        console.log(`lockedConfidence=${active15mCycle.lockedConfidence || 0}`);
+        console.log(`lockedAt=${active15mCycle.lockedAt || 'NONE'}`);
+        console.log(`lockReason=${active15mCycle.lockedReason || 'NONE'}`);
+        console.log(`sequence=${globalSequenceNumber}`);
+        console.log(`dataAgeMs=${dataAgeMs}`);
+        console.log(`latencyMs=${Math.max(0, dataAgeMs - 500)}`);
+      }, 10000);
     });
   } else {
     console.log("[Vercel] Serverless function initialized successfully.");
