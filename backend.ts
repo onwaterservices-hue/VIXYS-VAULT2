@@ -921,10 +921,17 @@ export interface Active15mCycleState {
   lockedSpot: number | null;
   lockedEdgePct: number | null;
   lockedReason: string | null;
+  lockReason?: 'QUALIFIED_SIGNAL' | 'TIME_THRESHOLD' | 'FORCED_SAFETY_LOCK' | null;
   isCriticallyInvalidated?: boolean;
   invalidationAt?: string | null;
   invalidationReason?: string | null;
   originalDecision?: string | null;
+  lockedSnapshot?: {
+    direction: 'UP' | 'DOWN' | 'PASS';
+    decision: 'BUY UP' | 'BUY DOWN' | 'PASS';
+    probability: number;
+    confidence: number;
+  } | null;
   livePrediction?: {
     direction: 'UP' | 'DOWN' | 'NEUTRAL';
     probability: number;
@@ -1201,6 +1208,20 @@ async function checkAndSettle15mCycle(livePrice: number) {
     spot: livePrice,
     timestamp: now,
   };
+
+  if (active15mCycle.isLocked && active15mCycle.lockedSnapshot) {
+    if (
+      active15mCycle.lockedDecision !== active15mCycle.lockedSnapshot.decision ||
+      active15mCycle.lockedDirection !== active15mCycle.lockedSnapshot.direction ||
+      Math.abs((active15mCycle.lockedProbability || 0) - active15mCycle.lockedSnapshot.probability) > 0.0001
+    ) {
+      console.error(`[VIXY_CRITICAL] LOCKED_PREDICTION_MUTATION_DETECTED cycleId=${active15mCycle.cycleId} previousDirection=${active15mCycle.lockedSnapshot.direction} currentDirection=${active15mCycle.lockedDirection} previousProbability=${active15mCycle.lockedSnapshot.probability} currentProbability=${active15mCycle.lockedProbability}`);
+      active15mCycle.lockedDecision = active15mCycle.lockedSnapshot.decision;
+      active15mCycle.lockedDirection = active15mCycle.lockedSnapshot.direction;
+      active15mCycle.lockedProbability = active15mCycle.lockedSnapshot.probability;
+      active15mCycle.lockedConfidence = active15mCycle.lockedSnapshot.confidence;
+    }
+  }
 
   const elapsedMs = now - intervalStart;
   const timeRemainingSec = Math.max(0, Math.floor((intervalEnd - now) / 1000));
@@ -5858,6 +5879,7 @@ async function drainPendingPersistenceQueuesAsync() {
 }
 
 const lastPersistedUserPayloads = new Map<string, string>();
+const lastPersistedUserTimes = new Map<string, number>();
 
 async function persistSingleUser(user: ServerUser) {
   savePersistentStore();
@@ -5876,11 +5898,13 @@ async function persistSingleUser(user: ServerUser) {
       payload.subscription = 'ELITE_PASS';
     }
 
-    // Idempotent write guard: compare serialized payload against cached last persisted payload
+    // Idempotent write guard with 60s time debounce: compare serialized payload and last write timestamp
     const payloadStr = JSON.stringify(payload);
     const cachedPayload = lastPersistedUserPayloads.get(docId);
-    if (cachedPayload === payloadStr) {
-      // Payload has not changed — skip duplicate Firestore network write
+    const lastTime = lastPersistedUserTimes.get(docId) || 0;
+    const now = Date.now();
+    if (cachedPayload === payloadStr && (now - lastTime < 60000)) {
+      // Payload has not changed and written recently — skip duplicate Firestore network write
       return;
     }
 
@@ -5893,8 +5917,10 @@ async function persistSingleUser(user: ServerUser) {
     }
 
     lastPersistedUserPayloads.set(docId, payloadStr);
+    lastPersistedUserTimes.set(docId, now);
     if (user.uid) {
       lastPersistedUserPayloads.set(user.uid, payloadStr);
+      lastPersistedUserTimes.set(user.uid, now);
     }
 
     lastFirestoreWriteTimeMs = Date.now();
