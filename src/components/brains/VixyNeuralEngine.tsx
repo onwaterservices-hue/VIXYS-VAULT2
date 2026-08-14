@@ -74,11 +74,15 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
      rawApiData?.vixyLockState === 'LOCKED')
   );
 
-  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'CALIBRATING').toUpperCase();
+  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'OBSERVING').toUpperCase();
+  const isObserving = !isServerLocked && (rawStage === 'OBSERVING');
   const isCalibrating = !isServerLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
   const isAnalyzing = !isServerLocked && rawStage === 'ANALYZING';
-  const isValidating = !isServerLocked && rawStage === 'VALIDATING';
+  const isQualifying = !isServerLocked && rawStage === 'QUALIFYING';
+  const isValidating = !isServerLocked && (rawStage === 'VALIDATING' || rawStage === 'LOCKING');
   const isReadyToLock = !isServerLocked && rawStage === 'READY_TO_LOCK';
+  const isNoTrade = !isServerLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED');
+  const isCriticallyInvalidated = rawApiData?.status === 'CRITICALLY_INVALIDATED' || rawApiData?.isCriticallyInvalidated;
 
   const cycleId = String(rawApiData?.cycleId || '15M-ACTIVE-CYCLE');
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
@@ -251,9 +255,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               </span>
             </h2>
             <div className="flex items-center gap-2 text-[8.5px] font-bold tracking-[0.15em] uppercase">
-              <span className={`flex items-center gap-1 ${isServerLocked ? (isUp ? 'text-[#00FF9D]' : 'text-[#FF3366]') : 'text-purple-300'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isServerLocked ? (isUp ? 'bg-[#00FF9D]' : 'bg-[#FF3366]') : 'bg-purple-400 animate-ping'}`} />
-                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
+              <span className={`flex items-center gap-1 ${isServerLocked ? (isUp ? 'text-[#00FF9D]' : 'text-[#FF3366]') : isNoTrade ? 'text-amber-400' : 'text-purple-300'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isServerLocked ? (isUp ? 'bg-[#00FF9D]' : 'bg-[#FF3366]') : isNoTrade ? 'bg-amber-400' : 'bg-purple-400 animate-ping'}`} />
+                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isNoTrade ? '● NO TRADE / SKIPPED' : isObserving ? '● OBSERVING 15M CYCLE' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isQualifying ? '● QUALIFYING CONFLUENCE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
               </span>
               <span className="text-purple-700">|</span>
               <span className="text-slate-300">EXPIRY IN {timeRemainingFormatted}</span>
@@ -267,6 +271,10 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             className={`flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${
               isOfflineOrStale
                 ? 'text-rose-400 border-rose-800/60 bg-rose-950/70'
+                : isCriticallyInvalidated
+                ? 'text-rose-400 border-rose-500/80 bg-rose-950/80 shadow-[0_0_20px_rgba(244,63,94,0.4)]'
+                : isNoTrade
+                ? 'text-amber-300 border-amber-500/60 bg-amber-950/70 shadow-[0_0_15px_rgba(245,158,11,0.3)]'
                 : isServerLocked
                 ? isUp
                   ? 'text-[#00FF9D] border-emerald-500/80 bg-[#041d13] shadow-[0_0_20px_rgba(0,255,157,0.4)]'
@@ -274,30 +282,55 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 : 'text-cyan-300 border-cyan-500/50 bg-cyan-950/80 shadow-[0_0_15px_rgba(6,182,212,0.25)]'
             }`}
           >
-            {isServerLocked ? (
+            {isCriticallyInvalidated ? (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
+                <span>STATE: CRITICALLY INVALIDATED</span>
+              </>
+            ) : isNoTrade ? (
+              <>
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+                <span>STATE: NO TRADE (SKIPPED)</span>
+              </>
+            ) : isServerLocked ? (
               <>
                 <Lock className="w-3.5 h-3.5 animate-pulse" />
-                <span>STATE 03: LOCKED — {lockedDecision}</span>
+                <span>STATE 04: LOCKED — {lockedDecision}</span>
+              </>
+            ) : isObserving ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                <span>STATE 01: OBSERVING 15M CYCLE</span>
               </>
             ) : isCalibrating ? (
               <>
                 <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
-                <span>STATE 01: CALIBRATING 15M CYCLE</span>
+                <span>STATE 02: CALIBRATING ENGINE</span>
+              </>
+            ) : isAnalyzing ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
+                <span>STATE 03: ANALYZING MARKET</span>
+              </>
+            ) : isQualifying ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-pulse text-indigo-300" />
+                <span>STATE 04: QUALIFYING ENTRY</span>
               </>
             ) : isValidating ? (
               <>
                 <Activity className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                <span>STATE 02: VALIDATING EVIDENCE</span>
+                <span>STATE 04: VALIDATING EVIDENCE</span>
               </>
             ) : isReadyToLock ? (
               <>
                 <Activity className="w-3.5 h-3.5 animate-pulse text-amber-400" />
-                <span>STATE 02: FINALIZING LOCK</span>
+                <span>STATE 04: FINALIZING LOCK</span>
               </>
             ) : (
               <>
                 <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
-                <span>STATE 01: ANALYZING 15M CYCLE</span>
+                <span>STATE 01: OBSERVING 15M CYCLE</span>
               </>
             )}
           </span>
@@ -396,6 +429,20 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
               {isOfflineOrStale ? (
                 <WifiOff className="w-7 h-7 text-rose-400 animate-pulse" />
+              ) : isCriticallyInvalidated ? (
+                <>
+                  <AlertTriangle className="w-7 h-7 text-rose-400 animate-bounce" />
+                  <span className="text-[7.5px] font-black text-rose-400 tracking-widest uppercase mt-1">
+                    INVALIDATED
+                  </span>
+                </>
+              ) : isNoTrade ? (
+                <>
+                  <ShieldCheck className="w-7 h-7 text-amber-300 animate-pulse" />
+                  <span className="text-[7.5px] font-black text-amber-300 tracking-widest uppercase mt-1">
+                    NO TRADE
+                  </span>
+                </>
               ) : isServerLocked ? (
                 <>
                   <div
@@ -418,7 +465,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 <>
                   <Activity className="w-7 h-7 text-cyan-300 animate-pulse" />
                   <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">
-                    {isCalibrating ? 'CALIBRATING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYSIS'}
+                    {isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}
                   </span>
                 </>
               )}
@@ -429,10 +476,18 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             <span className="text-[9px] font-mono font-bold tracking-widest uppercase" style={{ color: themeNeon }}>
               {isOfflineOrStale
                 ? 'FEED OFFLINE'
+                : isCriticallyInvalidated
+                ? 'CRITICAL REVERSAL DETECTED'
+                : isNoTrade
+                ? 'PROTECTION / CHOP VETO'
                 : isServerLocked
                 ? `FINALIZED @ ${lockedAtFormatted}`
+                : isObserving
+                ? 'OBSERVING ORDER FLOW'
                 : isCalibrating
                 ? 'CALIBRATING ENGINE'
+                : isQualifying
+                ? 'QUALIFYING CONFLUENCE'
                 : isValidating
                 ? 'VALIDATING EVIDENCE'
                 : isReadyToLock
@@ -454,10 +509,18 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               {isServerLocked && <Lock className="w-3 h-3 text-[#00FF9D]" />}
               {isOfflineOrStale
                 ? 'DATA LINK INTERRUPTED'
+                : isCriticallyInvalidated
+                ? 'CRITICAL INVALIDATION TRIGGERED'
+                : isNoTrade
+                ? 'CYCLE FILTERED BY PROTECTION / CHOP GATE'
                 : isServerLocked
                 ? 'AUTHORITATIVE 15M CYCLE LOCK'
+                : isObserving
+                ? 'OBSERVING MARKET ORDER FLOW'
                 : isCalibrating
                 ? 'PREPARING CURRENT-CYCLE INTELLIGENCE'
+                : isQualifying
+                ? 'EVALUATING QUALIFICATION & GUARDIAN RISK'
                 : isValidating
                 ? 'CHECKING EVIDENCE AGREEMENT'
                 : isReadyToLock
@@ -478,11 +541,11 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             <div
               className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-none transition-all select-none flex items-center gap-2"
               style={{
-                color: isOfflineOrStale ? '#F43F5E' : themeNeon,
-                textShadow: `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
+                color: isOfflineOrStale ? '#F43F5E' : isNoTrade ? '#F59E0B' : themeNeon,
+                textShadow: `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : isNoTrade ? 'rgba(245,158,11,0.4)' : themeGlow}`,
               }}
             >
-              <span>{isServerLocked ? `LOCKED — ${lockedDecision}` : isCalibrating ? 'CALIBRATING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
+              <span>{isCriticallyInvalidated ? 'INVALIDATED' : isNoTrade ? 'NO TRADE' : isServerLocked ? `LOCKED — ${lockedDecision}` : isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
               {!isOfflineOrStale && isServerLocked && (
                 <span className="text-3xl sm:text-5xl md:text-6xl animate-pulse" style={{ color: themeNeon }}>
                   {isUp ? '▲' : '▼'}

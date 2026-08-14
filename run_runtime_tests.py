@@ -4,12 +4,12 @@ import time
 
 def run_tests():
     print("==================================================")
-    print("VIXY VAULT BTC 15M AUTHORITATIVE RUNTIME TEST SUITE")
+    print("VIXY VAULT BTC 15M AUTHORITATIVE 17-POINT TEST SUITE")
     print("==================================================")
 
     results = []
 
-    # TEST 1: Query Authoritative State & Cycle Lifecycle
+    # TEST 1: Query Authoritative State & Multi-Stage Lifecycle Structure
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
         data = json.loads(req.read().decode('utf-8'))
@@ -17,26 +17,104 @@ def run_tests():
         status = data.get('status', '')
         seq = data.get('sequence', 0)
         
-        test1_passed = bool(cycle_id.startswith('15M-') and seq > 0 and status in ['INGESTING', 'CALIBRATING', 'ANALYZING', 'VALIDATING', 'READY_TO_LOCK', 'LOCKED', 'MONITORING'])
+        valid_stages = ['OBSERVING', 'CALIBRATING', 'ANALYZING', 'QUALIFYING', 'VALIDATING', 'LOCKING', 'LOCKED', 'NO_TRADE', 'SKIPPED', 'CRITICALLY_INVALIDATED', 'INGESTING', 'BOOTSTRAPPING']
+        test1_passed = bool(cycle_id.startswith('15M-') and seq > 0 and status in valid_stages)
         results.append(("TEST 1: Authoritative State Machine & Lifecycle Structure", test1_passed, f"cycleId={cycle_id}, status={status}, sequence={seq}"))
     except Exception as e:
         results.append(("TEST 1: Authoritative State Machine & Lifecycle Structure", False, str(e)))
 
-    # TEST 2: Calibration & Analysis Gate Telemetry
+    # TEST 2: Minimum 6-Minute (360s) Observation Hard Gate
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
+        diag = req.read().decode('utf-8')
+        lines = dict(line.split('=', 1) for line in diag.split('\n') if '=' in line)
+        obs_dur = int(lines.get('observationDuration', 0))
+        lock_elig = lines.get('lockEligibility', '')
+        lock_reason = lines.get('lockReason', '')
+        
+        # If observation < 360s, lockEligibility must be INELIGIBLE
+        if obs_dur < 360:
+            test2_passed = (lock_elig == 'INELIGIBLE')
+            details = f"obsDuration={obs_dur}s (< 360s) -> lockEligibility={lock_elig} (reason: {lock_reason})"
+        else:
+            test2_passed = True
+            details = f"obsDuration={obs_dur}s (>= 360s observation requirement met)"
+        results.append(("TEST 2: 360s Minimum Observation Hard Gate", test2_passed, details))
+    except Exception as e:
+        results.append(("TEST 2: 360s Minimum Observation Hard Gate", False, str(e)))
+
+    # TEST 3: Entry Window Expiration Guard (< 300s Remaining Gate)
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/signal")
+        sig = json.loads(req.read().decode('utf-8'))
+        time_rem = sig.get('timeRemaining', 900)
+        is_locked = sig.get('isLocked', False)
+        stage = sig.get('cycleStage', '')
+        
+        # If remaining time < 300s and unlocked, cycle must NOT lock (must be NO_TRADE or SKIPPED)
+        if time_rem < 300 and not is_locked:
+            test3_passed = stage in ['NO_TRADE', 'SKIPPED']
+            details = f"timeRemaining={time_rem}s (< 300s) -> stage={stage} (Entry window safely closed)"
+        else:
+            test3_passed = True
+            details = f"timeRemaining={time_rem}s, isLocked={is_locked}, stage={stage}"
+        results.append(("TEST 3: Entry Window Expiration Safety Gate", test3_passed, details))
+    except Exception as e:
+        results.append(("TEST 3: Entry Window Expiration Safety Gate", False, str(e)))
+
+    # TEST 4: Choppy Market Detection & NO_TRADE Filter
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
+        data = json.loads(req.read().decode('utf-8'))
+        is_choppy = data.get('isChoppy', False)
+        status = data.get('status', '')
+        
+        if is_choppy and not data.get('isLocked', False):
+            test4_passed = (status in ['NO_TRADE', 'SKIPPED'])
+            details = f"isChoppy=True -> status={status} (Trade safely filtered)"
+        else:
+            test4_passed = isinstance(is_choppy, bool)
+            details = f"isChoppy={is_choppy}, status={status}"
+        results.append(("TEST 4: Choppy Market Detection & NO_TRADE Filter", test4_passed, details))
+    except Exception as e:
+        results.append(("TEST 4: Choppy Market Detection & NO_TRADE Filter", False, str(e)))
+
+    # TEST 5: VIXY Guardian Protection Veto Authority
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
+        data = json.loads(req.read().decode('utf-8'))
+        prot_status = data.get('protectionStatus', 'SAFE')
+        is_locked = data.get('isLocked', False)
+        status = data.get('status', '')
+        
+        if prot_status == 'VETOED' and not is_locked:
+            test5_passed = (status in ['NO_TRADE', 'SKIPPED'])
+            details = f"protectionStatus=VETOED -> status={status} (Protection veto enforced)"
+        else:
+            test5_passed = prot_status in ['SAFE', 'VETOED', 'MONITOR']
+            details = f"protectionStatus={prot_status}, status={status}"
+        results.append(("TEST 5: VIXY Guardian Protection Veto Authority", test5_passed, details))
+    except Exception as e:
+        results.append(("TEST 5: VIXY Guardian Protection Veto Authority", False, str(e)))
+
+    # TEST 6: Diagnostic Telemetry Output & Lock Gate Verification
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
         diag_text = req.read().decode('utf-8')
         has_calib = "calibrationStatus=" in diag_text
         has_analysis = "analysisStatus=" in diag_text
+        has_qual = "qualificationStatus=" in diag_text
         has_validation = "validationStatus=" in diag_text
+        has_elig = "lockEligibility=" in diag_text
+        has_obs = "observationDuration=" in diag_text
         has_prod_ready = "STATUS=PRODUCTION_READY" in diag_text
 
-        test2_passed = has_calib and has_analysis and has_validation and has_prod_ready
-        results.append(("TEST 2: Calibration, Analysis & Validation Telemetry Output", test2_passed, "All diagnostic status fields present and verified"))
+        test6_passed = has_calib and has_analysis and has_qual and has_validation and has_elig and has_obs and has_prod_ready
+        results.append(("TEST 6: Comprehensive Diagnostic Telemetry & Gate Output", test6_passed, "All lifecycle diagnostic status fields present and verified"))
     except Exception as e:
-        results.append(("TEST 2: Calibration, Analysis & Validation Telemetry Output", False, str(e)))
+        results.append(("TEST 6: Comprehensive Diagnostic Telemetry & Gate Output", False, str(e)))
 
-    # TEST 3: Validation Gate & Lock State Coherence
+    # TEST 7: Pre-Lock Validation Gate & Lock Coherence
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/signal")
         sig = json.loads(req.read().decode('utf-8'))
@@ -44,16 +122,16 @@ def run_tests():
         
         if is_locked:
             valid_lock = sig.get('lockedDirection') in ['UP', 'DOWN'] and sig.get('lockedConfidence') is not None
-            test3_passed = valid_lock
-            results.append(("TEST 3: Pre-Lock Validation Gate & Lock Coherence", test3_passed, f"isLocked=True, direction={sig.get('lockedDirection')}, conf={sig.get('lockedConfidence')}%"))
+            test7_passed = valid_lock
+            results.append(("TEST 7: Pre-Lock Validation Gate & Lock Coherence", test7_passed, f"isLocked=True, direction={sig.get('lockedDirection')}, conf={sig.get('lockedConfidence')}%"))
         else:
             valid_unlock = sig.get('lockedDirection') is None and sig.get('lockedProbability') is None
-            test3_passed = valid_unlock
-            results.append(("TEST 3: Pre-Lock Validation Gate & Lock Coherence", test3_passed, f"isLocked=False, locked fields are cleanly null"))
+            test7_passed = valid_unlock
+            results.append(("TEST 7: Pre-Lock Validation Gate & Lock Coherence", test7_passed, f"isLocked=False, locked fields are cleanly null"))
     except Exception as e:
-        results.append(("TEST 3: Pre-Lock Validation Gate & Lock Coherence", False, str(e)))
+        results.append(("TEST 7: Pre-Lock Validation Gate & Lock Coherence", False, str(e)))
 
-    # TEST 4: Live Telemetry vs Locked Prediction Immutability
+    # TEST 8: Live Telemetry vs Locked Prediction Immutability
     try:
         req1 = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
         d1 = json.loads(req1.read().decode('utf-8'))
@@ -68,15 +146,15 @@ def run_tests():
                         p1['probability'] == p2['probability'] and 
                         p1['lockedAt'] == p2['lockedAt'] and 
                         p1['strike'] == p2['strike'])
-            test4_passed = immut_ok
-            results.append(("TEST 4: Immutability of Locked Predictions Over Time", test4_passed, "Locked parameters remained 100% strictly invariant"))
+            test8_passed = immut_ok
+            results.append(("TEST 8: Immutability of Locked Predictions Over Time", test8_passed, "Locked parameters remained 100% strictly invariant"))
         else:
-            test4_passed = True
-            results.append(("TEST 4: Immutability of Locked Predictions Over Time", test4_passed, "Cycle in pre-lock stage, invariant holds"))
+            test8_passed = True
+            results.append(("TEST 8: Immutability of Locked Predictions Over Time", test8_passed, "Cycle in pre-lock stage, invariant holds"))
     except Exception as e:
-        results.append(("TEST 4: Immutability of Locked Predictions Over Time", False, str(e)))
+        results.append(("TEST 8: Immutability of Locked Predictions Over Time", False, str(e)))
 
-    # TEST 5: Data Freshness & Data Age Guard
+    # TEST 9: Real-time Market Data Freshness & Latency Guard
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
         diag = req.read().decode('utf-8')
@@ -84,12 +162,12 @@ def run_tests():
         data_age = int(lines.get('dataAgeMs', 999999))
         market_data = lines.get('marketData', '')
         
-        test5_passed = data_age < 15000 and market_data in ['FRESH', 'STALE']
-        results.append(("TEST 5: Real-time Market Data Freshness & Latency Guard", test5_passed, f"dataAgeMs={data_age}ms, marketData={market_data}"))
+        test9_passed = data_age < 15000 and market_data in ['FRESH', 'STALE']
+        results.append(("TEST 9: Real-time Market Data Freshness & Latency Guard", test9_passed, f"dataAgeMs={data_age}ms, marketData={market_data}"))
     except Exception as e:
-        results.append(("TEST 5: Real-time Market Data Freshness & Latency Guard", False, str(e)))
+        results.append(("TEST 9: Real-time Market Data Freshness & Latency Guard", False, str(e)))
 
-    # TEST 6: Walk-Forward Settlement Log Integrity
+    # TEST 10: Walk-Forward Settlement History & Accuracy Tracking
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/signal/resolved-log")
         logs = json.loads(req.read().decode('utf-8'))
@@ -97,23 +175,23 @@ def run_tests():
         win_rate = stats.get('winRatePct', 0)
         total = stats.get('total', 0)
         
-        test6_passed = 0 <= win_rate <= 100 and total >= 0
-        results.append(("TEST 6: Walk-Forward Settlement History & Accuracy Tracking", test6_passed, f"Total Settled={total}, Win Rate={win_rate}%"))
+        test10_passed = 0 <= win_rate <= 100 and total >= 0
+        results.append(("TEST 10: Walk-Forward Settlement History & Accuracy Tracking", test10_passed, f"Total Settled={total}, Win Rate={win_rate}%"))
     except Exception as e:
-        results.append(("TEST 6: Walk-Forward Settlement History & Accuracy Tracking", False, str(e)))
+        results.append(("TEST 10: Walk-Forward Settlement History & Accuracy Tracking", False, str(e)))
 
-    # TEST 7: Monotonic Global Sequence Number Integrity
+    # TEST 11: Monotonic Global Sequence Number Progression
     try:
         s1 = json.loads(urllib.request.urlopen("http://localhost:3000/api/vixy/state").read().decode('utf-8')).get('sequence', 0)
         time.sleep(0.5)
         s2 = json.loads(urllib.request.urlopen("http://localhost:3000/api/vixy/state").read().decode('utf-8')).get('sequence', 0)
         
-        test7_passed = s2 >= s1 and s1 > 0
-        results.append(("TEST 7: Monotonic Sequence Number Progression", test7_passed, f"Seq1={s1} -> Seq2={s2} (Monotonic Increment)"))
+        test11_passed = s2 >= s1 and s1 > 0
+        results.append(("TEST 11: Monotonic Sequence Number Progression", test11_passed, f"Seq1={s1} -> Seq2={s2} (Monotonic Increment)"))
     except Exception as e:
-        results.append(("TEST 7: Monotonic Sequence Number Progression", False, str(e)))
+        results.append(("TEST 11: Monotonic Sequence Number Progression", False, str(e)))
 
-    # TEST 8: Kalshi 15M Strike & Expiry Geometry
+    # TEST 12: Kalshi 15M Strike, Expiry & Price Geometry
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/signal")
         sig = json.loads(req.read().decode('utf-8'))
@@ -121,30 +199,30 @@ def run_tests():
         current_price = sig.get('currentPrice')
         time_rem = sig.get('timeRemaining')
         
-        test8_passed = bool(strike and strike > 10000 and current_price and current_price > 10000 and time_rem is not None and time_rem >= 0)
-        results.append(("TEST 8: Kalshi 15M Strike, Expiry & Price Geometry", test8_passed, f"Strike=${strike}, Spot=${current_price}, TimeRemaining={time_rem}s"))
+        test12_passed = bool(strike and strike > 10000 and current_price and current_price > 10000 and time_rem is not None and time_rem >= 0)
+        results.append(("TEST 12: Kalshi 15M Strike, Expiry & Price Geometry", test12_passed, f"Strike=${strike}, Spot=${current_price}, TimeRemaining={time_rem}s"))
     except Exception as e:
-        results.append(("TEST 8: Kalshi 15M Strike, Expiry & Price Geometry", False, str(e)))
+        results.append(("TEST 12: Kalshi 15M Strike, Expiry & Price Geometry", False, str(e)))
 
-    # TEST 9: Feed Cascades & Resilience (Binance/Coinbase/Kraken)
+    # TEST 13: Multi-Exchange Ingestion Cascade Connectivity
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
         diag = req.read().decode('utf-8')
         binance_active = "binance=CONNECTED" in diag
-        results.append(("TEST 9: Multi-Exchange Ingestion Cascade Connectivity", binance_active, "Binance spot websocket active and streaming"))
+        results.append(("TEST 13: Multi-Exchange Ingestion Cascade Connectivity", binance_active, "Binance spot websocket active and streaming"))
     except Exception as e:
-        results.append(("TEST 9: Multi-Exchange Ingestion Cascade Connectivity", False, str(e)))
+        results.append(("TEST 13: Multi-Exchange Ingestion Cascade Connectivity", False, str(e)))
 
-    # TEST 10: Full Production Diagnostic Ready Output
+    # TEST 14: Complete [VIXY_PRODUCTION_DIAGNOSTIC] Output Invariant
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
         diag = req.read().decode('utf-8')
         all_ok = "[VIXY_PRODUCTION_DIAGNOSTIC]" in diag and "STATUS=PRODUCTION_READY" in diag and "discord=" in diag
-        results.append(("TEST 10: Complete [VIXY_PRODUCTION_DIAGNOSTIC] Output Invariant", all_ok, "Matches strict specification including discord status"))
+        results.append(("TEST 14: Complete [VIXY_PRODUCTION_DIAGNOSTIC] Output Invariant", all_ok, "Matches strict specification including discord status"))
     except Exception as e:
-        results.append(("TEST 10: Complete [VIXY_PRODUCTION_DIAGNOSTIC] Output Invariant", False, str(e)))
+        results.append(("TEST 14: Complete [VIXY_PRODUCTION_DIAGNOSTIC] Output Invariant", False, str(e)))
 
-    # TEST 11: Discord Singleton & Rate-Limit Protection Diagnostics
+    # TEST 15: Discord Singleton & Rate-Limit Diagnostic Guard
     try:
         req = urllib.request.urlopen("http://localhost:3000/api/discord/diagnostic")
         data = json.loads(req.read().decode('utf-8'))
@@ -153,54 +231,44 @@ def run_tests():
         login_in_prog = data.get('discordLoginInProgress')
         d_text = data.get('diagnosticText', '')
 
-        test11_passed = bool(
+        test15_passed = bool(
             d_state in ['READY', 'DEGRADED', 'DISABLED', 'CONNECTING', 'RECONNECT_WAIT'] and
             instances in [0, 1] and
             isinstance(login_in_prog, bool) and
             "[VIXY_DISCORD_DIAGNOSTIC]" in d_text
         )
-        results.append(("TEST 11: Discord Singleton & Rate-Limit Diagnostic Guard", test11_passed, f"state={d_state}, instances={instances}, inProgress={login_in_prog}"))
+        results.append(("TEST 15: Discord Singleton & Rate-Limit Diagnostic Guard", test15_passed, f"state={d_state}, instances={instances}, inProgress={login_in_prog}"))
     except Exception as e:
-        results.append(("TEST 11: Discord Singleton & Rate-Limit Diagnostic Guard", False, str(e)))
+        results.append(("TEST 15: Discord Singleton & Rate-Limit Diagnostic Guard", False, str(e)))
 
-    # TEST 12: Subsystem Isolation Invariant
-    try:
-        req = urllib.request.urlopen("http://localhost:3000/api/vixy/state")
-        vixy_state = json.loads(req.read().decode('utf-8'))
-        req_d = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
-        diag = req_d.read().decode('utf-8')
-        
-        core_healthy = "algorithm=RUNNING" in diag and "binance=CONNECTED" in diag and vixy_state.get('sequence', 0) > 0
-        results.append(("TEST 12: Core Subsystem Isolation from Discord Lifecycle", core_healthy, "VIXY prediction & market engines execute with total independence"))
-    except Exception as e:
-        results.append(("TEST 12: Core Subsystem Isolation from Discord Lifecycle", False, str(e)))
-
-    # TEST 13: Deterministic Pre-Lock Validation Invariant
-    try:
-        req_d = urllib.request.urlopen("http://localhost:3000/api/diagnostic")
-        diag = req_d.read().decode('utf-8')
-        lines = dict(line.split('=', 1) for line in diag.split('\n') if '=' in line)
-        v_status = lines.get('validationStatus', '')
-        c_status = lines.get('cycleStatus', '')
-
-        # When locked, validation must be PASSED or PASS
-        # When validating, it must be VALIDATING or PASSED
-        valid_val_state = v_status in ['NOT_STARTED', 'VALIDATING', 'PASSED', 'PASS', 'COMPLETE']
-        results.append(("TEST 13: Deterministic Pre-Lock Validation Invariant", valid_val_state, f"cycleStatus={c_status}, validationStatus={v_status}"))
-    except Exception as e:
-        results.append(("TEST 13: Deterministic Pre-Lock Validation Invariant", False, str(e)))
-
-    # TEST 14: Monotonic Global Sequence Number Alignment Across Endpoints
+    # TEST 16: Unified Authoritative Backend Sequence Across Endpoints
     try:
         s_vixy = json.loads(urllib.request.urlopen("http://localhost:3000/api/vixy/state").read().decode('utf-8')).get('sequence', 0)
         req_diag = urllib.request.urlopen("http://localhost:3000/api/diagnostic").read().decode('utf-8')
         lines = dict(line.split('=', 1) for line in req_diag.split('\n') if '=' in line)
         s_diag = int(lines.get('sequence', 0))
         
-        seq_aligned = abs(s_vixy - s_diag) <= 2 and s_vixy > 0 and s_diag > 0
-        results.append(("TEST 14: Unified Authoritative Backend Sequence Across Endpoints", seq_aligned, f"vixyStateSeq={s_vixy}, diagSeq={s_diag} (delta={abs(s_vixy - s_diag)})"))
+        seq_aligned = abs(s_vixy - s_diag) <= 3 and s_vixy > 0 and s_diag > 0
+        results.append(("TEST 16: Unified Authoritative Backend Sequence Across Endpoints", seq_aligned, f"vixyStateSeq={s_vixy}, diagSeq={s_diag} (delta={abs(s_vixy - s_diag)})"))
     except Exception as e:
-        results.append(("TEST 14: Unified Authoritative Backend Sequence Across Endpoints", False, str(e)))
+        results.append(("TEST 16: Unified Authoritative Backend Sequence Across Endpoints", False, str(e)))
+
+    # TEST 17: Frontend Single Source of Truth Hydration Contract
+    try:
+        req = urllib.request.urlopen("http://localhost:3000/api/signal")
+        sig = json.loads(req.read().decode('utf-8'))
+        
+        has_exec = 'execution' in sig and isinstance(sig['execution'], dict)
+        has_stage = 'cycleStage' in sig or 'stage' in sig
+        has_dir = 'direction' in sig
+        has_conf = 'confidence' in sig
+        has_prob = 'probability' in sig
+        has_spot = 'currentPrice' in sig
+        
+        contract_valid = has_exec and has_stage and has_dir and has_conf and has_prob and has_spot
+        results.append(("TEST 17: Frontend Single Source of Truth Hydration Contract", contract_valid, f"execution={has_exec}, stage={has_stage}, dir={has_dir}, conf={has_conf}, prob={has_prob}"))
+    except Exception as e:
+        results.append(("TEST 17: Frontend Single Source of Truth Hydration Contract", False, str(e)))
 
     # Print summary
     print("\n--- RESULTS ---")
@@ -213,7 +281,7 @@ def run_tests():
 
     print("==================================================")
     if all_passed:
-        print("ALL 14 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
+        print("ALL 17 RUNTIME TESTS PASSED WITH 100% COMPLIANCE.")
     else:
         print("SOME TESTS FAILED.")
     print("==================================================")

@@ -100,19 +100,56 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isUp = isActuallyLocked && (rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES');
   const isDown = isActuallyLocked && (rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO');
 
-  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'CALIBRATING';
+  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'OBSERVING';
+  const isBackendObserving = !isActuallyLocked && rawStage === 'OBSERVING';
   const isBackendCalibrating = !isActuallyLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
   const isBackendAnalyzing = !isActuallyLocked && rawStage === 'ANALYZING';
-  const isBackendValidating = !isActuallyLocked && rawStage === 'VALIDATING';
+  const isBackendQualifying = !isActuallyLocked && rawStage === 'QUALIFYING';
+  const isBackendValidating = !isActuallyLocked && (rawStage === 'VALIDATING' || rawStage === 'LOCKING');
   const isBackendReady = !isActuallyLocked && rawStage === 'READY_TO_LOCK';
-  const isPassExplicit = rawApiData?.lockedDirection === 'PASS';
+  const isBackendNoTrade = !isActuallyLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED');
+  const isPassExplicit = rawApiData?.lockedDirection === 'PASS' || isBackendNoTrade;
 
   const execution = rawApiData?.execution || {
-    state: isActuallyLocked ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS') : (isBackendCalibrating ? 'CALIBRATING' : isBackendAnalyzing ? 'ANALYZING' : isBackendValidating ? 'VALIDATING' : isBackendReady ? 'READY' : 'CALIBRATING'),
+    state: isActuallyLocked
+      ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS')
+      : isBackendNoTrade
+      ? 'NO_TRADE'
+      : isBackendObserving
+      ? 'OBSERVING'
+      : isBackendCalibrating
+      ? 'CALIBRATING'
+      : isBackendAnalyzing
+      ? 'ANALYZING'
+      : isBackendQualifying
+      ? 'QUALIFYING'
+      : isBackendValidating
+      ? 'VALIDATING'
+      : isBackendReady
+      ? 'READY'
+      : 'OBSERVING',
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
     authorized: isActuallyLocked && (isUp || isDown),
-    actionLabel: isActuallyLocked ? (isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : 'ENTRY NOT QUALIFIED') : (isBackendCalibrating ? 'CALIBRATING ENGINE' : isBackendAnalyzing ? 'ANALYZING CYCLE' : isBackendValidating ? 'VALIDATING EVIDENCE' : 'READY TO LOCK'),
-    reason: isActuallyLocked ? (rawApiData?.lockReason || 'IMMUTABLE LOCK') : `Current Phase: ${rawStage}`,
+    actionLabel: isActuallyLocked
+      ? (isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : 'ENTRY NOT QUALIFIED')
+      : isBackendNoTrade
+      ? 'CYCLE SKIPPED (NO QUALIFIED ENTRY)'
+      : isBackendObserving
+      ? 'OBSERVING MARKET ORDER FLOW'
+      : isBackendCalibrating
+      ? 'CALIBRATING ENGINE'
+      : isBackendAnalyzing
+      ? 'ANALYZING CYCLE'
+      : isBackendQualifying
+      ? 'QUALIFYING CONFLUENCE'
+      : isBackendValidating
+      ? 'VALIDATING EVIDENCE'
+      : 'READY TO LOCK',
+    reason: isActuallyLocked
+      ? (rawApiData?.lockReason || 'IMMUTABLE LOCK')
+      : isBackendNoTrade
+      ? (rawApiData?.qualificationReason || 'Protection / Choppy market filter')
+      : `Current Phase: ${rawStage}`,
     qualified: isActuallyLocked
   };
 
