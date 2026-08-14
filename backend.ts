@@ -908,8 +908,10 @@ export interface Active15mCycleState {
   intervalStart: number;
   intervalEnd: number;
   strikePrice: number;
+  status: 'PREPARING' | 'LIVE' | 'LOCKED' | 'CRITICALLY_INVALIDATED' | 'RESOLVED';
   stage: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' | 'CRITICALLY_INVALIDATED' | 'SETTLED';
   isLocked: boolean;
+  sequence: number;
   lockedAt: string | null;
   lockedDecision: 'BUY UP' | 'BUY DOWN' | 'PASS' | null;
   lockedDirection: 'UP' | 'DOWN' | 'PASS' | null;
@@ -923,6 +925,15 @@ export interface Active15mCycleState {
   invalidationAt?: string | null;
   invalidationReason?: string | null;
   originalDecision?: string | null;
+  livePrediction?: {
+    direction: 'UP' | 'DOWN' | 'NEUTRAL';
+    probability: number;
+    confidence: number;
+    regime: string;
+    momentum: number;
+    spot: number;
+    timestamp: number;
+  };
 }
 
 let current15mIntervalStart = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
@@ -935,8 +946,10 @@ let active15mCycle: Active15mCycleState = {
   intervalStart: current15mIntervalStart,
   intervalEnd: current15mIntervalStart + 15 * 60 * 1000,
   strikePrice: current15mStrikePrice,
+  status: 'LIVE',
   stage: 'ANALYZING',
   isLocked: false,
+  sequence: 1,
   lockedAt: null,
   lockedDecision: null,
   lockedDirection: null,
@@ -972,7 +985,9 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   const strike = current15mStrikePrice;
 
   active15mCycle.isLocked = true;
+  active15mCycle.status = 'LOCKED';
   active15mCycle.stage = 'LOCKED';
+  active15mCycle.sequence += 1;
   active15mCycle.lockedAt = lockedTime;
   active15mCycle.lockedDirection = dir;
   active15mCycle.lockedDecision = decision;
@@ -1024,6 +1039,8 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   }
 
   persistSingleSignalLog(logItem);
+  console.log(`[VIXY_CYCLE] cycleId=${cycleId} status=LOCKED sequence=${active15mCycle.sequence}`);
+  console.log(`[VIXY_LOCK] cycleId=${cycleId} direction=${dir} probability=${prob} confidence=${conf}% lockedAt=${lockedTime} action=LOCKED_ONCE`);
   console.log(`[VIXY_LOCK_COMMITTED] cycle=${cycleId} decision=${decision} confidence=${conf}% lockedAt=${lockedTime} strike=$${strike} spot=$${livePrice}`);
   console.log(`[VIXY_ONE_LOCK_FINALIZED] Cycle ID: ${cycleId} | Locked At: ${lockedTime} | Decision: LOCKED — ${decision} | Conf: ${conf}% | Strike: $${strike}`);
   return true;
@@ -1110,16 +1127,19 @@ async function checkAndSettle15mCycle(livePrice: number) {
       }
     }
 
-    // Initialize new cycle in ANALYZING stage
+    // Initialize new cycle in LIVE/ANALYZING stage
     currentEngineCycleId += 1;
     persistenceSeconds = 0;
+    const oldCycleId = active15mCycle.cycleId;
     active15mCycle = {
       cycleId: currentCycleId,
       intervalStart,
       intervalEnd,
       strikePrice: current15mStrikePrice,
+      status: 'LIVE',
       stage: 'ANALYZING',
       isLocked: false,
+      sequence: currentEngineCycleId,
       lockedAt: null,
       lockedDecision: null,
       lockedDirection: null,
@@ -1133,8 +1153,18 @@ async function checkAndSettle15mCycle(livePrice: number) {
       invalidationAt: null,
       invalidationReason: null,
       originalDecision: null,
+      livePrediction: {
+        direction: currentDirection,
+        probability: currentModelProbability,
+        confidence: currentConfidence,
+        regime: serverLearningEngine.currentRegime,
+        momentum: currentMomentum,
+        spot: livePrice,
+        timestamp: now,
+      }
     };
 
+    console.log(`[VIXY_CYCLE_TRANSITION] from=${oldCycleId} to=${currentCycleId} cycleId=${currentCycleId}`);
     console.log(`[VIXY_CYCLE_CREATED] Cycle ID: ${currentCycleId} (#${currentEngineCycleId}) | Strike: $${current15mStrikePrice} | Spot: $${livePrice} | Stage: ANALYZING`);
   }
 
@@ -1143,7 +1173,9 @@ async function checkAndSettle15mCycle(livePrice: number) {
   const existingLog = persistentSignalLogs.find(s => s.id === currentSigId);
   if (existingLog && (existingLog.status === 'LOCKED' || existingLog.status === 'CRITICALLY_INVALIDATED') && !active15mCycle.isLocked) {
     active15mCycle.isLocked = true;
+    active15mCycle.status = existingLog.status === 'CRITICALLY_INVALIDATED' ? 'CRITICALLY_INVALIDATED' : 'LOCKED';
     active15mCycle.stage = existingLog.status === 'CRITICALLY_INVALIDATED' ? 'CRITICALLY_INVALIDATED' : 'LOCKED';
+    active15mCycle.sequence += 1;
     active15mCycle.lockedAt = existingLog.lockedAt;
     active15mCycle.lockedDirection = existingLog.direction;
     active15mCycle.lockedDecision = existingLog.direction === 'UP' ? 'BUY UP' : 'BUY DOWN';
@@ -1159,13 +1191,21 @@ async function checkAndSettle15mCycle(livePrice: number) {
     return;
   }
 
-  // 3. EVALUATE LOCK POINT FOR ACTIVE CYCLE
-  // Before lock (first 45s): ANALYZING stage, model continues updating live features
-  // At official lock point (elapsed >= 45s or qualification confirmed): Lock prediction ONCE
+  // 3. UPDATE LIVE MODEL STATE (Continuous Diagnostic Update)
+  active15mCycle.livePrediction = {
+    direction: currentDirection,
+    probability: currentModelProbability,
+    confidence: currentConfidence,
+    regime: serverLearningEngine.currentRegime,
+    momentum: currentMomentum,
+    spot: livePrice,
+    timestamp: now,
+  };
+
   const elapsedMs = now - intervalStart;
   const timeRemainingSec = Math.max(0, Math.floor((intervalEnd - now) / 1000));
 
-  // Periodic VIXY_INTELLIGENCE audit log (throttled or per tick)
+  console.log(`[VIXY_LIVE] direction=${currentDirection} probability=${currentModelProbability} confidence=${currentConfidence}% regime=${serverLearningEngine.currentRegime} spot=$${livePrice}`);
   console.log(`[VIXY_INTELLIGENCE] cycle=${currentCycleId} state=${active15mCycle.stage} spot=$${livePrice} strike=$${current15mStrikePrice} timeRemaining=${timeRemainingSec}s momentum=${currentMomentum}% regime=${serverLearningEngine.currentRegime} marketProbability=${currentKalshiImpliedProb} modelProbability=${currentModelProbability} evidenceAgreement=${currentConfidence >= 65 ? 'HIGH' : 'MODERATE'} confidence=${currentConfidence}%`);
 
   if (!active15mCycle.isLocked) {
@@ -1174,11 +1214,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
       lock15mCycle(currentCycleId, livePrice, 'Official 15M cycle lock finalized after initial sampling');
     }
   } else if (active15mCycle.isLocked && !active15mCycle.isCriticallyInvalidated) {
-    // 4. STRICT CRITICAL REVERSAL INTELLIGENCE PROTOCOL (Strict Exception Check)
-    // Only trigger if multiple independent pieces of evidence confirm a genuine structural reversal:
-    // - Price displacement against locked direction > $750 (or > 1.2%)
-    // - Calibrated model probability for locked direction collapses below 15%
-    // - Guardian action is EXIT / PROTECT with reversal threat >= 80%
+    // 4. MONITOR ONLY MODE (Immutable lock protection against normal market noise)
     const lockedSpot = active15mCycle.lockedSpot || livePrice;
     const lockedDir = active15mCycle.lockedDirection;
     const priceDelta = lockedDir === 'UP' ? lockedSpot - livePrice : livePrice - lockedSpot;
@@ -1189,10 +1225,11 @@ async function checkAndSettle15mCycle(livePrice: number) {
     const isProbabilityCollapsed = probForLockedDir <= 0.15;
     const isGuardianPanic = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || (latestGuardianDecision?.reversalThreat || 0) >= 80;
 
-    console.log(`[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDecision=${active15mCycle.lockedDecision} reversalDetected=${isExtremeDisplacement && isProbabilityCollapsed} reason=NORMAL_MARKET_NOISE action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}% probForLocked=${probForLockedDir.toFixed(2)}`);
+    console.log(`[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDirection=${active15mCycle.lockedDirection} lockedProbability=${active15mCycle.lockedProbability} liveDirection=${currentDirection} liveProbability=${currentModelProbability} reversalDetected=${isExtremeDisplacement && isProbabilityCollapsed} action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}% probForLocked=${probForLockedDir.toFixed(2)}`);
 
     if (isExtremeDisplacement && isProbabilityCollapsed && isGuardianPanic) {
       active15mCycle.isCriticallyInvalidated = true;
+      active15mCycle.status = 'CRITICALLY_INVALIDATED';
       active15mCycle.stage = 'CRITICALLY_INVALIDATED';
       active15mCycle.invalidationAt = new Date().toISOString();
       active15mCycle.invalidationReason = `CRITICAL_STRUCTURAL_REVERSAL: Price moved ${priceDeltaPct.toFixed(2)}% against lock with prob collapse (${(probForLockedDir * 100).toFixed(1)}%) & guardian threat (${latestGuardianDecision?.reversalThreat || 0}%)`;
