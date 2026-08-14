@@ -88,28 +88,37 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   // Safe backend-authoritative execution state
   // We prefer the explicit `execution` payload from the backend if it exists.
   // Otherwise, we derive it cleanly from `direction` and `engineState`.
-  const isActuallyLocked = Boolean(rawApiData?.isLocked || rawApiData?.status === 'LOCKED');
+  const isActuallyLocked = Boolean(
+    rawApiData?.isLocked === true &&
+    (rawApiData?.status === 'LOCKED' || rawApiData?.stage === 'LOCKED' || rawApiData?.cycleStage === 'LOCKED')
+  );
+
   const rawDirection = isActuallyLocked
     ? (rawApiData?.lockedDirection || 'NONE')
-    : (rawApiData?.direction || rawApiData?.action || 'NONE');
+    : 'NONE';
 
-  const isUp = rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES';
-  const isDown = rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO';
-  const isBackendCalibrating = rawApiData?.engineState === 'CALIBRATING' || rawApiData?.engineState === 'EVALUATING' || rawApiData?.calibrationStatus === 'WARMING_UP' || rawDirection === 'CALIBRATING' || rawDirection === 'BUILDING' || rawApiData?.hasActiveModel === false || rawApiData?.status?.includes('Collecting');
-  const isPassExplicit = (rawDirection === 'PASS' || rawDirection === 'HOLD') && !isBackendCalibrating;
+  const isUp = isActuallyLocked && (rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES');
+  const isDown = isActuallyLocked && (rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO');
+
+  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'CALIBRATING';
+  const isBackendCalibrating = !isActuallyLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
+  const isBackendAnalyzing = !isActuallyLocked && rawStage === 'ANALYZING';
+  const isBackendValidating = !isActuallyLocked && rawStage === 'VALIDATING';
+  const isBackendReady = !isActuallyLocked && rawStage === 'READY_TO_LOCK';
+  const isPassExplicit = rawApiData?.lockedDirection === 'PASS';
 
   const execution = rawApiData?.execution || {
-    state: isBackendCalibrating ? 'CALIBRATING' : (isActuallyLocked ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS') : (isUp ? 'CONFIRMED_UP' : isDown ? 'CONFIRMED_DOWN' : isPassExplicit ? 'PASS' : 'ANALYZING')),
+    state: isActuallyLocked ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS') : (isBackendCalibrating ? 'CALIBRATING' : isBackendAnalyzing ? 'ANALYZING' : isBackendValidating ? 'VALIDATING' : isBackendReady ? 'READY' : 'CALIBRATING'),
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
-    authorized: isUp || isDown,
-    actionLabel: isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : isPassExplicit ? 'ENTRY NOT QUALIFIED' : 'ANALYZING CYCLE',
-    reason: isActuallyLocked ? (rawApiData?.lockReason || 'IMMUTABLE LOCK') : 'Authoritative Engine State',
-    qualified: isActuallyLocked || rawApiData?.entryQualification === 'QUALIFIED' || rawApiData?.signalConfirmed
+    authorized: isActuallyLocked && (isUp || isDown),
+    actionLabel: isActuallyLocked ? (isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : 'ENTRY NOT QUALIFIED') : (isBackendCalibrating ? 'CALIBRATING ENGINE' : isBackendAnalyzing ? 'ANALYZING CYCLE' : isBackendValidating ? 'VALIDATING EVIDENCE' : 'READY TO LOCK'),
+    reason: isActuallyLocked ? (rawApiData?.lockReason || 'IMMUTABLE LOCK') : `Current Phase: ${rawStage}`,
+    qualified: isActuallyLocked
   };
 
-  const isConfirmedUp = execution.state === 'CONFIRMED_UP' || execution.state === 'LOCK_UP' || (rawApiData?.signalConfirmed && (rawDirection === 'UP' || rawDirection === 'BUY UP')) || (rawDirection === 'BUY UP' && rawApiData?.entryQualification === 'QUALIFIED');
-  const isConfirmedDown = execution.state === 'CONFIRMED_DOWN' || execution.state === 'LOCK_DOWN' || (rawApiData?.signalConfirmed && (rawDirection === 'DOWN' || rawDirection === 'BUY DOWN')) || (rawDirection === 'BUY DOWN' && rawApiData?.entryQualification === 'QUALIFIED');
-  const isPassState = execution.state === 'PASS' || (!isConfirmedUp && !isConfirmedDown && rawDirection === 'PASS');
+  const isConfirmedUp = isActuallyLocked && isUp;
+  const isConfirmedDown = isActuallyLocked && isDown;
+  const isPassState = isActuallyLocked && isPassExplicit;
 
   const sigAny = signal as any;
   const rawEffectiveProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
@@ -151,9 +160,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const targetPrice = Math.round(rawApiData?.features?.crossVenue?.kalshiStrike || signal?.targetPrice || 0);
 
   const rawCalibStatus = rawApiData?.calibrationStatus || rawApiData?.calibration?.calibrationStatus;
-  const calibrationStatus = rawCalibStatus === 'ACTIVE' 
-      ? 'CALIBRATED' 
-      : (rawCalibStatus || 'CALIBRATION WARMUP');
+  const calibrationStatus = isActuallyLocked ? 'CALIBRATED' : (rawCalibStatus === 'COMPLETE' ? 'CALIBRATED' : 'CALIBRATING');
 
   // Authoritative calibrated metric states with unified math, thresholds, and semantic classes
   const orderFlowState = formatOrderFlow(
@@ -198,41 +205,45 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || liveAgeSeconds > 60;
   const isOfflineOrStale = isActualOffline && !hasValidRawData;
 
-  const isWarmingUp = rawApiData?.calibrationStatus === 'WARMING_UP' || execution.state === 'CALIBRATING';
-
-  let displayDecisionText = 'ANALYZING';
+  let displayDecisionText = 'CALIBRATING';
   if (isOfflineOrStale) {
     displayDecisionText = 'DATA STALE';
-  } else if (isWarmingUp) {
-    displayDecisionText = 'CALIBRATING';
-  } else if (isConfirmedUp) {
+  } else if (isActuallyLocked && isConfirmedUp) {
     displayDecisionText = 'BUY UP';
-  } else if (isConfirmedDown) {
+  } else if (isActuallyLocked && isConfirmedDown) {
     displayDecisionText = 'BUY DOWN';
-  } else if (isPassState) {
+  } else if (isActuallyLocked && isPassState) {
     displayDecisionText = 'PASS';
+  } else if (isBackendCalibrating) {
+    displayDecisionText = 'CALIBRATING';
+  } else if (isBackendAnalyzing) {
+    displayDecisionText = 'ANALYZING';
+  } else if (isBackendValidating) {
+    displayDecisionText = 'VALIDATING';
+  } else if (isBackendReady) {
+    displayDecisionText = 'READY';
   } else {
     displayDecisionText = 'ANALYZING';
   }
 
-  const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
+  const displayCalibratedProb = isActuallyLocked && (rawCalibProb !== null && rawCalibProb !== undefined)
     ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
-    : (rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : 'CALIBRATING');
+    : (isActuallyLocked && rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : '');
 
   // Compute execution dispatch panel state (STRICTLY INDEPENDENT FROM ACCESS GATE)
-  let executionPanelState: 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING' = 'ANALYZING';
+  let executionPanelState: 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING' = 'CALIBRATING';
   if (isOfflineOrStale) {
     executionPanelState = 'STALE';
   } else if (isProtectState) {
     executionPanelState = 'PROTECT';
-  } else if (isWarmingUp) {
-    executionPanelState = 'CALIBRATING';
-  } else if (isConfirmedUp) {
+  } else if (isActuallyLocked && isConfirmedUp) {
     executionPanelState = 'CONFIRMED_UP';
-  } else if (isConfirmedDown) {
+  } else if (isActuallyLocked && isConfirmedDown) {
     executionPanelState = 'CONFIRMED_DOWN';
-  } else if (isPassState) {
+  } else if (isActuallyLocked && isPassState) {
     executionPanelState = 'PASS';
+  } else if (isBackendCalibrating) {
+    executionPanelState = 'CALIBRATING';
   } else {
     executionPanelState = 'ANALYZING';
   }
@@ -523,7 +534,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </div>
           </div>
           <div className="flex items-center gap-2 text-[9px] font-mono font-bold tracking-[0.15em] uppercase bg-[#06020c] py-1 px-2.5 rounded border border-purple-900/40">
-            <span className="text-purple-400/60">MODEL: <span className={isOfflineOrStale ? "text-rose-400" : isWarmingUp ? "text-amber-400" : "text-emerald-400"}>{isOfflineOrStale ? "STALE" : isWarmingUp ? "WARMING UP" : "LIVE"}</span></span>
+            <span className="text-purple-400/60">MODEL: <span className={isOfflineOrStale ? "text-rose-400" : isBackendCalibrating ? "text-amber-400" : "text-emerald-400"}>{isOfflineOrStale ? "STALE" : isBackendCalibrating ? "WARMING UP" : "LIVE"}</span></span>
             <span className="text-purple-400/60">LINK: <span className={isOfflineOrStale ? "text-rose-400" : isDegradedStatus ? "text-amber-400" : "text-emerald-400"}>{connectionLabel}</span></span>
           </div>
         </div>

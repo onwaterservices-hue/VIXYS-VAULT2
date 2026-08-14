@@ -15,10 +15,11 @@ import {
   Crosshair
 } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
+import { safeNumber, safeToFixed } from '../../utils/numeric';
 
 interface ProtectionBrainProps {
-  signal: PredictionSignal;
-  ticker: BTCTicker;
+  signal?: PredictionSignal | null;
+  ticker?: BTCTicker | null;
   isDiscordVerified?: boolean;
   rawApiData?: any;
 }
@@ -30,19 +31,21 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   rawApiData
 }) => {
   // Live spot and reference strike math
-  const currentPrice = ticker.price || signal.currentPrice || 0;
-  const isUp = signal.direction === 'YES';
-  const targetPrice = Math.round(signal.targetPrice || (isUp ? currentPrice + 120 : currentPrice - 120));
+  const currentPrice = safeNumber(ticker?.price, safeNumber(signal?.currentPrice, 0));
+  const isUp = signal?.direction === 'YES';
+  const targetPrice = Math.round(safeNumber(signal?.targetPrice, isUp ? currentPrice + 120 : currentPrice - 120));
   
   const spotVsStrikeDelta = currentPrice - targetPrice;
   const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
-  const formattedDeltaVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${Math.abs(spotVsStrikeDelta).toFixed(2)}`;
-  const formattedDeltaPct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${Math.abs(spotVsStrikePct).toFixed(2)}%`;
+  const formattedDeltaVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}$${safeToFixed(Math.abs(spotVsStrikeDelta), 2)}`;
+  const formattedDeltaPct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${safeToFixed(Math.abs(spotVsStrikePct), 2)}%`;
 
   // Calculate Position Survival & Reversal Risk score based on signal confidence & spot dynamics
+  const signalConf = safeNumber(signal?.confidence, 70);
+  const tickerPrice = safeNumber(ticker?.price, 0);
   const rawReversalRisk = rawApiData?.guardianDecision?.reversalThreat ?? Math.min(
     95,
-    Math.max(12, Math.round(100 - signal.confidence + Math.abs((ticker.price % 30) / 2)))
+    Math.max(12, Math.round(100 - signalConf + Math.abs((tickerPrice % 30) / 2)))
   );
 
   const survivalScore = rawApiData?.guardianDecision?.survivalScore ?? Math.max(5, 100 - rawReversalRisk);

@@ -1,4 +1,4 @@
-import { discordClient, generateInviteUrl } from './client';
+import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot, DiscordBotDiagnostics } from './client';
 import { createDashboardEmbed } from './embeds/dashboardEmbed';
 import { createStructuredPredictionEmbed } from './embeds/predictionEmbed';
 import { createFreeSignalEmbed, createVipSignalEmbed } from './embeds/signalEmbed';
@@ -43,27 +43,37 @@ let botState: DiscordBotState = {
 };
 
 export function getDiscordBotStatus(): DiscordBotState {
-  if (discordClient && discordClient.isReady()) {
+  const diag = discordBotManager.getDiagnostics();
+  if (diag.discordState === 'READY' && discordClient && discordClient.isReady()) {
     botState.isReady = true;
     botState.pingMs = discordClient.ws.ping;
     botState.guildCount = discordClient.guilds.cache.size;
     botState.botTag = discordClient.user?.tag || 'VIXY AI#0000';
     botState.botId = discordClient.user?.id || null;
     botState.mode = 'ACTIVE_BOT';
-  } else if (process.env.DISCORD_BOT_TOKEN) {
-    if (botState.lastError) {
-      botState.mode = process.env.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
-    } else {
-      botState.mode = 'CONNECTING';
-    }
+    botState.lastError = null;
+  } else if (diag.discordState === 'CONNECTING') {
+    botState.isReady = false;
+    botState.mode = 'CONNECTING';
+    botState.lastError = diag.discordLastError;
   } else if (process.env.DISCORD_WEBHOOK_URL) {
-    botState.isReady = true;
+    botState.isReady = false;
     botState.mode = 'WEBHOOK_FALLBACK';
+    botState.lastError = diag.discordLastError;
   } else {
+    botState.isReady = false;
     botState.mode = 'DISABLED';
+    botState.lastError = diag.discordLastError;
   }
   botState.inviteUrl = generateInviteUrl(process.env.DISCORD_CLIENT_ID);
   return botState;
+}
+
+export function getDiscordDiagnosticsReport(): { text: string; diagnostics: DiscordBotDiagnostics } {
+  return {
+    text: discordBotManager.getDiagnosticText(),
+    diagnostics: discordBotManager.getDiagnostics(),
+  };
 }
 
 async function registerCommands(token: string, clientId: string, guildId?: string) {
@@ -199,50 +209,12 @@ export function validateDiscordEnv(): { valid: boolean; missing: string[]; envCo
   return { valid: missing.length === 0, missing, envConfig };
 }
 
+// Register interaction handler with singleton manager
+discordBotManager.registerInteractionHandler(handleInteraction);
+
 export async function initializeDiscordBot(): Promise<boolean> {
-  const { valid, envConfig } = validateDiscordEnv();
-
-  if (!valid) {
-    console.warn(`[DiscordBot] Missing DISCORD_BOT_TOKEN on startup. Bot running in fallback/webhook mode.`);
-    botState.mode = envConfig.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
-    return false;
-  }
-
-  // Set the service client reference
   setServiceDiscordClient(discordClient);
-
-  const token = process.env.DISCORD_BOT_TOKEN!;
-  const clientId = process.env.DISCORD_CLIENT_ID || '1534690638937981028';
-  const guildId = process.env.DISCORD_GUILD_ID;
-
-  try {
-    discordClient.once('ready', async (client) => {
-      console.log(`[DiscordBot] Connected as ${client.user.tag}! Listening across Discord server channels.`);
-      botState.isReady = true;
-      botState.botTag = client.user.tag;
-      botState.botId = client.user.id;
-      botState.guildCount = client.guilds.cache.size;
-      botState.mode = 'ACTIVE_BOT';
-
-      client.user.setPresence({
-        activities: [{ name: 'VIXY AI Signals | /dashboard | /predict', type: 3 }],
-        status: 'online',
-      });
-
-      if (clientId) {
-        await registerCommands(token, clientId, guildId);
-      }
-    });
-
-    discordClient.on('interactionCreate', handleInteraction);
-    await discordClient.login(token);
-    return true;
-  } catch (err: any) {
-    console.error('[DiscordBot] Connection failed:', err);
-    botState.lastError = err?.message || String(err);
-    botState.mode = process.env.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
-    return false;
-  }
+  return await initClientBot();
 }
 
 // Multi-tier signal dispatcher for Free vs. VIP channels

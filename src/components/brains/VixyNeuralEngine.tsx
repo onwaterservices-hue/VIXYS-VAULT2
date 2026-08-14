@@ -68,25 +68,25 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   // ─── 1. AUTHORITATIVE SERVER-SIDE CYCLE & LOCK STATE ───
   // Strictly respects the invariant: ONE CYCLE → ONE PREDICTION → ONE LOCK → ONE SETTLEMENT
   const isServerLocked = Boolean(
-    rawApiData?.isLocked ||
-    rawApiData?.status === 'LOCKED' ||
-    rawApiData?.cycleStage === 'LOCKED' ||
-    rawApiData?.vixyLockState === 'LOCKED'
+    rawApiData?.isLocked === true &&
+    (rawApiData?.status === 'LOCKED' ||
+     rawApiData?.cycleStage === 'LOCKED' ||
+     rawApiData?.vixyLockState === 'LOCKED')
   );
 
-  const cycleStage: 'ANALYZING' | 'CONFIRMED' | 'LOCKED' = isServerLocked
-    ? 'LOCKED'
-    : (rawApiData?.cycleStage === 'CONFIRMED' || rawApiData?.signalConfirmed)
-    ? 'CONFIRMED'
-    : 'ANALYZING';
+  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'CALIBRATING').toUpperCase();
+  const isCalibrating = !isServerLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
+  const isAnalyzing = !isServerLocked && rawStage === 'ANALYZING';
+  const isValidating = !isServerLocked && rawStage === 'VALIDATING';
+  const isReadyToLock = !isServerLocked && rawStage === 'READY_TO_LOCK';
 
   const cycleId = String(rawApiData?.cycleId || '15M-ACTIVE-CYCLE');
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
 
-  const rawDirection = isServerLocked ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() : (rawApiData?.direction || rawApiData?.execution?.direction || 'UP').toUpperCase();
-  const isUp = rawDirection.includes('UP') || rawDirection.includes('YES');
-  const isDown = rawDirection.includes('DOWN') || rawDirection.includes('NO');
+  const rawDirection = isServerLocked ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() : 'NONE';
+  const isUp = isServerLocked && (rawDirection.includes('UP') || rawDirection.includes('YES'));
+  const isDown = isServerLocked && (rawDirection.includes('DOWN') || rawDirection.includes('NO'));
 
   const lockedDecision = rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS');
   const lockedStrike = Number(rawApiData?.lockedStrike || rawApiData?.strike || targetPrice || 64100);
@@ -253,7 +253,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             <div className="flex items-center gap-2 text-[8.5px] font-bold tracking-[0.15em] uppercase">
               <span className={`flex items-center gap-1 ${isServerLocked ? (isUp ? 'text-[#00FF9D]' : 'text-[#FF3366]') : 'text-purple-300'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${isServerLocked ? (isUp ? 'bg-[#00FF9D]' : 'bg-[#FF3366]') : 'bg-purple-400 animate-ping'}`} />
-                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : '● ANALYZING 15M CYCLE'}
+                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
               </span>
               <span className="text-purple-700">|</span>
               <span className="text-slate-300">EXPIRY IN {timeRemainingFormatted}</span>
@@ -279,9 +279,24 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 <Lock className="w-3.5 h-3.5 animate-pulse" />
                 <span>STATE 03: LOCKED — {lockedDecision}</span>
               </>
+            ) : isCalibrating ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                <span>STATE 01: CALIBRATING 15M CYCLE</span>
+              </>
+            ) : isValidating ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                <span>STATE 02: VALIDATING EVIDENCE</span>
+              </>
+            ) : isReadyToLock ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-pulse text-amber-400" />
+                <span>STATE 02: FINALIZING LOCK</span>
+              </>
             ) : (
               <>
-                <Activity className="w-3.5 h-3.5 animate-spin" />
+                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
                 <span>STATE 01: ANALYZING 15M CYCLE</span>
               </>
             )}
@@ -402,7 +417,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               ) : (
                 <>
                   <Activity className="w-7 h-7 text-cyan-300 animate-pulse" />
-                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">ANALYSIS</span>
+                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">
+                    {isCalibrating ? 'CALIBRATING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYSIS'}
+                  </span>
                 </>
               )}
             </div>
@@ -414,6 +431,12 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 ? 'FEED OFFLINE'
                 : isServerLocked
                 ? `FINALIZED @ ${lockedAtFormatted}`
+                : isCalibrating
+                ? 'CALIBRATING ENGINE'
+                : isValidating
+                ? 'VALIDATING EVIDENCE'
+                : isReadyToLock
+                ? 'COMMITTING LOCK'
                 : 'SAMPLING 15M MATRIX'}
             </span>
           </div>
@@ -433,7 +456,13 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 ? 'DATA LINK INTERRUPTED'
                 : isServerLocked
                 ? 'AUTHORITATIVE 15M CYCLE LOCK'
-                : '15M CONFLUENCE CALIBRATION'}
+                : isCalibrating
+                ? 'PREPARING CURRENT-CYCLE INTELLIGENCE'
+                : isValidating
+                ? 'CHECKING EVIDENCE AGREEMENT'
+                : isReadyToLock
+                ? 'FINALIZING NEURAL LOCK'
+                : 'EVALUATING CURRENT MARKET STRUCTURE'}
             </span>
             <span className="text-purple-600">|</span>
             <span className="text-[9px] font-mono text-purple-400/70">
@@ -453,7 +482,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 textShadow: `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
               }}
             >
-              <span>{isServerLocked ? lockedDecision : 'ANALYZING...'}</span>
+              <span>{isServerLocked ? `LOCKED — ${lockedDecision}` : isCalibrating ? 'CALIBRATING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
               {!isOfflineOrStale && isServerLocked && (
                 <span className="text-3xl sm:text-5xl md:text-6xl animate-pulse" style={{ color: themeNeon }}>
                   {isUp ? '▲' : '▼'}

@@ -1,17 +1,18 @@
 import React from 'react';
 import { Target } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
+import { safeNumber, safeToFixed } from '../../utils/numeric';
 
 interface ExecutionBrainProps {
-  signal: PredictionSignal;
-  ticker: BTCTicker;
+  signal?: PredictionSignal | null;
+  ticker?: BTCTicker | null;
 }
 
 export const ExecutionBrain: React.FC<ExecutionBrainProps> = ({ signal, ticker }) => {
-  const isBull = signal.direction === 'YES';
+  const isBull = signal?.direction === 'YES';
   const idealBid = (venueOddsPrice: number) => Math.max(0.10, Math.round((venueOddsPrice - 0.06) * 100) / 100);
 
-  const currentBid = signal.venueOdds?.kalshiYesPrice || 0.54;
+  const currentBid = safeNumber(signal?.venueOdds?.kalshiYesPrice, 0.54);
   const targetBid = idealBid(currentBid);
 
   return (
@@ -38,14 +39,14 @@ export const ExecutionBrain: React.FC<ExecutionBrainProps> = ({ signal, ticker }
         {/* Ideal Bid / Ask */}
         <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/60 space-y-1">
           <div className="text-[10px] text-purple-300/70 uppercase font-bold">Optimal Limit Bid</div>
-          <div className="text-2xl font-black text-emerald-400">${targetBid.toFixed(2)} {isBull ? 'YES' : 'NO'}</div>
-          <div className="text-[10px] text-purple-400">Current Ask: ${currentBid.toFixed(2)}</div>
+          <div className="text-2xl font-black text-emerald-400">${safeToFixed(targetBid, 2)} {isBull ? 'YES' : 'NO'}</div>
+          <div className="text-[10px] text-purple-400">Current Ask: ${safeToFixed(currentBid, 2)}</div>
         </div>
 
         {/* Entry Zone Range */}
         <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/60 space-y-1">
           <div className="text-[10px] text-purple-300/70 uppercase font-bold">Execution Spread</div>
-          <div className="text-2xl font-black text-white">${targetBid.toFixed(2)} - ${currentBid.toFixed(2)}</div>
+          <div className="text-2xl font-black text-white">${safeToFixed(targetBid, 2)} - ${safeToFixed(currentBid, 2)}</div>
           <div className="text-[10px] text-emerald-400 font-bold">High +EV Window</div>
         </div>
 
@@ -58,31 +59,11 @@ export const ExecutionBrain: React.FC<ExecutionBrainProps> = ({ signal, ticker }
 
         {/* Max Risk Exposure */}
         <div className="bg-[#060210] p-4 rounded-2xl border border-purple-800/60 space-y-1">
-          <div className="text-[10px] text-purple-300/70 uppercase font-bold">Max Sizing</div>
-          <div className="text-2xl font-black text-cyan-300">2.5% Max</div>
-          <div className="text-[10px] text-purple-400">Kelly Criterion Limit</div>
-        </div>
-      </div>
-
-      {/* Smart Execution Step-by-Step */}
-      <div className="bg-[#060210] p-4 rounded-2xl border border-purple-900/50 space-y-2 text-xs">
-        <div className="text-[10px] text-purple-300/70 uppercase font-bold">Execution Steps:</div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-          <div className="flex items-center gap-2 bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
-            <span className="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center font-bold text-[10px] shrink-0">1</span>
-            <span>Place limit order at <strong>${targetBid.toFixed(2)}</strong></span>
-          </div>
-          <div className="flex items-center gap-2 bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
-            <span className="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center font-bold text-[10px] shrink-0">2</span>
-            <span>Set target exit at <strong>${(currentBid + 0.35).toFixed(2)}</strong></span>
-          </div>
-          <div className="flex items-center gap-2 bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
-            <span className="w-5 h-5 rounded-full bg-purple-900 text-purple-200 flex items-center justify-center font-bold text-[10px] shrink-0">3</span>
-            <span>Stop trigger if price below <strong>${(ticker.price - 140).toLocaleString()}</strong></span>
-          </div>
+          <div className="text-[10px] text-purple-300/70 uppercase font-bold">Risk Management Cap</div>
+          <div className="text-2xl font-black text-rose-400">MAX 5.0% PORTFOLIO</div>
+          <div className="text-[10px] text-purple-300/80">Never over-leverage single window</div>
         </div>
       </div>
     </div>
   );
 };
-

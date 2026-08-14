@@ -135,7 +135,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
     }
   };
 
-  const inviteUrl = statusData?.status?.inviteUrl || 'https://discord.com/api/oauth2/authorize?client_id=123456789012345678&permissions=268435456&scope=bot%20applications.commands';
+  const inviteUrl = statusData?.status?.inviteUrl || 'https://discord.com/api/oauth2/authorize?client_id=1534690638937981028&permissions=2416004096&scope=bot%20applications.commands';
 
   const copyInvite = () => {
     navigator.clipboard.writeText(inviteUrl);

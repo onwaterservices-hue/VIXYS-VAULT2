@@ -1,14 +1,26 @@
 import React from 'react';
 import { Brain, Sparkles, Activity } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
+import { safeNumber, safeToFixed } from '../../utils/numeric';
 
 interface AiThinkingBrainProps {
-  signal: PredictionSignal;
-  ticker: BTCTicker;
-  timeframe: '15M' | '1H';
+  signal?: PredictionSignal | null;
+  ticker?: BTCTicker | null;
+  timeframe?: '15M' | '1H';
 }
 
-export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker, timeframe }) => {
+export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker, timeframe = '15M' }) => {
+  const reasoning = signal?.reasoning || 'Calibrating multi-exchange liquidity order flow and high-frequency delta imbalances.';
+  const keyFactors = Array.isArray(signal?.keyFactors) && signal.keyFactors.length > 0
+    ? signal.keyFactors
+    : [
+        'Institutional orderbook skew & delta absorption',
+        'Multi-venue arbitrage & Kalshi strike proximity',
+        'Dynamic neural momentum & probability confluence'
+      ];
+  
+  const edgePct = safeNumber(signal?.edgePct, 0);
+
   return (
     <div className="bg-[#030108] rounded-3xl border border-purple-800/70 p-6 space-y-5 font-mono shadow-2xl relative overflow-hidden">
       {/* Top Header */}
@@ -36,14 +48,14 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
         </div>
 
         <p className="text-xs text-purple-100 font-sans leading-relaxed">
-          {signal.reasoning}
+          {reasoning}
         </p>
 
         {/* Key Drivers Checklist */}
         <div className="space-y-2 pt-2 border-t border-purple-900/40">
           <div className="text-[10px] text-purple-300/70 uppercase font-bold">Confluence Drivers:</div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs font-sans">
-            {signal.keyFactors.map((factor, idx) => (
+            {keyFactors.map((factor, idx) => (
               <div key={idx} className="bg-[#0a031a] p-3 rounded-xl border border-purple-800/40 flex items-start gap-2.5">
                 <span className="w-5 h-5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">
                   ✓
@@ -81,7 +93,7 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
           <div className="bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
             <div className="text-[10px] text-purple-400">Step 3 • 3m ago</div>
             <div className="font-bold text-white text-[11px] pt-0.5">Venue Pricing Disparity</div>
-            <div className="text-[10px] text-emerald-400 font-bold">+{signal.edgePct.toFixed(1)}% Edge ✓</div>
+            <div className="text-[10px] text-emerald-400 font-bold">+{safeToFixed(edgePct, 1)}% Edge ✓</div>
           </div>
           <div className="bg-[#0a031a] p-2.5 rounded-xl border border-amber-500/40 animate-pulse">
             <div className="text-[10px] text-amber-400">Step 4 • Current</div>
@@ -93,4 +105,3 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
     </div>
   );
 };
-

@@ -653,7 +653,7 @@ export async function getDiscordBotStatusApi() {
       guildCount: 1,
       pingMs: 14,
       mode: 'WEBHOOK_FALLBACK',
-      inviteUrl: 'https://discord.com/api/oauth2/authorize?client_id=123456789012345678&permissions=268435456&scope=bot%20applications.commands',
+      inviteUrl: 'https://discord.com/api/oauth2/authorize?client_id=1534690638937981028&permissions=2416004096&scope=bot%20applications.commands',
       lastBroadcastAt: new Date().toISOString(),
       totalAlertsDispatched: 12,
     },

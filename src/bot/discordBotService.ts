@@ -1,4 +1,5 @@
 import { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, Interaction } from 'discord.js';
+import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot } from './client';
 
 export interface DiscordBotState {
   isReady: boolean;
@@ -12,7 +13,6 @@ export interface DiscordBotState {
   totalAlertsDispatched: number;
 }
 
-let discordClient: Client | null = null;
 let botState: DiscordBotState = {
   isReady: false,
   botTag: null,
@@ -27,13 +27,12 @@ let botState: DiscordBotState = {
 
 // Generate OAuth2 invite link with pre-configured bot & slash command permissions
 export function generateDiscordInviteUrl(clientId?: string): string {
-  const id = clientId || process.env.DISCORD_CLIENT_ID || '123456789012345678';
-  const permissions = '268435456'; // Send Messages, Embed Links, Read Message History, Manage Roles
-  return `https://discord.com/api/oauth2/authorize?client_id=${id}&permissions=${permissions}&scope=bot%20applications.commands`;
+  return generateInviteUrl(clientId);
 }
 
 export function getDiscordBotStatus(): DiscordBotState {
-  if (discordClient && discordClient.isReady()) {
+  const mgrDiag = discordBotManager.getDiagnostics();
+  if (mgrDiag.discordState === 'READY' && discordClient && discordClient.isReady()) {
     botState.isReady = true;
     botState.pingMs = discordClient.ws.ping;
     botState.guildCount = discordClient.guilds.cache.size;
@@ -41,9 +40,10 @@ export function getDiscordBotStatus(): DiscordBotState {
     botState.botId = discordClient.user?.id || null;
     botState.mode = 'ACTIVE_BOT';
   } else if (process.env.DISCORD_WEBHOOK_URL) {
-    botState.isReady = true;
+    botState.isReady = false;
     botState.mode = 'WEBHOOK_FALLBACK';
   } else {
+    botState.isReady = false;
     botState.mode = 'DISABLED';
   }
   botState.inviteUrl = generateDiscordInviteUrl(process.env.DISCORD_CLIENT_ID);
@@ -216,101 +216,12 @@ async function handleInteraction(interaction: Interaction) {
   }
 }
 
-// Initialize the Discord Bot Client
+// Register interactions once with singleton manager
+discordBotManager.registerInteractionHandler(handleInteraction);
+
+// Initialize the Discord Bot Client via Singleton DiscordBotManager
 export async function initializeDiscordBot(): Promise<boolean> {
-  const token = process.env.DISCORD_BOT_TOKEN;
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const guildId = process.env.DISCORD_GUILD_ID;
-
-  if (!token) {
-    console.log('[DiscordBot] DISCORD_BOT_TOKEN environment variable not set. Bot running in webhook fallback mode.');
-    botState.mode = process.env.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
-    return false;
-  }
-
-  try {
-    console.log('[DiscordBot] Initializing discord.js client...');
-    discordClient = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-      ],
-    });
-
-    discordClient.once('ready', async (client) => {
-      console.log(`[DiscordBot] Logged in successfully as ${client.user.tag}!`);
-      botState.isReady = true;
-      botState.botTag = client.user.tag;
-      botState.botId = client.user.id;
-      botState.guildCount = client.guilds.cache.size;
-      botState.mode = 'ACTIVE_BOT';
-
-      // Set initial bot presence and start rotation ticker
-      const presenceActivities = [
-        'Scanning Global Markets',
-        'Watching Institutional Order Flow',
-        'Analyzing BTC Liquidity',
-      ];
-      let presenceIdx = 0;
-
-      client.user.setPresence({
-        activities: [{ name: presenceActivities[0], type: 3 }],
-        status: 'online',
-      });
-
-      setInterval(() => {
-        if (discordClient && discordClient.user) {
-          presenceIdx = (presenceIdx + 1) % presenceActivities.length;
-          discordClient.user.setPresence({
-            activities: [{ name: presenceActivities[presenceIdx], type: 3 }],
-            status: 'online',
-          });
-        }
-      }, 180000); // Rotate presence every 3 minutes
-
-      // Register slash commands if Client ID is provided
-      if (clientId) {
-        await registerSlashCommands(token, clientId, guildId);
-      }
-    });
-
-    discordClient.on('interactionCreate', handleInteraction);
-
-    // Prefix commands handler for !predict, !ping, !price
-    discordClient.on('messageCreate', async (message) => {
-      if (message.author.bot || !message.content.startsWith('!')) return;
-
-      const args = message.content.slice(1).trim().split(/ +/);
-      const command = args.shift()?.toLowerCase();
-
-      if (command === 'ping') {
-        await message.reply('🟢 **VIXY AI ONLINE** • Type `/predict` for live signals!');
-      } else if (command === 'predict') {
-        const asset = args[0]?.toUpperCase() || 'BTC';
-        const { price, change24h } = await fetchCurrentPrice(asset);
-        const isBullish = change24h >= 0;
-
-        const embed = new EmbedBuilder()
-          .setTitle(`⚡ VIXY AI Prediction Signal: ${asset}`)
-          .setColor(isBullish ? 0x10B981 : 0xF43F5E)
-          .addFields(
-            { name: 'Spot Price', value: `$${price.toLocaleString()}`, inline: true },
-            { name: 'AI Signal', value: isBullish ? 'BUY UP (YES)' : 'BUY DOWN (NO)', inline: true },
-            { name: 'Confidence', value: '88%', inline: true }
-          )
-          .setFooter({ text: 'VIXY AI Terminal' });
-
-        await message.channel.send({ embeds: [embed] });
-      }
-    });
-
-    await discordClient.login(token);
-    return true;
-  } catch (error) {
-    console.error('[DiscordBot] Failed to log in to Discord:', error);
-    botState.mode = process.env.DISCORD_WEBHOOK_URL ? 'WEBHOOK_FALLBACK' : 'DISABLED';
-    return false;
-  }
+  return await initClientBot();
 }
 
 // Broadcast high-confidence signal to Discord via Bot or Webhook
@@ -978,9 +889,9 @@ export async function assignDiscordVipRole(discordUserId: string, guildId?: stri
   return { success: result.success, message: result.message };
 }
 
-// Share client instance across services
-export function setServiceDiscordClient(client: Client) {
-  discordClient = client;
+// Share client instance across services (maintained for backwards compatibility)
+export function setServiceDiscordClient(_client?: Client) {
+  // Singleton discordClient is automatically managed by DiscordBotManager
 }
 
 // Fetch guild members from Discord server

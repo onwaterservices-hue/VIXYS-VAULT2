@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Flame, ArrowUpRight, ArrowDownRight, Radio, ShieldAlert, Cpu } from 'lucide-react';
 import { BTCTicker } from '../../types';
+import { safeNumber, safeToFixed } from '../../utils/numeric';
 
 interface WhaleMove {
   id: string;
@@ -16,7 +17,7 @@ interface WhaleMove {
 }
 
 interface WhaleBrainProps {
-  ticker: BTCTicker;
+  ticker?: BTCTicker | null;
   selectedAsset?: string;
 }
 
@@ -42,17 +43,18 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
           if (data && data.orders) {
             const mappedMoves: WhaleMove[] = data.orders.map((o: any) => {
               const isBuy = o.action === 'BUY_SWEEP';
+              const size = safeNumber(o.sizeUSD, 0);
               return {
                 id: o.id,
-                sizeUSD: `${isBuy ? '+' : '-'}$${(o.sizeUSD / 1000000).toFixed(2)}M`,
-                asset: o.asset,
+                sizeUSD: `${isBuy ? '+' : '-'}$${safeToFixed(size / 1000000, 2)}M`,
+                asset: o.asset || 'BTC',
                 action: isBuy ? 'BOUGHT' : 'SOLD',
-                venue: o.venue,
+                venue: o.venue || 'Binance',
                 confidence: o.impact === 'CRITICAL' ? 'INSTITUTIONAL' : o.impact === 'EXTREME' ? 'VERY HIGH' : 'HIGH',
                 effect: isBuy ? 'Bullish' : 'Bearish',
                 estimatedImpactMins: o.impact === 'CRITICAL' ? 15 : o.impact === 'EXTREME' ? 10 : 5,
-                timeAgo: new Date(o.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                timestamp: o.timestamp,
+                timeAgo: new Date(o.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                timestamp: o.timestamp || Date.now(),
               };
             });
 

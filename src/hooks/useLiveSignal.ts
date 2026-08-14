@@ -73,13 +73,18 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     market15mState: null
   } : { ...state.signal };
 
-  const isLocked = snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED';
+  const isLocked = Boolean(snapshot.isLocked === true || snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED');
 
   state.signal = {
     ...baseSignal,
     cycleId: snapshot.cycleId,
     isLocked: isLocked,
     status: snapshot.status || 'LIVE',
+    stage: snapshot.stage || snapshot.cycleStage || snapshot.status || 'CALIBRATING',
+    cycleStage: snapshot.cycleStage || snapshot.stage || snapshot.status || 'CALIBRATING',
+    calibrationStatus: snapshot.calibrationStatus,
+    analysisStatus: snapshot.analysisStatus,
+    validationStatus: snapshot.validationStatus,
     lockedDirection: isLocked ? snapshot.lockedPrediction?.direction : undefined,
     lockedProbability: isLocked ? snapshot.lockedPrediction?.probability : undefined,
     lockedConfidence: isLocked ? snapshot.lockedPrediction?.confidence : undefined,
@@ -90,10 +95,10 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     timeRemaining: snapshot.timeRemaining,
     modelProbability: snapshot.livePrediction?.probability,
     confidence: snapshot.livePrediction?.confidence,
-    direction: snapshot.livePrediction?.direction,
+    direction: isLocked ? snapshot.lockedPrediction?.direction : snapshot.livePrediction?.direction,
     feedStatus: 'LIVE',
     sequenceNumber: snapshot.sequence,
-    action: isLocked ? 'BUY_YES' : 'HOLD',
+    action: isLocked ? (snapshot.lockedPrediction?.direction === 'UP' ? 'BUY_YES' : 'BUY_NO') : 'HOLD',
   } as any;
 
   states.set(key, state);
