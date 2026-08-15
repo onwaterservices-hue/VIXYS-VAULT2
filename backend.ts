@@ -5186,8 +5186,8 @@ persistentSignalLogs.forEach((item) => {
 
 app.get('/api/signal/resolved-log', (req, res) => {
   const limit = Math.min(200, parseInt((req.query.limit as string) || '200', 10));
-  const recentLogs = persistentSignalLogs.slice(0, limit);
-  const resolved = persistentSignalLogs.filter((s) => s.status === 'RESOLVED');
+  const recentLogs = persistentSignalLogs.filter(s => s.dataSource !== 'COINBASE_KRAKEN_CASCADE').slice(0, limit);
+  const resolved = persistentSignalLogs.filter((s) => s.status === 'RESOLVED' && s.dataSource !== 'COINBASE_KRAKEN_CASCADE');
   
   const upWins = resolved.filter((s) => s.wasCorrect && s.direction === 'UP').length;
   const downWins = resolved.filter((s) => s.wasCorrect && s.direction === 'DOWN').length;

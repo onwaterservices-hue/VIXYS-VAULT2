@@ -70,42 +70,35 @@ export const HistoricalAccuracy: React.FC<any> = () => {
   // Streak & Metrics
   const metrics = useMemo(() => {
     // 1. Authoritative filtered dataset
-    const settledMap = new Map();
-    resolvedLog.forEach(s => {
-      // 2. Filter to BTC
-      const isBTC = s.asset === 'BTC' || s.ticker === 'BTC/USD' || (s.market && s.market.includes('BTC'));
-      // 3. Filter to 15M
-      const is15M = (s.market && s.market.includes('15M')) || s.desk === '15m' || (s.intervalEnd && s.intervalStart && (new Date(s.intervalEnd).getTime() - new Date(s.intervalStart).getTime() === 15 * 60000));
-      // 4. Include only resolved VIXY LOCK
-      const isResolvedLock = s.status === 'RESOLVED' && s.id && s.id.includes('lock');
-      // 5. Exclude NO TRADE/SKIP
-      const notSkip = s.status !== 'NO_TRADE' && s.status !== 'SKIPPED' && s.status !== 'CRITICALLY_INVALIDATED' && (!s.id || !s.id.includes('skip'));
-      // 6. Exclude duplicate/replayed
-      const notReplay = !s.isReplay && !s.isReplayed && !s.isDuplicate && !s.replayed && s.dataSource !== 'REPLAY';
-      
-      if (isBTC && is15M && isResolvedLock && notSkip && notReplay) {
-        // Exclude duplicates by intervalStart to ensure pure authoritative unique dataset
-        if (!settledMap.has(s.intervalStart)) {
-          settledMap.set(s.intervalStart, s);
-        }
-      }
-    });
-    
-    const settled = Array.from(settledMap.values())
+    const settled = resolvedLog
+      .filter(s => s.status === 'RESOLVED')
       .sort((a, b) => new Date(b.resolvedAt || b.expiresAt || b.lockedAt || 0).getTime() - new Date(a.resolvedAt || a.expiresAt || a.lockedAt || 0).getTime());
     
-    const totalLocks = settled.length;
-    const wins = settled.filter(s => s.wasCorrect).length;
-    const losses = settled.length - wins;
-    const noTrades = resolvedLog.filter(s => s.status === 'CRITICALLY_INVALIDATED' || s.status === 'NO_TRADE' || s.status === 'SKIPPED').length;
-    const winRate = totalLocks > 0 ? (wins / totalLocks) * 100 : 0;
+    // Total dataset metrics (Authoritative source)
+    const totalLocks = backendStats ? backendStats.total : settled.length;
+    const wins = backendStats ? backendStats.winCount : settled.filter(s => s.wasCorrect).length;
+    const losses = backendStats ? backendStats.lossCount : settled.length - wins;
+    const noTrades = backendStats ? (backendStats.excludedNoTrade || backendStats.skipped || 0) : resolvedLog.filter(s => s.status === 'CRITICALLY_INVALIDATED' || s.status === 'NO_TRADE' || s.status === 'SKIPPED').length;
+    const winRate = backendStats ? backendStats.winRatePct : (totalLocks > 0 ? (wins / totalLocks) * 100 : 0);
 
-    // Calculate Last 10 Wins Rate
-    const recent10Settled = settled.slice(0, 10);
+    // Calculate Last 10 Wins Rate ONLY (Scoped derived metric)
+    // - Exclude NO_TRADE, SKIP
+    // - Include only resolved BUY UP / BUY DOWN locks (s.wasCorrect is a boolean so we can just check length)
+    // - deduplicate by intervalStart to ensure we count 10 distinct cycles
+    const recentUnique = new Map();
+    for (const s of settled) {
+      if (s.id && s.id.includes('lock') && !s.isReplay && !s.isReplayed && !s.isDuplicate && !s.replayed && s.dataSource !== 'REPLAY') {
+         if (!recentUnique.has(s.intervalStart)) {
+            recentUnique.set(s.intervalStart, s);
+         }
+      }
+      if (recentUnique.size >= 10) break;
+    }
+    const recent10Settled = Array.from(recentUnique.values());
     const last10Wins = recent10Settled.filter(s => s.wasCorrect).length;
     const last10Total = recent10Settled.length;
     const last10WinRate = last10Total > 0 ? (last10Wins / last10Total) * 100 : 0;
-    
+
     // Diagnostic logging strictly adhering to authoritative calculation
     console.log('[VIXY_WINRATE]', {
       asset: "BTC",
@@ -154,9 +147,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     }
 
     return { 
-      totalLocks, 
-      wins, 
-      losses, 
+      totalLocks: totalLocks,
+      wins: wins,
+      losses: losses, 
       noTrades, 
       winRate, 
       last10WinRate,
@@ -776,7 +769,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     {log.status === 'LOCKED' ? (
                       <span className="text-purple-400 font-bold">LOCKED</span>
                     ) : log.status === 'CRITICALLY_INVALIDATED' ? (
-                      <span className="text-orange-400 font-bold">NO TRADE</span>
+                      <span className="text-purple-400 font-bold">NO TRADE</span>
                     ) : log.wasCorrect ? (
                       <span className="text-green-400 font-black">WIN</span>
                     ) : (
@@ -886,7 +879,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-2">FINAL RESULT</div>
                   <div className={`text-3xl font-black ${
                     activeProvenance.status === 'LOCKED' ? 'text-purple-400 animate-pulse' :
-                    activeProvenance.status === 'CRITICALLY_INVALIDATED' ? 'text-orange-400' :
+                    activeProvenance.status === 'CRITICALLY_INVALIDATED' ? 'text-purple-400' :
                     activeProvenance.wasCorrect ? 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'text-red-400'
                   }`}>
                     {activeProvenance.status === 'LOCKED' ? 'PENDING' :
