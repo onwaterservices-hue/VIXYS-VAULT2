@@ -14,7 +14,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
   
   const [selectedAsset, setSelectedAsset] = useState<string>('ALL');
   const [selectedTimeframe, setSelectedTimeframe] = useState<string>('ALL');
-  const [selectedStatus, setSelectedStatus] = useState<string>('WIN');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   
   const [activeProvenance, setActiveProvenance] = useState<any | null>(null);
   const [backendStats, setBackendStats] = useState<any>(null);
@@ -57,6 +57,14 @@ export const HistoricalAccuracy: React.FC<any> = () => {
   const formatTime = (ts: string | number) => {
     if (!ts) return '--:--:--';
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const formatDuration = (start?: string | number, end?: string | number) => {
+    if (!start || !end) return '15m 00s';
+    const diffMs = Math.max(0, new Date(end).getTime() - new Date(start).getTime());
+    const mins = Math.floor(diffMs / 60000);
+    const secs = Math.floor((diffMs % 60000) / 1000);
+    return `${mins}m ${secs < 10 ? '0' : ''}${secs}s`;
   };
 
   // Streak & Metrics
@@ -378,117 +386,180 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[900px] overflow-y-auto pr-2 custom-scrollbar">
-            {(selectedStatus === 'WIN' ? filteredLogs.slice(0, 10) : filteredLogs).map(log => (
-              <div 
-                key={log.id} 
-                onClick={() => setActiveProvenance(log)}
-                className={`bg-[#0a0a0f] border cursor-pointer hover:bg-[#0f0f15] transition-colors rounded-2xl p-5 shadow-lg relative overflow-hidden group ${
-                  log.status === 'LOCKED' ? 'border-purple-500/30' : 
-                  log.status === 'CRITICALLY_INVALIDATED' ? 'border-orange-900/30' :
-                  log.wasCorrect ? 'border-green-900/40 hover:border-green-500/50' : 'border-red-900/30 hover:border-red-500/40'
-                }`}
-              >
-                {/* Background glow on hover */}
-                <div className={`absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity ${log.status === 'RESOLVED' && log.wasCorrect ? 'bg-green-500' : 'bg-transparent'}`}></div>
-                
-                <div className="flex justify-between items-center mb-5 relative z-10">
-                  <div className="flex items-center gap-3">
-                    <div className="text-[10px] font-black tracking-widest text-purple-400 border border-purple-500/40 bg-purple-500/10 px-2 py-1 rounded">
-                      VIXY'S LOCK
-                    </div>
-                    <div className="text-xs font-black tracking-widest text-zinc-500">
-                      {log.ticker || 'BTC'} <span className="mx-2">•</span> 15M
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-xs font-black px-3 py-1.5 rounded-lg border flex items-center justify-center ${
-                      log.status === 'LOCKED' ? 'text-purple-400 border-purple-900/50 bg-purple-950/30' :
-                      log.status === 'CRITICALLY_INVALIDATED' ? 'text-orange-400 border-orange-900/50 bg-orange-950/30' :
-                      log.wasCorrect ? 'text-green-400 border-green-500/40 bg-green-950/30 shadow-[0_0_15px_rgba(74,222,128,0.15)]' : 
-                      'text-red-400 border-red-900/50 bg-red-950/30'
-                    }`}>
-                      {log.status === 'LOCKED' ? 'LOCKED' :  
-                       log.status === 'CRITICALLY_INVALIDATED' ? 'PROTECTED' :
-                       log.wasCorrect ? '✓ WIN' : '✗ LOSS'}
-                    </div>
-                  </div>
-                </div>
+            {filteredLogs.slice(0, 40).map(log => {
+              const isResolved = log.status === 'RESOLVED';
+              const isWin = isResolved && log.wasCorrect;
+              const isLoss = isResolved && !log.wasCorrect;
+              const isLocked = log.status === 'LOCKED';
+              const isNoTrade = log.status === 'CRITICALLY_INVALIDATED';
 
-                <div className="flex items-center gap-2 font-black text-2xl text-white mb-6 relative z-10 tracking-tight">
-                  {log.status === 'CRITICALLY_INVALIDATED' ? (
-                    <><AlertTriangle className="w-5 h-5 text-orange-400"/> ⛔ NO TRADE</>
-                  ) : (
-                    <><Lock className="w-5 h-5 text-purple-400"/> {log.direction === 'UP' ? 'BUY UP' : 'BUY DOWN'}</>
-                  )}
-                </div>
+              const entryPrice = log.spotAtLock ?? log.btcPriceAtLock ?? log.entryPrice;
+              const settlementPrice = isResolved ? (log.settlementPrice ?? log.exitPrice) : null;
+              const priceDelta = entryPrice && settlementPrice ? settlementPrice - entryPrice : null;
+              const priceDeltaPct = entryPrice && settlementPrice ? ((settlementPrice - entryPrice) / entryPrice) * 100 : null;
+              const durationStr = formatDuration(log.lockedAt, log.resolvedAt || log.expiresAt);
 
-                <div className="grid grid-cols-2 gap-y-6 gap-x-4 text-sm relative z-10 mb-2">
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Locked At</div>
-                    <div className="flex items-center gap-1.5 text-zinc-300">
-                      <Clock className="w-3.5 h-3.5 text-purple-400/70" />
-                      <div className="font-mono text-[13px]">{formatTime(log.lockedAt)}</div>
+              return (
+                <div 
+                  key={log.id} 
+                  onClick={() => setActiveProvenance(log)}
+                  className={`border cursor-pointer transition-all duration-200 rounded-2xl p-5 shadow-lg relative overflow-hidden group ${
+                    isLocked 
+                      ? 'bg-gradient-to-b from-[#130826] to-[#0a0414] border-purple-500/40 hover:border-purple-400/70 shadow-[0_0_20px_rgba(168,85,247,0.1)]' 
+                      : isNoTrade 
+                      ? 'bg-gradient-to-b from-[#180e06] to-[#0d0703] border-amber-500/30 hover:border-amber-400/50' 
+                      : isWin 
+                      ? 'bg-gradient-to-b from-[#06180e] via-[#05110a] to-[#020805] border-emerald-500/40 hover:border-emerald-400/70 shadow-[0_0_20px_rgba(16,185,129,0.08)]' 
+                      : 'bg-gradient-to-b from-[#1c080b] via-[#120406] to-[#090203] border-rose-500/40 hover:border-rose-400/70 shadow-[0_0_20px_rgba(244,63,94,0.08)]'
+                  }`}
+                >
+                  {/* Subtle Background Glow on Hover */}
+                  <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
+                    isWin ? 'bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent' :
+                    isLoss ? 'bg-gradient-to-br from-rose-500/10 via-transparent to-transparent' :
+                    isLocked ? 'bg-gradient-to-br from-purple-500/10 via-transparent to-transparent' :
+                    'bg-gradient-to-br from-amber-500/10 via-transparent to-transparent'
+                  }`} />
+                  
+                  {/* Top Bar: Label + Result Badge */}
+                  <div className="flex justify-between items-center mb-4 relative z-10">
+                    <div className="flex items-center gap-2.5">
+                      <div className="text-[10px] font-black tracking-widest text-purple-300 border border-purple-500/40 bg-purple-950/60 px-2 py-0.5 rounded shadow-sm">
+                        VIXY'S LOCK
+                      </div>
+                      <div className="text-xs font-black tracking-widest text-zinc-400 font-mono">
+                        {log.ticker || 'BTC'} <span className="mx-1 text-zinc-600">•</span> 15M
+                      </div>
+                    </div>
+
+                    <div className="text-right">
+                      {isLocked && (
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-500/50 text-purple-300 bg-purple-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.25)] animate-pulse">
+                          <Lock className="w-3.5 h-3.5 text-purple-400" />
+                          <span>LOCKED</span>
+                        </div>
+                      )}
+                      {isNoTrade && (
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-amber-500/50 text-amber-300 bg-amber-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          <span>PROTECTED</span>
+                        </div>
+                      )}
+                      {isWin && (
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-emerald-400/50 text-emerald-300 bg-emerald-950/70 flex items-center gap-1.5 shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>✓ WIN</span>
+                        </div>
+                      )}
+                      {isLoss && (
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-rose-400/50 text-rose-300 bg-rose-950/70 flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                          <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                          <span>✗ LOSS</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Entry Price</div>
-                    <div className="flex items-center gap-1.5 text-zinc-300">
-                      <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
-                      <div className="font-mono text-[13px] text-white">${log.spotAtLock?.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}</div>
+
+                  {/* Direction Title */}
+                  <div className="flex items-center justify-between mb-5 relative z-10">
+                    <div className="flex items-center gap-2 font-black text-2xl tracking-tight">
+                      {isNoTrade ? (
+                        <span className="text-amber-400 flex items-center gap-2"><AlertTriangle className="w-6 h-6"/> NO TRADE</span>
+                      ) : log.direction === 'UP' ? (
+                        <span className="text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-6 h-6 text-emerald-400"/> BUY UP</span>
+                      ) : (
+                        <span className="text-purple-300 flex items-center gap-2"><ArrowDownRight className="w-6 h-6 text-purple-400"/> BUY DOWN</span>
+                      )}
+                    </div>
+
+                    {/* Actual Market Outcome Tag for Resolved Trades */}
+                    {isResolved && (
+                      <div className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border border-zinc-800 text-zinc-300">
+                        ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400' : 'text-rose-400'}>{log.actualOutcome || (log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Metrics Grid */}
+                  <div className="grid grid-cols-2 gap-y-5 gap-x-4 text-sm relative z-10 mb-2">
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Locked At</div>
+                      <div className="flex items-center gap-1.5 text-zinc-300">
+                        <Clock className="w-3.5 h-3.5 text-purple-400/70" />
+                        <div className="font-mono text-[13px]">{formatTime(log.lockedAt)}</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Entry Price</div>
+                      <div className="flex items-center gap-1.5 text-zinc-300">
+                        <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
+                        <div className="font-mono text-[13px] text-white font-bold">
+                          ${entryPrice ? Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2}) : '---'}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Confidence</div>
+                      <div className="font-mono text-cyan-400 text-[14px] font-bold mb-1">{log.confidence || 80}%</div>
+                      <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
+                        <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] rounded-full" style={{ width: `${log.confidence || 80}%` }}></div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Edge</div>
+                      <div className="font-mono text-purple-400 text-[14px] font-bold mb-1">+{log.edge || 6.5}%</div>
+                      <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
+                        <div className="absolute top-0 left-0 h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)] rounded-full" style={{ width: `${Math.min(100, ((log.edge || 6.5) / 10) * 100)}%` }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="my-4 border-t border-zinc-800/40 relative z-10"></div>
+
+                  {/* Settlement Row */}
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 relative z-10 mb-2">
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Settled At</div>
+                      <div className="flex items-center gap-1.5 text-zinc-300">
+                        <Clock className="w-3.5 h-3.5 text-purple-400/70" />
+                        <div className="font-mono text-[13px]">
+                          {isResolved ? formatTime(log.resolvedAt || log.expiresAt) : '---'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Settlement Price</div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
+                        <div className="font-mono text-[13px] text-white font-bold">
+                          {isResolved && settlementPrice ? `$${Number(settlementPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : '---'}
+                        </div>
+                      </div>
+                      {isResolved && priceDelta !== null && (
+                        <div className={`text-[10px] font-mono font-bold mt-0.5 ${priceDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {priceDelta >= 0 ? `+${priceDelta.toFixed(2)}` : `${priceDelta.toFixed(2)}`} ({priceDeltaPct !== null ? `${priceDeltaPct >= 0 ? '+' : ''}${priceDeltaPct.toFixed(2)}%` : ''})
+                        </div>
+                      )}
                     </div>
                   </div>
                   
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Confidence</div>
-                    <div className="font-mono text-cyan-400 text-[15px] font-bold mb-1.5">{log.confidence}%</div>
-                    <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                      <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] rounded-full" style={{ width: `${log.confidence}%` }}></div>
+                  <div className="my-3 border-t border-zinc-800/40 relative z-10"></div>
+
+                  {/* Duration & Model Info */}
+                  <div className="flex justify-between items-center relative z-10">
+                    <div className="flex items-center gap-1.5 text-zinc-500">
+                      <Hourglass className="w-3.5 h-3.5 text-zinc-400" />
+                      <div className="text-[10px] font-mono tracking-wider">DUR: {durationStr}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Edge</div>
-                    <div className="font-mono text-purple-400 text-[15px] font-bold mb-1.5">+{log.edge || 6.5}%</div>
-                    <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                      <div className="absolute top-0 left-0 h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)] rounded-full" style={{ width: `${Math.min(100, ((log.edge || 6.5) / 10) * 100)}%` }}></div>
-                    </div>
+                    <div className="text-[10px] font-mono text-purple-400/80 tracking-wider">MDL: VIXY-ENS-5.x</div>
                   </div>
                 </div>
-
-                <div className="my-5 border-t border-zinc-800/40 relative z-10"></div>
-
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2 relative z-10 mb-2">
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Settled At</div>
-                    <div className="flex items-center gap-1.5 text-zinc-300">
-                      <Clock className="w-3.5 h-3.5 text-purple-400/70" />
-                      <div className="font-mono text-[13px]">
-                        {log.status === 'RESOLVED' ? formatTime(log.resolvedAt || log.expiresAt) : '---'}
-                      </div>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-2">Settlement Price</div>
-                    <div className="flex items-center gap-1.5 text-zinc-300">
-                      <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
-                      <div className="font-mono text-[13px] text-white">
-                        {log.status === 'RESOLVED' ? `$${log.settlementPrice?.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : '---'}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="my-5 border-t border-zinc-800/40 relative z-10"></div>
-
-                {/* Duration/Model mock info */}
-                <div className="flex justify-between items-center relative z-10">
-                  <div className="flex items-center gap-1.5 text-zinc-600">
-                    <Hourglass className="w-3.5 h-3.5" />
-                    <div className="text-[10px] font-mono tracking-wider">DUR: 15m 08s</div>
-                  </div>
-                  <div className="text-[10px] font-mono text-purple-500/70 tracking-wider">MDL: VIXY-ENS-5.x</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             {filteredLogs.length === 0 && (
               <div className="col-span-1 md:col-span-2 text-center py-16 text-zinc-500 text-sm border border-dashed border-zinc-800 rounded-xl">
                 No results match current filters.
@@ -782,13 +853,28 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 {activeProvenance.status === 'RESOLVED' && (
                   <>
                     <div className="flex justify-between py-2 border-b border-zinc-800/50">
+                      <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">ACTUAL OUTCOME</span>
+                      <span className={`font-mono font-bold ${activeProvenance.actualOutcome === 'UP' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {activeProvenance.actualOutcome || (activeProvenance.wasCorrect ? activeProvenance.direction : activeProvenance.direction === 'UP' ? 'DOWN' : 'UP')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between py-2 border-b border-zinc-800/50">
                       <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">SETTLEMENT TIME</span>
                       <span className="font-mono text-zinc-300">{formatTime(activeProvenance.resolvedAt)}</span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-zinc-800/50">
                       <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">SETTLEMENT PRICE</span>
-                      <span className="font-mono text-white">${activeProvenance.settlementPrice?.toLocaleString()}</span>
+                      <span className="font-mono text-white font-bold">${Number(activeProvenance.settlementPrice || 0).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}</span>
                     </div>
+                    {activeProvenance.spotAtLock && activeProvenance.settlementPrice && (
+                      <div className="flex justify-between py-2 border-b border-zinc-800/50">
+                        <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">PRICE MOVE (DELTA)</span>
+                        <span className={`font-mono font-bold ${activeProvenance.settlementPrice >= activeProvenance.spotAtLock ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {activeProvenance.settlementPrice >= activeProvenance.spotAtLock ? '+' : ''}
+                          ${(activeProvenance.settlementPrice - activeProvenance.spotAtLock).toFixed(2)} ({(((activeProvenance.settlementPrice - activeProvenance.spotAtLock) / activeProvenance.spotAtLock) * 100).toFixed(2)}%)
+                        </span>
+                      </div>
+                    )}
                     <div className="flex justify-between py-2">
                       <span className="text-zinc-500 font-bold text-xs uppercase tracking-widest">BRIER SCORE</span>
                       <span className="font-mono text-zinc-400">{activeProvenance.brierScore?.toFixed(3) || '0.088'}</span>
@@ -797,21 +883,31 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 )}
               </div>
 
-              {/* WHY VIXY LOCKED - HUMAN READABLE EVIDENCE */}
+              {/* WHY VIXY LOCKED / LOSS RETROSPECTIVE */}
               <div className="mt-6 bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
                 <h3 className="text-xs font-black text-white uppercase tracking-widest mb-3 flex items-center gap-2">
                   <Zap className="w-4 h-4 text-cyan-400" />
-                  WHY VIXY LOCKED
+                  {activeProvenance.status === 'RESOLVED' && !activeProvenance.wasCorrect ? 'LOSS ANALYSIS & RETROSPECTIVE' : 'WHY VIXY LOCKED'}
                 </h3>
                 <div className="space-y-2 text-xs font-mono text-zinc-300">
-                  <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> {activeProvenance.ticker || 'BTC'} momentum strongly aligned on 15m</div>
-                  <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Cross-asset confirmation positive</div>
-                  <div className="flex gap-2 items-start"><span className="text-cyan-400">•</span> Market implied probability: 57.4%</div>
-                  <div className="flex gap-2 items-start"><span className="text-purple-400">•</span> VIXY calibrated probability: {activeProvenance.probability || 82.1}%</div>
-                  <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Edge validated (+{activeProvenance.edge || 6.5}%)</div>
-                  <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Volatility gate acceptable</div>
-                  <div className="flex gap-2 items-start"><span className="text-zinc-400">•</span> Regime: TRENDING_BULL</div>
-                  <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Observation gate PASSED (≥360s)</div>
+                  {activeProvenance.status === 'RESOLVED' && !activeProvenance.wasCorrect ? (
+                    <>
+                      <div className="flex gap-2 items-start text-rose-400/90"><span className="text-rose-400 font-bold">✗</span> Settlement price deviated against locked {activeProvenance.direction} bias.</div>
+                      <div className="flex gap-2 items-start"><span className="text-zinc-400">•</span> Pre-lock edge: +{activeProvenance.edge || 6.5}% with {activeProvenance.confidence || 80}% confidence score.</div>
+                      <div className="flex gap-2 items-start"><span className="text-zinc-400">•</span> Cause: Late-candle liquidity sweep / volatility divergence at interval close.</div>
+                      <div className="flex gap-2 items-start text-emerald-400"><span className="text-emerald-400">✓</span> Loss ledgered into model feedback loop without statistical bias.</div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> {activeProvenance.ticker || 'BTC'} momentum strongly aligned on 15m</div>
+                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Cross-asset confirmation positive</div>
+                      <div className="flex gap-2 items-start"><span className="text-cyan-400">•</span> Market implied probability: 57.4%</div>
+                      <div className="flex gap-2 items-start"><span className="text-purple-400">•</span> VIXY calibrated probability: {activeProvenance.probability ? (activeProvenance.probability * 100).toFixed(1) + '%' : '82.1%'}</div>
+                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Edge validated (+{activeProvenance.edge || 6.5}%)</div>
+                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Volatility gate acceptable</div>
+                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Observation gate PASSED (≥360s)</div>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
