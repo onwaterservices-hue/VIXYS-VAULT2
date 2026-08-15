@@ -55,6 +55,7 @@ import { DiscordBotHubView } from './DiscordBotHubView';
 import {
   fetchAdminDiagnostics,
   fetchAdminUsers,
+  fetchAdminDayPassesApi,
   createAdminUser,
   updateUserPassword,
   updateUserVerification,
@@ -105,6 +106,15 @@ export interface UserItem {
   authStatus?: string;
   lastSeenAt?: number;
   lastActiveAt?: number;
+  dayPass?: {
+    entitlementId?: string;
+    status: 'ACTIVE' | 'EXPIRED';
+    startedAt?: string;
+    expiresAt?: string;
+    discordRoleAssigned?: boolean;
+    stripePaymentId?: string;
+    stripeCheckoutSessionId?: string;
+  };
 }
 
 export interface TransactionItem {
@@ -146,6 +156,7 @@ export type UserFilterOption =
   | 'ALL'
   | 'FREE'
   | 'TRIAL'
+  | 'DAY PASS ACTIVE'
   | 'PRO'
   | 'ELITE'
   | 'DISCORD LINKED'
@@ -186,6 +197,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   const [stripeHealth, setStripeHealth] = useState<any>(null);
   const [signalLogsState, setSignalLogsState] = useState<any[]>([]);
   const [discordDiag, setDiscordDiag] = useState<any>(null);
+  const [dayPassRecords, setDayPassRecords] = useState<any[]>([]);
 
   // User Intelligence State & Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -317,6 +329,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         fetchedDiscHealth,
         fetchedStripeHealth,
         fetchedTickets,
+        fetchedDayPasses,
       ] = await Promise.all([
         fetchAdminUsers().catch(() => null),
         fetchAdminStats().catch(() => null),
@@ -328,6 +341,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         fetchDiscordHealthApi().catch(() => null),
         fetchStripeHealthApi().catch(() => null),
         fetchAdminSupportTickets().catch(() => null),
+        fetchAdminDayPassesApi().catch(() => null),
       ]);
 
       if (
@@ -361,6 +375,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       if (fetchedDiscHealth) setDiscordHealth(fetchedDiscHealth);
       if (fetchedStripeHealth) setStripeHealth(fetchedStripeHealth);
       if (Array.isArray(fetchedTickets)) setTickets(fetchedTickets);
+      if (fetchedDayPasses && Array.isArray(fetchedDayPasses.records)) setDayPassRecords(fetchedDayPasses.records);
 
       const events = await fetchAdminEventsApi().catch(() => null);
       if (Array.isArray(events)) setAdminEvents(events);
@@ -441,6 +456,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
           return u.subscription === 'FREE' || u.role === 'FREE' || u.role === 'USER';
         case 'TRIAL':
           return u.subscription === 'FREE_TRIAL' || u.status === 'TRIALING';
+        case 'DAY PASS ACTIVE':
+          return Boolean(u.dayPass && u.dayPass.status === 'ACTIVE' && new Date(u.dayPass.expiresAt || 0).getTime() > Date.now());
         case 'PRO':
           return u.subscription === 'PRO_PASS' || u.role === 'PRO';
         case 'ELITE':
@@ -798,7 +815,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
           { id: 'overview', label: 'OVERVIEW', icon: Activity },
           { id: 'users', label: 'USERS', icon: Users, badge: users.length },
           { id: 'billing', label: 'BILLING', icon: CreditCard },
-          { id: 'trials', label: 'TRIALS & ACCESS', icon: Clock, badge: activeTrialsCount },
+          { id: 'trials', label: 'DAY PASSES & ACCESS', icon: Zap, badge: dayPassRecords.filter((dp) => dp.status === 'ACTIVE').length + activeTrialsCount },
           { id: 'discord', label: 'DISCORD', icon: Bot },
           { id: 'referrals', label: 'REFERRALS', icon: Link, badge: referrals.length },
           { id: 'audit_log', label: 'AUDIT LOG', icon: FileText },
@@ -1338,6 +1355,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 'ALL',
                 'FREE',
                 'TRIAL',
+                'DAY PASS ACTIVE',
                 'PRO',
                 'ELITE',
                 'DISCORD LINKED',
@@ -1418,19 +1436,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                             </td>
 
                             <td className="p-3">
-                              <span
-                                className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                                  user.subscription === 'ELITE_PASS' || user.role === 'ELITE'
-                                    ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40'
-                                    : user.subscription === 'PRO_PASS' || user.role === 'PRO'
-                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                                    : user.subscription === 'FREE_TRIAL'
-                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                    : 'bg-slate-800 text-slate-400'
-                                }`}
-                              >
-                                {user.subscription || user.role || 'NONE'}
-                              </span>
+                              {user.dayPass && user.dayPass.status === 'ACTIVE' && new Date(user.dayPass.expiresAt || 0).getTime() > Date.now() ? (
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-950">
+                                  ⚡ 24H_DAY_PASS
+                                </span>
+                              ) : user.dayPass && user.dayPass.status === 'EXPIRED' ? (
+                                <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 border border-slate-700">
+                                  ⚡ PASS_EXPIRED
+                                </span>
+                              ) : (
+                                <span
+                                  className={`px-2 py-0.5 text-[10px] font-bold rounded ${
+                                    user.subscription === 'ELITE_PASS' || user.role === 'ELITE'
+                                      ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40'
+                                      : user.subscription === 'PRO_PASS' || user.role === 'PRO'
+                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                      : user.subscription === 'FREE_TRIAL'
+                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                      : 'bg-slate-800 text-slate-400'
+                                  }`}
+                                >
+                                  {user.subscription || user.role || 'NONE'}
+                                </span>
+                              )}
                             </td>
 
                             <td className="p-3">
@@ -1674,35 +1702,182 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         )}
 
         {/* ========================================================================= */}
-        {/* 4. TRIALS & ACCESS SECTION */}
+        {/* 4. DAY PASSES, CONNECTED ACCOUNTS & ACCESS STORE */}
         {/* ========================================================================= */}
         {activeSection === 'trials' && (
           <div className="space-y-6">
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span>Free Trials & Anti-Duplicate Hardware Protection</span>
-              </h2>
+            {/* Top Stat Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl">
+                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center justify-between">
+                  <span>ACTIVE 24H PASSES</span>
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-amber-400 mt-1">
+                  {dayPassRecords.filter((dp) => dp.status === 'ACTIVE').length}
+                </div>
+              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">ACTIVE FREE TRIALS</div>
-                  <div className="text-lg font-black font-mono text-amber-400">{activeTrialsCount}</div>
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl">
+                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center justify-between">
+                  <span>EXPIRED DAY PASSES</span>
+                  <Clock className="w-3.5 h-3.5 text-slate-500" />
                 </div>
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">SUSPECTED DUPLICATE RISKS</div>
-                  <div className="text-lg font-black font-mono text-red-400">{duplicateRiskUserIds.size}</div>
+                <div className="text-xl font-black font-mono text-slate-400 mt-1">
+                  {dayPassRecords.filter((dp) => dp.status === 'EXPIRED').length}
                 </div>
-                <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">HARDWARE ENFORCEMENT</div>
-                  <div className="text-lg font-black font-mono text-emerald-400">ENABLED (1 Pass / HW)</div>
+              </div>
+
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl">
+                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center justify-between">
+                  <span>FREE TRIALS</span>
+                  <Clock className="w-3.5 h-3.5 text-purple-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-purple-300 mt-1">
+                  {activeTrialsCount}
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl">
+                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center justify-between">
+                  <span>DISCORD CONNECTED</span>
+                  <Bot className="w-3.5 h-3.5 text-indigo-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-indigo-300 mt-1">
+                  {users.filter((u) => u.discordLinked || u.discordId).length}
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-900/80 border border-slate-800 rounded-2xl">
+                <div className="text-[10px] text-slate-400 uppercase font-bold flex items-center justify-between">
+                  <span>STRIPE CUSTOMERS</span>
+                  <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                </div>
+                <div className="text-xl font-black font-mono text-emerald-400 mt-1">
+                  {users.filter((u) => u.stripeCustomerId || u.stripeSubscriptionId).length}
                 </div>
               </div>
             </div>
 
-            {/* Trial Users Table */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="overflow-x-auto">
+            {/* 1. 24-HOUR DAY PASSES STORE TABLE */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-bold uppercase tracking-wider text-amber-300 flex items-center space-x-2">
+                    <Zap className="w-5 h-5 text-amber-400" />
+                    <span>24-Hour Day Passes Store & Active Grants</span>
+                  </h2>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    Real-time status of all $9.99 24-Hour Day Passes purchased via Stripe Checkout or granted by admins.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto border border-slate-800 rounded-xl">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
+                    <tr>
+                      <th className="p-3">USER / EMAIL</th>
+                      <th className="p-3">ENTITLEMENT ID</th>
+                      <th className="p-3">TIER</th>
+                      <th className="p-3">PASS STATUS</th>
+                      <th className="p-3">ACTIVATED AT</th>
+                      <th className="p-3">EXPIRES AT</th>
+                      <th className="p-3">DISCORD ROLE</th>
+                      <th className="p-3 text-right">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {dayPassRecords.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-6 text-center text-slate-500 font-sans">
+                          No 24-Hour Day Pass records currently found.
+                        </td>
+                      </tr>
+                    ) : (
+                      dayPassRecords.map((dp) => {
+                        const isPassActive = dp.status === 'ACTIVE' && new Date(dp.expiresAt || 0).getTime() > Date.now();
+                        const matchingUser = users.find((u) => u.email?.toLowerCase() === dp.email?.toLowerCase() || u.id === dp.userId);
+                        return (
+                          <tr key={dp.entitlementId || dp.email} className="hover:bg-slate-800/40 transition">
+                            <td className="p-3">
+                              <div className="font-bold text-slate-200">{dp.email}</div>
+                              <div className="text-[10px] text-slate-500">ID: {dp.userId}</div>
+                            </td>
+                            <td className="p-3 font-mono text-[11px] text-slate-400">
+                              {dp.entitlementId || 'dp_vixy'}
+                            </td>
+                            <td className="p-3">
+                              <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
+                                ELITE 24H
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              {isPassActive ? (
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 rounded flex items-center space-x-1 w-fit">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                  <span>ACTIVE (24H)</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700 rounded">
+                                  EXPIRED
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-3 text-slate-400 text-[11px]">
+                              {dp.activatedAt ? new Date(dp.activatedAt).toLocaleString() : 'N/A'}
+                            </td>
+                            <td className="p-3 text-slate-300 font-mono text-[11px]">
+                              {dp.expiresAt ? new Date(dp.expiresAt).toLocaleString() : 'N/A'}
+                            </td>
+                            <td className="p-3">
+                              {dp.discordRoleAssigned ? (
+                                <span className="text-emerald-400 text-[10px] font-bold flex items-center space-x-1">
+                                  <Check className="w-3 h-3" />
+                                  <span>ASSIGNED</span>
+                                </span>
+                              ) : (
+                                <span className="text-slate-500 text-[10px]">UNASSIGNED</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right space-x-1.5">
+                              {matchingUser && (
+                                <>
+                                  {isPassActive ? (
+                                    <button
+                                      onClick={() => handleUserAction(matchingUser, 'revoke_day_pass')}
+                                      className="px-2 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded text-[11px] font-bold"
+                                    >
+                                      Revoke Pass
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleUserAction(matchingUser, 'grant_day_pass')}
+                                      className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded text-[11px] font-bold"
+                                    >
+                                      Grant 24H Pass
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 2. FREE TRIALS & ANTI-DUPLICATE TABLE */}
+            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden p-5 space-y-4">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
+                <Clock className="w-5 h-5 text-amber-400" />
+                <span>Free Trials & Hardware Protection</span>
+              </h2>
+
+              <div className="overflow-x-auto border border-slate-800 rounded-xl">
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
                     <tr>
@@ -1742,6 +1917,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-purple-300 rounded text-[11px]"
                             >
                               Extend 7 Days
+                            </button>
+                            <button
+                              onClick={() => handleUserAction(u, 'grant_day_pass')}
+                              className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded text-[11px] font-bold"
+                            >
+                              Grant 24H Pass
                             </button>
                             <button
                               onClick={() => handleUserAction(u, 'revoke_trial')}
@@ -2145,6 +2326,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 <div><span className="text-slate-500">Active Tier:</span> <span className="text-slate-200">{inspectorUser.subscription || inspectorUser.role}</span></div>
               </div>
 
+              {/* Day Pass Record */}
+              <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
+                <div className="text-[10px] text-amber-400 font-bold uppercase flex items-center justify-between">
+                  <span>24-HOUR DAY PASS ENTITLEMENT</span>
+                  <Zap className="w-3.5 h-3.5" />
+                </div>
+                {inspectorUser.dayPass ? (
+                  <>
+                    <div><span className="text-slate-500">Status:</span> <span className={inspectorUser.dayPass.status === 'ACTIVE' ? 'text-emerald-400 font-bold' : 'text-slate-400'}>{inspectorUser.dayPass.status}</span></div>
+                    <div><span className="text-slate-500">Entitlement ID:</span> <span className="text-slate-300 font-mono text-[11px]">{inspectorUser.dayPass.entitlementId || 'N/A'}</span></div>
+                    <div><span className="text-slate-500">Expires At:</span> <span className="text-amber-300 font-mono text-[11px]">{inspectorUser.dayPass.expiresAt ? new Date(inspectorUser.dayPass.expiresAt).toLocaleString() : 'N/A'}</span></div>
+                  </>
+                ) : (
+                  <div className="text-slate-500 italic text-[11px]">No active or previous Day Pass record found for this user.</div>
+                )}
+              </div>
+
               {/* Discord */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
                 <div className="text-[10px] text-purple-400 font-bold uppercase">DISCORD INTEGRATION</div>
@@ -2173,12 +2371,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 <Edit3 className="w-3.5 h-3.5 text-purple-300" />
                 <span>EDIT USER RECORD</span>
               </button>
-              <button
-                onClick={() => handleUserAction(inspectorUser, 'extend_trial')}
-                className="px-3 py-1.5 rounded bg-amber-600/30 text-amber-300 border border-amber-500/40 font-bold text-xs"
-              >
-                EXTEND TRIAL
-              </button>
+              {inspectorUser.dayPass?.status === 'ACTIVE' ? (
+                <button
+                  onClick={() => handleUserAction(inspectorUser, 'revoke_day_pass')}
+                  className="px-3 py-1.5 rounded bg-red-950 text-red-300 border border-red-500/40 font-bold text-xs"
+                >
+                  REVOKE DAY PASS
+                </button>
+              ) : (
+                <button
+                  onClick={() => handleUserAction(inspectorUser, 'grant_day_pass')}
+                  className="px-3 py-1.5 rounded bg-amber-600/30 text-amber-200 border border-amber-500/40 font-bold text-xs flex items-center gap-1"
+                >
+                  <Zap className="w-3.5 h-3.5 text-amber-300" />
+                  <span>GRANT 24H PASS</span>
+                </button>
+              )}
               <button
                 onClick={() => handleUserAction(inspectorUser, 'grant_premium', { tier: 'ELITE_PASS' })}
                 className="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"

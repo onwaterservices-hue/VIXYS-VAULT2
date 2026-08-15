@@ -19,6 +19,10 @@ import {
   AlertTriangle,
   Layers,
   Sparkles,
+  ShieldCheck,
+  Clock,
+  Lock,
+  ArrowRight,
 } from 'lucide-react';
 import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
@@ -128,17 +132,74 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   onOpenAuth('register');
                 }
               }}
-              className="px-8 py-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-xl shadow-purple-600/30 transition-all active:scale-95"
+              className="px-8 py-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-xl shadow-purple-600/30 transition-all active:scale-95 cursor-pointer"
             >
               {authState?.isAuthenticated ? 'ENTER LIVE TERMINAL' : 'ACTIVATE DECISION ENGINE'}
             </button>
 
             <button
               onClick={onLaunchTerminal}
-              className="px-7 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center gap-2"
+              className="px-7 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer"
             >
               <span>EXPLORE LIVE TERMINAL</span>
             </button>
+          </div>
+
+          {/* VIXY Vault Command Center Day Pass Access Module */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#0F0826]/95 via-[#0A0518]/95 to-[#060310] border border-purple-500/35 shadow-2xl shadow-purple-950/80 relative overflow-hidden font-mono group hover:border-purple-500/60 transition-all">
+            {/* Luminous accent ambient back-light */}
+            <div className="absolute -top-12 -right-12 w-36 h-36 bg-purple-600/20 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute top-0 right-0 px-3 py-1 bg-purple-900/50 border-b border-l border-purple-500/30 rounded-bl-xl text-[10px] text-cyan-400 font-bold tracking-widest uppercase flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span>VAULT ACCESS MODULE</span>
+            </div>
+
+            <div className="space-y-3 relative z-10">
+              <div className="space-y-0.5">
+                <span className="text-[10px] text-purple-400/90 uppercase tracking-widest font-bold block">
+                  VIXY VAULT DAY PASS
+                </span>
+                <h4 className="text-sm sm:text-base font-black text-white font-sans tracking-tight">
+                  24 HOURS OF FULL DECISION INTELLIGENCE
+                </h4>
+              </div>
+
+              {/* Prominent Price & Features */}
+              <div className="flex flex-wrap items-baseline justify-between gap-2 pt-2 pb-2 border-y border-purple-900/40">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl sm:text-4xl font-black text-cyan-300 tracking-tight font-mono drop-shadow-[0_0_12px_rgba(6,182,212,0.3)]">
+                    $9.99
+                  </span>
+                  <span className="text-[11px] text-purple-200/90 font-sans">
+                    One-time access • No subscription required
+                  </span>
+                </div>
+                <div className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span>INSTANT ACTIVATION</span>
+                </div>
+              </div>
+
+              {/* Primary Action CTA */}
+              <div className="space-y-2 pt-1">
+                <button
+                  onClick={() => onOpenAuth('register')}
+                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-purple-900/40 border border-purple-400/30 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-[0.99]"
+                >
+                  <ShieldCheck className="w-4 h-4 text-cyan-300 group-hover/btn:scale-110 transition-transform" />
+                  <span>UNLOCK 24H ACCESS — $9.99</span>
+                  <ArrowRight className="w-4 h-4 text-purple-200 group-hover/btn:translate-x-1 transition-transform" />
+                </button>
+
+                <div className="flex items-center justify-between text-[10px] text-purple-300/80 font-mono">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-purple-400" />
+                    Discord verification required before terminal access
+                  </span>
+                  <span className="text-purple-400/60 hidden sm:inline">Unfiltered 15m Signal Stream</span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Micro Trust Indicators (Honest, Compliant) */}
@@ -476,27 +537,58 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
-        {/* Day Pass Promo Banner */}
-        <div className="mb-8 p-6 bg-gradient-to-r from-amber-500/10 via-purple-600/15 to-amber-500/10 border-2 border-amber-500/40 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-amber-500/10 text-left">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest uppercase bg-amber-500 text-slate-950">
-                1-DAY PASS
+        {/* VIXY Vault 24H Day Pass Access Module */}
+        <div className="mb-8 p-6 sm:p-8 bg-gradient-to-r from-[#0F0826] via-[#0A0518] to-[#120930] border-2 border-purple-500/40 rounded-3xl flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 shadow-2xl shadow-purple-950/90 relative overflow-hidden text-left font-mono group">
+          {/* Subtle Ambient Accent Orbs */}
+          <div className="absolute top-0 right-1/4 w-72 h-72 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
+          
+          <div className="space-y-3 relative z-10 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase bg-purple-900/80 border border-purple-500/40 text-cyan-300 shadow-inner">
+                VIXY VAULT ACCESS CREDENTIAL
               </span>
-              <span className="text-xs font-mono text-amber-300 font-bold">$9.99 ONE-TIME</span>
+              <span className="text-xs font-mono text-emerald-400 font-bold flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                INSTANT ACTIVATION • $9.99 ONE-TIME
+              </span>
             </div>
-            <h3 className="text-xl font-black text-white">VIXY 24-Hour Terminal Day Pass</h3>
-            <p className="text-xs text-slate-300 max-w-xl font-sans">
-              Get 24 hours of full, unrestricted access to the VIXY 15-minute prediction terminal, real-time decision locks, and Discord signals. No monthly commitment, cancel anytime.
-            </p>
+
+            <div className="space-y-1">
+              <h3 className="text-2xl sm:text-3xl font-black text-white font-sans tracking-tight">
+                VIXY 24-Hour Terminal Day Pass
+              </h3>
+              <p className="text-xs sm:text-sm text-purple-200/80 max-w-xl font-sans leading-relaxed">
+                Full VIXY decision intelligence for 24 hours. Get 96 complete 15-minute prediction cycles, live orderbook depth, decision locks, and Discord signals. One-time access • No subscription required.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 text-[11px] text-purple-300/90 font-mono pt-1">
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" /> Discord Verification Required
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-purple-400" /> 24-Hour Authoritative Window
+              </span>
+            </div>
           </div>
-          <button
-            onClick={() => onOpenAuth('register')}
-            className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
-          >
-            <Sparkles className="w-4 h-4 text-slate-950" />
-            <span>Buy 24H Day Pass ($9.99)</span>
-          </button>
+
+          <div className="w-full lg:w-auto flex flex-col items-center lg:items-end gap-2 relative z-10 shrink-0">
+            <div className="text-center lg:text-right pb-1">
+              <span className="text-3xl sm:text-4xl font-black text-cyan-300 font-mono tracking-tight drop-shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+                $9.99
+              </span>
+              <span className="text-[10px] text-purple-300/70 block font-sans">Single 24H Pass</span>
+            </div>
+
+            <button
+              onClick={() => onOpenAuth('register')}
+              className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-purple-900/50 border border-purple-400/30 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-95"
+            >
+              <ShieldCheck className="w-4 h-4 text-cyan-300 group-hover/btn:scale-110 transition-transform" />
+              <span>UNLOCK 24H ACCESS — $9.99</span>
+              <ArrowRight className="w-4 h-4 text-purple-200 group-hover/btn:translate-x-1 transition-transform" />
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">

@@ -75,13 +75,14 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
         <section className="space-y-3">
           <div className="flex items-center gap-3 text-purple-300 font-mono font-black text-lg border-b border-purple-900/40 pb-2">
             <span className="text-purple-500">03.</span>
-            <h2>Subscription Terms, Billing & Renewal</h2>
+            <h2>Subscriptions, 24-Hour Day Passes & Billing</h2>
           </div>
           <p className="text-purple-200/80">
-            Subscriptions to Starter, Professional, and Elite Quant plans are billed in advance on a monthly or annual recurring cycle through our payment processor, Stripe.
+            Access to VIXY AI prediction market intelligence is granted via recurring monthly/annual subscriptions or 24-Hour Day Passes ($9.99), processed securely through Stripe.
           </p>
           <ul className="list-disc pl-5 space-y-2 text-purple-200/80 text-xs">
-            <li><strong>Auto-Renewal:</strong> Subscriptions automatically renew at the end of each billing cycle unless cancelled prior to your renewal date via the Customer Portal.</li>
+            <li><strong>24-Hour Day Pass ($9.99):</strong> Grants 24 full hours of continuous, unthrottled access to all Elite 15m signal streams, neural ribbon models, and Discord Elite VIP role access from the exact timestamp of payment completion. Day Passes are non-recurring, one-time charges.</li>
+            <li><strong>Auto-Renewal Subscriptions:</strong> Starter, Pro, and Elite monthly/annual subscriptions automatically renew at the end of each billing cycle unless cancelled prior to your renewal date via the Customer Portal.</li>
             <li><strong>Price Changes:</strong> We reserve the right to adjust plan pricing upon 30 days prior notice to active subscribers.</li>
             <li><strong>Payment Processing:</strong> Payments are processed securely via Stripe. We do not collect or store raw credit card numbers on our servers.</li>
           </ul>

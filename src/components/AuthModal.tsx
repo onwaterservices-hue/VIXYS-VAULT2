@@ -91,7 +91,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         isAdminEmail
           ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
           : mode === 'register'
-          ? `Account created successfully! Welcome, ${userName}. Your Free Access Pass is now active.`
+          ? `Account created successfully! Welcome, ${userName}. Your account is ready for 24H Day Pass access.`
           : `Signed in successfully. Welcome back, ${userName}!`
       );
       setTimeout(() => {
@@ -235,7 +235,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     : mode === 'login'
                     ? 'Sign In to Terminal'
                     : mode === 'register'
-                    ? 'Create Account & Unlock Free Access'
+                    ? 'Create Account & Continue'
                     : 'Send Password Reset Link'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}

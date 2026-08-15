@@ -849,7 +849,7 @@ export async function fetchUserAccess(email?: string, uid?: string): Promise<Use
     isAdmin: false,
     accessState: 'AUTHORIZED',
     discordVerified: true,
-    subscriptionStatus: 'trial',
+    subscriptionStatus: 'none',
     entitlements: ['15m_desk'],
     locked: false,
   };
@@ -1244,6 +1244,21 @@ export async function fetchAdminUsers() {
     }
   } catch (err) {
     console.warn('Failed to fetch admin users from server', err);
+  }
+  return null;
+}
+
+export async function fetchAdminDayPassesApi() {
+  try {
+    const res = await fetch('/api/admin/day-passes?_t=' + Date.now(), {
+      cache: 'no-store',
+      headers: getAdminHeaders({ 'Cache-Control': 'no-cache' }),
+    });
+    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn('Failed to fetch admin day passes from server', err);
   }
   return null;
 }

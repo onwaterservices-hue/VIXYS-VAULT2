@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, Sparkles } from 'lucide-react';
+import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
 import {
@@ -711,8 +711,8 @@ export default function App() {
   const handleStartFreeTrial = () => {
     const trialUser = {
       id: `usr_trial_${Math.random().toString(36).substring(2, 7)}`,
-      email: 'trial.user@vixysvault.com',
-      name: 'Free Trial User',
+      email: 'visitor@vixysvault.com',
+      name: 'VIXY Vault Visitor',
       role: 'DEMO' as const,
       joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
     };
