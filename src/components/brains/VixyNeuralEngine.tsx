@@ -17,6 +17,7 @@ import {
   Layers,
   Flame,
   Check,
+  ShieldAlert,
 } from 'lucide-react';
 import { formatConfidenceLabel, MetricFormattedState } from '../../utils/metrics';
 
@@ -649,6 +650,73 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               <span>VIXY DEFENSE: REVERSAL THREAT ELEVATED ({reversalRisk}%)</span>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* ─── WHALE WATCH & RISK REVERSAL INSTITUTIONAL TELEMETRY BOX ─── */}
+      <div className="bg-[#05010c] border border-purple-800/60 rounded-xl p-3 relative z-10 shadow-[0_0_20px_rgba(0,0,0,0.8)] my-3">
+        <div className="flex items-center justify-between border-b border-purple-900/40 pb-2 mb-2.5 font-mono">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
+            <span className="text-[10px] font-black text-slate-100 tracking-[0.2em] uppercase">
+              WHALE RADAR & RISK REVERSAL
+            </span>
+          </div>
+          <span className="text-[8.5px] font-mono font-bold text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-700/50">
+            DESK SCAN ACTIVE
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono">
+          {/* Box 1: Whale Sweep Activity */}
+          <div className="bg-[#090318] border border-cyan-500/40 rounded-lg p-2.5 flex items-center justify-between shadow-inner">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-md bg-cyan-950/90 border border-cyan-500/60 flex items-center justify-center text-cyan-300 shrink-0">
+                <Layers className="w-3.5 h-3.5 text-cyan-300 animate-pulse" />
+              </div>
+              <div>
+                <div className="text-[8.5px] font-bold text-cyan-400/80 tracking-widest uppercase">
+                  WHALE SWEEP INTERCEPT
+                </div>
+                <div className="text-xs font-black text-cyan-300 tracking-tight font-mono">
+                  {rawApiData?.darkPoolSweep?.label || '+$2.48M BTC BOUGHT'}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className="text-[8px] font-black px-2 py-0.5 rounded bg-emerald-950/90 text-[#00FF9D] border border-emerald-500/50 uppercase tracking-wider block">
+                BULLISH
+              </span>
+              <span className="text-[7.5px] text-purple-400/60 tracking-wider mt-0.5 block font-bold">
+                +15M WINDOW
+              </span>
+            </div>
+          </div>
+
+          {/* Box 2: Risk Reversal Protection Threat */}
+          <div className="bg-[#090318] border border-purple-500/40 rounded-lg p-2.5 flex items-center justify-between shadow-inner">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 ${reversalRisk >= 40 ? 'bg-rose-950/90 border-rose-500/60 text-rose-400' : 'bg-purple-950/90 border-purple-500/60 text-purple-300'}`}>
+                <ShieldAlert className={`w-3.5 h-3.5 ${reversalRisk >= 40 ? 'animate-bounce' : ''}`} />
+              </div>
+              <div>
+                <div className="text-[8.5px] font-bold text-purple-400/80 tracking-widest uppercase">
+                  RISK REVERSAL THREAT
+                </div>
+                <div className={`text-xs font-black tracking-tight font-mono ${reversalRisk >= 40 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                  {reversalRisk}% {reversalRisk >= 50 ? '[HIGH]' : reversalRisk >= 30 ? '[ELEVATED]' : '[LOW THREAT]'}
+                </div>
+              </div>
+            </div>
+            <div className="text-right">
+              <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider block border ${reversalRisk >= 40 ? 'bg-rose-950/90 text-rose-400 border-rose-500/50' : 'bg-emerald-950/90 text-[#00FF9D] border border-emerald-500/50'}`}>
+                {reversalRisk >= 40 ? 'STATE: WATCH' : 'GUARDIAN OK'}
+              </span>
+              <span className="text-[7.5px] text-purple-400/60 tracking-wider mt-0.5 block font-bold">
+                0 TRIGGERS
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 

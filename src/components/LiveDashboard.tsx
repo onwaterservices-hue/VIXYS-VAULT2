@@ -42,6 +42,7 @@ import { ProtectionBrain } from './brains/ProtectionBrain';
 import { WhaleBrain } from './brains/WhaleBrain';
 import { ExecutionBrain } from './brains/ExecutionBrain';
 import { AiThinkingBrain } from './brains/AiThinkingBrain';
+import { OrderFlowPressure } from './brains/OrderFlowPressure';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -527,6 +528,13 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                 <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
               </div>
             </div>
+
+            {/* VIXY ORDER FLOW PRESSURE (MOVED BELOW WHALE WATCH & VIXY PROTECTION) */}
+            <OrderFlowPressure
+              rawApiData={liveApiData}
+              venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
+              timeframe={timeframe}
+            />
           </div>
 
           {/* 7. STAGE 1: MARKET EVIDENCE & NEURAL ORDER FLOW */}
