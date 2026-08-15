@@ -386,3 +386,65 @@ export function formatConfidenceLabel(
   };
 }
 
+export type DirectionVisualState = 'UP' | 'DOWN' | 'NEUTRAL' | 'DELAYED' | 'ERROR';
+
+export interface VisualStateConfig {
+  primaryColor: string;
+  secondaryColor: string;
+  glowColor: string;
+  borderClass: string;
+  textClass: string;
+  bgClass: string;
+}
+
+export function getVisualStateConfig(state: DirectionVisualState): VisualStateConfig {
+  switch (state) {
+    case 'UP':
+      return {
+        primaryColor: '#00FF9D',
+        secondaryColor: '#A855F7',
+        glowColor: 'rgba(0, 255, 157, 0.4)',
+        borderClass: 'border-[#00FF9D]/60',
+        textClass: 'text-[#00FF9D]',
+        bgClass: 'bg-[#00FF9D]/10',
+      };
+    case 'DOWN':
+      return {
+        primaryColor: '#FF3366',
+        secondaryColor: '#A855F7',
+        glowColor: 'rgba(255, 51, 102, 0.4)',
+        borderClass: 'border-[#FF3366]/60',
+        textClass: 'text-[#FF3366]',
+        bgClass: 'bg-[#FF3366]/10',
+      };
+    case 'DELAYED':
+      return {
+        primaryColor: '#FBBF24',
+        secondaryColor: '#A855F7',
+        glowColor: 'rgba(251, 191, 36, 0.3)',
+        borderClass: 'border-amber-400/40',
+        textClass: 'text-amber-400',
+        bgClass: 'bg-amber-400/10',
+      };
+    case 'ERROR':
+      return {
+        primaryColor: '#F87171',
+        secondaryColor: '#A855F7',
+        glowColor: 'rgba(248, 113, 113, 0.2)',
+        borderClass: 'border-red-400/30',
+        textClass: 'text-red-400',
+        bgClass: 'bg-red-400/10',
+      };
+    case 'NEUTRAL':
+    default:
+      return {
+        primaryColor: '#C084FC',
+        secondaryColor: '#A855F7',
+        glowColor: 'rgba(192, 132, 252, 0.3)',
+        borderClass: 'border-purple-500/40',
+        textClass: 'text-purple-300',
+        bgClass: 'bg-purple-900/20',
+      };
+  }
+}
+

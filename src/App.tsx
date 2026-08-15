@@ -522,8 +522,14 @@ export default function App() {
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
-        } else if (alertSettings.discordLinked) {
-          // Keep existing linked state across temporary network hiccups
+        } else if (alertSettings.discordLinked || authState.user?.discordId || (authState.user as any)?.discordLinked) {
+          // Permanently preserve linked Discord identity even during transient background refreshes
+          setAlertSettings((prev) => ({
+            ...prev,
+            discordLinked: true,
+            discordUserId: prev.discordUserId || authState.user?.discordId,
+            discordUsername: prev.discordUsername || (authState.user as any)?.discordTag,
+          }));
         } else {
           setAlertSettings((prev) => ({
             ...prev,

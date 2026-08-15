@@ -19,8 +19,12 @@ import {
   Check,
   ShieldAlert,
 } from 'lucide-react';
-import { formatConfidenceLabel, MetricFormattedState } from '../../utils/metrics';
-import { DirectionVisualState, getVisualStateConfig } from '../../utils/visualState';
+import {
+  formatConfidenceLabel,
+  MetricFormattedState,
+  DirectionVisualState,
+  getVisualStateConfig,
+} from '../../utils/metrics';
 
 interface VixyNeuralEngineProps {
   rawApiData: any;
