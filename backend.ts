@@ -4269,8 +4269,83 @@ export async function reconcileUserEntitlement(identity: {
   // 2. Hydrate from Firestore if available
   if (db) {
     try {
-      // Check day_passes collection
-      const dpKeys = [cleanEmail, cleanUid, cleanDiscordId].filter(Boolean);
+      const emailDocId = cleanEmail ? `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
+      const emailSubId1 = cleanEmail ? `sub_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
+      const emailSubId2 = cleanEmail ? `sub_usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
+      const emailDpId1 = cleanEmail ? `dp_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
+
+      // 2a. Check 'users' collection in Firestore
+      const userKeys = [cleanUid, cleanEmail, emailDocId].filter(Boolean);
+      for (const k of userKeys) {
+        try {
+          const userSnap = await getDoc(doc(db, 'users', k));
+          if (userSnap.exists()) {
+            const userData = userSnap.data() as any;
+            if (userData) {
+              const matchedEmail = (userData.email || cleanEmail).toLowerCase();
+              const existingMemUser = serverUsers.find(u => u.email?.toLowerCase() === matchedEmail || u.id === userData.id || u.uid === userData.uid);
+              if (!existingMemUser) {
+                serverUsers.unshift({
+                  id: userData.id || userData.userId || k,
+                  uid: userData.uid || cleanUid || undefined,
+                  email: matchedEmail,
+                  name: userData.name || matchedEmail.split('@')[0],
+                  role: userData.role || 'USER',
+                  subscription: userData.subscription || 'NONE',
+                  passwordHash: userData.passwordHash || 'AuthManaged2026!',
+                  verificationStatus: userData.verificationStatus || 'VERIFIED',
+                  hardwareFingerprint: userData.hardwareFingerprint || `hw_${k}`,
+                  ipHash: userData.ipHash || '127.0.0.1',
+                  joined: userData.joined || new Date().toISOString().split('T')[0],
+                  status: userData.status || 'ACTIVE',
+                  volumeTrades: userData.volumeTrades || 0,
+                  stripeCustomerId: userData.stripeCustomerId,
+                  stripeSubscriptionId: userData.stripeSubscriptionId,
+                  discordId: userData.discordId || userData.discordUserId,
+                  discordTag: userData.discordTag,
+                  discordLinked: Boolean(userData.discordLinked || userData.discordId),
+                });
+              } else {
+                if (userData.subscription) existingMemUser.subscription = userData.subscription;
+                if (userData.status) existingMemUser.status = userData.status;
+                if (userData.stripeCustomerId) existingMemUser.stripeCustomerId = userData.stripeCustomerId;
+                if (userData.stripeSubscriptionId) existingMemUser.stripeSubscriptionId = userData.stripeSubscriptionId;
+                if (userData.discordId) existingMemUser.discordId = userData.discordId;
+              }
+
+              // If user doc contains active dayPass object
+              if (userData.dayPass && userData.dayPass.expiresAt) {
+                const dp = userData.dayPass as DayPassRecord;
+                if (new Date(dp.expiresAt).getTime() > Date.now() && dp.status === 'ACTIVE') {
+                  userDayPasses.set(matchedEmail, dp);
+                  if (userData.id) userDayPasses.set(userData.id, dp);
+                  if (userData.uid) userDayPasses.set(userData.uid, dp);
+                }
+              }
+
+              // If user has active subscription in user doc
+              if (userData.subscription && userData.subscription !== 'NONE' && userData.subscription !== 'FREE_TRIAL') {
+                const subRec: UserSubscriptionRecord = {
+                  email: matchedEmail,
+                  role: userData.role === 'ADMIN' || userData.role === 'OWNER' ? userData.role : (userData.subscription.includes('ELITE') ? 'ELITE' : 'PRO'),
+                  plan: userData.subscription,
+                  status: userData.status === 'ACTIVE' || userData.status === 'TRIALING' ? 'ACTIVE' : (userData.status || 'ACTIVE'),
+                  stripeCustomerId: userData.stripeCustomerId,
+                  stripeSubscriptionId: userData.stripeSubscriptionId,
+                  updatedAt: userData.updatedAt || new Date().toISOString(),
+                };
+                userSubscriptions.set(matchedEmail, subRec);
+                if (cleanUid) userSubscriptions.set(cleanUid, subRec);
+              }
+            }
+          }
+        } catch (uErr) {
+          console.warn('[RECONCILE ENTITLEMENT] User doc hydration note:', uErr);
+        }
+      }
+
+      // 2b. Check 'day_passes' collection
+      const dpKeys = [cleanEmail, cleanUid, cleanDiscordId, emailDocId, emailDpId1].filter(Boolean);
       for (const k of dpKeys) {
         if (!userDayPasses.has(k)) {
           const dpSnap = await getDoc(doc(db, 'day_passes', k));
@@ -4285,14 +4360,14 @@ export async function reconcileUserEntitlement(identity: {
         }
       }
 
-      // Check subscriptions collection
-      const subKeys = [cleanEmail, cleanUid, cleanStripeCustId].filter(Boolean);
+      // 2c. Check 'subscriptions' collection
+      const subKeys = [cleanEmail, cleanUid, cleanStripeCustId, emailSubId1, emailSubId2, emailDocId].filter(Boolean);
       for (const k of subKeys) {
         if (!userSubscriptions.has(k)) {
           const subSnap = await getDoc(doc(db, 'subscriptions', k));
           if (subSnap.exists()) {
             const data = subSnap.data() as UserSubscriptionRecord;
-            if (data && data.status === 'ACTIVE') {
+            if (data && (data.status === 'ACTIVE' || data.status === 'TRIALING')) {
               userSubscriptions.set(k, data);
               if (data.email) userSubscriptions.set(data.email.toLowerCase(), data);
             }
@@ -4314,13 +4389,13 @@ export async function reconcileUserEntitlement(identity: {
   const stripe = getStripe();
   if (stripe) {
     try {
-      // 4a. Direct Checkout Session Lookup
+      // 4a. Direct Checkout Session Lookup if Session ID is provided
       if (cleanSessionId) {
         const session = await stripe.checkout.sessions.retrieve(cleanSessionId, {
-          expand: ['line_items', 'payment_intent'],
+          expand: ['line_items', 'payment_intent', 'subscription'],
         });
         if (session && session.payment_status === 'paid') {
-          const targetEmail = (session.customer_details?.email || cleanEmail || '').toLowerCase();
+          const targetEmail = (session.customer_details?.email || session.customer_email || cleanEmail || '').toLowerCase().trim();
           const isDayPass = session.mode === 'payment' || session.amount_total === 999;
           const sessionCreatedMs = session.created ? session.created * 1000 : Date.now();
           const nowMs = Date.now();
@@ -4332,7 +4407,7 @@ export async function reconcileUserEntitlement(identity: {
             const expiresAt =
               elapsedMs < twentyFourHoursMs
                 ? new Date(sessionCreatedMs + twentyFourHoursMs).toISOString()
-                : new Date(nowMs + twentyFourHoursMs).toISOString(); // Goodwill restoration
+                : new Date(nowMs + twentyFourHoursMs).toISOString(); // Goodwill active restoration
 
             const dpRecord: DayPassRecord = {
               entitlementId: `dp_restored_${session.id}`,
@@ -4372,39 +4447,64 @@ export async function reconcileUserEntitlement(identity: {
             }
 
             syncUserEntitlementToDiscord(targetEmail).catch(() => {});
+          } else if ((session.mode === 'subscription' || session.subscription) && targetEmail) {
+            const subId = typeof session.subscription === 'object' && session.subscription ? (session.subscription as any).id : (session.subscription || '');
+            let resolvedPlan = 'PRO';
+            let stripePriceId = '';
+
+            if (subId) {
+              try {
+                const subObj = await stripe.subscriptions.retrieve(subId);
+                stripePriceId = subObj.items?.data?.[0]?.price?.id || '';
+                resolvedPlan = getPlanFromPriceId(stripePriceId);
+              } catch (subErr) {
+                console.warn('[RECONCILE ENTITLEMENT] Subscription fetch note:', subErr);
+              }
+            }
+
+            await updateSubscriptionInFirestore(targetEmail, {
+              stripeCustomerId: typeof session.customer === 'string' ? session.customer : (session.customer as any)?.id,
+              stripeSubscriptionId: subId || `sub_${session.id}`,
+              stripePriceId,
+              plan: resolvedPlan,
+              status: 'ACTIVE',
+              lastStripeEventId: `restore_${session.id}`,
+            });
+
+            syncUserEntitlementToDiscord(targetEmail).catch(() => {});
           }
         }
       }
 
       // 4b. Stripe Customer & Active Subscription / Payment Lookup by Email
       if (cleanEmail) {
-        const customers = await stripe.customers.list({ email: cleanEmail, limit: 3 });
+        const customers = await stripe.customers.list({ email: cleanEmail, limit: 5 });
         for (const cust of customers.data) {
-          // Check active subscriptions
-          const subs = await stripe.subscriptions.list({ customer: cust.id, status: 'active', limit: 1 });
-          if (subs.data.length > 0) {
-            const sub = subs.data[0];
-            const priceId = sub.items?.data?.[0]?.price?.id;
+          // Check active or trialing subscriptions
+          const subs = await stripe.subscriptions.list({ customer: cust.id, limit: 5 });
+          const activeSub = subs.data.find(s => s.status === 'active' || s.status === 'trialing' || s.status === 'past_due');
+          if (activeSub) {
+            const priceId = activeSub.items?.data?.[0]?.price?.id;
             const plan = getPlanFromPriceId(priceId);
 
             await updateSubscriptionInFirestore(cleanEmail, {
               stripeCustomerId: cust.id,
-              stripeSubscriptionId: sub.id,
+              stripeSubscriptionId: activeSub.id,
               stripePriceId: priceId,
               plan,
               status: 'ACTIVE',
-              currentPeriodStart: (sub as any).current_period_start,
-              currentPeriodEnd: (sub as any).current_period_end,
-              cancelAtPeriodEnd: (sub as any).cancel_at_period_end,
-              lastStripeEventId: `reconcile_${sub.id}`,
+              currentPeriodStart: (activeSub as any).current_period_start,
+              currentPeriodEnd: (activeSub as any).current_period_end,
+              cancelAtPeriodEnd: (activeSub as any).cancel_at_period_end,
+              lastStripeEventId: `reconcile_${activeSub.id}`,
             });
 
             syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
             break;
           }
 
-          // Check recent settled payment intents for Day Pass
-          const payments = await stripe.paymentIntents.list({ customer: cust.id, limit: 5 });
+          // Check recent settled payment intents for Day Pass ($9.99)
+          const payments = await stripe.paymentIntents.list({ customer: cust.id, limit: 10 });
           const successfulDayPassPayment = payments.data.find(
             (p) => p.status === 'succeeded' && (p.amount === 999 || p.description?.includes('Day Pass'))
           );
@@ -4456,15 +4556,17 @@ export async function reconcileUserEntitlement(identity: {
           }
         }
 
-        // 4c. Search recent checkout sessions if still not found
+        // 4c. Deep Search recent checkout sessions (reconciling legacy paid customers who paid before ID binding)
         const fastCheck = getUserEntitlement(cleanEmail || cleanUid);
         if (fastCheck.plan === 'NONE' && !fastCheck.dayPass.active) {
-          const recentSessions = await stripe.checkout.sessions.list({ limit: 50 });
+          const recentSessions = await stripe.checkout.sessions.list({ limit: 100 });
           const matchingSession = recentSessions.data.find(
             (s) =>
               s.payment_status === 'paid' &&
-              ((s.customer_details?.email && s.customer_details.email.toLowerCase() === cleanEmail) ||
-                (s.customer_email && s.customer_email.toLowerCase() === cleanEmail) ||
+              ((s.customer_details?.email && s.customer_details.email.toLowerCase().trim() === cleanEmail) ||
+                (s.customer_email && s.customer_email.toLowerCase().trim() === cleanEmail) ||
+                (s.metadata?.userEmail && s.metadata.userEmail.toLowerCase().trim() === cleanEmail) ||
+                (s.metadata?.email && s.metadata.email.toLowerCase().trim() === cleanEmail) ||
                 (s.client_reference_id &&
                   (s.client_reference_id === cleanUid || s.client_reference_id === cleanEmail)))
           );
@@ -4516,6 +4618,34 @@ export async function reconcileUserEntitlement(identity: {
               if (db) {
                 setDoc(doc(db, 'day_passes', cleanEmail), dpRecord, { merge: true }).catch(() => {});
               }
+
+              syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
+            } else if (matchingSession.mode === 'subscription' || matchingSession.subscription) {
+              // Legacy Subscription Checkout Session Reconciled!
+              const subId = typeof matchingSession.subscription === 'string'
+                ? matchingSession.subscription
+                : (matchingSession.subscription as any)?.id;
+              let resolvedPlan = 'PRO';
+              let stripePriceId = '';
+
+              if (subId) {
+                try {
+                  const subObj = await stripe.subscriptions.retrieve(subId);
+                  stripePriceId = subObj.items?.data?.[0]?.price?.id || '';
+                  resolvedPlan = getPlanFromPriceId(stripePriceId);
+                } catch (subErr) {
+                  console.warn('[RECONCILE ENTITLEMENT] Subscription fetch note:', subErr);
+                }
+              }
+
+              await updateSubscriptionInFirestore(cleanEmail, {
+                stripeCustomerId: typeof matchingSession.customer === 'string' ? matchingSession.customer : (matchingSession.customer as any)?.id,
+                stripeSubscriptionId: subId || `sub_${matchingSession.id}`,
+                stripePriceId,
+                plan: resolvedPlan,
+                status: 'ACTIVE',
+                lastStripeEventId: `reconcile_${matchingSession.id}`,
+              });
 
               syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
             }
@@ -9593,7 +9723,7 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false, ws: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
