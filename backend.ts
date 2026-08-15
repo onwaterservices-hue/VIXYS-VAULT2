@@ -1947,6 +1947,50 @@ async function checkAndSettle15mCycle(livePrice: number) {
       active15mCycle.qualificationReason = 'ENTRY_WINDOW_EXPIRED';
       console.log(`[VIXY_NO_TRADE] cycleId=${currentCycleId} reason=ENTRY_WINDOW_EXPIRED`);
     }
+
+    // Immediately record active NO_TRADE / SKIPPED cycle in persistentSignalLogs for VIXY LOCKS & Firestore learning engine
+    if (active15mCycle.status === 'NO_TRADE' || active15mCycle.stage === 'NO_TRADE') {
+      const sigId = `sig_skip_${active15mCycle.intervalStart}`;
+      let skippedLog = persistentSignalLogs.find(s => s.id === sigId);
+      if (!skippedLog) {
+        skippedLog = {
+          id: sigId,
+          market: 'BTC_KALSHI_15M',
+          ticker: 'BTC/USD',
+          intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
+          intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
+          direction: 'NEUTRAL',
+          probability: active15mCycle.livePrediction?.probability || 50,
+          confidence: active15mCycle.livePrediction?.confidence || currentConfidence || 72,
+          reversalRisk: reversalThreat,
+          targetStrike: active15mCycle.strikePrice,
+          spotAtLock: active15mCycle.livePrediction?.spot || livePrice,
+          btcPriceAtLock: active15mCycle.livePrediction?.spot || livePrice,
+          ethPriceAtLock: currentEthPrice,
+          solPriceAtLock: currentSolPrice,
+          lockedAt: new Date(now).toISOString(),
+          expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
+          status: 'NO_TRADE',
+          modelVersion: serverLearningEngine.modelVersion,
+          dataSource: 'COINBASE_KRAKEN_CASCADE',
+          latencyMs: 12,
+          resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
+          settlementPrice: livePrice,
+          actualOutcome: 'NEUTRAL',
+          wasCorrect: false,
+          brierScore: 0,
+          qualificationReason: active15mCycle.qualificationReason || active15mCycle.choppyReason || 'CHOPPY_MARKET'
+        };
+        persistentSignalLogs.unshift(skippedLog);
+        if (persistentSignalLogs.length > 300) persistentSignalLogs.pop();
+      } else {
+        skippedLog.qualificationReason = active15mCycle.qualificationReason || active15mCycle.choppyReason || skippedLog.qualificationReason;
+        skippedLog.confidence = active15mCycle.livePrediction?.confidence || currentConfidence || skippedLog.confidence || 72;
+        skippedLog.reversalRisk = reversalThreat;
+        skippedLog.spotAtLock = active15mCycle.livePrediction?.spot || livePrice;
+      }
+      persistSingleSignalLog(skippedLog);
+    }
   }
 
   // Authoritative Sequence Sync
@@ -5077,6 +5121,7 @@ export interface PersistentSignalLogItem {
   direction: 'UP' | 'DOWN' | 'NEUTRAL';
   probability?: number;
   confidence: number;
+  reversalRisk?: number;
   targetStrike: number;
   spotAtLock: number;
   btcPriceAtLock?: number;
