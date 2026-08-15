@@ -47,7 +47,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   authState,
 }) => {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('annual');
-  const [showCheckoutModal, setShowCheckoutModal] = useState<boolean>(false);
   const [selectedPlanToBuy, setSelectedPlanToBuy] = useState<'STARTER' | 'PRO' | 'ELITE'>('PRO');
   const [cardNumber, setCardNumber] = useState<string>('4242 •••• •••• 4242');
   const [expiry, setExpiry] = useState<string>('12/28');
@@ -217,12 +216,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     }
   }, [authState?.user?.email, authState?.user?.id, setSubscription, setUserRole]);
 
-  const handleOpenCheckout = async (plan: 'STARTER' | 'PRO' | 'ELITE') => {
-    setSelectedPlanToBuy(plan);
-    setShowCheckoutModal(true);
-    setSuccessMessage('');
-    setStripeError('');
-  };
+
 
   const handleDirectStripeCheckout = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
     const directUrl = getDirectStripeUrl(planKey);
@@ -510,12 +504,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <span>{subscription.plan === 'STARTER' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout'}</span>
               <ExternalLink className="w-3.5 h-3.5 text-purple-300" />
             </a>
-            <button
-              onClick={() => handleOpenCheckout('STARTER')}
-              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
-            >
-              Custom Card Checkout
-            </button>
           </div>
         </div>
 
@@ -552,12 +540,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <span>{subscription.plan === 'PRO' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('PRO') + '/mo)'}</span>
               <ExternalLink className="w-3.5 h-3.5 text-purple-200" />
             </a>
-            <button
-              onClick={() => handleOpenCheckout('PRO')}
-              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
-            >
-              Custom Card Checkout
-            </button>
           </div>
         </div>
 
@@ -590,12 +572,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <span>{subscription.plan === 'ELITE' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('ELITE') + '/mo)'}</span>
               <ExternalLink className="w-3.5 h-3.5 text-violet-200" />
             </a>
-            <button
-              onClick={() => handleOpenCheckout('ELITE')}
-              className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-medium text-xs transition-all border border-purple-900/40"
-            >
-              Custom Card Checkout
-            </button>
           </div>
         </div>
       </div>
@@ -667,161 +643,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </p>
       </div>
 
-      {/* Simulated Stripe Modal */}
-      {showCheckoutModal && (
-        <div className="fixed inset-0 z-50 bg-[#0A0518]/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#120B28] border border-purple-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-5 font-mono text-xs text-purple-100">
-            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
-              <div className="flex items-center gap-2 text-white">
-                <Lock className="w-4 h-4 text-purple-400" />
-                <span className="font-bold">Stripe Subscription Checkout</span>
-              </div>
-              <button onClick={() => setShowCheckoutModal(false)} className="text-purple-300/60 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
 
-            {successMessage ? (
-              <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl text-center space-y-2">
-                <CheckCircle2 className="w-8 h-8 text-purple-400 mx-auto" />
-                <p className="text-purple-300 font-bold text-xs">{successMessage}</p>
-              </div>
-            ) : (
-              <form onSubmit={handleSimulateStripePayment} className="space-y-4">
-                <div className="bg-[#0B061A] p-3 rounded-xl border border-purple-900/40 flex justify-between items-center text-xs">
-                  <span className="text-purple-300/60">Selected Tier:</span>
-                  <div className="text-right font-bold">
-                    <span className="text-purple-300 block">VIXY {selectedPlanToBuy}</span>
-                    {appliedPromo ? (
-                      <div className="flex items-center gap-1.5 justify-end">
-                        <span className="text-purple-400/50 line-through text-[11px]">${priceFor(selectedPlanToBuy)}</span>
-                        <span className="text-emerald-400 font-mono font-black text-xs">${finalPriceFor(selectedPlanToBuy)}/mo</span>
-                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1 rounded border border-emerald-500/30">
-                          -{appliedPromo.discountPct}% OFF
-                        </span>
-                      </div>
-                    ) : (
-                      <span className="text-purple-200 text-xs">${priceFor(selectedPlanToBuy)}/mo</span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Promo Code / Referral Code Input Field */}
-                <div className="space-y-1.5 bg-[#0B061A] p-3 rounded-xl border border-purple-900/50">
-                  <div className="flex justify-between items-center">
-                    <label className="text-purple-300/80 text-[11px] font-bold uppercase tracking-wider flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Discount or Referral Code</span>
-                    </label>
-                    <span className="text-[10px] text-purple-300/60 font-sans">Promoter Commission Tagged</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="e.g. PROMOTER20, REF-ALEX, VIXY50"
-                      value={promoCodeInput}
-                      onChange={(e) => setPromoCodeInput(e.target.value.toUpperCase())}
-                      className="flex-1 bg-[#120B28] border border-purple-900/60 rounded-xl px-3 py-1.5 text-xs text-white font-mono uppercase focus:outline-none focus:border-purple-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleValidatePromo}
-                      disabled={isValidatingPromo}
-                      className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all disabled:opacity-50"
-                    >
-                      {isValidatingPromo ? 'Checking...' : 'Apply Code'}
-                    </button>
-                  </div>
-                  {promoStatusMsg && (
-                    <p className={`text-[10.5px] font-sans font-medium mt-1 ${appliedPromo ? 'text-emerald-300' : 'text-amber-300'}`}>
-                      {promoStatusMsg}
-                    </p>
-                  )}
-                </div>
-
-                {stripeError && (
-                  <div className="p-3 bg-rose-500/15 border border-rose-500/30 rounded-xl text-rose-300 text-[11px]">
-                    {stripeError}
-                  </div>
-                )}
-
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/60 text-[11px] block font-semibold">Cardholder Name</label>
-                  <input
-                    type="text"
-                    required
-                    defaultValue="Alex Mercer"
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/60 text-[11px] block font-semibold">Card Number</label>
-                  <input
-                    type="text"
-                    required
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-purple-300/60 text-[11px] block font-semibold">Expires (MM/YY)</label>
-                    <input
-                      type="text"
-                      required
-                      value={expiry}
-                      onChange={(e) => setExpiry(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-purple-300/60 text-[11px] block font-semibold">CVC</label>
-                    <input
-                      type="text"
-                      required
-                      value={cvc}
-                      onChange={(e) => setCvc(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-3 bg-[#080413] rounded-xl border border-purple-900/40 text-[11px] text-purple-300/80 space-y-1 font-mono">
-                  <div className="font-bold text-emerald-400 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                    Live Stripe API Key Active
-                  </div>
-                  <p className="text-[10px] text-purple-300/70 font-sans">
-                    Publishable Key: <code className="text-amber-300 font-mono text-[9.5px]">pk_live_51Tyidv...YFLSBF</code>
-                  </p>
-                </div>
-
-                <div className="pt-1 space-y-2">
-                  <a
-                    href={getDirectStripeUrl(selectedPlanToBuy)}
-                    className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2"
-                  >
-                    <Lock className="w-3.5 h-3.5" />
-                    <span>Proceed to Official Stripe Checkout ({finalPriceFor(selectedPlanToBuy)}/mo)</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-
-                  <button
-                    type="submit"
-                    disabled={isProcessingStripe}
-                    className="w-full py-2.5 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300 hover:text-white font-bold text-xs transition-all border border-purple-900/50 flex items-center justify-center gap-2 disabled:opacity-50"
-                  >
-                    {isProcessingStripe ? 'Processing Checkout...' : 'Pay with Embedded Form'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 };

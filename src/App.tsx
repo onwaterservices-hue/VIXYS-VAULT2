@@ -413,7 +413,7 @@ export default function App() {
   });
 
   // Spot prices map across assets
-  const [spotPrices, setSpotPrices] = useState<Record<string, number>>({});
+  const [spotPrices, setSpotPrices] = useState<Record<string, { price: number; change24h: number }>>({});
 
   useEffect(() => {
     let isMounted = true;
@@ -421,10 +421,10 @@ export default function App() {
       try {
         const tickers = await fetchAllCryptoTickers();
         if (isMounted && Array.isArray(tickers) && tickers.length > 0) {
-          const map: Record<string, number> = {};
+          const map: Record<string, { price: number; change24h: number }> = {};
           tickers.forEach((t) => {
             if (t.symbol && t.price) {
-              map[t.symbol] = t.price;
+              map[t.symbol] = { price: t.price, change24h: t.change24h || 0 };
             }
           });
           setSpotPrices((prev) => ({ ...prev, ...map }));
