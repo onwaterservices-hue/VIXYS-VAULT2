@@ -2858,20 +2858,22 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
       expiresAt,
       startedAt,
       stripePaymentStatus: 'PAID',
-      stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?utm_source=chatgpt.com',
+      stripePaymentLink: 'https://buy.stripe.com/5kQ5kC6mngQiete7Nn1oI0b',
       stripePaymentId: `manual_grant_${nowMs}`,
       stripeCheckoutSessionId: `sess_manual_${nowMs}`,
       stripeEventId: `evt_manual_${nowMs}`,
-      stripePriceId: 'price_vixy_day_pass_999',
-      discordRoleId: process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
+      stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+      discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
       discordRoleAssigned: false,
       createdAt: startedAt,
       updatedAt: startedAt,
     };
     userDayPasses.set(user.email.toLowerCase(), dpRecord);
     if (user.id) userDayPasses.set(user.id, dpRecord);
+    if (dpRecord.discordUserId) userDayPasses.set(dpRecord.discordUserId, dpRecord);
     if (db) {
       setDoc(doc(db, 'day_passes', user.email.toLowerCase()), dpRecord, { merge: true }).catch(() => {});
+      if (user.id) setDoc(doc(db, 'day_passes', user.id), dpRecord, { merge: true }).catch(() => {});
     }
     syncUserEntitlementToDiscord(user.email.toLowerCase()).catch(() => {});
     addServerAuditLog('ADMIN', 'GRANT_DAY_PASS', `Granted 24H Day Pass to ${user.email}`);
@@ -3528,7 +3530,7 @@ const createDayPassCheckoutHandler = async (req: express.Request, res: express.R
     }
   }
 
-  const dayPassPriceId = process.env.STRIPE_DAY_PASS_PRICE_ID;
+  const dayPassPriceId = process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG';
   const lineItem = dayPassPriceId
     ? { price: dayPassPriceId, quantity: 1 }
     : {
@@ -3545,17 +3547,22 @@ const createDayPassCheckoutHandler = async (req: express.Request, res: express.R
 
   try {
     const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+    const discordProfile = userDiscordProfiles.get(cleanUserEmail);
+    const discordUserId = discordProfile?.discordUserId || user.discordId || '';
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
       allow_promotion_codes: true,
       customer: stripeCustomerId || undefined,
       customer_email: stripeCustomerId ? undefined : (cleanUserEmail || undefined),
+      client_reference_id: user.id || cleanUid || cleanUserEmail,
       line_items: [lineItem as any],
       metadata: {
         vixyUserId: user.id,
         userId: user.id,
         uid: user.uid || cleanUid || '',
         userEmail: cleanUserEmail,
+        discordUserId,
         plan: 'DAY_PASS',
         entitlementType: 'VIXY_DAY_PASS',
         productType: 'DAY_PASS',
@@ -4034,8 +4041,15 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
   // Priority 1: Active Monthly / Annual Paid Subscription
   const resolvedSub = getEntitlementsFromSubscription(rawPlan, status, isOwnerOrAdmin);
 
-  // Day Pass Record Evaluation
-  const dayPassRecord = userDayPasses.get(clean) || (user?.id ? userDayPasses.get(user.id) : undefined) || (user as any)?.dayPass;
+  // Day Pass Record Evaluation (Lookup by email, UID, or Discord ID)
+  const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
+  const discordId = discordProfile?.discordUserId || user?.discordId;
+
+  const dayPassRecord = userDayPasses.get(clean) ||
+                        (user?.id ? userDayPasses.get(user.id) : undefined) ||
+                        (discordId ? userDayPasses.get(discordId) : undefined) ||
+                        (user as any)?.dayPass;
+
   const nowMs = Date.now();
   let dayPassActive = false;
   let dayPassSecondsRemaining = 0;
@@ -4043,10 +4057,32 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
   if (dayPassRecord && dayPassRecord.expiresAt) {
     const expMs = new Date(dayPassRecord.expiresAt).getTime();
     if (expMs > nowMs) {
-      dayPassActive = true;
-      dayPassSecondsRemaining = Math.floor((expMs - nowMs) / 1000);
+      if (dayPassRecord.status === 'ACTIVE') {
+        dayPassActive = true;
+        dayPassSecondsRemaining = Math.floor((expMs - nowMs) / 1000);
+      }
     } else {
-      dayPassRecord.status = 'EXPIRED';
+      // Serverless-Safe Active Expiration Enforcement
+      if (dayPassRecord.status === 'ACTIVE') {
+        dayPassRecord.status = 'EXPIRED';
+        dayPassRecord.updatedAt = new Date().toISOString();
+        console.log(`[DAY PASS ON-DEMAND EXPIRED] Expired 24H Day Pass for email=${dayPassRecord.email}, userId=${dayPassRecord.userId}`);
+
+        // Immediate On-Demand Discord Role Revocation
+        const targetDiscordUser = dayPassRecord.discordUserId || discordId;
+        if (targetDiscordUser) {
+          assignDiscordRoleToUser(targetDiscordUser, 'NONE').catch((err) => {
+            console.warn(`[DAY PASS ON-DEMAND DISCORD DEMOTION WARN] User ${targetDiscordUser}:`, err);
+          });
+          dayPassRecord.discordRoleAssigned = false;
+        }
+
+        // Save expired status to Firestore
+        if (db) {
+          if (dayPassRecord.email) setDoc(doc(db, 'day_passes', dayPassRecord.email.toLowerCase()), dayPassRecord, { merge: true }).catch(() => {});
+          if (dayPassRecord.userId) setDoc(doc(db, 'day_passes', dayPassRecord.userId), dayPassRecord, { merge: true }).catch(() => {});
+        }
+      }
     }
   }
 
@@ -4138,8 +4174,6 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
   }
 
   // Priority 3 Resolution: No Active Access
-  const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
-
   return {
     authenticated: Boolean(user || sub || clean),
     userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
@@ -4541,8 +4575,16 @@ timestamp: ${new Date().toISOString()}`);
       const isDayPass = session.mode === 'payment' || entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS';
 
       if (isDayPass) {
-        const vixyUserId = session.metadata?.vixyUserId || session.metadata?.userId || `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-        const discordUserId = session.metadata?.discordUserId || session.metadata?.discord_user_id;
+        const vixyUserId = session.client_reference_id || session.metadata?.vixyUserId || session.metadata?.userId || `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const discordUserId = session.metadata?.discordUserId || session.metadata?.discord_user_id || userDiscordProfiles.get(customerEmail.toLowerCase())?.discordUserId;
+
+        // Duplicate Webhook Session Check
+        const existingPass = userDayPasses.get(customerEmail.toLowerCase()) || (vixyUserId ? userDayPasses.get(vixyUserId) : undefined);
+        if (existingPass && (existingPass.stripeCheckoutSessionId === session.id || (existingPass.stripePaymentIntentId && existingPass.stripePaymentIntentId === session.payment_intent))) {
+          console.log(`[DAY PASS WEBHOOK IDEMPOTENCY] Session ${session.id} / Event ${event.id} already processed for ${customerEmail}. Deduplicating webhook event.`);
+          break;
+        }
+
         const amountTotal = (session.amount_total || 999) / 100;
         const nowMs = Date.now();
         const startedAt = new Date(nowMs).toISOString();
@@ -4563,12 +4605,12 @@ timestamp: ${new Date().toISOString()}`);
           expiresAt,
           startedAt,
           stripePaymentStatus: 'PAID',
-          stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?utm_source=chatgpt.com',
+          stripePaymentLink: 'https://buy.stripe.com/5kQ5kC6mngQiete7Nn1oI0b',
           stripePaymentId: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
           stripeCheckoutSessionId: session.id,
           stripeEventId: event.id || session.id,
-          stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_vixy_day_pass_999',
-          discordRoleId: process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
+          stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+          discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
           discordRoleAssigned: false,
           createdAt: startedAt,
           updatedAt: startedAt,
@@ -4576,6 +4618,8 @@ timestamp: ${new Date().toISOString()}`);
 
         userDayPasses.set(customerEmail.toLowerCase(), dayPassRecord);
         if (vixyUserId) userDayPasses.set(vixyUserId, dayPassRecord);
+        if (session.client_reference_id) userDayPasses.set(session.client_reference_id, dayPassRecord);
+        if (discordUserId) userDayPasses.set(discordUserId, dayPassRecord);
 
         // Instant Discord Role Assignment if Discord is connected
         syncUserEntitlementToDiscord(customerEmail.toLowerCase()).then((syncRes) => {

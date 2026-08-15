@@ -3,6 +3,8 @@ export interface StripePlanLinks {
   annual: string;
 }
 
+export const STRIPE_DAY_PASS_LINK = 'https://buy.stripe.com/5kQ5kC6mngQiete7Nn1oI0b';
+
 export const STRIPE_PAYMENT_LINKS: Record<'STARTER' | 'PRO' | 'ELITE', StripePlanLinks> = {
   STARTER: {
     monthly: 'https://buy.stripe.com/bJeeVc4ef9nQ3OA2t31oI05',
@@ -17,6 +19,24 @@ export const STRIPE_PAYMENT_LINKS: Record<'STARTER' | 'PRO' | 'ELITE', StripePla
     annual: 'https://buy.stripe.com/eVqdR8bGH9nQ70M3x71oI01',
   },
 };
+
+/**
+ * Gets the official 24-Hour Day Pass checkout URL prefilled with client parameters
+ */
+export function getStripeDayPassUrl(params?: { email?: string; uid?: string }): string {
+  try {
+    const url = new URL(STRIPE_DAY_PASS_LINK);
+    if (params?.email) {
+      url.searchParams.set('prefilled_email', params.email);
+    }
+    if (params?.uid || params?.email) {
+      url.searchParams.set('client_reference_id', params.uid || params.email || '');
+    }
+    return url.toString();
+  } catch {
+    return STRIPE_DAY_PASS_LINK;
+  }
+}
 
 /**
  * Builds an official Stripe Checkout Payment Link with optional prefilled parameters
