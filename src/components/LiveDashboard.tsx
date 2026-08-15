@@ -51,7 +51,7 @@ interface LiveDashboardProps {
   onOpenPricing: () => void;
   onOpenJournal: () => void;
   onOpenCompare?: () => void;
-  userRole: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
   selectedTimeframe?: string;
@@ -370,7 +370,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   return (
     <div className="space-y-6 font-mono text-purple-100">
       {/* Top Banner Alert / 24-Hour Day Pass & Access Notice */}
-      {userRole === 'DEMO' && (
+      {userRole === 'UNPAID' && (
         <div className="bg-gradient-to-r from-amber-900/60 via-[#130B2A] to-purple-900/60 border border-amber-500/40 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs shadow-xl">
           <div className="flex items-center gap-3">
             <Flame className="w-5 h-5 text-amber-300 animate-pulse shrink-0" />
@@ -488,6 +488,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               latencyMs={latencyMs}
               rawApiData={liveApiData}
               venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
+              isUserAuthorized={isIntelligenceUnlocked}
             />
           </div>
 

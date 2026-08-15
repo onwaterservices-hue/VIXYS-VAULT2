@@ -49,8 +49,7 @@ interface OneHourDeskViewProps {
   ticker: BTCTicker;
   spotPrices?: Record<string, { price: number; change24h: number }>;
   selectedAsset?: string;
-  userRole: 'DEMO' | 'PRO' | 'ADMIN';
-  onUpgradeToPro: () => void;
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
 }
@@ -60,7 +59,6 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   spotPrices = {},
   selectedAsset = 'BTC',
   userRole,
-  onUpgradeToPro,
   alertSettings,
   onOpenDiscordModal,
 }) => {

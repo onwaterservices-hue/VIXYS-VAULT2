@@ -24,6 +24,7 @@ interface SignalBrainProps {
   lockEvaluation: any;
   rawApiData?: any;
   venue?: string;
+  isUserAuthorized?: boolean;
 }
 
 export const SignalBrain: React.FC<SignalBrainProps> = ({
@@ -36,6 +37,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   latencyMs = 33,
   rawApiData,
   venue = 'Kalshi',
+  isUserAuthorized = true,
 }) => {
   const isStaleOrInvalid = feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
   const displayVenue = venue || 'Kalshi';
@@ -199,6 +201,19 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   const rawCalibStatus = rawApiData?.calibrationStatus || rawApiData?.calibration?.calibrationStatus;
   const calibrationStatus = isActuallyLocked ? 'CALIBRATED' : (rawCalibStatus === 'COMPLETE' ? 'CALIBRATED' : 'CALIBRATING');
+
+  let directionVisualState: 'UP' | 'DOWN' | 'NEUTRAL' | 'DELAYED' | 'ERROR' = 'NEUTRAL';
+  if (isOfflineStatus) {
+    directionVisualState = 'ERROR';
+  } else if (isDegradedStatus) {
+    directionVisualState = 'DELAYED';
+  } else if (isConfirmedUp || rawApiData?.direction === 'UP' || rawApiData?.direction === 'BUY UP' || execution.direction === 'UP') {
+    directionVisualState = 'UP';
+  } else if (isConfirmedDown || rawApiData?.direction === 'DOWN' || rawApiData?.direction === 'BUY DOWN' || execution.direction === 'DOWN') {
+    directionVisualState = 'DOWN';
+  } else {
+    directionVisualState = 'NEUTRAL';
+  }
 
   // Authoritative calibrated metric states with unified math, thresholds, and semantic classes
   const orderFlowState = formatOrderFlow(
@@ -556,6 +571,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         isProtectState={isProtectState}
         reversalRisk={reversalRisk}
         isOfflineOrStale={isOfflineOrStale}
+        directionVisualState={directionVisualState}
+        isUserAuthorized={isUserAuthorized}
         onExecute={triggerHapticPulse}
       />
 
@@ -580,7 +597,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         {/* 5 EVIDENCE METRICS */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 relative z-10">
            {/* Order Flow */}
-           <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${orderFlowState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : orderFlowState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">ORDER FLOW</span>
                <span className="text-[8px] font-mono text-purple-500/60">{orderFlowState.unitText}</span>
@@ -604,7 +621,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
            
            {/* Momentum */}
-           <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${momentumState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : momentumState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">MOMENTUM</span>
                <span className="text-[8px] font-mono text-purple-500/60">{momentumState.unitText}</span>
@@ -625,7 +642,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Volatility */}
-           <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${volatilityState.isWarning ? 'border-amber-400/30 bg-amber-400/[0.03] hover:border-amber-400/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">VOLATILITY</span>
                <span className="text-[8px] font-mono text-purple-500/60">{volatilityState.unitText}</span>
@@ -646,7 +663,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Distance */}
-           <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${distanceState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : distanceState.isBearish ? 'border-amber-400/30 bg-amber-400/[0.03] hover:border-amber-400/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
                <span className="text-[8px] font-mono text-purple-500/60">{distanceState.unitText}</span>
@@ -667,7 +684,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Regime */}
-           <div className="bg-[#06020c] rounded-xl border border-purple-900/30 p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group hover:border-purple-700/50 transition-colors">
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${regimeState.isBull ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : regimeState.isBear ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">REGIME</span>
                <span className="text-[8px] font-mono text-purple-500/60">MODEL</span>

@@ -20,7 +20,7 @@ import { syncAuthUserApi } from '../services/api';
 interface AuthViewProps {
   authState: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
-  setUserRole: (role: 'DEMO' | 'PRO' | 'ADMIN') => void;
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
   onSuccessNavigate?: () => void;
 }
 
@@ -60,7 +60,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
     }
 
-    const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
+    const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
     // Live sync user to server backend persistent database

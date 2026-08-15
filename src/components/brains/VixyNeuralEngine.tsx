@@ -20,6 +20,7 @@ import {
   ShieldAlert,
 } from 'lucide-react';
 import { formatConfidenceLabel, MetricFormattedState } from '../../utils/metrics';
+import { DirectionVisualState, getVisualStateConfig } from '../../utils/visualState';
 
 interface VixyNeuralEngineProps {
   rawApiData: any;
@@ -47,6 +48,8 @@ interface VixyNeuralEngineProps {
   isProtectState: boolean;
   reversalRisk: number;
   isOfflineOrStale: boolean;
+  directionVisualState: DirectionVisualState;
+  isUserAuthorized?: boolean;
   onExecute?: (action: string) => void;
 }
 
@@ -64,6 +67,8 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   isProtectState,
   reversalRisk,
   isOfflineOrStale,
+  directionVisualState,
+  isUserAuthorized = true,
   onExecute,
 }) => {
   // ─── 1. AUTHORITATIVE SERVER-SIDE CYCLE & LOCK STATE ───
@@ -121,26 +126,10 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const formattedSeconds = timeRemainingSec % 60;
   const timeRemainingFormatted = `${formattedMinutes}:${formattedSeconds < 10 ? '0' : ''}${formattedSeconds}`;
 
-  // Visual Theme Colors
-  const themeNeon = isOfflineOrStale
-    ? '#F43F5E'
-    : isUp
-    ? '#00FF9D'
-    : isDown
-    ? '#FF3366'
-    : isNoTrade
-    ? '#C084FC'
-    : '#A855F7';
-
-  const themeGlow = isOfflineOrStale
-    ? 'rgba(244,63,94,0.4)'
-    : isUp
-    ? 'rgba(0,255,157,0.4)'
-    : isDown
-    ? 'rgba(255,51,102,0.4)'
-    : isNoTrade
-    ? 'rgba(192,132,252,0.5)'
-    : 'rgba(168,85,247,0.3)';
+  // Direction-Aware Visual State
+  const visualConfig = getVisualStateConfig(directionVisualState);
+  const themeNeon = visualConfig.primaryColor;
+  const themeGlow = visualConfig.glowColor;
 
   // ─── 2. DIAGNOSTIC REAL INPUT VECTORS (Direct telemetry) ───
   const diagnosticNodes = useMemo(() => {
@@ -196,37 +185,18 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   return (
     <div
       id="vixy-neural-hero-terminal"
-      className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-500 p-4 sm:p-5 font-mono shadow-[0_0_40px_rgba(0,0,0,0.95)] ${
-        isOfflineOrStale
-          ? 'border-rose-900/60 bg-[#0c0205]'
-          : isProtectState
-          ? 'border-rose-500/80 bg-[#0f0206] shadow-[0_0_50px_rgba(244,63,94,0.35)]'
-          : isServerLocked
-          ? isUp
-            ? 'border-emerald-500/80 bg-[#01110a] shadow-[0_0_60px_rgba(0,255,157,0.3)]'
-            : 'border-rose-500/80 bg-[#140207] shadow-[0_0_60px_rgba(255,51,102,0.3)]'
-          : isUp
-          ? 'border-emerald-500/40 bg-[#020b07] shadow-[0_0_40px_rgba(0,255,157,0.15)]'
-          : 'border-rose-500/40 bg-[#0e0206] shadow-[0_0_40px_rgba(255,51,102,0.15)]'
-      }`}
+      className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-500 p-4 sm:p-5 font-mono shadow-[0_0_40px_rgba(0,0,0,0.95)] ${visualConfig.borderClass} ${visualConfig.bgClass.replace('/10', '/20')}`}
+      style={{ boxShadow: `0 0 50px ${themeGlow}` }}
     >
       {/* ─── HUD BACKGROUND GRID & CYBERNETIC PERIMETER LIGHT ─── */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.03)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none opacity-90" />
-      
+
       {/* Top Animated Energy Perimeter Beam */}
       <div
         className="absolute top-0 left-0 right-0 h-[2.5px] transition-all duration-700"
         style={{
-          background: isOfflineOrStale
-            ? '#F43F5E'
-            : isUp
-            ? 'linear-gradient(90deg, transparent, #00FF9D, #00FF9D, transparent)'
-            : 'linear-gradient(90deg, transparent, #FF3366, #FF3366, transparent)',
-          boxShadow: isOfflineOrStale
-            ? '0 0 15px rgba(244,63,94,0.9)'
-            : isUp
-            ? '0 0 20px rgba(0,255,157,0.9)'
-            : '0 0 20px rgba(255,51,102,0.9)',
+          background: `linear-gradient(90deg, transparent, ${themeNeon}, ${themeNeon}, transparent)`,
+          boxShadow: `0 0 20px ${themeNeon}`,
         }}
       />
 
@@ -239,17 +209,11 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       {/* ─── TOP HEADER: TITLE & IMMUTABLE CYCLE LOCK STATUS ─── */}
       <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-purple-900/40 pb-3 relative z-10">
         <div className="flex items-center gap-2.5">
-          <div className={`w-7 h-7 rounded-md flex items-center justify-center border shadow-inner ${
-            isServerLocked
-              ? isUp
-                ? 'bg-emerald-950/90 border-emerald-500/80 text-[#00FF9D]'
-                : 'bg-rose-950/90 border-rose-500/80 text-[#FF3366]'
-              : 'bg-purple-950/90 border-purple-600/60 text-purple-300'
-          }`}>
+          <div className={`w-7 h-7 rounded-md flex items-center justify-center border shadow-inner ${visualConfig.bgClass.replace('/10', '/80')} ${visualConfig.borderClass} ${visualConfig.textClass}`}>
             {isServerLocked ? (
               <Lock className="w-3.5 h-3.5 animate-pulse" />
             ) : (
-              <Zap className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+              <Zap className="w-3.5 h-3.5 animate-pulse" />
             )}
           </div>
           <div>
@@ -260,8 +224,8 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               </span>
             </h2>
             <div className="flex items-center gap-2 text-[8.5px] font-bold tracking-[0.15em] uppercase">
-              <span className={`flex items-center gap-1 ${isServerLocked ? (isUp ? 'text-[#00FF9D]' : 'text-[#FF3366]') : isNoTrade ? 'text-purple-300 font-bold' : 'text-purple-300'}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${isServerLocked ? (isUp ? 'bg-[#00FF9D]' : 'bg-[#FF3366]') : isNoTrade ? 'bg-purple-400 animate-pulse' : 'bg-purple-400 animate-ping'}`} />
+              <span className={`flex items-center gap-1 ${visualConfig.textClass}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${visualConfig.bgClass.replace('/10', '')} ${isServerLocked ? '' : 'animate-pulse'}`} style={{ backgroundColor: themeNeon }} />
                 {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isNoTrade ? '● VIXY SKIP // CHOP GATE' : isObserving ? '● OBSERVING 15M CYCLE' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isQualifying ? '● QUALIFYING CONFLUENCE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
               </span>
               <span className="text-purple-700">|</span>
@@ -273,19 +237,8 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
         {/* Cycle Stage Badge */}
         <div className="flex items-center gap-2">
           <span
-            className={`flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${
-              isOfflineOrStale
-                ? 'text-rose-400 border-rose-800/60 bg-rose-950/70'
-                : isCriticallyInvalidated
-                ? 'text-rose-400 border-rose-500/80 bg-rose-950/80 shadow-[0_0_20px_rgba(244,63,94,0.4)]'
-                : isNoTrade
-                ? 'text-purple-200 border-purple-400/90 bg-purple-950/90 shadow-[0_0_20px_rgba(168,85,247,0.45)]'
-                : isServerLocked
-                ? isUp
-                  ? 'text-[#00FF9D] border-emerald-500/80 bg-[#041d13] shadow-[0_0_20px_rgba(0,255,157,0.4)]'
-                  : 'text-[#FF3366] border-rose-500/80 bg-[#1d040a] shadow-[0_0_20px_rgba(255,51,102,0.4)]'
-                : 'text-cyan-300 border-cyan-500/50 bg-cyan-950/80 shadow-[0_0_15px_rgba(6,182,212,0.25)]'
-            }`}
+            className={`flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${visualConfig.textClass} ${visualConfig.borderClass} ${visualConfig.bgClass}`}
+            style={{ boxShadow: `0 0 15px ${themeGlow}` }}
           >
             {isCriticallyInvalidated ? (
               <>
@@ -550,7 +503,28 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 textShadow: `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
               }}
             >
-              <span>{isCriticallyInvalidated ? 'INVALIDATED' : isNoTrade ? 'VIXY SKIP' : isServerLocked ? `LOCKED — ${lockedDecision}` : isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
+              <span>
+                {!isUserAuthorized && isServerLocked 
+                  ? `LOCKED — ${lockedDecision}` 
+                  : isCriticallyInvalidated 
+                  ? 'INVALIDATED' 
+                  : isNoTrade 
+                  ? 'VIXY SKIP' 
+                  : isServerLocked 
+                  ? lockedDecision 
+                  : isObserving 
+                  ? 'OBSERVING' 
+                  : isCalibrating 
+                  ? 'CALIBRATING' 
+                  : isQualifying 
+                  ? 'QUALIFYING' 
+                  : isValidating 
+                  ? 'VALIDATING' 
+                  : isReadyToLock 
+                  ? 'READY' 
+                  : 'ANALYZING'
+                }
+              </span>
               {!isOfflineOrStale && isServerLocked && (
                 <span className="text-3xl sm:text-5xl md:text-6xl animate-pulse" style={{ color: themeNeon }}>
                   {isUp ? '▲' : '▼'}
@@ -817,12 +791,12 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
           <span
             className={`flex items-center gap-1 font-bold transition-colors ${
-              isMarketLinked ? 'text-[#00FF9D]' : 'text-purple-600'
+              isOfflineOrStale ? 'text-rose-400' : isMarketLinked ? 'text-emerald-400' : 'text-amber-400'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isMarketLinked ? 'bg-[#00FF9D] shadow-[0_0_6px_#00FF9D]' : 'bg-purple-800'
+                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isMarketLinked ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-amber-400 shadow-[0_0_6px_#fbbf24]'
               }`}
             />
             MARKET LINKED
@@ -830,12 +804,12 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
           <span
             className={`flex items-center gap-1 font-bold transition-colors ${
-              isModelValidated ? 'text-[#00FF9D]' : 'text-purple-600'
+              isOfflineOrStale ? 'text-rose-400' : isModelValidated ? 'text-emerald-400' : 'text-purple-400'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isModelValidated ? 'bg-[#00FF9D] shadow-[0_0_6px_#00FF9D]' : 'bg-purple-800'
+                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isModelValidated ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-purple-400 animate-pulse'
               }`}
             />
             MODEL VALIDATED
@@ -843,12 +817,12 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
           <span
             className={`flex items-center gap-1 font-bold transition-colors ${
-              isSignalActive ? 'text-[#00FF9D]' : 'text-purple-600'
+              isOfflineOrStale ? 'text-rose-400' : isSignalActive ? 'text-emerald-400' : 'text-cyan-400'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isSignalActive ? 'bg-[#00FF9D] shadow-[0_0_6px_#00FF9D]' : 'bg-purple-800'
+                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isSignalActive ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-cyan-400 animate-pulse'
               }`}
             />
             SIGNAL ACTIVE
@@ -856,13 +830,14 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
           <span
             className={`flex items-center gap-1 font-bold transition-colors ${
-              isServerLocked ? 'text-[#00FF9D]' : 'text-purple-600'
+              isOfflineOrStale ? 'text-rose-400' : isServerLocked ? visualConfig.textClass : 'text-purple-400'
             }`}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
-                isServerLocked ? 'bg-[#00FF9D] shadow-[0_0_6px_#00FF9D]' : 'bg-purple-800'
+                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isServerLocked ? visualConfig.bgClass.replace('/10', '') : 'bg-purple-400 animate-pulse'
               }`}
+              style={{ backgroundColor: isServerLocked ? themeNeon : undefined, boxShadow: isServerLocked ? `0 0 6px ${themeNeon}` : undefined }}
             />
             CYCLE LOCKED
           </span>

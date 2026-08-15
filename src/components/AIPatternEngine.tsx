@@ -23,7 +23,7 @@ interface AIPatternEngineProps {
   ticker?: BTCTicker;
   timeframe?: '15M' | '1H';
   appMode?: 'SIMPLE' | 'PRO';
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
 }
@@ -50,7 +50,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   ticker = { price: 64108, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5 },
   timeframe = '15M',
   appMode = 'SIMPLE',
-  userRole = 'DEMO',
+  userRole = 'UNPAID',
   alertSettings,
   onOpenDiscordModal,
 }) => {

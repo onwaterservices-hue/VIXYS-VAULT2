@@ -28,9 +28,8 @@ const stripePromise = loadStripe(stripePublishableKey);
 interface SubscriptionViewProps {
   subscription: UserSubscription;
   setSubscription: React.Dispatch<React.SetStateAction<UserSubscription>>;
-  userRole: 'DEMO' | 'PRO' | 'ADMIN';
-  setUserRole: (role: 'DEMO' | 'PRO' | 'ADMIN') => void;
-  trialSeconds?: number;
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
   onResetTrial?: () => void;
   onExpireTrial?: () => void;
   authState?: AuthState;
@@ -41,7 +40,6 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   setSubscription,
   userRole,
   setUserRole,
-  trialSeconds = 10800,
   onResetTrial,
   onExpireTrial,
   authState,

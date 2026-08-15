@@ -2283,7 +2283,7 @@ export function getUserAccessState(email?: string, uid?: string) {
   const entitlement = getUserEntitlement(cleanEmail);
 
   return {
-    role: entitlement.entitlements.canAccessAdminPanel ? 'ADMIN' : (entitlement.entitlements.proQuant || entitlement.entitlements.eliteQuant ? 'PRO' : (entitlement.entitlements.starter ? 'STARTER' : 'DEMO')),
+    role: entitlement.entitlements.canAccessAdminPanel ? 'ADMIN' : (entitlement.entitlements.proQuant || entitlement.entitlements.eliteQuant ? 'PRO' : (entitlement.entitlements.starter ? 'STARTER' : 'UNPAID')),
     isAdmin: entitlement.entitlements.canAccessAdminPanel,
     accessState: entitlement.status === 'active' ? 'SUBSCRIBED' : (entitlement.status === 'trialing' ? 'AUTHORIZED' : 'LOCKED'),
     discordVerified: entitlement.discordVerified,
@@ -3583,7 +3583,7 @@ const createDayPassCheckoutHandler = async (req: express.Request, res: express.R
   try {
     const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
     const discordProfile = userDiscordProfiles.get(cleanUserEmail);
-    const discordUserId = discordProfile?.discordUserId || user.discordId || '';
+    const discordUserId = req.body.discordUserId || discordProfile?.discordUserId || user.discordId || '';
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       payment_method_types: ['card'],
@@ -7241,7 +7241,7 @@ interface DiscordSyncQueueItem {
   id: string;
   email: string;
   discordUserId: string;
-  tier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE';
+  tier: 'ELITE' | 'PRO' | 'DAY_PASS' | 'VERIFIED' | 'NONE';
   attempts: number;
   lastAttemptAt?: string;
   status: 'PENDING' | 'SUCCESS' | 'FAILED';
@@ -8264,7 +8264,7 @@ function seedInitialUsers() {
   savePersistentStore();
 }
 
-function enqueueDiscordRoleSync(email: string, discordUserId: string, tier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE') {
+function enqueueDiscordRoleSync(email: string, discordUserId: string, tier: 'ELITE' | 'PRO' | 'DAY_PASS' | 'VERIFIED' | 'NONE') {
   const normalizedEmail = email.toLowerCase().trim();
   
   // Idempotency check: check if there's already a pending or successful sync with exact same tier for this user
@@ -8439,8 +8439,10 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
   const entRes = getUserEntitlement(normalizedEmail);
   let targetTier: 'ELITE' | 'PRO' | 'DAY_PASS' | 'VERIFIED' | 'NONE' = 'NONE';
 
-  if (entRes.entitlements.canAccessAdminPanel || entRes.plan === 'ELITE_QUANT' || entRes.plan === 'DAY_PASS' || (entRes.dayPass && entRes.dayPass.active)) {
+  if (entRes.entitlements.canAccessAdminPanel || entRes.plan === 'ELITE_QUANT') {
     targetTier = 'ELITE';
+  } else if (entRes.plan === 'DAY_PASS' || (entRes.dayPass && entRes.dayPass.active)) {
+    targetTier = 'DAY_PASS';
   } else if (entRes.plan === 'PRO_QUANT' || entRes.plan === 'STARTER') {
     targetTier = 'PRO';
   } else {
@@ -9029,7 +9031,7 @@ app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], (req, res) => {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: entitlement.entitlements.canAccessAdminPanel ? 'ADMIN' : (entitlement.entitlements.proQuant || entitlement.entitlements.eliteQuant ? 'PRO' : 'DEMO'),
+      role: entitlement.entitlements.canAccessAdminPanel ? 'ADMIN' : (entitlement.entitlements.proQuant || entitlement.entitlements.eliteQuant ? 'PRO' : 'UNPAID'),
       subscription: entitlement.plan,
       discordLinked: !!(user.discordLinked || user.discordId || profile?.discordUserId),
       discordId: user.discordId || profile?.discordUserId || null,

@@ -24,7 +24,7 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface WhaleTrackerViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
@@ -134,7 +134,7 @@ const TOP_WHALE_ENTITIES = [
 export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   onSelectAssetAndNavigate,
   alertSettings,
-  userRole = 'DEMO',
+  userRole = 'UNPAID',
   onOpenDiscordModal,
 }) => {
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');

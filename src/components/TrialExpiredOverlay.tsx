@@ -16,9 +16,9 @@ import { createDayPassCheckoutApi, restoreAccessApi } from '../services/api';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface TrialExpiredOverlayProps {
-  onUpgradeToPro: () => void;
-  onViewPricing: () => void;
-  onResetTrial: () => void;
+  onUpgradeToPro?: () => void;
+  onViewPricing?: () => void;
+  onResetTrial?: () => void;
   userEmail?: string;
   userId?: string;
   discordUserId?: string;

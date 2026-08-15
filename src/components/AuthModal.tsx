@@ -9,8 +9,8 @@ interface AuthModalProps {
   authState?: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
-  onSuccessRole?: (role: 'PRO' | 'DEMO' | 'ADMIN') => void;
-  setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'DEMO' | 'ADMIN' | 'OWNER'>>;
+  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
+  setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -62,7 +62,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
     }
 
-    const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
+    const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
     // Live sync user to server backend persistent database

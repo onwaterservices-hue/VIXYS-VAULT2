@@ -91,7 +91,7 @@ export default function App() {
     };
   });
 
-  const [userRole, setUserRole] = useState<'DEMO' | 'PRO' | 'ADMIN'>(() => {
+  const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ADMIN'>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
       if (saved) {
@@ -100,12 +100,12 @@ export default function App() {
         if (email === 'vixyvault0@gmail.com' || parsed?.user?.role === 'ADMIN' || parsed?.user?.role === 'OWNER') {
           return 'ADMIN';
         }
-        return parsed?.user?.role || 'DEMO';
+        return parsed?.user?.role || 'UNPAID';
       }
     } catch (e) {
       console.error(e);
     }
-    return 'DEMO';
+    return 'UNPAID';
   });
 
   // 24-Hour Day Pass State & Entitlements
@@ -115,7 +115,7 @@ export default function App() {
     expiresAt?: string | null;
     secondsRemaining: number;
   }>({ active: false, secondsRemaining: 0 });
-  const [trialSeconds, setTrialSeconds] = useState<number>(10800);
+
   const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
     starter: true,
     proQuant: true,
@@ -153,7 +153,7 @@ export default function App() {
           } else if (ent.status === 'active') {
             setUserRole('PRO');
           } else {
-            setUserRole('DEMO');
+            setUserRole('UNPAID');
           }
         }
       })
@@ -164,13 +164,13 @@ export default function App() {
         .then((res) => {
           if (res && res.authenticated && res.user) {
             if (res.user.trialSecondsRemaining !== undefined) {
-              setTrialSeconds(res.user.trialSecondsRemaining);
+              // Trial removed
             }
             
             setAuthState((prev) => {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
-              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'DEMO')) as 'PRO' | 'OWNER' | 'ADMIN' | 'DEMO';
+              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'UNPAID')) as 'PRO' | 'OWNER' | 'ADMIN' | 'UNPAID';
               const updatedUser: NonNullable<AuthState['user']> = {
                 ...prev.user,
                 // @ts-ignore
@@ -285,7 +285,7 @@ export default function App() {
                 id: uid,
                 email: cleanEmail,
                 name: cleanName,
-                role: isAdmin ? 'ADMIN' : (prev.user?.role || 'DEMO'),
+                role: isAdmin ? 'ADMIN' : (prev.user?.role || 'UNPAID'),
                 joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
               },
             };
@@ -371,41 +371,6 @@ export default function App() {
           : prev
         : [...prev, venue]
     );
-  };
-
-  // Trial Timer Countdown Effect
-  useEffect(() => {
-    if (userRole !== 'DEMO') return;
-
-    const interval = setInterval(() => {
-      setTrialSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [userRole]);
-
-  const handleResetTrial = () => {
-    setTrialSeconds(10800);
-  };
-
-  const handleExpireTrial = () => {
-    setTrialSeconds(0);
-  };
-
-  const handleUpgradeToPro = () => {
-    setUserRole('PRO');
-    setSubscription((prev) => ({
-      ...prev,
-      plan: 'PRO',
-      status: 'active',
-    }));
-    setTrialSeconds(10800);
   };
 
   // Live Ticker State initialized from active Asset
@@ -710,28 +675,7 @@ export default function App() {
   };
 
   const handleStartFreeTrial = () => {
-    const trialUser = {
-      id: `usr_trial_${Math.random().toString(36).substring(2, 7)}`,
-      email: 'visitor@vixysvault.com',
-      name: 'VIXY Vault Visitor',
-      role: 'DEMO' as const,
-      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-    };
-
-    syncAuthUserApi({
-      email: trialUser.email,
-      name: trialUser.name,
-      role: 'FREE',
-      subscription: 'FREE_TRIAL',
-    }).catch((err) => console.warn('Auth sync error:', err));
-
-    setAuthState({
-      isAuthenticated: true,
-      user: trialUser,
-    });
-    setUserRole('DEMO');
-    setTrialSeconds(10800);
-    setActiveTab('terminal');
+    setShowAuthModal(true);
   };
 
   const handleLogout = () => {
@@ -744,7 +688,7 @@ export default function App() {
       isAuthenticated: false,
       user: null,
     });
-    setUserRole('DEMO');
+    setUserRole('UNPAID');
     setActiveTab('landing');
   };
 
@@ -774,10 +718,7 @@ export default function App() {
         onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
-        trialSeconds={trialSeconds}
         dayPassInfo={dayPassInfo}
-        onResetTrial={handleResetTrial}
-        onExpireTrial={handleExpireTrial}
         selectedAsset={selectedAsset}
         selectedTimeframe={selectedTimeframe}
         selectedVenue={selectedVenues[0] || 'Kalshi'}
@@ -818,9 +759,6 @@ export default function App() {
               setSubscription={setSubscription}
               userRole={userRole}
               setUserRole={setUserRole}
-              trialSeconds={trialSeconds}
-              onResetTrial={handleResetTrial}
-              onExpireTrial={handleExpireTrial}
             />
           )}
 
@@ -994,7 +932,6 @@ export default function App() {
                       </div>
                     </div>
                     <button
-                      onClick={handleUpgradeToPro}
                       className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 transition-all shadow-lg shadow-amber-500/20"
                     >
                       Instant Pro Upgrade ($29/mo)
@@ -1006,9 +943,6 @@ export default function App() {
                     setSubscription={setSubscription}
                     userRole={userRole}
                     setUserRole={setUserRole}
-                    trialSeconds={trialSeconds}
-                    onResetTrial={handleResetTrial}
-                    onExpireTrial={handleExpireTrial}
                     authState={authState}
                   />
                 </div>
@@ -1078,7 +1012,6 @@ export default function App() {
                     <ScalpingDeskView
                       ticker={ticker}
                       userRole={userRole}
-                      onUpgradeToPro={handleUpgradeToPro}
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
                       alertSettings={alertSettings}
@@ -1092,7 +1025,6 @@ export default function App() {
                       spotPrices={spotPrices}
                       selectedAsset={selectedAsset}
                       userRole={userRole}
-                      onUpgradeToPro={handleUpgradeToPro}
                       alertSettings={alertSettings}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
@@ -1229,11 +1161,8 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {userRole === 'DEMO' && trialSeconds <= 0 && (
+      {userRole === 'UNPAID' && (
         <TrialExpiredOverlay
-          onUpgradeToPro={handleUpgradeToPro}
-          onViewPricing={() => setActiveTab('pricing')}
-          onResetTrial={handleResetTrial}
           userEmail={authState?.user?.email}
           userId={authState?.user?.id}
           discordUserId={authState?.user?.discordId}

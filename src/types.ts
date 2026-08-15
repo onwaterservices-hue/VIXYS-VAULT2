@@ -199,7 +199,7 @@ export interface AuthState {
     id: string;
     email: string;
     name: string;
-    role: 'DEMO' | 'PRO' | 'ADMIN' | 'OWNER';
+    role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
     apiKey?: string;
     joinedDate: string;
     discordId?: string;
@@ -256,7 +256,7 @@ export type AccessStateType =
   | 'LOCKED';
 
 export interface UserAccessObject {
-  role: 'ADMIN' | 'PRO' | 'DEMO' | 'OWNER' | 'USER';
+  role: 'ADMIN' | 'PRO' | 'UNPAID' | 'OWNER' | 'USER';
   isAdmin: boolean;
   accessState: AccessStateType;
   discordVerified: boolean;

@@ -22,13 +22,13 @@ import {
 
 interface VixyAiStatusCardProps {
   onOpenPricing?: () => void;
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   className?: string;
 }
 
 export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
   onOpenPricing,
-  userRole = 'DEMO',
+  userRole = 'UNPAID',
   className = '',
 }) => {
   const isPro = userRole === 'PRO' || userRole === 'ADMIN';

@@ -32,7 +32,7 @@ interface ExplainabilityVaultViewProps {
   currentSymbol?: string;
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
@@ -60,7 +60,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
   currentSymbol = 'BTC',
   onSelectAsset,
   alertSettings,
-  userRole = 'DEMO',
+  userRole = 'UNPAID',
   onOpenDiscordModal,
 }) => {
   const [selectedAsset, setSelectedAsset] = useState<string>(currentSymbol);

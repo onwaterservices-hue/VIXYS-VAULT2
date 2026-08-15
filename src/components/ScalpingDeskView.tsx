@@ -29,8 +29,7 @@ import {
 
 interface ScalpingDeskViewProps {
   ticker: BTCTicker;
-  userRole: 'DEMO' | 'PRO' | 'ADMIN';
-  onUpgradeToPro: () => void;
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;
@@ -40,7 +39,6 @@ interface ScalpingDeskViewProps {
 export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   ticker,
   userRole,
-  onUpgradeToPro,
   selectedAsset = 'BTC',
   onSelectAsset,
   alertSettings,

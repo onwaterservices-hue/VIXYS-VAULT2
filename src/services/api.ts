@@ -845,7 +845,7 @@ export async function fetchUserAccess(email?: string, uid?: string): Promise<Use
   }
 
   return {
-    role: 'DEMO',
+    role: 'UNPAID',
     isAdmin: false,
     accessState: 'AUTHORIZED',
     discordVerified: true,

@@ -27,8 +27,8 @@ interface HeaderProps {
   ticker: BTCTicker;
   activeTab: 'terminal' | 'scalping' | 'onehour' | 'history' | 'journal' | 'alerts' | 'pricing' | 'settings' | 'admin' | 'landing' | 'auth' | 'markets' | 'compare' | string;
   setActiveTab: (tab: any) => void;
-  userRole: 'DEMO' | 'PRO' | 'ADMIN';
-  setUserRole: (role: 'DEMO' | 'PRO' | 'ADMIN') => void;
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
   subscription: UserSubscription;
   authState: AuthState;
   exchangeKeys?: ExchangeApiKeys;
@@ -37,7 +37,6 @@ interface HeaderProps {
   onOpenAuth: (mode: 'login' | 'register') => void;
   onLogout: () => void;
   isLoading?: boolean;
-  trialSeconds?: number;
   dayPassInfo?: {
     active: boolean;
     startedAt?: string | null;
@@ -45,7 +44,6 @@ interface HeaderProps {
     secondsRemaining: number;
   };
   onResetTrial?: () => void;
-  onExpireTrial?: () => void;
   selectedAsset?: string;
   selectedTimeframe?: string;
   selectedVenue?: string;
@@ -66,10 +64,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onLogout,
   isLoading = false,
-  trialSeconds = 10800,
   dayPassInfo,
   onResetTrial,
-  onExpireTrial,
   selectedAsset = 'BTC',
   selectedTimeframe = '15M',
   selectedVenue = 'Kalshi',

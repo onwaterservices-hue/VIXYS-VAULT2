@@ -39,7 +39,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSearch: () => void;
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({

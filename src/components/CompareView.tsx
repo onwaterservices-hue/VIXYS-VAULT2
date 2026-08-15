@@ -7,14 +7,14 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface CompareViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'DEMO' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 
 export const CompareView: React.FC<CompareViewProps> = ({
   onSelectAssetAndNavigate,
   alertSettings,
-  userRole = 'DEMO',
+  userRole = 'UNPAID',
   onOpenDiscordModal,
 }) => {
   const [assetA, setAssetA] = useState<string>('BTC');
