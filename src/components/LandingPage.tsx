@@ -145,58 +145,75 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
           </div>
 
-          {/* VIXY Vault Command Center Day Pass Access Module */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#0F0826]/95 via-[#0A0518]/95 to-[#060310] border border-purple-500/35 shadow-2xl shadow-purple-950/80 relative overflow-hidden font-mono group hover:border-purple-500/60 transition-all">
-            {/* Luminous accent ambient back-light */}
-            <div className="absolute -top-12 -right-12 w-36 h-36 bg-purple-600/20 rounded-full blur-2xl pointer-events-none" />
-            <div className="absolute top-0 right-0 px-3 py-1 bg-purple-900/50 border-b border-l border-purple-500/30 rounded-bl-xl text-[10px] text-cyan-400 font-bold tracking-widest uppercase flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-              <span>VAULT ACCESS MODULE</span>
+          {/* VIXY Vault Command Center Day Pass Access Module - Ultra High Standout */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-gradient-to-br from-[#120830]/95 via-[#0A0518]/98 to-[#0B041E] border-2 border-cyan-500/50 shadow-2xl shadow-cyan-950/80 relative overflow-hidden font-mono group hover:border-cyan-400 transition-all duration-300">
+            {/* Luminous Ambient Backlight */}
+            <div className="absolute -top-16 -right-16 w-48 h-48 bg-cyan-500/20 rounded-full blur-3xl pointer-events-none group-hover:bg-cyan-400/30 transition-all" />
+            <div className="absolute top-0 right-0 px-3.5 py-1.5 bg-gradient-to-r from-purple-900/90 to-cyan-950/90 border-b-2 border-l-2 border-cyan-500/50 rounded-bl-2xl text-[10px] text-cyan-300 font-black tracking-widest uppercase flex items-center gap-1.5 shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400" />
+              <span>VAULT ACCESS CREDENTIAL</span>
             </div>
 
-            <div className="space-y-3 relative z-10">
-              <div className="space-y-0.5">
-                <span className="text-[10px] text-purple-400/90 uppercase tracking-widest font-bold block">
-                  VIXY VAULT DAY PASS
-                </span>
-                <h4 className="text-sm sm:text-base font-black text-white font-sans tracking-tight">
+            <div className="space-y-4 relative z-10">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 shadow">
+                    24H PASS
+                  </span>
+                  <span className="text-[10px] text-purple-300 font-bold tracking-wider uppercase">ONE-TIME ACCESS • NO SUBSCRIPTION</span>
+                </div>
+                <h4 className="text-base sm:text-lg font-black text-white font-sans tracking-tight pt-1">
                   24 HOURS OF FULL DECISION INTELLIGENCE
                 </h4>
               </div>
 
-              {/* Prominent Price & Features */}
-              <div className="flex flex-wrap items-baseline justify-between gap-2 pt-2 pb-2 border-y border-purple-900/40">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl sm:text-4xl font-black text-cyan-300 tracking-tight font-mono drop-shadow-[0_0_12px_rgba(6,182,212,0.3)]">
+              {/* Prominent Price & Instant Activation */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 pb-3 border-y border-purple-800/40">
+                <div className="flex items-baseline gap-2.5">
+                  <span className="text-4xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 via-cyan-200 to-blue-300 tracking-tight font-mono drop-shadow-[0_0_20px_rgba(6,182,212,0.6)]">
                     $9.99
                   </span>
-                  <span className="text-[11px] text-purple-200/90 font-sans">
-                    One-time access • No subscription required
-                  </span>
+                  <div className="flex flex-col text-[11px] text-purple-200 font-sans leading-tight">
+                    <span className="font-bold text-white">Full Terminal Unlocks</span>
+                    <span className="text-purple-300/80">96 prediction cycles</span>
+                  </div>
                 </div>
-                <div className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <div className="px-3 py-1.5 rounded-xl bg-emerald-950/70 border border-emerald-500/40 text-[11px] text-emerald-400 font-black flex items-center gap-1.5 shadow-inner">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                   <span>INSTANT ACTIVATION</span>
                 </div>
               </div>
 
-              {/* Primary Action CTA */}
+              {/* Feature Pills */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[10px] font-mono text-purple-200">
+                <div className="px-2.5 py-1 rounded-lg bg-[#070314] border border-purple-900/60 flex items-center gap-1.5">
+                  <span className="text-cyan-400 font-bold">✓</span> Sub-Second L2 Depth
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-[#070314] border border-purple-900/60 flex items-center gap-1.5">
+                  <span className="text-cyan-400 font-bold">✓</span> Discord Signals Feed
+                </div>
+                <div className="px-2.5 py-1 rounded-lg bg-[#070314] border border-purple-900/60 flex items-center gap-1.5 col-span-2 sm:col-span-1">
+                  <span className="text-cyan-400 font-bold">✓</span> 100% Unrestricted
+                </div>
+              </div>
+
+              {/* Primary Action CTA Button */}
               <div className="space-y-2 pt-1">
                 <button
                   onClick={() => onOpenAuth('register')}
-                  className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-lg shadow-purple-900/40 border border-purple-400/30 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-[0.99]"
+                  className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-cyan-950/90 border border-cyan-300/40 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-[0.99]"
                 >
-                  <ShieldCheck className="w-4 h-4 text-cyan-300 group-hover/btn:scale-110 transition-transform" />
-                  <span>UNLOCK 24H ACCESS — $9.99</span>
-                  <ArrowRight className="w-4 h-4 text-purple-200 group-hover/btn:translate-x-1 transition-transform" />
+                  <ShieldCheck className="w-4 h-4 text-cyan-200 group-hover/btn:scale-110 transition-transform" />
+                  <span className="drop-shadow">UNLOCK 24H ACCESS — $9.99</span>
+                  <ArrowRight className="w-4 h-4 text-cyan-200 group-hover/btn:translate-x-1 transition-transform" />
                 </button>
 
                 <div className="flex items-center justify-between text-[10px] text-purple-300/80 font-mono">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-1 h-1 rounded-full bg-purple-400" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
                     Discord verification required before terminal access
                   </span>
-                  <span className="text-purple-400/60 hidden sm:inline">Unfiltered 15m Signal Stream</span>
+                  <span className="text-cyan-400/90 font-bold hidden sm:inline">96 Prediction Cycles / Day</span>
                 </div>
               </div>
             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Mail, User, ShieldCheck, ArrowRight, X, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, User, ArrowRight, X, Sparkles, CheckCircle2, ShieldCheck, Key, Ticket } from 'lucide-react';
 import { AuthState } from '../types';
 import { syncAuthUserApi } from '../services/api';
 
@@ -102,69 +102,116 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0A0518]/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-md bg-[#120B28] border border-purple-500/40 rounded-2xl shadow-2xl overflow-hidden text-purple-100 font-mono">
-        {/* Glow Header Bar */}
-        <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-violet-500 to-indigo-500" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05020F]/85 backdrop-blur-xl animate-fadeIn font-mono select-none overflow-y-auto">
+      <div className="relative w-full max-w-lg bg-gradient-to-b from-[#130B2A] via-[#0A0518] to-[#070312] border-2 border-purple-500/50 rounded-3xl shadow-2xl shadow-purple-950/90 overflow-hidden text-purple-100 my-auto">
+        {/* Glow Header Accent Bar */}
+        <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500" />
 
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-purple-300/60 hover:text-white bg-[#0B061A] p-1.5 rounded-lg border border-purple-900/40 transition-all"
+          className="absolute top-4 right-4 text-purple-300/70 hover:text-white bg-[#0A0518] p-2 rounded-xl border border-purple-800/50 transition-all cursor-pointer z-20"
         >
           <X className="w-4 h-4" />
         </button>
 
         <div className="p-6 sm:p-8 space-y-6">
-          {/* Brand & Title */}
+          {/* Top Mode Switcher Tabs */}
+          <div className="flex items-center justify-center p-1 bg-[#090416] border border-purple-800/50 rounded-2xl max-w-xs mx-auto text-xs font-bold shadow-inner">
+            <button
+              type="button"
+              onClick={() => setMode('login')}
+              className={`flex-1 py-2 px-3 rounded-xl transition-all ${
+                mode === 'login'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-900/50 font-black'
+                  : 'text-purple-300/60 hover:text-white'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode('register')}
+              className={`flex-1 py-2 px-3 rounded-xl transition-all ${
+                mode === 'register'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-900/50 font-black'
+                  : 'text-purple-300/60 hover:text-white'
+              }`}
+            >
+              Create Account
+            </button>
+          </div>
+
+          {/* Header Title & Subtitle */}
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-mono font-bold">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>VIXY AI AUTHENTICATION</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-purple-500/20 border border-purple-400/40 text-cyan-300 text-[11px] font-bold">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+              <span>VIXY DECISION INTELLIGENCE PORTAL</span>
             </div>
-            <h2 className="text-2xl font-black font-mono tracking-tight text-white">
-              {mode === 'login' && 'Welcome Back'}
-              {mode === 'register' && 'Create Your VIXY AI Account'}
-              {mode === 'forgot' && 'Reset Password'}
+            <h2 className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-white">
+              {mode === 'login' && 'Sign In to Terminal'}
+              {mode === 'register' && 'Create Your VIXY Account'}
+              {mode === 'forgot' && 'Reset Account Password'}
             </h2>
-            <p className="text-xs text-purple-300/60 font-sans">
-              Access live 15m prediction market intelligence & L2 order flow delta.
+            <p className="text-xs text-purple-200/70 font-sans max-w-sm mx-auto">
+              {mode === 'register'
+                ? 'Instant account setup for 24-Hour Day Pass ($9.99) & Full Terminal Access.'
+                : 'Enter your credentials to unlock live 15m decision feeds & orderbook deltas.'}
             </p>
           </div>
 
+          {/* Day Pass Promo Pill for Signup */}
+          {mode === 'register' && (
+            <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/80 via-[#0E0622] to-cyan-950/80 border border-cyan-500/40 flex items-center justify-between gap-3 text-xs shadow-md">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shrink-0">
+                  <Ticket className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-white text-[11px]">24H DAY PASS READY</div>
+                  <div className="text-[10px] text-purple-300/80">$9.99 One-time payment after registration</div>
+                </div>
+              </div>
+              <span className="px-2 py-1 rounded bg-cyan-500 text-slate-950 text-[10px] font-black uppercase shrink-0">
+                $9.99
+              </span>
+            </div>
+          )}
+
           {successMsg ? (
-            <div className="p-4 bg-purple-500/10 border border-purple-500/30 rounded-xl text-center space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-purple-400 mx-auto" />
-              <p className="text-purple-300 font-bold text-xs">{successMsg}</p>
+            <div className="p-5 bg-emerald-950/80 border-2 border-emerald-500/60 rounded-2xl text-center space-y-2 shadow-xl">
+              <CheckCircle2 className="w-10 h-10 text-emerald-400 mx-auto" />
+              <p className="text-emerald-200 font-bold text-xs">{successMsg}</p>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
               {errorMsg && (
-                <div className="p-3 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-[11px]">
+                <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-xl text-rose-300 font-bold text-[11px]">
                   {errorMsg}
                 </div>
               )}
+
               {mode === 'register' && (
                 <>
                   <div className="space-y-1.5">
-                    <label className="text-purple-300/60 block font-semibold">Full Name</label>
+                    <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Full Name</label>
                     <div className="relative">
-                      <User className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                      <User className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
                       <input
                         type="text"
                         required
                         placeholder="Alex Mercer"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                        className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
-                      <label className="text-purple-300/60 block font-semibold text-[11px] uppercase tracking-wider">
-                        Discount / Referral Code (Optional)
+                      <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">
+                        Referral / Promo Code (Optional)
                       </label>
                       {referralCode.trim().length > 0 && (
                         <span className="text-[10px] text-emerald-400 font-bold">Code Active</span>
@@ -172,26 +219,26 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                     <input
                       type="text"
-                      placeholder="Optional Referral or Promo Code"
+                      placeholder="Enter promo code"
                       value={referralCode}
                       onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 uppercase font-mono text-xs placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      className="w-full bg-[#080414] border border-purple-800/60 rounded-xl px-3.5 py-2.5 text-purple-100 uppercase font-mono text-xs placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
                     />
                   </div>
                 </>
               )}
 
               <div className="space-y-1.5">
-                <label className="text-purple-300/60 block font-semibold">Email Address</label>
+                <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Email Address</label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                  <Mail className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
                   <input
                     type="email"
                     required
                     placeholder="trader@vixysvault.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
                   />
                 </div>
               </div>
@@ -199,35 +246,36 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               {mode !== 'forgot' && (
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center">
-                    <label className="text-purple-300/60 font-semibold">Password</label>
+                    <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Password</label>
                     {mode === 'login' && (
                       <button
                         type="button"
                         onClick={() => setMode('forgot')}
-                        className="text-[10px] text-purple-300 hover:underline"
+                        className="text-[10px] text-cyan-400 hover:underline cursor-pointer"
                       >
                         Forgot password?
                       </button>
                     )}
                   </div>
                   <div className="relative">
-                    <Lock className="w-4 h-4 text-purple-300/50 absolute left-3 top-2.5" />
+                    <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
                     <input
                       type="password"
                       required
                       placeholder="••••••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-9 pr-3 py-2 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
                     />
                   </div>
                 </div>
               )}
 
+              {/* Submit Button */}
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-purple-950/80 border border-purple-400/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99] disabled:opacity-50"
               >
                 <span>
                   {loading
@@ -236,36 +284,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     ? 'Sign In to Terminal'
                     : mode === 'register'
                     ? 'Create Account & Continue'
-                    : 'Send Password Reset Link'}
+                    : 'Send Reset Link'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
             </form>
           )}
 
-          {/* Switch Mode Footer */}
-          <div className="text-center text-xs text-purple-300/60 pt-2 border-t border-purple-900/40">
-            {mode === 'login' && (
-              <p>
-                Don't have an account?{' '}
-                <button onClick={() => setMode('register')} className="text-purple-300 font-bold hover:underline">
-                  Create Account
-                </button>
-              </p>
-            )}
-            {mode === 'register' && (
-              <p>
-                Already registered?{' '}
-                <button onClick={() => setMode('login')} className="text-purple-300 font-bold hover:underline">
-                  Sign In
-                </button>
-              </p>
-            )}
-            {mode === 'forgot' && (
-              <button onClick={() => setMode('login')} className="text-purple-300 font-bold hover:underline">
-                Back to Sign In
-              </button>
-            )}
+          {/* Registration Feature Perks */}
+          {mode === 'register' && !successMsg && (
+            <div className="pt-2 border-t border-purple-900/40 grid grid-cols-3 gap-2 text-[10px] text-purple-300/80 font-mono">
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>15m Signal Stream</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Sub-Second L2</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Discord Webhooks</span>
+              </div>
+            </div>
+          )}
+
+          {/* Footer Security Badges */}
+          <div className="flex items-center justify-between text-[10px] text-purple-400/60 pt-1 font-sans">
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> 256-Bit SSL Encrypted
+            </span>
+            <span className="flex items-center gap-1">
+              <Key className="w-3.5 h-3.5 text-cyan-400" /> Instant Terminal Setup
+            </span>
           </div>
         </div>
       </div>

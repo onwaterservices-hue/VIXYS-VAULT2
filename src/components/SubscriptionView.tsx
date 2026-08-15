@@ -367,16 +367,20 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         <Quote className="w-16 h-16 sm:w-24 sm:h-24 text-purple-400/10 absolute bottom-4 right-4 pointer-events-none rotate-180" />
 
         <div className="max-w-4xl mx-auto space-y-6 relative z-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-purple-500/20 border border-purple-400/40 text-purple-200 text-xs sm:text-sm font-black uppercase tracking-widest shadow-md">
-            <Sparkles className="w-4 h-4 text-purple-300 animate-pulse" />
-            <span>THE GOLDEN RULE OF QUANTITATIVE EDGE</span>
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-emerald-500/20 to-amber-500/20 border-2 border-amber-400/60 text-amber-300 text-xs sm:text-sm font-black uppercase tracking-widest shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+            <Sparkles className="w-4 h-4 text-amber-300 animate-pulse" />
+            <span>THE #1 LAW OF QUANTITATIVE PROFIT</span>
           </div>
 
           <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black font-mono tracking-tight leading-[1.15] uppercase max-w-4xl mx-auto">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-emerald-300 to-cyan-300 drop-shadow-[0_0_35px_rgba(251,191,36,0.5)]">
-              "YOU NEED TO SPEND MONEY
-              <br />
-              TO MAKE MONEY"
+            <span className="text-white drop-shadow-md">"YOU NEED TO </span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-yellow-400 to-amber-200 drop-shadow-[0_0_35px_rgba(251,191,36,0.95)] underline decoration-amber-400/50 underline-offset-8">
+              SPEND MONEY
+            </span>
+            <br />
+            <span className="text-white drop-shadow-md">TO </span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-green-400 to-emerald-200 drop-shadow-[0_0_40px_rgba(52,211,153,1)] underline decoration-emerald-400/50 underline-offset-8">
+              MAKE MONEY"
             </span>
           </h1>
 

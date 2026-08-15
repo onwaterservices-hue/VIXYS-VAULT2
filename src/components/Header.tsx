@@ -180,37 +180,37 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <div className="flex items-center gap-2.5">
                 {/* Micro-status line for desktop navigation */}
-                <div className="hidden xl:flex items-center gap-2 text-[11px] font-mono text-purple-300/80 bg-[#0F0826] px-3 py-1.5 rounded-xl border border-purple-900/40">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80" />
-                  <span className="font-bold text-white tracking-wider">24H VAULT ACCESS</span>
+                <div className="hidden xl:flex items-center gap-2 text-[11px] font-mono text-purple-200 bg-[#0F0826] px-3.5 py-1.5 rounded-xl border-2 border-purple-500/40 shadow-lg shadow-purple-950/60">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-sm shadow-cyan-400" />
+                  <span className="font-black text-white tracking-wider">24H VAULT ACCESS</span>
                   <span className="text-purple-400/60">•</span>
-                  <span className="text-cyan-400 font-bold">$9.99</span>
+                  <span className="text-cyan-300 font-black px-1.5 py-0.5 bg-cyan-950/60 rounded border border-cyan-500/40">$9.99</span>
                   <span className="text-purple-400/60">•</span>
-                  <span className="text-purple-300/90">INSTANT ACTIVATION</span>
+                  <span className="text-emerald-400 font-bold">INSTANT ACTIVATION</span>
                 </div>
 
                 <button
                   onClick={() => onOpenAuth('login')}
-                  className="px-4 py-2 rounded-xl bg-[#120B24] border border-purple-800/50 text-xs font-bold text-purple-200 hover:text-white hover:border-purple-500/50 transition-all font-mono"
+                  className="px-4 py-2 rounded-xl bg-[#120B24] border border-purple-700/60 text-xs font-bold text-purple-200 hover:text-white hover:border-purple-400 transition-all font-mono cursor-pointer"
                 >
                   Log In
                 </button>
 
-                {/* Premium VIXY Vault Access Control CTA */}
+                {/* Premium VIXY Vault Access Control CTA - Ultra High Standout */}
                 <button
                   onClick={() => onOpenAuth('register')}
-                  className="relative group overflow-hidden rounded-xl p-[1px] transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-purple-950/60 cursor-pointer"
+                  className="relative group overflow-hidden rounded-xl p-[2px] transition-all duration-300 hover:scale-[1.03] active:scale-[0.98] shadow-xl shadow-cyan-950/80 cursor-pointer"
                   title="Unlock 24 Hours of VIXY Decision Intelligence ($9.99)"
                 >
-                  {/* Subtle Edge Glow Gradient */}
-                  <span className="absolute inset-0 bg-gradient-to-r from-purple-600 via-violet-500 to-cyan-400 rounded-xl opacity-75 group-hover:opacity-100 transition-opacity blur-[1px] group-hover:blur-[2px]" />
+                  {/* Animated Radiant Edge Glow Gradient */}
+                  <span className="absolute inset-0 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500 rounded-xl opacity-90 group-hover:opacity-100 transition-opacity animate-pulse blur-[1px] group-hover:blur-[2px]" />
                   
-                  <div className="relative flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-[11px] bg-[#0A0518] text-xs font-mono font-bold transition-colors group-hover:bg-[#0E0722]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                    <span className="text-purple-200 tracking-wider font-semibold group-hover:text-white text-[11px] sm:text-xs">
+                  <div className="relative flex items-center gap-2 px-4 py-2 rounded-[10px] bg-[#0A0518] text-xs font-mono font-bold transition-colors group-hover:bg-[#0E0722]">
+                    <span className="w-2 h-2 rounded-full bg-cyan-300 animate-ping" />
+                    <span className="text-white tracking-wider font-black text-[11px] sm:text-xs drop-shadow">
                       VIXY VAULT ACCESS
                     </span>
-                    <span className="px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/30 text-cyan-300 text-[10px] font-bold tracking-tight shadow-inner">
+                    <span className="px-2.5 py-1 rounded-md bg-gradient-to-r from-cyan-500 to-blue-600 text-slate-950 text-[11px] font-black tracking-tight shadow-md">
                       24H PASS • $9.99
                     </span>
                   </div>
