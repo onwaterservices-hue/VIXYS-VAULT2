@@ -8,8 +8,11 @@ import {
   CreditCard,
   Crown,
   Loader2,
+  RefreshCw,
+  AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
-import { createDayPassCheckoutApi } from '../services/api';
+import { createDayPassCheckoutApi, restoreAccessApi } from '../services/api';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface TrialExpiredOverlayProps {
@@ -18,6 +21,7 @@ interface TrialExpiredOverlayProps {
   onResetTrial: () => void;
   userEmail?: string;
   userId?: string;
+  discordUserId?: string;
 }
 
 export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
@@ -26,23 +30,71 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   onResetTrial,
   userEmail,
   userId,
+  discordUserId,
 }) => {
   const [isProcessingDayPass, setIsProcessingDayPass] = useState(false);
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreEmail, setRestoreEmail] = useState(userEmail || '');
+  const [restoreSessionId, setRestoreSessionId] = useState('');
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [restoreStatus, setRestoreStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const handleDayPassCheckout = async () => {
     setIsProcessingDayPass(true);
+    const directUrl = getStripeDayPassUrl({ email: userEmail, uid: userId });
     try {
-      const directUrl = getStripeDayPassUrl({ email: userEmail, uid: userId });
-      const apiRes = await createDayPassCheckoutApi({ userEmail, uid: userId });
+      const apiRes = await createDayPassCheckoutApi({ userEmail, uid: userId, discordUserId });
       if (apiRes?.url) {
         window.location.href = apiRes.url;
       } else {
         window.location.href = directUrl;
       }
     } catch {
-      window.location.href = getStripeDayPassUrl({ email: userEmail, uid: userId });
+      window.location.href = directUrl;
     } finally {
       setIsProcessingDayPass(false);
+    }
+  };
+
+  const handleRestoreAccess = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restoreEmail.trim() && !restoreSessionId.trim()) {
+      setRestoreStatus({ type: 'error', message: 'Please enter your account email or Stripe checkout session ID.' });
+      return;
+    }
+
+    setIsRestoring(true);
+    setRestoreStatus(null);
+
+    try {
+      const res = await restoreAccessApi({
+        email: restoreEmail.trim().toLowerCase(),
+        stripeSessionId: restoreSessionId.trim(),
+        uid: userId,
+        discordUserId,
+      });
+
+      if (res.success && res.restored) {
+        setRestoreStatus({
+          type: 'success',
+          message: res.message || 'Access successfully verified and restored! Reloading terminal...',
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1000);
+      } else {
+        setRestoreStatus({
+          type: 'error',
+          message: res.message || 'No active entitlement found for this email. Please check the spelling or complete checkout.',
+        });
+      }
+    } catch (err: any) {
+      setRestoreStatus({
+        type: 'error',
+        message: err?.message || 'Failed to restore access. Please try again or contact support.',
+      });
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -136,6 +188,91 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             <CreditCard className="w-3.5 h-3.5 text-purple-400" />
             <span>View All Subscription Plans & Billing (Starter / Pro / Elite)</span>
           </button>
+
+          {/* Self-service Restore Access Accordion / Button */}
+          {!showRestoreModal ? (
+            <button
+              onClick={() => setShowRestoreModal(true)}
+              className="w-full py-2 text-[11px] text-purple-400/80 hover:text-purple-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+            >
+              <RefreshCw className="w-3 h-3" />
+              <span>Already paid or need to restore active access? Click here</span>
+            </button>
+          ) : (
+            <div className="bg-[#080414] border border-purple-800/60 p-4 rounded-xl text-left space-y-3 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-white flex items-center gap-1.5 font-mono">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" /> Restore Entitlement
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowRestoreModal(false)}
+                  className="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded bg-purple-950/60"
+                >
+                  Close
+                </button>
+              </div>
+
+              <form onSubmit={handleRestoreAccess} className="space-y-2.5">
+                <div>
+                  <label className="text-[10px] text-purple-300 block mb-1">Account Email / Billing Email</label>
+                  <input
+                    type="email"
+                    value={restoreEmail}
+                    onChange={(e) => setRestoreEmail(e.target.value)}
+                    placeholder="e.g. trader@gmail.com"
+                    className="w-full bg-[#0e0720] border border-purple-700/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-purple-400/40 focus:outline-none focus:border-amber-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-purple-300 block mb-1">Stripe Checkout Session ID (Optional)</label>
+                  <input
+                    type="text"
+                    value={restoreSessionId}
+                    onChange={(e) => setRestoreSessionId(e.target.value)}
+                    placeholder="cs_live_... or session ID"
+                    className="w-full bg-[#0e0720] border border-purple-700/50 rounded-lg px-3 py-1.5 text-xs text-white placeholder-purple-400/40 focus:outline-none focus:border-amber-400 font-mono text-[11px]"
+                  />
+                </div>
+
+                {restoreStatus && (
+                  <div
+                    className={`p-2 rounded-lg text-[11px] flex items-start gap-1.5 ${
+                      restoreStatus.type === 'success'
+                        ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
+                        : 'bg-rose-950/60 border border-rose-500/40 text-rose-300'
+                    }`}
+                  >
+                    {restoreStatus.type === 'success' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    ) : (
+                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                    )}
+                    <span>{restoreStatus.message}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={isRestoring}
+                  className="w-full py-2 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 text-xs cursor-pointer shadow"
+                >
+                  {isRestoring ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Checking Stripe & Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Verify & Restore Entitlement</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
         </div>
 
         <p className="text-[10px] text-purple-300/50 font-sans">

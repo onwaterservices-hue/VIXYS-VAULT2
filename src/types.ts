@@ -202,6 +202,10 @@ export interface AuthState {
     role: 'DEMO' | 'PRO' | 'ADMIN' | 'OWNER';
     apiKey?: string;
     joinedDate: string;
+    discordId?: string;
+    discordTag?: string;
+    discordLinked?: boolean;
+    subscription?: string;
   } | null;
 }
 

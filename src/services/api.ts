@@ -1549,6 +1549,7 @@ export async function createCheckoutSessionApi(payload: {
 export async function createDayPassCheckoutApi(payload: {
   userEmail?: string;
   uid?: string;
+  discordUserId?: string;
   referralCode?: string;
 }) {
   try {
@@ -1611,6 +1612,42 @@ export async function fetchVixyStateApi(): Promise<any> {
     headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
   });
   return data;
+}
+
+export async function restoreAccessApi(payload: {
+  email?: string;
+  uid?: string;
+  discordUserId?: string;
+  stripeSessionId?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  restored?: boolean;
+  entitlement?: EntitlementsResponse;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/auth/restore-access', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': payload.email || '',
+        'x-user-uid': payload.uid || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await safeParseJson(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Connection error restoring access',
+    };
+  }
+}
+
+export async function getEntitlementDiagnosticsApi(): Promise<any> {
+  return await safeFetchJson<any>(`/api/admin/entitlement-diagnostics?_t=${Date.now()}`);
 }
 
 

@@ -1236,6 +1236,7 @@ export default function App() {
           onResetTrial={handleResetTrial}
           userEmail={authState?.user?.email}
           userId={authState?.user?.id}
+          discordUserId={authState?.user?.discordId}
         />
       )}
 
