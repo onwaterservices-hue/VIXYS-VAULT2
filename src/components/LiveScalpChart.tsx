@@ -90,7 +90,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
 
     const chart = createChart(container, {
       layout: {
-        background: { type: ColorType.Solid, color: '#090418' },
+        background: { type: ColorType.Solid, color: '#070412' },
         textColor: '#8b84a8',
         fontSize: 11,
         fontFamily: 'JetBrains Mono, monospace, system-ui',

@@ -198,47 +198,51 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
   const signals: ChartSignal[] = [];
 
   candles.forEach((c, i) => {
-    if (i < 3) return;
+    if (i < 2) return;
 
     const windowSize = Math.min(10, i);
     const slice = candles.slice(i - windowSize, i);
     const trailingHigh = Math.max(...slice.map((x) => x.high));
     const trailingLow = Math.min(...slice.map((x) => x.low));
 
+    const formattedTime = typeof c.time === 'number'
+      ? new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      : String(c.time || `Bar #${i + 1}`);
+
     if (c.close > trailingHigh) {
       signals.push({
         idx: i,
-        time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+        time: formattedTime,
         price: c.close,
         type: 'breakout',
-        label: `Candle #${i + 1}: Resistance Break`,
+        label: `${formattedTime} BUY UP ENTRY`,
         detail: `Close ($${c.close.toFixed(1)}) crossed above 10-bar trailing resistance ($${trailingHigh.toFixed(1)}).`,
-        color: THEME.bull,
+        color: '#10b981',
         symbol: '▲',
       });
     } else if (c.close < trailingLow) {
       signals.push({
         idx: i,
-        time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+        time: formattedTime,
         price: c.close,
         type: 'breakdown',
-        label: `Candle #${i + 1}: Support Break`,
+        label: `${formattedTime} ENTRY WATCH DOWN`,
         detail: `Close ($${c.close.toFixed(1)}) broke below 10-bar trailing support ($${trailingLow.toFixed(1)}).`,
-        color: THEME.bear,
+        color: '#f43f5e',
         symbol: '▼',
       });
     }
 
     const range = c.high - c.low;
-    const isDoji = range > 0 && Math.abs(c.close - c.open) / range <= 0.10;
+    const isDoji = range > 0 && Math.abs(c.close - c.open) / range <= 0.12;
 
     if (isDoji) {
       const nearSupport =
-        Math.abs(c.close - trailingLow) / trailingLow <= 0.0015 ||
-        Math.abs(c.low - trailingLow) / trailingLow <= 0.0015;
+        Math.abs(c.close - trailingLow) / trailingLow <= 0.002 ||
+        Math.abs(c.low - trailingLow) / trailingLow <= 0.002;
       const nearResistance =
-        Math.abs(c.close - trailingHigh) / trailingHigh <= 0.0015 ||
-        Math.abs(c.high - trailingHigh) / trailingHigh <= 0.0015;
+        Math.abs(c.close - trailingHigh) / trailingHigh <= 0.002 ||
+        Math.abs(c.high - trailingHigh) / trailingHigh <= 0.002;
 
       const hasNext = i < candles.length - 1;
       const nextCandle = hasNext ? candles[i + 1] : null;
@@ -247,26 +251,23 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         if (hasNext && nextCandle && nextCandle.close > c.close) {
           signals.push({
             idx: i,
-            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+            time: formattedTime,
             price: c.close,
             type: 'doji_reversal_bull',
-            label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
+            label: `${formattedTime} REVERSAL WATCH`,
             detail: `Doji pause formed near support ($${trailingLow.toFixed(1)}) and next candle closed higher ($${nextCandle.close.toFixed(1)}).`,
-            color: THEME.bull,
+            color: '#10b981',
             symbol: '◈',
           });
         } else {
           signals.push({
             idx: i,
-            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+            time: formattedTime,
             price: c.close,
             type: 'doji_hold',
-            label:
-              dataSource === 'live' || !hasNext
-                ? `Candle #${i + 1}: Doji Hold at Support (Pending)`
-                : `Candle #${i + 1}: Doji Hold at Support`,
+            label: `${formattedTime} ENTRY WATCH UP`,
             detail: `Doji indecision candle formed within 0.15% of support ($${trailingLow.toFixed(1)}). Outcome pending next bar.`,
-            color: THEME.amber,
+            color: '#f59e0b',
             symbol: '◆',
           });
         }
@@ -274,38 +275,35 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         if (hasNext && nextCandle && nextCandle.close < c.close) {
           signals.push({
             idx: i,
-            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+            time: formattedTime,
             price: c.close,
             type: 'doji_reversal_bear',
-            label: `Candle #${i + 1}: Doji Reversal (Confirmed)`,
+            label: `${formattedTime} EXIT 50% / RISK`,
             detail: `Doji pause formed near resistance ($${trailingHigh.toFixed(1)}) and next candle closed lower ($${nextCandle.close.toFixed(1)}).`,
-            color: THEME.bear,
+            color: '#f43f5e',
             symbol: '◈',
           });
         } else {
           signals.push({
             idx: i,
-            time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+            time: formattedTime,
             price: c.close,
             type: 'doji_hold',
-            label:
-              dataSource === 'live' || !hasNext
-                ? `Candle #${i + 1}: Doji Hold at Resistance (Pending)`
-                : `Candle #${i + 1}: Doji Hold at Resistance`,
+            label: `${formattedTime} REVERSAL WATCH`,
             detail: `Doji indecision candle formed within 0.15% of resistance ($${trailingHigh.toFixed(1)}). Outcome pending next bar.`,
-            color: THEME.amber,
+            color: '#f59e0b',
             symbol: '◆',
           });
         }
       } else {
         signals.push({
           idx: i,
-          time: typeof c.time === 'number' ? new Date(c.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}) : String(c.time || `Bar #${i + 1}`),
+          time: formattedTime,
           price: c.close,
           type: 'doji',
-          label: `Candle #${i + 1}: Doji Pivot`,
-          detail: `Open and close within 10% of total bar range ($${range.toFixed(1)}). Indecision inside range.`,
-          color: THEME.amber,
+          label: `DOJI PIVOT`,
+          detail: `Open and close within 12% of total bar range ($${range.toFixed(1)}). Indecision inside range.`,
+          color: '#f59e0b',
           symbol: '◇',
         });
       }
@@ -945,81 +943,73 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               className="transition-all duration-100"
             />
 
-            {/* Signal Markers */}
+            {/* Signal Markers & Terminal Decision Badges */}
             {hasSignal && (
               <g>
-                <circle
-                  cx={cx}
-                  cy={isBull ? y(c.low) + 12 : y(c.high) - 12}
-                  r={isHoveredSignal ? "7" : "4.5"}
-                  fill={isHoveredSignal ? THEME.purpleBright : THEME.amber}
-                  stroke={THEME.bg}
-                  strokeWidth="1.5"
-                  className={isHoveredSignal ? "animate-ping" : ""}
-                />
-                <circle
-                  cx={cx}
-                  cy={isBull ? y(c.low) + 12 : y(c.high) - 12}
-                  r={isHoveredSignal ? "5" : "3"}
-                  fill={isHoveredSignal ? THEME.purpleBright : THEME.amber}
-                />
-              </g>
-            )}
+                {(() => {
+                  const matchingSig = signals.find((s) => s.idx === i);
+                  const sigLabel = matchingSig ? matchingSig.label : (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN');
+                  const sigColor = matchingSig ? matchingSig.color : (isBull ? '#10b981' : '#f43f5e');
+                  // Vertical guide line
+                  const guideStartY = isBull ? y(c.low) + 4 : y(c.high) - 4;
+                  const stackOffset = (i % 2 === 0 ? 0 : 18);
+                  const badgeY = isBull ? y(c.low) + 18 + stackOffset : y(c.high) - 32 - stackOffset;
 
-            {/* TikTok Style AI Indicator Floating Badges (BUY UP / BUY DOWN) */}
-            {showTikTokAiOverlay && (hasSignal || i % 3 === 0 || i === visibleCandles.length - 1) && (
-              <g className="transition-all duration-300">
-                {isBull ? (
-                  <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); if (audioEnabled) playBuyUpSound(); }}>
-                    <rect
-                      x={cx - 28}
-                      y={y(c.low) + 10}
-                      width="56"
-                      height="16"
-                      rx="8"
-                      fill="#042f2e"
-                      stroke="#10b981"
-                      strokeWidth="1.5"
-                      filter="url(#glow-green)"
-                    />
-                    <text
-                      x={cx}
-                      y={y(c.low) + 21}
-                      fill="#34d399"
-                      fontSize="8.5"
-                      fontWeight="900"
-                      textAnchor="middle"
-                      className="font-mono tracking-wider pointer-events-none"
-                    >
-                      BUY UP ▲
-                    </text>
-                  </g>
-                ) : (
-                  <g className="cursor-pointer" onClick={(e) => { e.stopPropagation(); if (audioEnabled) playBuyDownSound(); }}>
-                    <rect
-                      x={cx - 34}
-                      y={y(c.high) - 24}
-                      width="68"
-                      height="16"
-                      rx="8"
-                      fill="#4c0519"
-                      stroke="#f43f5e"
-                      strokeWidth="1.5"
-                      filter="url(#glow-red)"
-                    />
-                    <text
-                      x={cx}
-                      y={y(c.high) - 13}
-                      fill="#fb7185"
-                      fontSize="8.5"
-                      fontWeight="900"
-                      textAnchor="middle"
-                      className="font-mono tracking-wider pointer-events-none"
-                    >
-                      BUY DOWN ▼
-                    </text>
-                  </g>
-                )}
+                  return (
+                    <g className="transition-all duration-300 cursor-pointer" onClick={(e) => {
+                      e.stopPropagation();
+                      if (audioEnabled) {
+                        if (isBull) playBuyUpSound(); else playBuyDownSound();
+                      }
+                    }}>
+                      {/* Dashed vertical guideline connecting to candle wick */}
+                      <line
+                        x1={cx}
+                        y1={guideStartY}
+                        x2={cx}
+                        y2={badgeY + (isBull ? 0 : 16)}
+                        stroke={sigColor}
+                        strokeWidth="1"
+                        strokeDasharray="2 2"
+                        strokeOpacity="0.8"
+                      />
+
+                      {/* Candle connection dot */}
+                      <circle
+                        cx={cx}
+                        cy={guideStartY}
+                        r="3.5"
+                        fill={sigColor}
+                        stroke="#070412"
+                        strokeWidth="1"
+                      />
+
+                      {/* Badge Container Box */}
+                      <rect
+                        x={cx - 52}
+                        y={badgeY}
+                        width="104"
+                        height="18"
+                        rx="4"
+                        fill={isBull ? "#042f2e" : "#4c0519"}
+                        stroke={sigColor}
+                        strokeWidth="1.2"
+                        className="shadow-md"
+                      />
+                      <text
+                        x={cx}
+                        y={badgeY + 12}
+                        fill={isBull ? "#34d399" : "#fb7185"}
+                        fontSize="8"
+                        fontWeight="900"
+                        textAnchor="middle"
+                        className="font-mono tracking-tight pointer-events-none"
+                      >
+                        {sigLabel}
+                      </text>
+                    </g>
+                  );
+                })()}
               </g>
             )}
           </g>
@@ -1062,6 +1052,22 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           fontWeight="bold"
         >
           ${latestClose.toFixed(1)}
+        </text>
+      </g>
+
+      {/* Bottom-Right HUD Price Box: "Last 63089.0" */}
+      <g transform={`translate(${marginLeft + plotWidth - 105}, ${marginTop + chartHeight - 26})`}>
+        <rect
+          width="100"
+          height="22"
+          rx="5"
+          fill="#060312"
+          stroke={lastPriceChange >= 0 ? '#10b981' : '#f43f5e'}
+          strokeWidth="1.2"
+          opacity="0.95"
+        />
+        <text x="10" y="15" fill="#ffffff" fontSize="10" fontWeight="900" className="font-mono tracking-wider">
+          Last {latestClose.toFixed(1)}
         </text>
       </g>
 

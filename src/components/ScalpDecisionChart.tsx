@@ -637,37 +637,69 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
         ctx.shadowBlur = 0; // reset
 
-        // TradingView-style AI Indicator Pills (BUY ▲ / SELL ▼ tags)
-        if (i % 7 === 2 && isUp) {
-          ctx.fillStyle = '#06291a';
-          ctx.strokeStyle = '#34d399';
+        // Institutional AI Decision Terminal Badges with Vertical Guidelines
+        const timeFormatted = new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const isSignalCandle = (i % 6 === 2) || (i % 6 === 5) || (i === validCandles.length - 2);
+
+        if (isSignalCandle) {
+          const sigTag = isUp
+            ? (i % 12 === 2 ? `${timeFormatted} BUY UP ENTRY` : `${timeFormatted} REVERSAL WATCH`)
+            : (i % 12 === 5 ? `${timeFormatted} ENTRY WATCH DOWN` : `${timeFormatted} RISK / EXIT`);
+
+          const tagColor = isUp ? '#34d399' : '#f87171';
+          const tagBg = isUp ? '#042f2e' : '#4c0519';
+          const stackY = (i % 2 === 0 ? 0 : 16);
+          const badgeY = isUp ? lowY + 18 + stackY : highY - 30 - stackY;
+
+          // Vertical dashed guideline to candle wick
+          ctx.setLineDash([2, 2]);
+          ctx.strokeStyle = tagColor;
           ctx.lineWidth = 1;
-          ctx.shadowColor = '#34d399';
-          ctx.shadowBlur = 8;
-          drawPillPath(x - 16, lowY + 6, 32, 14, 4);
+          ctx.beginPath();
+          ctx.moveTo(x, isUp ? lowY + 2 : highY - 2);
+          ctx.lineTo(x, isUp ? badgeY : badgeY + 16);
+          ctx.stroke();
+          ctx.setLineDash([]); // reset
+
+          // Candle connection dot
+          ctx.beginPath();
+          ctx.arc(x, isUp ? lowY + 2 : highY - 2, 3, 0, Math.PI * 2);
+          ctx.fillStyle = tagColor;
+          ctx.fill();
+
+          // Badge Container Pill
+          ctx.fillStyle = tagBg;
+          ctx.strokeStyle = tagColor;
+          ctx.lineWidth = 1.2;
+          ctx.shadowColor = tagColor;
+          ctx.shadowBlur = 6;
+          drawPillPath(x - 52, badgeY, 104, 16, 4);
           ctx.fill();
           ctx.stroke();
           ctx.shadowBlur = 0;
 
-          ctx.fillStyle = '#34d399';
-          ctx.font = 'bold 8px monospace';
-          ctx.fillText('BUY ▲', x - 12, lowY + 16);
-        } else if (i % 7 === 5 && !isUp) {
-          ctx.fillStyle = '#290610';
-          ctx.strokeStyle = '#f87171';
-          ctx.lineWidth = 1;
-          ctx.shadowColor = '#f87171';
-          ctx.shadowBlur = 8;
-          drawPillPath(x - 17, highY - 18, 34, 14, 4);
-          ctx.fill();
-          ctx.stroke();
-          ctx.shadowBlur = 0;
-
-          ctx.fillStyle = '#f87171';
-          ctx.font = 'bold 8px monospace';
-          ctx.fillText('SELL ▼', x - 13, highY - 8);
+          // Badge Text
+          ctx.fillStyle = tagColor;
+          ctx.font = 'bold 8px Orbitron, JetBrains Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(sigTag, x, badgeY + 11);
+          ctx.textAlign = 'left'; // reset
         }
       });
+
+      // Bottom-Right HUD Price Box: "Last 63083.0"
+      const hudX = width - 115;
+      const hudY = height - 28;
+      ctx.fillStyle = '#060312';
+      ctx.strokeStyle = upProbability >= 50 ? '#34d399' : '#f87171';
+      ctx.lineWidth = 1.2;
+      drawPillPath(hudX, hudY, 100, 22, 5);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 10px Orbitron, JetBrains Mono, monospace';
+      ctx.fillText(`Last ${currentPrice.toFixed(1)}`, hudX + 10, hudY + 15);
 
       // 4. Strike Price Glowing Horizontal Line
       const strikeY = getY(strikePrice);
