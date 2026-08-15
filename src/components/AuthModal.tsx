@@ -85,47 +85,116 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       role: isAdminEmail ? 'OWNER' : 'USER',
       subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
     })
-      .then(async () => {
-        // Authoritative server check for active Day Pass or Subscription
+      .then(async (syncRes: any) => {
+        const canonicalUser = syncRes?.user || {};
+        const canonicalUserId = canonicalUser.id || canonicalUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const discordUserId = canonicalUser.discordId || canonicalUser.discordUserId;
+
+        // Authoritative server check and automatic restore for active Day Pass or Subscription
+        let hasActiveEntitlement = false;
+        let restoredTierName = '';
+
         try {
-          const entRes = await fetch(`/api/entitlements?email=${encodeURIComponent(userEmail)}`);
-          if (entRes.ok) {
-            const entData = await entRes.json();
-            if (entData.entitlements?.proQuant || entData.entitlements?.eliteQuant || entData.dayPass?.active || entData.status === 'active') {
-              if (setUserRole) setUserRole('PRO');
-              if (onSuccessRole) onSuccessRole('PRO');
+          // 1. Run restore access API with full authenticated context
+          const restoreRes = await fetch('/api/auth/restore-access', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-user-email': userEmail,
+              'x-user-uid': canonicalUserId,
+            },
+            body: JSON.stringify({
+              email: userEmail,
+              uid: canonicalUserId,
+              discordUserId,
+            }),
+          });
+          if (restoreRes.ok) {
+            const restData = await restoreRes.json();
+            if (restData.success && (restData.restored || restData.entitlement?.status === 'active' || restData.entitlement?.dayPass?.active)) {
+              hasActiveEntitlement = true;
+              restoredTierName = restData.tier || restData.entitlement?.tier || '24-Hour Day Pass';
             }
           }
         } catch (_) {}
-      })
-      .catch((err) => console.warn('Auth sync error:', err));
 
-    setTimeout(() => {
-      setLoading(false);
-      setAuthState({
-        isAuthenticated: true,
-        user: {
-          id: `usr_${Math.random().toString(36).substring(2, 9)}`,
-          email: userEmail,
-          name: userName,
-          role: assignedRole,
-          apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
-          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        },
+        // 2. Double check /api/entitlements
+        if (!hasActiveEntitlement) {
+          try {
+            const entRes = await fetch(`/api/entitlements?email=${encodeURIComponent(userEmail)}&userId=${encodeURIComponent(canonicalUserId)}`);
+            if (entRes.ok) {
+              const entData = await entRes.json();
+              if (
+                entData.entitlements?.proQuant ||
+                entData.entitlements?.eliteQuant ||
+                entData.dayPass?.active ||
+                entData.status === 'active' ||
+                entData.plan === 'ELITE_QUANT' ||
+                entData.plan === 'PRO_QUANT' ||
+                entData.plan === 'DAY_PASS'
+              ) {
+                hasActiveEntitlement = true;
+                restoredTierName = entData.plan || '24-Hour Day Pass';
+              }
+            }
+          } catch (_) {}
+        }
+
+        const finalRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : hasActiveEntitlement ? 'PRO' : 'UNPAID';
+
+        setAuthState({
+          isAuthenticated: true,
+          user: {
+            id: canonicalUserId,
+            email: userEmail,
+            name: canonicalUser.name || userName,
+            role: finalRole,
+            discordId: discordUserId,
+            discordTag: canonicalUser.discordTag,
+            apiKey: canonicalUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
+            joinedDate: canonicalUser.createdAt ? new Date(canonicalUser.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          },
+        });
+
+        if (setUserRole) setUserRole(finalRole);
+        if (onSuccessRole) onSuccessRole(finalRole);
+
+        setLoading(false);
+        setSuccessMsg(
+          isAdminEmail
+            ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
+            : hasActiveEntitlement
+            ? `Active ${restoredTierName} Restored! Welcome back, ${userName}.`
+            : mode === 'register'
+            ? `Account created successfully! Welcome, ${userName}.`
+            : `Signed in successfully. Welcome back, ${userName}!`
+        );
+
+        setTimeout(() => {
+          setSuccessMsg('');
+          onClose();
+        }, 1000);
+      })
+      .catch((err) => {
+        console.warn('Auth sync error:', err);
+        setLoading(false);
+        setAuthState({
+          isAuthenticated: true,
+          user: {
+            id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+            email: userEmail,
+            name: userName,
+            role: assignedRole,
+            apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
+            joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+          },
+        });
+        if (setUserRole) setUserRole(assignedRole);
+        if (onSuccessRole) onSuccessRole(assignedRole);
+        setTimeout(() => {
+          onClose();
+        }, 800);
       });
-      if (onSuccessRole) onSuccessRole(assignedRole);
-      setSuccessMsg(
-        isAdminEmail
-          ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
-          : mode === 'register'
-          ? `Account created successfully! Welcome, ${userName}. Your account is ready for 24H Day Pass access.`
-          : `Signed in successfully. Welcome back, ${userName}!`
-      );
-      setTimeout(() => {
-        setSuccessMsg('');
-        onClose();
-      }, 1000);
-    }, 600);
   };
 
   return (

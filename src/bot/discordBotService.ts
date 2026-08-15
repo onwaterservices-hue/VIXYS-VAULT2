@@ -334,8 +334,10 @@ export async function assignDiscordRoleToUser(
     const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
     let targetRoleId = verifiedRoleId;
-    if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+    if (targetTier === 'ELITE' || targetTier === 'AI') {
       targetRoleId = eliteRoleId;
+    } else if (targetTier === 'PRO') {
+      targetRoleId = proRoleId;
     } else if (targetTier === 'DAY_PASS') {
       targetRoleId = dayPassRoleId;
     } else if (targetTier === 'VERIFIED') {
@@ -422,13 +424,23 @@ export async function assignDiscordRoleToUser(
         }
 
         // Handle obsolete/conflicting role cleanup before assigning new target role
-        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI' || targetTier === 'DAY_PASS') {
+        if (targetTier === 'ELITE') {
           if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
           if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
+          if (dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
+        } else if (targetTier === 'PRO') {
+          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
+          if (eliteRoleId !== proRoleId && member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (dayPassRoleId !== proRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
+        } else if (targetTier === 'DAY_PASS') {
+          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
+          if (eliteRoleId !== dayPassRoleId && member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (proRoleId !== dayPassRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
         } else if (targetTier === 'VERIFIED') {
           if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
           if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
-          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
+          if (proRoleId && proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
+          if (verifiedRoleId && !member.roles.cache.has(verifiedRoleId)) await member.roles.add(verifiedRoleId).catch(() => {});
         }
 
         // Check idempotency: if user already has role
@@ -565,7 +577,7 @@ export async function assignDiscordRoleToUser(
         }
 
         // Cleanup conflicting roles before PUT
-        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI' || targetTier === 'DAY_PASS') {
+        if (targetTier === 'ELITE') {
           if (existingRoles.includes(verifiedRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
               method: 'DELETE',
@@ -573,6 +585,50 @@ export async function assignDiscordRoleToUser(
             }).catch(() => {});
           }
           if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+        } else if (targetTier === 'PRO') {
+          if (existingRoles.includes(verifiedRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (eliteRoleId !== proRoleId && existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (dayPassRoleId !== proRoleId && existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+        } else if (targetTier === 'DAY_PASS') {
+          if (existingRoles.includes(verifiedRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (eliteRoleId !== dayPassRoleId && existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (proRoleId !== dayPassRoleId && existingRoles.includes(proRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
               method: 'DELETE',
               headers: { Authorization: `Bot ${botToken}` },
@@ -591,9 +647,15 @@ export async function assignDiscordRoleToUser(
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
           }
-          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
+          if (proRoleId && proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
               method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (verifiedRoleId && !existingRoles.includes(verifiedRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+              method: 'PUT',
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
           }

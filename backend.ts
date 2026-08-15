@@ -3462,6 +3462,7 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
       allow_promotion_codes: true,
       customer: stripeCustomerId || undefined,
       customer_email: stripeCustomerId ? undefined : (cleanUserEmail || undefined),
+      client_reference_id: user.id || cleanUid || cleanUserEmail,
       line_items: [lineItem],
       metadata: {
         vixyUserId: user.id,

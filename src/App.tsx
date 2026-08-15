@@ -126,8 +126,13 @@ export default function App() {
   });
 
   useEffect(() => {
-    const userEmail = authState.user?.email || localStorage.getItem('vixy_user_email') || 'vixyvault0@gmail.com';
+    const userEmail = authState.user?.email || (authState.isAuthenticated ? (localStorage.getItem('vixy_user_email') || '') : '');
     const userId = authState.user?.id || undefined;
+
+    if (!userEmail && !userId) {
+      setUserRole('UNPAID');
+      return;
+    }
 
     getEntitlementsApi(userEmail, userId)
       .then((ent) => {
@@ -759,6 +764,7 @@ export default function App() {
               setSubscription={setSubscription}
               userRole={userRole}
               setUserRole={setUserRole}
+              authState={authState}
             />
           )}
 
