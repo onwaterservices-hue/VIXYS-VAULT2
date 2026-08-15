@@ -397,21 +397,21 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       break;
 
     case 'PASS':
-      bgGlowClass = 'bg-gradient-to-b from-purple-800/40 to-purple-950/20 shadow-[0_0_20px_rgba(168,85,247,0.15)]';
-      bgInnerClass = 'bg-[#0a050f]';
-      accentHeaderTitle = 'text-purple-400/80';
-      accentHeaderValue = 'text-purple-300';
-      accentSubtitleLabel = 'text-purple-400';
-      accentSubtitleDesc = 'text-purple-300/70';
-      actionBtnClass = 'bg-purple-950/40 border-purple-800/60 text-purple-300/80';
-      actionBtnText = 'ENTRY NOT QUALIFIED';
-      statusLabelClass = 'text-purple-400/70';
-      statusText = 'CAPITAL DEFENDED';
+      bgGlowClass = 'bg-gradient-to-b from-purple-600/50 via-purple-900/30 to-purple-950/20 shadow-[0_0_40px_rgba(168,85,247,0.35)]';
+      bgInnerClass = 'bg-[#120526]';
+      accentHeaderTitle = 'text-purple-300 font-black';
+      accentHeaderValue = 'text-purple-200';
+      accentSubtitleLabel = 'text-purple-300';
+      accentSubtitleDesc = 'text-purple-200/80';
+      actionBtnClass = 'bg-purple-950/80 border-2 border-purple-500/80 text-purple-200 shadow-[0_0_25px_rgba(168,85,247,0.4)] font-black';
+      actionBtnText = 'VIXY SKIP — CAPITAL PROTECTED';
+      statusLabelClass = 'text-purple-300 font-bold';
+      statusText = '🛡 VIXY CAPITAL PROTECTED';
       titleLabelText = 'CYCLE EVALUATION';
-      statusValueText = 'PASS';
-      subtitleLabelText = 'NO STATISTICAL EDGE DETECTED';
-      subtitleDescText = 'VIXY intentionally rejected this cycle because it did not meet the statistical edge threshold.';
-      statusIcon = <ShieldCheck className="w-8 h-8 text-purple-400/80" />;
+      statusValueText = 'VIXY SKIP';
+      subtitleLabelText = 'CHOPPY MARKET // HIGH VOLATILITY RISK';
+      subtitleDescText = 'VIXY engine vetoed entry for this cycle to preserve capital due to high chop or insufficient edge.';
+      statusIcon = <ShieldCheck className="w-8 h-8 text-purple-300 drop-shadow-[0_0_20px_rgba(168,85,247,0.8)] animate-pulse" />;
       break;
 
     case 'ANALYZING':
