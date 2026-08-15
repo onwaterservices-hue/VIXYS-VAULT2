@@ -187,7 +187,11 @@ export interface ChartSignal {
   idx: number;
   time: string;
   price: number;
-  type: 'breakout' | 'breakdown' | 'doji' | 'doji_hold' | 'doji_reversal_bull' | 'doji_reversal_bear' | 'bb_squeeze';
+  type: 'active' | 'breakout' | 'breakdown' | 'doji_reversal_bull' | 'doji_reversal_bear' | 'doji_hold' | 'doji';
+  priority: 1 | 2 | 3 | 4; // 1 = Active Decision, 2 = Reversal/Risk, 3 = Entry Watch, 4 = Micro/Pattern
+  title: string;
+  subtitle?: string;
+  timeLabel: string;
   label: string;
   detail: string;
   color: string;
@@ -196,6 +200,9 @@ export interface ChartSignal {
 
 function buildChartSignals(candles: Candle[], dataSource: string = 'live'): ChartSignal[] {
   const signals: ChartSignal[] = [];
+  let lastBreakoutIdx = -10;
+  let lastBreakdownIdx = -10;
+  let lastDojiIdx = -10;
 
   candles.forEach((c, i) => {
     if (i < 2) return;
@@ -209,25 +216,36 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
       ? new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       : String(c.time || `Bar #${i + 1}`);
 
-    if (c.close > trailingHigh) {
+    // Breakout Resistance
+    if (c.close > trailingHigh && i - lastBreakoutIdx >= 4) {
+      lastBreakoutIdx = i;
       signals.push({
         idx: i,
         time: formattedTime,
         price: c.close,
         type: 'breakout',
-        label: `${formattedTime} BUY UP ENTRY`,
-        detail: `Close ($${c.close.toFixed(1)}) crossed above 10-bar trailing resistance ($${trailingHigh.toFixed(1)}).`,
+        priority: 2,
+        title: 'BUY UP ENTRY',
+        subtitle: 'Breakout',
+        timeLabel: formattedTime,
+        label: 'BUY UP ENTRY',
+        detail: `Close ($${c.close.toFixed(1)}) crossed above 10-bar resistance ($${trailingHigh.toFixed(1)}).`,
         color: '#10b981',
         symbol: '▲',
       });
-    } else if (c.close < trailingLow) {
+    } else if (c.close < trailingLow && i - lastBreakdownIdx >= 4) {
+      lastBreakdownIdx = i;
       signals.push({
         idx: i,
         time: formattedTime,
         price: c.close,
         type: 'breakdown',
-        label: `${formattedTime} ENTRY WATCH DOWN`,
-        detail: `Close ($${c.close.toFixed(1)}) broke below 10-bar trailing support ($${trailingLow.toFixed(1)}).`,
+        priority: 2,
+        title: 'ENTRY WATCH DOWN',
+        subtitle: 'Breakdown',
+        timeLabel: formattedTime,
+        label: 'ENTRY WATCH DOWN',
+        detail: `Close ($${c.close.toFixed(1)}) broke below 10-bar support ($${trailingLow.toFixed(1)}).`,
         color: '#f43f5e',
         symbol: '▼',
       });
@@ -236,7 +254,8 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
     const range = c.high - c.low;
     const isDoji = range > 0 && Math.abs(c.close - c.open) / range <= 0.12;
 
-    if (isDoji) {
+    if (isDoji && i - lastDojiIdx >= 3) {
+      lastDojiIdx = i;
       const nearSupport =
         Math.abs(c.close - trailingLow) / trailingLow <= 0.002 ||
         Math.abs(c.low - trailingLow) / trailingLow <= 0.002;
@@ -247,62 +266,63 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
       const hasNext = i < candles.length - 1;
       const nextCandle = hasNext ? candles[i + 1] : null;
 
-      if (nearSupport) {
-        if (hasNext && nextCandle && nextCandle.close > c.close) {
-          signals.push({
-            idx: i,
-            time: formattedTime,
-            price: c.close,
-            type: 'doji_reversal_bull',
-            label: `${formattedTime} REVERSAL WATCH`,
-            detail: `Doji pause formed near support ($${trailingLow.toFixed(1)}) and next candle closed higher ($${nextCandle.close.toFixed(1)}).`,
-            color: '#10b981',
-            symbol: '◈',
-          });
-        } else {
-          signals.push({
-            idx: i,
-            time: formattedTime,
-            price: c.close,
-            type: 'doji_hold',
-            label: `${formattedTime} ENTRY WATCH UP`,
-            detail: `Doji indecision candle formed within 0.15% of support ($${trailingLow.toFixed(1)}). Outcome pending next bar.`,
-            color: '#f59e0b',
-            symbol: '◆',
-          });
-        }
-      } else if (nearResistance) {
-        if (hasNext && nextCandle && nextCandle.close < c.close) {
-          signals.push({
-            idx: i,
-            time: formattedTime,
-            price: c.close,
-            type: 'doji_reversal_bear',
-            label: `${formattedTime} EXIT 50% / RISK`,
-            detail: `Doji pause formed near resistance ($${trailingHigh.toFixed(1)}) and next candle closed lower ($${nextCandle.close.toFixed(1)}).`,
-            color: '#f43f5e',
-            symbol: '◈',
-          });
-        } else {
-          signals.push({
-            idx: i,
-            time: formattedTime,
-            price: c.close,
-            type: 'doji_hold',
-            label: `${formattedTime} REVERSAL WATCH`,
-            detail: `Doji indecision candle formed within 0.15% of resistance ($${trailingHigh.toFixed(1)}). Outcome pending next bar.`,
-            color: '#f59e0b',
-            symbol: '◆',
-          });
-        }
+      if (nearSupport && hasNext && nextCandle && nextCandle.close > c.close) {
+        signals.push({
+          idx: i,
+          time: formattedTime,
+          price: c.close,
+          type: 'doji_reversal_bull',
+          priority: 2,
+          title: 'REVERSAL WATCH',
+          subtitle: 'Support Turn',
+          timeLabel: formattedTime,
+          label: 'REVERSAL WATCH',
+          detail: `Doji pause near support ($${trailingLow.toFixed(1)}) with bullish follow-through.`,
+          color: '#10b981',
+          symbol: '◈',
+        });
+      } else if (nearResistance && hasNext && nextCandle && nextCandle.close < c.close) {
+        signals.push({
+          idx: i,
+          time: formattedTime,
+          price: c.close,
+          type: 'doji_reversal_bear',
+          priority: 2,
+          title: 'RISK / EXIT',
+          subtitle: 'Resistance Fall',
+          timeLabel: formattedTime,
+          label: 'RISK / EXIT',
+          detail: `Doji pause near resistance ($${trailingHigh.toFixed(1)}) with bearish follow-through.`,
+          color: '#f43f5e',
+          symbol: '◈',
+        });
+      } else if (nearSupport || nearResistance) {
+        signals.push({
+          idx: i,
+          time: formattedTime,
+          price: c.close,
+          type: 'doji_hold',
+          priority: 3,
+          title: 'ENTRY WATCH',
+          subtitle: 'Key Level Pause',
+          timeLabel: formattedTime,
+          label: 'ENTRY WATCH',
+          detail: `Doji indecision candle near key level. Pending confirmation.`,
+          color: '#f59e0b',
+          symbol: '◆',
+        });
       } else {
         signals.push({
           idx: i,
           time: formattedTime,
           price: c.close,
           type: 'doji',
-          label: `DOJI PIVOT`,
-          detail: `Open and close within 12% of total bar range ($${range.toFixed(1)}). Indecision inside range.`,
+          priority: 4,
+          title: 'DOJI PIVOT',
+          subtitle: 'Range Pause',
+          timeLabel: formattedTime,
+          label: 'DOJI PIVOT',
+          detail: `Open and close within 12% of total bar range ($${range.toFixed(1)}).`,
           color: '#f59e0b',
           symbol: '◇',
         });
@@ -948,37 +968,65 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               <g>
                 {(() => {
                   const matchingSig = signals.find((s) => s.idx === i);
-                  const sigLabel = matchingSig ? matchingSig.label : (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN');
-                  const sigColor = matchingSig ? matchingSig.color : (isBull ? '#10b981' : '#f43f5e');
-                  // Vertical guide line
+                  if (!matchingSig && !isMobile && i !== visibleCandles.length - 1) return null;
+
+                  // Priority check: on mobile, collapse Level 3 and Level 4 signals
+                  if (isMobile && matchingSig && matchingSig.priority > 2) return null;
+
+                  const isLastCandle = i === visibleCandles.length - 1;
+                  const sigTitle = matchingSig
+                    ? matchingSig.title
+                    : isLastCandle
+                    ? `VIXY: ${activeSignal.direction || (isBull ? 'BUY UP' : 'BUY DOWN')}`
+                    : (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN');
+
+                  const sigSubtitle = matchingSig
+                    ? matchingSig.subtitle || matchingSig.timeLabel
+                    : isLastCandle
+                    ? `Conf ${Math.round((activeSignal.confidence || 0.91) * 100)}%`
+                    : '';
+
+                  const sigColor = matchingSig
+                    ? matchingSig.color
+                    : (isBull ? '#10b981' : '#f43f5e');
+
                   const guideStartY = isBull ? y(c.low) + 4 : y(c.high) - 4;
-                  const stackOffset = (i % 2 === 0 ? 0 : 18);
-                  const badgeY = isBull ? y(c.low) + 18 + stackOffset : y(c.high) - 32 - stackOffset;
+
+                  // Collision Stacking offset: stagger adjacent candles
+                  const stackStep = (i % 3) * (isMobile ? 18 : 22);
+                  const badgeWidth = isMobile ? 82 : 108;
+                  const badgeHeight = sigSubtitle ? (isMobile ? 20 : 24) : (isMobile ? 16 : 18);
+                  const badgeY = isBull
+                    ? y(c.low) + 16 + stackStep
+                    : y(c.high) - badgeHeight - 16 - stackStep;
 
                   return (
-                    <g className="transition-all duration-300 cursor-pointer" onClick={(e) => {
-                      e.stopPropagation();
-                      if (audioEnabled) {
-                        if (isBull) playBuyUpSound(); else playBuyDownSound();
-                      }
-                    }}>
+                    <g
+                      className="transition-all duration-200 cursor-pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (audioEnabled) {
+                          if (isBull) playBuyUpSound(); else playBuyDownSound();
+                        }
+                      }}
+                    >
                       {/* Dashed vertical guideline connecting to candle wick */}
                       <line
                         x1={cx}
                         y1={guideStartY}
                         x2={cx}
-                        y2={badgeY + (isBull ? 0 : 16)}
+                        y2={isBull ? badgeY : badgeY + badgeHeight}
                         stroke={sigColor}
                         strokeWidth="1"
                         strokeDasharray="2 2"
-                        strokeOpacity="0.8"
+                        strokeOpacity="0.75"
                       />
 
                       {/* Candle connection dot */}
                       <circle
                         cx={cx}
                         cy={guideStartY}
-                        r="3.5"
+                        r={isMobile ? "2.5" : "3.5"}
                         fill={sigColor}
                         stroke="#070412"
                         strokeWidth="1"
@@ -986,27 +1034,44 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
                       {/* Badge Container Box */}
                       <rect
-                        x={cx - 52}
+                        x={cx - badgeWidth / 2}
                         y={badgeY}
-                        width="104"
-                        height="18"
-                        rx="4"
+                        width={badgeWidth}
+                        height={badgeHeight}
+                        rx="5"
                         fill={isBull ? "#042f2e" : "#4c0519"}
                         stroke={sigColor}
-                        strokeWidth="1.2"
-                        className="shadow-md"
+                        strokeWidth={matchingSig?.priority === 1 || isLastCandle ? "1.8" : "1.2"}
+                        className="shadow-lg"
                       />
+
+                      {/* Title Text */}
                       <text
                         x={cx}
-                        y={badgeY + 12}
+                        y={badgeY + (sigSubtitle ? (isMobile ? 10 : 11) : (isMobile ? 11 : 12))}
                         fill={isBull ? "#34d399" : "#fb7185"}
-                        fontSize="8"
+                        fontSize={isMobile ? "7.5" : "8.5"}
                         fontWeight="900"
                         textAnchor="middle"
-                        className="font-mono tracking-tight pointer-events-none"
+                        className="font-mono tracking-tight pointer-events-none uppercase"
                       >
-                        {sigLabel}
+                        {sigTitle}
                       </text>
+
+                      {/* Subtitle / Timestamp Text */}
+                      {sigSubtitle && (
+                        <text
+                          x={cx}
+                          y={badgeY + (isMobile ? 17 : 19)}
+                          fill="#94a3b8"
+                          fontSize={isMobile ? "6.5" : "7"}
+                          fontWeight="700"
+                          textAnchor="middle"
+                          className="font-mono pointer-events-none"
+                        >
+                          {sigSubtitle}
+                        </text>
+                      )}
                     </g>
                   );
                 })()}
@@ -1051,14 +1116,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           fontSize="9"
           fontWeight="bold"
         >
-          ${latestClose.toFixed(1)}
+          ${latestClose > 0 ? latestClose.toFixed(1) : 'WAITING'}
         </text>
       </g>
 
-      {/* Bottom-Right HUD Price Box: "Last 63089.0" */}
-      <g transform={`translate(${marginLeft + plotWidth - 105}, ${marginTop + chartHeight - 26})`}>
+      {/* Bottom-Right HUD Price Box: Always Real Spot Price */}
+      <g transform={`translate(${marginLeft + plotWidth - 118}, ${marginTop + chartHeight - 26})`}>
         <rect
-          width="100"
+          width="112"
           height="22"
           rx="5"
           fill="#060312"
@@ -1066,8 +1131,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           strokeWidth="1.2"
           opacity="0.95"
         />
-        <text x="10" y="15" fill="#ffffff" fontSize="10" fontWeight="900" className="font-mono tracking-wider">
-          Last {latestClose.toFixed(1)}
+        <text x="8" y="15" fill="#ffffff" fontSize="9.5" fontWeight="900" className="font-mono tracking-wider">
+          {latestClose > 0 ? `Last $${latestClose.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}` : 'LIVE PRICE FEED'}
         </text>
       </g>
 
@@ -1338,57 +1403,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     </svg>
   );
 
-  const annotationPanel = (
-    <div className="flex flex-col h-full bg-[#150f28] rounded-xl border border-[#2a2340] p-3 text-xs font-mono space-y-3">
-      <div className="flex items-center justify-between border-b border-[#2a2340] pb-2">
-        <span className="text-[10px] font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
-          <Zap className="w-3 h-3 text-amber-400" /> Pattern Detections ({signals.length})
-        </span>
-        <span className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-          Honest Rules
-        </span>
-      </div>
-
-      {signals.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center text-[#8b84a8] text-[11px] text-center p-4">
-          No pattern signals detected in visible range.
-        </div>
-      ) : (
-        <div className="space-y-2 overflow-y-auto max-h-[380px] pr-1">
-          {signals.map((sig, sIdx) => {
-            const isSelected = hoveredSignalIdx === sIdx;
-            return (
-              <div
-                key={sIdx}
-                onClick={() => {
-                  setHoveredSignalIdx(sIdx);
-                  setHoveredCandleIndex(sig.idx);
-                }}
-                className={`p-2.5 rounded-lg border transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-purple-950/40 border-purple-500/50 shadow-lg ring-1 ring-purple-500/30'
-                    : 'bg-[#0d0a1a]/60 border-[#2a2340] hover:border-purple-500/30'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="font-bold text-[11px]" style={{ color: sig.color }}>
-                    {sig.symbol} {sig.label}
-                  </span>
-                  <span className="text-[9px] text-[#8b84a8]">{sig.time}</span>
-                </div>
-                <p className="text-[10px] text-purple-200/80 leading-relaxed">{sig.detail}</p>
-                <div className="mt-1.5 text-[9px] font-bold text-purple-300/60 flex items-center justify-between">
-                  <span>Price Level: ${sig.price.toFixed(1)}</span>
-                  <span className="text-[9px] text-teal-400">Bar #{sig.idx + 1}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-
   const controlsBar = (
     <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#080316] rounded-2xl border border-purple-800/60 font-mono text-xs mb-3 shadow-xl">
       {/* Title & Status Chips */}
@@ -1638,33 +1652,20 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const mainViewContent = (
     <div
       ref={containerRef}
-      className="w-full min-h-[580px] md:h-[650px] lg:h-[750px] flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-3 sm:p-4 text-[#e5e0f5] font-mono shadow-2xl"
+      className="w-full flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-3 sm:p-4 text-[#e5e0f5] font-mono shadow-2xl overflow-hidden"
     >
       {controlsBar}
       {candleHudHeader}
       {indicatorToolbar}
 
-      {isWide ? (
-        <div className="flex-1 grid grid-cols-[1fr_260px] gap-4 overflow-hidden min-h-[420px]">
-          <div
-            ref={plotWrapperRef}
-            className="w-full h-full min-h-[380px] sm:min-h-[440px] md:min-h-[480px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center"
-          >
-            {mainSvgContent}
-          </div>
-          <div className="overflow-y-auto max-h-[500px]">{annotationPanel}</div>
+      <div className="w-full flex-1 min-h-[420px] sm:min-h-[480px] md:min-h-[540px] lg:min-h-[600px] flex flex-col overflow-hidden">
+        <div
+          ref={plotWrapperRef}
+          className="w-full flex-1 min-h-[380px] sm:min-h-[440px] md:min-h-[480px] lg:min-h-[540px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center"
+        >
+          {mainSvgContent}
         </div>
-      ) : (
-        <div className="flex-1 flex flex-col space-y-3 min-h-[420px]">
-          <div
-            ref={plotWrapperRef}
-            className="w-full h-[380px] sm:h-[440px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center"
-          >
-            {mainSvgContent}
-          </div>
-          <div className="w-full border-t border-[#2a2340] pt-3">{annotationPanel}</div>
-        </div>
-      )}
+      </div>
 
       {/* Legend Footer */}
       <div className="mt-3 pt-3 border-t border-[#2a2340] flex flex-wrap items-center justify-between gap-2 text-[10px] text-[#8b84a8]">

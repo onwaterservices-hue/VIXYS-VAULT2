@@ -561,13 +561,13 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             <NeuralRibbonChart asset={selectedAsset} desk={timeframe.toLowerCase()} title="BTC 15M • AI NEURAL RIBBON & ORDER FLOW" />
           </div>
 
-          {/* 8. STAGE 2: MARKET STRUCTURE & PATTERN DETECTION */}
+          {/* 8. STAGE 2: MARKET STRUCTURE & SCALP DECISION MATRIX */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-amber-300">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_#fbbf24]" />
-                  <span>STAGE 2 // MARKET STRUCTURE & PATTERN DETECTION</span>
+                  <span>STAGE 2 // MARKET STRUCTURE & SCALP DECISION MATRIX</span>
                 </div>
                 <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
                   DNA CLUSTERS & SCALP PROBABILITY CONE
@@ -578,15 +578,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               </span>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <AIPatternEngine
-                ticker={ticker}
-                timeframe={timeframe}
-                appMode={appMode}
-                userRole={userRole}
-                alertSettings={alertSettings}
-                onOpenDiscordModal={onOpenAlerts}
-              />
+            <div className="w-full">
               <ScalpDecisionChart
                 asset={selectedAsset}
                 desk={timeframe.toLowerCase()}

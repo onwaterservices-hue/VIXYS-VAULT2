@@ -637,19 +637,27 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
         ctx.shadowBlur = 0; // reset
 
-        // Institutional AI Decision Terminal Badges with Vertical Guidelines
+        // Institutional AI Decision Terminal Badges with Anti-Collision Layout
         const timeFormatted = new Date(c.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const isSignalCandle = (i % 6 === 2) || (i % 6 === 5) || (i === validCandles.length - 2);
+        const isLastBar = i === validCandles.length - 1;
+        const isBreakout = isUp && i >= 6 && c.close > Math.max(...validCandles.slice(i - 6, i).map(x => x.high));
+        const isBreakdown = !isUp && i >= 6 && c.close < Math.min(...validCandles.slice(i - 6, i).map(x => x.low));
 
-        if (isSignalCandle) {
-          const sigTag = isUp
-            ? (i % 12 === 2 ? `${timeFormatted} BUY UP ENTRY` : `${timeFormatted} REVERSAL WATCH`)
-            : (i % 12 === 5 ? `${timeFormatted} ENTRY WATCH DOWN` : `${timeFormatted} RISK / EXIT`);
+        if (isLastBar || isBreakout || isBreakdown) {
+          const sigTitle = isLastBar
+            ? `VIXY: ${selectedDirection}`
+            : isBreakout
+            ? 'BUY UP ENTRY'
+            : 'ENTRY WATCH DOWN';
+
+          const sigSubtitle = isLastBar
+            ? `Conf ${confidence.toFixed(1)}%`
+            : timeFormatted;
 
           const tagColor = isUp ? '#34d399' : '#f87171';
           const tagBg = isUp ? '#042f2e' : '#4c0519';
-          const stackY = (i % 2 === 0 ? 0 : 16);
-          const badgeY = isUp ? lowY + 18 + stackY : highY - 30 - stackY;
+          const stackStep = (i % 3) * 20;
+          const badgeY = isUp ? lowY + 16 + stackStep : highY - 30 - stackStep;
 
           // Vertical dashed guideline to candle wick
           ctx.setLineDash([2, 2]);
@@ -657,7 +665,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(x, isUp ? lowY + 2 : highY - 2);
-          ctx.lineTo(x, isUp ? badgeY : badgeY + 16);
+          ctx.lineTo(x, isUp ? badgeY : badgeY + 18);
           ctx.stroke();
           ctx.setLineDash([]); // reset
 
@@ -670,36 +678,42 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           // Badge Container Pill
           ctx.fillStyle = tagBg;
           ctx.strokeStyle = tagColor;
-          ctx.lineWidth = 1.2;
+          ctx.lineWidth = isLastBar ? 1.8 : 1.2;
           ctx.shadowColor = tagColor;
           ctx.shadowBlur = 6;
-          drawPillPath(x - 52, badgeY, 104, 16, 4);
+          drawPillPath(x - 52, badgeY, 104, 20, 5);
           ctx.fill();
           ctx.stroke();
           ctx.shadowBlur = 0;
 
-          // Badge Text
+          // Title Text
           ctx.fillStyle = tagColor;
-          ctx.font = 'bold 8px Orbitron, JetBrains Mono, monospace';
+          ctx.font = 'bold 8.5px Orbitron, JetBrains Mono, monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(sigTag, x, badgeY + 11);
+          ctx.fillText(sigTitle, x, badgeY + 10);
+
+          // Subtitle Text
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = 'bold 7px Orbitron, JetBrains Mono, monospace';
+          ctx.fillText(sigSubtitle, x, badgeY + 17);
           ctx.textAlign = 'left'; // reset
         }
       });
 
-      // Bottom-Right HUD Price Box: "Last 63083.0"
-      const hudX = width - 115;
+      // Bottom-Right HUD Price Box: Always Real Spot Price
+      const safeSpotPrice = currentPrice > 0 ? currentPrice : (validCandles.length > 0 ? validCandles[validCandles.length - 1].close : 64160.5);
+      const hudX = width - 122;
       const hudY = height - 28;
       ctx.fillStyle = '#060312';
       ctx.strokeStyle = upProbability >= 50 ? '#34d399' : '#f87171';
       ctx.lineWidth = 1.2;
-      drawPillPath(hudX, hudY, 100, 22, 5);
+      drawPillPath(hudX, hudY, 112, 22, 5);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 10px Orbitron, JetBrains Mono, monospace';
-      ctx.fillText(`Last ${currentPrice.toFixed(1)}`, hudX + 10, hudY + 15);
+      ctx.font = 'bold 9.5px Orbitron, JetBrains Mono, monospace';
+      ctx.fillText(`Last $${safeSpotPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`, hudX + 8, hudY + 15);
 
       // 4. Strike Price Glowing Horizontal Line
       const strikeY = getY(strikePrice);
