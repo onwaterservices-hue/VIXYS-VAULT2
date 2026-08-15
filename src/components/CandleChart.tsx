@@ -326,7 +326,45 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   modelSignal,
   venue = 'Kalshi',
 }) => {
-  const { containerRef, width: measuredWidth, height: measuredHeight } = useContainerSize();
+  const { containerRef, width: measuredWidth } = useContainerSize();
+  const plotWrapperRef = useRef<HTMLDivElement | null>(null);
+  const [plotDimensions, setPlotDimensions] = useState({ width: 750, height: 480 });
+
+  useEffect(() => {
+    const el = plotWrapperRef.current;
+    if (!el) return;
+
+    const updateDimensions = () => {
+      const rect = el.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setPlotDimensions({
+          width: Math.floor(rect.width),
+          height: Math.floor(rect.height),
+        });
+      }
+    };
+
+    updateDimensions();
+
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setPlotDimensions({
+            width: Math.floor(entry.contentRect.width),
+            height: Math.floor(entry.contentRect.height),
+          });
+        }
+      }
+    });
+
+    observer.observe(el);
+    window.addEventListener('resize', updateDimensions);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateDimensions);
+    };
+  }, []);
+
   const [hoveredSignalIdx, setHoveredSignalIdx] = useState<number | null>(null);
   const [hoveredCandleIndex, setHoveredCandleIndex] = useState<number | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
@@ -346,20 +384,18 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Mouse Crosshair Position State
   const [crosshairPos, setCrosshairPos] = useState<{ x: number; y: number; price: number; timeLabel: string } | null>(null);
 
-  const isMobile = measuredWidth < 600;
+  const chartSvgWidth = plotDimensions.width;
+  const svgHeight = plotDimensions.height;
+  const isMobile = chartSvgWidth < 520;
   const isWide = measuredWidth >= WIDE_BREAKPOINT;
-  const sidePanelWidth = isWide ? 260 : 0;
-  const gapX = isWide ? 16 : 0;
-  const paddingX = isMobile ? 16 : 32;
-  const chartSvgWidth = Math.max(300, isWide ? measuredWidth - sidePanelWidth - gapX - paddingX : measuredWidth - paddingX);
 
   const safeCandles = candles || [];
 
   const rawVisibleCount =
     safeCandles.length > 0 ? Math.max(6, Math.round(safeCandles.length / zoomLevel)) : 0;
 
-  const marginLeft = isMobile ? 42 : 65;
-  const marginRight = isMobile ? 55 : 80; // Extra room for right Y-axis tags & target badges
+  const marginLeft = isMobile ? 40 : 55;
+  const marginRight = isMobile ? 50 : 60; // Room for price scale & target badges on right
   const plotWidth = Math.max(100, chartSvgWidth - marginLeft - marginRight);
 
   const maxFitCandles = Math.max(6, Math.floor(plotWidth / MIN_CANDLE_SLOT_PX));
@@ -425,16 +461,11 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     );
   }
 
-  const volumeHeight = isMobile ? 45 : 60;
-  const rsiHeight = showRSI ? (isMobile ? 55 : 75) : 0;
-  const marginTop = isMobile ? 15 : 25;
-  const marginBottom = isMobile ? 25 : 35;
-  const svgHeight = isWide
-    ? Math.max(480, measuredHeight - 160)
-    : isMobile
-    ? 380
-    : 440;
-  const chartHeight = Math.max(180, svgHeight - volumeHeight - rsiHeight - marginTop - marginBottom);
+  const volumeHeight = isMobile ? 40 : 55;
+  const rsiHeight = showRSI ? (isMobile ? 50 : 65) : 0;
+  const marginTop = isMobile ? 15 : 20;
+  const marginBottom = isMobile ? 20 : 30;
+  const chartHeight = Math.max(150, svgHeight - volumeHeight - rsiHeight - marginTop - marginBottom);
 
   const lowPrices = visibleCandles.map((c) => c.low);
   const highPrices = visibleCandles.map((c) => c.high);
@@ -1608,15 +1639,21 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       {indicatorToolbar}
 
       {isWide ? (
-        <div className="flex-1 grid grid-cols-[1fr_260px] gap-4 overflow-hidden min-h-[380px]">
-          <div className="w-full h-full overflow-hidden flex justify-center items-center relative">
+        <div className="flex-1 grid grid-cols-[1fr_260px] gap-4 overflow-hidden min-h-[420px]">
+          <div
+            ref={plotWrapperRef}
+            className="w-full h-full min-h-[380px] sm:min-h-[440px] md:min-h-[480px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center"
+          >
             {mainSvgContent}
           </div>
           <div className="overflow-y-auto max-h-[500px]">{annotationPanel}</div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col space-y-3 min-h-[380px]">
-          <div className="w-full h-[380px] sm:h-[440px] flex justify-center items-center relative overflow-hidden">
+        <div className="flex-1 flex flex-col space-y-3 min-h-[420px]">
+          <div
+            ref={plotWrapperRef}
+            className="w-full h-[380px] sm:h-[440px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center"
+          >
             {mainSvgContent}
           </div>
           <div className="w-full border-t border-[#2a2340] pt-3">{annotationPanel}</div>
