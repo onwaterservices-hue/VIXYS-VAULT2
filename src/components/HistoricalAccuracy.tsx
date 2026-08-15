@@ -420,60 +420,63 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <div 
                   key={log.id} 
                   onClick={() => setActiveProvenance(log)}
-                  className={`border cursor-pointer transition-all duration-200 rounded-2xl p-5 shadow-lg relative overflow-hidden group ${
+                  className={`border cursor-pointer transition-all duration-300 rounded-2xl p-5 shadow-xl relative overflow-hidden group ${
                     isLocked 
-                      ? 'bg-gradient-to-b from-[#130826] to-[#0a0414] border-purple-500/40 hover:border-purple-400/70 shadow-[0_0_20px_rgba(168,85,247,0.1)]' 
+                      ? 'bg-gradient-to-b from-[#1d0a3d] via-[#120528] to-[#0a0218] border-purple-400 hover:border-purple-300 shadow-[0_0_25px_rgba(168,85,247,0.3)] animate-pulse' 
                       : isNoTrade 
-                      ? 'bg-gradient-to-b from-[#110524] to-[#080212] border-purple-500/30 hover:border-purple-400/50' 
+                      ? 'bg-gradient-to-b from-[#220942] via-[#14052b] to-[#0b021a] border-purple-500/80 hover:border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.35)]' 
                       : isWin 
-                      ? 'bg-gradient-to-b from-[#06180e] via-[#05110a] to-[#020805] border-emerald-500/40 hover:border-emerald-400/70 shadow-[0_0_20px_rgba(16,185,129,0.08)]' 
-                      : 'bg-gradient-to-b from-[#1c080b] via-[#120406] to-[#090203] border-rose-500/40 hover:border-rose-400/70 shadow-[0_0_20px_rgba(244,63,94,0.08)]'
+                      ? 'bg-gradient-to-b from-[#072a18] via-[#05170d] to-[#020a05] border-emerald-500/70 hover:border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.22)]' 
+                      : 'bg-gradient-to-b from-[#2e0912] via-[#1a0509] to-[#0d0204] border-rose-500/70 hover:border-rose-400 shadow-[0_0_25px_rgba(244,63,94,0.22)]'
                   }`}
                 >
                   {/* Subtle Background Glow on Hover */}
                   <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
-                    isWin ? 'bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent' :
-                    isLoss ? 'bg-gradient-to-br from-rose-500/10 via-transparent to-transparent' :
-                    isLocked ? 'bg-gradient-to-br from-purple-500/10 via-transparent to-transparent' :
-                    'bg-gradient-to-br from-purple-500/10 via-transparent to-transparent'
+                    isWin ? 'bg-gradient-to-br from-emerald-500/15 via-transparent to-transparent' :
+                    isLoss ? 'bg-gradient-to-br from-rose-500/15 via-transparent to-transparent' :
+                    'bg-gradient-to-br from-purple-500/20 via-transparent to-transparent'
                   }`} />
                   
                   {/* Top Bar: Label + Result Badge */}
                   <div className="flex justify-between items-center mb-4 relative z-10">
                     <div className="flex items-center gap-2.5">
-                      <div className={`text-[10px] font-black tracking-widest border px-2 py-0.5 rounded shadow-sm ${
+                      <div className={`text-[10px] font-black tracking-widest border px-2.5 py-0.5 rounded shadow-md uppercase ${
                         isNoTrade 
-                          ? 'text-purple-300 border-purple-500/40 bg-purple-950/60' 
-                          : 'text-purple-300 border-purple-500/40 bg-purple-950/60'
+                          ? 'text-purple-200 border-purple-400/80 bg-purple-900/80 shadow-[0_0_12px_rgba(168,85,247,0.4)]' 
+                          : isWin
+                          ? 'text-emerald-200 border-emerald-500/80 bg-emerald-950/80 shadow-[0_0_12px_rgba(16,185,129,0.3)]'
+                          : isLoss
+                          ? 'text-rose-200 border-rose-500/80 bg-rose-950/80 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                          : 'text-purple-200 border-purple-400/80 bg-purple-950/80 shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       }`}>
                         {isNoTrade ? "VIXY'S SKIP" : "VIXY'S LOCK"}
                       </div>
-                      <div className="text-xs font-black tracking-widest text-zinc-400 font-mono">
-                        {log.ticker || 'BTC'} <span className="mx-1 text-zinc-600">•</span> 15M
+                      <div className="text-xs font-black tracking-widest text-zinc-300 font-mono">
+                        {log.ticker || 'BTC'} <span className="mx-1 text-purple-400/60">•</span> 15M
                       </div>
                     </div>
 
                     <div className="text-right">
                       {isLocked && (
-                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-500/50 text-purple-300 bg-purple-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.25)] animate-pulse">
-                          <Lock className="w-3.5 h-3.5 text-purple-400" />
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-400 text-purple-200 bg-purple-950/90 flex items-center gap-1.5 shadow-[0_0_16px_rgba(168,85,247,0.4)] animate-pulse">
+                          <Lock className="w-3.5 h-3.5 text-purple-300" />
                           <span>LOCKED</span>
                         </div>
                       )}
                       {isNoTrade && (
-                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-500/50 text-purple-300 bg-purple-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.25)]">
-                          <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-400/90 text-purple-200 bg-purple-950/90 flex items-center gap-1.5 shadow-[0_0_18px_rgba(168,85,247,0.45)]">
+                          <Shield className="w-3.5 h-3.5 text-purple-300" />
                           <span>PROTECTED</span>
                         </div>
                       )}
                       {isWin && (
-                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-emerald-400/50 text-emerald-300 bg-emerald-950/70 flex items-center gap-1.5 shadow-[0_0_15px_rgba(52,211,153,0.3)]">
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-emerald-400/80 text-emerald-200 bg-emerald-950/90 flex items-center gap-1.5 shadow-[0_0_18px_rgba(52,211,153,0.4)]">
                           <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                           <span>✓ WIN</span>
                         </div>
                       )}
                       {isLoss && (
-                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-rose-400/50 text-rose-300 bg-rose-950/70 flex items-center gap-1.5 shadow-[0_0_15px_rgba(244,63,94,0.3)]">
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-rose-400/80 text-rose-200 bg-rose-950/90 flex items-center gap-1.5 shadow-[0_0_18px_rgba(244,63,94,0.4)]">
                           <XCircle className="w-3.5 h-3.5 text-rose-400" />
                           <span>✗ LOSS</span>
                         </div>
@@ -485,59 +488,71 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <div className="flex items-center justify-between mb-5 relative z-10">
                     <div className="flex items-center gap-2 font-black text-2xl tracking-tight">
                       {isNoTrade ? (
-                        <span className="text-purple-400 flex items-center gap-2"><AlertTriangle className="w-6 h-6"/> NO TRADE</span>
+                        <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(168,85,247,0.6)]">
+                          <AlertTriangle className="w-6 h-6 text-purple-400 animate-pulse"/> VIXY SKIP
+                        </span>
                       ) : log.direction === 'UP' ? (
-                        <span className="text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-6 h-6 text-emerald-400"/> BUY UP</span>
+                        <span className="text-emerald-400 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]">
+                          <ArrowUpRight className="w-6 h-6 text-emerald-400"/> BUY UP
+                        </span>
                       ) : (
-                        <span className="text-purple-300 flex items-center gap-2"><ArrowDownRight className="w-6 h-6 text-purple-400"/> BUY DOWN</span>
+                        <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(168,85,247,0.6)]">
+                          <ArrowDownRight className="w-6 h-6 text-purple-400"/> BUY DOWN
+                        </span>
                       )}
                     </div>
 
                     {/* Actual Market Outcome Tag for Resolved Trades */}
                     {isResolved && (
-                      <div className="text-[11px] font-mono font-bold px-2 py-0.5 rounded bg-black/50 border border-zinc-800 text-zinc-300">
+                      <div className="text-[11px] font-mono font-bold px-2.5 py-0.5 rounded bg-black/60 border border-zinc-800 text-zinc-300">
                         ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400' : 'text-rose-400'}>{log.actualOutcome || (log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')}</span>
+                      </div>
+                    )}
+                    {isNoTrade && (
+                      <div className="text-[10px] font-mono font-black px-2.5 py-0.5 rounded bg-purple-950/90 border border-purple-500/60 text-purple-300 tracking-wider">
+                        STATUS: NO TRADE
                       </div>
                     )}
                   </div>
 
                   {/* Metrics Grid */}
                   {isNoTrade ? (
-                    <div className="space-y-4 relative z-10 mb-2 mt-4">
-                      <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Reason</div>
-                        <div className="font-mono text-[13px] text-white font-bold">{log.qualificationReason?.replace(/_/g, ' ') || 'CHOPPY MARKET'}</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Regime</div>
-                        <div className="font-mono text-[13px] text-zinc-300 font-bold">RANGING / NEUTRAL</div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-3.5 relative z-10 mb-2 mt-4 bg-purple-950/40 border border-purple-800/40 rounded-xl p-3.5">
+                      <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Confidence</div>
-                          <div className="font-mono text-cyan-400 text-[14px] font-bold mb-1">{log.confidence || 72}%</div>
-                          <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                            <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] rounded-full" style={{ width: `${log.confidence || 72}%` }}></div>
+                          <div className="text-[9.5px] uppercase text-purple-300/70 font-black tracking-wider mb-1">REASON</div>
+                          <div className="font-mono text-[12.5px] text-purple-100 font-bold tracking-tight">
+                            {log.qualificationReason?.replace(/_/g, ' ') || 'CHOPPY MARKET REGIME'}
                           </div>
                         </div>
                         <div>
-                          <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Reversal Risk</div>
-                          <div className="font-mono text-purple-400 text-[14px] font-bold mb-1">39%</div>
-                          <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                            <div className="absolute top-0 left-0 h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)] rounded-full" style={{ width: `39%` }}></div>
+                          <div className="text-[9.5px] uppercase text-purple-300/70 font-black tracking-wider mb-1">MARKET REGIME</div>
+                          <div className="font-mono text-[12.5px] text-purple-200 font-bold">
+                            RANGING / HIGH CHOP
                           </div>
                         </div>
                       </div>
-                      
-                      <div className="my-4 border-t border-zinc-800/40 relative z-10"></div>
-                      <div className="flex justify-between items-center relative z-10">
-                        <div className="flex items-center gap-1.5 text-zinc-500">
-                          <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider">CYCLE</div>
-                          <div className="text-[10px] font-mono tracking-wider text-zinc-300 ml-1">15M</div>
+
+                      <div className="grid grid-cols-2 gap-4 pt-1">
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9.5px] uppercase text-purple-300/70 font-black tracking-wider">CONFIDENCE</span>
+                            <span className="font-mono text-cyan-300 text-[12px] font-bold">{log.confidence || 72}%</span>
+                          </div>
+                          <div className="w-full h-[4px] bg-purple-950 rounded-full overflow-hidden relative border border-purple-800/50">
+                            <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)] rounded-full" style={{ width: `${log.confidence || 72}%` }}></div>
+                          </div>
+                          <span className="text-[8.5px] text-cyan-400/80 font-mono tracking-wider block mt-1">BELOW 80% THRESHOLD</span>
                         </div>
-                        <div className="flex items-center gap-1.5 text-zinc-500">
-                           <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider">MDL</div>
-                           <div className="text-[10px] font-mono text-purple-400/80 tracking-wider">VIXY-ENS-5.x</div>
+                        <div>
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-[9.5px] uppercase text-purple-300/70 font-black tracking-wider">REVERSAL RISK</span>
+                            <span className="font-mono text-purple-300 text-[12px] font-bold">{log.reversalRisk || 42}%</span>
+                          </div>
+                          <div className="w-full h-[4px] bg-purple-950 rounded-full overflow-hidden relative border border-purple-800/50">
+                            <div className="absolute top-0 left-0 h-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.9)] rounded-full" style={{ width: `${log.reversalRisk || 42}%` }}></div>
+                          </div>
+                          <span className="text-[8.5px] text-purple-300/80 font-mono tracking-wider block mt-1">ELEVATED RISK LEVEL</span>
                         </div>
                       </div>
                     </div>
@@ -545,17 +560,17 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     <>
                     <div className="grid grid-cols-2 gap-y-5 gap-x-4 text-sm relative z-10 mb-2">
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Locked At</div>
-                        <div className="flex items-center gap-1.5 text-zinc-300">
-                          <Clock className="w-3.5 h-3.5 text-purple-400/70" />
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Locked At</div>
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <Clock className="w-3.5 h-3.5 text-purple-400/90" />
                           <div className="font-mono text-[13px]">{formatTime(log.lockedAt)}</div>
                         </div>
                       </div>
   
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Entry Price</div>
-                        <div className="flex items-center gap-1.5 text-zinc-300">
-                          <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Entry Price</div>
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <div className="w-3.5 h-3.5 rounded-full border border-purple-400/90 flex items-center justify-center text-[8px] text-purple-300 font-bold">$</div>
                           <div className="font-mono text-[13px] text-white font-bold">
                             ${entryPrice ? Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2}) : '---'}
                           </div>
@@ -563,30 +578,30 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </div>
                       
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Confidence</div>
-                        <div className="font-mono text-cyan-400 text-[14px] font-bold mb-1">{log.confidence || 80}%</div>
-                        <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                          <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.8)] rounded-full" style={{ width: `${log.confidence || 80}%` }}></div>
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Confidence</div>
+                        <div className="font-mono text-cyan-300 text-[14px] font-bold mb-1">{log.confidence || 80}%</div>
+                        <div className="w-full h-[4px] bg-zinc-900 rounded-full overflow-hidden relative border border-purple-900/40">
+                          <div className="absolute top-0 left-0 h-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)] rounded-full" style={{ width: `${log.confidence || 80}%` }}></div>
                         </div>
                       </div>
   
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Edge</div>
-                        <div className="font-mono text-purple-400 text-[14px] font-bold mb-1">+{log.edge || 6.5}%</div>
-                        <div className="w-full h-[3px] bg-zinc-900 rounded-full overflow-hidden relative">
-                          <div className="absolute top-0 left-0 h-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.8)] rounded-full" style={{ width: `${Math.min(100, ((log.edge || 6.5) / 10) * 100)}%` }}></div>
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Edge</div>
+                        <div className="font-mono text-purple-300 text-[14px] font-bold mb-1">+{log.edge || 6.5}%</div>
+                        <div className="w-full h-[4px] bg-zinc-900 rounded-full overflow-hidden relative border border-purple-900/40">
+                          <div className="absolute top-0 left-0 h-full bg-purple-400 shadow-[0_0_8px_rgba(168,85,247,0.9)] rounded-full" style={{ width: `${Math.min(100, ((log.edge || 6.5) / 10) * 100)}%` }}></div>
                         </div>
                       </div>
                     </div>
   
-                    <div className="my-4 border-t border-zinc-800/40 relative z-10"></div>
+                    <div className="my-4 border-t border-zinc-800/60 relative z-10"></div>
   
                     {/* Settlement Row */}
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 relative z-10 mb-2">
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Settled At</div>
-                        <div className="flex items-center gap-1.5 text-zinc-300">
-                          <Clock className="w-3.5 h-3.5 text-purple-400/70" />
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Settled At</div>
+                        <div className="flex items-center gap-1.5 text-zinc-200">
+                          <Clock className="w-3.5 h-3.5 text-purple-400/90" />
                           <div className="font-mono text-[13px]">
                             {isResolved ? formatTime(log.resolvedAt || log.expiresAt) : '---'}
                           </div>
@@ -594,9 +609,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </div>
   
                       <div>
-                        <div className="text-[10px] uppercase text-zinc-500 font-black tracking-wider mb-1">Settlement Price</div>
+                        <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Settlement Price</div>
                         <div className="flex items-center gap-1.5">
-                          <div className="w-3.5 h-3.5 rounded-full border border-purple-400/70 flex items-center justify-center text-[8px] text-purple-400/70 font-bold">$</div>
+                          <div className="w-3.5 h-3.5 rounded-full border border-purple-400/90 flex items-center justify-center text-[8px] text-purple-300 font-bold">$</div>
                           <div className="font-mono text-[13px] text-white font-bold">
                             {isResolved && settlementPrice ? `$${Number(settlementPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : '---'}
                           </div>
@@ -611,15 +626,15 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     
                       </>
                   )}
-                  <div className="my-3 border-t border-zinc-800/40 relative z-10"></div>
+                  <div className="my-3 border-t border-zinc-800/60 relative z-10"></div>
 
                   {/* Duration & Model Info */}
                   <div className="flex justify-between items-center relative z-10">
-                    <div className="flex items-center gap-1.5 text-zinc-500">
-                      <Hourglass className="w-3.5 h-3.5 text-zinc-400" />
-                      <div className="text-[10px] font-mono tracking-wider">DUR: {durationStr}</div>
+                    <div className="flex items-center gap-1.5 text-zinc-400">
+                      <Hourglass className="w-3.5 h-3.5 text-purple-400/80" />
+                      <div className="text-[10px] font-mono tracking-wider font-semibold">DUR: {durationStr}</div>
                     </div>
-                    <div className="text-[10px] font-mono text-purple-400/80 tracking-wider">MDL: VIXY-ENS-5.x</div>
+                    <div className="text-[10px] font-mono text-purple-300 font-bold tracking-wider">MDL: VIXY-VAULT-v5</div>
                   </div>
                 </div>
               );
