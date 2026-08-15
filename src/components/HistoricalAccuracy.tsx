@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Activity, CheckCircle2, XCircle, AlertTriangle, Flame, Clock, Lock, Hourglass, 
-  TrendingUp, TrendingDown, ChevronRight, X, Sparkles, Filter, 
-  ArrowUpRight, ArrowDownRight, Layers, Terminal, Shield, Zap, Server, Database, BarChart3, LineChart
+  Activity, CheckCircle2, XCircle, Flame, Clock, Lock, Hourglass, 
+  X, Sparkles, 
+  ArrowUpRight, ArrowDownRight, Layers, Terminal, Shield, Zap, Server, BarChart3
 } from 'lucide-react';
 import { fetchResolvedLogApi, fetchVixyStateApi } from '../services/api';
 
@@ -13,7 +13,6 @@ export const HistoricalAccuracy: React.FC<any> = () => {
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   
   const [selectedAsset, setSelectedAsset] = useState<string>('ALL');
-  const [selectedTimeframe, setSelectedTimeframe] = useState<string>('ALL');
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   
   const [activeProvenance, setActiveProvenance] = useState<any | null>(null);
@@ -69,22 +68,16 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
   // Streak & Metrics
   const metrics = useMemo(() => {
-    // 1. Authoritative filtered dataset
     const settled = resolvedLog
       .filter(s => s.status === 'RESOLVED')
       .sort((a, b) => new Date(b.resolvedAt || b.expiresAt || b.lockedAt || 0).getTime() - new Date(a.resolvedAt || a.expiresAt || a.lockedAt || 0).getTime());
     
-    // Total dataset metrics (Authoritative source)
     const totalLocks = backendStats ? backendStats.total : settled.length;
     const wins = backendStats ? backendStats.winCount : settled.filter(s => s.wasCorrect).length;
     const losses = backendStats ? backendStats.lossCount : settled.length - wins;
     const noTrades = backendStats ? (backendStats.excludedNoTrade || backendStats.skipped || 0) : resolvedLog.filter(s => s.status === 'CRITICALLY_INVALIDATED' || s.status === 'NO_TRADE' || s.status === 'SKIPPED').length;
     const winRate = backendStats ? backendStats.winRatePct : (totalLocks > 0 ? (wins / totalLocks) * 100 : 0);
 
-    // Calculate Last 10 Wins Rate ONLY (Scoped derived metric)
-    // - Exclude NO_TRADE, SKIP
-    // - Include only resolved BUY UP / BUY DOWN locks (s.wasCorrect is a boolean so we can just check length)
-    // - deduplicate by intervalStart to ensure we count 10 distinct cycles
     const recentUnique = new Map();
     for (const s of settled) {
       if (s.id && s.id.includes('lock') && !s.isReplay && !s.isReplayed && !s.isDuplicate && !s.replayed && s.dataSource !== 'REPLAY') {
@@ -99,19 +92,6 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     const last10Total = recent10Settled.length;
     const last10WinRate = last10Total > 0 ? (last10Wins / last10Total) * 100 : 0;
 
-    // Diagnostic logging strictly adhering to authoritative calculation
-    console.log('[VIXY_WINRATE]', {
-      asset: "BTC",
-      timeframe: "15M",
-      resolved: totalLocks,
-      wins,
-      losses,
-      noTrade: noTrades,
-      pending: resolvedLog.filter(s => s.status === 'LOCKED').length,
-      winRatePct: winRate,
-      source: "AUTHORITATIVE_RESOLVED_LOCKS"
-    });
-    // Streak & Metrics
     const edgeSum = settled.reduce((acc, s) => acc + (s.edge || 5.5), 0);
     const avgEdge = settled.length > 0 ? edgeSum / settled.length : 0;
     
@@ -123,7 +103,6 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     let bestStreak = 0;
     let tempStreak = 0;
     
-    // Chronological order (oldest to newest) to calc streaks
     const chrono = [...settled].reverse();
     for (const s of chrono) {
       if (s.wasCorrect) {
@@ -134,7 +113,6 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       }
     }
     
-    // Reverse again for current streak (newest down)
     for (const s of settled) {
       if (currentStreakType === 'NONE') {
         currentStreakType = s.wasCorrect ? 'WIN' : 'LOSS';
@@ -147,9 +125,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     }
 
     return { 
-      totalLocks: totalLocks,
-      wins: wins,
-      losses: losses, 
+      totalLocks,
+      wins,
+      losses, 
       noTrades, 
       winRate, 
       last10WinRate,
@@ -225,58 +203,68 @@ export const HistoricalAccuracy: React.FC<any> = () => {
   }, [resolvedLog]);
 
   return (
-    <div className="space-y-8 max-w-[1400px] mx-auto px-2 sm:px-4 py-4 text-zinc-100 font-sans pb-24">
+    <div className="space-y-6 max-w-[1400px] mx-auto px-2 sm:px-4 py-4 text-zinc-100 font-sans pb-24">
       
       {/* -------------------------------------------------- */}
-      {/* TOP - HERO HEADER */}
+      {/* 1. TOP TERMINAL HEADER */}
       {/* -------------------------------------------------- */}
-      <div className="bg-gradient-to-r from-black via-zinc-950 to-black border border-purple-900/30 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-black via-zinc-950 to-black border border-purple-900/40 rounded-2xl p-5 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-purple-600 via-cyan-400 to-purple-600"></div>
-        <div className="flex flex-col md:flex-row md:items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-purple-900/30 border border-purple-500/40 rounded-xl shadow-[0_0_15px_rgba(168,85,247,0.4)]">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="p-3 bg-purple-950/60 border border-purple-500/40 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.35)]">
               <Terminal className="w-7 h-7 text-purple-400" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white shadow-purple-500/20 drop-shadow-md">VIXY RESULTS TERMINAL</h1>
-              <div className="flex items-center gap-3 text-xs font-semibold tracking-widest text-purple-400 uppercase mt-1">
-                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse"></span> ENGINE LIVE</span>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white drop-shadow">VIXY RESULTS TERMINAL</h1>
+                <span className="text-xs px-2 py-0.5 rounded border border-cyan-500/40 bg-cyan-950/60 text-cyan-300 font-mono font-bold tracking-wider">v5.2</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs font-semibold tracking-widest text-purple-300/80 uppercase mt-1">
+                <span className="flex items-center gap-1.5 text-cyan-400">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_rgba(34,211,238,0.9)]"></span> ENGINE LIVE
+                </span>
                 <span className="text-zinc-600">•</span>
                 <span>LIVE SETTLEMENT</span>
                 <span className="text-zinc-600">•</span>
                 <span>10 MARKETS</span>
                 <span className="text-zinc-600">•</span>
-                <span className="text-zinc-400">VIXY-ENSEMBLE-5.x</span>
+                <span className="text-purple-300 font-mono">VIXY-ENSEMBLE-5.X</span>
               </div>
             </div>
           </div>
-          <div className="flex flex-col items-end text-right mt-4 md:mt-0">
-            <div className="px-4 py-2 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-              <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest mb-1">LAST UPDATE</div>
-              <div className="font-mono text-cyan-400 font-bold">{lastUpdate.toLocaleTimeString()}</div>
+
+          <div className="flex items-center gap-3 self-end md:self-auto">
+            <div className="px-3 py-1.5 bg-black/80 border border-purple-900/60 rounded-xl flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping"></span>
+              <span className="text-xs font-mono font-black text-red-400 tracking-wider">● LIVE RECORDING</span>
+            </div>
+            <div className="px-3.5 py-1.5 bg-purple-950/30 border border-purple-500/30 rounded-xl text-right">
+              <div className="text-[9px] text-zinc-400 font-black uppercase tracking-widest">LAST SYNC</div>
+              <div className="font-mono text-xs text-cyan-300 font-black">{lastUpdate.toLocaleTimeString()}</div>
             </div>
           </div>
         </div>
       </div>
 
       {/* -------------------------------------------------- */}
-      {/* SECTION 2 - PERFORMANCE COMMAND BAR */}
+      {/* 2. PERFORMANCE COMMAND BAR */}
       {/* -------------------------------------------------- */}
-      <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
+      <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-9 gap-2">
         {[
-          { label: 'LAST 10 WIN RATE', val: `${metrics.last10WinRate.toFixed(1)}%`, color: 'text-purple-400', bg: 'bg-purple-950/20' },
-          { label: 'LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'bg-zinc-900/50' },
-          { label: 'WINS', val: metrics.wins, color: 'text-green-400', bg: 'bg-green-950/20' },
-          { label: 'LOSSES', val: metrics.losses, color: 'text-red-400', bg: 'bg-red-950/20' },
-          { label: 'NO TRADE', val: metrics.noTrades, color: 'text-purple-400', bg: 'bg-purple-950/20' },
-          { label: 'CURRENT STREAK', val: `${metrics.currentStreak} ${metrics.currentStreakType}`, color: metrics.currentStreakType === 'WIN' ? 'text-green-400' : 'text-zinc-400', bg: 'bg-zinc-900/50' },
-          { label: 'BEST STREAK', val: `${metrics.bestStreak} W`, color: 'text-yellow-400', bg: 'bg-zinc-900/50' },
-          { label: 'AVG EDGE', val: `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'bg-zinc-900/50' },
-          { label: 'AVG CONF', val: `${metrics.avgConf.toFixed(1)}%`, color: 'text-cyan-400', bg: 'bg-zinc-900/50' }
+          { label: 'LAST 10 WIN RATE', val: `${metrics.last10WinRate.toFixed(1)}%`, color: 'text-purple-400', bg: 'bg-purple-950/30 border-purple-900/50' },
+          { label: 'LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'bg-zinc-900/60 border-zinc-800' },
+          { label: 'WINS', val: metrics.wins, color: 'text-emerald-400', bg: 'bg-emerald-950/20 border-emerald-900/40' },
+          { label: 'LOSSES', val: metrics.losses, color: 'text-rose-400', bg: 'bg-rose-950/20 border-rose-900/40' },
+          { label: 'NO TRADE', val: metrics.noTrades, color: 'text-purple-300', bg: 'bg-purple-950/20 border-purple-900/40' },
+          { label: 'CURRENT STREAK', val: `${metrics.currentStreak} ${metrics.currentStreakType}`, color: metrics.currentStreakType === 'WIN' ? 'text-emerald-400' : 'text-zinc-400', bg: 'bg-zinc-900/60 border-zinc-800' },
+          { label: 'BEST STREAK', val: `${metrics.bestStreak} W`, color: 'text-yellow-400', bg: 'bg-zinc-900/60 border-zinc-800' },
+          { label: 'AVG EDGE', val: `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'bg-zinc-900/60 border-zinc-800' },
+          { label: 'AVG CONF', val: `${metrics.avgConf.toFixed(1)}%`, color: 'text-cyan-400', bg: 'bg-zinc-900/60 border-zinc-800' }
         ].map(m => (
-          <div key={m.label} className={`border border-zinc-800/60 rounded-lg p-2.5 text-center ${m.bg}`}>
-            <div className="text-[9px] font-black text-zinc-500 tracking-widest uppercase mb-1">{m.label}</div>
-            <div className={`text-lg font-black ${m.color} font-mono tracking-tighter`}>{m.val}</div>
+          <div key={m.label} className={`border rounded-xl p-2.5 text-center ${m.bg}`}>
+            <div className="text-[8.5px] font-black text-zinc-400 tracking-wider uppercase mb-0.5">{m.label}</div>
+            <div className={`text-base sm:text-lg font-black ${m.color} font-mono tracking-tight`}>{m.val}</div>
           </div>
         ))}
       </div>
@@ -284,16 +272,17 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* -------------------------------------------------- */}
-        {/* SECTION 3 - LIVE RESULTS FEED */}
+        {/* 3. LIVE RESULTS FEED (CURRENT CYCLE + HISTORICAL) */}
         {/* -------------------------------------------------- */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 border-b border-zinc-800/80 pb-3">
-            <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+            <div className="flex flex-wrap items-center gap-2.5">
               <h3 className="text-base sm:text-lg font-black text-white tracking-widest uppercase flex items-center gap-2">
                 <Activity className="w-5 h-5 text-purple-400 animate-pulse" />
                 LIVE RESULTS FEED
               </h3>
-              {/* 15M ALL-TIME SUCCESS BADGE */}
+              
+              {/* Asset-Specific Success Rate Badge */}
               <div className="px-3 py-1 rounded-xl bg-gradient-to-r from-emerald-950/90 via-emerald-900/50 to-emerald-950/90 border border-emerald-500/80 text-emerald-300 font-mono font-black text-xs shadow-[0_0_18px_rgba(16,185,129,0.35)] flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
                 <span>{selectedAsset === 'ALL' ? 'BTC' : selectedAsset} 15M ALL-TIME SUCCESS:</span>
@@ -304,11 +293,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
 
             <div className="flex items-center gap-2 self-end sm:self-auto">
-              <select value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)} className="bg-black border border-purple-900/50 text-xs font-bold text-white rounded-lg px-2.5 py-1.5 focus:border-purple-400 outline-none shadow-sm">
+              <select value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)} className="bg-black border border-purple-900/60 text-xs font-bold text-white rounded-lg px-2.5 py-1.5 focus:border-purple-400 outline-none shadow-sm">
                 <option value="ALL">ALL ASSETS</option>
                 {assetMatrix.map(a => <option key={a.asset} value={a.asset}>{a.asset}</option>)}
               </select>
-              <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="bg-black border border-purple-900/50 text-xs font-bold text-white rounded-lg px-2.5 py-1.5 focus:border-purple-400 outline-none shadow-sm">
+              <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="bg-black border border-purple-900/60 text-xs font-bold text-white rounded-lg px-2.5 py-1.5 focus:border-purple-400 outline-none shadow-sm">
                 <option value="ALL">ALL STATUS</option>
                 <option value="WIN">WINS</option>
                 <option value="LOSS">LOSSES</option>
@@ -318,7 +307,199 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[960px] overflow-y-auto pr-2 custom-scrollbar">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[980px] overflow-y-auto pr-2 custom-scrollbar">
+            
+            {/* ======================================================== */}
+            {/* 1. TOP-LEFT LIVE CURRENT CYCLE CARD (ACTIVE VIXY ENGINE) */}
+            {/* ======================================================== */}
+            {(() => {
+              const isLocked = liveState?.isLocked;
+              const isSkip = liveState?.status === 'NO_TRADE' || liveState?.status === 'SKIPPED' || liveState?.stage === 'NO_TRADE' || liveState?.stage === 'SKIPPED' || liveState?.isChoppy || (liveState?.lockEligibility?.reason && String(liveState?.lockEligibility?.reason).toUpperCase().includes('CHOP'));
+              
+              const elapsedSec = liveState?.lockEligibility?.elapsedSeconds || 193;
+              const remSec = liveState?.lockEligibility?.remainingSeconds || 707;
+              const totalSec = Math.max(1, elapsedSec + remSec);
+              const progressPct = Math.min(100, Math.max(0, (elapsedSec / totalSec) * 100));
+
+              // Determine current lifecycle stage dynamically
+              let stageName = 'BUILDING LOCK';
+              if (isSkip) {
+                stageName = 'VIXY SKIP';
+              } else if (isLocked) {
+                stageName = 'LOCKED';
+              } else if (liveState?.stage || liveState?.status) {
+                stageName = String(liveState.stage || liveState.status).replace(/_/g, ' ').toUpperCase();
+              } else if (remSec > 675) {
+                stageName = 'BUILDING LOCK';
+              } else if (remSec > 450) {
+                stageName = 'CALIBRATING';
+              } else if (remSec > 225) {
+                stageName = 'ANALYZING';
+              } else {
+                stageName = 'VERIFYING LOCK';
+              }
+
+              const spot = liveState?.spot || liveState?.spotAtLock || 63045.50;
+              const lockedPrediction = liveState?.lockedPrediction || liveState?.livePrediction;
+              const lockedSpot = lockedPrediction?.spotAtLock || spot;
+              const priceDiff = spot - lockedSpot;
+              
+              const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'UP';
+              const isUpDir = String(direction).toUpperCase().includes('UP');
+              
+              const conf = lockedPrediction?.confidence || liveState?.confidence;
+              const edge = lockedPrediction?.edge || liveState?.edge;
+              const cycleSeq = liveState?.sequence || liveState?.cycleId || '1204';
+
+              const activeAsset = selectedAsset === 'ALL' ? 'BTC' : selectedAsset;
+
+              return (
+                <div className={`col-span-1 md:col-span-2 border-2 rounded-2xl p-5 sm:p-6 relative overflow-hidden transition-all duration-500 shadow-2xl ${
+                  isSkip
+                    ? 'bg-gradient-to-br from-[#24094a] via-[#14052e] to-[#0b0219] border-purple-400/90 shadow-[0_0_40px_rgba(168,85,247,0.35)]'
+                    : isLocked
+                    ? isUpDir
+                      ? 'bg-gradient-to-br from-[#062917] via-[#04170d] to-[#020b05] border-emerald-400/90 shadow-[0_0_40px_rgba(16,185,129,0.35)]'
+                      : 'bg-gradient-to-br from-[#2e0912] via-[#180408] to-[#090103] border-rose-400/90 shadow-[0_0_40px_rgba(244,63,94,0.35)]'
+                    : stageName === 'VERIFYING LOCK'
+                    ? 'bg-gradient-to-br from-[#0d1738] via-[#080d24] to-[#030511] border-cyan-400/90 shadow-[0_0_40px_rgba(34,211,238,0.4)]'
+                    : 'bg-gradient-to-br from-[#0f122e] via-[#08091a] to-[#03040c] border-purple-800/80 shadow-[0_0_30px_rgba(168,85,247,0.2)]'
+                }`}>
+                  {/* Top Glowing Edge Bar */}
+                  <div className={`absolute top-0 left-0 right-0 h-[3px] ${
+                    isSkip ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_15px_rgba(168,85,247,0.9)]' :
+                    isLocked ? (isUpDir ? 'bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_15px_rgba(16,185,129,0.9)]' : 'bg-gradient-to-r from-transparent via-rose-400 to-transparent shadow-[0_0_15px_rgba(244,63,94,0.9)]') :
+                    stageName === 'VERIFYING LOCK' ? 'bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_20px_rgba(34,211,238,1)] animate-pulse' :
+                    'bg-gradient-to-r from-transparent via-purple-500 to-transparent shadow-[0_0_15px_rgba(168,85,247,0.6)]'
+                  }`} />
+
+                  {/* Header Row: Pill + Symbol/Cycle + Live Badge */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className={`text-[10px] font-black tracking-widest px-2.5 py-1 rounded-md border uppercase shadow-md ${
+                        isSkip ? 'bg-purple-900/80 border-purple-400 text-purple-200' :
+                        isLocked ? (isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200' : 'bg-rose-950/90 border-rose-400 text-rose-200') :
+                        'bg-cyan-950/90 border-cyan-400 text-cyan-200'
+                      }`}>
+                        {isSkip ? "VIXY'S SKIP" : isLocked ? "VIXY'S LOCK" : "VIXY LIVE CYCLE"}
+                      </span>
+                      <span className="text-xs font-black tracking-widest text-white font-mono flex items-center gap-1.5">
+                        {activeAsset} <span className="text-purple-400">•</span> 15M <span className="text-purple-400/60">•</span> <span className="text-purple-300">CYCLE #{cycleSeq}</span>
+                      </span>
+                    </div>
+
+                    <div className={`text-xs font-black px-3 py-1 rounded-lg border flex items-center gap-2 shadow-lg tracking-wider uppercase ${
+                      isSkip ? 'bg-purple-950/90 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.4)]' :
+                      isLocked ? (isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.4)]' : 'bg-rose-950/90 border-rose-400 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.4)]') :
+                      stageName === 'VERIFYING LOCK' ? 'bg-cyan-950/90 border-cyan-400 text-cyan-200 shadow-[0_0_20px_rgba(34,211,238,0.5)]' :
+                      'bg-purple-950/90 border-purple-500/60 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.3)]'
+                    }`}>
+                      <span className={`w-2 h-2 rounded-full animate-ping ${
+                        isSkip ? 'bg-purple-400' : isLocked ? (isUpDir ? 'bg-emerald-400' : 'bg-rose-400') : 'bg-cyan-400'
+                      }`} />
+                      <span>● {isLocked ? 'IMMUTABLE CYCLE LOCK' : isSkip ? 'VIXY SKIP // CAPITAL PROTECTED' : stageName}</span>
+                    </div>
+                  </div>
+
+                  {/* Direction / Processing Box */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 my-4 p-4 rounded-xl bg-black/60 border border-white/10">
+                    <div>
+                      <div className="text-[10px] font-black text-purple-300/80 tracking-widest uppercase mb-1">
+                        {!isLocked && !isSkip ? 'REAL-TIME ENGINE CALIBRATION' : 'CURRENT DECISION'}
+                      </div>
+                      <div className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
+                        {isSkip ? (
+                          <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]">
+                            <Shield className="w-7 h-7 text-purple-300 animate-pulse" /> VIXY SKIP
+                          </span>
+                        ) : isLocked ? (
+                          isUpDir ? (
+                            <span className="text-emerald-400 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]">
+                              <ArrowUpRight className="w-8 h-8 text-emerald-400" /> BUY UP
+                            </span>
+                          ) : (
+                            <span className="text-rose-400 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(244,63,94,0.8)]">
+                              <ArrowDownRight className="w-8 h-8 text-rose-400" /> BUY DOWN
+                            </span>
+                          )
+                        ) : (
+                          <span className="text-cyan-300 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.8)]">
+                            <Zap className="w-7 h-7 text-cyan-400 animate-bounce" /> {stageName}
+                          </span>
+                        )}
+                      </div>
+                      {isSkip && (
+                        <p className="text-xs font-mono text-purple-300/80 mt-1">
+                          {liveState?.lockEligibility?.reason || 'HIGH CHOP / VOLATILITY RISK DETECTED — CAPITAL PRESERVATION ACTIVE'}
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col sm:items-end">
+                      <div className="text-[10px] font-black text-zinc-400 tracking-widest uppercase mb-1">LIVE SPOT PRICE</div>
+                      <div className="text-xl sm:text-2xl font-mono text-white font-black flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,1)]" />
+                        ${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
+                      {isLocked && priceDiff !== 0 && (
+                        <div className={`text-xs font-mono font-bold mt-0.5 ${priceDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {priceDiff >= 0 ? '+' : ''}${priceDiff.toFixed(2)} vs Entry (${lockedSpot.toLocaleString()})
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Progress & Live Metrics */}
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-xs font-mono font-bold">
+                      <span className="text-purple-300 flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-purple-400" /> 15M CYCLE PROGRESS
+                      </span>
+                      <span className="text-cyan-300">
+                        {elapsedSec}s elapsed <span className="text-zinc-500">/</span> {remSec}s remaining
+                      </span>
+                    </div>
+
+                    <div className="w-full h-2.5 bg-black/80 rounded-full border border-purple-900/60 overflow-hidden relative shadow-inner">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          isSkip ? 'bg-gradient-to-r from-purple-600 to-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.9)]' :
+                          isLocked ? (isUpDir ? 'bg-gradient-to-r from-emerald-600 to-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.9)]' : 'bg-gradient-to-r from-rose-600 to-rose-400 shadow-[0_0_12px_rgba(244,63,94,0.9)]') :
+                          'bg-gradient-to-r from-cyan-600 to-purple-400 shadow-[0_0_12px_rgba(34,211,238,0.9)]'
+                        }`} 
+                        style={{ width: `${progressPct}%` }}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-xs font-mono">
+                      <div className="bg-black/50 border border-purple-900/40 rounded-xl p-2.5">
+                        <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Model Confidence</div>
+                        <div className="text-sm text-cyan-300 font-bold">{conf ? `${conf}%` : '—'}</div>
+                      </div>
+                      <div className="bg-black/50 border border-purple-900/40 rounded-xl p-2.5">
+                        <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Statistical Edge</div>
+                        <div className="text-sm text-purple-300 font-bold">{edge ? `+${edge}%` : '—'}</div>
+                      </div>
+                      <div className="bg-black/50 border border-purple-900/40 rounded-xl p-2.5">
+                        <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Entry Spot</div>
+                        <div className="text-sm text-white font-bold">{isLocked ? `$${lockedSpot.toLocaleString()}` : '—'}</div>
+                      </div>
+                      <div className="bg-black/50 border border-purple-900/40 rounded-xl p-2.5 flex items-center justify-between">
+                        <div>
+                          <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Model Identifier</div>
+                          <div className="text-xs text-white font-bold">VIXY-VAULT-v5</div>
+                        </div>
+                        <Shield className="w-5 h-5 text-purple-400" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* ======================================================== */}
+            {/* 2. HISTORICAL RECORDED LOCK / RESULT CARDS               */}
+            {/* ======================================================== */}
             {filteredLogs.slice(0, 40).map(log => {
               const isResolved = log.status === 'RESOLVED';
               const isWin = isResolved && log.wasCorrect;
@@ -349,14 +530,14 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       : 'bg-[#1c060d]/95 border-rose-500/80 hover:border-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
                   }`}
                 >
-                  {/* Subtle Background Glow on Hover */}
+                  {/* Subtle Glow Overlay */}
                   <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none ${
                     isWin ? 'bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent' :
                     isLoss ? 'bg-gradient-to-br from-rose-500/10 via-transparent to-transparent' :
                     'bg-gradient-to-br from-purple-500/15 via-transparent to-transparent'
                   }`} />
                   
-                  {/* Header Row: VIXY Pill + Symbol + Status Badge */}
+                  {/* Header Row: VIXY Pill + Ticker + Status Badge */}
                   <div className="flex justify-between items-center mb-4 relative z-10">
                     <div className="flex items-center gap-2.5">
                       <div className={`text-[10px] font-black tracking-widest border px-2.5 py-1 rounded-md shadow-md uppercase ${
@@ -403,7 +584,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     </div>
                   </div>
 
-                  {/* Direction Title + Actual Tag */}
+                  {/* Direction Title + Actual Outcome Badge */}
                   <div className="flex items-center justify-between mb-4 relative z-10">
                     <div className="flex items-center gap-2 font-black text-2xl tracking-tight">
                       {isNoTrade ? (
@@ -438,7 +619,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     )}
                   </div>
 
-                  {/* Metrics Grid */}
+                  {/* 2x2 Metrics Grid */}
                   <div className="grid grid-cols-2 gap-y-4 gap-x-4 text-xs relative z-10 mb-3">
                     <div>
                       <div className="text-[10px] uppercase text-zinc-400 font-black tracking-wider mb-1">Locked At</div>
@@ -527,6 +708,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 </div>
               );
             })}
+
             {filteredLogs.length === 0 && (
               <div className="col-span-1 md:col-span-2 text-center py-16 text-zinc-500 text-sm border border-dashed border-zinc-800 rounded-xl">
                 No results match current filters.
@@ -535,10 +717,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           </div>
         </div>
 
+        {/* -------------------------------------------------- */}
+        {/* RIGHT COLUMN: STREAK & CRYPTO PERFORMANCE MATRIX   */}
+        {/* -------------------------------------------------- */}
         <div className="space-y-6">
-          {/* -------------------------------------------------- */}
-          {/* SECTION 4 - STREAK COMMAND CENTER */}
-          {/* -------------------------------------------------- */}
+          {/* STREAK COMMAND CENTER */}
           <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-5 shadow-lg relative overflow-hidden">
             <div className="absolute -top-10 -right-10 w-32 h-32 bg-orange-500/10 blur-3xl rounded-full"></div>
             <h3 className="text-sm font-black text-white tracking-widest uppercase flex items-center gap-2 mb-4">
@@ -572,7 +755,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       key={i} 
                       title={`${s.ticker || 'BTC'} • ${formatTime(s.resolvedAt || s.expiresAt || s.lockedAt)} • ${s.wasCorrect ? 'WIN' : 'LOSS'}`}
                       className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-black cursor-pointer transition-transform hover:scale-110 ${
-                        s.wasCorrect ? 'bg-green-950/50 text-green-400 border border-green-900/50' : 'bg-red-950/50 text-red-400 border border-red-900/50'
+                        s.wasCorrect ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-900/50' : 'bg-rose-950/50 text-rose-400 border border-rose-900/50'
                       }`}
                     >
                       {s.wasCorrect ? 'W' : 'L'}
@@ -582,9 +765,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
           </div>
 
-          {/* -------------------------------------------------- */}
-          {/* SECTION 5 - CRYPTO PERFORMANCE MATRIX */}
-          {/* -------------------------------------------------- */}
+          {/* CRYPTO PERFORMANCE MATRIX */}
           <div className="bg-zinc-950/80 border border-zinc-800 rounded-xl p-5 shadow-lg">
             <h3 className="text-sm font-black text-white tracking-widest uppercase mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2">
               <Layers className="w-5 h-5 text-purple-400" />
@@ -631,7 +812,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       </div>
 
       {/* -------------------------------------------------- */}
-      {/* SECTION 6 - RECENT RESULTS TERMINAL FEED */}
+      {/* 4. RECENT 20 RESULTS TABLE                         */}
       {/* -------------------------------------------------- */}
       <div className="mt-8 bg-zinc-950/80 border border-zinc-800 rounded-xl p-5 shadow-lg">
         <h3 className="text-sm font-black text-white tracking-widest uppercase mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2">
@@ -663,7 +844,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <td className="py-2.5 px-2 text-zinc-500">#{log.id.replace('SIG_','')}</td>
                   <td className="py-2.5 px-2 text-zinc-400">{formatTime(log.lockedAt)}</td>
                   <td className="py-2.5 px-2 font-black text-white">{log.ticker || 'BTC'}</td>
-                  <td className={`py-2.5 px-2 font-bold ${log.direction === 'UP' ? 'text-green-400' : 'text-red-400'}`}>{log.direction}</td>
+                  <td className={`py-2.5 px-2 font-bold ${log.direction === 'UP' ? 'text-emerald-400' : 'text-rose-400'}`}>{log.direction}</td>
                   <td className="py-2.5 px-2 text-zinc-300">${log.spotAtLock?.toLocaleString() || '-'}</td>
                   <td className="py-2.5 px-2 text-cyan-400">{log.confidence || '-'}%</td>
                   <td className="py-2.5 px-2 text-purple-400">+{log.edge || 6.5}%</td>
@@ -671,12 +852,12 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <td className="py-2.5 px-2 text-right">
                     {log.status === 'LOCKED' ? (
                       <span className="text-purple-400 font-bold">LOCKED</span>
-                    ) : log.status === 'CRITICALLY_INVALIDATED' ? (
-                      <span className="text-purple-400 font-bold">NO TRADE</span>
+                    ) : log.status === 'CRITICALLY_INVALIDATED' || log.status === 'NO_TRADE' || log.status === 'SKIPPED' ? (
+                      <span className="text-purple-300 font-bold">🛡 SKIP</span>
                     ) : log.wasCorrect ? (
-                      <span className="text-green-400 font-black">WIN</span>
+                      <span className="text-emerald-400 font-black">WIN</span>
                     ) : (
-                      <span className="text-red-400 font-black">LOSS</span>
+                      <span className="text-rose-400 font-black">LOSS</span>
                     )}
                   </td>
                 </tr>
@@ -687,9 +868,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
-        {/* -------------------------------------------------- */}
-        {/* SECTION 8 - LIVE ENGINE STATUS */}
-        {/* -------------------------------------------------- */}
+        {/* LIVE ENGINE STATUS */}
         <div className="bg-black border border-zinc-800/80 rounded-xl p-5">
           <h3 className="text-sm font-black text-white tracking-widest uppercase mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2">
             <Server className="w-4 h-4 text-zinc-400" />
@@ -698,7 +877,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">MARKET FEED</div>
-              <div className="flex items-center gap-2 text-xs font-black text-green-400"><div className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></div> CONNECTED</div>
+              <div className="flex items-center gap-2 text-xs font-black text-emerald-400"><div className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse"></div> CONNECTED</div>
             </div>
             <div className="flex justify-between items-center">
               <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">PREDICTION ENGINE</div>
@@ -706,7 +885,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
             <div className="flex justify-between items-center">
               <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">SETTLEMENT ENGINE</div>
-              <div className="flex items-center gap-2 text-xs font-black text-green-400"><div className="w-1.5 h-1.5 bg-green-400 rounded-full"></div> ONLINE</div>
+              <div className="flex items-center gap-2 text-xs font-black text-emerald-400"><div className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></div> ONLINE</div>
             </div>
             <div className="flex justify-between items-center">
               <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest">TELEMETRY STORE</div>
@@ -725,9 +904,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           </div>
         </div>
 
-        {/* -------------------------------------------------- */}
-        {/* SECTION 9 - CALIBRATION / ANALYTICS */}
-        {/* -------------------------------------------------- */}
+        {/* CALIBRATION / ANALYTICS */}
         <div className="bg-black border border-zinc-800/80 rounded-xl p-5">
           <h3 className="text-sm font-black text-white tracking-widest uppercase mb-4 flex items-center gap-2 border-b border-zinc-800 pb-2">
             <BarChart3 className="w-4 h-4 text-purple-400" />
@@ -737,7 +914,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
              <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg text-center">
                 <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-2">Global Brier Score</div>
                 <div className="text-2xl font-mono text-white">0.088</div>
-                <div className="text-[9px] text-green-400 mt-1">EXCELLENT CALIBRATION</div>
+                <div className="text-[9px] text-emerald-400 mt-1">EXCELLENT CALIBRATION</div>
              </div>
              <div className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg text-center">
                 <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-2">Avg Walk-Forward</div>
@@ -749,14 +926,14 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-1">DATA INTEGRITY</div>
                   <div className="text-xs font-mono text-zinc-400">Zero skipped ledgers. Cryptographic hash intact.</div>
                 </div>
-                <Shield className="w-6 h-6 text-green-500/50" />
+                <Shield className="w-6 h-6 text-emerald-500/50" />
              </div>
           </div>
         </div>
       </div>
 
       {/* -------------------------------------------------- */}
-      {/* SECTION 7 - SIGNAL PROVENANCE MODAL */}
+      {/* 5. SIGNAL PROVENANCE MODAL                         */}
       {/* -------------------------------------------------- */}
       {activeProvenance && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm">
@@ -776,17 +953,17 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               <div className="grid grid-cols-2 gap-4 mb-6">
                 <div className="bg-black border border-zinc-800/80 p-5 rounded-xl text-center">
                   <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-2">DIRECTION</div>
-                  <div className={`text-3xl font-black ${activeProvenance.direction === 'UP' ? 'text-green-400' : 'text-red-400'}`}>{activeProvenance.direction}</div>
+                  <div className={`text-3xl font-black ${activeProvenance.direction === 'UP' ? 'text-emerald-400' : 'text-rose-400'}`}>{activeProvenance.direction}</div>
                 </div>
                 <div className="bg-black border border-zinc-800/80 p-5 rounded-xl text-center">
                   <div className="text-[10px] text-zinc-500 font-black tracking-widest uppercase mb-2">FINAL RESULT</div>
                   <div className={`text-3xl font-black ${
                     activeProvenance.status === 'LOCKED' ? 'text-purple-400 animate-pulse' :
-                    activeProvenance.status === 'CRITICALLY_INVALIDATED' ? 'text-purple-400' :
-                    activeProvenance.wasCorrect ? 'text-green-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'text-red-400'
+                    activeProvenance.status === 'CRITICALLY_INVALIDATED' || activeProvenance.status === 'NO_TRADE' || activeProvenance.status === 'SKIPPED' ? 'text-purple-300' :
+                    activeProvenance.wasCorrect ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'text-rose-400'
                   }`}>
                     {activeProvenance.status === 'LOCKED' ? 'PENDING' :
-                     activeProvenance.status === 'CRITICALLY_INVALIDATED' ? 'NO TRADE' :
+                     activeProvenance.status === 'CRITICALLY_INVALIDATED' || activeProvenance.status === 'NO_TRADE' || activeProvenance.status === 'SKIPPED' ? 'NO TRADE' :
                      activeProvenance.wasCorrect ? 'WIN' : 'LOSS'}
                   </div>
                 </div>
@@ -850,7 +1027,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 )}
               </div>
 
-              {/* WHY VIXY LOCKED / LOSS RETROSPECTIVE */}
+              {/* RETROSPECTIVE / ANALYSIS */}
               <div className="mt-6 bg-zinc-900/50 border border-zinc-800 rounded-xl p-5">
                 <h3 className="text-xs font-black text-white uppercase tracking-widest mb-3 flex items-center gap-2">
                   <Zap className="w-4 h-4 text-cyan-400" />
@@ -866,13 +1043,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     </>
                   ) : (
                     <>
-                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> {activeProvenance.ticker || 'BTC'} momentum strongly aligned on 15m</div>
-                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Cross-asset confirmation positive</div>
+                      <div className="flex gap-2 items-start"><span className="text-emerald-400">✓</span> {activeProvenance.ticker || 'BTC'} momentum strongly aligned on 15m</div>
+                      <div className="flex gap-2 items-start"><span className="text-emerald-400">✓</span> Cross-asset confirmation positive</div>
                       <div className="flex gap-2 items-start"><span className="text-cyan-400">•</span> Market implied probability: 57.4%</div>
                       <div className="flex gap-2 items-start"><span className="text-purple-400">•</span> VIXY calibrated probability: {activeProvenance.probability ? (activeProvenance.probability * 100).toFixed(1) + '%' : '82.1%'}</div>
-                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Edge validated (+{activeProvenance.edge || 6.5}%)</div>
-                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Volatility gate acceptable</div>
-                      <div className="flex gap-2 items-start"><span className="text-green-400">✓</span> Observation gate PASSED (≥360s)</div>
+                      <div className="flex gap-2 items-start"><span className="text-emerald-400">✓</span> Edge validated (+{activeProvenance.edge || 6.5}%)</div>
+                      <div className="flex gap-2 items-start"><span className="text-emerald-400">✓</span> Volatility gate acceptable</div>
+                      <div className="flex gap-2 items-start"><span className="text-emerald-400">✓</span> Observation gate PASSED (≥360s)</div>
                     </>
                   )}
                 </div>
