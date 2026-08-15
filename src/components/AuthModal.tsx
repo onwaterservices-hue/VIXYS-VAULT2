@@ -25,10 +25,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [referralCode, setReferralCode] = useState('PROMOTER20');
+  const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Sync mode with initialMode whenever modal opens or mode prop changes
+  React.useEffect(() => {
+    if (isOpen) {
+      setMode(initialMode);
+      setErrorMsg('');
+      setSuccessMsg('');
+    }
+  }, [isOpen, initialMode]);
 
   if (!isOpen) return null;
 
@@ -155,13 +164,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <div className="space-y-1.5">
                     <div className="flex justify-between items-center">
                       <label className="text-purple-300/60 block font-semibold text-[11px] uppercase tracking-wider">
-                        Discount / Referral Code
+                        Discount / Referral Code (Optional)
                       </label>
-                      <span className="text-[10px] text-emerald-400 font-bold">20% Off Active</span>
+                      {referralCode.trim().length > 0 && (
+                        <span className="text-[10px] text-emerald-400 font-bold">Code Active</span>
+                      )}
                     </div>
                     <input
                       type="text"
-                      placeholder="PROMOTER20, REF-ALEX, VIXY50"
+                      placeholder="Optional Referral or Promo Code"
                       value={referralCode}
                       onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
                       className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100 uppercase font-mono text-xs placeholder-purple-300/30 focus:outline-none focus:border-purple-500"

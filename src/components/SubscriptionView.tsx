@@ -56,14 +56,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const [stripeError, setStripeError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
   const [customStripeUrl, setCustomStripeUrl] = useState<string>('');
-  const [promoCodeInput, setPromoCodeInput] = useState<string>('PROMOTER20');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPct: number; promoterName: string; desc: string } | null>({
-    code: 'PROMOTER20',
-    discountPct: 20,
-    promoterName: 'Alpha Promoter Network',
-    desc: '20% Off Subscription + Promoter Commission Tracked',
-  });
-  const [promoStatusMsg, setPromoStatusMsg] = useState<string>('Default Promoter Tag Active: 20% Off + Promoter Commission Logged');
+  const [promoCodeInput, setPromoCodeInput] = useState<string>('');
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPct: number; promoterName: string; desc: string } | null>(null);
+  const [promoStatusMsg, setPromoStatusMsg] = useState<string>('');
   const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
 
   const handleValidatePromo = async () => {
@@ -158,7 +153,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     return getStripePaymentUrl(planKey, billingInterval, {
       email: currentUserEmail,
       uid: currentUid,
-      promoCode: appliedPromo?.code || (promoCodeInput !== 'PROMOTER20' ? promoCodeInput : undefined),
+      promoCode: appliedPromo?.code || (promoCodeInput.trim() ? promoCodeInput.trim() : undefined),
     });
   };
 
