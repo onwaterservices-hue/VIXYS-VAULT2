@@ -365,6 +365,7 @@ export default function App() {
 
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
+  const [authModalEmail, setAuthModalEmail] = useState<string>('');
 
   // Toggle Favorite Asset
   const handleToggleFavorite = (symbol: string) => {
@@ -1180,8 +1181,9 @@ export default function App() {
           userId={authState?.user?.id}
           discordUserId={authState?.user?.discordId}
           onViewPricing={() => setActiveTab('pricing')}
-          onOpenAuth={(mode) => {
+          onOpenAuth={(mode, prefillEmail) => {
             setAuthModalMode(mode === 'signup' ? 'register' : (mode || 'login'));
+            if (prefillEmail) setAuthModalEmail(prefillEmail);
             setShowAuthModal(true);
           }}
         />
@@ -1192,6 +1194,7 @@ export default function App() {
         isOpen={showAuthModal}
         onClose={() => setShowAuthModal(false)}
         initialMode={authModalMode}
+        initialEmail={authModalEmail}
         setAuthState={setAuthState}
         setUserRole={setUserRole}
       />

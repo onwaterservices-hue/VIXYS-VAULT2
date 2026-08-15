@@ -9,6 +9,7 @@ interface AuthModalProps {
   authState?: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
+  initialEmail?: string;
   onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
   setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
 }
@@ -19,11 +20,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   authState,
   setAuthState,
   initialMode = 'login',
+  initialEmail = '',
   onSuccessRole,
   setUserRole,
 }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => initialEmail || localStorage.getItem('vixy_user_email') || '');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [referralCode, setReferralCode] = useState('');
@@ -31,14 +33,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Sync mode with initialMode whenever modal opens or mode prop changes
+  // Sync mode and email whenever modal opens or mode prop changes
   React.useEffect(() => {
     if (isOpen) {
       setMode(initialMode);
       setErrorMsg('');
       setSuccessMsg('');
+      if (initialEmail) {
+        setEmail(initialEmail);
+      } else {
+        const stored = localStorage.getItem('vixy_user_email');
+        if (stored) setEmail(stored);
+      }
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, initialEmail]);
 
   if (!isOpen) return null;
 
@@ -198,7 +206,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05020F]/85 backdrop-blur-xl animate-fadeIn font-mono select-none overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#05020F]/90 backdrop-blur-2xl animate-fadeIn font-mono select-none overflow-y-auto">
       <div className="relative w-full max-w-lg bg-gradient-to-b from-[#130B2A] via-[#0A0518] to-[#070312] border-2 border-purple-500/50 rounded-3xl shadow-2xl shadow-purple-950/90 overflow-hidden text-purple-100 my-auto">
         {/* Glow Header Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500" />

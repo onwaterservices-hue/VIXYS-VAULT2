@@ -24,12 +24,12 @@ export interface MetricFormattedState {
  */
 export function formatOrderFlow(imbalanceVal?: number | null): MetricFormattedState {
   const val = typeof imbalanceVal === 'number' && !isNaN(imbalanceVal) ? imbalanceVal : 0;
-  const isBullish = val >= 0.05;
-  const isBearish = val <= -0.05;
-  const isNeutral = !isBullish && !isBearish;
+  const isBullish = val > 0;
+  const isBearish = val < 0;
+  const isNeutral = val === 0;
 
   const valueText = val > 0 ? `+${val.toFixed(3)}` : val.toFixed(3);
-  const subLabelText = isBullish ? 'BULLISH' : isBearish ? 'BEARISH' : 'NEUTRAL';
+  const subLabelText = isBullish ? (val >= 0.05 ? 'BULLISH' : 'NET BUY') : isBearish ? (val <= -0.05 ? 'BEARISH' : 'NET SELL') : 'NEUTRAL';
   const semanticClass = isBullish ? 'text-[#00FF9D]' : isBearish ? 'text-[#FF3366]' : 'text-purple-400';
 
   return {
@@ -56,10 +56,10 @@ export function formatMomentum(momentumVal?: number | null): MetricFormattedStat
   const pct = Math.abs(val) < 0.05 && val !== 0 ? val * 100 : val;
 
   const isStrongBull = pct >= 0.40;
-  const isBullish = pct >= 0.10;
+  const isBullish = pct > 0;
   const isStrongBear = pct <= -0.40;
-  const isBearish = pct <= -0.10;
-  const isNeutral = !isBullish && !isBearish;
+  const isBearish = pct < 0;
+  const isNeutral = pct === 0;
 
   const valueText = pct > 0 ? `+${pct.toFixed(2)}%` : `${pct.toFixed(2)}%`;
   const subLabelText = isStrongBull ? 'STRONG BULL' : isBullish ? 'BULLISH' : isStrongBear ? 'STRONG BEAR' : isBearish ? 'BEARISH' : 'NEUTRAL';
@@ -125,64 +125,37 @@ export function formatDistance(
   predictedDirection?: 'UP' | 'DOWN' | 'BUY UP' | 'BUY DOWN' | 'NEUTRAL' | string
 ): MetricFormattedState {
   const val = typeof distanceVal === 'number' && !isNaN(distanceVal) ? distanceVal : 0;
+  const isPositive = val > 0;
+  const isNegative = val < 0;
+  const isNeutral = val === 0;
+
+  const absVal = Math.abs(val);
+  const sign = isPositive ? '+' : isNegative ? '-' : '';
+  const valueText = `${sign}$${absVal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
+
   const dirUpper = (predictedDirection || '').toUpperCase();
   const isUp = dirUpper.includes('UP') || dirUpper.includes('YES');
   const isDown = dirUpper.includes('DOWN') || dirUpper.includes('NO');
 
-  const absVal = Math.abs(val);
-  const sign = val > 0 ? '+' : val < 0 ? '-' : '';
-  const valueText = `${sign}$${absVal.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}`;
-
-  let subLabelText = 'AT THE MONEY';
-  let isBullish = false;
-  let isBearish = false;
-  let isNeutral = true;
-  let semanticClass = 'text-purple-300';
-
+  let subLabelText = isPositive ? 'ABOVE STRIKE' : isNegative ? 'BELOW STRIKE' : 'AT STRIKE';
   if (isUp) {
-    if (val >= 10) {
-      subLabelText = 'IN THE MONEY';
-      isBullish = true;
-      isNeutral = false;
-      semanticClass = 'text-[#00FF9D]';
-    } else if (val <= -10) {
-      subLabelText = 'OUT OF MONEY';
-      isBearish = true;
-      isNeutral = false;
-      semanticClass = 'text-amber-400';
-    } else {
-      subLabelText = 'AT THE MONEY';
-      semanticClass = 'text-cyan-300';
-    }
+    subLabelText = isPositive ? 'IN THE MONEY' : isNegative ? 'OUT OF MONEY' : 'AT THE MONEY';
   } else if (isDown) {
-    if (val <= -10) {
-      subLabelText = 'IN THE MONEY';
-      isBullish = true; // Favorable for down contract
-      isNeutral = false;
-      semanticClass = 'text-[#00FF9D]';
-    } else if (val >= 10) {
-      subLabelText = 'OUT OF MONEY';
-      isBearish = true;
-      isNeutral = false;
-      semanticClass = 'text-amber-400';
-    } else {
-      subLabelText = 'AT THE MONEY';
-      semanticClass = 'text-cyan-300';
-    }
-  } else {
-    subLabelText = val > 0 ? 'ABOVE STRIKE' : val < 0 ? 'BELOW STRIKE' : 'AT STRIKE';
-    semanticClass = 'text-purple-300';
+    subLabelText = isNegative ? 'IN THE MONEY' : isPositive ? 'OUT OF MONEY' : 'AT THE MONEY';
   }
+
+  // Consistent strictly positive = Green, negative = Red, zero = Neutral Purple
+  const semanticClass = isPositive ? 'text-[#00FF9D]' : isNegative ? 'text-[#FF3366]' : 'text-purple-300';
 
   return {
     valueText,
     unitText: 'STRIKE GAP',
     subLabelText,
     semanticClass,
-    isBullish,
-    isBearish,
+    isBullish: isPositive,
+    isBearish: isNegative,
     isNeutral,
-    isWarning: subLabelText === 'OUT OF MONEY',
+    isWarning: isNegative,
   };
 }
 

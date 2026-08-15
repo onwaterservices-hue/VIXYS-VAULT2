@@ -611,11 +611,15 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
                </div>
              </div>
              <div className="absolute bottom-2 right-2 opacity-40 group-hover:opacity-70 transition-opacity flex items-end gap-[2px] h-4">
-               {[20, 35, 50, 75, 90, 80, 60, 40].map((h, i) => {
-                   const actualH = orderFlowState.isBullish ? h : orderFlowState.isBearish ? [90, 75, 60, 40, 35, 30, 20, 15][i] : 50;
+               {[20, 35, 50, 75, 90, 80, 60, 40].map((_, i) => {
+                   const actualH = orderFlowState.isBullish
+                     ? [15, 25, 40, 55, 70, 80, 90, 100][i]
+                     : orderFlowState.isBearish
+                     ? [100, 90, 80, 70, 55, 40, 25, 15][i]
+                     : 50;
                    return (
                      <div key={i} className={`w-1 rounded-t-sm ${orderFlowState.isBullish ? 'bg-[#00FF9D]' : orderFlowState.isBearish ? 'bg-[#FF3366]' : 'bg-purple-500'}`} style={{ height: `${actualH}%` }} />
-                   )
+                   );
                })}
              </div>
            </div>
@@ -636,7 +640,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 12C3 12 5 11 8 11C11 11 13 14 17 14C20 14 23 8 26 8C29 8 31 5 34 5C37 5 38 2 39 2" stroke={momentumState.isBullish ? "#00FF9D" : momentumState.isBearish ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 {momentumState.isBullish ? (
+                   <path d="M1 13C4 13 8 11 12 11C16 11 19 14 23 14C27 14 30 7 34 7C37 7 38 2 39 2" stroke="#00FF9D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : momentumState.isBearish ? (
+                   <path d="M1 2C4 2 8 4 12 4C16 4 19 1 23 1C27 1 30 8 34 8C37 8 38 13 39 13" stroke="#FF3366" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : (
+                   <path d="M1 8C5 8 8 6 12 6C16 6 20 10 24 10C28 10 32 7 36 7C38 7 39 8 40 8" stroke="#A855F7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 )}
                </svg>
              </div>
            </div>
@@ -663,7 +673,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Distance */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${distanceState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : distanceState.isBearish ? 'border-amber-400/30 bg-amber-400/[0.03] hover:border-amber-400/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${distanceState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : distanceState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
                <span className="text-[8px] font-mono text-purple-500/60">{distanceState.unitText}</span>
@@ -678,7 +688,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 12C5 12 7 14 10 14C14 14 17 8 20 8C23 8 25 11 29 11C33 11 36 6 39 6" stroke={distanceState.isBullish ? "#00FF9D" : distanceState.isBearish ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 {distanceState.isBullish ? (
+                   <path d="M1 13C5 13 9 11 13 11C17 11 20 14 24 14C28 14 31 7 35 7C37 7 38 2 39 2" stroke="#00FF9D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : distanceState.isBearish ? (
+                   <path d="M1 2C5 2 9 4 13 4C17 4 20 1 24 1C28 1 31 8 35 8C37 8 38 13 39 13" stroke="#FF3366" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : (
+                   <path d="M1 8C5 8 10 6 15 6C20 6 25 10 30 10C35 10 37 8 39 8" stroke="#A855F7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 )}
                </svg>
              </div>
            </div>
@@ -699,7 +715,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              </div>
              <div className="absolute bottom-2 right-2 opacity-30 group-hover:opacity-60 transition-opacity">
                <svg width="40" height="15" viewBox="0 0 40 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-                 <path d="M1 11C4 11 6 13 9 13C12 13 14 7 17 7C20 7 23 10 26 10C29 10 32 3 35 3C37 3 38 1 39 1" stroke={regimeState.isBull ? "#00FF9D" : regimeState.isBear ? "#FF3366" : "#A855F7"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 {regimeState.isBull ? (
+                   <path d="M1 13C5 13 8 11 12 11C16 11 19 14 23 14C27 14 30 6 34 6C37 6 38 2 39 2" stroke="#00FF9D" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : regimeState.isBear ? (
+                   <path d="M1 2C5 2 8 4 12 4C16 4 19 1 23 1C27 1 30 9 34 9C37 9 38 13 39 13" stroke="#FF3366" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 ) : (
+                   <path d="M1 8C4 8 7 5 11 5C15 5 18 11 22 11C26 11 29 5 33 5C36 5 38 8 39 8" stroke="#A855F7" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                 )}
                </svg>
              </div>
            </div>
@@ -736,13 +758,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
 
         {/* Card 2: DISTANCE TO STRIKE */}
-        <div className={`bg-[#06020c] border rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg ${spotVsStrikeDelta >= 0 ? 'border-rose-900/40' : 'border-emerald-900/40'}`}>
+        <div className={`bg-[#06020c] border rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg ${spotVsStrikeDelta >= 0 ? 'border-emerald-900/40' : 'border-rose-900/40'}`}>
           <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">DISTANCE TO STRIKE</div>
           <div>
-            <div className={`text-3xl font-black tracking-tighter ${spotVsStrikeDelta >= 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+            <div className={`text-3xl font-black tracking-tighter ${spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
               {formattedSpotVsStrikeVal}
             </div>
-            <div className={`text-sm font-bold tracking-widest ${spotVsStrikeDelta >= 0 ? 'text-rose-500/80' : 'text-emerald-500/80'}`}>
+            <div className={`text-sm font-bold tracking-widest ${spotVsStrikeDelta >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
               ({formattedSpotVsStrikePct})
             </div>
           </div>

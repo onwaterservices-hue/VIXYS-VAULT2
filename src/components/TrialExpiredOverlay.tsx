@@ -10,9 +10,9 @@ import {
   Loader2,
   RefreshCw,
   AlertCircle,
-  ShieldCheck,
   LogIn,
   UserCheck,
+  Mail,
 } from 'lucide-react';
 import { createDayPassCheckoutApi, restoreAccessApi, getEntitlementsApi } from '../services/api';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
@@ -20,7 +20,7 @@ import { getStripeDayPassUrl } from '../config/stripeLinks';
 interface TrialExpiredOverlayProps {
   onUpgradeToPro?: () => void;
   onViewPricing?: () => void;
-  onOpenAuth?: (mode?: 'login' | 'signup') => void;
+  onOpenAuth?: (mode?: 'login' | 'signup', prefillEmail?: string) => void;
   onResetTrial?: () => void;
   isAuthenticated?: boolean;
   userEmail?: string;
@@ -36,6 +36,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   userId,
   discordUserId,
 }) => {
+  const [quickEmailInput, setQuickEmailInput] = useState('');
   const [isProcessingDayPass, setIsProcessingDayPass] = useState(false);
   const [isCheckingEntitlement, setIsCheckingEntitlement] = useState(false);
   const [restoreFeedback, setRestoreFeedback] = useState<{
@@ -47,9 +48,10 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   const handleDayPassCheckout = async () => {
     setIsProcessingDayPass(true);
     setRestoreFeedback(null);
-    const directUrl = getStripeDayPassUrl({ email: userEmail, uid: userId });
+    const targetEmail = userEmail || quickEmailInput.trim() || undefined;
+    const directUrl = getStripeDayPassUrl({ email: targetEmail, uid: userId });
     try {
-      const apiRes = await createDayPassCheckoutApi({ userEmail, uid: userId, discordUserId });
+      const apiRes = await createDayPassCheckoutApi({ userEmail: targetEmail, uid: userId, discordUserId });
       if (apiRes?.url) {
         window.location.href = apiRes.url;
       } else {
@@ -62,20 +64,29 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
     }
   };
 
-  const handleNormalSignIn = () => {
+  const handleNormalSignIn = (customEmail?: string) => {
+    const target = customEmail || quickEmailInput.trim() || userEmail || '';
+    if (target) {
+      localStorage.setItem('vixy_user_email', target.toLowerCase());
+    }
     if (onOpenAuth) {
-      onOpenAuth('login');
+      onOpenAuth('login', target);
     }
   };
 
-  const handleCreateAccount = () => {
+  const handleCreateAccount = (customEmail?: string) => {
+    const target = customEmail || quickEmailInput.trim() || userEmail || '';
+    if (target) {
+      localStorage.setItem('vixy_user_email', target.toLowerCase());
+    }
     if (onOpenAuth) {
-      onOpenAuth('signup');
+      onOpenAuth('signup', target);
     }
   };
 
   const handleCheckActiveEntitlement = async () => {
-    if (!isAuthenticated && !userEmail && !userId) {
+    const targetEmail = (userEmail || quickEmailInput.trim()).toLowerCase();
+    if (!isAuthenticated && !targetEmail && !userId) {
       handleNormalSignIn();
       return;
     }
@@ -85,7 +96,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
 
     try {
       const restoreRes = await restoreAccessApi({
-        email: userEmail,
+        email: targetEmail || undefined,
         uid: userId,
         discordUserId,
       });
@@ -93,16 +104,16 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
       if (restoreRes.success && restoreRes.restored) {
         setRestoreFeedback({
           type: 'success',
-          message: restoreRes.message || 'Active entitlement restored successfully! Reloading terminal...',
+          message: restoreRes.message || 'Active entitlement verified! Loading terminal...',
         });
         setTimeout(() => {
           window.location.reload();
-        }, 1000);
+        }, 800);
         return;
       }
 
-      // Check entitlements directly
-      const entRes = await getEntitlementsApi(userEmail, userId);
+      // Check entitlements API directly
+      const entRes = await getEntitlementsApi(targetEmail || userEmail, userId);
       if (
         entRes &&
         (entRes.status === 'active' ||
@@ -112,23 +123,28 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
       ) {
         setRestoreFeedback({
           type: 'success',
-          message: 'Active subscription verified! Unlocking terminal...',
+          message: 'Active plan confirmed! Unlocking terminal...',
         });
         setTimeout(() => {
           window.location.reload();
-        }, 1000);
+        }, 800);
         return;
       }
 
-      setRestoreFeedback({
-        type: 'info',
-        showPlans: true,
-        message: 'No active subscription or 24-hour Day Pass found for this account.',
-      });
+      // If not yet authenticated, guide them to complete normal sign in
+      if (!isAuthenticated) {
+        handleNormalSignIn(targetEmail);
+      } else {
+        setRestoreFeedback({
+          type: 'info',
+          showPlans: true,
+          message: `No active paid subscription or 24-hour Day Pass on file for ${targetEmail || 'this account'}.`,
+        });
+      }
     } catch (err: any) {
       setRestoreFeedback({
         type: 'error',
-        message: err?.message || 'Unable to verify entitlements. Please check your connection.',
+        message: err?.message || 'Unable to connect to verification service. Please try standard sign in.',
       });
     } finally {
       setIsCheckingEntitlement(false);
@@ -136,28 +152,28 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-[#05020E]/94 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 text-purple-100 font-mono select-none overflow-y-auto">
-      {/* Background Ambient Radial Lights */}
+    <div className="fixed inset-0 z-50 bg-[#05020E]/95 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 text-purple-100 font-mono select-none overflow-y-auto">
+      {/* Ambient background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-600/20 blur-[180px] rounded-full pointer-events-none animate-pulse" />
-      <div className="absolute top-1/4 right-1/4 w-[350px] h-[350px] bg-violet-600/15 blur-[140px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/4 right-1/4 w-[350px] h-[350px] bg-amber-500/10 blur-[140px] rounded-full pointer-events-none" />
 
-      {/* Main Lockout Card Container */}
-      <div className="relative z-10 max-w-xl w-full bg-[#0D071E]/95 p-6 sm:p-10 rounded-3xl border-2 border-purple-500/50 shadow-2xl shadow-purple-950/90 text-center space-y-6 backdrop-blur-xl my-auto">
-        {/* Animated Emblem */}
+      {/* Main Lockout Card */}
+      <div className="relative z-10 max-w-xl w-full bg-[#0D071E]/95 p-6 sm:p-9 rounded-3xl border-2 border-purple-500/50 shadow-2xl shadow-purple-950/90 text-center space-y-5 backdrop-blur-xl my-auto">
+        {/* Logo */}
         <div className="flex justify-center">
           <div className="scale-110 sm:scale-125 hover:scale-130 transition-transform">
             <Logo size="xl" showText={false} />
           </div>
         </div>
 
-        {/* Lockout Header Badge */}
+        {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-widest">
           <Lock className="w-3.5 h-3.5 text-amber-400" />
           <span>VIXY TERMINAL ACCESS LOCKED</span>
         </div>
 
-        {/* Main Display Title */}
-        <div className="space-y-2">
+        {/* Heading */}
+        <div className="space-y-1.5">
           <h1 className="text-3xl sm:text-5xl font-black text-white font-mono tracking-tight leading-none uppercase">
             VIXY'S <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-purple-300 to-amber-300">VAULT</span>
             <br />
@@ -168,8 +184,8 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           </p>
         </div>
 
-        {/* Exclusive Feature Preview List */}
-        <div className="bg-[#070312] p-4 sm:p-5 rounded-2xl border border-purple-900/50 text-left text-xs space-y-3 font-sans">
+        {/* Advantage Box */}
+        <div className="bg-[#070312] p-4 rounded-2xl border border-purple-900/50 text-left text-xs space-y-2.5 font-sans">
           <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider font-mono flex items-center justify-between border-b border-purple-900/40 pb-2">
             <span className="flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-amber-400" /> UNRESTRICTED QUANT MEMBER ADVANTAGES
@@ -177,7 +193,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             <span className="text-emerald-400 font-mono text-[10px]">+EV ACCELERATOR</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-purple-100 text-[11px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-purple-100 text-[11px]">
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <span>Sub-Second L2 Net Taker Volume Delta Depth</span>
@@ -197,9 +213,9 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           </div>
         </div>
 
-        {/* Action CTAs */}
+        {/* Buttons */}
         <div className="space-y-3 pt-1">
-          {/* Direct 24H Day Pass Button */}
+          {/* Day Pass Direct Checkout */}
           <button
             onClick={handleDayPassCheckout}
             disabled={isProcessingDayPass}
@@ -219,7 +235,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             )}
           </button>
 
-          {/* View All Subscription Plans Button */}
+          {/* View Plans */}
           <button
             onClick={onViewPricing}
             className="w-full py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-500/40 text-purple-200 font-bold transition-all flex items-center justify-center gap-2 font-mono text-xs cursor-pointer active:scale-[0.99]"
@@ -228,26 +244,43 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             <span>View All Subscription Plans & Billing (Starter / Pro / Elite)</span>
           </button>
 
-          {/* Standard Normal Sign In / Restore Section */}
+          {/* Standard Normal Sign-In / Account Flow */}
           <div className="pt-2 border-t border-purple-900/40 space-y-2.5">
             {!isAuthenticated ? (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={handleNormalSignIn}
-                  className="w-full py-2.5 px-4 rounded-xl bg-purple-900/40 hover:bg-purple-900/70 border border-purple-700/50 text-white font-bold text-xs font-mono transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <LogIn className="w-3.5 h-3.5 text-purple-300" />
-                  <span>Already have an account or active pass? Sign In to Restore Access</span>
-                </button>
-                <div className="flex items-center justify-center gap-1.5 text-[11px] text-purple-300/70">
-                  <span>Don't have an account yet?</span>
+              <div className="space-y-2.5">
+                {/* Fast Email Input with Direct Sign In */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Mail className="w-3.5 h-3.5 text-purple-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="email"
+                      value={quickEmailInput}
+                      onChange={(e) => setQuickEmailInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleNormalSignIn(quickEmailInput);
+                      }}
+                      placeholder="Account email (e.g. trader@email.com)"
+                      className="w-full pl-9 pr-3 py-2.5 bg-[#070312] border border-purple-800/60 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-purple-500 placeholder-purple-400/40"
+                    />
+                  </div>
                   <button
                     type="button"
-                    onClick={handleCreateAccount}
+                    onClick={() => handleNormalSignIn(quickEmailInput)}
+                    className="px-4 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs font-mono transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-md shadow-purple-900/40"
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    <span>Sign In</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] px-1">
+                  <span className="text-purple-300/60">New to VIXY Vault?</span>
+                  <button
+                    type="button"
+                    onClick={() => handleCreateAccount(quickEmailInput)}
                     className="text-amber-400 hover:text-amber-300 font-bold underline cursor-pointer"
                   >
-                    Create Account
+                    Create Free Account →
                   </button>
                 </div>
               </div>
@@ -260,7 +293,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={handleNormalSignIn}
+                    onClick={() => handleNormalSignIn()}
                     className="text-[10px] text-purple-400 hover:text-white underline cursor-pointer"
                   >
                     Switch Account
@@ -276,7 +309,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
                   {isCheckingEntitlement ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Checking Active Entitlements...</span>
+                      <span>Verifying Active Entitlements...</span>
                     </>
                   ) : (
                     <>
@@ -288,7 +321,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
               </div>
             )}
 
-            {/* Status / Feedback Box if any */}
+            {/* Status / Feedback Box */}
             {restoreFeedback && (
               <div
                 className={`p-2.5 rounded-xl text-xs space-y-2 text-left ${
@@ -333,7 +366,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           </div>
         </div>
 
-        {/* Trust Badge Footer */}
+        {/* Footer */}
         <p className="text-[10px] text-purple-300/50 font-sans">
           30-day money-back guarantee on all subscriptions. Cancel anytime in 1 click.
         </p>
