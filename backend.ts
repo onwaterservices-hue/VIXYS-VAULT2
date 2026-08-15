@@ -2840,9 +2840,79 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
       addServerAuditLog('ADMIN', 'ROLE_UPDATED', `Updated role of ${user.email} to ${role}`);
       return res.json({ success: true, message: `Role updated to ${role}`, user });
     }
+  } else if (action === 'grant_day_pass') {
+    const nowMs = Date.now();
+    const startedAt = new Date(nowMs).toISOString();
+    const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
+    const dpRecord: DayPassRecord = {
+      entitlementId: `dp_admin_${nowMs}`,
+      userId: user.id || user.uid || `usr_${user.email.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+      email: user.email.toLowerCase(),
+      discordUserId: user.discordId || undefined,
+      guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+      entitlementType: 'DAY_PASS',
+      accessTier: 'ELITE',
+      status: 'ACTIVE',
+      duration: '24 hours',
+      activatedAt: startedAt,
+      expiresAt,
+      startedAt,
+      stripePaymentStatus: 'PAID',
+      stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?utm_source=chatgpt.com',
+      stripePaymentId: `manual_grant_${nowMs}`,
+      stripeCheckoutSessionId: `sess_manual_${nowMs}`,
+      stripeEventId: `evt_manual_${nowMs}`,
+      stripePriceId: 'price_vixy_day_pass_999',
+      discordRoleId: process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
+      discordRoleAssigned: false,
+      createdAt: startedAt,
+      updatedAt: startedAt,
+    };
+    userDayPasses.set(user.email.toLowerCase(), dpRecord);
+    if (user.id) userDayPasses.set(user.id, dpRecord);
+    if (db) {
+      setDoc(doc(db, 'day_passes', user.email.toLowerCase()), dpRecord, { merge: true }).catch(() => {});
+    }
+    syncUserEntitlementToDiscord(user.email.toLowerCase()).catch(() => {});
+    addServerAuditLog('ADMIN', 'GRANT_DAY_PASS', `Granted 24H Day Pass to ${user.email}`);
+    return res.json({ success: true, message: `Granted 24H Day Pass to ${user.email}`, dayPass: dpRecord });
+  } else if (action === 'revoke_day_pass') {
+    const dp = userDayPasses.get(user.email.toLowerCase());
+    if (dp) {
+      dp.status = 'EXPIRED';
+      dp.updatedAt = new Date().toISOString();
+      if (dp.discordUserId) {
+        assignDiscordRoleToUser(dp.discordUserId, 'NONE').catch(() => {});
+      }
+      if (db) setDoc(doc(db, 'day_passes', user.email.toLowerCase()), dp, { merge: true }).catch(() => {});
+    }
+    addServerAuditLog('ADMIN', 'REVOKE_DAY_PASS', `Revoked Day Pass for ${user.email}`, 'WARN');
+    return res.json({ success: true, message: `Revoked Day Pass for ${user.email}` });
   }
 
   res.status(400).json({ error: 'INVALID_ACTION', message: 'Unknown action requested' });
+});
+
+// GET /api/admin/day-passes — Day Pass Observability & Entitlement Audit
+app.get('/api/admin/day-passes', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, res) => {
+  const records: DayPassRecord[] = [];
+  const seenIds = new Set<string>();
+
+  for (const [key, dp] of userDayPasses.entries()) {
+    if (dp && dp.entitlementId && !seenIds.has(dp.entitlementId)) {
+      seenIds.add(dp.entitlementId);
+      records.push(dp);
+    }
+  }
+
+  res.json({
+    success: true,
+    count: records.length,
+    activeCount: records.filter((r) => r.status === 'ACTIVE').length,
+    expiredCount: records.filter((r) => r.status === 'EXPIRED').length,
+    records: records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 app.post('/api/admin/users/role', requireRole(['OWNER', 'ADMIN']), (req, res) => {
@@ -3405,6 +3475,112 @@ app.post('/api/stripe/create-checkout-session', createCheckoutSessionHandler);
 app.post('/create-checkout-session', createCheckoutSessionHandler);
 app.post('/api/create-checkout-session', createCheckoutSessionHandler);
 
+// Stripe Day Pass Checkout Handler (24-Hour Day Pass, $9.99 One-Time)
+const createDayPassCheckoutHandler = async (req: express.Request, res: express.Response) => {
+  const stripe = getStripe();
+  const cleanUserEmail = (
+    req.body.userEmail ||
+    req.body.email ||
+    (req.headers['x-user-email'] as string) ||
+    ''
+  ).toLowerCase().trim();
+
+  const cleanUid = (
+    req.body.uid ||
+    req.body.userId ||
+    (req.headers['x-user-uid'] as string) ||
+    (req.headers['x-user-id'] as string) ||
+    ''
+  ).trim();
+
+  const cleanReferral = (req.body.referralCode || req.body.ref || '').toString().trim().toUpperCase();
+  const user = ensureUserExists({ uid: cleanUid, email: cleanUserEmail, name: cleanUserEmail ? cleanEmailName(cleanUserEmail) : 'Day Pass User' });
+
+  if (!stripe) {
+    console.warn('[DAY PASS CHECKOUT] Stripe Secret Key missing. Returning simulated checkout URL or direct link.');
+    const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+    return res.json({
+      url: `${origin}/?stripe_status=success&day_pass=activated&ref=${cleanReferral}`,
+      sessionId: `sess_sim_daypass_${Date.now()}`,
+      simulated: true,
+    });
+  }
+
+  let stripeCustomerId = user.stripeCustomerId;
+
+  if (!stripeCustomerId && cleanUserEmail) {
+    try {
+      const existingCustomers = await stripe.customers.list({ email: cleanUserEmail, limit: 1 });
+      if (existingCustomers.data.length > 0) {
+        stripeCustomerId = existingCustomers.data[0].id;
+      } else {
+        const newCust = await stripe.customers.create({
+          email: cleanUserEmail,
+          name: user.name || cleanUserEmail.split('@')[0],
+          metadata: { userId: user.id, uid: user.uid || '' },
+        });
+        stripeCustomerId = newCust.id;
+      }
+      user.stripeCustomerId = stripeCustomerId;
+      savePersistentStore();
+    } catch (custErr) {
+      console.warn('[DAY PASS CHECKOUT] Customer lookup warning:', custErr);
+    }
+  }
+
+  const dayPassPriceId = process.env.STRIPE_DAY_PASS_PRICE_ID;
+  const lineItem = dayPassPriceId
+    ? { price: dayPassPriceId, quantity: 1 }
+    : {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: 'VIXY Vault — 24H Day Pass',
+            description: '24 hours of access to VIXY live prediction intelligence and decision terminal. One-time purchase. No recurring subscription.',
+          },
+          unit_amount: 999, // $9.99
+        },
+        quantity: 1,
+      };
+
+  try {
+    const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+    const sessionParams: Stripe.Checkout.SessionCreateParams = {
+      payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      customer: stripeCustomerId || undefined,
+      customer_email: stripeCustomerId ? undefined : (cleanUserEmail || undefined),
+      line_items: [lineItem as any],
+      metadata: {
+        vixyUserId: user.id,
+        userId: user.id,
+        uid: user.uid || cleanUid || '',
+        userEmail: cleanUserEmail,
+        plan: 'DAY_PASS',
+        entitlementType: 'VIXY_DAY_PASS',
+        productType: 'DAY_PASS',
+        durationHours: '24',
+        referralCode: cleanReferral || 'DIRECT',
+      },
+      mode: 'payment', // ONE-TIME payment
+      success_url: `${origin}/?stripe_status=success&day_pass=activated&ref=${cleanReferral}`,
+      cancel_url: `${origin}/?stripe_status=cancelled`,
+    };
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
+
+    console.log(`[DAY PASS CHECKOUT CREATED] user=${user.id}, email=${cleanUserEmail}, session=${session.id}`);
+
+    res.json({ url: session.url, sessionId: session.id, mode: 'payment', entitlement: 'VIXY_DAY_PASS' });
+  } catch (err: any) {
+    console.error('Error creating Day Pass checkout session:', err);
+    res.status(500).json({ error: 'STRIPE_ERROR', message: err.message || 'Failed to create Day Pass checkout session' });
+  }
+};
+
+app.post('/api/stripe/create-day-pass-checkout', createDayPassCheckoutHandler);
+app.post('/create-day-pass-checkout', createDayPassCheckoutHandler);
+
 // Stripe Customer Billing Portal Session Endpoint
 app.post('/api/stripe/create-portal-session', async (req: express.Request, res: express.Response) => {
   const stripe = getStripe();
@@ -3664,15 +3840,43 @@ export interface EntitlementsMap {
   canAccessAdminPanel: boolean;
 }
 
+export interface DayPassRecord {
+  entitlementId: string;
+  userId: string;
+  email: string;
+  discordUserId?: string;
+  guildId?: string;
+  entitlementType: 'DAY_PASS';
+  accessTier: 'ELITE';
+  status: 'ACTIVE' | 'EXPIRED';
+  duration: string;
+  activatedAt: string;
+  expiresAt: string;
+  startedAt: string;
+  stripePaymentStatus: 'PAID';
+  stripePaymentLink: string;
+  stripePaymentId?: string;
+  stripeCheckoutSessionId?: string;
+  stripePaymentIntentId?: string;
+  stripeEventId?: string;
+  stripePriceId?: string;
+  discordRoleId?: string;
+  discordRoleAssigned: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const userDayPasses = new Map<string, DayPassRecord>();
+
 export interface AuthoritativeEntitlementResponse {
   authenticated: boolean;
   userId: string;
   email: string;
   stripeVerified: boolean;
-  plan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
-  logicalPlan: 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
-  billing: 'MONTHLY' | 'YEARLY' | 'NONE';
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'NONE';
+  logicalPlan: 'DAY_PASS_24H' | 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
+  billing: 'ONE_TIME' | 'MONTHLY' | 'YEARLY' | 'NONE';
+  status: 'active' | 'past_due' | 'canceled' | 'inactive' | 'discord_unverified';
   stripeCustomerId?: string;
   subscriptionId?: string;
   stripePriceId?: string;
@@ -3683,26 +3887,25 @@ export interface AuthoritativeEntitlementResponse {
   discordUserId?: string;
   guildMember: boolean;
   entitlements: EntitlementsMap;
-  trial: {
+  dayPass: {
     active: boolean;
-    consumed: boolean;
-    expiresAt?: string;
+    startedAt?: string | null;
+    expiresAt?: string | null;
     secondsRemaining: number;
+    stripeSessionId?: string;
   };
   updatedAt: string;
 }
 
-// Single Authoritative Entitlement Hierarchy Resolver (ELITE_QUANT > PRO_QUANT > STARTER)
+// Single Authoritative Subscription Resolver (ELITE_QUANT > PRO_QUANT > STARTER)
 export function getEntitlementsFromSubscription(
   planStr: string,
   statusStr: string,
-  isOwnerOrAdmin: boolean = false,
-  trialConsumed: boolean = false,
-  trialExpiresAt?: string
+  isOwnerOrAdmin: boolean = false
 ): {
   entitlements: EntitlementsMap;
-  normalizedPlan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
-  normalizedStatus: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
+  normalizedPlan: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'NONE';
+  normalizedStatus: 'active' | 'past_due' | 'canceled' | 'inactive' | 'discord_unverified';
   isStripeVerified: boolean;
 } {
   if (isOwnerOrAdmin) {
@@ -3724,8 +3927,8 @@ export function getEntitlementsFromSubscription(
   const cleanPlan = (planStr || '').toUpperCase().trim();
   const cleanStatus = (statusStr || '').toUpperCase().trim();
 
-  // Active Stripe Plan Check
-  if (cleanStatus === 'ACTIVE' || cleanStatus === 'PAST_DUE' || cleanStatus === 'TRIALING') {
+  // Active Stripe Subscription Check
+  if (cleanStatus === 'ACTIVE' || cleanStatus === 'PAST_DUE') {
     if (cleanPlan.includes('ELITE')) {
       return {
         entitlements: {
@@ -3771,44 +3974,6 @@ export function getEntitlementsFromSubscription(
     }
   }
 
-  // Free trial handling
-  const isTrial = cleanPlan.includes('FREE_TRIAL') || cleanPlan === 'FREE' || cleanPlan === 'TRIAL' || cleanPlan === 'NONE' || cleanPlan === '';
-  if (isTrial) {
-    const hasActiveTrial = trialExpiresAt && Date.now() < new Date(trialExpiresAt).getTime() && !trialConsumed;
-    
-    if (!hasActiveTrial) {
-      const isDiscordUnverified = !trialExpiresAt && !trialConsumed;
-      return {
-        entitlements: {
-          starter: false,
-          proQuant: false,
-          eliteQuant: false,
-          scalping15s: false,
-          canAccessProDesks: false,
-          canAccessAdminPanel: false,
-        },
-        normalizedPlan: 'FREE_TRIAL',
-        normalizedStatus: isDiscordUnverified ? 'discord_unverified' : 'trial_expired',
-        isStripeVerified: false,
-      };
-    }
-
-    // Active trial grants temporary Pro Desks preview
-    return {
-      entitlements: {
-        starter: true,
-        proQuant: true,
-        eliteQuant: false,
-        scalping15s: true,
-        canAccessProDesks: true,
-        canAccessAdminPanel: false,
-      },
-      normalizedPlan: 'FREE_TRIAL',
-      normalizedStatus: 'trialing',
-      isStripeVerified: false,
-    };
-  }
-
   return {
     entitlements: {
       starter: false,
@@ -3849,9 +4014,8 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
       discordUserId: '315284910382911234',
       guildMember: true,
       entitlements: ownerRes.entitlements,
-      trial: {
+      dayPass: {
         active: false,
-        consumed: true,
         secondsRemaining: 0,
       },
       updatedAt: new Date().toISOString(),
@@ -3862,61 +4026,148 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
   const sub = userSubscriptions.get(clean);
   const user = serverUsers.find((u) => u.email?.toLowerCase() === clean || u.id === clean || u.uid === clean);
 
-  if (user) {
-    checkAndUpdateTrialState(user);
-  }
-
-  const role = (sub?.role || user?.role || 'FREE').toUpperCase();
-  const rawPlan = (sub?.plan || user?.subscription || 'FREE_TRIAL').toUpperCase();
+  const role = (sub?.role || user?.role || 'USER').toUpperCase();
+  const rawPlan = (sub?.plan || user?.subscription || 'NONE').toUpperCase();
   const status = (sub?.status || user?.status || 'INACTIVE').toUpperCase();
   const isOwnerOrAdmin = ['OWNER', 'ADMIN', 'SUPPORT'].includes(role);
 
-  const trialConsumed = Boolean(user?.trialConsumed || (user as any)?.trial_consumed);
-  const trialExpiresAt = user?.trial_expires_at;
-  const trialSecondsRemaining = trialExpiresAt ? Math.max(0, Math.floor((new Date(trialExpiresAt).getTime() - Date.now()) / 1000)) : (trialConsumed ? 0 : 10800);
+  // Priority 1: Active Monthly / Annual Paid Subscription
+  const resolvedSub = getEntitlementsFromSubscription(rawPlan, status, isOwnerOrAdmin);
 
-  const resolved = getEntitlementsFromSubscription(rawPlan, status, isOwnerOrAdmin, trialConsumed, trialExpiresAt);
+  // Day Pass Record Evaluation
+  const dayPassRecord = userDayPasses.get(clean) || (user?.id ? userDayPasses.get(user.id) : undefined) || (user as any)?.dayPass;
+  const nowMs = Date.now();
+  let dayPassActive = false;
+  let dayPassSecondsRemaining = 0;
 
-  // Resolve logical plan and billing interval
-  let logicalPlan: AuthoritativeEntitlementResponse['logicalPlan'] = 'NONE';
-  let billing: 'MONTHLY' | 'YEARLY' | 'NONE' = 'NONE';
-
-  if (resolved.normalizedPlan === 'ELITE_QUANT') {
-    billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
-    logicalPlan = billing === 'YEARLY' ? 'ELITE_QUANT_YEARLY' : 'ELITE_QUANT_MONTHLY';
-  } else if (resolved.normalizedPlan === 'PRO_QUANT') {
-    billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
-    logicalPlan = billing === 'YEARLY' ? 'PRO_QUANT_YEARLY' : 'PRO_QUANT_MONTHLY';
-  } else if (resolved.normalizedPlan === 'STARTER') {
-    billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
-    logicalPlan = billing === 'YEARLY' ? 'STARTER_YEARLY' : 'STARTER_MONTHLY';
+  if (dayPassRecord && dayPassRecord.expiresAt) {
+    const expMs = new Date(dayPassRecord.expiresAt).getTime();
+    if (expMs > nowMs) {
+      dayPassActive = true;
+      dayPassSecondsRemaining = Math.floor((expMs - nowMs) / 1000);
+    } else {
+      dayPassRecord.status = 'EXPIRED';
+    }
   }
 
+  // Priority 1 Resolution (Active Subscription exists)
+  if (resolvedSub.normalizedPlan !== 'NONE') {
+    let logicalPlan: AuthoritativeEntitlementResponse['logicalPlan'] = 'NONE';
+    let billing: 'ONE_TIME' | 'MONTHLY' | 'YEARLY' | 'NONE' = 'NONE';
+
+    if (resolvedSub.normalizedPlan === 'ELITE_QUANT') {
+      billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
+      logicalPlan = billing === 'YEARLY' ? 'ELITE_QUANT_YEARLY' : 'ELITE_QUANT_MONTHLY';
+    } else if (resolvedSub.normalizedPlan === 'PRO_QUANT') {
+      billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
+      logicalPlan = billing === 'YEARLY' ? 'PRO_QUANT_YEARLY' : 'PRO_QUANT_MONTHLY';
+    } else if (resolvedSub.normalizedPlan === 'STARTER') {
+      billing = rawPlan.includes('YEAR') || rawPlan.includes('ANNUAL') ? 'YEARLY' : 'MONTHLY';
+      logicalPlan = billing === 'YEARLY' ? 'STARTER_YEARLY' : 'STARTER_MONTHLY';
+    }
+
+    const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
+
+    return {
+      authenticated: Boolean(user || sub || clean),
+      userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+      email: clean,
+      stripeVerified: resolvedSub.isStripeVerified,
+      plan: resolvedSub.normalizedPlan,
+      logicalPlan,
+      billing,
+      status: resolvedSub.normalizedStatus,
+      stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
+      subscriptionId: sub?.stripeSubscriptionId || user?.stripeSubscriptionId,
+      currentPeriodStart: Math.floor(Date.now() / 1000) - 86400 * 15,
+      currentPeriodEnd: Math.floor(Date.now() / 1000) + 86400 * 15,
+      cancelAtPeriodEnd: false,
+      discordVerified: Boolean(discordProfile?.discordLinked || user?.discordLinked),
+      discordUserId: discordProfile?.discordUserId || user?.discordId,
+      guildMember: Boolean(discordProfile?.guildMember || user?.verificationStatus === 'VERIFIED'),
+      entitlements: resolvedSub.entitlements,
+      dayPass: {
+        active: dayPassActive,
+        startedAt: dayPassRecord?.startedAt || null,
+        expiresAt: dayPassRecord?.expiresAt || null,
+        secondsRemaining: dayPassSecondsRemaining,
+        stripeSessionId: dayPassRecord?.stripeCheckoutSessionId,
+      },
+      updatedAt: sub?.updatedAt || new Date().toISOString(),
+    };
+  }
+
+  // Priority 2 Resolution: Active 24H Day Pass
+  if (dayPassActive && dayPassRecord) {
+    const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
+
+    return {
+      authenticated: Boolean(user || sub || clean),
+      userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+      email: clean,
+      stripeVerified: true,
+      plan: 'DAY_PASS',
+      logicalPlan: 'DAY_PASS_24H',
+      billing: 'ONE_TIME',
+      status: 'active',
+      stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
+      subscriptionId: dayPassRecord.stripeCheckoutSessionId,
+      currentPeriodStart: Math.floor(new Date(dayPassRecord.startedAt).getTime() / 1000),
+      currentPeriodEnd: Math.floor(new Date(dayPassRecord.expiresAt).getTime() / 1000),
+      cancelAtPeriodEnd: false,
+      discordVerified: Boolean(discordProfile?.discordLinked || user?.discordLinked),
+      discordUserId: discordProfile?.discordUserId || user?.discordId,
+      guildMember: Boolean(discordProfile?.guildMember || user?.verificationStatus === 'VERIFIED'),
+      entitlements: {
+        starter: true,
+        proQuant: true,
+        eliteQuant: true,
+        scalping15s: true,
+        canAccessProDesks: true,
+        canAccessAdminPanel: false,
+      },
+      dayPass: {
+        active: true,
+        startedAt: dayPassRecord.startedAt,
+        expiresAt: dayPassRecord.expiresAt,
+        secondsRemaining: dayPassSecondsRemaining,
+        stripeSessionId: dayPassRecord.stripeCheckoutSessionId,
+      },
+      updatedAt: dayPassRecord.updatedAt || new Date().toISOString(),
+    };
+  }
+
+  // Priority 3 Resolution: No Active Access
   const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
 
   return {
     authenticated: Boolean(user || sub || clean),
     userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
     email: clean,
-    stripeVerified: resolved.isStripeVerified,
-    plan: resolved.normalizedPlan,
-    logicalPlan,
-    billing,
-    status: resolved.normalizedStatus,
+    stripeVerified: false,
+    plan: 'NONE',
+    logicalPlan: 'NONE',
+    billing: 'NONE',
+    status: status === 'CANCELED' ? 'canceled' : 'inactive',
     stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
     subscriptionId: sub?.stripeSubscriptionId || user?.stripeSubscriptionId,
-    currentPeriodStart: Math.floor(Date.now() / 1000) - 86400 * 15,
-    currentPeriodEnd: Math.floor(Date.now() / 1000) + 86400 * 15,
-    cancelAtPeriodEnd: false,
     discordVerified: Boolean(discordProfile?.discordLinked || user?.discordLinked),
     discordUserId: discordProfile?.discordUserId || user?.discordId,
     guildMember: Boolean(discordProfile?.guildMember || user?.verificationStatus === 'VERIFIED'),
-    entitlements: resolved.entitlements,
-    trial: {
-      active: resolved.normalizedPlan === 'FREE_TRIAL' && !trialConsumed && trialSecondsRemaining > 0,
-      consumed: trialConsumed,
-      expiresAt: trialExpiresAt,
-      secondsRemaining: trialSecondsRemaining,
+    entitlements: {
+      starter: false,
+      proQuant: false,
+      eliteQuant: false,
+      scalping15s: false,
+      canAccessProDesks: false,
+      canAccessAdminPanel: false,
+    },
+    dayPass: {
+      active: false,
+      startedAt: dayPassRecord?.startedAt || null,
+      expiresAt: dayPassRecord?.expiresAt || null,
+      secondsRemaining: 0,
+      stripeSessionId: dayPassRecord?.stripeCheckoutSessionId,
     },
     updatedAt: sub?.updatedAt || new Date().toISOString(),
   };
@@ -4283,6 +4534,86 @@ timestamp: ${new Date().toISOString()}`);
       const customerEmail = await extractEmail(session);
       if (!customerEmail) {
         console.warn('[STRIPE WEBHOOK] Checkout completed has no email.', session.id);
+        break;
+      }
+
+      const entitlementType = session.metadata?.entitlementType || session.metadata?.productType || session.metadata?.plan;
+      const isDayPass = session.mode === 'payment' || entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS';
+
+      if (isDayPass) {
+        const vixyUserId = session.metadata?.vixyUserId || session.metadata?.userId || `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const discordUserId = session.metadata?.discordUserId || session.metadata?.discord_user_id;
+        const amountTotal = (session.amount_total || 999) / 100;
+        const nowMs = Date.now();
+        const startedAt = new Date(nowMs).toISOString();
+        const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
+        const dayPassId = `dp_${nowMs}_${Math.random().toString(36).substring(2, 6)}`;
+
+        const dayPassRecord: DayPassRecord = {
+          entitlementId: dayPassId,
+          userId: vixyUserId,
+          email: customerEmail.toLowerCase(),
+          discordUserId: discordUserId || undefined,
+          guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+          entitlementType: 'DAY_PASS',
+          accessTier: 'ELITE',
+          status: 'ACTIVE',
+          duration: '24 hours',
+          activatedAt: startedAt,
+          expiresAt,
+          startedAt,
+          stripePaymentStatus: 'PAID',
+          stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?utm_source=chatgpt.com',
+          stripePaymentId: typeof session.payment_intent === 'string' ? session.payment_intent : session.id,
+          stripeCheckoutSessionId: session.id,
+          stripeEventId: event.id || session.id,
+          stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_vixy_day_pass_999',
+          discordRoleId: process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
+          discordRoleAssigned: false,
+          createdAt: startedAt,
+          updatedAt: startedAt,
+        };
+
+        userDayPasses.set(customerEmail.toLowerCase(), dayPassRecord);
+        if (vixyUserId) userDayPasses.set(vixyUserId, dayPassRecord);
+
+        // Instant Discord Role Assignment if Discord is connected
+        syncUserEntitlementToDiscord(customerEmail.toLowerCase()).then((syncRes) => {
+          if (syncRes.success) {
+            dayPassRecord.discordRoleAssigned = true;
+            console.log(`[DAY PASS DISCORD SYNC] Assigned ELITE role to Discord user for ${customerEmail}`);
+          }
+        }).catch((err) => console.warn('[DAY PASS DISCORD SYNC WARN]', err));
+
+        if (db) {
+          try {
+            await setDoc(doc(db, 'day_passes', customerEmail.toLowerCase()), dayPassRecord, { merge: true });
+            await setDoc(doc(db, 'day_passes', vixyUserId), dayPassRecord, { merge: true });
+            await setDoc(doc(db, 'users', vixyUserId), { dayPass: dayPassRecord }, { merge: true });
+          } catch (dpSaveErr) {
+            console.warn('[DAY PASS FIRESTORE SAVE WARNING]', dpSaveErr);
+          }
+        }
+
+        serverTransactions.unshift({
+          id: session.id || `ch_${Date.now()}`,
+          email: customerEmail,
+          plan: `VIXY Vault 24H Day Pass ($${amountTotal})`,
+          amount: amountTotal,
+          method: session.payment_method_types?.[0] ? `Stripe (${session.payment_method_types[0]})` : 'Stripe Credit Card',
+          status: 'Succeeded',
+          timestamp: 'Just now',
+          rawTime: Date.now(),
+        });
+
+        broadcastAdminEvent({
+          eventType: 'DAY_PASS_PURCHASED',
+          userEmail: customerEmail,
+          status: 'SUCCESS',
+          message: `24H Day Pass activated for ${customerEmail} (Expires: ${expiresAt})`,
+        });
+
+        console.log(`[DAY PASS FULFILLED] email=${customerEmail}, userId=${vixyUserId}, session=${session.id}, expires=${expiresAt}`);
         break;
       }
 
@@ -6613,10 +6944,15 @@ function saveDiskStore() {
     userSubscriptions.forEach((val, key) => {
       subsObj[key] = val;
     });
+    const dayPassesObj: Record<string, any> = {};
+    userDayPasses.forEach((val, key) => {
+      dayPassesObj[key] = val;
+    });
     fs.writeFileSync(STORE_FILE_PATH, JSON.stringify({
       users: serverUsers,
       profiles: profilesObj,
       subscriptions: subsObj,
+      dayPasses: dayPassesObj,
       signalLogs: persistentSignalLogs,
       telemetryObservations: persistentTelemetryObservations.slice(0, 300),
       calibrationState: latestCalibrationState,
@@ -6896,14 +7232,14 @@ function ensureUserExists(
       id: 'usr_anon',
       email: 'anonymous@vixy.internal',
       name: 'Anonymous User',
-      role: 'FREE',
-      subscription: 'FREE_TRIAL',
+      role: 'USER',
+      subscription: 'NONE',
       passwordHash: 'AuthManaged2026!',
       verificationStatus: 'UNVERIFIED',
       hardwareFingerprint: 'hw_anon',
       ipHash: '127.0.0.1',
       joined: new Date().toISOString().split('T')[0],
-      status: 'TRIALING',
+      status: 'INACTIVE',
       volumeTrades: 0,
     };
   }
@@ -6922,8 +7258,8 @@ function ensureUserExists(
   if (!user) {
     created = true;
     const sub = cleanEmail ? userSubscriptions.get(cleanEmail) : undefined;
-    const defaultRole = isMasterAdminEmail(cleanEmail) ? 'OWNER' : ((roleOpt || sub?.role || 'FREE') as any);
-    const defaultSub = isMasterAdminEmail(cleanEmail) ? 'ELITE_PASS' : ((subOpt || sub?.plan || 'FREE_TRIAL') as any);
+    const defaultRole = isMasterAdminEmail(cleanEmail) ? 'OWNER' : ((roleOpt || sub?.role || 'USER') as any);
+    const defaultSub = isMasterAdminEmail(cleanEmail) ? 'ELITE_PASS' : ((subOpt || sub?.plan || 'NONE') as any);
     const primaryId = cleanUid || `usr_${Date.now().toString().slice(-4)}_${Math.random().toString(36).slice(2, 5)}`;
 
     user = {
@@ -6938,7 +7274,7 @@ function ensureUserExists(
       hardwareFingerprint: `hw_auto_${Math.random().toString(36).slice(2, 8)}`,
       ipHash: '127.0.0.1',
       joined: new Date().toISOString().split('T')[0],
-      status: defaultSub === 'FREE_TRIAL' ? 'TRIALING' : 'ACTIVE',
+      status: defaultSub === 'NONE' ? 'INACTIVE' : 'ACTIVE',
       volumeTrades: 0,
       stripeCustomerId: sub?.stripeCustomerId,
     };
@@ -7028,6 +7364,12 @@ function loadPersistentStore() {
       if (data.subscriptions && typeof data.subscriptions === 'object') {
         Object.entries(data.subscriptions).forEach(([k, v]) => {
           userSubscriptions.set(k, v as any);
+        });
+      }
+
+      if (data.dayPasses && typeof data.dayPasses === 'object') {
+        Object.entries(data.dayPasses).forEach(([k, v]) => {
+          userDayPasses.set(k, v as any);
         });
       }
 
@@ -7147,6 +7489,20 @@ async function loadPersistentStoreAsync() {
       }
     });
 
+    try {
+      const dayPassesSnap = await getDocs(collection(db, 'day_passes'));
+      dayPassesSnap.forEach((docSnap) => {
+        const data = docSnap.data() as DayPassRecord;
+        if (data && docSnap.id) {
+          userDayPasses.set(docSnap.id, data);
+          if (data.email) userDayPasses.set(data.email.toLowerCase(), data);
+          if (data.userId) userDayPasses.set(data.userId, data);
+        }
+      });
+    } catch (dpErr) {
+      console.warn('[Firestore] Error loading day_passes collection:', dpErr);
+    }
+
     let fetchedProfilesCount = 0;
     const processProfileDoc = (data: any, docId: string) => {
       if (data && docId) {
@@ -7202,6 +7558,45 @@ async function loadPersistentStoreAsync() {
     } catch (err) {
       console.warn('[Firestore] Notice fetching discord_profiles:', err);
     }
+
+    // Periodic 24-Hour Day Pass Expiration & Discord Role Demotion Daemon (Runs every 30 seconds)
+    setInterval(async () => {
+      const nowMs = Date.now();
+      for (const [key, dp] of userDayPasses.entries()) {
+        if (dp && dp.status === 'ACTIVE' && dp.expiresAt) {
+          const expMs = new Date(dp.expiresAt).getTime();
+          if (nowMs >= expMs) {
+            dp.status = 'EXPIRED';
+            dp.updatedAt = new Date().toISOString();
+            console.log(`[DAY PASS AUTO-EXPIRED] Pass expired for email=${dp.email}, userId=${dp.userId}`);
+
+            // Remove Elite Discord Role automatically
+            if (dp.discordUserId) {
+              assignDiscordRoleToUser(dp.discordUserId, 'NONE').catch((err) => {
+                console.warn(`[DAY PASS AUTO-EXPIRED] Discord role demotion error for ${dp.discordUserId}:`, err);
+              });
+              dp.discordRoleAssigned = false;
+            }
+
+            if (db) {
+              try {
+                if (dp.email) await setDoc(doc(db, 'day_passes', dp.email.toLowerCase()), dp, { merge: true });
+                if (dp.userId) await setDoc(doc(db, 'day_passes', dp.userId), dp, { merge: true });
+              } catch (e) {
+                console.warn('[DAY PASS EXPIRE FIRESTORE SAVE ERROR]', e);
+              }
+            }
+
+            broadcastAdminEvent({
+              eventType: 'DAY_PASS_EXPIRED',
+              userEmail: dp.email,
+              status: 'EXPIRED',
+              message: `24H Day Pass auto-expired for ${dp.email}. Elite Discord role removed.`,
+            });
+          }
+        }
+      }
+    }, 30000);
 
     try {
       const profilesAltSnap = await getDocs(collection(db, 'discordProfiles'));
@@ -7594,14 +7989,16 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
     };
   }
 
-  const userSub = userSubscriptions.get(normalizedEmail) || serverUsers.find((u) => u.email?.toLowerCase() === normalizedEmail);
-  const subStatus = (userSub as any)?.status || 'ACTIVE';
-  const userRole = (userSub as any)?.role || (userSub as any)?.subscription || 'PRO';
+  const entRes = getUserEntitlement(normalizedEmail, userRecord?.id || userRecord?.uid);
+  let targetTier: 'ELITE' | 'PRO' | 'DAY_PASS' | 'VERIFIED' | 'NONE' = 'NONE';
 
-  const hasActiveEntitlement = ['ACTIVE', 'TRIALING'].includes(subStatus) && ['PRO_PASS', 'ELITE_PASS', 'OWNER', 'ADMIN', 'PRO', 'ELITE'].includes(userRole);
-  const targetTier: 'ELITE' | 'PRO' | 'VERIFIED' | 'NONE' = hasActiveEntitlement
-    ? (userRole === 'ELITE' || userRole === 'ELITE_PASS' ? 'ELITE' : 'PRO')
-    : 'VERIFIED';
+  if (entRes.entitlements.canAccessAdminPanel || entRes.plan === 'ELITE_QUANT' || entRes.plan === 'DAY_PASS' || (entRes.dayPass && entRes.dayPass.active)) {
+    targetTier = 'ELITE';
+  } else if (entRes.plan === 'PRO_QUANT' || entRes.plan === 'STARTER') {
+    targetTier = 'PRO';
+  } else {
+    targetTier = 'NONE';
+  }
 
   console.log(`[DISCORD_ROLE_SYNC_ASYNCHRONOUS] Enqueueing role sync to tier ${targetTier} for Discord user ID ${profile.discordUserId}`);
 

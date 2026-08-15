@@ -72,8 +72,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   const faqs = [
     {
-      q: 'Why offer a 3-Hour Free Trial instead of a traditional multi-day trial?',
-      a: 'In 15-minute prediction markets, 3 hours gives you 12 complete prediction cycles. You see real-time orderbook depth, model-estimated probabilities vs Kalshi/Polymarket odds, and instantaneous edge evaluation in a single focused trading session.',
+      q: 'How does the VIXY 24-Hour Day Pass work?',
+      a: 'The 24-Hour Day Pass gives you exactly 24 hours of full, unrestricted VIXY Elite access for a $9.99 one-time payment. You get 96 complete 15-minute prediction cycles, real-time orderbook depth, decision locks, and Discord signals without any recurring monthly commitment.',
     },
     {
       q: 'Is VIXY’s Vault a gambling platform or signal group?',
@@ -149,8 +149,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <span className="flex items-center gap-1.5" title="Historical walk-forward backtest win rate">
               <Check className="w-4 h-4 text-emerald-400" /> 84.2% Backtest (n=2,410)
             </span>
-            <span className="flex items-center gap-1.5" title="Full feature access during trial session">
-              <Check className="w-4 h-4 text-emerald-400" /> Free Trial — Cancel Anytime
+            <span className="flex items-center gap-1.5" title="Instant 24-Hour Unfiltered Access">
+              <Check className="w-4 h-4 text-emerald-400" /> 24H Day Pass — Instant $9.99 Access
             </span>
           </div>
         </div>
@@ -476,6 +476,29 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
+        {/* Day Pass Promo Banner */}
+        <div className="mb-8 p-6 bg-gradient-to-r from-amber-500/10 via-purple-600/15 to-amber-500/10 border-2 border-amber-500/40 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl shadow-amber-500/10 text-left">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black tracking-widest uppercase bg-amber-500 text-slate-950">
+                1-DAY PASS
+              </span>
+              <span className="text-xs font-mono text-amber-300 font-bold">$9.99 ONE-TIME</span>
+            </div>
+            <h3 className="text-xl font-black text-white">VIXY 24-Hour Terminal Day Pass</h3>
+            <p className="text-xs text-slate-300 max-w-xl font-sans">
+              Get 24 hours of full, unrestricted access to the VIXY 15-minute prediction terminal, real-time decision locks, and Discord signals. No monthly commitment, cancel anytime.
+            </p>
+          </div>
+          <button
+            onClick={() => onOpenAuth('register')}
+            className="w-full md:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
+          >
+            <Sparkles className="w-4 h-4 text-slate-950" />
+            <span>Buy 24H Day Pass ($9.99)</span>
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
           {/* STARTER */}
           <div className="bg-[#0D071E] border border-purple-900/40 rounded-2xl p-6 space-y-6 flex flex-col justify-between">
@@ -523,7 +546,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => onOpenAuth('register')}
               className="w-full py-3 rounded-xl bg-[#140C2A] hover:bg-[#1C123A] border border-purple-900/60 text-white font-bold text-xs transition-all"
             >
-              Start Free Trial
+              Subscribe Starter
             </button>
           </div>
 
@@ -573,7 +596,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => onOpenAuth('register')}
               className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/40 transition-all"
             >
-              Start Free Trial
+              Subscribe Professional
             </button>
           </div>
 
@@ -619,7 +642,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               onClick={() => onOpenAuth('register')}
               className="w-full py-3 rounded-xl bg-[#140C2A] hover:bg-[#1C123A] border border-purple-900/60 text-white font-bold text-xs transition-all"
             >
-              Start Free Trial
+              Subscribe Elite
             </button>
           </div>
         </div>

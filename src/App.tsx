@@ -107,7 +107,13 @@ export default function App() {
     return 'DEMO';
   });
 
-  // 3-Hour Free Trial Pass State (10,800 seconds = 3 hours)
+  // 24-Hour Day Pass State & Entitlements
+  const [dayPassInfo, setDayPassInfo] = useState<{
+    active: boolean;
+    startedAt?: string | null;
+    expiresAt?: string | null;
+    secondsRemaining: number;
+  }>({ active: false, secondsRemaining: 0 });
   const [trialSeconds, setTrialSeconds] = useState<number>(10800);
   const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
     starter: true,
@@ -126,24 +132,24 @@ export default function App() {
       .then((ent) => {
         if (ent) {
           setEntitlements(ent.entitlements);
-          if (ent.trial && typeof ent.trial.secondsRemaining === 'number') {
-            setTrialSeconds(ent.trial.secondsRemaining);
+          if (ent.dayPass) {
+            setDayPassInfo(ent.dayPass);
           }
 
           const resolvedPlan = ent.plan === 'ELITE_QUANT' ? 'ELITE' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
           setSubscription({
             plan: resolvedPlan as any,
-            status: (ent.status === 'active' || ent.status === 'trialing' ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,
-            renewalDate: '30 days from now',
+            status: (ent.status === 'active' || ent.dayPass?.active ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,
+            renewalDate: ent.dayPass?.active ? '24 Hours Pass' : '30 days from now',
             paymentMethod: 'Stripe Credit Card',
             billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
 
           if (ent.entitlements.canAccessAdminPanel) {
             setUserRole('ADMIN');
-          } else if (ent.entitlements.proQuant || ent.entitlements.eliteQuant) {
+          } else if (ent.entitlements.proQuant || ent.entitlements.eliteQuant || ent.dayPass?.active) {
             setUserRole('PRO');
-          } else if (ent.status === 'active' || ent.status === 'trialing') {
+          } else if (ent.status === 'active') {
             setUserRole('PRO');
           } else {
             setUserRole('DEMO');
@@ -745,7 +751,7 @@ export default function App() {
     subscription.status === 'active' ||
     userRole === 'PRO' ||
     userRole === 'ADMIN' ||
-    (userRole === 'DEMO' && trialSeconds > 0);
+    dayPassInfo.active;
 
   const isPublicRoute = ['landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
@@ -768,6 +774,7 @@ export default function App() {
         onOpenAuth={handleOpenAuth}
         onLogout={handleLogout}
         trialSeconds={trialSeconds}
+        dayPassInfo={dayPassInfo}
         onResetTrial={handleResetTrial}
         onExpireTrial={handleExpireTrial}
         selectedAsset={selectedAsset}
@@ -919,8 +926,57 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+              ) : !(alertSettings?.discordLinked && alertSettings?.guildMember) ? (
+                /* Logged in, BUT Discord Not Linked or Server Membership Not Verified */
+                <div className="max-w-3xl mx-auto my-8 p-8 rounded-3xl bg-[#0B061A] border-2 border-indigo-500/50 text-center space-y-6 shadow-2xl font-mono animate-fadeIn">
+                  <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mx-auto text-indigo-400 shadow-lg shadow-indigo-600/30">
+                    <MessageSquare className="w-8 h-8 text-indigo-300 animate-pulse" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold uppercase tracking-wider">
+                      <span>STEP 2: DISCORD VERIFICATION REQUIRED</span>
+                    </div>
+                    <h2 className="text-2xl font-black text-white font-sans tracking-tight">
+                      Connect & Verify Your Discord Account
+                    </h2>
+                    <p className="text-sm text-purple-300/80 font-sans max-w-lg mx-auto leading-relaxed">
+                      Discord configuration is required for all VIXY Vault access. Bind your Discord account and confirm server membership to activate live signals, day pass entitlements, and automated role sync.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-800/40 max-w-md mx-auto text-left text-xs font-sans space-y-2 text-purple-200">
+                    <div className="flex items-center justify-between">
+                      <span>1. Connect Discord Account</span>
+                      <span className={alertSettings?.discordLinked ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                        {alertSettings?.discordLinked ? '✓ Connected' : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>2. Join VIXY Vault Discord Server</span>
+                      <span className={alertSettings?.guildMember ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
+                        {alertSettings?.guildMember ? '✓ Joined' : 'Pending'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>3. Instant Elite Role & Access Sync</span>
+                      <span className={alertSettings?.guildMember ? 'text-emerald-400 font-bold' : 'text-purple-400/60'}>
+                        {alertSettings?.guildMember ? '✓ Synced' : 'Awaiting Membership'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setIsDiscordModalOpen(true)}
+                    className="px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-indigo-600/30 transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95"
+                  >
+                    <MessageSquare className="w-5 h-5" />
+                    <span>Connect Discord & Verify Server</span>
+                    <ArrowRight className="w-5 h-5" />
+                  </button>
+                </div>
               ) : !isSubscriptionActive ? (
-                /* Logged in, BUT Subscription Inactive / Trial Expired -> Redirect to Pricing Page View */
+                /* Logged in AND Discord Verified, BUT Subscription Inactive / Day Pass Expired -> Redirect to Pricing Page View */
                 <div className="space-y-6 animate-fadeIn">
                   <div className="bg-gradient-to-r from-amber-950/80 via-[#180C04] to-amber-950/80 border-2 border-amber-500/60 rounded-2xl p-5 text-amber-200 font-mono text-xs flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
                     <div className="flex items-center gap-3">
@@ -929,10 +985,10 @@ export default function App() {
                       </div>
                       <div>
                         <div className="font-black text-sm text-white font-sans">
-                          STEP 2: ACTIVE SUBSCRIPTION REQUIRED
+                          STEP 3: ACTIVE 24-HOUR DAY PASS OR SUBSCRIPTION REQUIRED
                         </div>
                         <p className="text-amber-300/80 text-xs font-sans">
-                          You are logged in, but your free trial pass has expired or your plan is inactive. Upgrade to a Pro or Elite plan below to unlock the live terminal.
+                          Discord verified! Purchase a 24-Hour VIXY Elite Day Pass ($9.99) or subscribe below to unlock the live terminal.
                         </p>
                       </div>
                     </div>

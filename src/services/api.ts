@@ -495,10 +495,10 @@ export interface EntitlementsResponse {
   userId: string;
   email: string;
   stripeVerified: boolean;
-  plan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
-  logicalPlan: 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
-  billing: 'MONTHLY' | 'YEARLY' | 'NONE';
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'NONE';
+  logicalPlan: 'DAY_PASS_24H' | 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
+  billing: 'ONE_TIME' | 'MONTHLY' | 'YEARLY' | 'NONE';
+  status: 'active' | 'past_due' | 'canceled' | 'inactive' | 'discord_unverified';
   stripeCustomerId?: string;
   subscriptionId?: string;
   stripePriceId?: string;
@@ -516,11 +516,12 @@ export interface EntitlementsResponse {
     canAccessProDesks: boolean;
     canAccessAdminPanel: boolean;
   };
-  trial: {
+  dayPass: {
     active: boolean;
-    consumed: boolean;
-    expiresAt?: string;
+    startedAt?: string | null;
+    expiresAt?: string | null;
     secondsRemaining: number;
+    stripeSessionId?: string;
   };
   updatedAt: string;
 }
@@ -1527,6 +1528,27 @@ export async function createCheckoutSessionApi(payload: {
     return await safeParseJson(res);
   } catch (err: any) {
     return { error: 'NETWORK_ERROR', message: err.message || 'Connection error creating checkout session' };
+  }
+}
+
+export async function createDayPassCheckoutApi(payload: {
+  userEmail?: string;
+  uid?: string;
+  referralCode?: string;
+}) {
+  try {
+    const res = await fetch('/api/stripe/create-day-pass-checkout', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': payload.userEmail || '',
+        'x-user-uid': payload.uid || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await safeParseJson(res);
+  } catch (err: any) {
+    return { error: 'NETWORK_ERROR', message: err.message || 'Connection error creating Day Pass checkout session' };
   }
 }
 

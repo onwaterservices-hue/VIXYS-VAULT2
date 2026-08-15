@@ -63,14 +63,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
-    const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'Free Trial Trader');
+    const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
     // Live sync user to server backend persistent database
     syncAuthUserApi({
       email: userEmail,
       name: userName,
-      role: isAdminEmail ? 'OWNER' : 'FREE',
-      subscription: isAdminEmail ? 'ELITE_PASS' : (mode === 'register' ? 'FREE_TRIAL' : 'FREE_TRIAL'),
+      role: isAdminEmail ? 'OWNER' : 'USER',
+      subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
     }).catch((err) => console.warn('Auth sync error:', err));
 
     setTimeout(() => {

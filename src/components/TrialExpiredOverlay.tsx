@@ -39,20 +39,20 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
         </div>
 
         {/* Lockout Header Badge */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/40 text-rose-300 text-xs font-bold uppercase tracking-widest">
-          <Lock className="w-3.5 h-3.5 text-rose-400" />
-          <span>3-HOUR FREE TRIAL PASS COMPLETED</span>
+        <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-bold uppercase tracking-widest">
+          <Lock className="w-3.5 h-3.5 text-amber-400" />
+          <span>VIXY TERMINAL ACCESS LOCKED</span>
         </div>
 
-        {/* Main Display Title Requested by User */}
+        {/* Main Display Title */}
         <div className="space-y-2">
           <h1 className="text-3xl sm:text-5xl font-black text-white font-mono tracking-tight leading-none uppercase">
-            VIXY'S <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 via-violet-300 to-fuchsia-300">VAULT</span>
+            VIXY'S <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 via-purple-300 to-amber-300">VAULT</span>
             <br />
             AWAITS YOU
           </h1>
           <p className="text-xs sm:text-sm text-purple-200/80 font-sans max-w-md mx-auto leading-relaxed">
-            You've experienced 12 full 15-minute prediction cycles. To maintain continuous access to orderbook depth features, calibrated model probabilities, and webhook automation, upgrade your account below.
+            Get instant unfiltered access to the live 15-minute decision engine, real-time Lock feed, L2 orderbook depth, and Discord signals with a 24-Hour Day Pass or Monthly Subscription.
           </p>
         </div>
 
@@ -88,31 +88,21 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
         {/* Action CTAs */}
         <div className="space-y-3 pt-1">
           <button
-            onClick={onUpgradeToPro}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-sm shadow-xl shadow-purple-600/40 transition-all flex items-center justify-center gap-2 font-mono uppercase tracking-wide group"
+            onClick={onViewPricing}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 font-mono uppercase tracking-wide group"
           >
-            <Zap className="w-4 h-4 text-amber-300 group-hover:scale-110 transition-transform" />
-            <span>Upgrade to Professional Pass ($64/mo)</span>
-            <ArrowRight className="w-4 h-4 text-purple-200 group-hover:translate-x-1 transition-transform" />
+            <Sparkles className="w-4 h-4 text-slate-950 group-hover:scale-110 transition-transform" />
+            <span>Get 24H Day Pass ($9.99) or Subscribe</span>
+            <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
           </button>
 
-          <div className="grid grid-cols-2 gap-3 font-mono text-xs">
-            <button
-              onClick={onViewPricing}
-              className="py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-500/40 text-purple-200 font-bold transition-all flex items-center justify-center gap-1.5"
-            >
-              <CreditCard className="w-3.5 h-3.5 text-purple-400" />
-              <span>View All Tiers</span>
-            </button>
-
-            <button
-              onClick={onResetTrial}
-              className="py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-900/50 text-purple-300/70 hover:text-white font-bold transition-all flex items-center justify-center gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5 text-purple-400" />
-              <span>Reset 3-Hour Demo</span>
-            </button>
-          </div>
+          <button
+            onClick={onViewPricing}
+            className="w-full py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-500/40 text-purple-200 font-bold transition-all flex items-center justify-center gap-1.5 font-mono text-xs"
+          >
+            <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+            <span>View All Subscription Plans (Starter / Pro / Elite)</span>
+          </button>
         </div>
 
         <p className="text-[10px] text-purple-300/50 font-sans">

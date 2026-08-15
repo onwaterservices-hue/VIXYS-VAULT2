@@ -161,11 +161,11 @@ export interface AlertSettings {
 }
 
 export interface UserSubscription {
-  plan: 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS';
-  status: 'active' | 'canceling' | 'trial';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS';
+  status: 'active' | 'canceling' | 'expired';
   renewalDate: string;
   paymentMethod: string;
-  billingInterval: 'monthly' | 'annual';
+  billingInterval: 'one_time' | 'monthly' | 'annual';
   email?: string;
   stripeCustomerId?: string;
 }
@@ -246,7 +246,7 @@ export type SignalStateType =
 
 export type AccessStateType = 
   | 'AUTHORIZED' 
-  | 'TRIAL' 
+  | 'DAY_PASS' 
   | 'SUBSCRIBED' 
   | 'ADMIN' 
   | 'LOCKED';
@@ -256,7 +256,7 @@ export interface UserAccessObject {
   isAdmin: boolean;
   accessState: AccessStateType;
   discordVerified: boolean;
-  subscriptionStatus: 'active' | 'trial' | 'canceling' | 'expired' | 'none';
+  subscriptionStatus: 'active' | 'day_pass' | 'canceling' | 'expired' | 'none';
   entitlements: string[];
   locked: boolean;
 }

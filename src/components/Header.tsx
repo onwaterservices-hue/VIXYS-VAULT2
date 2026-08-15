@@ -38,6 +38,12 @@ interface HeaderProps {
   onLogout: () => void;
   isLoading?: boolean;
   trialSeconds?: number;
+  dayPassInfo?: {
+    active: boolean;
+    startedAt?: string | null;
+    expiresAt?: string | null;
+    secondsRemaining: number;
+  };
   onResetTrial?: () => void;
   onExpireTrial?: () => void;
   selectedAsset?: string;
@@ -61,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
   onLogout,
   isLoading = false,
   trialSeconds = 10800,
+  dayPassInfo,
   onResetTrial,
   onExpireTrial,
   selectedAsset = 'BTC',
@@ -183,7 +190,7 @@ export const Header: React.FC<HeaderProps> = ({
                   className="px-4.5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-slate-950" />
-                  <span>Start Free Trial</span>
+                  <span>Get 24H Day Pass — $9.99</span>
                 </button>
               </div>
             )}
@@ -324,13 +331,30 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {userRole === 'DEMO' && (
-            <div className="flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-purple-950/90 border border-amber-500/40 text-[11px] font-mono shadow-md">
-              <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-              <span className="text-purple-200 font-bold hidden sm:inline">3H TRIAL:</span>
-              <span className="font-black text-amber-300 text-xs tracking-wider">{formatTrialTime(trialSeconds)}</span>
+          {/* VIXY ELITE DAY PASS Status Indicator */}
+          {dayPassInfo?.active && dayPassInfo.expiresAt ? (
+            <div
+              onClick={() => setActiveTab('pricing')}
+              className="flex items-center gap-2 px-3 py-1 rounded-xl bg-gradient-to-r from-amber-950/90 to-purple-950/90 border border-amber-500/50 text-[11px] font-mono shadow-md cursor-pointer hover:border-amber-400 transition-all"
+              title={`VIXY Elite Day Pass expires at: ${new Date(dayPassInfo.expiresAt).toLocaleString()}`}
+            >
+              <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
+              <span className="text-amber-300 font-extrabold hidden md:inline">VIXY ELITE DAY PASS</span>
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black text-[10px] border border-amber-500/30">ACTIVE</span>
+              <span className="font-mono font-black text-amber-200 text-xs tracking-wider">
+                {formatTrialTime(Math.max(0, Math.floor((new Date(dayPassInfo.expiresAt).getTime() - Date.now()) / 1000)))} REMAINING
+              </span>
             </div>
-          )}
+          ) : dayPassInfo?.expiresAt && !dayPassInfo.active ? (
+            <button
+              onClick={() => setActiveTab('pricing')}
+              className="flex items-center gap-2 px-3 py-1 rounded-xl bg-rose-950/90 border border-rose-500/50 text-rose-200 text-[11px] font-mono shadow-md hover:bg-rose-900/90 transition-all cursor-pointer"
+            >
+              <Clock className="w-3.5 h-3.5 text-rose-400" />
+              <span className="font-extrabold text-rose-200">DAY PASS EXPIRED</span>
+              <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] uppercase">RENEW ACCESS</span>
+            </button>
+          ) : null}
 
           {/* Compact Discord Status Badge */}
           {onOpenDiscordModal && alertSettings && (
@@ -549,7 +573,7 @@ export const Header: React.FC<HeaderProps> = ({
                 className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all active:scale-95 flex items-center gap-1.5"
               >
                 <Sparkles className="w-3.5 h-3.5 text-white" />
-                <span>Start Free Trial</span>
+                <span>Get 24H Day Pass — $9.99</span>
               </button>
             </div>
           )}

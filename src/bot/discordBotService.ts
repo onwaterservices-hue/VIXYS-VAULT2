@@ -304,7 +304,7 @@ const inFlightSyncs = new Map<string, Promise<{ success: boolean; message: strin
 
 export async function assignDiscordRoleToUser(
   discordUserId: string,
-  targetTier: 'ELITE' | 'AI' | 'VERIFIED' | 'PRO' | 'NONE' = 'ELITE',
+  targetTier: 'ELITE' | 'AI' | 'VERIFIED' | 'PRO' | 'DAY_PASS' | 'NONE' = 'ELITE',
   guildIdOverride?: string
 ): Promise<{ success: boolean; message: string; details?: any; code?: string; roleId?: string; status?: string; retryAfter?: number }> {
   const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '1451337712937336985';
@@ -330,11 +330,14 @@ export async function assignDiscordRoleToUser(
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
     const proRoleId = process.env.DISCORD_PRO_ROLE_ID || process.env.DISCORD_ROLE_PRO || eliteRoleId;
     const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
+    const dayPassRoleId = process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || eliteRoleId;
     const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
     let targetRoleId = verifiedRoleId;
     if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
       targetRoleId = eliteRoleId;
+    } else if (targetTier === 'DAY_PASS') {
+      targetRoleId = dayPassRoleId;
     } else if (targetTier === 'VERIFIED') {
       targetRoleId = verifiedRoleId;
     }

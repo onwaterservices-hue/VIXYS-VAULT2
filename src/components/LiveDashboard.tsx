@@ -369,21 +369,21 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
   return (
     <div className="space-y-6 font-mono text-purple-100">
-      {/* Top Banner Alert / 3-Hour Trial Pass Notice */}
+      {/* Top Banner Alert / 24-Hour Day Pass & Access Notice */}
       {userRole === 'DEMO' && (
-        <div className="bg-gradient-to-r from-purple-900/60 via-[#130B2A] to-violet-900/60 border border-purple-500/40 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs shadow-xl">
+        <div className="bg-gradient-to-r from-amber-900/60 via-[#130B2A] to-purple-900/60 border border-amber-500/40 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs shadow-xl">
           <div className="flex items-center gap-3">
-            <Flame className="w-5 h-5 text-purple-300 animate-pulse shrink-0" />
+            <Flame className="w-5 h-5 text-amber-300 animate-pulse shrink-0" />
             <div>
-              <span className="font-extrabold text-purple-100">3-HOUR ALL-ACCESS TRIAL ACTIVE:</span> Live predictions for <span className="text-emerald-400 font-bold">15M & 1H BTC Trades</span> are unlocked!
+              <span className="font-extrabold text-amber-300">GET 24-HOUR ELITE ACCESS:</span> Unlock full live predictions, orderbook depth, and Discord signals with a <span className="text-amber-300 font-bold">$9.99 24H Day Pass</span>!
             </div>
           </div>
           <button
             onClick={onOpenPricing}
-            className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl font-black shadow-lg shadow-purple-600/30 transition-all shrink-0 flex items-center gap-1.5 active:scale-95 text-xs cursor-pointer"
+            className="bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 px-4 py-2 rounded-xl font-black shadow-lg shadow-amber-500/20 transition-all shrink-0 flex items-center gap-1.5 active:scale-95 text-xs cursor-pointer"
           >
             <Clock className="w-3.5 h-3.5" />
-            <span>Unlock Pro Pass ($79)</span>
+            <span>Get Day Pass ($9.99)</span>
           </button>
         </div>
       )}

@@ -61,14 +61,14 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
 
     const assignedRole: 'ADMIN' | 'DEMO' | 'PRO' = isAdminEmail ? 'ADMIN' : 'DEMO';
-    const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'Free Trial Trader');
+    const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
     // Live sync user to server backend persistent database
     syncAuthUserApi({
       email: userEmail,
       name: userName,
-      role: isAdminEmail ? 'OWNER' : 'FREE',
-      subscription: isAdminEmail ? 'ELITE_PASS' : (mode === 'register' ? 'FREE_TRIAL' : 'FREE_TRIAL'),
+      role: isAdminEmail ? 'OWNER' : 'USER',
+      subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
     }).catch((err) => console.warn('Auth sync error:', err));
 
     setTimeout(() => {
@@ -143,9 +143,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0B051A] border border-purple-900/50">
               <Flame className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white block font-bold">3-Hour Free Trial Pass</strong>
+                <strong className="text-white block font-bold">24-Hour Day Pass ($9.99)</strong>
                 <span className="text-purple-300/70 font-sans text-[11px]">
-                  Full access to all real-time feeds without requiring a credit card upfront.
+                  Instant unfiltered terminal access to live decision locks, calibration feeds, and signals.
                 </span>
               </div>
             </div>

@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
-import { getEntitlementsApi } from '../services/api';
+import { getEntitlementsApi, createDayPassCheckoutApi } from '../services/api';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -279,6 +279,31 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     }
   };
 
+  const handleBuyDayPass = async () => {
+    setIsProcessingStripe(true);
+    setStripeError('');
+    const currentUserEmail = authState?.user?.email || '';
+    const currentUid = authState?.user?.id || '';
+
+    try {
+      const res = await createDayPassCheckoutApi({
+        userEmail: currentUserEmail,
+        uid: currentUid,
+        referralCode: appliedPromo?.code || promoCodeInput,
+      });
+
+      if (res.url) {
+        window.location.href = res.url;
+      } else {
+        setStripeError('Failed to launch Day Pass checkout. Please try again.');
+        setIsProcessingStripe(false);
+      }
+    } catch (err: any) {
+      setStripeError(err?.message || 'Failed to initiate Day Pass purchase.');
+      setIsProcessingStripe(false);
+    }
+  };
+
   const handleSimulateStripePayment = (e: React.FormEvent) => {
     e.preventDefault();
     handleInitiateRealStripeCheckout();
@@ -355,24 +380,28 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             </span>
           </h1>
 
-          {/* 3-Hour Trial Live Banner in Quote Box */}
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3 text-xs sm:text-sm text-purple-200 font-bold">
-            <div className="bg-[#0B061A]/90 px-4 py-2 rounded-2xl border border-purple-500/40 flex items-center gap-2 shadow-lg">
-              <Flame className="w-4 h-4 text-amber-400 animate-bounce" />
-              <span>3-Hour Free Trial Pass:</span>
-              <span className="font-mono text-white font-black text-base tracking-wider bg-purple-950 px-2 py-0.5 rounded border border-purple-700/50">
-                {formatTrialTime(trialSeconds)}
-              </span>
-            </div>
-
-            {userRole === 'DEMO' && onExpireTrial && (
+          {/* VIXY 24-Hour Day Pass CTA Box */}
+          <div className="pt-2 max-w-xl mx-auto">
+            <div className="bg-[#0D0722]/90 border-2 border-amber-500/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/10">
+              <div className="text-left space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-500 text-slate-950">
+                    DAY PASS
+                  </span>
+                  <span className="text-xs font-mono font-bold text-amber-300">$9.99 / 24 HOURS</span>
+                </div>
+                <div className="text-sm font-black text-white font-mono">24-Hour Terminal Access Pass</div>
+                <div className="text-[11px] text-slate-300">Instant unfiltered access to live predictions, Locks & Discord</div>
+              </div>
               <button
-                onClick={onExpireTrial}
-                className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 border border-rose-500/40 text-xs font-mono font-bold transition-all"
+                onClick={handleBuyDayPass}
+                disabled={isProcessingStripe}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
               >
-                Simulate Expired Lockout
+                {isProcessingStripe ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Sparkles className="w-4 h-4 text-slate-950" />}
+                <span>Get Day Pass ($9.99)</span>
               </button>
-            )}
+            </div>
           </div>
         </div>
       </div>
