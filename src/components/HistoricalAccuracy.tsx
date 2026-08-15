@@ -311,44 +311,63 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
           </div>
         ) : (
-          <div className="bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-6 mt-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 px-4 py-1 bg-zinc-800 border-b-2 border-l-2 border-zinc-700 rounded-bl-xl text-xs font-black tracking-widest text-zinc-300">
-              {liveState?.status === 'NO_TRADE' ? 'STATUS: NO TRADE' : 'STATUS: OBSERVING'}
+          <div className={`border-2 rounded-xl p-6 mt-4 relative overflow-hidden transition-all duration-300 ${
+            liveState?.status === 'NO_TRADE'
+              ? 'bg-gradient-to-br from-[#1e083c] via-[#110426] to-[#0a0218] border-purple-500/80 shadow-[0_0_35px_rgba(168,85,247,0.3)]'
+              : 'bg-zinc-950/80 border-purple-900/40 shadow-xl'
+          }`}>
+            <div className={`absolute top-0 right-0 px-4 py-1.5 border-b-2 border-l-2 rounded-bl-xl text-xs font-black tracking-widest shadow-lg ${
+              liveState?.status === 'NO_TRADE'
+                ? 'bg-purple-900/90 border-purple-400 text-purple-200'
+                : 'bg-zinc-800 border-zinc-700 text-zinc-300'
+            }`}>
+              {liveState?.status === 'NO_TRADE' ? 'STATUS: VIXY SKIP' : 'STATUS: OBSERVING'}
             </div>
             
             <div className="flex items-center gap-3 mb-6">
-              <Activity className="w-6 h-6 text-cyan-400 animate-pulse" />
-              <h2 className="text-xl font-black text-white tracking-wider">VIXY MONITOR <span className="text-zinc-500 font-normal">|</span> BTC • 15M</h2>
+              {liveState?.status === 'NO_TRADE' ? (
+                <Shield className="w-6 h-6 text-purple-400 animate-pulse" />
+              ) : (
+                <Activity className="w-6 h-6 text-cyan-400 animate-pulse" />
+              )}
+              <h2 className="text-xl font-black text-white tracking-wider">
+                VIXY MONITOR <span className="text-purple-400 font-normal">|</span> BTC • 15M
+              </h2>
             </div>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-black/40 border border-zinc-800/50 rounded-lg p-3">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Live Spot</div>
-                <div className="text-lg font-mono text-white">${liveState?.spot?.toLocaleString() || '---'}</div>
+              <div className="bg-black/50 border border-purple-900/40 rounded-xl p-3.5">
+                <div className="text-[10px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Live Spot</div>
+                <div className="text-lg font-mono text-white font-bold">${liveState?.spot?.toLocaleString() || '---'}</div>
               </div>
-              <div className="bg-black/40 border border-zinc-800/50 rounded-lg p-3">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Engine Cycle</div>
-                <div className="text-lg font-mono text-white">{liveState?.sequence || '---'}</div>
+              <div className="bg-black/50 border border-purple-900/40 rounded-xl p-3.5">
+                <div className="text-[10px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Engine Cycle</div>
+                <div className="text-lg font-mono text-white font-bold">{liveState?.sequence || '---'}</div>
               </div>
-              <div className="bg-black/40 border border-zinc-800/50 rounded-lg p-3">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Elapsed / Rem</div>
-                <div className="text-lg font-mono text-zinc-300">{liveState?.lockEligibility?.elapsedSeconds || 0}s <span className="text-zinc-600">/</span> {liveState?.lockEligibility?.remainingSeconds || 0}s</div>
+              <div className="bg-black/50 border border-purple-900/40 rounded-xl p-3.5">
+                <div className="text-[10px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Elapsed / Rem</div>
+                <div className="text-lg font-mono text-purple-200 font-bold">{liveState?.lockEligibility?.elapsedSeconds || 0}s <span className="text-purple-500/60">/</span> {liveState?.lockEligibility?.remainingSeconds || 0}s</div>
               </div>
-              <div className="bg-black/40 border border-zinc-800/50 rounded-lg p-3 flex flex-col justify-center">
-                <div className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1">Qualification</div>
+              <div className="bg-black/50 border border-purple-900/40 rounded-xl p-3.5 flex flex-col justify-center">
+                <div className="text-[10px] text-purple-300/70 font-black uppercase tracking-wider mb-1">Qualification</div>
                 {liveState?.status === 'NO_TRADE' ? (
-                  <div className="text-sm font-bold text-orange-400">MARKET CHOPPY</div>
+                  <div className="text-sm font-black text-purple-300 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+                    VIXY SKIP // CHOPPY
+                  </div>
                 ) : (
-                  <div className="text-sm font-bold text-cyan-400 animate-pulse">SCANNING...</div>
+                  <div className="text-sm font-black text-cyan-400 animate-pulse">SCANNING...</div>
                 )}
               </div>
             </div>
             
-            {liveState?.status === 'NO_TRADE' && liveState?.lockEligibility?.reason && (
-               <div className="mt-4 pt-4 border-t border-zinc-800/50 flex justify-between items-center text-xs">
-                 <div className="font-mono text-zinc-500"><span className="text-orange-500">⚠</span> {liveState.lockEligibility.reason}</div>
-                 <div className="text-zinc-400 font-bold">NEXT EVALUATION: LIVE</div>
-               </div>
+            {liveState?.status === 'NO_TRADE' && (
+              <div className="mt-4 pt-4 border-t border-purple-800/40 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs font-mono">
+                <div className="text-purple-200 font-bold flex items-center gap-2">
+                  <span className="text-purple-400 font-black">🛡 VIXY PROTECTED:</span> {liveState?.lockEligibility?.reason || 'MARKET IS TOO CHOPPY + HIGH VOLATILITY RISK'}
+                </div>
+                <div className="text-purple-400/80 font-black tracking-widest uppercase">EVALUATION: LIVE</div>
+              </div>
             )}
           </div>
         )}
