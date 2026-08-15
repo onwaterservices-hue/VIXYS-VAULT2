@@ -3,7 +3,7 @@ export interface StripePlanLinks {
   annual: string;
 }
 
-export const STRIPE_DAY_PASS_LINK = 'https://buy.stripe.com/5kQ5kC6mngQiete7Nn1oI0b';
+export const STRIPE_DAY_PASS_LINK = 'https://buy.stripe.com/5kQ3cu9yz0Rkbh2c3D1oI0c';
 
 export const STRIPE_PAYMENT_LINKS: Record<'STARTER' | 'PRO' | 'ELITE', StripePlanLinks> = {
   STARTER: {

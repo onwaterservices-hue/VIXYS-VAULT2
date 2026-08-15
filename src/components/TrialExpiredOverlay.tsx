@@ -1,28 +1,51 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Logo } from './Logo';
 import {
   Sparkles,
   Lock,
   CheckCircle2,
   ArrowRight,
-  ShieldCheck,
-  Zap,
-  RotateCcw,
   CreditCard,
   Crown,
+  Loader2,
 } from 'lucide-react';
+import { createDayPassCheckoutApi } from '../services/api';
+import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface TrialExpiredOverlayProps {
   onUpgradeToPro: () => void;
   onViewPricing: () => void;
   onResetTrial: () => void;
+  userEmail?: string;
+  userId?: string;
 }
 
 export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   onUpgradeToPro,
   onViewPricing,
   onResetTrial,
+  userEmail,
+  userId,
 }) => {
+  const [isProcessingDayPass, setIsProcessingDayPass] = useState(false);
+
+  const handleDayPassCheckout = async () => {
+    setIsProcessingDayPass(true);
+    try {
+      const directUrl = getStripeDayPassUrl({ email: userEmail, uid: userId });
+      const apiRes = await createDayPassCheckoutApi({ userEmail, uid: userId });
+      if (apiRes?.url) {
+        window.location.href = apiRes.url;
+      } else {
+        window.location.href = directUrl;
+      }
+    } catch {
+      window.location.href = getStripeDayPassUrl({ email: userEmail, uid: userId });
+    } finally {
+      setIsProcessingDayPass(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-[#05020E]/94 backdrop-blur-2xl flex items-center justify-center p-4 sm:p-6 text-purple-100 font-mono select-none overflow-y-auto">
       {/* Background Ambient Radial Lights */}
@@ -88,20 +111,30 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
         {/* Action CTAs */}
         <div className="space-y-3 pt-1">
           <button
-            onClick={onViewPricing}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 font-mono uppercase tracking-wide group"
+            onClick={handleDayPassCheckout}
+            disabled={isProcessingDayPass}
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2 font-mono uppercase tracking-wide group cursor-pointer active:scale-[0.99] disabled:opacity-75"
           >
-            <Sparkles className="w-4 h-4 text-slate-950 group-hover:scale-110 transition-transform" />
-            <span>Get 24H Day Pass ($9.99) or Subscribe</span>
-            <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
+            {isProcessingDayPass ? (
+              <>
+                <Loader2 className="w-4 h-4 text-slate-950 animate-spin" />
+                <span>Redirecting to Day Pass Checkout...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-slate-950 group-hover:scale-110 transition-transform" />
+                <span>Get 24H Day Pass ($9.99) — Direct Checkout</span>
+                <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
           </button>
 
           <button
             onClick={onViewPricing}
-            className="w-full py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-500/40 text-purple-200 font-bold transition-all flex items-center justify-center gap-1.5 font-mono text-xs"
+            className="w-full py-3 px-4 rounded-xl bg-[#140B28] hover:bg-[#1C1038] border border-purple-500/40 text-purple-200 font-bold transition-all flex items-center justify-center gap-1.5 font-mono text-xs cursor-pointer active:scale-[0.99]"
           >
             <CreditCard className="w-3.5 h-3.5 text-purple-400" />
-            <span>View All Subscription Plans (Starter / Pro / Elite)</span>
+            <span>View All Subscription Plans & Billing (Starter / Pro / Elite)</span>
           </button>
         </div>
 
