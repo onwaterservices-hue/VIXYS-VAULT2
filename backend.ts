@@ -2863,9 +2863,21 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
       return res.json({ success: true, message: `Role updated to ${role}`, user });
     }
   } else if (action === 'grant_day_pass') {
+    const existingDp = userDayPasses.get(user.email.toLowerCase()) || (user.id ? userDayPasses.get(user.id) : undefined);
     const nowMs = Date.now();
-    const startedAt = new Date(nowMs).toISOString();
-    const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
+    const twentyFourHoursMs = 24 * 3600 * 1000;
+    let baseExpirationMs = nowMs;
+
+    if (existingDp && existingDp.status === 'ACTIVE' && existingDp.expiresAt) {
+      const existingExpMs = new Date(existingDp.expiresAt).getTime();
+      if (existingExpMs > nowMs) {
+        baseExpirationMs = existingExpMs;
+      }
+    }
+
+    const startedAt = (existingDp && existingDp.status === 'ACTIVE' && existingDp.startedAt) ? existingDp.startedAt : new Date(nowMs).toISOString();
+    const expiresAt = new Date(baseExpirationMs + twentyFourHoursMs).toISOString();
+
     const dpRecord: DayPassRecord = {
       entitlementId: `dp_admin_${nowMs}`,
       userId: user.id || user.uid || `usr_${user.email.replace(/[^a-zA-Z0-9_]/g, '_')}`,
@@ -2888,7 +2900,7 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
       discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
       discordRoleAssigned: false,
       createdAt: startedAt,
-      updatedAt: startedAt,
+      updatedAt: new Date().toISOString(),
     };
     userDayPasses.set(user.email.toLowerCase(), dpRecord);
     if (user.id) userDayPasses.set(user.id, dpRecord);
@@ -2896,9 +2908,10 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
     if (db) {
       setDoc(doc(db, 'day_passes', user.email.toLowerCase()), dpRecord, { merge: true }).catch(() => {});
       if (user.id) setDoc(doc(db, 'day_passes', user.id), dpRecord, { merge: true }).catch(() => {});
+      if (user.id) setDoc(doc(db, 'users', user.id), { dayPass: dpRecord }, { merge: true }).catch(() => {});
     }
     syncUserEntitlementToDiscord(user.email.toLowerCase()).catch(() => {});
-    addServerAuditLog('ADMIN', 'GRANT_DAY_PASS', `Granted 24H Day Pass to ${user.email}`);
+    addServerAuditLog('ADMIN', 'GRANT_DAY_PASS', `Granted 24H Day Pass to ${user.email} (Expires: ${expiresAt})`);
     return res.json({ success: true, message: `Granted 24H Day Pass to ${user.email}`, dayPass: dpRecord });
   } else if (action === 'revoke_day_pass') {
     const dp = userDayPasses.get(user.email.toLowerCase());
@@ -4230,7 +4243,14 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
 }
 
 // GET /api/entitlements — The authoritative single source of truth for user access
-app.get(['/api/entitlements', '/api/entitlement'], (req, res) => {
+app.get([
+  '/api/entitlements',
+  '/api/entitlement',
+  '/api/entitlement/me',
+  '/api/entitlements/me',
+  '/api/user/entitlements',
+  '/api/user/entitlement',
+], (req, res) => {
   const userEmail = (
     (req.headers['x-user-email'] as string) ||
     (req.headers['x-user-id'] as string) ||
@@ -4927,10 +4947,29 @@ timestamp: ${new Date().toISOString()}`);
       const isDayPass = session.mode === 'payment' || entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS';
 
       if (isDayPass) {
-        const vixyUserId = session.client_reference_id || session.metadata?.vixyUserId || session.metadata?.userId || `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-        const discordUserId = session.metadata?.discordUserId || session.metadata?.discord_user_id || userDiscordProfiles.get(customerEmail.toLowerCase())?.discordUserId;
+        // Deterministic Canonical User Resolution
+        let matchedUser = serverUsers.find(
+          (u) =>
+            (session.client_reference_id && (u.id === session.client_reference_id || u.uid === session.client_reference_id)) ||
+            (u.email && u.email.toLowerCase() === customerEmail.toLowerCase())
+        );
 
-        // Duplicate Webhook Session Check
+        if (!matchedUser && db) {
+          try {
+            const userSnap = await getDoc(doc(db, 'users', `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`));
+            if (userSnap.exists()) {
+              matchedUser = userSnap.data() as any;
+            }
+          } catch (e) {
+            console.warn('[DAY PASS WEBHOOK] Firestore lookup notice:', e);
+          }
+        }
+
+        const vixyUserId = session.client_reference_id || session.metadata?.vixyUserId || session.metadata?.userId || matchedUser?.id || `usr_${customerEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        const discordProfile = userDiscordProfiles.get(customerEmail.toLowerCase()) || (vixyUserId ? userDiscordProfiles.get(vixyUserId) : undefined);
+        const discordUserId = session.metadata?.discordUserId || session.metadata?.discord_user_id || matchedUser?.discordId || discordProfile?.discordUserId;
+
+        // Duplicate Webhook Session Check (Idempotency)
         const existingPass = userDayPasses.get(customerEmail.toLowerCase()) || (vixyUserId ? userDayPasses.get(vixyUserId) : undefined);
         if (existingPass && (existingPass.stripeCheckoutSessionId === session.id || (existingPass.stripePaymentIntentId && existingPass.stripePaymentIntentId === session.payment_intent))) {
           console.log(`[DAY PASS WEBHOOK IDEMPOTENCY] Session ${session.id} / Event ${event.id} already processed for ${customerEmail}. Deduplicating webhook event.`);
@@ -4939,8 +4978,20 @@ timestamp: ${new Date().toISOString()}`);
 
         const amountTotal = (session.amount_total || 999) / 100;
         const nowMs = Date.now();
-        const startedAt = new Date(nowMs).toISOString();
-        const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
+        const twentyFourHoursMs = 24 * 3600 * 1000;
+        let baseExpirationMs = nowMs;
+
+        // Hardened Policy: Second Day Pass while active -> extend the existing expiration by 24 hours
+        if (existingPass && existingPass.status === 'ACTIVE' && existingPass.expiresAt) {
+          const existingExpMs = new Date(existingPass.expiresAt).getTime();
+          if (existingExpMs > nowMs) {
+            baseExpirationMs = existingExpMs;
+            console.log(`[DAY PASS EXTENSION POLICY] User ${customerEmail} already has active pass expiring at ${existingPass.expiresAt}. Stacking +24 hours!`);
+          }
+        }
+
+        const startedAt = (existingPass && existingPass.status === 'ACTIVE' && existingPass.startedAt) ? existingPass.startedAt : new Date(nowMs).toISOString();
+        const expiresAt = new Date(baseExpirationMs + twentyFourHoursMs).toISOString();
         const dayPassId = `dp_${nowMs}_${Math.random().toString(36).substring(2, 6)}`;
 
         const dayPassRecord: DayPassRecord = {
@@ -4965,7 +5016,7 @@ timestamp: ${new Date().toISOString()}`);
           discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || process.env.DISCORD_ELITE_ROLE_ID || '1535025983093215425',
           discordRoleAssigned: false,
           createdAt: startedAt,
-          updatedAt: startedAt,
+          updatedAt: new Date().toISOString(),
         };
 
         userDayPasses.set(customerEmail.toLowerCase(), dayPassRecord);

@@ -422,11 +422,12 @@ export async function assignDiscordRoleToUser(
         }
 
         // Handle obsolete/conflicting role cleanup before assigning new target role
-        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI' || targetTier === 'DAY_PASS') {
           if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
           if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
         } else if (targetTier === 'VERIFIED') {
           if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
           if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
         }
 
@@ -442,13 +443,21 @@ export async function assignDiscordRoleToUser(
           };
         }
 
-        // If tier is NONE, handle role removal
+        // If tier is NONE, handle role removal and keep verified identity
         if (targetTier === 'NONE') {
           if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
+          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
           if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
-          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
-          console.log(`[Discord Role Sync] ✅ Role Removed for ${member.user.tag}`);
-          return { success: true, status: 'verified', message: `Removed membership roles for ${member.user.tag}`, code: 'ROLE_REMOVED' };
+          if (verifiedRoleId && !member.roles.cache.has(verifiedRoleId)) {
+            await member.roles.add(verifiedRoleId).catch(() => {});
+          }
+          console.log(`[Discord Role Sync] ✅ Paid roles removed, verified role preserved for ${member.user.tag}`);
+          return {
+            success: true,
+            status: 'verified',
+            message: `Removed paid access roles for user ${member.user.tag}. Discord link and verified role preserved.`,
+            code: 'ROLE_REMOVED',
+          };
         }
 
         console.log(`[Discord Role Sync] Step 4: Adding role "${roleToAssign.name}" to member ${member.user.tag}...`);
@@ -527,9 +536,15 @@ export async function assignDiscordRoleToUser(
         const existingRoles: string[] = memberData.roles || [];
 
         if (targetTier === 'NONE') {
-          // Remove roles
+          // Remove paid roles and ensure verified role is retained
           if (existingRoles.includes(eliteRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
               method: 'DELETE',
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
@@ -540,11 +555,17 @@ export async function assignDiscordRoleToUser(
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
           }
-          return { success: true, status: 'verified', message: `Removed membership roles for user ${discordUserId}`, code: 'ROLE_REMOVED' };
+          if (verifiedRoleId && !existingRoles.includes(verifiedRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+              method: 'PUT',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          return { success: true, status: 'verified', message: `Removed paid membership roles for user ${discordUserId}. Discord verification preserved.`, code: 'ROLE_REMOVED' };
         }
 
         // Cleanup conflicting roles before PUT
-        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI' || targetTier === 'DAY_PASS') {
           if (existingRoles.includes(verifiedRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
               method: 'DELETE',
@@ -560,6 +581,12 @@ export async function assignDiscordRoleToUser(
         } else if (targetTier === 'VERIFIED') {
           if (existingRoles.includes(eliteRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
               method: 'DELETE',
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
