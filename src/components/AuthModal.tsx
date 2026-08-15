@@ -20,6 +20,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   setAuthState,
   initialMode = 'login',
   onSuccessRole,
+  setUserRole,
 }) => {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
   const [email, setEmail] = useState('');
@@ -62,6 +63,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
     }
 
+    if (mode === 'forgot') {
+      setTimeout(() => {
+        setLoading(false);
+        setSuccessMsg(`Password reset instructions have been sent to ${userEmail}. Please check your inbox.`);
+        setTimeout(() => {
+          setMode('login');
+          setSuccessMsg('');
+        }, 2500);
+      }, 600);
+      return;
+    }
+
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
@@ -71,7 +84,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       name: userName,
       role: isAdminEmail ? 'OWNER' : 'USER',
       subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
-    }).catch((err) => console.warn('Auth sync error:', err));
+    })
+      .then(async () => {
+        // Authoritative server check for active Day Pass or Subscription
+        try {
+          const entRes = await fetch(`/api/entitlements?email=${encodeURIComponent(userEmail)}`);
+          if (entRes.ok) {
+            const entData = await entRes.json();
+            if (entData.entitlements?.proQuant || entData.entitlements?.eliteQuant || entData.dayPass?.active || entData.status === 'active') {
+              if (setUserRole) setUserRole('PRO');
+              if (onSuccessRole) onSuccessRole('PRO');
+            }
+          }
+        } catch (_) {}
+      })
+      .catch((err) => console.warn('Auth sync error:', err));
 
     setTimeout(() => {
       setLoading(false);
@@ -97,8 +124,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setTimeout(() => {
         setSuccessMsg('');
         onClose();
-      }, 1200);
-    }, 800);
+      }, 1000);
+    }, 600);
   };
 
   return (

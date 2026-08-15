@@ -18,7 +18,9 @@ import { getStripeDayPassUrl } from '../config/stripeLinks';
 interface TrialExpiredOverlayProps {
   onUpgradeToPro?: () => void;
   onViewPricing?: () => void;
+  onOpenAuth?: (mode?: 'login' | 'signup') => void;
   onResetTrial?: () => void;
+  isAuthenticated?: boolean;
   userEmail?: string;
   userId?: string;
   discordUserId?: string;
@@ -27,7 +29,9 @@ interface TrialExpiredOverlayProps {
 export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   onUpgradeToPro,
   onViewPricing,
+  onOpenAuth,
   onResetTrial,
+  isAuthenticated = false,
   userEmail,
   userId,
   discordUserId,
@@ -37,7 +41,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   const [restoreEmail, setRestoreEmail] = useState(userEmail || '');
   const [restoreSessionId, setRestoreSessionId] = useState('');
   const [isRestoring, setIsRestoring] = useState(false);
-  const [restoreStatus, setRestoreStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [restoreStatus, setRestoreStatus] = useState<{ type: 'success' | 'error'; message: string; notFound?: boolean } | null>(null);
 
   const handleDayPassCheckout = async () => {
     setIsProcessingDayPass(true);
@@ -56,10 +60,23 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
     }
   };
 
-  const handleRestoreAccess = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!restoreEmail.trim() && !restoreSessionId.trim()) {
-      setRestoreStatus({ type: 'error', message: 'Please enter your account email or Stripe checkout session ID.' });
+  const handleRestoreClick = () => {
+    if (!isAuthenticated && !userId) {
+      if (onOpenAuth) {
+        onOpenAuth('login');
+        return;
+      }
+    }
+    setShowRestoreModal(true);
+  };
+
+  const handleRestoreAccess = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const targetEmail = (restoreEmail || userEmail || '').trim().toLowerCase();
+    const targetSession = restoreSessionId.trim();
+
+    if (!targetEmail && !targetSession && !userId) {
+      setRestoreStatus({ type: 'error', message: 'Please log in or provide your account email to restore active access.' });
       return;
     }
 
@@ -68,8 +85,8 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
 
     try {
       const res = await restoreAccessApi({
-        email: restoreEmail.trim().toLowerCase(),
-        stripeSessionId: restoreSessionId.trim(),
+        email: targetEmail || undefined,
+        stripeSessionId: targetSession || undefined,
         uid: userId,
         discordUserId,
       });
@@ -85,7 +102,8 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
       } else {
         setRestoreStatus({
           type: 'error',
-          message: res.message || 'No active entitlement found for this email. Please check the spelling or complete checkout.',
+          notFound: true,
+          message: res.message || 'No active VIXY subscription or 24-hour Day Pass was found for this account.',
         });
       }
     } catch (err: any) {
@@ -192,7 +210,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           {/* Self-service Restore Access Accordion / Button */}
           {!showRestoreModal ? (
             <button
-              onClick={() => setShowRestoreModal(true)}
+              onClick={handleRestoreClick}
               className="w-full py-2 text-[11px] text-purple-400/80 hover:text-purple-200 transition-colors flex items-center justify-center gap-1 cursor-pointer"
             >
               <RefreshCw className="w-3 h-3" />
@@ -206,12 +224,33 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
                 </span>
                 <button
                   type="button"
-                  onClick={() => setShowRestoreModal(false)}
+                  onClick={() => {
+                    setShowRestoreModal(false);
+                    setRestoreStatus(null);
+                  }}
                   className="text-slate-400 hover:text-white text-xs px-2 py-0.5 rounded bg-purple-950/60"
                 >
                   Close
                 </button>
               </div>
+
+              {isAuthenticated && userEmail && (
+                <div className="bg-purple-950/40 border border-purple-800/40 rounded-lg p-2 text-[11px] flex items-center justify-between">
+                  <div>
+                    <span className="text-purple-400 font-mono text-[9px] block uppercase tracking-wider">Authenticated Account</span>
+                    <span className="text-white font-bold">{userEmail}</span>
+                  </div>
+                  {onOpenAuth && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenAuth('login')}
+                      className="text-[10px] text-purple-300 hover:text-white underline cursor-pointer"
+                    >
+                      Switch Account
+                    </button>
+                  )}
+                </div>
+              )}
 
               <form onSubmit={handleRestoreAccess} className="space-y-2.5">
                 <div>
@@ -238,18 +277,50 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
 
                 {restoreStatus && (
                   <div
-                    className={`p-2 rounded-lg text-[11px] flex items-start gap-1.5 ${
+                    className={`p-2.5 rounded-lg text-[11px] space-y-2 ${
                       restoreStatus.type === 'success'
                         ? 'bg-emerald-950/60 border border-emerald-500/40 text-emerald-300'
                         : 'bg-rose-950/60 border border-rose-500/40 text-rose-300'
                     }`}
                   >
-                    {restoreStatus.type === 'success' ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                    <div className="flex items-start gap-1.5">
+                      {restoreStatus.type === 'success' ? (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      ) : (
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
+                      )}
+                      <span>{restoreStatus.message}</span>
+                    </div>
+
+                    {restoreStatus.notFound && (
+                      <div className="pt-1.5 flex flex-wrap gap-2 border-t border-rose-900/40">
+                        <button
+                          type="button"
+                          onClick={handleDayPassCheckout}
+                          className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] uppercase font-mono cursor-pointer"
+                        >
+                          Get 24H Day Pass
+                        </button>
+                        {onViewPricing && (
+                          <button
+                            type="button"
+                            onClick={onViewPricing}
+                            className="px-2.5 py-1 rounded bg-purple-800 hover:bg-purple-700 text-white font-bold text-[10px] uppercase font-mono cursor-pointer"
+                          >
+                            View Subscription Plans
+                          </button>
+                        )}
+                        {onOpenAuth && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenAuth('login')}
+                            className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-[10px] font-mono cursor-pointer"
+                          >
+                            Log In / Switch Account
+                          </button>
+                        )}
+                      </div>
                     )}
-                    <span>{restoreStatus.message}</span>
                   </div>
                 )}
 

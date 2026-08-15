@@ -1161,11 +1161,17 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {userRole === 'UNPAID' && (
+      {userRole === 'UNPAID' && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
         <TrialExpiredOverlay
+          isAuthenticated={authState.isAuthenticated}
           userEmail={authState?.user?.email}
           userId={authState?.user?.id}
           discordUserId={authState?.user?.discordId}
+          onViewPricing={() => setActiveTab('pricing')}
+          onOpenAuth={(mode) => {
+            setAuthModalMode(mode === 'signup' ? 'register' : (mode || 'login'));
+            setShowAuthModal(true);
+          }}
         />
       )}
 
