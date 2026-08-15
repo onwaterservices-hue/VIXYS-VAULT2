@@ -2211,52 +2211,22 @@ app.get('/api/admin/users', requireRole(['OWNER', 'ADMIN', 'SUPPORT']), (req, re
   });
 });
 
-// AUTHORITATIVE ACCESS STATE CALCULATOR (INDEPENDENT FROM SIGNAL STATE)
+// AUTHORITATIVE ACCESS STATE CALCULATOR (DELEGATED TO ENTITLEMENT SOLVER)
 export function getUserAccessState(email?: string, uid?: string) {
-  const cleanEmail = (email || '').toLowerCase().trim();
-  const isAdmin = cleanEmail === 'vixyvault0@gmail.com' || cleanEmail.includes('admin') || cleanEmail.includes('owner');
-  
-  const user = serverUsers.find(u => (cleanEmail && u.email?.toLowerCase() === cleanEmail) || (uid && u.id === uid));
-  const role = isAdmin || user?.role === 'ADMIN' || user?.role === 'OWNER' ? 'ADMIN' : (user?.role || 'DEMO');
-  
-  if (role === 'ADMIN' || isAdmin) {
-    return {
-      role: 'ADMIN',
-      isAdmin: true,
-      accessState: 'AUTHORIZED',
-      discordVerified: true,
-      subscriptionStatus: 'active',
-      entitlements: ['15m_desk', 'scalping', 'whale_tracker', 'ai_patterns', 'explainability'],
-      locked: false
-    };
-  }
-
-  const isSubscribed = user?.subscription === 'PRO_PASS' || user?.subscription === 'ELITE_PASS' || user?.status === 'ACTIVE';
-  const isExpired = (user?.status as string) === 'EXPIRED' || user?.status === 'SUSPENDED';
-  const isDiscordVerified = Boolean(user?.discordId || (user as any)?.isDiscordVerified || true);
-
-  if (isExpired) {
-    return {
-      role: 'USER',
-      isAdmin: false,
-      accessState: 'LOCKED',
-      discordVerified: isDiscordVerified,
-      subscriptionStatus: 'expired',
-      entitlements: [],
-      locked: true
-    };
-  }
+  const cleanEmail = (email || uid || '').toLowerCase().trim();
+  const entitlement = getUserEntitlement(cleanEmail);
 
   return {
-    role: isSubscribed ? 'PRO' : 'DEMO',
-    isAdmin: false,
-    accessState: isSubscribed ? 'SUBSCRIBED' : 'AUTHORIZED',
-    discordVerified: isDiscordVerified,
-    subscriptionStatus: isSubscribed ? 'active' : 'trial',
-    entitlements: isSubscribed 
-      ? ['15m_desk', 'scalping', 'whale_tracker', 'ai_patterns', 'explainability'] 
-      : ['15m_desk'],
-    locked: false
+    role: entitlement.entitlements.canAccessAdminPanel ? 'ADMIN' : (entitlement.entitlements.proQuant || entitlement.entitlements.eliteQuant ? 'PRO' : (entitlement.entitlements.starter ? 'STARTER' : 'DEMO')),
+    isAdmin: entitlement.entitlements.canAccessAdminPanel,
+    accessState: entitlement.status === 'active' ? 'SUBSCRIBED' : (entitlement.status === 'trialing' ? 'AUTHORIZED' : 'LOCKED'),
+    discordVerified: entitlement.discordVerified,
+    subscriptionStatus: entitlement.status,
+    entitlements: [
+      ...(entitlement.entitlements.starter ? ['15m_desk'] : []),
+      ...(entitlement.entitlements.proQuant ? ['scalping', 'whale_tracker', 'ai_patterns', 'explainability'] : []),
+    ],
+    locked: entitlement.status !== 'active' && entitlement.status !== 'trialing'
   };
 }
 
@@ -3658,7 +3628,7 @@ export interface AuthoritativeEntitlementResponse {
   plan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
   logicalPlan: 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
   billing: 'MONTHLY' | 'YEARLY' | 'NONE';
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired';
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
   stripeCustomerId?: string;
   subscriptionId?: string;
   stripePriceId?: string;
@@ -3688,7 +3658,7 @@ export function getEntitlementsFromSubscription(
 ): {
   entitlements: EntitlementsMap;
   normalizedPlan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
-  normalizedStatus: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired';
+  normalizedStatus: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
   isStripeVerified: boolean;
 } {
   if (isOwnerOrAdmin) {
@@ -3710,9 +3680,8 @@ export function getEntitlementsFromSubscription(
   const cleanPlan = (planStr || '').toUpperCase().trim();
   const cleanStatus = (statusStr || '').toUpperCase().trim();
 
-  const isPaidActive = cleanStatus === 'ACTIVE' || cleanStatus === 'TRIALING' || cleanStatus === 'PAST_DUE';
-
-  if (isPaidActive) {
+  // Active Stripe Plan Check
+  if (cleanStatus === 'ACTIVE' || cleanStatus === 'PAST_DUE' || cleanStatus === 'TRIALING') {
     if (cleanPlan.includes('ELITE')) {
       return {
         entitlements: {
@@ -3727,9 +3696,7 @@ export function getEntitlementsFromSubscription(
         normalizedStatus: cleanStatus === 'PAST_DUE' ? 'past_due' : 'active',
         isStripeVerified: true,
       };
-    }
-
-    if (cleanPlan.includes('PRO')) {
+    } else if (cleanPlan.includes('PRO')) {
       return {
         entitlements: {
           starter: true,
@@ -3743,9 +3710,7 @@ export function getEntitlementsFromSubscription(
         normalizedStatus: cleanStatus === 'PAST_DUE' ? 'past_due' : 'active',
         isStripeVerified: true,
       };
-    }
-
-    if (cleanPlan.includes('STARTER')) {
+    } else if (cleanPlan.includes('STARTER')) {
       return {
         entitlements: {
           starter: true,
@@ -3763,10 +3728,12 @@ export function getEntitlementsFromSubscription(
   }
 
   // Free trial handling
-  const isTrial = cleanPlan.includes('FREE_TRIAL') || cleanPlan === 'FREE' || cleanPlan === 'TRIAL';
+  const isTrial = cleanPlan.includes('FREE_TRIAL') || cleanPlan === 'FREE' || cleanPlan === 'TRIAL' || cleanPlan === 'NONE' || cleanPlan === '';
   if (isTrial) {
-    const isExpired = trialConsumed || (trialExpiresAt ? Date.now() >= new Date(trialExpiresAt).getTime() : false);
-    if (isExpired) {
+    const hasActiveTrial = trialExpiresAt && Date.now() < new Date(trialExpiresAt).getTime() && !trialConsumed;
+    
+    if (!hasActiveTrial) {
+      const isDiscordUnverified = !trialExpiresAt && !trialConsumed;
       return {
         entitlements: {
           starter: false,
@@ -3777,7 +3744,7 @@ export function getEntitlementsFromSubscription(
           canAccessAdminPanel: false,
         },
         normalizedPlan: 'FREE_TRIAL',
-        normalizedStatus: 'trial_expired',
+        normalizedStatus: isDiscordUnverified ? 'discord_unverified' : 'trial_expired',
         isStripeVerified: false,
       };
     }

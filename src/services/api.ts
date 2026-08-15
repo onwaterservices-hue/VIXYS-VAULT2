@@ -498,7 +498,7 @@ export interface EntitlementsResponse {
   plan: 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'FREE_TRIAL' | 'NONE';
   logicalPlan: 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
   billing: 'MONTHLY' | 'YEARLY' | 'NONE';
-  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired';
+  status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'trial_expired' | 'discord_unverified';
   stripeCustomerId?: string;
   subscriptionId?: string;
   stripePriceId?: string;
