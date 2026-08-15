@@ -116,6 +116,8 @@ export default function App() {
     secondsRemaining: number;
   }>({ active: false, secondsRemaining: 0 });
 
+  const [isEntitlementLoading, setIsEntitlementLoading] = useState<boolean>(true);
+
   const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
     starter: true,
     proQuant: true,
@@ -131,9 +133,11 @@ export default function App() {
 
     if (!userEmail && !userId) {
       setUserRole('UNPAID');
+      setIsEntitlementLoading(false);
       return;
     }
 
+    setIsEntitlementLoading(true);
     getEntitlementsApi(userEmail, userId)
       .then((ent) => {
         if (ent) {
@@ -162,7 +166,10 @@ export default function App() {
           }
         }
       })
-      .catch((err) => console.warn('Authoritative entitlements check warning:', err));
+      .catch((err) => console.warn('Authoritative entitlements check warning:', err))
+      .finally(() => {
+        setIsEntitlementLoading(false);
+      });
 
     if (authState.isAuthenticated && authState.user?.email) {
       safeFetchJson<{ authenticated: boolean; user: any; discord: any }>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
@@ -1167,7 +1174,7 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {userRole === 'UNPAID' && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
+      {!isEntitlementLoading && userRole === 'UNPAID' && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
         <TrialExpiredOverlay
           isAuthenticated={authState.isAuthenticated}
           userEmail={authState?.user?.email}

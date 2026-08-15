@@ -4032,8 +4032,8 @@ export function getEntitlementsFromSubscription(
   };
 }
 
-// Authoritative entitlement solver
-function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementResponse {
+// Authoritative entitlement solver (Synchronous in-memory fast-path)
+export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementResponse {
   const clean = emailOrUid.toLowerCase().trim();
 
   // 1. Owner master bypass
@@ -4104,7 +4104,7 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
         dayPassRecord.updatedAt = new Date().toISOString();
         console.log(`[DAY PASS ON-DEMAND EXPIRED] Expired 24H Day Pass for email=${dayPassRecord.email}, userId=${dayPassRecord.userId}`);
 
-        // Immediate On-Demand Discord Role Revocation
+        // Immediate On-Demand Discord Role Revocation (Preserve Discord link, restore Verified)
         const targetDiscordUser = dayPassRecord.discordUserId || discordId;
         if (targetDiscordUser) {
           assignDiscordRoleToUser(targetDiscordUser, 'NONE').catch((err) => {
@@ -4243,6 +4243,294 @@ function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlementRespons
   };
 }
 
+// Authoritative Asynchronous Reconciliation Solver across Memory, Firestore, and Real-time Stripe
+export async function reconcileUserEntitlement(identity: {
+  email?: string;
+  userId?: string;
+  uid?: string;
+  discordUserId?: string;
+  stripeCustomerId?: string;
+  stripeSessionId?: string;
+}): Promise<AuthoritativeEntitlementResponse> {
+  const cleanEmail = (identity.email || '').toLowerCase().trim();
+  const cleanUid = (identity.userId || identity.uid || '').trim();
+  const cleanDiscordId = (identity.discordUserId || '').trim();
+  const cleanSessionId = (identity.stripeSessionId || '').trim();
+  const cleanStripeCustId = (identity.stripeCustomerId || '').trim();
+
+  // 1. Owner master bypass
+  if (
+    cleanEmail === 'vixyvault0@gmail.com' ||
+    (process.env.ADMIN_EMAIL && cleanEmail === process.env.ADMIN_EMAIL.toLowerCase())
+  ) {
+    return getUserEntitlement('vixyvault0@gmail.com');
+  }
+
+  // 2. Hydrate from Firestore if available
+  if (db) {
+    try {
+      // Check day_passes collection
+      const dpKeys = [cleanEmail, cleanUid, cleanDiscordId].filter(Boolean);
+      for (const k of dpKeys) {
+        if (!userDayPasses.has(k)) {
+          const dpSnap = await getDoc(doc(db, 'day_passes', k));
+          if (dpSnap.exists()) {
+            const data = dpSnap.data() as DayPassRecord;
+            if (data && data.expiresAt) {
+              userDayPasses.set(k, data);
+              if (data.email) userDayPasses.set(data.email.toLowerCase(), data);
+              if (data.userId) userDayPasses.set(data.userId, data);
+            }
+          }
+        }
+      }
+
+      // Check subscriptions collection
+      const subKeys = [cleanEmail, cleanUid, cleanStripeCustId].filter(Boolean);
+      for (const k of subKeys) {
+        if (!userSubscriptions.has(k)) {
+          const subSnap = await getDoc(doc(db, 'subscriptions', k));
+          if (subSnap.exists()) {
+            const data = subSnap.data() as UserSubscriptionRecord;
+            if (data && data.status === 'ACTIVE') {
+              userSubscriptions.set(k, data);
+              if (data.email) userSubscriptions.set(data.email.toLowerCase(), data);
+            }
+          }
+        }
+      }
+    } catch (fsErr) {
+      console.warn('[RECONCILE ENTITLEMENT] Firestore hydration note:', fsErr);
+    }
+  }
+
+  // 3. Fast check if already active in memory
+  let currentFast = getUserEntitlement(cleanEmail || cleanUid || 'unknown');
+  if (currentFast.plan !== 'NONE' || currentFast.dayPass.active) {
+    return currentFast;
+  }
+
+  // 4. Live Stripe Verification / Settlement Check
+  const stripe = getStripe();
+  if (stripe) {
+    try {
+      // 4a. Direct Checkout Session Lookup
+      if (cleanSessionId) {
+        const session = await stripe.checkout.sessions.retrieve(cleanSessionId, {
+          expand: ['line_items', 'payment_intent'],
+        });
+        if (session && session.payment_status === 'paid') {
+          const targetEmail = (session.customer_details?.email || cleanEmail || '').toLowerCase();
+          const isDayPass = session.mode === 'payment' || session.amount_total === 999;
+          const sessionCreatedMs = session.created ? session.created * 1000 : Date.now();
+          const nowMs = Date.now();
+          const elapsedMs = nowMs - sessionCreatedMs;
+          const twentyFourHoursMs = 24 * 3600 * 1000;
+
+          if (isDayPass && targetEmail) {
+            const startedAt = new Date(sessionCreatedMs).toISOString();
+            const expiresAt =
+              elapsedMs < twentyFourHoursMs
+                ? new Date(sessionCreatedMs + twentyFourHoursMs).toISOString()
+                : new Date(nowMs + twentyFourHoursMs).toISOString(); // Goodwill restoration
+
+            const dpRecord: DayPassRecord = {
+              entitlementId: `dp_restored_${session.id}`,
+              userId: cleanUid || session.client_reference_id || `usr_${targetEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+              email: targetEmail,
+              discordUserId: cleanDiscordId || undefined,
+              guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+              entitlementType: 'DAY_PASS',
+              accessTier: 'ELITE',
+              status: 'ACTIVE',
+              duration: '24 hours',
+              activatedAt: startedAt,
+              expiresAt,
+              startedAt,
+              stripePaymentStatus: 'PAID',
+              stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
+              stripePaymentId:
+                typeof session.payment_intent === 'object' && session.payment_intent
+                  ? (session.payment_intent as any).id
+                  : (session.payment_intent || session.id),
+              stripeCheckoutSessionId: session.id,
+              stripeEventId: `restore_${session.id}`,
+              stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+              discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || '1535025983093215425',
+              discordRoleAssigned: false,
+              createdAt: startedAt,
+              updatedAt: new Date().toISOString(),
+            };
+
+            userDayPasses.set(targetEmail, dpRecord);
+            if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
+            if (dpRecord.userId) userDayPasses.set(dpRecord.userId, dpRecord);
+
+            if (db) {
+              setDoc(doc(db, 'day_passes', targetEmail), dpRecord, { merge: true }).catch(() => {});
+              if (cleanUid) setDoc(doc(db, 'day_passes', cleanUid), dpRecord, { merge: true }).catch(() => {});
+            }
+
+            syncUserEntitlementToDiscord(targetEmail).catch(() => {});
+          }
+        }
+      }
+
+      // 4b. Stripe Customer & Active Subscription / Payment Lookup by Email
+      if (cleanEmail) {
+        const customers = await stripe.customers.list({ email: cleanEmail, limit: 3 });
+        for (const cust of customers.data) {
+          // Check active subscriptions
+          const subs = await stripe.subscriptions.list({ customer: cust.id, status: 'active', limit: 1 });
+          if (subs.data.length > 0) {
+            const sub = subs.data[0];
+            const priceId = sub.items?.data?.[0]?.price?.id;
+            const plan = getPlanFromPriceId(priceId);
+
+            await updateSubscriptionInFirestore(cleanEmail, {
+              stripeCustomerId: cust.id,
+              stripeSubscriptionId: sub.id,
+              stripePriceId: priceId,
+              plan,
+              status: 'ACTIVE',
+              currentPeriodStart: (sub as any).current_period_start,
+              currentPeriodEnd: (sub as any).current_period_end,
+              cancelAtPeriodEnd: (sub as any).cancel_at_period_end,
+              lastStripeEventId: `reconcile_${sub.id}`,
+            });
+
+            syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
+            break;
+          }
+
+          // Check recent settled payment intents for Day Pass
+          const payments = await stripe.paymentIntents.list({ customer: cust.id, limit: 5 });
+          const successfulDayPassPayment = payments.data.find(
+            (p) => p.status === 'succeeded' && (p.amount === 999 || p.description?.includes('Day Pass'))
+          );
+          if (successfulDayPassPayment) {
+            const paymentCreatedMs = successfulDayPassPayment.created * 1000;
+            const nowMs = Date.now();
+            const elapsedMs = nowMs - paymentCreatedMs;
+            const twentyFourHoursMs = 24 * 3600 * 1000;
+            const startedAt = new Date(paymentCreatedMs).toISOString();
+            const expiresAt =
+              elapsedMs < twentyFourHoursMs
+                ? new Date(paymentCreatedMs + twentyFourHoursMs).toISOString()
+                : new Date(nowMs + twentyFourHoursMs).toISOString();
+
+            const dpRecord: DayPassRecord = {
+              entitlementId: `dp_pi_${successfulDayPassPayment.id}`,
+              userId: cleanUid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+              email: cleanEmail,
+              discordUserId: cleanDiscordId || undefined,
+              guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+              entitlementType: 'DAY_PASS',
+              accessTier: 'ELITE',
+              status: 'ACTIVE',
+              duration: '24 hours',
+              activatedAt: startedAt,
+              expiresAt,
+              startedAt,
+              stripePaymentStatus: 'PAID',
+              stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
+              stripePaymentId: successfulDayPassPayment.id,
+              stripeCheckoutSessionId: `sess_pi_${successfulDayPassPayment.id}`,
+              stripeEventId: `reconcile_${successfulDayPassPayment.id}`,
+              stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+              discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || '1535025983093215425',
+              discordRoleAssigned: false,
+              createdAt: startedAt,
+              updatedAt: new Date().toISOString(),
+            };
+
+            userDayPasses.set(cleanEmail, dpRecord);
+            if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
+
+            if (db) {
+              setDoc(doc(db, 'day_passes', cleanEmail), dpRecord, { merge: true }).catch(() => {});
+            }
+
+            syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
+            break;
+          }
+        }
+
+        // 4c. Search recent checkout sessions if still not found
+        const fastCheck = getUserEntitlement(cleanEmail || cleanUid);
+        if (fastCheck.plan === 'NONE' && !fastCheck.dayPass.active) {
+          const recentSessions = await stripe.checkout.sessions.list({ limit: 50 });
+          const matchingSession = recentSessions.data.find(
+            (s) =>
+              s.payment_status === 'paid' &&
+              ((s.customer_details?.email && s.customer_details.email.toLowerCase() === cleanEmail) ||
+                (s.customer_email && s.customer_email.toLowerCase() === cleanEmail) ||
+                (s.client_reference_id &&
+                  (s.client_reference_id === cleanUid || s.client_reference_id === cleanEmail)))
+          );
+
+          if (matchingSession) {
+            const isDayPass = matchingSession.mode === 'payment' || matchingSession.amount_total === 999;
+            const sessionCreatedMs = matchingSession.created * 1000;
+            const nowMs = Date.now();
+            const elapsedMs = nowMs - sessionCreatedMs;
+            const twentyFourHoursMs = 24 * 3600 * 1000;
+            const startedAt = new Date(sessionCreatedMs).toISOString();
+            const expiresAt =
+              elapsedMs < twentyFourHoursMs
+                ? new Date(sessionCreatedMs + twentyFourHoursMs).toISOString()
+                : new Date(nowMs + twentyFourHoursMs).toISOString();
+
+            if (isDayPass) {
+              const dpRecord: DayPassRecord = {
+                entitlementId: `dp_sess_${matchingSession.id}`,
+                userId: cleanUid || matchingSession.client_reference_id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+                email: cleanEmail,
+                discordUserId: cleanDiscordId || undefined,
+                guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+                entitlementType: 'DAY_PASS',
+                accessTier: 'ELITE',
+                status: 'ACTIVE',
+                duration: '24 hours',
+                activatedAt: startedAt,
+                expiresAt,
+                startedAt,
+                stripePaymentStatus: 'PAID',
+                stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
+                stripePaymentId:
+                  typeof matchingSession.payment_intent === 'string'
+                    ? matchingSession.payment_intent
+                    : matchingSession.id,
+                stripeCheckoutSessionId: matchingSession.id,
+                stripeEventId: `reconcile_${matchingSession.id}`,
+                stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+                discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || '1535025983093215425',
+                discordRoleAssigned: false,
+                createdAt: startedAt,
+                updatedAt: new Date().toISOString(),
+              };
+
+              userDayPasses.set(cleanEmail, dpRecord);
+              if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
+
+              if (db) {
+                setDoc(doc(db, 'day_passes', cleanEmail), dpRecord, { merge: true }).catch(() => {});
+              }
+
+              syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
+            }
+          }
+        }
+      }
+    } catch (stripeErr) {
+      console.warn('[RECONCILE ENTITLEMENT] Stripe query warning:', stripeErr);
+    }
+  }
+
+  // 5. Final Authoritative State
+  return getUserEntitlement(cleanEmail || cleanUid || 'unknown');
+}
+
 // GET /api/entitlements — The authoritative single source of truth for user access
 app.get([
   '/api/entitlements',
@@ -4251,19 +4539,32 @@ app.get([
   '/api/entitlements/me',
   '/api/user/entitlements',
   '/api/user/entitlement',
-], (req, res) => {
-  const userEmail = (
+], async (req, res) => {
+  const reqEmail = (
     (req.headers['x-user-email'] as string) ||
-    (req.headers['x-user-id'] as string) ||
     (req.query.email as string) ||
-    (req.query.userId as string) ||
-    'vixyvault0@gmail.com'
+    ''
   ).toLowerCase().trim();
 
-  const userRoleHeader = ((req.headers['x-user-role'] as string) || '').toUpperCase();
-  ensureUserExists(userEmail, { role: userRoleHeader });
+  const reqUserId = (
+    (req.headers['x-user-id'] as string) ||
+    (req.headers['x-user-uid'] as string) ||
+    (req.query.userId as string) ||
+    (req.query.uid as string) ||
+    ''
+  ).trim();
 
-  const entitlement = getUserEntitlement(userEmail);
+  const userRoleHeader = ((req.headers['x-user-role'] as string) || '').toUpperCase();
+  
+  if (reqEmail || reqUserId) {
+    ensureUserExists({ uid: reqUserId, email: reqEmail }, { role: userRoleHeader });
+  }
+
+  const entitlement = await reconcileUserEntitlement({
+    email: reqEmail,
+    userId: reqUserId,
+  });
+
   res.json(entitlement);
 });
 
@@ -4295,251 +4596,21 @@ app.post(['/api/auth/restore-access', '/api/restore-access', '/api/user/restore-
     });
   }
 
-  const stripe = getStripe();
-  let foundFromStripe = false;
-  let restoredTier = '';
+  const entitlement = await reconcileUserEntitlement({
+    email: cleanEmail,
+    userId: cleanUid,
+    discordUserId,
+    stripeSessionId: sessionId,
+  });
 
-  // 1. Direct Stripe Checkout Session Validation
-  if (stripe && sessionId) {
-    try {
-      const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['line_items', 'payment_intent'] });
-      if (session && session.payment_status === 'paid') {
-        const targetEmail = (session.customer_details?.email || cleanEmail || '').toLowerCase();
-        const entitlementType = session.metadata?.entitlementType || session.metadata?.productType || session.metadata?.plan;
-        const isDayPass = session.mode === 'payment' || entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS' || session.amount_total === 999;
-
-        if (isDayPass && targetEmail) {
-          const sessionCreatedMs = session.created ? session.created * 1000 : Date.now();
-          const nowMs = Date.now();
-          const elapsedMs = nowMs - sessionCreatedMs;
-          const twentyFourHoursMs = 24 * 3600 * 1000;
-          
-          const startedAt = new Date(sessionCreatedMs).toISOString();
-          const expiresAt = elapsedMs < twentyFourHoursMs 
-            ? new Date(sessionCreatedMs + twentyFourHoursMs).toISOString()
-            : new Date(nowMs + twentyFourHoursMs).toISOString(); // Goodwill restoration
-
-          const dayPassId = `dp_restored_${session.id}`;
-
-          const dpRecord: DayPassRecord = {
-            entitlementId: dayPassId,
-            userId: cleanUid || `usr_${targetEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            email: targetEmail,
-            discordUserId: discordUserId || undefined,
-            guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
-            entitlementType: 'DAY_PASS',
-            accessTier: 'ELITE',
-            status: 'ACTIVE',
-            duration: '24 hours',
-            activatedAt: startedAt,
-            expiresAt,
-            startedAt,
-            stripePaymentStatus: 'PAID',
-            stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
-            stripePaymentId: typeof session.payment_intent === 'object' && session.payment_intent ? (session.payment_intent as any).id : (session.payment_intent || session.id),
-            stripeCheckoutSessionId: session.id,
-            stripeEventId: `restore_${session.id}`,
-            stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-            discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_ROLE_ELITE || '1535025983093215425',
-            discordRoleAssigned: false,
-            createdAt: startedAt,
-            updatedAt: new Date().toISOString(),
-          };
-
-          userDayPasses.set(targetEmail, dpRecord);
-          if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
-          if (dpRecord.userId) userDayPasses.set(dpRecord.userId, dpRecord);
-          if (discordUserId) userDayPasses.set(discordUserId, dpRecord);
-
-          if (db) {
-            setDoc(doc(db, 'day_passes', targetEmail), dpRecord, { merge: true }).catch(() => {});
-            if (cleanUid) setDoc(doc(db, 'day_passes', cleanUid), dpRecord, { merge: true }).catch(() => {});
-          }
-
-          syncUserEntitlementToDiscord(targetEmail).catch((err) => console.warn('[RESTORE SYNC DISCORD WARN]', err));
-          foundFromStripe = true;
-          restoredTier = '24-Hour Day Pass';
-        }
-      }
-    } catch (err: any) {
-      console.warn('[RESTORE ACCESS] Stripe session lookup warning:', err?.message || err);
-    }
-  }
-
-  // 2. Comprehensive Stripe Lookup (Customers, Recent Sessions, Charges) for Email
-  if (stripe && !foundFromStripe && cleanEmail) {
-    try {
-      // 2a. Check Stripe Customers
-      const customers = await stripe.customers.list({ email: cleanEmail, limit: 3 });
-      for (const cust of customers.data) {
-        // Check active subscriptions
-        const subs = await stripe.subscriptions.list({ customer: cust.id, status: 'active', limit: 1 });
-        if (subs.data.length > 0) {
-          const sub = subs.data[0];
-          const priceId = sub.items?.data?.[0]?.price?.id;
-          const plan = getPlanFromPriceId(priceId);
-
-          await updateSubscriptionInFirestore(cleanEmail, {
-            stripeCustomerId: cust.id,
-            stripeSubscriptionId: sub.id,
-            stripePriceId: priceId,
-            plan,
-            status: 'ACTIVE',
-            currentPeriodStart: (sub as any).current_period_start,
-            currentPeriodEnd: (sub as any).current_period_end,
-            cancelAtPeriodEnd: (sub as any).cancel_at_period_end,
-            lastStripeEventId: `restore_${sub.id}`,
-          });
-
-          syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
-          foundFromStripe = true;
-          restoredTier = `${plan} Subscription`;
-          break;
-        }
-
-        // Check recent payment intents for customer
-        const payments = await stripe.paymentIntents.list({ customer: cust.id, limit: 5 });
-        const successfulDayPassPayment = payments.data.find(
-          (p) => p.status === 'succeeded' && (p.amount === 999 || p.description?.includes('Day Pass'))
-        );
-        if (successfulDayPassPayment) {
-          const paymentCreatedMs = successfulDayPassPayment.created * 1000;
-          const nowMs = Date.now();
-          const startedAt = new Date(paymentCreatedMs).toISOString();
-          const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
-
-          const dpRecord: DayPassRecord = {
-            entitlementId: `dp_pi_${successfulDayPassPayment.id}`,
-            userId: cleanUid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            email: cleanEmail,
-            discordUserId: discordUserId || undefined,
-            guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
-            entitlementType: 'DAY_PASS',
-            accessTier: 'ELITE',
-            status: 'ACTIVE',
-            duration: '24 hours',
-            activatedAt: startedAt,
-            expiresAt,
-            startedAt,
-            stripePaymentStatus: 'PAID',
-            stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
-            stripePaymentId: successfulDayPassPayment.id,
-            stripeCheckoutSessionId: `sess_pi_${successfulDayPassPayment.id}`,
-            stripeEventId: `restore_${successfulDayPassPayment.id}`,
-            stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-            discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_ROLE_ELITE || '1535025983093215425',
-            discordRoleAssigned: false,
-            createdAt: startedAt,
-            updatedAt: new Date().toISOString(),
-          };
-
-          userDayPasses.set(cleanEmail, dpRecord);
-          if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
-          if (dpRecord.userId) userDayPasses.set(dpRecord.userId, dpRecord);
-          if (discordUserId) userDayPasses.set(discordUserId, dpRecord);
-
-          if (db) {
-            setDoc(doc(db, 'day_passes', cleanEmail), dpRecord, { merge: true }).catch(() => {});
-          }
-
-          syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
-          foundFromStripe = true;
-          restoredTier = '24-Hour Day Pass';
-          break;
-        }
-      }
-
-      // 2b. If not found via customer list, search recent checkout sessions
-      if (!foundFromStripe) {
-        const recentSessions = await stripe.checkout.sessions.list({ limit: 50 });
-        const matchingSession = recentSessions.data.find(
-          (s) =>
-            s.payment_status === 'paid' &&
-            ((s.customer_details?.email && s.customer_details.email.toLowerCase() === cleanEmail) ||
-              (s.customer_email && s.customer_email.toLowerCase() === cleanEmail) ||
-              (s.client_reference_id && (s.client_reference_id === cleanUid || s.client_reference_id === cleanEmail)))
-        );
-
-        if (matchingSession) {
-          const isDayPass = matchingSession.mode === 'payment' || matchingSession.amount_total === 999;
-          const sessionCreatedMs = matchingSession.created * 1000;
-          const nowMs = Date.now();
-          const startedAt = new Date(sessionCreatedMs).toISOString();
-          const expiresAt = new Date(nowMs + 24 * 3600 * 1000).toISOString();
-
-          if (isDayPass) {
-            const dpRecord: DayPassRecord = {
-              entitlementId: `dp_sess_${matchingSession.id}`,
-              userId: cleanUid || matchingSession.client_reference_id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-              email: cleanEmail,
-              discordUserId: discordUserId || undefined,
-              guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
-              entitlementType: 'DAY_PASS',
-              accessTier: 'ELITE',
-              status: 'ACTIVE',
-              duration: '24 hours',
-              activatedAt: startedAt,
-              expiresAt,
-              startedAt,
-              stripePaymentStatus: 'PAID',
-              stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
-              stripePaymentId: typeof matchingSession.payment_intent === 'string' ? matchingSession.payment_intent : matchingSession.id,
-              stripeCheckoutSessionId: matchingSession.id,
-              stripeEventId: `restore_${matchingSession.id}`,
-              stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-              discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_ROLE_ELITE || '1535025983093215425',
-              discordRoleAssigned: false,
-              createdAt: startedAt,
-              updatedAt: new Date().toISOString(),
-            };
-
-            userDayPasses.set(cleanEmail, dpRecord);
-            if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
-            if (dpRecord.userId) userDayPasses.set(dpRecord.userId, dpRecord);
-            if (discordUserId) userDayPasses.set(discordUserId, dpRecord);
-
-            if (db) {
-              setDoc(doc(db, 'day_passes', cleanEmail), dpRecord, { merge: true }).catch(() => {});
-            }
-
-            syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
-            foundFromStripe = true;
-            restoredTier = '24-Hour Day Pass';
-          }
-        }
-      }
-    } catch (err: any) {
-      console.warn('[RESTORE ACCESS] Comprehensive Stripe lookup warning:', err?.message || err);
-    }
-  }
-
-  // 3. Fallback Firestore Day Pass / Subscription Direct Hydration
-  if (!foundFromStripe && db && (cleanEmail || cleanUid)) {
-    try {
-      const dpDocSnap = cleanEmail ? await getDoc(doc(db, 'day_passes', cleanEmail)) : null;
-      if (dpDocSnap && dpDocSnap.exists()) {
-        const dpData = dpDocSnap.data() as DayPassRecord;
-        if (dpData && dpData.status === 'ACTIVE' && new Date(dpData.expiresAt).getTime() > Date.now()) {
-          userDayPasses.set(cleanEmail, dpData);
-          if (cleanUid) userDayPasses.set(cleanUid, dpData);
-          foundFromStripe = true;
-          restoredTier = '24-Hour Day Pass';
-        }
-      }
-    } catch (fsErr) {
-      console.warn('[RESTORE ACCESS] Firestore hydration warning:', fsErr);
-    }
-  }
-
-  const lookupKey = cleanEmail || cleanUid || sessionId;
-  const entitlement = getUserEntitlement(lookupKey);
   const isNowActive = entitlement.plan !== 'NONE' || entitlement.dayPass.active || entitlement.entitlements.canAccessProDesks;
 
   if (isNowActive) {
+    const tierName = entitlement.dayPass.active ? '24-Hour Day Pass' : `${entitlement.plan} Subscription`;
     return res.json({
       success: true,
       restored: true,
-      message: `Active entitlement verified successfully${restoredTier ? ` (${restoredTier})` : ''}. Terminal unlocked.`,
+      message: `Active entitlement verified successfully (${tierName}). Terminal unlocked.`,
       entitlement,
     });
   } else {
