@@ -276,8 +276,65 @@ export async function broadcastSignalToDiscord(signalData: {
   webhookUrl?: string;
 }): Promise<{ success: boolean; method: string; message: string }> {
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
-  const marketData = await fetchLiveMarketOverview(signalData.symbol.split('/')[0] || 'BTC');
+  
+  // Construct marketData directly from the actual authoritative lock data
+  const marketData: MarketOverview = {
+    asset: signalData.symbol,
+    price: signalData.currentPrice,
+    change24h: 0,
+    volume24h: 0,
+    prediction: {
+      direction: signalData.direction === 'YES' ? 'BULLISH' : 'BEARISH',
+      confidence: signalData.confidence,
+      reasoning: signalData.reasoning,
+    },
+    metrics: { institutionalVolume: 0, retailSentiment: 0, orderbookImbalance: 0 },
+    timestamp: Date.now(),
+  };
+
   const embed = createVipSignalEmbed(marketData);
+
+  const channelId = '1535025646852636853';
+
+  if (discordClient && discordClient.isReady()) {
+    try {
+      const channel = await discordClient.channels.fetch(channelId);
+      if (channel && channel.isTextBased()) {
+        await channel.send({ embeds: [embed] });
+        botState.lastBroadcastAt = new Date().toISOString();
+        botState.totalAlertsDispatched += 1;
+        return { success: true, method: 'BOT', message: 'Signal posted to VIP Discord Channel!' };
+      }
+    } catch (err) {
+      console.warn('[DiscordBot] Bot channel dispatch error:', err);
+    }
+  }
+
+  // Fallback to direct REST API if discordClient is not ready
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (token) {
+    try {
+      const botRes = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bot ${token}`
+        },
+        body: JSON.stringify({
+          embeds: [embed.toJSON()]
+        })
+      });
+      if (botRes.ok) {
+        botState.lastBroadcastAt = new Date().toISOString();
+        botState.totalAlertsDispatched += 1;
+        return { success: true, method: 'BOT_REST', message: 'Signal posted to VIP Discord Channel via REST!' };
+      } else {
+        console.warn(`[DiscordBot] REST API call failed with status ${botRes.status}: ${await botRes.text()}`);
+      }
+    } catch (err) {
+      console.warn('[DiscordBot] Bot REST dispatch error:', err);
+    }
+  }
 
   if (webhookUrl) {
     try {
@@ -285,8 +342,8 @@ export async function broadcastSignalToDiscord(signalData: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: 'VIXY Terminal Intelligence',
-          avatar_url: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=100',
+          username: 'VIXY VIP Intelligence Core',
+          avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
           embeds: [embed.toJSON()],
         }),
       });
