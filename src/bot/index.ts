@@ -280,16 +280,27 @@ export async function broadcastSignalToDiscord(signalData: {
   // Construct marketData directly from the actual authoritative lock data
   const marketData: MarketOverview = {
     asset: signalData.symbol,
+    symbol: signalData.symbol,
     price: signalData.currentPrice,
     change24h: 0,
+    high24h: signalData.currentPrice,
+    low24h: signalData.currentPrice,
     volume24h: 0,
+    lastFetchedAt: Date.now(),
     prediction: {
       direction: signalData.direction === 'YES' ? 'BULLISH' : 'BEARISH',
       confidence: signalData.confidence,
       reasoning: signalData.reasoning,
+      momentumScore: 0,
+      whalePressureScore: 0,
+      liquidityScore: 0,
+      volatility: 'MEDIUM',
+      riskLevel: 'MODERATE',
+      targetPrice: signalData.targetPrice || signalData.currentPrice,
+      brierScore: 0,
+      accuracy: 0,
+      totalSettled: 0
     },
-    metrics: { institutionalVolume: 0, retailSentiment: 0, orderbookImbalance: 0 },
-    timestamp: Date.now(),
   };
 
   const embed = createVipSignalEmbed(marketData);
@@ -299,8 +310,8 @@ export async function broadcastSignalToDiscord(signalData: {
   if (discordClient && discordClient.isReady()) {
     try {
       const channel = await discordClient.channels.fetch(channelId);
-      if (channel && channel.isTextBased()) {
-        await channel.send({ embeds: [embed] });
+      if (channel && channel.isTextBased() && 'send' in channel) {
+        await (channel as any).send({ embeds: [embed] });
         botState.lastBroadcastAt = new Date().toISOString();
         botState.totalAlertsDispatched += 1;
         return { success: true, method: 'BOT', message: 'Signal posted to VIP Discord Channel!' };

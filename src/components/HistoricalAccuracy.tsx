@@ -69,15 +69,36 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
   // Streak & Metrics
   const metrics = useMemo(() => {
-    const settled = resolvedLog
-      .filter(s => s.status === 'RESOLVED')
+    // 1. Authoritative filtered dataset
+    const settledMap = new Map();
+    resolvedLog.forEach(s => {
+      // 2. Filter to BTC
+      const isBTC = s.asset === 'BTC' || s.ticker === 'BTC/USD' || (s.market && s.market.includes('BTC'));
+      // 3. Filter to 15M
+      const is15M = (s.market && s.market.includes('15M')) || s.desk === '15m' || (s.intervalEnd && s.intervalStart && (new Date(s.intervalEnd).getTime() - new Date(s.intervalStart).getTime() === 15 * 60000));
+      // 4. Include only resolved VIXY LOCK
+      const isResolvedLock = s.status === 'RESOLVED' && s.id && s.id.includes('lock');
+      // 5. Exclude NO TRADE/SKIP
+      const notSkip = s.status !== 'NO_TRADE' && s.status !== 'SKIPPED' && s.status !== 'CRITICALLY_INVALIDATED' && (!s.id || !s.id.includes('skip'));
+      // 6. Exclude duplicate/replayed
+      const notReplay = !s.isReplay && !s.isReplayed && !s.isDuplicate && !s.replayed && s.dataSource !== 'REPLAY';
+      
+      if (isBTC && is15M && isResolvedLock && notSkip && notReplay) {
+        // Exclude duplicates by intervalStart to ensure pure authoritative unique dataset
+        if (!settledMap.has(s.intervalStart)) {
+          settledMap.set(s.intervalStart, s);
+        }
+      }
+    });
+    
+    const settled = Array.from(settledMap.values())
       .sort((a, b) => new Date(b.resolvedAt || b.expiresAt || b.lockedAt || 0).getTime() - new Date(a.resolvedAt || a.expiresAt || a.lockedAt || 0).getTime());
     
-    const totalLocks = backendStats ? backendStats.total : settled.length;
-    const wins = backendStats ? backendStats.winCount : settled.filter(s => s.wasCorrect).length;
-    const losses = backendStats ? backendStats.lossCount : settled.length - wins;
-    const noTrades = backendStats ? (backendStats.excludedNoTrade || backendStats.skipped || 0) : resolvedLog.filter(s => s.status === 'CRITICALLY_INVALIDATED' || s.status === 'NO_TRADE' || s.status === 'SKIPPED').length;
-    const winRate = backendStats ? backendStats.winRatePct : (totalLocks > 0 ? (wins / totalLocks) * 100 : 0);
+    const totalLocks = settled.length;
+    const wins = settled.filter(s => s.wasCorrect).length;
+    const losses = settled.length - wins;
+    const noTrades = resolvedLog.filter(s => s.status === 'CRITICALLY_INVALIDATED' || s.status === 'NO_TRADE' || s.status === 'SKIPPED').length;
+    const winRate = totalLocks > 0 ? (wins / totalLocks) * 100 : 0;
 
     // Calculate Last 10 Wins Rate
     const recent10Settled = settled.slice(0, 10);
@@ -133,7 +154,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     }
 
     return { 
-      totalLocks: backendStats ? backendStats.total : settled.length, 
+      totalLocks, 
       wins, 
       losses, 
       noTrades, 
@@ -345,11 +366,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       {/* -------------------------------------------------- */}
       <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
         {[
-          { label: 'WIN RATE', val: `${metrics.winRate.toFixed(1)}%`, color: 'text-purple-400', bg: 'bg-purple-950/20' },
+          { label: 'LAST 10 WIN RATE', val: `${metrics.last10WinRate.toFixed(1)}%`, color: 'text-purple-400', bg: 'bg-purple-950/20' },
           { label: 'LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'bg-zinc-900/50' },
           { label: 'WINS', val: metrics.wins, color: 'text-green-400', bg: 'bg-green-950/20' },
           { label: 'LOSSES', val: metrics.losses, color: 'text-red-400', bg: 'bg-red-950/20' },
-          { label: 'NO TRADE', val: metrics.noTrades, color: 'text-orange-400', bg: 'bg-orange-950/20' },
+          { label: 'NO TRADE', val: metrics.noTrades, color: 'text-purple-400', bg: 'bg-purple-950/20' },
           { label: 'CURRENT STREAK', val: `${metrics.currentStreak} ${metrics.currentStreakType}`, color: metrics.currentStreakType === 'WIN' ? 'text-green-400' : 'text-zinc-400', bg: 'bg-zinc-900/50' },
           { label: 'BEST STREAK', val: `${metrics.bestStreak} W`, color: 'text-yellow-400', bg: 'bg-zinc-900/50' },
           { label: 'AVG EDGE', val: `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'bg-zinc-900/50' },
@@ -410,7 +431,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     isLocked 
                       ? 'bg-gradient-to-b from-[#130826] to-[#0a0414] border-purple-500/40 hover:border-purple-400/70 shadow-[0_0_20px_rgba(168,85,247,0.1)]' 
                       : isNoTrade 
-                      ? 'bg-gradient-to-b from-[#180e06] to-[#0d0703] border-amber-500/30 hover:border-amber-400/50' 
+                      ? 'bg-gradient-to-b from-[#110524] to-[#080212] border-purple-500/30 hover:border-purple-400/50' 
                       : isWin 
                       ? 'bg-gradient-to-b from-[#06180e] via-[#05110a] to-[#020805] border-emerald-500/40 hover:border-emerald-400/70 shadow-[0_0_20px_rgba(16,185,129,0.08)]' 
                       : 'bg-gradient-to-b from-[#1c080b] via-[#120406] to-[#090203] border-rose-500/40 hover:border-rose-400/70 shadow-[0_0_20px_rgba(244,63,94,0.08)]'
@@ -421,7 +442,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     isWin ? 'bg-gradient-to-br from-emerald-500/10 via-transparent to-transparent' :
                     isLoss ? 'bg-gradient-to-br from-rose-500/10 via-transparent to-transparent' :
                     isLocked ? 'bg-gradient-to-br from-purple-500/10 via-transparent to-transparent' :
-                    'bg-gradient-to-br from-amber-500/10 via-transparent to-transparent'
+                    'bg-gradient-to-br from-purple-500/10 via-transparent to-transparent'
                   }`} />
                   
                   {/* Top Bar: Label + Result Badge */}
@@ -447,8 +468,8 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                         </div>
                       )}
                       {isNoTrade && (
-                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-amber-500/50 text-amber-300 bg-amber-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(245,158,11,0.2)]">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                        <div className="text-xs font-black px-3 py-1 rounded-lg border border-purple-500/50 text-purple-300 bg-purple-950/60 flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.25)]">
+                          <AlertTriangle className="w-3.5 h-3.5 text-purple-400" />
                           <span>PROTECTED</span>
                         </div>
                       )}
@@ -471,7 +492,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <div className="flex items-center justify-between mb-5 relative z-10">
                     <div className="flex items-center gap-2 font-black text-2xl tracking-tight">
                       {isNoTrade ? (
-                        <span className="text-amber-400 flex items-center gap-2"><AlertTriangle className="w-6 h-6"/> NO TRADE</span>
+                        <span className="text-purple-400 flex items-center gap-2"><AlertTriangle className="w-6 h-6"/> NO TRADE</span>
                       ) : log.direction === 'UP' ? (
                         <span className="text-emerald-400 flex items-center gap-2"><ArrowUpRight className="w-6 h-6 text-emerald-400"/> BUY UP</span>
                       ) : (

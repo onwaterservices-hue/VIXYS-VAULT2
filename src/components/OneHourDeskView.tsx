@@ -47,7 +47,7 @@ import {
 
 interface OneHourDeskViewProps {
   ticker: BTCTicker;
-  spotPrices?: Record<string, number>;
+  spotPrices?: Record<string, { price: number; change24h: number }>;
   selectedAsset?: string;
   userRole: 'DEMO' | 'PRO' | 'ADMIN';
   onUpgradeToPro: () => void;
@@ -134,7 +134,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
     };
   }, []);
 
-  const spotPrice = spotPrices?.[selectedAsset] || spotPrices?.['BTC'] || ticker?.price || 0;
+  const spotPrice = spotPrices?.[selectedAsset]?.price || spotPrices?.['BTC']?.price || ticker?.price || 0;
 
   useEffect(() => {
     let active = true;
