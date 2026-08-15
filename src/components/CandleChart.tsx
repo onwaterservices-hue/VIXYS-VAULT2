@@ -217,7 +217,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
       : String(c.time || `Bar #${i + 1}`);
 
     // Breakout Resistance
-    if (c.close > trailingHigh && i - lastBreakoutIdx >= 4) {
+    if (c.close > trailingHigh && i - lastBreakoutIdx >= 10) {
       lastBreakoutIdx = i;
       signals.push({
         idx: i,
@@ -233,7 +233,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         color: '#10b981',
         symbol: '▲',
       });
-    } else if (c.close < trailingLow && i - lastBreakdownIdx >= 4) {
+    } else if (c.close < trailingLow && i - lastBreakdownIdx >= 10) {
       lastBreakdownIdx = i;
       signals.push({
         idx: i,
@@ -254,7 +254,7 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
     const range = c.high - c.low;
     const isDoji = range > 0 && Math.abs(c.close - c.open) / range <= 0.12;
 
-    if (isDoji && i - lastDojiIdx >= 3) {
+    if (isDoji && i - lastDojiIdx >= 12) {
       lastDojiIdx = i;
       const nearSupport =
         Math.abs(c.close - trailingLow) / trailingLow <= 0.002 ||
@@ -618,6 +618,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       width={chartSvgWidth}
       height={svgHeight}
       viewBox={`0 0 ${chartSvgWidth} ${svgHeight}`}
+      shapeRendering="geometricPrecision"
+      textRendering="geometricPrecision"
       className="w-full h-full overflow-visible select-none cursor-crosshair block"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
@@ -1050,10 +1052,11 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                         x={cx}
                         y={badgeY + (sigSubtitle ? (isMobile ? 10 : 11) : (isMobile ? 11 : 12))}
                         fill={isBull ? "#34d399" : "#fb7185"}
-                        fontSize={isMobile ? "7.5" : "8.5"}
-                        fontWeight="900"
+                        fontSize={isMobile ? "8" : "9"}
+                        fontWeight="700"
                         textAnchor="middle"
-                        className="font-mono tracking-tight pointer-events-none uppercase"
+                        fontFamily="Inter, system-ui, -apple-system, sans-serif"
+                        className="pointer-events-none uppercase"
                       >
                         {sigTitle}
                       </text>
@@ -1063,11 +1066,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                         <text
                           x={cx}
                           y={badgeY + (isMobile ? 17 : 19)}
-                          fill="#94a3b8"
-                          fontSize={isMobile ? "6.5" : "7"}
-                          fontWeight="700"
+                          fill="#cbd5e1"
+                          fontSize={isMobile ? "7" : "7.5"}
+                          fontWeight="600"
                           textAnchor="middle"
-                          className="font-mono pointer-events-none"
+                          fontFamily="'JetBrains Mono', monospace"
+                          className="pointer-events-none"
                         >
                           {sigSubtitle}
                         </text>
@@ -1102,7 +1106,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         <rect
           x={marginLeft + plotWidth + 4}
           y={y(latestClose) - 9}
-          width="70"
+          width="76"
           height="18"
           rx="4"
           fill={lastPriceChange >= 0 ? '#064e3b' : '#881337'}
@@ -1110,20 +1114,21 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           strokeWidth="1"
         />
         <text
-          x={marginLeft + plotWidth + 9}
+          x={marginLeft + plotWidth + 8}
           y={y(latestClose) + 3}
           fill="#ffffff"
-          fontSize="9"
+          fontSize="9.5"
           fontWeight="bold"
+          fontFamily="Inter, system-ui, sans-serif"
         >
           ${latestClose > 0 ? latestClose.toFixed(1) : 'WAITING'}
         </text>
       </g>
 
       {/* Bottom-Right HUD Price Box: Always Real Spot Price */}
-      <g transform={`translate(${marginLeft + plotWidth - 118}, ${marginTop + chartHeight - 26})`}>
+      <g transform={`translate(${marginLeft + plotWidth - 124}, ${marginTop + chartHeight - 26})`}>
         <rect
-          width="112"
+          width="118"
           height="22"
           rx="5"
           fill="#060312"
@@ -1131,7 +1136,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           strokeWidth="1.2"
           opacity="0.95"
         />
-        <text x="8" y="15" fill="#ffffff" fontSize="9.5" fontWeight="900" className="font-mono tracking-wider">
+        <text x="8" y="15" fill="#ffffff" fontSize="10" fontWeight="700" fontFamily="Inter, system-ui, sans-serif">
           {latestClose > 0 ? `Last $${latestClose.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}` : 'LIVE PRICE FEED'}
         </text>
       </g>
@@ -1330,7 +1335,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       )}
 
       {/* Right Y-Axis Price Scale Labels */}
-      <g className="font-mono">
+      <g>
         {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
           const val = yMax - (yMax - yMin) * pct;
           const labelY = marginTop + chartHeight * pct;
@@ -1339,12 +1344,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               key={i}
               x={marginLeft + plotWidth + 8}
               y={labelY + 3}
-              fill="#8b84a8"
-              fontSize="8.5"
-              fontWeight="bold"
-              className="font-mono"
+              fill="#cbd5e1"
+              fontSize="9.5"
+              fontWeight="600"
+              fontFamily="'JetBrains Mono', monospace"
             >
-              ${Math.round(val).toLocaleString()}
+              ${val.toFixed(1)}
             </text>
           );
         })}

@@ -359,15 +359,20 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   }, [probabilityTimeline]);
 
   
-  // Resize Observer for robust canvas sizing
+  // Resize Observer for robust HiDPI canvas sizing
   useEffect(() => {
     const canvas = canvasRef.current;
     const container = containerRef.current || canvas?.parentElement;
     if (!canvas || !container) return;
     
     const handleResize = () => {
-      canvas.width = container.clientWidth || 600;
-      canvas.height = container.clientHeight || 380;
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = container.clientWidth || 600;
+      const cssHeight = container.clientHeight || 380;
+      canvas.width = Math.floor(cssWidth * dpr);
+      canvas.height = Math.floor(cssHeight * dpr);
+      canvas.style.width = `${cssWidth}px`;
+      canvas.style.height = `${cssHeight}px`;
     };
     
     handleResize(); // Initial sizing
@@ -376,7 +381,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     return () => observer.disconnect();
   }, []);
 
-  // High-frame-rate Canvas Render Engine
+  // High-frame-rate Canvas Render Engine with HiDPI crisp text
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -387,8 +392,15 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
     const render = () => {
       try {
-        const width = canvas.width;
-        const height = canvas.height;
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = parseFloat(canvas.style.width) || canvas.width / dpr || 600;
+        const cssHeight = parseFloat(canvas.style.height) || canvas.height / dpr || 380;
+
+        ctx.save();
+        ctx.scale(dpr, dpr);
+
+        const width = cssWidth;
+        const height = cssHeight;
 
         // Clear Canvas Background & Draw Radial Ambient Aura Glow
         ctx.fillStyle = '#060312';
@@ -679,23 +691,20 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           ctx.fillStyle = tagBg;
           ctx.strokeStyle = tagColor;
           ctx.lineWidth = isLastBar ? 1.8 : 1.2;
-          ctx.shadowColor = tagColor;
-          ctx.shadowBlur = 6;
           drawPillPath(x - 52, badgeY, 104, 20, 5);
           ctx.fill();
           ctx.stroke();
-          ctx.shadowBlur = 0;
 
-          // Title Text
-          ctx.fillStyle = tagColor;
-          ctx.font = 'bold 8.5px Orbitron, JetBrains Mono, monospace';
+          // Title Text - Crystal-Clear System Sans/Mono
+          ctx.fillStyle = isUp ? '#34d399' : '#fb7185';
+          ctx.font = '700 9px Inter, system-ui, -apple-system, sans-serif';
           ctx.textAlign = 'center';
-          ctx.fillText(sigTitle, x, badgeY + 10);
+          ctx.fillText(sigTitle, x, badgeY + 11);
 
           // Subtitle Text
-          ctx.fillStyle = '#94a3b8';
-          ctx.font = 'bold 7px Orbitron, JetBrains Mono, monospace';
-          ctx.fillText(sigSubtitle, x, badgeY + 17);
+          ctx.fillStyle = '#cbd5e1';
+          ctx.font = '600 7.5px "JetBrains Mono", monospace';
+          ctx.fillText(sigSubtitle, x, badgeY + 18);
           ctx.textAlign = 'left'; // reset
         }
       });
@@ -712,7 +721,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.stroke();
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 9.5px Orbitron, JetBrains Mono, monospace';
+      ctx.font = '700 10px Inter, system-ui, -apple-system, sans-serif';
       ctx.fillText(`Last $${safeSpotPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}`, hudX + 8, hudY + 15);
 
       // 4. Strike Price Glowing Horizontal Line
@@ -720,8 +729,6 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.setLineDash([4, 4]);
       ctx.strokeStyle = strikeCrossed ? '#fbbf24' : 'rgba(168, 85, 247, 0.8)';
       ctx.lineWidth = strikeCrossed ? 2.5 : 1.5;
-      ctx.shadowColor = strikeCrossed ? '#fbbf24' : '#a855f7';
-      ctx.shadowBlur = strikeCrossed ? 15 : 8;
 
       ctx.beginPath();
       ctx.moveTo(0, strikeY);
@@ -729,18 +736,17 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.stroke();
 
       ctx.setLineDash([]);
-      ctx.shadowBlur = 0;
 
       // Strike Price Label Badge
       ctx.fillStyle = strikeCrossed ? '#fbbf24' : '#1e0c38';
       ctx.fillRect(chartWidth + 4, strikeY - 10, 65, 20);
       ctx.fillStyle = strikeCrossed ? '#000000' : '#c084fc';
-      ctx.font = 'bold 9px monospace';
-      ctx.fillText(`STRIKE`, chartWidth + 8, strikeY + 3);
+      ctx.font = '700 10px Inter, system-ui, sans-serif';
+      ctx.fillText(`STRIKE`, chartWidth + 8, strikeY + 4);
 
-      // Y-Axis Price Scale (Mathematically Aligned)
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = 'bold 9px monospace';
+      // Y-Axis Price Scale (Mathematically Aligned & High Contrast)
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '600 9.5px "JetBrains Mono", monospace';
       const steps = 5;
       for (let i = 0; i <= steps; i++) {
         const p = minP + (totalRange / steps) * i;
@@ -749,6 +755,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       }
       } catch (err) {
         console.warn('Render loop exception:', err);
+      } finally {
+        ctx.restore();
       }
 
       animId = requestAnimationFrame(render);
