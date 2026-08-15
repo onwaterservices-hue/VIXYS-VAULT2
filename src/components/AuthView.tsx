@@ -73,10 +73,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     setTimeout(() => {
       setLoading(false);
+      const newUserId = `usr_${Math.random().toString(36).substring(2, 9)}`;
       setAuthState({
         isAuthenticated: true,
         user: {
-          id: `usr_${Math.random().toString(36).substring(2, 9)}`,
+          id: newUserId,
           email: userEmail,
           name: userName,
           role: assignedRole,
@@ -89,10 +90,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
         isAdminEmail
           ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
           : mode === 'register'
-          ? `Account created successfully! Welcome, ${userName}. Your Free Access Pass is active.`
+          ? `Account created successfully! Redirecting to Stripe secure checkout...`
           : `Signed in successfully. Welcome back, ${userName}!`
       );
-      if (onSuccessNavigate) {
+
+      if (mode === 'register' && !isAdminEmail) {
+        setTimeout(() => {
+          const directCheckoutUrl = `https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?prefilled_email=${encodeURIComponent(userEmail)}&client_reference_id=${newUserId}`;
+          window.location.href = directCheckoutUrl;
+        }, 1200);
+      } else if (onSuccessNavigate) {
         setTimeout(onSuccessNavigate, 1000);
       }
     }, 800);
