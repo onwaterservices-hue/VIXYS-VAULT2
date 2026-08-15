@@ -328,16 +328,12 @@ export async function assignDiscordRoleToUser(
 
     // Determine role IDs from env (with fallbacks for all configured variable naming variations)
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
-    const proRoleId = process.env.DISCORD_PRO_ROLE_ID || process.env.DISCORD_ROLE_PRO || eliteRoleId;
-    const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
-    const dayPassRoleId = process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || eliteRoleId;
-    const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
+    const dayPassRoleId = process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547';
+    const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || process.env.DISCORD_FREE_ROLE_ID || '1454661279305433202';
 
     let targetRoleId = verifiedRoleId;
-    if (targetTier === 'ELITE' || targetTier === 'AI') {
+    if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
       targetRoleId = eliteRoleId;
-    } else if (targetTier === 'PRO') {
-      targetRoleId = proRoleId;
     } else if (targetTier === 'DAY_PASS') {
       targetRoleId = dayPassRoleId;
     } else if (targetTier === 'VERIFIED') {
@@ -347,6 +343,9 @@ export async function assignDiscordRoleToUser(
     console.log(`\n================ [DISCORD ROLE SYNCHRONIZATION AUDIT] ================`);
     console.log(`[Discord Role Sync] Target User ID: ${discordUserId}`);
     console.log(`[Discord Role Sync] Target Tier: ${targetTier} | Target Role ID: ${targetRoleId}`);
+    console.log(`[Discord Role Sync] Verified Base Role ID: ${verifiedRoleId}`);
+    console.log(`[Discord Role Sync] 24HR Day Pass Role ID: ${dayPassRoleId}`);
+    console.log(`[Discord Role Sync] Elite Role ID: ${eliteRoleId}`);
     console.log(`[Discord Role Sync] Target Guild ID: ${targetGuildId}`);
     console.log(`[Discord Role Sync] Bot Token Present: ${!!botToken}`);
 
@@ -394,13 +393,12 @@ export async function assignDiscordRoleToUser(
         console.log(`[Discord Role Sync] Bot Role Name: "${botHighestRole.name}" (Position: ${botHighestRole.position})`);
 
         const roleToAssign = await guild.roles.fetch(targetRoleId).catch(() => null);
-        if (!roleToAssign) {
+        if (!roleToAssign && targetTier !== 'NONE') {
           console.error(`[Discord Role Sync] ❌ Failure: Role ID ${targetRoleId} not found in guild`);
           return { success: false, message: `Target role ${targetRoleId} does not exist in Discord server.`, code: 'INVALID_ROLE_ID' };
         }
-        console.log(`[Discord Role Sync] Target Role Name: "${roleToAssign.name}" (Position: ${roleToAssign.position})`);
 
-        if (botHighestRole.position <= roleToAssign.position) {
+        if (roleToAssign && botHighestRole.position <= roleToAssign.position) {
           console.error(`[Discord Role Sync] ❌ Hierarchy Error: Bot role position (${botHighestRole.position}) is <= Target role position (${roleToAssign.position})`);
           return {
             success: false,
@@ -423,71 +421,67 @@ export async function assignDiscordRoleToUser(
           };
         }
 
-        // Handle obsolete/conflicting role cleanup before assigning new target role
-        if (targetTier === 'ELITE') {
-          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
-          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
-          if (dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
-        } else if (targetTier === 'PRO') {
-          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
-          if (eliteRoleId !== proRoleId && member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
-          if (dayPassRoleId !== proRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
-        } else if (targetTier === 'DAY_PASS') {
-          if (member.roles.cache.has(verifiedRoleId)) await member.roles.remove(verifiedRoleId).catch(() => {});
-          if (eliteRoleId !== dayPassRoleId && member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
-          if (proRoleId !== dayPassRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
-        } else if (targetTier === 'VERIFIED') {
-          if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
-          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
-          if (proRoleId && proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
-          if (verifiedRoleId && !member.roles.cache.has(verifiedRoleId)) await member.roles.add(verifiedRoleId).catch(() => {});
+        // Authoritative Discord Role State Machine
+        // Rule: Base prerequisite is Verified role. NEVER remove Verified when assigning or expiring paid tiers.
+        if (verifiedRoleId && !member.roles.cache.has(verifiedRoleId)) {
+          console.log(`[Discord Role Sync] Ensuring base Verified role (${verifiedRoleId}) is assigned to ${member.user.tag}...`);
+          await member.roles.add(verifiedRoleId).catch((err: any) => console.warn('[Discord Role Sync] Note adding verified role:', err.message));
         }
 
-        // Check idempotency: if user already has role
-        if (member.roles.cache.has(targetRoleId)) {
-          console.log(`[Discord Role Sync] ✅ Idempotent Success: User ${member.user.tag} already has role "${roleToAssign.name}"`);
-          return {
-            success: true,
-            status: 'verified',
-            message: `User ${member.user.tag} already has active role "${roleToAssign.name}" in ${guild.name}.`,
-            code: 'ALREADY_ASSIGNED',
-            roleId: targetRoleId,
-          };
-        }
-
-        // If tier is NONE, handle role removal and keep verified identity
-        if (targetTier === 'NONE') {
-          if (member.roles.cache.has(eliteRoleId)) await member.roles.remove(eliteRoleId).catch(() => {});
-          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) await member.roles.remove(dayPassRoleId).catch(() => {});
-          if (proRoleId !== eliteRoleId && member.roles.cache.has(proRoleId)) await member.roles.remove(proRoleId).catch(() => {});
-          if (verifiedRoleId && !member.roles.cache.has(verifiedRoleId)) {
-            await member.roles.add(verifiedRoleId).catch(() => {});
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+          // Remove conflicting 24HR Day Pass role if present
+          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && member.roles.cache.has(dayPassRoleId)) {
+            await member.roles.remove(dayPassRoleId).catch(() => {});
           }
-          console.log(`[Discord Role Sync] ✅ Paid roles removed, verified role preserved for ${member.user.tag}`);
+          // Add Elite role if not already present
+          if (!member.roles.cache.has(eliteRoleId)) {
+            await member.roles.add(eliteRoleId);
+            console.log(`[Discord Role Sync] ✅ Assigned VIXY Elite role (${eliteRoleId}) to ${member.user.tag}`);
+          }
           return {
             success: true,
             status: 'verified',
-            message: `Removed paid access roles for user ${member.user.tag}. Discord link and verified role preserved.`,
+            message: `Successfully synchronized VIXY Elite role for ${member.user.tag}!`,
+            code: 'ROLE_ASSIGNED',
+            roleId: eliteRoleId,
+            details: { userTag: member.user.tag, roleName: roleToAssign?.name || 'VIXY Elite', guildName: guild.name },
+          };
+        } else if (targetTier === 'DAY_PASS') {
+          // Remove conflicting Elite role if present
+          if (eliteRoleId && eliteRoleId !== dayPassRoleId && member.roles.cache.has(eliteRoleId)) {
+            await member.roles.remove(eliteRoleId).catch(() => {});
+          }
+          // Add 24HR Day Pass role if not already present
+          if (!member.roles.cache.has(dayPassRoleId)) {
+            await member.roles.add(dayPassRoleId);
+            console.log(`[Discord Role Sync] ✅ Assigned VIXY (24HR) Elite role (${dayPassRoleId}) to ${member.user.tag}`);
+          }
+          return {
+            success: true,
+            status: 'verified',
+            message: `Successfully synchronized VIXY (24HR) Elite role for ${member.user.tag}!`,
+            code: 'ROLE_ASSIGNED',
+            roleId: dayPassRoleId,
+            details: { userTag: member.user.tag, roleName: roleToAssign?.name || 'VIXY (24HR) Elite', guildName: guild.name },
+          };
+        } else {
+          // targetTier === 'NONE' or 'VERIFIED' (Expired / Cancelled paid access)
+          // Remove paid roles, retain base Verified role, never kick member
+          if (eliteRoleId && member.roles.cache.has(eliteRoleId)) {
+            await member.roles.remove(eliteRoleId).catch(() => {});
+          }
+          if (dayPassRoleId && member.roles.cache.has(dayPassRoleId)) {
+            await member.roles.remove(dayPassRoleId).catch(() => {});
+          }
+          console.log(`[Discord Role Sync] ✅ Paid roles removed, base Verified role preserved for ${member.user.tag}`);
+          return {
+            success: true,
+            status: 'verified',
+            message: `Removed paid access roles for user ${member.user.tag}. Base Discord verification preserved.`,
             code: 'ROLE_REMOVED',
+            roleId: verifiedRoleId,
           };
         }
-
-        console.log(`[Discord Role Sync] Step 4: Adding role "${roleToAssign.name}" to member ${member.user.tag}...`);
-        await member.roles.add(targetRoleId);
-        console.log(`[Discord Role Sync] ✅ ROLE ASSIGNMENT SUCCESSFUL for ${member.user.tag}!`);
-
-        return {
-          success: true,
-          status: 'verified',
-          message: `Successfully assigned "${roleToAssign.name}" role to ${member.user.tag} in ${guild.name}!`,
-          code: 'ROLE_ASSIGNED',
-          roleId: targetRoleId,
-          details: {
-            userTag: member.user.tag,
-            roleName: roleToAssign.name,
-            guildName: guild.name,
-          },
-        };
       } catch (err: any) {
         console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err);
         // Fallback to REST API if discord.js fetch errored
@@ -547,204 +541,79 @@ export async function assignDiscordRoleToUser(
         const memberData = await memberRes.json();
         const existingRoles: string[] = memberData.roles || [];
 
-        if (targetTier === 'NONE') {
-          // Remove paid roles and ensure verified role is retained
-          if (existingRoles.includes(eliteRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
+        // Authoritative REST State Machine
+        // Ensure base Verified role is preserved/assigned
+        if (verifiedRoleId && !existingRoles.includes(verifiedRoleId)) {
+          await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+            method: 'PUT',
+            headers: { Authorization: `Bot ${botToken}`, 'X-Audit-Log-Reason': 'Vixy Vault Base Verified Role' },
+          }).catch(() => {});
+        }
+
+        if (targetTier === 'ELITE' || targetTier === 'PRO' || targetTier === 'AI') {
+          // Remove conflicting 24HR Day Pass role
           if (dayPassRoleId && dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
             await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
               method: 'DELETE',
               headers: { Authorization: `Bot ${botToken}` },
             }).catch(() => {});
           }
-          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (verifiedRoleId && !existingRoles.includes(verifiedRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
+          // Put Elite role if missing
+          if (!existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
               method: 'PUT',
-              headers: { Authorization: `Bot ${botToken}` },
+              headers: { Authorization: `Bot ${botToken}`, 'X-Audit-Log-Reason': 'Vixy Vault Elite Subscription' },
             }).catch(() => {});
           }
-          return { success: true, status: 'verified', message: `Removed paid membership roles for user ${discordUserId}. Discord verification preserved.`, code: 'ROLE_REMOVED' };
-        }
-
-        // Cleanup conflicting roles before PUT
-        if (targetTier === 'ELITE') {
-          if (existingRoles.includes(verifiedRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-        } else if (targetTier === 'PRO') {
-          if (existingRoles.includes(verifiedRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (eliteRoleId !== proRoleId && existingRoles.includes(eliteRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (dayPassRoleId !== proRoleId && existingRoles.includes(dayPassRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-        } else if (targetTier === 'DAY_PASS') {
-          if (existingRoles.includes(verifiedRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (eliteRoleId !== dayPassRoleId && existingRoles.includes(eliteRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (proRoleId !== dayPassRoleId && existingRoles.includes(proRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-        } else if (targetTier === 'VERIFIED') {
-          if (existingRoles.includes(eliteRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (dayPassRoleId && dayPassRoleId !== eliteRoleId && existingRoles.includes(dayPassRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (proRoleId && proRoleId !== eliteRoleId && existingRoles.includes(proRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${proRoleId}`, {
-              method: 'DELETE',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-          if (verifiedRoleId && !existingRoles.includes(verifiedRoleId)) {
-            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${verifiedRoleId}`, {
-              method: 'PUT',
-              headers: { Authorization: `Bot ${botToken}` },
-            }).catch(() => {});
-          }
-        }
-
-        if (existingRoles.includes(targetRoleId)) {
-          console.log(`[Discord Role Sync] ✅ REST Idempotent Check: User already has role ${targetRoleId}`);
-          return {
-            success: true,
-            status: 'verified',
-            message: `User @${memberData.user?.username || discordUserId} already has active role in Discord server.`,
-            code: 'ALREADY_ASSIGNED',
-            roleId: targetRoleId,
-          };
-        }
-
-        // 2. Put role on user via REST
-        console.log(`[Discord Role Sync] Putting role ${targetRoleId} on user ${discordUserId}...`);
-        const putRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${targetRoleId}`, {
-          method: 'PUT',
-          headers: {
-            Authorization: `Bot ${botToken}`,
-            'X-Audit-Log-Reason': 'Vixy Vault Subscription Auto Role Assignment',
-          },
-        });
-
-        console.log(`[Discord Role Sync] REST PUT Response Status: ${putRes.status} ${putRes.statusText}`);
-
-        if (putRes.status === 429) {
-          const retryHeader = putRes.headers.get('retry-after');
-          let retryAfterSec = retryHeader ? Math.ceil(parseFloat(retryHeader)) : 5;
-          try {
-            const errJson = await putRes.json();
-            if (errJson.retry_after) retryAfterSec = Math.ceil(Number(errJson.retry_after));
-          } catch (_) {}
-          console.warn(`[Discord Role Sync] ⚠️ Discord Role PUT Rate Limited (429). Retry after ${retryAfterSec}s`);
-          return {
-            success: false,
-            status: 'rate_limited',
-            code: 'DISCORD_RATE_LIMITED',
-            retryAfter: retryAfterSec,
-            message: `Discord verification is temporarily rate-limited. Try again in ${retryAfterSec} seconds.`,
-          };
-        }
-
-        if (putRes.ok || putRes.status === 204) {
-          console.log(`[Discord Role Sync] ✅ REST API ROLE ASSIGNMENT SUCCESSFUL!`);
           return {
             success: true,
             status: 'verified',
             message: `Role assigned successfully to @${memberData.user?.username || discordUserId}!`,
             code: 'ROLE_ASSIGNED',
-            roleId: targetRoleId,
+            roleId: eliteRoleId,
+          };
+        } else if (targetTier === 'DAY_PASS') {
+          // Remove conflicting Elite role
+          if (eliteRoleId && eliteRoleId !== dayPassRoleId && existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
+          // Put 24HR Day Pass role if missing
+          if (!existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
+              method: 'PUT',
+              headers: { Authorization: `Bot ${botToken}`, 'X-Audit-Log-Reason': 'Vixy Vault 24HR Day Pass' },
+            }).catch(() => {});
+          }
+          return {
+            success: true,
+            status: 'verified',
+            message: `Role assigned successfully to @${memberData.user?.username || discordUserId}!`,
+            code: 'ROLE_ASSIGNED',
+            roleId: dayPassRoleId,
           };
         } else {
-          const errText = await putRes.text();
-          console.error(`[Discord Role Sync] ❌ REST Role Assignment Failed. Status ${putRes.status}:`, errText);
-          let parsedErr: any = {};
-          try { parsedErr = JSON.parse(errText); } catch (_) {}
-
-          if (putRes.status === 403) {
-            if (parsedErr.code === 50013) {
-              return {
-                success: false,
-                message: 'Bot lacks "Manage Roles" permission or the target role is higher than the bot role in hierarchy.',
-                code: 'ROLE_ABOVE_BOT',
-                details: parsedErr,
-              };
-            }
-            return {
-              success: false,
-              message: 'Bot lacks permission to manage roles in target Discord server.',
-              code: 'BOT_MISSING_MANAGE_ROLES',
-              details: parsedErr,
-            };
-          } else if (putRes.status === 404) {
-            return {
-              success: false,
-              message: `Target role ID ${targetRoleId} was not found in Discord server.`,
-              code: 'INVALID_ROLE_ID',
-              details: parsedErr,
-            };
+          // targetTier === 'NONE' or 'VERIFIED'
+          if (existingRoles.includes(eliteRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${eliteRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
           }
-
+          if (dayPassRoleId && existingRoles.includes(dayPassRoleId)) {
+            await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUserId}/roles/${dayPassRoleId}`, {
+              method: 'DELETE',
+              headers: { Authorization: `Bot ${botToken}` },
+            }).catch(() => {});
+          }
           return {
-            success: false,
-            message: `Discord API Error (${putRes.status}): ${parsedErr.message || errText}`,
-            details: parsedErr,
-            code: 'DISCORD_API_ERROR',
+            success: true,
+            status: 'verified',
+            message: `Removed paid membership roles for user ${discordUserId}. Discord verification preserved.`,
+            code: 'ROLE_REMOVED',
+            roleId: verifiedRoleId,
           };
         }
       } catch (restErr: any) {

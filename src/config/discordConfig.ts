@@ -286,6 +286,8 @@ export class DiscordConfigService {
     return {
       verified: env.DISCORD_ROLE_VERIFIED,
       unverified: env.DISCORD_ROLE_UNVERIFIED,
+      dayPass: env.DISCORD_ROLE_DAY_PASS,
+      pro: env.DISCORD_ROLE_ELITE || env.DISCORD_ROLE_VIP,
       elite: env.DISCORD_ROLE_ELITE || env.DISCORD_ROLE_VIP,
       vip: env.DISCORD_ROLE_VIP,
       moderator: env.DISCORD_ROLE_MODERATOR,

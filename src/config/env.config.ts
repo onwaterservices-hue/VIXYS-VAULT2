@@ -66,6 +66,7 @@ export const EnvSchema = z.object({
   // 7. Discord Roles
   DISCORD_ROLE_VERIFIED: z.string().optional().default(''),
   DISCORD_ROLE_UNVERIFIED: z.string().optional().default(''),
+  DISCORD_ROLE_DAY_PASS: z.string().optional().default(''),
   DISCORD_ROLE_ELITE: z.string().optional().default(''),
   DISCORD_ROLE_MODERATOR: z.string().optional().default(''),
   DISCORD_ROLE_ADMINISTRATOR: z.string().optional().default(''),
@@ -129,8 +130,9 @@ export function parseEnv(): EnvConfig {
     DISCORD_CHANNEL_AI_SIGNALS: process.env.DISCORD_CHANNEL_AI_SIGNALS || process.env.DISCORD_SIGNALS_CHANNEL || '',
     DISCORD_CHANNEL_BREAKING_NEWS: process.env.DISCORD_CHANNEL_BREAKING_NEWS || process.env.DISCORD_ALERTS_CHANNEL || '',
     DISCORD_CHANNEL_AUDIT_LOGS: process.env.DISCORD_CHANNEL_AUDIT_LOGS || process.env.DISCORD_LOGS_CHANNEL_ID || '',
-    DISCORD_ROLE_VERIFIED: process.env.DISCORD_ROLE_VERIFIED || process.env.DISCORD_FREE_ROLE_ID || '',
-    DISCORD_ROLE_ELITE: process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_ROLE_VIP || process.env.DISCORD_VIP_ROLE_ID || '',
+    DISCORD_ROLE_VERIFIED: process.env.DISCORD_ROLE_VERIFIED || process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_FREE_ROLE_ID || '1454661279305433202',
+    DISCORD_ROLE_DAY_PASS: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+    DISCORD_ROLE_ELITE: process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_VIP || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425',
     DISCORD_ROLE_ADMINISTRATOR: process.env.DISCORD_ROLE_ADMINISTRATOR || process.env.DISCORD_ADMIN_ROLE_ID || '',
   };
 

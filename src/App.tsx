@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { SpeedInsights } from '@vercel/speed-insights/react';
 import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
@@ -1235,8 +1234,6 @@ export default function App() {
         setSettings={setAlertSettings}
         onComplete={() => setActiveTab('terminal')}
       />
-
-      <SpeedInsights />
     </div>
   );
 }
