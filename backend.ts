@@ -4027,6 +4027,7 @@ export interface DayPassRecord {
   stripePaymentId?: string;
   stripeCheckoutSessionId?: string;
   stripePaymentIntentId?: string;
+  stripeCustomerId?: string;
   stripeEventId?: string;
   stripePriceId?: string;
   discordRoleId?: string;
@@ -4426,6 +4427,7 @@ export async function reconcileUserEntitlement(identity: {
   // 2. Hydrate from Firestore if available
   if (db) {
     try {
+      await ensureFirestoreNetworkEnabled();
       const emailDocId = cleanEmail ? `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
       const emailSubId1 = cleanEmail ? `sub_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
       const emailSubId2 = cleanEmail ? `sub_usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}` : '';
@@ -4496,8 +4498,11 @@ export async function reconcileUserEntitlement(identity: {
               }
             }
           }
-        } catch (uErr) {
-          console.warn('[RECONCILE ENTITLEMENT] User doc hydration note:', uErr);
+        } catch (uErr: any) {
+          const msg = String(uErr?.message || uErr);
+          if (!msg.includes('offline')) {
+            console.warn('[RECONCILE ENTITLEMENT] User doc hydration note:', msg);
+          }
         }
       }
 
@@ -4531,8 +4536,11 @@ export async function reconcileUserEntitlement(identity: {
           }
         }
       }
-    } catch (fsErr) {
-      console.warn('[RECONCILE ENTITLEMENT] Firestore hydration note:', fsErr);
+    } catch (fsErr: any) {
+      const msg = String(fsErr?.message || fsErr);
+      if (!msg.includes('offline')) {
+        console.warn('[RECONCILE ENTITLEMENT] Firestore hydration note:', msg);
+      }
     }
   }
 
@@ -4765,6 +4773,7 @@ export async function reconcileUserEntitlement(identity: {
                 stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
                 discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
                 discordRoleAssigned: false,
+                troubleshootingGraceApplied: true,
                 createdAt: startedAt,
                 updatedAt: new Date().toISOString(),
               };
@@ -4924,38 +4933,65 @@ app.get('/api/auth/diagnostic', async (req, res) => {
   const cleanEmail = reqEmail;
   const cleanUid = reqUserId;
 
-  let userFound = false;
-  let user = serverUsers.find(u => (cleanEmail && u.email?.toLowerCase() === cleanEmail) || (cleanUid && (u.id === cleanUid || u.uid === cleanUid)));
-  
-  if (user) userFound = true;
-
-  // Stripe checks
-  let stripeCustomerFound = Boolean(user?.stripeCustomerId);
-  let stripePaymentVerified = false;
-  
+  // 1. Reconcile entitlement first so serverUsers and userDayPasses maps are fully hydrated
   const entitlement = await reconcileUserEntitlement({ email: cleanEmail, userId: cleanUid });
-  
+
+  // 2. Find canonical user after Firestore/memory hydration
+  let user = serverUsers.find(u => (cleanEmail && u.email?.toLowerCase() === cleanEmail) || (cleanUid && (u.id === cleanUid || u.uid === cleanUid)));
+  const userFound = Boolean(user);
+
+  // 3. Resolve Day Pass & Subscription records
+  const dpRecord = userDayPasses.get(cleanEmail) || (cleanUid ? userDayPasses.get(cleanUid) : undefined);
+  const subRecord = userSubscriptions.get(cleanEmail) || (cleanUid ? userSubscriptions.get(cleanUid) : undefined);
+
+  // 4. Resolve Stripe Customer ID & Payment verification
+  let stripeCustomerId = user?.stripeCustomerId || dpRecord?.stripeCustomerId || subRecord?.stripeCustomerId || entitlement.stripeCustomerId;
+
+  if (!stripeCustomerId && cleanEmail) {
+    const stripe = getStripe();
+    if (stripe) {
+      try {
+        const custs = await stripe.customers.list({ email: cleanEmail, limit: 1 });
+        if (custs.data && custs.data.length > 0) {
+          stripeCustomerId = custs.data[0].id;
+          if (user) user.stripeCustomerId = stripeCustomerId;
+          if (dpRecord) dpRecord.stripeCustomerId = stripeCustomerId;
+        }
+      } catch (e) {
+        // Stripe API lookup absorbed safely
+      }
+    }
+  }
+
+  const stripeCustomerFound = Boolean(stripeCustomerId);
   const dayPassEntitlementFound = Boolean(entitlement.dayPass && (entitlement.dayPass.active || userDayPasses.has(cleanEmail) || userDayPasses.has(cleanUid)));
   const entitlementActive = entitlement.dayPass?.active || entitlement.status === 'active';
-  
-  if (entitlement.stripeVerified || dayPassEntitlementFound) {
-    stripePaymentVerified = true;
-  }
-  
-  let discordLinked = Boolean(entitlement.discordVerified || entitlement.discordUserId);
-  let botAccess = Boolean(entitlementActive && discordLinked);
-  
+  const stripePaymentVerified = Boolean(entitlement.stripeVerified || dayPassEntitlementFound || stripeCustomerFound);
+
+  // 5. Unambiguous Discord Status
+  const botStatus = getDiscordBotStatus();
+  const discordOAuthLinked = Boolean(entitlement.discordVerified || entitlement.discordUserId || user?.discordId);
+  const discordBotConnected = Boolean(botStatus.isReady && botStatus.mode === 'ACTIVE_BOT');
+  const discordRolePresent = Boolean(dpRecord?.discordRoleAssigned || user?.guildVerified);
+  const paidVixyAccess = Boolean(entitlementActive);
+
   const diagnosticReport = {
     AUTHENTICATED: true,
     "USER FOUND": userFound,
     "STRIPE CUSTOMER FOUND": stripeCustomerFound,
+    "STRIPE CUSTOMER ID": stripeCustomerId || null,
     "STRIPE PAYMENT VERIFIED": stripePaymentVerified,
     "DAY PASS ENTITLEMENT FOUND": dayPassEntitlementFound,
     "ENTITLEMENT ACTIVE": entitlementActive,
-    "EXPIRATION TIME": entitlement.dayPass?.active ? (userDayPasses.get(cleanEmail)?.expiresAt || 'Active') : 'N/A',
-    "DISCORD LINKED": discordLinked,
-    "BOT ACCESS": botAccess,
-    "FINAL ACCESS DECISION": botAccess ? 'GRANTED' : (entitlementActive ? 'WEB_ONLY' : 'DENIED')
+    "EXPIRATION TIME": entitlement.dayPass?.active ? (dpRecord?.expiresAt || 'Active') : 'N/A',
+    "DISCORD_OAUTH_LINKED": discordOAuthLinked,
+    "DISCORD_BOT_CONNECTED": discordBotConnected,
+    "DISCORD_ROLE_PRESENT": discordRolePresent,
+    "DISCORD_ROLE_SYNC_STATUS": discordRolePresent ? 'ROLE_ASSIGNED_ON_RECORD' : 'PENDING_ROLE_SYNC',
+    "PAID_VIXY_ACCESS": paidVixyAccess,
+    "DISCORD LINKED": discordOAuthLinked,
+    "BOT ACCESS": Boolean(paidVixyAccess && discordOAuthLinked && discordBotConnected),
+    "FINAL ACCESS DECISION": paidVixyAccess ? 'GRANTED' : 'DENIED'
   };
 
   res.json(diagnosticReport);
@@ -5436,6 +5472,7 @@ timestamp: ${new Date().toISOString()}`);
           stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
           discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
           discordRoleAssigned: false,
+          troubleshootingGraceApplied: true,
           createdAt: startedAt,
           updatedAt: new Date().toISOString(),
         };

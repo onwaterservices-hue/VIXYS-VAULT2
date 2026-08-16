@@ -167,9 +167,23 @@ export class DiscordBotManager {
   }
 
   public async initialize(): Promise<boolean> {
-    const rawToken = process.env.DISCORD_BOT_TOKEN;
+    const rawToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
     if (!rawToken || rawToken.trim().length < 10) {
       console.log('[DiscordBotManager] No DISCORD_BOT_TOKEN present. Bot subsystem set to DISABLED.');
+      this.mode = 'DISABLED';
+      return false;
+    }
+
+    const token = rawToken.replace(/^["']|["']$/g, '').trim();
+    if (
+      !token ||
+      token.length < 25 ||
+      token.includes('YOUR_') ||
+      token.includes('your_') ||
+      token.includes('placeholder') ||
+      token.includes('xxx')
+    ) {
+      console.log('[DiscordBotManager] DISCORD_BOT_TOKEN is unconfigured or placeholder. Bot subsystem set to DISABLED.');
       this.mode = 'DISABLED';
       return false;
     }
@@ -188,8 +202,6 @@ export class DiscordBotManager {
       this.lastError = 'Connection rate limit circuit breaker active';
       return false;
     }
-
-    const token = rawToken.replace(/^["']|["']$/g, '').trim();
 
     try {
       this.loginInProgress = true;
@@ -210,18 +222,19 @@ export class DiscordBotManager {
         errStr.includes('An invalid token was provided') ||
         errStr.includes('Used disallowed intents');
 
-      console.warn(`[DiscordBotManager] Discord login failed: ${errStr}`);
       this.lastError = errStr;
       this.lastDisconnectAt = new Date().toISOString();
 
       if (isTokenInvalid) {
-        console.warn(
-          '[DiscordBotManager] ⛔ Token rejected by Discord API. Entering DEGRADED mode without retrying. VIXY prediction engine continues unaffected.'
+        console.log(
+          `[DiscordBotManager] Discord bot token unconfigured or rejected by API (${errStr}). Subsystem set to DEGRADED mode without retrying. VIXY engine continues unaffected.`
         );
         this.mode = 'DEGRADED';
         this.circuitTrippedUntil = Date.now() + this.circuitCooldownMs;
         return false;
       }
+
+      console.warn(`[DiscordBotManager] Discord gateway connection error: ${errStr}`);
 
       // Schedule bounded exponential backoff retry if circuit allows
       this.scheduleReconnect();
