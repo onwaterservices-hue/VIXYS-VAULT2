@@ -61,6 +61,27 @@ export const AuthView: React.FC<AuthViewProps> = ({
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
     }
 
+    if (mode === 'forgot') {
+      try {
+        const fetchRes = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail })
+        });
+        const resData = await fetchRes.json();
+        setLoading(false);
+        if (!fetchRes.ok && fetchRes.status === 429) {
+          setErrorMsg(resData.message || 'Too many password reset requests. Please wait a few minutes before trying again.');
+          return;
+        }
+        setSuccessMsg(resData.message || `If an account exists for ${userEmail}, you'll receive a password reset link.`);
+      } catch (err) {
+        setLoading(false);
+        setSuccessMsg(`If an account exists for ${userEmail}, you'll receive a password reset link.`);
+      }
+      return;
+    }
+
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 

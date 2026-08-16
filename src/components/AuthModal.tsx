@@ -73,14 +73,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     if (mode === 'forgot') {
-      setTimeout(() => {
+      try {
+        const fetchRes = await fetch('/api/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail })
+        });
+        const resData = await fetchRes.json();
         setLoading(false);
-        setSuccessMsg(`Password reset instructions have been sent to ${userEmail}. Please check your inbox.`);
-        setTimeout(() => {
-          setMode('login');
-          setSuccessMsg('');
-        }, 2500);
-      }, 600);
+        if (!fetchRes.ok && fetchRes.status === 429) {
+          setErrorMsg(resData.message || 'Too many password reset requests. Please wait a few minutes before trying again.');
+          return;
+        }
+        setSuccessMsg(resData.message || `If an account exists for ${userEmail}, you'll receive a password reset link.`);
+      } catch (err) {
+        setLoading(false);
+        setSuccessMsg(`If an account exists for ${userEmail}, you'll receive a password reset link.`);
+      }
       return;
     }
 
