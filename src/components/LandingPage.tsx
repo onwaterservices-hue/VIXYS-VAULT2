@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
+import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface LandingPageProps {
   ticker: BTCTicker;
@@ -200,7 +201,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               {/* Primary Action CTA Button */}
               <div className="space-y-2 pt-1">
                 <button
-                  onClick={() => onOpenAuth('register')}
+                  onClick={() => { if (authState?.isAuthenticated) { window.location.href = getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }); } else { onOpenAuth('register'); } }}
                   className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-cyan-950/90 border border-cyan-300/40 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-[0.99]"
                 >
                   <ShieldCheck className="w-4 h-4 text-cyan-200 group-hover/btn:scale-110 transition-transform" />
@@ -598,7 +599,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <button
-              onClick={() => onOpenAuth('register')}
+              onClick={() => { if (authState?.isAuthenticated) { window.location.href = getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }); } else { onOpenAuth('register'); } }}
               className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-purple-900/50 border border-purple-400/30 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-95"
             >
               <ShieldCheck className="w-4 h-4 text-cyan-300 group-hover/btn:scale-110 transition-transform" />

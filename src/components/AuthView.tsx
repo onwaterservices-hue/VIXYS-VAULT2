@@ -40,7 +40,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
@@ -64,17 +64,34 @@ export const AuthView: React.FC<AuthViewProps> = ({
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
-    // Live sync user to server backend persistent database
-    syncAuthUserApi({
-      email: userEmail,
-      name: userName,
-      role: isAdminEmail ? 'OWNER' : 'USER',
-      subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
-    }).catch((err) => console.warn('Auth sync error:', err));
+    try {
+      let res;
+      if (mode === 'register') {
+        const fetchRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password, name: userName })
+        });
+        res = await fetchRes.json();
+      } else {
+        const fetchRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password })
+        });
+        res = await fetchRes.json();
+      }
 
-    setTimeout(() => {
+      if (!res?.success) {
+        setLoading(false);
+        setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
+        return;
+      }
+
+      const serverUser = res?.user || {};
+      const newUserId = serverUser.id || serverUser.uid || `usr_${Math.random().toString(36).substring(2, 9)}`;
+
       setLoading(false);
-      const newUserId = `usr_${Math.random().toString(36).substring(2, 9)}`;
       setAuthState({
         isAuthenticated: true,
         user: {
@@ -82,7 +99,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           email: userEmail,
           name: userName,
           role: assignedRole,
-          apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
+          apiKey: serverUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
           joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         },
       });
@@ -103,7 +120,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
       } else if (onSuccessNavigate) {
         setTimeout(onSuccessNavigate, 1000);
       }
-    }, 800);
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg('Authentication failed. Please try again.');
+    }
   };
 
   return (

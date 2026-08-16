@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Lock, Mail, User, ArrowRight, X, Sparkles, CheckCircle2, ShieldCheck, Key, Ticket } from 'lucide-react';
 import { AuthState } from '../types';
 import { syncAuthUserApi } from '../services/api';
+import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
@@ -86,17 +87,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
 
-    // Live sync user to server backend persistent database
-    syncAuthUserApi({
-      email: userEmail,
-      name: userName,
-      role: isAdminEmail ? 'OWNER' : 'USER',
-      subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
-    })
-      .then(async (syncRes: any) => {
-        const canonicalUser = syncRes?.user || {};
-        const canonicalUserId = canonicalUser.id || canonicalUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-        const discordUserId = canonicalUser.discordId || canonicalUser.discordUserId;
+    try {
+      let syncRes;
+      if (mode === 'register') {
+        const fetchRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password, name: userName })
+        });
+        syncRes = await fetchRes.json();
+      } else {
+        const fetchRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password })
+        });
+        syncRes = await fetchRes.json();
+      }
+
+      if (!syncRes?.success) {
+        setLoading(false);
+        setErrorMsg(syncRes?.message || 'Authentication failed. Please check your credentials.');
+        return;
+      }
+
+      const canonicalUser = syncRes?.user || {};
+      const canonicalUserId = canonicalUser.id || canonicalUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const discordUserId = canonicalUser.discordId || canonicalUser.discordUserId;
 
         // Authoritative server check and automatic restore for active Day Pass or Subscription
         let hasActiveEntitlement = false;
@@ -178,31 +195,21 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             : `Signed in successfully. Welcome back, ${userName}!`
         );
 
-        setTimeout(() => {
-          setSuccessMsg('');
-          onClose();
-        }, 1000);
-      })
-      .catch((err) => {
-        console.warn('Auth sync error:', err);
-        setLoading(false);
-        setAuthState({
-          isAuthenticated: true,
-          user: {
-            id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            email: userEmail,
-            name: userName,
-            role: assignedRole,
-            apiKey: `vault_live_${Math.random().toString(36).substring(2, 8)}`,
-            joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-          },
-        });
-        if (setUserRole) setUserRole(assignedRole);
-        if (onSuccessRole) onSuccessRole(assignedRole);
-        setTimeout(() => {
-          onClose();
-        }, 800);
-      });
+        if (mode === 'register' && !isAdminEmail) {
+          setTimeout(() => {
+            window.location.href = getStripeDayPassUrl({ email: userEmail, uid: canonicalUserId });
+          }, 1200);
+        } else {
+          setTimeout(() => {
+            setSuccessMsg('');
+            onClose();
+          }, 1000);
+        }
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg('Authentication failed. Please check your credentials.');
+      console.warn('Auth sync error:', err);
+    }
   };
 
   return (

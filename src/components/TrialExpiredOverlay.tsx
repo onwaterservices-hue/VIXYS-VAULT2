@@ -46,6 +46,13 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   } | null>(null);
 
   const handleDayPassCheckout = async () => {
+    if (!isAuthenticated) {
+      if (onOpenAuth) {
+        onOpenAuth('signup', quickEmailInput.trim() || undefined);
+      }
+      return;
+    }
+    
     setIsProcessingDayPass(true);
     setRestoreFeedback(null);
     const targetEmail = userEmail || quickEmailInput.trim() || undefined;

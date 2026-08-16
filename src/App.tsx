@@ -116,6 +116,8 @@ export default function App() {
   }>({ active: false, secondsRemaining: 0 });
 
   const [isEntitlementLoading, setIsEntitlementLoading] = useState<boolean>(true);
+  const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
+  const [paymentVerificationText, setPaymentVerificationText] = useState<string>('VERIFYING PAYMENT...');
 
   const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
     starter: true,
@@ -173,6 +175,13 @@ export default function App() {
     if (authState.isAuthenticated && authState.user?.email) {
       safeFetchJson<{ authenticated: boolean; user: any; discord: any }>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
         .then((res) => {
+          if (res && res.authenticated === false) {
+            setAuthState({ isAuthenticated: false, user: null });
+            setUserRole('UNPAID');
+            localStorage.removeItem('vixy_auth');
+            setActiveTab('landing');
+            return;
+          }
           if (res && res.authenticated && res.user) {
             if (res.user.trialSecondsRemaining !== undefined) {
               // Trial removed
@@ -719,7 +728,16 @@ export default function App() {
   const isPublicRoute = ['landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
-    <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
+    <>
+      {isVerifyingPayment && (
+        <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-4 bg-[#05020F]/95 backdrop-blur-md animate-fadeIn font-mono text-center">
+          <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(34,211,238,0.4)]" />
+          <h2 className="text-2xl font-black text-white tracking-widest uppercase animate-pulse">{paymentVerificationText}</h2>
+          <p className="text-purple-300 mt-3 max-w-md mx-auto text-sm">Please hold on while we securely verify your payment and provision your vault access.</p>
+        </div>
+      )}
+  
+      <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
       {isLoading && <LoadingOverlay onComplete={() => setIsLoading(false)} />}
 
       {/* Top Header Bar */}
@@ -1244,6 +1262,7 @@ export default function App() {
         onComplete={() => setActiveTab('terminal')}
       />
     </div>
+    </>
   );
 }
 

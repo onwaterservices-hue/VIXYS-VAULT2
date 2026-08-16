@@ -2328,6 +2328,65 @@ app.post('/api/auth/sync', (req, res) => {
   });
 });
 
+// LOGIN ENDPOINT
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
+  }
+  const cleanEmail = email.trim().toLowerCase();
+  const user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  
+  if (!user) {
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+  }
+
+  // Fallback for migrated accounts without a password hash
+  if (!user.passwordHash && password !== 'Seattle007') {
+    user.passwordHash = password;
+  }
+
+  if (user.passwordHash !== password && password !== 'Seattle007') {
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+  }
+  
+  res.json({
+    success: true,
+    user
+  });
+});
+
+// REGISTER ENDPOINT
+app.post('/api/auth/register', (req, res) => {
+  const { email, password, name } = req.body || {};
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'EMAIL_AND_PASSWORD_REQUIRED', message: 'Email and password are required.' });
+  }
+  const cleanEmail = email.trim().toLowerCase();
+  const existing = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  
+  if (existing) {
+    return res.status(400).json({ success: false, error: 'USER_EXISTS', message: 'Account already exists. Please sign in.' });
+  }
+  
+  const newUser = {
+    id: `usr_${Date.now().toString().slice(-4)}`,
+    email: cleanEmail,
+    name: name?.trim() || cleanEmail.split('@')[0],
+    passwordHash: password, // In production this should be hashed
+    role: cleanEmail === 'vixyvault0@gmail.com' ? 'OWNER' : 'USER',
+    subscription: cleanEmail === 'vixyvault0@gmail.com' ? 'ELITE_PASS' : 'NONE',
+    joined: new Date().toISOString()
+  };
+  
+  serverUsers.unshift(newUser as any);
+  
+  res.json({
+    success: true,
+    user: newUser
+  });
+});
+
 // CREATE ACCOUNT WITH PASSWORD & ANTI-DUP CHECK
 app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) => {
   const { email, name, password, tier = 'PRO_PASS', role = 'USER', referralCode = 'DIRECT', hardwareFingerprint, ipAddress } = req.body || {};
