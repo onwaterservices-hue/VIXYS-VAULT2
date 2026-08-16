@@ -329,7 +329,7 @@ export async function assignDiscordRoleToUser(
 
     // Determine role IDs from env (with fallbacks for all configured variable naming variations)
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
-    const dayPassRoleId = process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547';
+    const dayPassRoleId = process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547';
     const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || process.env.DISCORD_FREE_ROLE_ID || '1454661279305433202';
 
     let targetRoleId = verifiedRoleId;

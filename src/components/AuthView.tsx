@@ -31,14 +31,110 @@ export const AuthView: React.FC<AuthViewProps> = ({
   setUserRole,
   onSuccessNavigate,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'claim'>('login');
+  const [claimStep, setClaimStep] = useState<'request' | 'verify'>('request');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [claimOtp, setClaimOtp] = useState('');
+  const [claimPassword, setClaimPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [referralCode, setReferralCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+
+  const handleClaimRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail) {
+      setLoading(false);
+      setErrorMsg('Please enter your account email.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/claim/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail }),
+      });
+      const data = await res.json();
+      setLoading(false);
+      if (data.ok || data.success) {
+        setClaimStep('verify');
+        setSuccessMsg(data.message || 'Verification code sent to your email.');
+      } else {
+        setErrorMsg(data.message || 'Failed to request verification code.');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Network error requesting verification code. Please try again.');
+    }
+  };
+
+  const handleClaimVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setErrorMsg('');
+
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanOtp = claimOtp.trim();
+
+    if (!cleanEmail || !cleanOtp || !claimPassword) {
+      setLoading(false);
+      setErrorMsg('Email, 6-digit code, and new password are required.');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/auth/claim/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: cleanEmail,
+          otp: cleanOtp,
+          newPassword: claimPassword,
+        }),
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        setLoading(false);
+        setErrorMsg(data.message || 'Invalid or expired verification code.');
+        return;
+      }
+
+      const canonicalUser = data.user || {};
+      const canonicalUserId = canonicalUser.id || canonicalUser.uid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      const finalRole = canonicalUser.role === 'ADMIN' || canonicalUser.role === 'OWNER' ? 'ADMIN' : (canonicalUser.role === 'PRO' || canonicalUser.role === 'ELITE' ? 'PRO' : 'UNPAID');
+
+      setLoading(false);
+      setAuthState({
+        isAuthenticated: true,
+        user: {
+          id: canonicalUserId,
+          email: cleanEmail,
+          name: canonicalUser.name || cleanEmail.split('@')[0],
+          role: finalRole,
+          apiKey: canonicalUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
+          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
+        },
+      });
+      setUserRole(finalRole as any);
+      setSuccessMsg('Account claimed and password set successfully!');
+
+      if (onSuccessNavigate) {
+        setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
+      }
+    } catch (err) {
+      setLoading(false);
+      setErrorMsg('Verification failed. Please check your code.');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,7 +172,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
       if (!res?.success) {
         setLoading(false);
-        setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
+        if (res?.error === 'PASSWORD_CREDENTIAL_MISSING' || res?.error === 'ACCOUNT_NEEDS_CLAIM') {
+          setErrorMsg('Account found with active Day Pass / Stripe entitlement! Please verify your email to claim your access.');
+          setMode('claim');
+          setClaimStep('request');
+        } else {
+          setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
+        }
         return;
       }
 
@@ -194,6 +296,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <button
               onClick={() => {
                 setMode('login');
+                setErrorMsg('');
                 setSuccessMsg('');
               }}
               className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -207,6 +310,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <button
               onClick={() => {
                 setMode('register');
+                setErrorMsg('');
                 setSuccessMsg('');
               }}
               className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -217,6 +321,21 @@ export const AuthView: React.FC<AuthViewProps> = ({
             >
               Create Account
             </button>
+            <button
+              onClick={() => {
+                setMode('claim');
+                setClaimStep('request');
+                setErrorMsg('');
+                setSuccessMsg('');
+              }}
+              className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                mode === 'claim'
+                  ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg shadow-cyan-600/30'
+                  : 'text-purple-300/70 hover:text-white'
+              }`}
+            >
+              Claim Access
+            </button>
           </div>
 
           {successMsg ? (
@@ -225,6 +344,105 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <h3 className="text-lg font-bold text-white">{successMsg}</h3>
               <p className="text-xs text-purple-300 font-sans">Redirecting you to the trading terminal...</p>
             </div>
+          ) : mode === 'claim' ? (
+            claimStep === 'request' ? (
+              <form onSubmit={handleClaimRequest} className="space-y-4 text-xs font-mono">
+                {errorMsg && (
+                  <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-xs">
+                    {errorMsg}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">Purchased Stripe Email</label>
+                  <div className="relative">
+                    <Mail className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
+                    <input
+                      type="email"
+                      required
+                      placeholder="trader@vixysvault.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-black text-xs shadow-lg shadow-cyan-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <span>{loading ? 'Sending Code...' : 'Send Verification Code'}</span>
+                  {!loading && <ArrowRight className="w-4 h-4" />}
+                </button>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setClaimStep('verify')}
+                    className="text-[11px] text-cyan-300 hover:text-cyan-200 underline cursor-pointer"
+                  >
+                    Already have a verification code? Enter code
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleClaimVerify} className="space-y-4 text-xs font-mono">
+                {errorMsg && (
+                  <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-xs">
+                    {errorMsg}
+                  </div>
+                )}
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">Account Email</label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">6-Digit Verification Code</label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={6}
+                    placeholder="123456"
+                    value={claimOtp}
+                    onChange={(e) => setClaimOtp(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 tracking-widest text-center text-base focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">Create New Password</label>
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••••"
+                    value={claimPassword}
+                    onChange={(e) => setClaimPassword(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                >
+                  <span>{loading ? 'Verifying...' : 'Verify & Unlock Terminal'}</span>
+                  {!loading && <ArrowRight className="w-4 h-4" />}
+                </button>
+                <div className="text-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setClaimStep('request')}
+                    className="text-[11px] text-purple-300/80 hover:text-white underline cursor-pointer"
+                  >
+                    Didn't receive a code? Request new code
+                  </button>
+                </div>
+              </form>
+            )
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
               {errorMsg && (

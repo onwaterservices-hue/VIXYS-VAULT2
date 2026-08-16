@@ -128,6 +128,38 @@ export default function App() {
     canAccessAdminPanel: false,
   });
 
+  const [maintenanceState, setMaintenanceState] = useState<{
+    maintenance: boolean;
+    emergencyLock: boolean;
+    message: string;
+    reason?: string;
+  }>({
+    maintenance: false,
+    emergencyLock: false,
+    message: '',
+  });
+
+  useEffect(() => {
+    const checkMaintenance = () => {
+      fetch('/api/maintenance/status')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data && typeof data.maintenance === 'boolean') {
+            setMaintenanceState({
+              maintenance: data.maintenance,
+              emergencyLock: data.emergencyLock,
+              message: data.message || 'VIXY VAULT is temporarily in maintenance. Your account and active entitlement are safe.',
+              reason: data.reason,
+            });
+          }
+        })
+        .catch(() => {});
+    };
+    checkMaintenance();
+    const interval = setInterval(checkMaintenance, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -822,6 +854,41 @@ export default function App() {
   
       <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
       {isLoading && <LoadingOverlay onComplete={() => setIsLoading(false)} />}
+
+      {/* Professional Maintenance Banner */}
+      {(maintenanceState.maintenance || maintenanceState.emergencyLock) && (
+        <div className="bg-gradient-to-r from-amber-950/90 via-amber-900/90 to-purple-950/90 border-b border-amber-500/40 px-4 py-2.5 text-xs text-amber-200 flex flex-wrap items-center justify-between gap-3 z-40 backdrop-blur-md sticky top-0 shadow-lg">
+          <div className="flex items-center gap-2.5 max-w-5xl">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping flex-shrink-0" />
+            <span className="font-black uppercase tracking-wider text-amber-400 text-[11px] bg-amber-950/80 px-2 py-0.5 rounded border border-amber-500/50">
+              Maintenance Mode
+            </span>
+            <span className="text-amber-100 font-medium text-[11px] sm:text-xs">
+              {maintenanceState.message || 'VIXY VAULT is undergoing maintenance. Your account and active entitlement are safe. New checkouts and trading execution are temporarily paused.'}
+            </span>
+            {userRole === 'ADMIN' && (
+              <span className="bg-purple-900/80 border border-purple-400 text-purple-200 text-[10px] font-mono px-2 py-0.5 rounded font-black tracking-wider">
+                ADMIN BYPASS
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {!authState.isAuthenticated ? (
+              <button
+                onClick={() => handleOpenAuth('login')}
+                className="text-xs font-bold bg-amber-500/20 hover:bg-amber-500/40 text-amber-200 border border-amber-500/50 px-3 py-1 rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Existing Customer? Sign In
+              </button>
+            ) : (
+              <span className="text-[11px] text-emerald-400 font-mono font-bold flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                Session Active &amp; Entitlement Preserved
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Top Header Bar */}
       <Header

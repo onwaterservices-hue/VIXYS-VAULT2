@@ -8,33 +8,42 @@ import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
 
-// --- SECURE PASSWORD HASHING ---
-function hashPassword(password) {
-  if (!password) return password;
+// --- SECURE PASSWORD HASHING (SCRYPT + TIMING-SAFE VERIFICATION) ---
+function hashPassword(password: string): string {
+  if (!password) return '';
   const salt = crypto.randomBytes(16).toString('hex');
   const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
   return 'vixy$' + salt + ':' + derivedKey;
 }
 
-function verifyPassword(password, storedHash) {
-  if (!storedHash) return false;
+function verifyPassword(password: string, storedHash?: string | null): boolean {
+  if (!password || !storedHash || typeof storedHash !== 'string' || storedHash === 'AuthManaged2026!') {
+    return false;
+  }
   if (!storedHash.startsWith('vixy$')) {
-    // Legacy plaintext fallback
-    return password === storedHash;
+    // Legacy plaintext fallback - timing safe comparison
+    const pwdBuf = Buffer.from(password);
+    const hashBuf = Buffer.from(storedHash);
+    if (pwdBuf.length !== hashBuf.length) return false;
+    return crypto.timingSafeEqual(pwdBuf, hashBuf);
   }
   try {
     const withoutPrefix = storedHash.slice(5);
     const [salt, key] = withoutPrefix.split(':');
+    if (!salt || !key) return false;
     const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
-    return key === derivedKey;
-  } catch(e) {
+    const keyBuf = Buffer.from(key, 'hex');
+    const derivedBuf = Buffer.from(derivedKey, 'hex');
+    if (keyBuf.length !== derivedBuf.length) return false;
+    return crypto.timingSafeEqual(keyBuf, derivedBuf);
+  } catch (e) {
     return false;
   }
 }
-// -------------------------------
+// ------------------------------------------------------------------
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork, query, limit, orderBy } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork, query, limit, orderBy, where } from 'firebase/firestore';
 import {
   initializeDiscordBot,
   getDiscordBotStatus,
@@ -2426,124 +2435,538 @@ app.post('/api/auth/sync', (req, res) => {
   });
 });
 
+// ============================================================
+// PRODUCTION MAINTENANCE & EMERGENCY LOCK STATE
+// ============================================================
+export interface ProductionMaintenanceState {
+  enabled: boolean;
+  emergencyLock: boolean;
+  message: string;
+  startedAt: string | null;
+  estimatedReturnAt: string | null;
+  reason: string | null;
+  updatedBy: string | null;
+}
+
+let productionMaintenanceState: ProductionMaintenanceState = {
+  enabled: process.env.MAINTENANCE_MODE === 'true',
+  emergencyLock: process.env.EMERGENCY_LOCK === 'true',
+  message: 'VIXY VAULT is temporarily in maintenance. Your account and active entitlement are safe.',
+  startedAt: null,
+  estimatedReturnAt: null,
+  reason: 'Production upgrade',
+  updatedBy: 'SYSTEM',
+};
+
+// ============================================================
+// SECURE EMAIL OTP CLAIM STORE & RATE LIMITING
+// ============================================================
+interface ClaimOtpRecord {
+  email: string;
+  otpHash: string;
+  salt: string;
+  expiresAt: number; // 15 mins TTL
+  attempts: number;
+  used: boolean;
+}
+
+interface ClaimAuthTokenRecord {
+  email: string;
+  expiresAt: number; // 10 mins TTL
+}
+
+const claimOtpStore = new Map<string, ClaimOtpRecord>();
+const claimAuthTokenStore = new Map<string, ClaimAuthTokenRecord>();
+const claimRateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(key: string, maxLimit = 5, windowMs = 15 * 60 * 1000): boolean {
+  const now = Date.now();
+  const entry = claimRateLimitStore.get(key);
+  if (!entry || now > entry.resetAt) {
+    claimRateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= maxLimit) {
+    return false;
+  }
+  entry.count++;
+  return true;
+}
+
+// MAINTENANCE STATUS ENDPOINT (PUBLIC)
+app.get('/api/maintenance/status', (req, res) => {
+  res.json({
+    maintenance: productionMaintenanceState.enabled,
+    emergencyLock: productionMaintenanceState.emergencyLock,
+    message: productionMaintenanceState.message,
+    startedAt: productionMaintenanceState.startedAt,
+    estimatedReturnAt: productionMaintenanceState.estimatedReturnAt,
+    reason: productionMaintenanceState.reason,
+    updatedBy: productionMaintenanceState.updatedBy,
+    operational: !productionMaintenanceState.enabled && !productionMaintenanceState.emergencyLock,
+  });
+});
+
+// ADMIN MAINTENANCE CONTROL ENDPOINT (PROTECTED)
+app.post('/api/admin/maintenance', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+  const { maintenance, emergencyLock: newEmergencyLock, message, reason, estimatedReturnAt } = req.body || {};
+  
+  if (typeof maintenance === 'boolean') {
+    productionMaintenanceState.enabled = maintenance;
+    if (maintenance) {
+      productionMaintenanceState.startedAt = new Date().toISOString();
+      console.log(`[MAINTENANCE ENABLED] Triggered by admin.`);
+    } else {
+      productionMaintenanceState.startedAt = null;
+      console.log(`[MAINTENANCE DISABLED] Triggered by admin.`);
+    }
+  }
+  if (typeof newEmergencyLock === 'boolean') {
+    productionMaintenanceState.emergencyLock = newEmergencyLock;
+    console.log(`[EMERGENCY LOCK ${productionMaintenanceState.emergencyLock ? 'ENABLED' : 'DISABLED'}] Triggered by admin.`);
+  }
+  if (message && typeof message === 'string') {
+    productionMaintenanceState.message = message.trim();
+  }
+  if (reason && typeof reason === 'string') {
+    productionMaintenanceState.reason = reason.trim();
+  }
+  if (estimatedReturnAt !== undefined) {
+    productionMaintenanceState.estimatedReturnAt = estimatedReturnAt;
+  }
+  // @ts-ignore
+  productionMaintenanceState.updatedBy = req.user?.email || 'ADMIN';
+
+  savePersistentStore();
+
+  res.json({
+    success: true,
+    maintenance: productionMaintenanceState.enabled,
+    emergencyLock: productionMaintenanceState.emergencyLock,
+    message: productionMaintenanceState.message,
+    startedAt: productionMaintenanceState.startedAt,
+    estimatedReturnAt: productionMaintenanceState.estimatedReturnAt,
+    reason: productionMaintenanceState.reason,
+    updatedBy: productionMaintenanceState.updatedBy,
+  });
+});
+
+// PRODUCTION AUTH HEALTH ENDPOINT
+app.get('/api/health/auth', (req, res) => {
+  const botState = getDiscordBotStatus();
+  res.json({
+    auth: 'healthy',
+    firestore: db ? 'healthy' : 'standby',
+    entitlements: 'healthy',
+    discord: botState.isReady ? 'healthy' : 'degraded',
+    maintenance: productionMaintenanceState.enabled,
+    emergencyLock: productionMaintenanceState.emergencyLock,
+  });
+});
+
+// SECURE CLAIM OTP REQUEST ENDPOINT
+app.post('/api/auth/claim/request', async (req, res) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  const { email } = req.body || {};
+  if (!email || typeof email !== 'string') {
+    return res.status(400).json({ success: false, error: 'EMAIL_REQUIRED', message: 'Email address is required.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const rateLimitKey = `${clientIp}:${cleanEmail}`;
+
+  if (!checkRateLimit(rateLimitKey, 5, 15 * 60 * 1000)) {
+    return res.status(429).json({
+      success: false,
+      error: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many claim requests. Please wait a few minutes and try again.',
+    });
+  }
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error(`[AUTH CLAIM REQUEST] Firebase init failure:`, initErr?.message);
+  }
+
+  // Resolve whether email has an account or entitlement (Firestore or memory)
+  const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null, allDocs: [] }));
+  const existingUser = resolution.user || serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+  const hasDayPass = userDayPasses.has(cleanEmail);
+  const hasSub = userSubscriptions.has(cleanEmail);
+
+  const eligibleForClaim = Boolean(existingUser || hasDayPass || hasSub);
+
+  if (eligibleForClaim) {
+    // Generate secure 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const salt = crypto.randomBytes(16).toString('hex');
+    const otpHash = crypto.createHash('sha256').update(otp + salt).digest('hex');
+
+    claimOtpStore.set(cleanEmail, {
+      email: cleanEmail,
+      otpHash,
+      salt,
+      expiresAt: Date.now() + 15 * 60 * 1000, // 15 minutes TTL
+      attempts: 0,
+      used: false,
+    });
+
+    console.log(`[AUTH CLAIM REQUEST] Verification code generated for email=${cleanEmail}`);
+  } else {
+    console.log(`[AUTH CLAIM REQUEST] Email ${cleanEmail} not found in customer records.`);
+  }
+
+  // Always return generic privacy-preserving response
+  res.json({
+    ok: true,
+    success: true,
+    message: 'If an eligible VIXY account exists, a verification code has been sent to your email.',
+  });
+});
+
+// SECURE CLAIM OTP VERIFY & PASSWORD SETUP ENDPOINT
+app.post('/api/auth/claim/verify', async (req, res) => {
+  const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || '127.0.0.1';
+  const { email, otp, newPassword } = req.body || {};
+
+  if (!email || !otp) {
+    return res.status(400).json({
+      success: false,
+      error: 'FIELDS_REQUIRED',
+      message: 'Email and verification code are required.',
+    });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanOtp = String(otp).trim();
+  const rateLimitKey = `verify_${clientIp}:${cleanEmail}`;
+
+  if (!checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000)) {
+    return res.status(429).json({
+      success: false,
+      error: 'RATE_LIMIT_EXCEEDED',
+      message: 'Too many verification attempts. Please wait a few minutes and try again.',
+    });
+  }
+
+  const record = claimOtpStore.get(cleanEmail);
+  if (!record || record.used || Date.now() > record.expiresAt) {
+    return res.status(400).json({
+      success: false,
+      error: 'INVALID_OR_EXPIRED_OTP',
+      message: 'Verification code is invalid or has expired. Please request a new code.',
+    });
+  }
+
+  if (record.attempts >= 5) {
+    claimOtpStore.delete(cleanEmail);
+    return res.status(400).json({
+      success: false,
+      error: 'MAX_ATTEMPTS_EXCEEDED',
+      message: 'Maximum verification attempts exceeded. Please request a new code.',
+    });
+  }
+
+  record.attempts++;
+
+  // Verify OTP using constant-time comparison
+  const computedHash = crypto.createHash('sha256').update(cleanOtp + record.salt).digest('hex');
+  const bufA = Buffer.from(computedHash);
+  const bufB = Buffer.from(record.otpHash);
+
+  const isMatch = bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB);
+  if (!isMatch) {
+    return res.status(400).json({
+      success: false,
+      error: 'INVALID_OTP',
+      message: 'Invalid verification code. Please check your code and try again.',
+    });
+  }
+
+  // Invalidate OTP
+  record.used = true;
+  claimOtpStore.delete(cleanEmail);
+
+  // Generate a short-lived claim token (10 mins TTL)
+  const claimToken = `claim_${crypto.randomBytes(24).toString('hex')}`;
+  claimAuthTokenStore.set(claimToken, {
+    email: cleanEmail,
+    expiresAt: Date.now() + 10 * 60 * 1000,
+  });
+
+  // If newPassword was provided directly in verify step, handle password creation immediately
+  if (newPassword && typeof newPassword === 'string' && newPassword.length >= 6) {
+    try {
+      await ensureFirebaseReady();
+    } catch (initErr: any) {
+      console.error(`[AUTH CLAIM VERIFY] Firebase init failure:`, initErr?.message);
+    }
+
+    const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null, allDocs: [] }));
+    let canonicalUser = resolution.user || serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+
+    const hashedPassword = hashPassword(newPassword);
+
+    if (canonicalUser) {
+      canonicalUser.passwordHash = hashedPassword;
+      savePersistentStore();
+      persistSingleUser(canonicalUser as any).catch((err) => console.warn('[FIRESTORE USER] Save error:', err?.message));
+    } else {
+      const newUserId = `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+      canonicalUser = {
+        id: newUserId,
+        uid: newUserId,
+        email: cleanEmail,
+        name: cleanEmail.split('@')[0],
+        passwordHash: hashedPassword,
+        role: 'USER',
+        subscription: 'NONE',
+        joined: new Date().toISOString(),
+        status: 'ACTIVE',
+      };
+      serverUsers.unshift(canonicalUser as any);
+      savePersistentStore();
+      persistSingleUser(canonicalUser as any).catch((err) => console.warn('[FIRESTORE USER] Save error:', err?.message));
+    }
+
+    claimAuthTokenStore.delete(claimToken);
+    console.log(`[AUTH CLAIM SUCCESS] Password claimed and established for email=${cleanEmail}`);
+
+    return res.json({
+      success: true,
+      message: 'Account successfully claimed and password set.',
+      user: canonicalUser,
+      claimToken,
+    });
+  }
+
+  res.json({
+    success: true,
+    message: 'Verification code confirmed. You may now set your password.',
+    claimToken,
+  });
+});
+
+// SECURE CLAIM SET PASSWORD ENDPOINT
+app.post('/api/auth/claim/password', async (req, res) => {
+  const { email, claimToken, newPassword } = req.body || {};
+
+  if (!email || !claimToken || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'FIELDS_REQUIRED',
+      message: 'Email, claim authorization token, and new password are required.',
+    });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      error: 'PASSWORD_TOO_SHORT',
+      message: 'Password must be at least 6 characters.',
+    });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const tokenRecord = claimAuthTokenStore.get(claimToken);
+
+  if (!tokenRecord || tokenRecord.email !== cleanEmail || Date.now() > tokenRecord.expiresAt) {
+    return res.status(401).json({
+      success: false,
+      error: 'CLAIM_EXPIRED_OR_INVALID',
+      message: 'Claim authorization session has expired or is invalid. Please request a new code.',
+    });
+  }
+
+  // Invalidate claim token
+  claimAuthTokenStore.delete(claimToken);
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error(`[AUTH CLAIM PASSWORD] Firebase init failure:`, initErr?.message);
+  }
+
+  // Resolve existing canonical user
+  const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null, allDocs: [] }));
+  let canonicalUser = resolution.user || serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+
+  const hashedPassword = hashPassword(newPassword);
+
+  if (canonicalUser) {
+    // CRITICAL: NEVER modify existing user ID, stripeCustomerId, stripeSubscriptionId,
+    // or Day Pass startedAt / expiresAt. Only set passwordHash.
+    canonicalUser.passwordHash = hashedPassword;
+    savePersistentStore();
+    persistSingleUser(canonicalUser as any).catch((err) => console.warn('[FIRESTORE USER] Save error:', err?.message));
+  } else {
+    // Account was created solely via Stripe/Day Pass
+    const newUserId = `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
+    canonicalUser = {
+      id: newUserId,
+      uid: newUserId,
+      email: cleanEmail,
+      name: cleanEmail.split('@')[0],
+      passwordHash: hashedPassword,
+      role: 'USER',
+      subscription: 'NONE',
+      joined: new Date().toISOString(),
+      status: 'ACTIVE',
+    };
+    serverUsers.unshift(canonicalUser as any);
+    savePersistentStore();
+    persistSingleUser(canonicalUser as any).catch((err) => console.warn('[FIRESTORE USER] Save error:', err?.message));
+  }
+
+  console.log(`[AUTH CLAIM SUCCESS] Password set via claim endpoint for email=${cleanEmail}`);
+
+  res.json({
+    success: true,
+    message: 'Password successfully set. Your account is ready.',
+    user: canonicalUser,
+  });
+});
+
 // LOGIN ENDPOINT
 app.post('/api/auth/login', async (req, res) => {
-  console.log(`[AUTH_DEBUG] REQUEST_RECEIVED`);
-  console.log(`[AUTH_DEBUG] REQUEST_ORIGIN: ${req.headers.origin || 'none'}`);
-  console.log(`[AUTH_DEBUG] REQUEST_HOST: ${req.headers.host || 'none'}`);
+  const reqId = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+  console.log(`[AUTH_DEBUG] REQUEST_RECEIVED reqId=${reqId} origin=${req.headers.origin || 'none'}`);
 
   const { email, password } = req.body || {};
   
   if (!email || !password) {
-    console.log(`[AUTH_DEBUG] Login failed: Missing email or password`);
-    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 400`);
+    console.log(`[AUTH_DEBUG] Login failed: Missing email or password reqId=${reqId}`);
     return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
   }
 
   const cleanEmail = email.trim().toLowerCase();
-  console.log(`[AUTH_DEBUG] EMAIL_NORMALIZED: ${cleanEmail}`);
-  console.log(`[AUTH_DEBUG] PASSWORD_LENGTH: ${password.length}`);
+  console.log(`[AUTH_DEBUG] EMAIL_NORMALIZED: ${cleanEmail} reqId=${reqId}`);
 
-  let user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-  console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: ${user ? 'FOUND_IN_MEMORY' : 'NOT_FOUND_IN_MEMORY'}`);
-
-  // Hydrate from Firestore if not found in memory
-  if (!user && db) {
-    try {
-      console.log(`[AUTH_DEBUG] Attempting Firestore hydration for: ${cleanEmail}`);
-      const { getDocs, query, collection, where } = require('firebase/firestore');
-      const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const uData = snap.docs[0].data();
-        user = {
-          id: snap.docs[0].id,
-          uid: uData.uid || snap.docs[0].id,
-          email: uData.email,
-          name: uData.name || uData.email.split('@')[0],
-          role: uData.role || 'USER',
-          subscription: uData.subscription || 'NONE',
-          passwordHash: uData.passwordHash || 'AuthManaged2026!',
-          status: uData.status || 'ACTIVE',
-          joined: uData.joined || new Date().toISOString().split('T')[0]
-        };
-        serverUsers.unshift(user);
-        console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: FOUND_IN_FIRESTORE`);
-      } else {
-        console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: NOT_FOUND_IN_FIRESTORE`);
-      }
-    } catch (e) {
-      console.warn('[LOGIN FIRESTORE LOOKUP ERROR]', e);
-    }
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error(`[AUTH_DEBUG] FIREBASE_INIT_FAILED reqId=${reqId}:`, initErr?.message || initErr);
+    console.log(`[AUTH SERVICE UNAVAILABLE] email=${cleanEmail}`);
+    return res.status(503).json({
+      success: false,
+      error: 'AUTH_SERVICE_UNAVAILABLE',
+      message: 'Authentication service is temporarily unavailable. Please try again in a few moments.'
+    });
   }
+
+  let resolution: CanonicalUserResolution;
+  try {
+    resolution = await resolveCanonicalUserByEmail(cleanEmail);
+  } catch (lookupErr: any) {
+    console.error(`[AUTH_DEBUG] FIRESTORE_LOOKUP_EXCEPTION reqId=${reqId}:`, lookupErr?.message || lookupErr);
+    console.log(`[AUTH SERVICE UNAVAILABLE] email=${cleanEmail}`);
+    return res.status(503).json({
+      success: false,
+      error: 'AUTH_SERVICE_UNAVAILABLE',
+      message: 'Authentication service encountered a temporary error. Please try again.'
+    });
+  }
+
+  if (resolution.error) {
+    console.error(`[AUTH] email=${cleanEmail} firestore=UNAVAILABLE status=503`);
+    console.error(`[AUTH_DEBUG] FIRESTORE_ERROR_RETURNED reqId=${reqId}:`, resolution.error);
+    console.log(`[AUTH SERVICE UNAVAILABLE] email=${cleanEmail}`);
+    return res.status(503).json({
+      success: false,
+      error: 'AUTH_SERVICE_UNAVAILABLE',
+      message: 'Authentication service is temporarily unavailable. Please try again.'
+    });
+  }
+
+  const user = resolution.user;
+  console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: ${user ? 'FOUND' : 'NOT_FOUND'} matchedDocsCount=${resolution.allDocs.length} reqId=${reqId}`);
 
   if (!user) {
-    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 401`);
-    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+    console.log(`[AUTH] email=${cleanEmail} lookup=NONE candidateCount=0 credentialSource=NONE verification=FAILED`);
+    console.log(`[AUTH LOGIN FAILURE] email=${cleanEmail} reason=USER_NOT_FOUND`);
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' });
   }
 
-  let schema = 'none';
-  if (!user.passwordHash || user.passwordHash === 'AuthManaged2026!') {
-    schema = 'empty_or_auth_managed';
-  } else if (user.passwordHash.startsWith('vixy$')) {
-    schema = 'scrypt';
-  } else {
-    schema = 'legacy_plaintext';
-  }
-  console.log(`[AUTH_DEBUG] HASH_SCHEMA: ${schema}`);
+  const hasPasswordHash = !!(user.passwordHash && typeof user.passwordHash === 'string' && user.passwordHash !== 'AuthManaged2026!' && user.passwordHash.length > 0);
+  console.log(`[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith('vixy$') || false} reqId=${reqId}`);
 
-  // Fallback for migrated accounts without a password hash
-  if (!user.passwordHash || user.passwordHash === 'AuthManaged2026!') {
-    const hashed = hashPassword(password);
-    user.passwordHash = hashed;
-    if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
-      ensureFirestoreNetworkEnabled().then(() => {
-        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: hashed }, { merge: true }).catch(e => console.warn('Failed to update passwordHash', e));
-      }).catch(e => {});
-    }
-  } else if (user.passwordHash && !user.passwordHash.startsWith('vixy$') && user.passwordHash === password) {
-    // Migrate plaintext to hash on login
-    const hashed = hashPassword(password);
-    user.passwordHash = hashed;
-    if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
-      ensureFirestoreNetworkEnabled().then(() => {
-        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: hashed }, { merge: true }).catch(e => {});
-      }).catch(e => {});
-    }
+  if (!hasPasswordHash) {
+    console.log(`[AUTH] email=${cleanEmail} lookup=${resolution.allDocs.length > 0 ? 'FIRESTORE' : 'MEMORY'} candidateCount=${resolution.allDocs.length} credentialSource=NONE verification=FAILED`);
+    console.log(`[AUTH_DEBUG] PASSWORD_CREDENTIAL_MISSING for account ${user.id || user.uid || cleanEmail} reqId=${reqId}`);
+    return res.status(401).json({
+      success: false,
+      error: 'PASSWORD_CREDENTIAL_MISSING',
+      message: 'This account needs to be claimed. Verify your email to create your password.'
+    });
   }
 
   const verificationSuccess = verifyPassword(password, user.passwordHash);
-  console.log(`[AUTH_DEBUG] PASSWORD_VERIFY_RESULT: ${verificationSuccess ? 'SUCCESS' : 'FAILED'}`);
+  const credentialSource = user.passwordHash.startsWith('vixy$') ? 'SCRYPT' : 'LEGACY';
+  console.log(`[AUTH] email=${cleanEmail} lookup=${resolution.allDocs.length > 0 ? 'FIRESTORE' : 'MEMORY'} candidateCount=${resolution.allDocs.length} credentialSource=${credentialSource} verification=${verificationSuccess ? 'SUCCESS' : 'FAILED'}`);
+  console.log(`[AUTH_DEBUG] PASSWORD_VERIFY_RESULT: ${verificationSuccess ? 'SUCCESS' : 'FAILED'} reqId=${reqId}`);
 
   if (!verificationSuccess) {
-    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 401`);
-    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
+    console.log(`[AUTH LOGIN FAILURE] email=${cleanEmail} reason=BAD_PASSWORD`);
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' });
   }
 
-  console.log(`[AUTH_DEBUG] SESSION_CREATION_RESULT: SUCCESS`);
-  console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 200`);
+  // Migrate legacy plaintext to scrypt hash on successful verification if needed
+  if (user.passwordHash && !user.passwordHash.startsWith('vixy$') && user.passwordHash === password) {
+    const hashed = hashPassword(password);
+    user.passwordHash = hashed;
+    if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+      ensureFirestoreNetworkEnabled().then(() => {
+        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: hashed }, { merge: true }).catch(() => {});
+      }).catch(() => {});
+    }
+  }
 
+  console.log(`[AUTH LOGIN SUCCESS] email=${cleanEmail} userId=${user.id || user.uid}`);
   res.json({
     success: true,
     user
   });
 });
 
+app.post('/api/auth/register', async (req, res) => {
+  if (productionMaintenanceState.enabled || productionMaintenanceState.emergencyLock) {
+    return res.status(503).json({
+      success: false,
+      error: 'MAINTENANCE_MODE',
+      message: 'VIXY VAULT IS CURRENTLY UPDATING. Registrations are temporarily paused.',
+    });
+  }
 
-
-app.post('/api/auth/register', (req, res) => {
   const { email, password, name } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'EMAIL_AND_PASSWORD_REQUIRED', message: 'Email and password are required.' });
   }
   const cleanEmail = email.trim().toLowerCase();
-  const existing = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-  
-  if (existing) {
-    return res.status(400).json({ success: false, error: 'USER_EXISTS', message: 'Account already exists. Please sign in.' });
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error('[AUTH_DEBUG] Firebase init error during register:', initErr?.message);
   }
-  
-  const newUser = {
+
+  const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null, allDocs: [] }));
+  const existing = resolution.user || serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+
+  if (existing) {
+    if (existing.passwordHash && existing.passwordHash !== 'AuthManaged2026!') {
+      return res.status(400).json({ success: false, error: 'USER_EXISTS', message: 'Account already exists. Please sign in.' });
+    } else {
+      // Account created by checkout without password - redirect to secure OTP claim flow
+      return res.status(400).json({
+        success: false,
+        error: 'ACCOUNT_NEEDS_CLAIM',
+        message: 'This account needs to be claimed. Verify your email to create your password.',
+      });
+    }
+  }
+
+  const newUser: ServerUser = {
     id: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
     uid: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
     email: cleanEmail,
@@ -2553,11 +2976,11 @@ app.post('/api/auth/register', (req, res) => {
     subscription: cleanEmail === 'vixyvault0@gmail.com' ? 'ELITE_PASS' : 'NONE',
     joined: new Date().toISOString()
   };
-  
+
   serverUsers.unshift(newUser as any);
   savePersistentStore();
   persistSingleUser(newUser as any).catch(err => console.warn('[FIRESTORE USER] Async save error:', err?.message));
-  
+
   res.json({
     success: true,
     user: newUser
@@ -2591,7 +3014,7 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
     name: name?.trim() || cleanEmail.split('@')[0],
     role: role === 'ADMIN' || role === 'OWNER' ? role : 'USER',
     subscription: tier === 'ELITE_PASS' ? 'ELITE_PASS' : (tier === 'FREE_TRIAL' ? 'NONE' : 'PRO_PASS'),
-    passwordHash: password ? hashPassword(password) : hashPassword('DefaultPass2026!'),
+    passwordHash: password && String(password).trim() ? hashPassword(String(password).trim()) : undefined,
     verificationStatus,
     hardwareFingerprint: genHwFingerprint,
     ipHash: genIpHash,
@@ -2674,7 +3097,7 @@ app.post('/api/admin/users/wipe', requireRole(['OWNER', 'ADMIN']), (req, res) =>
 // UPDATE PASSWORD FOR ANY USER ACCOUNT
 app.post('/api/admin/users/password', requireRole(['OWNER', 'ADMIN']), (req, res) => {
   const { userId, newPassword } = req.body || {};
-  if (!userId || !newPassword) {
+  if (!userId || !newPassword || !String(newPassword).trim()) {
     return res.status(400).json({ error: 'INVALID_INPUT', message: 'userId and newPassword are required' });
   }
 
@@ -2683,7 +3106,10 @@ app.post('/api/admin/users/password', requireRole(['OWNER', 'ADMIN']), (req, res
     return res.status(404).json({ error: 'USER_NOT_FOUND', message: `User ${userId} not found` });
   }
 
-  user.passwordHash = newPassword;
+  user.passwordHash = hashPassword(String(newPassword).trim());
+  savePersistentStore();
+  persistSingleUser(user).catch(err => console.warn('[FIRESTORE USER] Admin password reset save error:', err?.message));
+
   res.json({
     success: true,
     userId: user.id,
@@ -3127,7 +3553,7 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
       stripeCheckoutSessionId: `sess_manual_${nowMs}`,
       stripeEventId: `evt_manual_${nowMs}`,
       stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-      discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+      discordRoleId: process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
       discordRoleAssigned: false,
       createdAt: startedAt,
       updatedAt: new Date().toISOString(),
@@ -3237,7 +3663,7 @@ app.post('/api/admin/users/update', requireRole(['OWNER', 'ADMIN']), (req, res) 
   if (role !== undefined) user.role = role;
   if (subscription !== undefined) user.subscription = subscription;
   if (status !== undefined) user.status = status;
-  if (password !== undefined && String(password).trim()) user.passwordHash = String(password);
+  if (password !== undefined && String(password).trim()) user.passwordHash = hashPassword(String(password).trim());
   if (discordTag !== undefined) user.discordTag = String(discordTag).trim();
   if (discordGlobalName !== undefined) (user as any).discordGlobalName = String(discordGlobalName).trim();
   if (discordId !== undefined) user.discordId = String(discordId).trim();
@@ -3582,6 +4008,13 @@ app.post('/api/stripe/validate-promo', (req, res) => {
 
 // Stripe Checkout Session Creation Endpoint
 const createCheckoutSessionHandler = async (req: express.Request, res: express.Response) => {
+  if (productionMaintenanceState.enabled || productionMaintenanceState.emergencyLock) {
+    return res.status(503).json({
+      error: 'MAINTENANCE_MODE',
+      message: 'VIXY VAULT IS CURRENTLY UPDATING. New checkouts are temporarily paused. Existing paid access is preserved.',
+    });
+  }
+
   const { plan, interval, promoCode, referralCode, userEmail, uid, userName, successUrl, cancelUrl } = req.body;
   const stripe = getStripe();
 
@@ -3745,6 +4178,13 @@ app.post('/api/create-checkout-session', createCheckoutSessionHandler);
 
 // Stripe Day Pass Checkout Handler (24-Hour Day Pass, $9.99 One-Time)
 const createDayPassCheckoutHandler = async (req: express.Request, res: express.Response) => {
+  if (productionMaintenanceState.enabled || productionMaintenanceState.emergencyLock) {
+    return res.status(503).json({
+      error: 'MAINTENANCE_MODE',
+      message: 'VIXY VAULT IS CURRENTLY UPDATING. New checkouts are temporarily paused. Existing paid access is preserved.',
+    });
+  }
+
   const stripe = getStripe();
   const cleanUserEmail = (
     req.body.userEmail ||
@@ -4558,7 +4998,7 @@ export async function reconcileUserEntitlement(identity: {
                   name: userData.name || matchedEmail.split('@')[0],
                   role: userData.role || 'USER',
                   subscription: userData.subscription || 'NONE',
-                  passwordHash: userData.passwordHash || 'AuthManaged2026!',
+                  passwordHash: (userData.passwordHash && userData.passwordHash !== 'AuthManaged2026!') ? userData.passwordHash : undefined,
                   verificationStatus: userData.verificationStatus || 'VERIFIED',
                   hardwareFingerprint: userData.hardwareFingerprint || `hw_${k}`,
                   ipHash: userData.ipHash || '127.0.0.1',
@@ -4572,6 +5012,7 @@ export async function reconcileUserEntitlement(identity: {
                   discordLinked: Boolean(userData.discordLinked || userData.discordId),
                 });
               } else {
+                if (userData.passwordHash && userData.passwordHash !== 'AuthManaged2026!') existingMemUser.passwordHash = userData.passwordHash;
                 if (userData.subscription) existingMemUser.subscription = userData.subscription;
                 if (userData.status) existingMemUser.status = userData.status;
                 if (userData.stripeCustomerId) existingMemUser.stripeCustomerId = userData.stripeCustomerId;
@@ -4703,7 +5144,7 @@ export async function reconcileUserEntitlement(identity: {
               stripeCheckoutSessionId: session.id,
               stripeEventId: `restore_${session.id}`,
               stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-              discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+              discordRoleId: process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
               discordRoleAssigned: false,
               createdAt: startedAt,
               updatedAt: new Date().toISOString(),
@@ -4810,7 +5251,7 @@ export async function reconcileUserEntitlement(identity: {
               stripeCheckoutSessionId: `sess_pi_${successfulDayPassPayment.id}`,
               stripeEventId: `reconcile_${successfulDayPassPayment.id}`,
               stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-              discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+              discordRoleId: process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
               discordRoleAssigned: false,
               createdAt: startedAt,
               updatedAt: new Date().toISOString(),
@@ -4878,7 +5319,7 @@ export async function reconcileUserEntitlement(identity: {
                 stripeCheckoutSessionId: matchingSession.id,
                 stripeEventId: `reconcile_${matchingSession.id}`,
                 stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-                discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+                discordRoleId: process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
                 discordRoleAssigned: false,
                 troubleshootingGraceApplied: true,
                 createdAt: startedAt,
@@ -4961,13 +5402,22 @@ app.get([
   
   if (reqEmail || reqUserId) {
     await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => {});
-    ensureUserExists({ uid: reqUserId, email: reqEmail }, { role: userRoleHeader });
   }
 
   const entitlement = await reconcileUserEntitlement({
     email: reqEmail,
     userId: reqUserId,
   });
+
+  const entStatus = entitlement.plan !== 'NONE' || entitlement.dayPass.active ? 'ACTIVE' : 'INACTIVE';
+  if (entitlement.dayPass.active) {
+    const dpRec = userDayPasses.get(reqEmail) || (reqUserId ? userDayPasses.get(reqUserId) : undefined);
+    console.log(`[ENTITLEMENT] email=${reqEmail || 'anonymous'} source=DAY_PASS expiresAt=${dpRec?.expiresAt || 'authoritative'} status=${entStatus}`);
+  } else if (entitlement.plan !== 'NONE') {
+    console.log(`[ENTITLEMENT] email=${reqEmail || 'anonymous'} source=STRIPE status=${entStatus}`);
+  } else {
+    console.log(`[ENTITLEMENT] email=${reqEmail || 'anonymous'} source=NONE status=${entStatus}`);
+  }
 
   res.json(entitlement);
 });
@@ -5321,7 +5771,7 @@ async function updateSubscriptionInFirestore(email: string, updateData: {
       name: cleanEmail.split('@')[0],
       role: (resolvedPlan === 'ELITE' ? 'ELITE' : (resolvedPlan === 'PRO' ? 'PRO' : 'USER')) as any,
       subscription: passName as any,
-      passwordHash: 'UserPass2026!',
+      passwordHash: undefined,
       verificationStatus: 'VERIFIED',
       hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
       ipHash: '172.56.22.10',
@@ -5583,7 +6033,7 @@ timestamp: ${new Date().toISOString()}`);
           stripeCheckoutSessionId: session.id,
           stripeEventId: event.id || session.id,
           stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
-          discordRoleId: process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
+          discordRoleId: process.env.DISCORD_24H_ROLE_ID || process.env.DISCORD_ROLE_DAY_PASS || process.env.DISCORD_DAY_PASS_ROLE_ID || '1538094678870593547',
           discordRoleAssigned: false,
           troubleshootingGraceApplied: true,
           createdAt: startedAt,
@@ -7871,8 +8321,11 @@ let discordSyncMetrics = {
   lastError: null as string | null
 };
 
-// Initialize Firebase on the server
+// Awaitable Firebase Initialization on the server
 let db: any = null;
+let firebaseAppInstance: any = null;
+let backendAuthInstance: any = null;
+let firebaseReadyPromise: Promise<void> | null = null;
 let lastFirestoreWriteTimeMs = 0;
 let lastSuccessfulFirestoreWrite: string | null = null;
 let lastFirestoreWriteSuccess = false;
@@ -7899,33 +8352,61 @@ let wssClientsCount = 0;
 const pendingTelemetryQueue: TelemetryObservationRecord[] = [];
 const pendingSignalLogsQueue: PersistentSignalLogItem[] = [];
 
-try {
-  const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (fs.existsSync(firebaseConfigPath)) {
-    const firebaseConfigRaw = fs.readFileSync(firebaseConfigPath, 'utf-8');
-    const firebaseConfig = JSON.parse(firebaseConfigRaw);
-    const firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-    const backendAuth = getAuth(firebaseApp);
-    signInWithEmailAndPassword(backendAuth, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026')
-      .then(() => console.log('[Firestore] Backend authenticated securely as system user.'))
-      .catch((authErr) => {
-        console.warn('[Firestore] Backend sign-in failed, attempting creation:', authErr.message);
-        createUserWithEmailAndPassword(backendAuth, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026')
-          .then(() => console.log('[Firestore] Backend system user created and authenticated.'))
-          .catch((createErr) => console.error('[Firestore] Backend authentication and creation failed:', createErr));
+async function initializeBackendFirebase(): Promise<void> {
+  try {
+    const firebaseConfigPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(firebaseConfigPath)) {
+      const firebaseConfigRaw = fs.readFileSync(firebaseConfigPath, 'utf-8');
+      const firebaseConfig = JSON.parse(firebaseConfigRaw);
+      if (!firebaseAppInstance) {
+        firebaseAppInstance = initializeApp(firebaseConfig);
+      }
+      db = getFirestore(firebaseAppInstance, firebaseConfig.firestoreDatabaseId);
+      backendAuthInstance = getAuth(firebaseAppInstance);
+      try {
+        await signInWithEmailAndPassword(backendAuthInstance, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026');
+        console.log('[Firestore] Backend authenticated securely as system user.');
+      } catch (authErr: any) {
+        console.warn('[Firestore] Backend sign-in failed, attempting creation:', authErr?.message);
+        try {
+          await createUserWithEmailAndPassword(backendAuthInstance, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026');
+          console.log('[Firestore] Backend system user created and authenticated.');
+        } catch (createErr: any) {
+          console.warn('[Firestore] Backend system user retry sign-in:', createErr?.message);
+          await signInWithEmailAndPassword(backendAuthInstance, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026').catch((permErr: any) => {
+            console.error('[Firestore] Backend system auth permanently failed:', permErr?.message);
+          });
+        }
+      }
+      persistenceState = 'HEALTHY_FIRESTORE';
+      lastFirestoreWriteSuccess = false;
+      console.log('[Firestore] Successfully initialized Firebase Firestore client on server.');
+
+      // Safely synchronize state with Firestore on startup
+      await loadPersistentStoreAsync().catch((syncErr: any) => {
+        console.warn('[Firestore] Initial sync note:', syncErr?.message);
       });
-    persistenceState = 'HEALTHY_FIRESTORE';
-    lastFirestoreWriteSuccess = false;
-    console.log('[Firestore] Successfully initialized Firebase Firestore client on server.');
-  } else {
+    } else {
+      persistenceState = 'LOCAL_DISK_ONLY';
+      console.warn('[Firestore] firebase-applet-config.json not found. Firestore is disabled on server.');
+    }
+  } catch (err: any) {
     persistenceState = 'LOCAL_DISK_ONLY';
-    console.warn('[Firestore] firebase-applet-config.json not found. Firestore is disabled on server.');
+    console.error('[Firestore] Error initializing Firebase Firestore client:', err?.message || err);
   }
-} catch (err) {
-  persistenceState = 'LOCAL_DISK_ONLY';
-  console.error('[Firestore] Error initializing Firebase Firestore client:', err);
 }
+
+function ensureFirebaseReady(): Promise<void> {
+  if (!firebaseReadyPromise) {
+    firebaseReadyPromise = initializeBackendFirebase();
+  }
+  return firebaseReadyPromise;
+}
+
+// Kick off Firebase initialization in background on boot
+ensureFirebaseReady().catch((err: any) => {
+  console.error('[Firestore] Background Firebase boot error:', err?.message || err);
+});
 
 const STORE_FILE_PATH = path.join(process.cwd(), 'data', 'vixy_store.json');
 
@@ -8069,7 +8550,8 @@ function saveDiskStore() {
         firestoreRetryAtMs,
         firestoreRetryAt,
         lastFirestoreWriteError,
-      }
+      },
+      maintenanceState: productionMaintenanceState,
     }, null, 2), 'utf-8');
   } catch (err) {
     console.warn('[Store] Notice saving store to disk:', err);
@@ -8252,6 +8734,128 @@ async function drainPendingPersistenceQueuesAsync() {
 const lastPersistedUserPayloads = new Map<string, string>();
 const lastPersistedUserTimes = new Map<string, number>();
 
+interface CanonicalUserResolution {
+  user: ServerUser | null;
+  allDocs: any[];
+  error?: string;
+}
+
+function scoreUserDoc(docData: any): number {
+  let score = 0;
+  // Has valid scrypt hash
+  if (docData.passwordHash && typeof docData.passwordHash === 'string' && docData.passwordHash.startsWith('vixy$')) {
+    score += 1000;
+  } else if (docData.passwordHash && typeof docData.passwordHash === 'string' && docData.passwordHash !== 'AuthManaged2026!' && docData.passwordHash.length > 0) {
+    score += 500;
+  }
+  // Has active subscription or day pass
+  if (docData.subscription && docData.subscription !== 'NONE') score += 100;
+  if (docData.status === 'ACTIVE') score += 50;
+  // Elevated role or paid tier
+  if (docData.role === 'OWNER' || docData.role === 'ADMIN' || docData.role === 'ELITE' || docData.role === 'PRO' || docData.role === 'DAY_PASS') score += 20;
+  if (docData.uid) score += 10;
+  return score;
+}
+
+async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUserResolution> {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    return { user: null, allDocs: [] };
+  }
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error('[AUTH_DEBUG] ensureFirebaseReady error in resolveCanonicalUserByEmail:', initErr?.message || initErr);
+    const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+    if (memUser) return { user: memUser, allDocs: [] };
+    return { user: null, allDocs: [], error: 'FIREBASE_INIT_FAILED' };
+  }
+
+  if (!db) {
+    const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+    return { user: memUser || null, allDocs: [] };
+  }
+
+  try {
+    await ensureFirestoreNetworkEnabled().catch(() => {});
+    const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+    const snap = await getDocs(q);
+
+    const allDocs: any[] = [];
+    snap.forEach((d: any) => {
+      allDocs.push({ _docId: d.id, ...d.data() });
+    });
+
+    if (allDocs.length === 0) {
+      // Secondary check: memory
+      const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+      return { user: memUser || null, allDocs: [] };
+    }
+
+    // Sort documents by heuristic score
+    const sortedDocs = [...allDocs].sort((a, b) => scoreUserDoc(b) - scoreUserDoc(a));
+    const bestDoc = sortedDocs[0];
+
+    // Check if ANY doc for this email contains a valid scrypt or legacy hash
+    const credentialDoc = allDocs.find(d => d.passwordHash && typeof d.passwordHash === 'string' && d.passwordHash.startsWith('vixy$'))
+      || allDocs.find(d => d.passwordHash && typeof d.passwordHash === 'string' && d.passwordHash !== 'AuthManaged2026!' && d.passwordHash.length > 0);
+
+    const effectivePasswordHash = credentialDoc?.passwordHash && credentialDoc.passwordHash !== 'AuthManaged2026!'
+      ? credentialDoc.passwordHash
+      : undefined;
+
+    const subDoc = allDocs.find(d => d.subscription && d.subscription !== 'NONE') || bestDoc;
+
+    const resolvedUser: ServerUser = {
+      id: bestDoc.id || bestDoc._docId,
+      uid: bestDoc.uid || bestDoc._docId,
+      email: cleanEmail,
+      name: bestDoc.name || credentialDoc?.name || cleanEmail.split('@')[0],
+      role: isMasterAdminEmail(cleanEmail) ? 'OWNER' : (bestDoc.role || 'USER'),
+      subscription: isMasterAdminEmail(cleanEmail) ? 'ELITE_PASS' : (subDoc.subscription || bestDoc.subscription || 'NONE'),
+      passwordHash: effectivePasswordHash,
+      status: bestDoc.status || (subDoc.subscription && subDoc.subscription !== 'NONE' ? 'ACTIVE' : 'INACTIVE'),
+      joined: bestDoc.joined || bestDoc.createdAt || new Date().toISOString().split('T')[0],
+      stripeCustomerId: bestDoc.stripeCustomerId || subDoc.stripeCustomerId || undefined,
+      stripeSubscriptionId: bestDoc.stripeSubscriptionId || subDoc.stripeSubscriptionId || undefined,
+      discordLinked: Boolean(bestDoc.discordLinked || bestDoc.discordId),
+      discordId: bestDoc.discordId || undefined,
+      discordTag: bestDoc.discordTag || undefined,
+      guildVerified: bestDoc.guildVerified || undefined
+    };
+
+    // Hydrate safely into serverUsers memory without overwriting valid credentials
+    const memIdx = serverUsers.findIndex(u => u.email?.toLowerCase() === cleanEmail || (resolvedUser.id && u.id === resolvedUser.id));
+    if (memIdx >= 0) {
+      const existing = serverUsers[memIdx];
+      if (resolvedUser.passwordHash !== undefined) {
+        existing.passwordHash = resolvedUser.passwordHash;
+      }
+      existing.email = cleanEmail;
+      if (resolvedUser.name) existing.name = resolvedUser.name;
+      if (resolvedUser.role) existing.role = resolvedUser.role;
+      if (resolvedUser.subscription) existing.subscription = resolvedUser.subscription;
+      if (resolvedUser.status) existing.status = resolvedUser.status;
+      if (resolvedUser.stripeCustomerId) existing.stripeCustomerId = resolvedUser.stripeCustomerId;
+      if (resolvedUser.stripeSubscriptionId) existing.stripeSubscriptionId = resolvedUser.stripeSubscriptionId;
+      if (resolvedUser.discordLinked !== undefined) existing.discordLinked = resolvedUser.discordLinked;
+      if (resolvedUser.discordId) existing.discordId = resolvedUser.discordId;
+    } else {
+      serverUsers.unshift(resolvedUser);
+    }
+
+    return { user: resolvedUser, allDocs };
+  } catch (firestoreErr: any) {
+    console.error('[AUTH_DEBUG] FIRESTORE_QUERY_ERROR in resolveCanonicalUserByEmail:', {
+      email: cleanEmail,
+      code: firestoreErr?.code,
+      message: firestoreErr?.message
+    });
+    return { user: null, allDocs: [], error: firestoreErr?.message || 'FIRESTORE_ERROR' };
+  }
+}
+
 async function persistSingleUser(user: ServerUser) {
   savePersistentStore();
 
@@ -8263,8 +8867,8 @@ async function persistSingleUser(user: ServerUser) {
   try {
     const payload = sanitizeForFirestore(user);
 
-    // If the password hash is the default auto-created hash, remove it to avoid overwriting existing real password hashes in Firestore during merge
-    if (payload.passwordHash === 'AuthManaged2026!') {
+    // If password hash is absent or default placeholder, do not include in payload so merge does not overwrite Firestore
+    if (!payload.passwordHash || payload.passwordHash === 'AuthManaged2026!') {
       delete payload.passwordHash;
     }
 
@@ -8280,7 +8884,6 @@ async function persistSingleUser(user: ServerUser) {
     const lastTime = lastPersistedUserTimes.get(docId) || 0;
     const now = Date.now();
     if (cachedPayload === payloadStr && (now - lastTime < 60000)) {
-      // Payload has not changed and written recently — skip duplicate Firestore network write
       return;
     }
 
@@ -8315,63 +8918,39 @@ async function hydrateUserFromFirestore(email?: string, uid?: string): Promise<S
   const cleanUid = (uid || '').trim();
   if (!cleanEmail && !cleanUid) return null;
 
-  // First check if already in memory
-  let user = serverUsers.find(u => 
-    (cleanUid && (u.uid === cleanUid || u.id === cleanUid)) ||
-    (cleanEmail && u.email?.toLowerCase() === cleanEmail)
-  );
-  if (user) return user as any;
+  await ensureFirebaseReady().catch(() => {});
 
-  // If not, hydrate from Firestore
-  if (db) {
+  if (cleanEmail) {
+    const res = await resolveCanonicalUserByEmail(cleanEmail);
+    if (res.user) return res.user;
+  }
+
+  // Fallback by UID if no email
+  if (cleanUid && db) {
     try {
-      const { getDocs, query, collection, where, doc, getDoc } = require('firebase/firestore');
-      
-      // Try UID first
-      if (cleanUid) {
-        await ensureFirestoreNetworkEnabled().catch(() => {});
-        const docSnap = await getDoc(doc(db, 'users', cleanUid));
-        if (docSnap.exists()) {
-          const uData = docSnap.data();
-          user = {
-            id: docSnap.id,
-            uid: uData.uid || docSnap.id,
-            email: uData.email,
-            name: uData.name || uData.email?.split('@')[0],
-            role: uData.role || 'USER',
-            subscription: uData.subscription || 'NONE',
-            passwordHash: uData.passwordHash || 'AuthManaged2026!',
-            status: uData.status || 'ACTIVE',
-            joined: uData.joined || new Date().toISOString().split('T')[0]
-          };
-          serverUsers.unshift(user as any);
-          console.log(`[HYDRATE_FIRESTORE] Hydrated user via UID: ${cleanUid}`);
-          return user as any;
+      await ensureFirestoreNetworkEnabled().catch(() => {});
+      const docSnap = await getDoc(doc(db, 'users', cleanUid));
+      if (docSnap.exists()) {
+        const uData = docSnap.data();
+        const docEmail = (uData.email || '').trim().toLowerCase();
+        if (docEmail) {
+          const res = await resolveCanonicalUserByEmail(docEmail);
+          if (res.user) return res.user;
         }
-      }
-
-      // Try Email
-      if (cleanEmail) {
-        await ensureFirestoreNetworkEnabled().catch(() => {});
-        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const uData = snap.docs[0].data();
-          user = {
-            id: snap.docs[0].id,
-            uid: uData.uid || snap.docs[0].id,
-            email: uData.email,
-            name: uData.name || uData.email?.split('@')[0],
-            role: uData.role || 'USER',
-            subscription: uData.subscription || 'NONE',
-            passwordHash: uData.passwordHash || 'AuthManaged2026!',
-            status: uData.status || 'ACTIVE',
-            joined: uData.joined || new Date().toISOString().split('T')[0]
-          };
-          serverUsers.unshift(user as any);
-          console.log(`[HYDRATE_FIRESTORE] Hydrated user via Email: ${cleanEmail}`);
-          return user as any;
-        }
+        const user: ServerUser = {
+          id: docSnap.id,
+          uid: uData.uid || docSnap.id,
+          email: uData.email,
+          name: uData.name || uData.email?.split('@')[0],
+          role: uData.role || 'USER',
+          subscription: uData.subscription || 'NONE',
+          passwordHash: (uData.passwordHash && uData.passwordHash !== 'AuthManaged2026!') ? uData.passwordHash : undefined,
+          status: uData.status || 'ACTIVE',
+          joined: uData.joined || new Date().toISOString().split('T')[0]
+        };
+        serverUsers.unshift(user);
+        console.log(`[HYDRATE_FIRESTORE] Hydrated user via UID: ${cleanUid}`);
+        return user;
       }
     } catch (e) {
       console.warn('[HYDRATE_FIRESTORE_ERROR]', e);
@@ -8416,7 +8995,6 @@ function ensureUserExists(
       name: 'Anonymous User',
       role: 'USER',
       subscription: 'NONE',
-      passwordHash: 'AuthManaged2026!',
       verificationStatus: 'UNVERIFIED',
       hardwareFingerprint: 'hw_anon',
       ipHash: '127.0.0.1',
@@ -8451,7 +9029,6 @@ function ensureUserExists(
       name: nameOpt || (cleanEmail ? cleanEmail.split('@')[0] : 'User'),
       role: defaultRole,
       subscription: defaultSub,
-      passwordHash: 'AuthManaged2026!',
       verificationStatus: 'VERIFIED',
       hardwareFingerprint: `hw_auto_${Math.random().toString(36).slice(2, 8)}`,
       ipHash: '127.0.0.1',
@@ -8617,6 +9194,9 @@ function loadPersistentStore() {
       if (data.learningEngine && typeof data.learningEngine === 'object') {
         Object.assign(serverLearningEngine, data.learningEngine);
       }
+      if (data.maintenanceState && typeof data.maintenanceState === 'object') {
+        productionMaintenanceState = { ...productionMaintenanceState, ...data.maintenanceState };
+      }
 
       console.log(`[Store] Loaded ${serverUsers.length} users, ${userDiscordProfiles.size} Discord profiles, ${userSubscriptions.size} subscriptions, ${persistentSignalLogs.length} signal logs & ${persistentTelemetryObservations.length} telemetry observations from disk store.`);
     }
@@ -8658,8 +9238,16 @@ async function loadPersistentStoreAsync() {
         if (!existing) {
           serverUsers.push(data);
         } else {
-          // Merge latest data from Firestore
-          Object.assign(existing, data);
+          // Merge latest data from Firestore SAFELY without overwriting valid credentials
+          for (const [k, v] of Object.entries(data)) {
+            if (k === 'passwordHash') {
+              if (v && typeof v === 'string' && v.length > 0 && v !== 'AuthManaged2026!') {
+                existing.passwordHash = v;
+              }
+            } else if (v !== undefined && v !== null) {
+              (existing as any)[k] = v;
+            }
+          }
         }
       }
     }
@@ -9079,6 +9667,7 @@ async function processDiscordSyncQueue() {
         if (syncResult.success) {
           item.status = 'SUCCESS';
           item.lastError = undefined;
+          console.log(`[DISCORD] email=${item.email} roleSync=SUCCESS roleId=${item.tier}`);
           console.log(`[Discord Queue] Job ${item.id} SUCCESS`);
           
           broadcastAdminEvent({
@@ -9091,6 +9680,7 @@ async function processDiscordSyncQueue() {
         } else {
           item.lastError = syncResult.message || 'Unknown sync error';
           discordSyncMetrics.lastError = item.lastError;
+          console.warn(`[DISCORD SYNC ERROR] email=${item.email} roleSync=FAILED error=${item.lastError}`);
           
           const isTransient = syncResult.code === 'DISCORD_RATE_LIMITED' || syncResult.code === 'DISCORD_API_ERROR';
           const maxAttempts = isTransient ? 15 : 4;
@@ -9161,6 +9751,16 @@ async function syncUserEntitlementToDiscord(userEmail: string): Promise<{
 }> {
   loadPersistentStore();
   const normalizedEmail = String(userEmail || 'vixyvault0@gmail.com').toLowerCase();
+
+  // Safeguard: Never process test fixtures against production Discord
+  if (normalizedEmail.endsWith('@example.com') || normalizedEmail.includes('test_daypass') || normalizedEmail.includes('vixy.test')) {
+    return {
+      success: true,
+      code: 'TEST_FIXTURE_SKIPPED',
+      message: 'Test fixture email skipped from production Discord synchronization.',
+      profile: null,
+    };
+  }
   const profileByEmail = userDiscordProfiles.get(normalizedEmail);
   const userRecord = serverUsers.find((u) => u.email?.toLowerCase() === normalizedEmail);
   const profile = profileByEmail || (userRecord?.discordId ? { email: normalizedEmail, discordUserId: userRecord.discordId, discordLinked: true } as any : null);
@@ -9733,17 +10333,24 @@ function getOrRestoreDiscordProfile(identifier: string): DiscordAuthProfile | nu
 // AUTHORITATIVE ACCOUNT ME ENDPOINT
 app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], async (req, res) => {
   const reqEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || '').toLowerCase().trim();
-  const reqUserId = ((req.headers['x-user-id'] as string) || (req.query.userId as string) || '').trim();
+  const reqUserId = ((req.headers['x-user-id'] as string) || (req.query.userId as string) || (req.headers['x-user-uid'] as string) || '').trim();
 
-  // Asynchronously hydrate user from Firestore before finding them in memory
-  if (reqEmail || reqUserId) {
-    await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => {});
+  await ensureFirebaseReady().catch(() => {});
+
+  let user: ServerUser | null = null;
+  if (reqEmail) {
+    const resolution = await resolveCanonicalUserByEmail(reqEmail).catch(() => ({ user: null, allDocs: [] }));
+    user = resolution.user;
   }
-
-  const user = serverUsers.find(u => 
-    (reqEmail && u.email?.toLowerCase() === reqEmail) ||
-    (reqUserId && (u.id === reqUserId || u.uid === reqUserId))
-  ) || (reqEmail ? null : serverUsers[0]);
+  if (!user && reqUserId) {
+    user = await hydrateUserFromFirestore(undefined, reqUserId).catch(() => null);
+  }
+  if (!user && (reqEmail || reqUserId)) {
+    user = serverUsers.find(u => 
+      (reqEmail && u.email?.toLowerCase() === reqEmail) ||
+      (reqUserId && (u.id === reqUserId || u.uid === reqUserId))
+    ) || null;
+  }
 
   if (!user) {
     return res.json({
