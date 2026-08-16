@@ -2991,6 +2991,52 @@ app.post('/api/auth/register', async (req, res) => {
   });
 });
 
+// USER PROFILE / AUTH STATE ENDPOINT
+app.get(['/api/auth/me', '/api/user/me'], async (req, res) => {
+  const reqEmail = (
+    (req.headers['x-user-email'] as string) ||
+    (req.query.email as string) ||
+    ''
+  ).toLowerCase().trim();
+
+  const reqUserId = (
+    (req.headers['x-user-id'] as string) ||
+    (req.headers['x-user-uid'] as string) ||
+    (req.query.userId as string) ||
+    (req.query.uid as string) ||
+    ''
+  ).trim();
+
+  if (!reqEmail && !reqUserId) {
+    return res.json({ authenticated: false, user: null, message: 'No active session' });
+  }
+
+  const user = serverUsers.find(u => (reqEmail && u.email?.toLowerCase() === reqEmail) || (reqUserId && (u.id === reqUserId || u.uid === reqUserId)));
+  const dp = userDayPasses.get(reqEmail) || (reqUserId ? userDayPasses.get(reqUserId) : undefined);
+  const sub = userSubscriptions.get(reqEmail);
+  const discordProfile = userDiscordProfiles.get(reqEmail);
+
+  const resolvedUser = user || {
+    id: reqUserId || `usr_${reqEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+    uid: reqUserId || `usr_${reqEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+    email: reqEmail,
+    name: reqEmail.split('@')[0],
+    role: sub?.role || (dp?.status === 'ACTIVE' ? 'PRO' : 'USER'),
+    subscription: sub?.plan || (dp?.status === 'ACTIVE' ? 'PRO_PASS' : 'NONE'),
+    status: 'ACTIVE',
+    verificationStatus: 'VERIFIED',
+    discordLinked: Boolean(discordProfile?.discordLinked),
+    discordId: discordProfile?.discordUserId,
+    discordTag: discordProfile?.discordUsername,
+  };
+
+  res.json({
+    authenticated: true,
+    user: resolvedUser,
+    discord: discordProfile || null,
+  });
+});
+
 // CREATE ACCOUNT WITH PASSWORD & ANTI-DUP CHECK
 app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) => {
   const { email, name, password, tier = 'PRO_PASS', role = 'USER', referralCode = 'DIRECT', hardwareFingerprint, ipAddress } = req.body || {};
@@ -4577,6 +4623,7 @@ export const AUGUST_15_COMPENSATED_USERS = [
   'ludinvelasquez47@gmail.com',
   'ragnarks1996@gmail.com',
   'xavierrosales503@icloud.com',
+  'vksminhkaka@gmail.com',
 ] as const;
 
 export function initializeProtectedAugust15Users() {
@@ -4640,6 +4687,8 @@ initializeProtectedAugust15Users();
 
 export interface AuthoritativeEntitlementResponse {
   authenticated: boolean;
+  entitled?: boolean;
+  access?: boolean;
   userId: string;
   email: string;
   stripeVerified: boolean;
@@ -4647,6 +4696,8 @@ export interface AuthoritativeEntitlementResponse {
   logicalPlan: 'DAY_PASS_24H' | 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
   billing: 'ONE_TIME' | 'MONTHLY' | 'YEARLY' | 'NONE';
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'inactive' | 'discord_unverified';
+  expiresAt?: string;
+  compensationApplied?: boolean;
   stripeCustomerId?: string;
   subscriptionId?: string;
   stripePriceId?: string;
@@ -4897,9 +4948,16 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
     }
 
     const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
+    const isCompensated = Boolean(
+      dayPassRecord?.troubleshootingGraceApplied ||
+      dayPassRecord?.compensationApplied ||
+      (AUGUST_15_COMPENSATED_USERS as readonly string[]).includes(clean)
+    );
 
     return {
       authenticated: Boolean(user || sub || clean),
+      entitled: true,
+      access: true,
       userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
       email: clean,
       stripeVerified: resolvedSub.isStripeVerified,
@@ -4907,6 +4965,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
       logicalPlan,
       billing,
       status: resolvedSub.normalizedStatus,
+      expiresAt: dayPassRecord?.expiresAt || new Date(Date.now() + 30 * 86400000).toISOString(),
+      compensationApplied: isCompensated,
       stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
       subscriptionId: sub?.stripeSubscriptionId || user?.stripeSubscriptionId,
       currentPeriodStart: Math.floor(Date.now() / 1000) - 86400 * 15,
@@ -4930,9 +4990,16 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
   // Priority 2 Resolution: Active 24H Day Pass
   if (dayPassActive && dayPassRecord) {
     const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
+    const isCompensated = Boolean(
+      dayPassRecord?.troubleshootingGraceApplied ||
+      dayPassRecord?.compensationApplied ||
+      (AUGUST_15_COMPENSATED_USERS as readonly string[]).includes(clean)
+    );
 
     return {
       authenticated: Boolean(user || sub || clean),
+      entitled: true,
+      access: true,
       userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
       email: clean,
       stripeVerified: true,
@@ -4940,6 +5007,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
       logicalPlan: 'DAY_PASS_24H',
       billing: 'ONE_TIME',
       status: 'active',
+      expiresAt: dayPassRecord.expiresAt,
+      compensationApplied: isCompensated,
       stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
       subscriptionId: dayPassRecord.stripeCheckoutSessionId,
       currentPeriodStart: Math.floor(new Date(dayPassRecord.startedAt).getTime() / 1000),
@@ -4970,6 +5039,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
   // Priority 3 Resolution: No Active Access
   return {
     authenticated: Boolean(user || sub || clean),
+    entitled: false,
+    access: false,
     userId: user?.id || user?.uid || `usr_${clean.replace(/[^a-zA-Z0-9_]/g, '_')}`,
     email: clean,
     stripeVerified: false,
@@ -4977,6 +5048,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
     logicalPlan: 'NONE',
     billing: 'NONE',
     status: status === 'CANCELED' ? 'canceled' : 'inactive',
+    expiresAt: dayPassRecord?.expiresAt || undefined,
+    compensationApplied: Boolean((AUGUST_15_COMPENSATED_USERS as readonly string[]).includes(clean)),
     stripeCustomerId: sub?.stripeCustomerId || user?.stripeCustomerId,
     subscriptionId: sub?.stripeSubscriptionId || user?.stripeSubscriptionId,
     discordVerified: Boolean(discordProfile?.discordLinked || user?.discordLinked),
