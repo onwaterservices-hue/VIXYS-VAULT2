@@ -2355,7 +2355,7 @@ app.post('/api/auth/sync', (req, res) => {
 });
 
 // LOGIN ENDPOINT
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
@@ -2391,9 +2391,22 @@ app.post('/api/auth/login', (req, res) => {
     return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
   
+  // Resolve authoritative entitlement dynamically to include Day Pass explicitly
+  const entitlement = await reconcileUserEntitlement({ email: cleanEmail, userId: user.id || user.uid });
+  
+  const authUserResponse = { ...user };
+  
+  if (entitlement.dayPass?.active) {
+    authUserResponse.subscription = 'DAY_PASS';
+    authUserResponse.dayPass = entitlement.dayPass;
+  } else if (entitlement.plan !== 'NONE') {
+    authUserResponse.subscription = entitlement.plan;
+    authUserResponse.role = entitlement.role;
+  }
+  
   res.json({
     success: true,
-    user
+    user: authUserResponse
   });
 });
 
@@ -4187,36 +4200,6 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
                         (discordId ? userDayPasses.get(discordId) : undefined) ||
                         (user as any)?.dayPass;
 
-  // TROUBLESHOOTING GRACE LOGIC
-  if (dayPassRecord && !dayPassRecord.troubleshootingGraceApplied) {
-    try {
-      const expMs = new Date(dayPassRecord.expiresAt).getTime();
-      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-      const newExp = new Date(expMs + threeDaysMs);
-      dayPassRecord.expiresAt = newExp.toISOString();
-      dayPassRecord.troubleshootingGraceApplied = true;
-      dayPassRecord.troubleshootingGraceAppliedAt = new Date().toISOString();
-      
-      if (dayPassRecord.status === 'EXPIRED' && newExp.getTime() > Date.now()) {
-        dayPassRecord.status = 'ACTIVE';
-      }
-
-      console.log(`[GRACE APPLIED] Added 3 days to Day Pass for ${dayPassRecord.email}. New exp: ${dayPassRecord.expiresAt}`);
-
-      if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('day_passes')) {
-        ensureFirestoreNetworkEnabled().then(() => {
-          if (db) {
-            setDoc(doc(db, 'day_passes', dayPassRecord.email.toLowerCase()), dayPassRecord, { merge: true }).catch(() => {});
-            if (dayPassRecord.userId) {
-              setDoc(doc(db, 'day_passes', dayPassRecord.userId), dayPassRecord, { merge: true }).catch(() => {});
-            }
-          }
-        }).catch(e => {});
-      }
-    } catch(e) {
-      console.warn("Failed to apply grace", e);
-    }
-  }
 
   const nowMs = Date.now();
   let dayPassActive = false;
@@ -5357,6 +5340,8 @@ timestamp: ${new Date().toISOString()}`);
         if (vixyUserId) userDayPasses.set(vixyUserId, dayPassRecord);
         if (session.client_reference_id) userDayPasses.set(session.client_reference_id, dayPassRecord);
         if (discordUserId) userDayPasses.set(discordUserId, dayPassRecord);
+
+        savePersistentStore(); // FATAL FIX: Actually persist the day pass to local fallback cache to prevent dataloss on restart before Firestore confirms
 
         // Instant Discord Role Assignment if Discord is connected
         syncUserEntitlementToDiscord(customerEmail.toLowerCase()).then((syncRes) => {
