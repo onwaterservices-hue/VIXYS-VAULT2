@@ -154,14 +154,16 @@ if (process.env.GEMINI_API_KEY) {
 function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  return clean === 'vixyvault0@gmail.com';
+  return clean === 'vixyvault0@gmail.com' || clean === 'onwaterservices@gmail.com';
 }
 
-// Canonical Authority Sanitizer: Guarantees vixyvault0@gmail.com is sole OWNER and strips admin authority from legacy onwaterservices account
+// Canonical Authority Sanitizer: Guarantees vixyvault0@gmail.com and onwaterservices@gmail.com are OWNER accounts with valid password hashes
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === 'undefined') return;
 
-  // 1. Ensure vixyvault0@gmail.com exists and is configured as sole OWNER
+  const defaultPasswordHash = hashPassword('Seattle007');
+
+  // 1. Ensure vixyvault0@gmail.com exists and is configured as OWNER
   let masterAdmin = serverUsers.find((u) => u.email?.toLowerCase() === 'vixyvault0@gmail.com');
   if (!masterAdmin) {
     masterAdmin = {
@@ -178,12 +180,41 @@ function sanitizeAndNormalizeServerUsers() {
       discordId: '123456789012345678',
       discordLinked: true,
       guildVerified: true,
+      passwordHash: defaultPasswordHash,
     };
     serverUsers.unshift(masterAdmin);
   } else {
     masterAdmin.role = 'OWNER';
     masterAdmin.subscription = 'ELITE_PASS';
     masterAdmin.status = 'ACTIVE';
+    if (!masterAdmin.passwordHash || !masterAdmin.passwordHash.startsWith('vixy$')) {
+      masterAdmin.passwordHash = defaultPasswordHash;
+    }
+  }
+
+  // 2. Ensure onwaterservices@gmail.com exists and is configured as OWNER
+  let onwaterUser = serverUsers.find((u) => u.email?.toLowerCase() === 'onwaterservices@gmail.com');
+  if (!onwaterUser) {
+    onwaterUser = {
+      id: 'usr_owner_00',
+      uid: 'usr_owner_00',
+      email: 'onwaterservices@gmail.com',
+      name: 'Vixy Admin (OnWater)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-01-15',
+      verificationStatus: 'VERIFIED',
+      passwordHash: defaultPasswordHash,
+    };
+    serverUsers.unshift(onwaterUser);
+  } else {
+    onwaterUser.role = 'OWNER';
+    onwaterUser.subscription = 'ELITE_PASS';
+    onwaterUser.status = 'ACTIVE';
+    if (!onwaterUser.passwordHash || !onwaterUser.passwordHash.startsWith('vixy$')) {
+      onwaterUser.passwordHash = defaultPasswordHash;
+    }
   }
 
   if (typeof userSubscriptions !== 'undefined') {
@@ -194,13 +225,20 @@ function sanitizeAndNormalizeServerUsers() {
       status: 'ACTIVE',
       updatedAt: new Date().toISOString(),
     });
+    userSubscriptions.set('onwaterservices@gmail.com', {
+      email: 'onwaterservices@gmail.com',
+      role: 'OWNER',
+      plan: 'ELITE_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
   }
 
-  // 2. Normalize and demote any unauthorized elevated roles (non-vixyvault0 OWNER or ADMIN accounts)
+  // 3. Normalize and demote any unauthorized elevated roles (non-owner/admin accounts)
   serverUsers.forEach((u) => {
     if (!u.email) return;
     const cleanEmail = u.email.trim().toLowerCase();
-    if (cleanEmail !== 'vixyvault0@gmail.com' && (u.role === 'OWNER' || u.role === 'ADMIN')) {
+    if (!isMasterAdminEmail(cleanEmail) && u.role === 'OWNER') {
       u.role = 'USER';
       if (typeof userSubscriptions !== 'undefined') {
         const sub = userSubscriptions.get(cleanEmail);
