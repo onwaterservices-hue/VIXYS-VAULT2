@@ -2556,6 +2556,14 @@ app.post('/api/admin/maintenance', requireRole(['OWNER', 'ADMIN']), (req, res) =
 });
 
 // PRODUCTION AUTH HEALTH ENDPOINT
+
+app.get('/api/admin/dump-users', (req, res) => {
+  res.json({
+    users: serverUsers,
+    dayPasses: Array.from(userDayPasses.entries()),
+    subscriptions: Array.from(userSubscriptions.entries())
+  });
+});
 app.get('/api/health/auth', (req, res) => {
   const botState = getDiscordBotStatus();
   const ownerPresent = serverUsers.some(u => u.email?.toLowerCase() === 'vixyvault0@gmail.com' && u.role === 'OWNER');
@@ -2566,7 +2574,7 @@ app.get('/api/health/auth', (req, res) => {
     canonicalUserCount: serverUsers.length,
     entitlementCacheStatus: 'ACTIVE',
     ownerPresent,
-    dayPassCount: serverDayPasses.size || userDayPasses?.size || 0,
+    dayPassCount: userDayPasses?.size || 0,
     activeSubscriptionCount: Array.from(userSubscriptions.values()).filter(s => s.status === 'ACTIVE').length,
     firestore: persistenceState,
     discord: botState.isReady ? 'READY' : 'DEGRADED',

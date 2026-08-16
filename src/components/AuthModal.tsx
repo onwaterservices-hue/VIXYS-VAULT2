@@ -118,6 +118,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
            return;
         }
         if (res?.error === 'USER_EXISTS' && mode === 'register') {
+           setMode('login');
            setErrorMsg('Account already exists. Sign in instead.');
            return;
         }
@@ -229,7 +230,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             
             
 
-{mode === 'register' && (
+{mode === 'register' && !successMsg && (
             <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/80 via-[#0E0622] to-cyan-950/80 border border-cyan-500/40 flex items-center justify-between gap-3 text-xs shadow-md">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shrink-0">

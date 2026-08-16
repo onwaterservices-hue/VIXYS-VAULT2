@@ -104,6 +104,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
            return;
         }
         if (res?.error === 'USER_EXISTS' && mode === 'register') {
+           setMode('login');
            setErrorMsg('Account already exists. Sign in instead.');
            return;
         }
@@ -278,7 +279,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             
             
 
-{mode === 'register' && (
+{mode === 'register' && !successMsg && (
                 <>
                   <div className="space-y-1.5">
                     <label className="text-purple-300/70 block font-semibold">Full Name</label>

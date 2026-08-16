@@ -828,7 +828,7 @@ export default function App() {
     subscription.status === 'active' ||
     userRole === 'PRO' ||
     (userRole as string) === 'ELITE' ||
-    userRole === 'ADMIN' ||
+    userRole === 'ADMIN' || userRole === 'OWNER' ||
     dayPassInfo.active;
 
   const handleLaunchTerminal = () => {
@@ -842,7 +842,7 @@ export default function App() {
   };
 
   const handleAuthSuccess = (role: 'PRO' | 'UNPAID' | 'ADMIN') => {
-    const hasActive = role === 'PRO' || role === 'ADMIN' || dayPassInfo.active || subscription.status === 'active';
+    const hasActive = role === 'PRO' || role === 'ADMIN' || role === 'OWNER' || role === 'ELITE' || dayPassInfo.active || subscription.status === 'active';
     if (hasActive) {
       setActiveTab('terminal');
     } else {
