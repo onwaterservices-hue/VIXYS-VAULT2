@@ -31,6 +31,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [claimStep, setClaimStep] = useState<'request' | 'verify'>('request');
   const [email, setEmail] = useState(() => initialEmail || localStorage.getItem('vixy_user_email') || '');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [claimOtp, setClaimOtp] = useState('');
   const [claimPassword, setClaimPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -46,6 +47,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setClaimStep('request');
       setErrorMsg('');
       setSuccessMsg('');
+      setPassword('');
+      setConfirmPassword('');
       if (initialEmail) {
         setEmail(initialEmail);
       } else {
@@ -203,6 +206,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
+
+    if (mode === 'register') {
+      if (password.length < 6) {
+        setLoading(false);
+        setErrorMsg('Password must be at least 6 characters.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setLoading(false);
+        setErrorMsg('Passwords do not match. Please re-enter your password.');
+        return;
+      }
+    }
 
     try {
       let syncRes;
@@ -610,6 +626,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   />
                 </div>
               </div>
+
+              {mode === 'register' && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Confirm Password</label>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Submit Button */}
               <button

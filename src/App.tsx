@@ -1006,24 +1006,24 @@ export default function App() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold">
-                      <ShieldCheck className="w-4 h-4 text-amber-400" />
-                      <span>ACCOUNT CREATION REQUIRED</span>
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-xs font-bold">
+                      <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                      <span>ACCOUNT AUTHENTICATION REQUIRED</span>
                     </div>
                     <h2 className="text-2xl font-black text-white font-sans">
-                      Create an Account to Unlock Your Free Access
+                      Create an Account to Unlock 24-Hour Access
                     </h2>
                     <p className="text-sm text-purple-300/70 font-sans max-w-lg mx-auto leading-relaxed">
-                      Register your free VIXY AI account to activate your 3-Hour Free Access Pass and enter the live prediction terminal, order flow delta metrics, and AI signal engine.
+                      Register your secure VIXY account to activate your 24-Hour Day Pass ($9.99) and enter the live prediction terminal, order flow delta metrics, and real-time AI signal engine.
                     </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 font-sans max-w-lg mx-auto">
                     <button
                       onClick={() => handleOpenAuth('register')}
-                      className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-sm shadow-xl shadow-amber-500/20 transition-all flex items-center justify-center gap-2"
+                      className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-sm shadow-xl shadow-cyan-950/80 transition-all flex items-center justify-center gap-2"
                     >
-                      <Sparkles className="w-4 h-4 text-slate-950" />
+                      <Sparkles className="w-4 h-4 text-cyan-200" />
                       <span>Create Account & Start Pass</span>
                     </button>
 

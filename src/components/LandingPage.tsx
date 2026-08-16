@@ -207,7 +207,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <div className="flex items-center justify-between text-[10px] text-purple-300/80 font-mono">
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                    Discord verification required before terminal access
+                    Instant access after payment • Discord sync available in-terminal
                   </span>
                   <span className="text-cyan-400/90 font-bold hidden sm:inline">96 Prediction Cycles / Day</span>
                 </div>

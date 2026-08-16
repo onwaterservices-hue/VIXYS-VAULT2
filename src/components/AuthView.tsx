@@ -35,6 +35,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [claimStep, setClaimStep] = useState<'request' | 'verify'>('request');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [claimOtp, setClaimOtp] = useState('');
   const [claimPassword, setClaimPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -151,6 +152,19 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
+
+    if (mode === 'register') {
+      if (password.length < 6) {
+        setLoading(false);
+        setErrorMsg('Password must be at least 6 characters.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setLoading(false);
+        setErrorMsg('Passwords do not match. Please re-enter your password.');
+        return;
+      }
+    }
 
     try {
       let res;
@@ -529,6 +543,25 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
               </div>
 
+              {mode === 'register' && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-purple-300/70 font-semibold">Confirm Password</label>
+                  </div>
+                  <div className="relative">
+                    <Lock className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
+                    <input
+                      type="password"
+                      required
+                      placeholder="••••••••••••"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={loading}
@@ -539,7 +572,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     ? 'Authenticating Session...'
                     : mode === 'login'
                     ? 'SIGN IN TO TERMINAL'
-                    : 'CREATE ACCOUNT & UNLOCK FREE ACCESS'}
+                    : 'CREATE ACCOUNT & CONTINUE'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>

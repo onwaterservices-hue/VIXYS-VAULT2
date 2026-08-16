@@ -102,7 +102,23 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const isUp = isServerLocked && (rawDirection.includes('UP') || rawDirection.includes('YES'));
   const isDown = isServerLocked && (rawDirection.includes('DOWN') || rawDirection.includes('NO'));
 
-  const lockedDecision = rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS');
+  const lockedDecision = isServerLocked
+    ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
+    : isNoTrade
+    ? 'VIXY SKIP'
+    : isObserving
+    ? 'OBSERVING'
+    : isCalibrating
+    ? 'CALIBRATING'
+    : isAnalyzing
+    ? 'ANALYZING'
+    : isQualifying
+    ? 'QUALIFYING'
+    : isValidating
+    ? 'VALIDATING'
+    : isReadyToLock
+    ? 'LOCKING'
+    : 'ANALYZING';
   const lockedStrike = Number(rawApiData?.lockedStrike || rawApiData?.strike || targetPrice || 64100);
   const lockedSpot = Number(rawApiData?.lockedSpot || rawApiData?.spotAtLock || currentPrice || 64100);
 
@@ -606,7 +622,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   </div>
 
                   <div className="text-[10px] font-extrabold tracking-[0.15em] text-slate-300 uppercase font-mono">
-                    {isUp ? 'CALL DIRECTION' : isDown ? 'PUT DIRECTION' : 'NEUTRAL RANGE'}
+                    {isServerLocked ? (isUp ? 'CALL DIRECTION' : isDown ? 'PUT DIRECTION' : 'NEUTRAL RANGE') : 'PRE-LOCK ANALYSIS PHASE'}
                   </div>
                 </div>
 

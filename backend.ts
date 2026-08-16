@@ -208,6 +208,10 @@ function sanitizeAndNormalizeServerUsers() {
       }
     }
   });
+
+  if (typeof initializeProtectedAugust15Users === 'function') {
+    initializeProtectedAugust15Users();
+  }
 }
 
 // Role Enforcement & Authorization Middleware
@@ -4563,6 +4567,76 @@ export interface DayPassRecord {
 }
 
 export const userDayPasses = new Map<string, DayPassRecord>();
+
+export const AUGUST_15_COMPENSATED_USERS = [
+  'abe.carrillo987@gmail.com',
+  'ajhuns07@gmail.com',
+  'albertt2700@gmail.com',
+  'alexescobar7503@gmail.com',
+  'dm2664817@gmail.com',
+  'ludinvelasquez47@gmail.com',
+  'ragnarks1996@gmail.com',
+  'xavierrosales503@icloud.com',
+] as const;
+
+export function initializeProtectedAugust15Users() {
+  const aug19Expiration = '2026-08-19T23:59:59.999Z';
+  AUGUST_15_COMPENSATED_USERS.forEach((email) => {
+    const cleanEmail = email.toLowerCase().trim();
+    const existingPass = userDayPasses.get(cleanEmail);
+    if (!existingPass) {
+      const dp: DayPassRecord = {
+        entitlementId: `dp_aug15_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+        userId: `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+        email: cleanEmail,
+        guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+        entitlementType: 'DAY_PASS',
+        accessTier: 'ELITE',
+        status: 'ACTIVE',
+        duration: 'August 15 Compensated Day Pass Access (Expires Aug 19)',
+        activatedAt: '2026-08-15T00:00:00.000Z',
+        startedAt: '2026-08-15T00:00:00.000Z',
+        expiresAt: aug19Expiration,
+        stripePaymentStatus: 'PAID',
+        stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
+        stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+        discordRoleId: process.env.DISCORD_24H_ROLE_ID || '1538094678870593547',
+        discordRoleAssigned: false,
+        troubleshootingGraceApplied: true,
+        createdAt: '2026-08-15T00:00:00.000Z',
+        updatedAt: new Date().toISOString(),
+      };
+      userDayPasses.set(cleanEmail, dp);
+      userDayPasses.set(dp.userId, dp);
+    } else {
+      if (new Date(existingPass.expiresAt).getTime() < new Date(aug19Expiration).getTime()) {
+        existingPass.expiresAt = aug19Expiration;
+      }
+      existingPass.status = 'ACTIVE';
+      existingPass.troubleshootingGraceApplied = true;
+    }
+
+    if (typeof serverUsers !== 'undefined') {
+      const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+      if (!existingUser) {
+        const uId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+        serverUsers.push({
+          id: uId,
+          uid: uId,
+          email: cleanEmail,
+          name: cleanEmail.split('@')[0],
+          role: 'USER',
+          subscription: 'PRO_PASS',
+          joined: '2026-08-15',
+          status: 'ACTIVE',
+          verificationStatus: 'VERIFIED',
+        });
+      }
+    }
+  });
+}
+
+initializeProtectedAugust15Users();
 
 export interface AuthoritativeEntitlementResponse {
   authenticated: boolean;

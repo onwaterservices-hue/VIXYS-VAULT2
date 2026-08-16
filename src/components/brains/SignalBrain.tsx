@@ -207,9 +207,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     directionVisualState = 'ERROR';
   } else if (isDegradedStatus) {
     directionVisualState = 'DELAYED';
-  } else if (isConfirmedUp || rawApiData?.direction === 'UP' || rawApiData?.direction === 'BUY UP' || execution.direction === 'UP') {
+  } else if (isConfirmedUp) {
     directionVisualState = 'UP';
-  } else if (isConfirmedDown || rawApiData?.direction === 'DOWN' || rawApiData?.direction === 'BUY DOWN' || execution.direction === 'DOWN') {
+  } else if (isConfirmedDown) {
     directionVisualState = 'DOWN';
   } else {
     directionVisualState = 'NEUTRAL';
@@ -301,8 +301,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     executionPanelState = 'ANALYZING';
   }
 
-  const showBuyUp = (executionPanelState === 'CONFIRMED_UP' || rawApiData?.direction === 'BUY UP') && !isOfflineOrStale;
-  const showBuyDown = (executionPanelState === 'CONFIRMED_DOWN' || rawApiData?.direction === 'BUY DOWN') && !isOfflineOrStale;
+  const showBuyUp = executionPanelState === 'CONFIRMED_UP' && !isOfflineOrStale;
+  const showBuyDown = executionPanelState === 'CONFIRMED_DOWN' && !isOfflineOrStale;
 
   let bgGlowClass = '';
   let bgInnerClass = '';
