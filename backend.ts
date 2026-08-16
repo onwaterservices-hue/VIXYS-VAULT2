@@ -217,6 +217,32 @@ function sanitizeAndNormalizeServerUsers() {
     }
   }
 
+  // 2b. Ensure test account ogershey@gmail.com exists with password Seattle007 and PRO_PASS entitlement
+  let ogersheyUser = serverUsers.find((u) => u.email?.toLowerCase() === 'ogershey@gmail.com');
+  if (!ogersheyUser) {
+    ogersheyUser = {
+      id: 'usr_test_ogershey_2026',
+      uid: 'usr_test_ogershey_2026',
+      email: 'ogershey@gmail.com',
+      name: 'OG Gershey (Test Account)',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-16',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@ogershey',
+      discordId: '998877665544332211',
+      discordLinked: true,
+      guildVerified: true,
+      passwordHash: defaultPasswordHash,
+    };
+    serverUsers.unshift(ogersheyUser);
+  } else {
+    if (!ogersheyUser.passwordHash || !ogersheyUser.passwordHash.startsWith('vixy$')) {
+      ogersheyUser.passwordHash = defaultPasswordHash;
+    }
+  }
+
   if (typeof userSubscriptions !== 'undefined') {
     userSubscriptions.set('vixyvault0@gmail.com', {
       email: 'vixyvault0@gmail.com',
@@ -229,6 +255,13 @@ function sanitizeAndNormalizeServerUsers() {
       email: 'onwaterservices@gmail.com',
       role: 'OWNER',
       plan: 'ELITE_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('ogershey@gmail.com', {
+      email: 'ogershey@gmail.com',
+      role: 'PRO',
+      plan: 'PRO_PASS',
       status: 'ACTIVE',
       updatedAt: new Date().toISOString(),
     });
@@ -2681,7 +2714,7 @@ app.post('/api/auth/login', async (req, res) => {
   
   if (!hasPasswordHash) {
     sanitizeAndNormalizeServerUsers();
-    if (isMasterAdminEmail(cleanEmail)) {
+    if (isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') {
       user.passwordHash = hashPassword('Seattle007');
     }
     hasPasswordHash = !!(user.passwordHash && typeof user.passwordHash === 'string' && user.passwordHash !== 'AuthManaged2026!' && user.passwordHash.length > 0);
@@ -2690,29 +2723,23 @@ app.post('/api/auth/login', async (req, res) => {
   console.log(`[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith('vixy$') || false} reqId=${reqId}`);
 
   if (!hasPasswordHash) {
-    const CONFIRMED_PASSWORDLESS_CUSTOMERS = [
-  "abe.carrillo987@gmail.com",
-  "ajhuns07@gmail.com",
-  "albertt2700@gmail.com",
-  "alexescobar7503@gmail.com",
-  "dm2664817@gmail.com",
-  "ludinvelasquez47@gmail.com",
-  "ragnarks1996@gmail.com",
-  "xavierrosales503@icloud.com",
-  "nathan.velasquez29@icloud.com",
-  "jeremygarr30@gmail.com",
-  "trelll2008@icloud.com",
-  "gifyzslide@gmail.com",
-  "dhdh@gmail.com"
-];
-    if (CONFIRMED_PASSWORDLESS_CUSTOMERS.includes(cleanEmail)) {
+    if (password && password.trim().length > 0) {
+      const hashed = hashPassword(password);
+      user.passwordHash = hashed;
+      savePersistentStore();
+      try {
+        await persistSingleUser(user);
+      } catch (persistErr: any) {
+        console.warn('[AUTH] Error persisting newly auto-bound password:', persistErr?.message);
+      }
+      console.log(`[AUTH LOGIN] Seamlessly bound initial password for Day Pass / Stripe account: ${cleanEmail}`);
+      hasPasswordHash = true;
+    } else {
       return res.status(400).json({ 
         success: false, 
-        error: 'ACCOUNT_NEEDS_PASSWORD', 
-        message: 'Account found. Please set a password to continue.' 
+        error: 'PASSWORD_REQUIRED', 
+        message: 'Please enter a password to secure and access your account.' 
       });
-    } else {
-      return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
     }
   }
 
@@ -2786,23 +2813,7 @@ app.post('/api/auth/register', async (req, res) => {
   if (existing) {
     const hasPasswordHash = !!(existing.passwordHash && typeof existing.passwordHash === 'string' && existing.passwordHash !== 'AuthManaged2026!' && existing.passwordHash.length > 0);
     
-    // If they already have a password OR they are not in the confirmed list, they should sign in
-    const CONFIRMED_PASSWORDLESS_CUSTOMERS = [
-        "abe.carrillo987@gmail.com",
-        "ajhuns07@gmail.com",
-        "albertt2700@gmail.com",
-        "alexescobar7503@gmail.com",
-        "dm2664817@gmail.com",
-        "ludinvelasquez47@gmail.com",
-        "ragnarks1996@gmail.com",
-        "xavierrosales503@icloud.com",
-        "nathan.velasquez29@icloud.com",
-        "jeremygarr30@gmail.com",
-        "trelll2008@icloud.com",
-        "gifyzslide@gmail.com",
-        "dhdh@gmail.com"
-      ];
-    if (hasPasswordHash || !CONFIRMED_PASSWORDLESS_CUSTOMERS.includes(cleanEmail)) {
+    if (hasPasswordHash) {
       return res.status(400).json({
         success: false,
         error: 'USER_EXISTS',
@@ -2815,12 +2826,12 @@ app.post('/api/auth/register', async (req, res) => {
       existing.passwordHash = hashed;
       existing.name = name?.trim() || existing.name || cleanEmail.split('@')[0];
       
-      if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
-        ensureFirestoreNetworkEnabled().then(() => {
-          setDoc(doc(db, 'users', existing.id || existing.uid || cleanEmail), { passwordHash: hashed, name: existing.name }, { merge: true }).catch(() => {});
-        }).catch(() => {});
-      }
       savePersistentStore();
+      try {
+        await persistSingleUser(existing);
+      } catch (persistErr: any) {
+        console.warn('[FIRESTORE USER] Persist existing user error during registration linking:', persistErr?.message);
+      }
       
       const serverSession = { ...existing, passwordHash: undefined };
       const entitlement = getUserEntitlement(cleanEmail);
@@ -2836,14 +2847,19 @@ app.post('/api/auth/register', async (req, res) => {
     email: cleanEmail,
     name: name?.trim() || cleanEmail.split('@')[0],
     passwordHash: hashPassword(password),
-    role: cleanEmail === 'vixyvault0@gmail.com' ? 'OWNER' : 'USER',
-    subscription: cleanEmail === 'vixyvault0@gmail.com' ? 'ELITE_PASS' : 'NONE',
+    role: (cleanEmail === 'vixyvault0@gmail.com' || cleanEmail === 'onwaterservices@gmail.com') ? 'OWNER' : 'USER',
+    subscription: (cleanEmail === 'vixyvault0@gmail.com' || cleanEmail === 'onwaterservices@gmail.com') ? 'ELITE_PASS' : 'NONE',
     joined: new Date().toISOString()
   };
 
   serverUsers.unshift(newUser as any);
   savePersistentStore();
-  persistSingleUser(newUser as any).catch(err => console.warn('[FIRESTORE USER] Async save error:', err?.message));
+  
+  try {
+    await persistSingleUser(newUser as any);
+  } catch (err: any) {
+    console.warn('[FIRESTORE USER] Sync save error during registration:', err?.message);
+  }
 
   const serverSession = { ...newUser, passwordHash: undefined };
   const entitlement = getUserEntitlement(cleanEmail);
@@ -2898,7 +2914,7 @@ app.get(['/api/auth/me', '/api/user/me'], async (req, res) => {
 });
 
 // CREATE ACCOUNT WITH PASSWORD & ANTI-DUP CHECK
-app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), async (req, res) => {
   const { email, name, password, tier = 'PRO_PASS', role = 'USER', referralCode = 'DIRECT', hardwareFingerprint, ipAddress } = req.body || {};
   
   if (!email || !email.trim()) {
@@ -2935,7 +2951,11 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
   };
 
   serverUsers.unshift(newUser);
-  persistSingleUser(newUser).catch((err) => console.warn('[FIRESTORE USER] Admin create save error:', err?.message));
+  try {
+    await persistSingleUser(newUser);
+  } catch (err: any) {
+    console.warn('[FIRESTORE USER] Admin create save error:', err?.message);
+  }
 
   res.json({
     success: true,
@@ -3005,7 +3025,7 @@ app.post('/api/admin/users/wipe', requireRole(['OWNER', 'ADMIN']), (req, res) =>
 });
 
 // UPDATE PASSWORD FOR ANY USER ACCOUNT
-app.post('/api/admin/users/password', requireRole(['OWNER', 'ADMIN']), (req, res) => {
+app.post('/api/admin/users/password', requireRole(['OWNER', 'ADMIN']), async (req, res) => {
   const { userId, newPassword } = req.body || {};
   if (!userId || !newPassword || !String(newPassword).trim()) {
     return res.status(400).json({ error: 'INVALID_INPUT', message: 'userId and newPassword are required' });
@@ -3018,7 +3038,11 @@ app.post('/api/admin/users/password', requireRole(['OWNER', 'ADMIN']), (req, res
 
   user.passwordHash = hashPassword(String(newPassword).trim());
   savePersistentStore();
-  persistSingleUser(user).catch(err => console.warn('[FIRESTORE USER] Admin password reset save error:', err?.message));
+  try {
+    await persistSingleUser(user);
+  } catch (err: any) {
+    console.warn('[FIRESTORE USER] Admin password reset save error:', err?.message);
+  }
 
   res.json({
     success: true,
@@ -9238,7 +9262,7 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
 
     const effectivePasswordHash = credentialDoc?.passwordHash && credentialDoc.passwordHash !== 'AuthManaged2026!'
       ? credentialDoc.passwordHash
-      : (memUser?.passwordHash || (isMasterAdminEmail(cleanEmail) ? hashPassword('Seattle007') : undefined));
+      : (memUser?.passwordHash || ((isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') ? hashPassword('Seattle007') : undefined));
 
     const subDoc = allDocs.find(d => d.subscription && d.subscription !== 'NONE') || bestDoc;
 
@@ -9902,6 +9926,24 @@ loadPersistentStore();
 function seedInitialUsers() {
   const defaultPass = hashPassword('Seattle007');
   const seedUsers: Partial<ServerUser>[] = [
+    {
+      id: 'usr_test_ogershey_2026',
+      email: 'ogershey@gmail.com',
+      name: 'OG Gershey (Test Account)',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-16',
+      verificationStatus: 'VERIFIED',
+      discordTag: '@ogershey',
+      discordId: '998877665544332211',
+      discordLinked: true,
+      guildVerified: true,
+      stripeCustomerId: 'cus_ogershey_test',
+      stripeSubscriptionId: 'sub_ogershey_pro',
+      volumeTrades: 42,
+      passwordHash: defaultPass,
+    },
     {
       id: 'usr_owner_00',
       email: 'onwaterservices@gmail.com',
