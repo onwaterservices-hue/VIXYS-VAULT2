@@ -7,6 +7,32 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI } from '@google/genai';
 import Stripe from 'stripe';
 import crypto from 'crypto';
+
+// --- SECURE PASSWORD HASHING ---
+function hashPassword(password) {
+  if (!password) return password;
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
+  return 'vixy$' + salt + ':' + derivedKey;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash) return false;
+  if (!storedHash.startsWith('vixy$')) {
+    // Legacy plaintext fallback
+    return password === storedHash;
+  }
+  try {
+    const withoutPrefix = storedHash.slice(5);
+    const [salt, key] = withoutPrefix.split(':');
+    const derivedKey = crypto.scryptSync(password, salt, 64).toString('hex');
+    return key === derivedKey;
+  } catch(e) {
+    return false;
+  }
+}
+// -------------------------------
+import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork } from 'firebase/firestore';
 import {
@@ -2342,17 +2368,26 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   // Fallback for migrated accounts without a password hash
-  console.log('Login attempt:', cleanEmail, 'hash:', user.passwordHash, 'pw:', password);
   if ((!user.passwordHash || user.passwordHash === 'AuthManaged2026!') && password !== 'Seattle007') {
-    user.passwordHash = password;
+    const hashed = hashPassword(password);
+    user.passwordHash = hashed;
     if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
       ensureFirestoreNetworkEnabled().then(() => {
-        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: password }, { merge: true }).catch(e => console.warn('Failed to update passwordHash', e));
+        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: hashed }, { merge: true }).catch(e => console.warn('Failed to update passwordHash', e));
+      }).catch(e => {});
+    }
+  } else if (user.passwordHash && !user.passwordHash.startsWith('vixy$') && user.passwordHash === password) {
+    // Migrate plaintext to hash on login
+    const hashed = hashPassword(password);
+    user.passwordHash = hashed;
+    if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+      ensureFirestoreNetworkEnabled().then(() => {
+        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: hashed }, { merge: true }).catch(e => {});
       }).catch(e => {});
     }
   }
 
-  if (user.passwordHash !== password && password !== 'Seattle007') {
+  if (!verifyPassword(password, user.passwordHash) && password !== 'Seattle007') {
     return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
   
@@ -2362,7 +2397,8 @@ app.post('/api/auth/login', (req, res) => {
   });
 });
 
-// REGISTER ENDPOINT
+
+
 app.post('/api/auth/register', (req, res) => {
   const { email, password, name } = req.body || {};
   if (!email || !password) {
@@ -2379,7 +2415,7 @@ app.post('/api/auth/register', (req, res) => {
     id: `usr_${Date.now().toString().slice(-4)}`,
     email: cleanEmail,
     name: name?.trim() || cleanEmail.split('@')[0],
-    passwordHash: password, // In production this should be hashed
+    passwordHash: hashPassword(password),
     role: cleanEmail === 'vixyvault0@gmail.com' ? 'OWNER' : 'USER',
     subscription: cleanEmail === 'vixyvault0@gmail.com' ? 'ELITE_PASS' : 'NONE',
     joined: new Date().toISOString()
@@ -2420,7 +2456,7 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
     name: name?.trim() || cleanEmail.split('@')[0],
     role: role === 'ADMIN' || role === 'OWNER' ? role : 'USER',
     subscription: tier === 'ELITE_PASS' ? 'ELITE_PASS' : tier === 'FREE_TRIAL' ? 'FREE_TRIAL' : 'PRO_PASS',
-    passwordHash: password || 'DefaultPass2026!',
+    passwordHash: password ? hashPassword(password) : hashPassword('DefaultPass2026!'),
     verificationStatus,
     hardwareFingerprint: genHwFingerprint,
     ipHash: genIpHash,
@@ -4146,10 +4182,41 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
   const discordProfile = userDiscordProfiles.get(clean) || userDiscordProfiles.get(user?.email?.toLowerCase() || '');
   const discordId = discordProfile?.discordUserId || user?.discordId;
 
-  const dayPassRecord = userDayPasses.get(clean) ||
+    const dayPassRecord = userDayPasses.get(clean) ||
                         (user?.id ? userDayPasses.get(user.id) : undefined) ||
                         (discordId ? userDayPasses.get(discordId) : undefined) ||
                         (user as any)?.dayPass;
+
+  // TROUBLESHOOTING GRACE LOGIC
+  if (dayPassRecord && !dayPassRecord.troubleshootingGraceApplied) {
+    try {
+      const expMs = new Date(dayPassRecord.expiresAt).getTime();
+      const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
+      const newExp = new Date(expMs + threeDaysMs);
+      dayPassRecord.expiresAt = newExp.toISOString();
+      dayPassRecord.troubleshootingGraceApplied = true;
+      dayPassRecord.troubleshootingGraceAppliedAt = new Date().toISOString();
+      
+      if (dayPassRecord.status === 'EXPIRED' && newExp.getTime() > Date.now()) {
+        dayPassRecord.status = 'ACTIVE';
+      }
+
+      console.log(`[GRACE APPLIED] Added 3 days to Day Pass for ${dayPassRecord.email}. New exp: ${dayPassRecord.expiresAt}`);
+
+      if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('day_passes')) {
+        ensureFirestoreNetworkEnabled().then(() => {
+          if (db) {
+            setDoc(doc(db, 'day_passes', dayPassRecord.email.toLowerCase()), dayPassRecord, { merge: true }).catch(() => {});
+            if (dayPassRecord.userId) {
+              setDoc(doc(db, 'day_passes', dayPassRecord.userId), dayPassRecord, { merge: true }).catch(() => {});
+            }
+          }
+        }).catch(e => {});
+      }
+    } catch(e) {
+      console.warn("Failed to apply grace", e);
+    }
+  }
 
   const nowMs = Date.now();
   let dayPassActive = false;
@@ -7553,6 +7620,10 @@ try {
     const firebaseConfig = JSON.parse(firebaseConfigRaw);
     const firebaseApp = initializeApp(firebaseConfig);
     db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+    const backendAuth = getAuth(firebaseApp);
+    signInWithEmailAndPassword(backendAuth, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026')
+      .then(() => console.log('[Firestore] Backend authenticated securely as system user.'))
+      .catch((authErr) => console.error('[Firestore] Backend authentication failed:', authErr));
     persistenceState = 'HEALTHY_FIRESTORE';
     lastFirestoreWriteSuccess = false;
     console.log('[Firestore] Successfully initialized Firebase Firestore client on server.');
@@ -9801,7 +9872,8 @@ async function startServer() {
   }
 
   if (!process.env.VERCEL) {
-    const server = app.listen(PORT, '0.0.0.0', () => {
+    const server = 
+app.listen(PORT, '0.0.0.0', () => {
       console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
       console.log("Discord Redirect URI:", process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback');
 
