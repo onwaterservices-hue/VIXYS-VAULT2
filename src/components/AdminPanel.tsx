@@ -2588,7 +2588,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   >
                     <option value="ELITE_PASS">ELITE_PASS ($99/mo - Full Bot & Signal Access)</option>
                     <option value="PRO_PASS">PRO_PASS ($49/mo - Standard Access)</option>
-                    <option value="FREE_TRIAL">FREE_TRIAL (3-Hour Access Pass)</option>
+                    <option value="DAY_PASS">DAY_PASS ($9.99 - 24-Hour Access Pass)</option>
                   </select>
                 </div>
 
@@ -2616,7 +2616,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
                     <option value="ACTIVE">ACTIVE (Full Platform Privileges)</option>
-                    <option value="TRIALING">TRIALING (Temporary Trial Access)</option>
+                    <option value="INACTIVE">INACTIVE (Requires Day Pass / Subscription)</option>
                     <option value="SUSPENDED">SUSPENDED / FROZEN (Blocked)</option>
                   </select>
                 </div>

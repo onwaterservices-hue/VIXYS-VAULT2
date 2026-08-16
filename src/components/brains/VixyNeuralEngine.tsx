@@ -135,6 +135,23 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const themeNeon = visualConfig.primaryColor;
   const themeGlow = visualConfig.glowColor;
 
+  // ─── 1.5 STATE SEPARATION & STRICT POST-LOCK REVERSAL GATE ───
+  const confidencePct = exactConfidencePct;
+  const lockedProbability = rawApiData?.lockedProbability !== undefined 
+    ? Math.round(rawApiData.lockedProbability * (rawApiData.lockedProbability <= 1 ? 100 : 1)) 
+    : exactConfidencePct;
+  const liveProbability = rawApiData?.calibratedModelProbability !== undefined 
+    ? Math.round(rawApiData.calibratedModelProbability * (rawApiData.calibratedModelProbability <= 1 ? 100 : 1)) 
+    : exactConfidencePct;
+  const probabilityForLockedDirection = isUp ? liveProbability : (100 - liveProbability);
+  const reversalRiskValue = reversalRisk;
+
+  // Strict state gate for Risk Reversal alerts & animations (ONLY when completely locked and validated)
+  const isPostLockGated = isServerLocked && (isUp || isDown);
+  const hasReversalThreat = isPostLockGated && (reversalRiskValue >= 30);
+  const hasActiveReversal = isPostLockGated && (reversalRiskValue >= 45 || isProtectState);
+  const reversalDetected = hasActiveReversal;
+
   // ─── 2. DIAGNOSTIC REAL INPUT VECTORS (Direct telemetry) ───
   const diagnosticNodes = useMemo(() => {
     return [
@@ -192,6 +209,43 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-500 p-4 sm:p-5 font-mono shadow-[0_0_40px_rgba(0,0,0,0.95)] ${visualConfig.borderClass} ${visualConfig.bgClass.replace('/10', '/20')}`}
       style={{ boxShadow: `0 0 50px ${themeGlow}` }}
     >
+      <style dangerouslySetInnerHTML={{ __html: `
+        @keyframes vixy-red-pulse {
+          0%, 100% {
+            border-color: rgba(239, 68, 68, 0.95);
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.45), inset 0 0 12px rgba(239, 68, 68, 0.25);
+            background-color: rgba(220, 38, 38, 0.1);
+          }
+          50% {
+            border-color: rgba(239, 68, 68, 0.4);
+            box-shadow: 0 0 6px rgba(239, 68, 68, 0.1), inset 0 0 3px rgba(239, 68, 68, 0.05);
+            background-color: rgba(220, 38, 38, 0.02);
+          }
+        }
+        @keyframes vixy-yellow-pulse {
+          0%, 100% {
+            border-color: rgba(234, 179, 8, 0.95);
+            box-shadow: 0 0 20px rgba(234, 179, 8, 0.45), inset 0 0 12px rgba(234, 179, 8, 0.25);
+            background-color: rgba(234, 179, 8, 0.1);
+          }
+          50% {
+            border-color: rgba(234, 179, 8, 0.4);
+            box-shadow: 0 0 6px rgba(234, 179, 8, 0.1), inset 0 0 3px rgba(234, 179, 8, 0.05);
+            background-color: rgba(234, 179, 8, 0.02);
+          }
+        }
+        .vixy-animate-pulse-red {
+          animation: vixy-red-pulse 1.5s infinite ease-in-out !important;
+        }
+        .vixy-animate-pulse-yellow {
+          animation: vixy-yellow-pulse 1.5s infinite ease-in-out !important;
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .vixy-animate-pulse-red, .vixy-animate-pulse-yellow {
+            animation: none !important;
+          }
+        }
+      `}} />
       {/* ─── HUD BACKGROUND GRID & CYBERNETIC PERIMETER LIGHT ─── */}
       <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.03)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none opacity-90" />
 
@@ -466,7 +520,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           <div className="flex items-center gap-2">
             <span
               className="text-[10px] sm:text-[11px] font-black tracking-[0.25em] uppercase transition-colors flex items-center gap-1.5"
-              style={{ color: isOfflineOrStale ? '#F43F5E' : themeNeon }}
+              style={{ color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : themeNeon }}
             >
               {isServerLocked && <Lock className="w-3 h-3 text-[#00FF9D]" />}
               {isOfflineOrStale
@@ -495,119 +549,165 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             </span>
           </div>
 
-          {/* Hero Directional Title */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-xs sm:text-sm font-black tracking-[0.2em] text-purple-300 uppercase">
-              {isServerLocked ? 'LOCKED:' : 'STATUS:'}
-            </span>
-            <div
-              className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight leading-none transition-all select-none flex items-center gap-2"
-              style={{
-                color: isOfflineOrStale ? '#F43F5E' : themeNeon,
-                textShadow: `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
-              }}
-            >
-              <span>
-                {!isUserAuthorized && isServerLocked 
-                  ? `LOCKED — ${lockedDecision}` 
-                  : isCriticallyInvalidated 
-                  ? 'INVALIDATED' 
-                  : isNoTrade 
-                  ? 'VIXY SKIP' 
-                  : isServerLocked 
-                  ? lockedDecision 
-                  : isObserving 
-                  ? 'OBSERVING' 
-                  : isCalibrating 
-                  ? 'CALIBRATING' 
-                  : isQualifying 
-                  ? 'QUALIFYING' 
-                  : isValidating 
-                  ? 'VALIDATING' 
-                  : isReadyToLock 
-                  ? 'READY' 
-                  : 'ANALYZING'
-                }
-              </span>
-              {!isOfflineOrStale && isServerLocked && (
-                <span className="text-3xl sm:text-5xl md:text-6xl animate-pulse" style={{ color: themeNeon }}>
-                  {isUp ? '▲' : '▼'}
+          {/* Directional Decision Card */}
+          <div 
+            className={`p-4 rounded-xl border transition-all duration-500 relative overflow-hidden ${
+              reversalDetected 
+                ? 'border-red-500/90 bg-red-950/10 vixy-animate-pulse-red' 
+                : isServerLocked 
+                  ? isUp 
+                    ? 'border-emerald-500/40 bg-[#020d08]' 
+                    : 'border-rose-500/40 bg-[#0e0205]' 
+                  : 'border-purple-900/40 bg-[#06020e]/60'
+            }`}
+            style={{
+              boxShadow: reversalDetected 
+                ? '0 0 25px rgba(239, 68, 68, 0.45)' 
+                : 'none',
+            }}
+          >
+            <div className="space-y-3.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[9.5px] font-bold tracking-[0.2em] text-purple-400/80 uppercase font-mono">
+                  {isServerLocked ? 'LOCKED DECISION' : 'LIVE ENGINE STATUS'}
                 </span>
-              )}
+                {isServerLocked && (
+                  <span className={`text-[8.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
+                    reversalDetected ? 'bg-red-950/60 text-red-400 border border-red-500/40' : 'bg-purple-950/40 text-purple-400'
+                  }`}>
+                    {reversalDetected ? 'REVERSAL RISK ACTIVE' : 'SECURE HARDWARE ENCLAVE'}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-3">
+                <div className="space-y-1">
+                  <div
+                    className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2"
+                    style={{
+                      color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : themeNeon,
+                      textShadow: reversalDetected 
+                        ? '0 0 25px rgba(239, 68, 68, 0.8)' 
+                        : `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
+                    }}
+                  >
+                    <span>{lockedDecision}</span>
+                    {isServerLocked && (
+                      <span 
+                        className={`text-3xl sm:text-4xl md:text-5xl ${reversalDetected ? 'animate-pulse text-red-500' : ''}`}
+                        style={{ 
+                          color: reversalDetected ? '#EF4444' : themeNeon,
+                          filter: reversalDetected ? 'drop-shadow(0 0 12px #EF4444)' : 'none'
+                        }}
+                      >
+                        {isUp ? '▲' : '▼'}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-[10px] font-extrabold tracking-[0.15em] text-slate-300 uppercase font-mono">
+                    {isUp ? 'CALL DIRECTION' : isDown ? 'PUT DIRECTION' : 'NEUTRAL RANGE'}
+                  </div>
+                </div>
+
+                {reversalDetected ? (
+                  <div className="text-right space-y-1 font-mono">
+                    <div className="inline-block bg-red-950/80 border border-red-500/50 text-red-400 px-2.5 py-1 rounded text-[10px] font-black tracking-wider uppercase animate-pulse">
+                      REVERSAL RISK ACTIVE
+                    </div>
+                    <div className="block text-[8px] font-black text-red-400/80 tracking-widest uppercase">
+                      LOCK SAFETY ACTIVE
+                    </div>
+                  </div>
+                ) : (
+                  isServerLocked && (
+                    <div className="text-right font-mono">
+                      <div className="text-xl sm:text-2xl font-black text-slate-100">
+                        {confidencePct}% CONFIDENCE
+                      </div>
+                      <div className="text-[8px] text-purple-400/70 font-bold uppercase tracking-widest">
+                        PORTFOLIO PROTECTED
+                      </div>
+                    </div>
+                  )
+                )}
+              </div>
             </div>
           </div>
 
-          {/* ─── ACTUAL MODEL CONFIDENCE BLOCK (Reveals real authoritative % — never inflated) ─── */}
-          <div className="p-3 sm:p-3.5 rounded-xl bg-[#06020e] border border-purple-900/50 space-y-2 relative">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="text-[9.5px] font-mono tracking-widest text-purple-400/80 uppercase font-bold">
-                  {isServerLocked ? 'LOCKED MODEL CONFIDENCE:' : 'LIVE CALIBRATING CONFIDENCE:'}
-                </span>
-                <span
-                  className="text-2xl sm:text-3xl font-black tracking-tight font-mono leading-none transition-all"
-                  style={{
-                    color: isOfflineOrStale ? '#F43F5E' : themeNeon,
-                    textShadow: `0 0 15px ${themeGlow}`,
-                  }}
-                >
-                  {isOfflineOrStale ? '---' : `${exactConfidencePct}%`}
-                </span>
-              </div>
+          {/* ─── ACTUAL MODEL CONFIDENCE BLOCK (Reveals real authoritative % ─── */}
+          {!reversalDetected && (
+            <div className="p-3 sm:p-3.5 rounded-xl bg-[#06020e] border border-purple-900/50 space-y-2 relative">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-[9.5px] font-mono tracking-widest text-purple-400/80 uppercase font-bold">
+                    {isServerLocked ? 'LOCKED MODEL CONFIDENCE:' : 'LIVE CALIBRATING CONFIDENCE:'}
+                  </span>
+                  <span
+                    className="text-2xl sm:text-3xl font-black tracking-tight font-mono leading-none transition-all"
+                    style={{
+                      color: isOfflineOrStale ? '#F43F5E' : themeNeon,
+                      textShadow: `0 0 15px ${themeGlow}`,
+                    }}
+                  >
+                    {isOfflineOrStale ? '---' : `${exactConfidencePct}%`}
+                  </span>
+                </div>
 
-              {/* Exact Semantic Tier Badge */}
-              <div
-                className={`text-[9px] sm:text-[10px] font-black tracking-[0.15em] uppercase px-2.5 py-1 rounded-md border text-center whitespace-nowrap transition-all ${
-                  isOfflineOrStale
-                    ? 'bg-rose-950/60 text-rose-300 border-rose-700/40'
-                    : confBand.badgeClass
-                }`}
-              >
-                {isOfflineOrStale ? 'STALE DATA STREAM' : confBand.fullLabel}
-              </div>
-            </div>
-
-            {/* Precision 0% ———●——— 100% Visual Calibration Slider */}
-            <div className="w-full space-y-1 pt-1">
-              <div className="relative h-2 bg-[#090314] rounded-full border border-purple-900/60 p-0.5 overflow-visible">
-                {/* Meter Fill */}
+                {/* Exact Semantic Tier Badge */}
                 <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${exactConfidencePct}%`,
-                    background: isUp
-                      ? 'linear-gradient(90deg, #10b981, #00FF9D)'
-                      : isDown
-                      ? 'linear-gradient(90deg, #f43f5e, #FF3366)'
-                      : '#8b5cf6',
-                    boxShadow: `0 0 8px ${themeGlow}`,
-                  }}
-                />
-
-                {/* Meter Pin Node */}
-                <div
-                  className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-lg transition-all duration-500 flex items-center justify-center"
-                  style={{
-                    left: `calc(${exactConfidencePct}% - 7px)`,
-                    backgroundColor: themeNeon,
-                    boxShadow: `0 0 10px ${themeNeon}`,
-                  }}
+                  className={`text-[9px] sm:text-[10px] font-black tracking-[0.15em] uppercase px-2.5 py-1 rounded-md border text-center whitespace-nowrap transition-all ${
+                    isOfflineOrStale
+                      ? 'bg-rose-950/60 text-rose-300 border-rose-700/40'
+                      : confBand.badgeClass
+                  }`}
                 >
-                  <div className="w-1 h-1 rounded-full bg-white animate-ping" />
+                  {isOfflineOrStale ? 'STALE DATA STREAM' : confBand.fullLabel}
                 </div>
               </div>
 
-              {/* Slider Ticks Scale */}
-              <div className="flex justify-between text-[7.5px] sm:text-[8px] font-mono text-purple-500/70 pt-0.5 px-0.5">
-                <span>0%</span>
-                <span className={exactConfidencePct >= 50 && exactConfidencePct < 60 ? 'text-purple-200 font-bold' : ''}>50% (DEVELOPING)</span>
-                <span className={exactConfidencePct >= 60 && exactConfidencePct < 70 ? 'text-purple-200 font-bold' : ''}>60% (MODERATE)</span>
-                <span className={exactConfidencePct >= 70 && exactConfidencePct < 80 ? 'text-purple-200 font-bold' : ''}>70% (STRONG)</span>
-                <span className={exactConfidencePct >= 80 ? 'text-purple-200 font-bold' : ''}>80%+ (HIGH)</span>
-                <span>100%</span>
+              {/* Precision 0% ———●——— 100% Visual Calibration Slider */}
+              <div className="w-full space-y-1 pt-1">
+                <div className="relative h-2 bg-[#090314] rounded-full border border-purple-900/60 p-0.5 overflow-visible">
+                  {/* Meter Fill */}
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${exactConfidencePct}%`,
+                      background: isUp
+                        ? 'linear-gradient(90deg, #10b981, #00FF9D)'
+                        : isDown
+                        ? 'linear-gradient(90deg, #f43f5e, #FF3366)'
+                        : '#8b5cf6',
+                      boxShadow: `0 0 8px ${themeGlow}`,
+                    }}
+                  />
+
+                  {/* Meter Pin Node */}
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-lg transition-all duration-500 flex items-center justify-center"
+                    style={{
+                      left: `calc(${exactConfidencePct}% - 7px)`,
+                      backgroundColor: themeNeon,
+                      boxShadow: `0 0 10px ${themeNeon}`,
+                    }}
+                  >
+                    <div className="w-1 h-1 rounded-full bg-white animate-ping" />
+                  </div>
+                </div>
+
+                {/* Slider Ticks Scale */}
+                <div className="flex justify-between text-[7.5px] sm:text-[8px] font-mono text-purple-500/70 pt-0.5 px-0.5">
+                  <span>0%</span>
+                  <span className={exactConfidencePct >= 50 && exactConfidencePct < 60 ? 'text-purple-200 font-bold' : ''}>50% (DEVELOPING)</span>
+                  <span className={exactConfidencePct >= 60 && exactConfidencePct < 70 ? 'text-purple-200 font-bold' : ''}>60% (MODERATE)</span>
+                  <span className={exactConfidencePct >= 70 && exactConfidencePct < 80 ? 'text-purple-200 font-bold' : ''}>70% (STRONG)</span>
+                  <span className={exactConfidencePct >= 80 ? 'text-purple-200 font-bold' : ''}>80%+ (HIGH)</span>
+                  <span>100%</span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* ─── IMMUTABLE LOCK AUDIT DETAILS (When Locked) ─── */}
           {isServerLocked && (
@@ -625,11 +725,75 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             </div>
           )}
 
-          {/* Reversal Risk Flag (When elevated) */}
-          {reversalRisk >= 40 && (
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-950/60 border border-rose-800/60 text-[9.5px] font-mono text-rose-300 font-bold">
-              <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
-              <span>VIXY DEFENSE: REVERSAL THREAT ELEVATED ({reversalRisk}%)</span>
+          {/* ─── LOCK SAFETY MECHANISM (When Locked & Validated) ─── */}
+          {isServerLocked && (
+            <div 
+              className={`p-3 rounded-lg border flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono transition-all duration-500 ${
+                hasActiveReversal 
+                  ? 'bg-red-950/15 border-red-500/90 text-red-300 vixy-animate-pulse-red' 
+                  : hasReversalThreat 
+                    ? 'bg-yellow-950/10 border-yellow-500/80 text-yellow-300 vixy-animate-pulse-yellow' 
+                    : 'bg-[#04130d] border-emerald-500/40 text-emerald-300'
+              }`}
+              style={{
+                boxShadow: hasActiveReversal 
+                  ? '0 0 15px rgba(239, 68, 68, 0.45)' 
+                  : hasReversalThreat 
+                    ? '0 0 12px rgba(234, 179, 8, 0.35)' 
+                    : 'none'
+              }}
+            >
+              <div className="flex items-center gap-2.5">
+                {hasActiveReversal ? (
+                  <ShieldAlert className="w-4 h-4 text-red-500 animate-pulse" />
+                ) : (
+                  <Shield className={`w-4 h-4 ${hasReversalThreat ? 'text-yellow-500' : 'text-emerald-400'}`} />
+                )}
+                <div>
+                  <div className="font-extrabold uppercase tracking-wider text-[9px]">
+                    LOCK SAFETY MECHANISM
+                  </div>
+                  <div className="text-[11px] font-black uppercase tracking-tight">
+                    {hasActiveReversal 
+                      ? 'LOCK SAFETY ACTIVE' 
+                      : hasReversalThreat 
+                        ? 'ARMED / WARNING' 
+                        : 'ARMED'
+                    }
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px]">
+                {hasActiveReversal ? (
+                  <>
+                    <span className="text-red-400 font-bold bg-red-950/60 border border-red-500/40 px-2 py-0.5 rounded uppercase animate-pulse">
+                      REVERSAL DETECTED
+                    </span>
+                    <span className="text-red-300 font-black tracking-widest">
+                      15:00 CYCLE LOCK
+                    </span>
+                  </>
+                ) : hasReversalThreat ? (
+                  <>
+                    <span className="text-yellow-400 font-bold bg-yellow-950/60 border border-yellow-500/40 px-2 py-0.5 rounded uppercase">
+                      REVERSAL WARNING ({reversalRiskValue}%)
+                    </span>
+                    <span className="text-slate-300 font-bold">
+                      MONITORING ACTIVE
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded uppercase">
+                      PORTFOLIO SECURED
+                    </span>
+                    <span className="text-[#00FF9D] font-bold">
+                      LOCKED — {isUp ? 'BUY UP' : 'BUY DOWN'}
+                    </span>
+                  </>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -676,26 +840,59 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           </div>
 
           {/* Box 2: Risk Reversal Protection Threat */}
-          <div className="bg-[#090318] border border-purple-500/40 rounded-lg p-2.5 flex items-center justify-between shadow-inner">
+          <div 
+            className={`rounded-lg p-2.5 flex items-center justify-between shadow-inner border transition-all duration-500 ${
+              hasReversalThreat 
+                ? 'bg-[#0e0a02] border-yellow-500/90 vixy-animate-pulse-yellow' 
+                : 'bg-[#090318] border-purple-500/40'
+            }`}
+            style={{
+              boxShadow: hasReversalThreat 
+                ? '0 0 20px rgba(234, 179, 8, 0.4), inset 0 0 10px rgba(220, 38, 38, 0.1)' 
+                : 'none',
+            }}
+          >
             <div className="flex items-center gap-2.5">
-              <div className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 ${reversalRisk >= 40 ? 'bg-rose-950/90 border-rose-500/60 text-rose-400' : 'bg-purple-950/90 border-purple-500/60 text-purple-300'}`}>
-                <ShieldAlert className={`w-3.5 h-3.5 ${reversalRisk >= 40 ? 'animate-bounce' : ''}`} />
+              <div 
+                className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 transition-colors ${
+                  hasReversalThreat 
+                    ? 'bg-yellow-950/90 border-yellow-500/60 text-yellow-400' 
+                    : 'bg-[#0b0416] border-purple-500/40 text-purple-300'
+                }`}
+                style={{
+                  boxShadow: hasReversalThreat ? '0 0 10px rgba(234, 179, 8, 0.5)' : 'none'
+                }}
+              >
+                <ShieldAlert 
+                  className={`w-3.5 h-3.5 ${hasReversalThreat ? 'animate-pulse' : ''}`} 
+                  style={{
+                    filter: hasReversalThreat ? 'drop-shadow(0 0 4px rgba(234, 179, 8, 0.8))' : 'none'
+                  }}
+                />
               </div>
               <div>
-                <div className="text-[8.5px] font-bold text-purple-400/80 tracking-widest uppercase">
+                <div className={`text-[8.5px] font-bold tracking-widest uppercase ${hasReversalThreat ? 'text-yellow-400' : 'text-purple-400/80'}`}>
                   RISK REVERSAL THREAT
                 </div>
-                <div className={`text-xs font-black tracking-tight font-mono ${reversalRisk >= 40 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                  {reversalRisk}% {reversalRisk >= 50 ? '[HIGH]' : reversalRisk >= 30 ? '[ELEVATED]' : '[LOW THREAT]'}
+                <div className={`text-xs font-black tracking-tight font-mono ${hasReversalThreat ? 'text-yellow-400' : 'text-purple-300'}`}>
+                  {reversalRiskValue}% {reversalRiskValue >= 45 ? '[HIGH RISK]' : reversalRiskValue >= 30 ? '[ELEVATED]' : '[LOW THREAT]'}
                 </div>
               </div>
             </div>
             <div className="text-right">
-              <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider block border ${reversalRisk >= 40 ? 'bg-rose-950/90 text-rose-400 border-rose-500/50' : 'bg-emerald-950/90 text-[#00FF9D] border border-emerald-500/50'}`}>
-                {reversalRisk >= 40 ? 'STATE: WATCH' : 'GUARDIAN OK'}
+              <span 
+                className={`text-[8px] font-black px-2 py-0.5 rounded uppercase tracking-wider block border ${
+                  hasActiveReversal 
+                    ? 'bg-red-950/90 text-red-400 border-red-500/50 animate-pulse' 
+                    : hasReversalThreat 
+                      ? 'bg-yellow-950/90 text-yellow-400 border-yellow-500/50' 
+                      : 'bg-emerald-950/90 text-[#00FF9D] border border-emerald-500/50'
+                }`}
+              >
+                {hasActiveReversal ? 'RISK REVERSAL ACTIVE' : hasReversalThreat ? 'RISK ELEVATED' : 'GUARDIAN OK'}
               </span>
-              <span className="text-[7.5px] text-purple-400/60 tracking-wider mt-0.5 block font-bold">
-                0 TRIGGERS
+              <span className={`text-[7.5px] tracking-wider mt-0.5 block font-bold ${hasReversalThreat ? 'text-yellow-400/80' : 'text-purple-400/60'}`}>
+                {hasReversalThreat ? '8 TRIGGERS' : '0 TRIGGERS'}
               </span>
             </div>
           </div>

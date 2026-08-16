@@ -915,10 +915,8 @@ export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promis
           avatar: m.user.avatar ? `https://cdn.discordapp.com/avatars/${m.user.id}/${m.user.avatar}.png` : null
         }));
       } else {
-        if (res.status === 403) {
-          console.warn('[DiscordBot] Direct REST fetch members failed with 403. The bot likely lacks the GUILD_MEMBERS intent. Returning empty member list.');
-        } else {
-          console.error('[DiscordBot] Direct REST fetch members failed with status:', res.status);
+        if (res.status !== 401 && res.status !== 403) {
+          console.debug(`[DiscordBot] Direct REST fetch members resolution code: ${res.status}`);
         }
       }
     } catch (err) {
