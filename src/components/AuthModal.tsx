@@ -165,7 +165,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           } catch (_) {}
         }
 
-        const finalRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : hasActiveEntitlement ? 'PRO' : 'UNPAID';
+        const finalRole = isAdminEmail ? 'ADMIN' : (canonicalUser.role === 'ADMIN' ? 'ADMIN' : ((canonicalUser.role === 'PRO' || canonicalUser.role === 'ELITE' || hasActiveEntitlement) ? 'PRO' : 'UNPAID'));
 
         setAuthState({
           isAuthenticated: true,
@@ -195,7 +195,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             : `Signed in successfully. Welcome back, ${userName}!`
         );
 
-        if (mode === 'register' && !isAdminEmail) {
+        if (mode === 'register' && !isAdminEmail && finalRole === 'UNPAID') {
           setTimeout(() => {
             window.location.href = getStripeDayPassUrl({ email: userEmail, uid: canonicalUserId });
           }, 1200);

@@ -98,12 +98,12 @@ export const AuthView: React.FC<AuthViewProps> = ({
           id: newUserId,
           email: userEmail,
           name: userName,
-          role: assignedRole,
+          role: serverUser?.role || assignedRole,
           apiKey: serverUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
           joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         },
       });
-      setUserRole(assignedRole);
+      setUserRole(serverUser?.role || assignedRole);
       setSuccessMsg(
         isAdminEmail
           ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
@@ -112,7 +112,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           : `Signed in successfully. Welcome back, ${userName}!`
       );
 
-      if (mode === 'register' && !isAdminEmail) {
+      if (mode === 'register' && !isAdminEmail && assignedRole === 'UNPAID' && serverUser?.role !== 'PRO' && serverUser?.role !== 'ELITE') {
         setTimeout(() => {
           const directCheckoutUrl = getStripeDayPassUrl({ email: userEmail, uid: newUserId });
           window.location.href = directCheckoutUrl;
