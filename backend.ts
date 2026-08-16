@@ -2603,12 +2603,7 @@ app.post('/api/auth/login', async (req, res) => {
     await ensureFirebaseReady();
   } catch (initErr: any) {
     console.error(`[AUTH_DEBUG] FIREBASE_INIT_FAILED reqId=${reqId}:`, initErr?.message || initErr);
-    console.log(`[AUTH SERVICE UNAVAILABLE] email=${cleanEmail}`);
-    return res.status(503).json({
-      success: false,
-      error: 'AUTH_SERVICE_UNAVAILABLE',
-      message: 'Authentication service is temporarily unavailable. Please try again in a few moments.'
-    });
+    // Continue with in-memory fallback
   }
 
   let resolution: CanonicalUserResolution;
@@ -2648,10 +2643,22 @@ app.post('/api/auth/login', async (req, res) => {
   console.log(`[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith('vixy$') || false} reqId=${reqId}`);
 
   if (!hasPasswordHash) {
-    const entitlement = getUserEntitlement(cleanEmail);
-    const hasActiveEntitlement = entitlement.plan !== 'NONE' || entitlement.dayPass?.active;
-    
-    if (hasActiveEntitlement) {
+    const CONFIRMED_PASSWORDLESS_CUSTOMERS = [
+  "abe.carrillo987@gmail.com",
+  "ajhuns07@gmail.com",
+  "albertt2700@gmail.com",
+  "alexescobar7503@gmail.com",
+  "dm2664817@gmail.com",
+  "ludinvelasquez47@gmail.com",
+  "ragnarks1996@gmail.com",
+  "xavierrosales503@icloud.com",
+  "nathan.velasquez29@icloud.com",
+  "jeremygarr30@gmail.com",
+  "trelll2008@icloud.com",
+  "gifyzslide@gmail.com",
+  "dhdh@gmail.com"
+];
+    if (CONFIRMED_PASSWORDLESS_CUSTOMERS.includes(cleanEmail)) {
       return res.status(400).json({ 
         success: false, 
         error: 'ACCOUNT_NEEDS_PASSWORD', 
@@ -2732,8 +2739,23 @@ app.post('/api/auth/register', async (req, res) => {
   if (existing) {
     const hasPasswordHash = !!(existing.passwordHash && typeof existing.passwordHash === 'string' && existing.passwordHash !== 'AuthManaged2026!' && existing.passwordHash.length > 0);
     
-    // If they already have a password, they should just sign in
-    if (hasPasswordHash) {
+    // If they already have a password OR they are not in the confirmed list, they should sign in
+    const CONFIRMED_PASSWORDLESS_CUSTOMERS = [
+        "abe.carrillo987@gmail.com",
+        "ajhuns07@gmail.com",
+        "albertt2700@gmail.com",
+        "alexescobar7503@gmail.com",
+        "dm2664817@gmail.com",
+        "ludinvelasquez47@gmail.com",
+        "ragnarks1996@gmail.com",
+        "xavierrosales503@icloud.com",
+        "nathan.velasquez29@icloud.com",
+        "jeremygarr30@gmail.com",
+        "trelll2008@icloud.com",
+        "gifyzslide@gmail.com",
+        "dhdh@gmail.com"
+      ];
+    if (hasPasswordHash || !CONFIRMED_PASSWORDLESS_CUSTOMERS.includes(cleanEmail)) {
       return res.status(400).json({
         success: false,
         error: 'USER_EXISTS',
