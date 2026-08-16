@@ -106,8 +106,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       if (!syncRes?.success) {
         setLoading(false);
-        if (syncRes?.error === 'PASSWORD_CREDENTIAL_MISSING' || syncRes?.error === 'ACCOUNT_NEEDS_CLAIM' || syncRes?.error === 'LEGACY_ACCOUNT_NEEDS_PASSWORD') {
-          setErrorMsg('Account exists on file. Please contact VIXY VAULT support for access recovery.');
+        if (syncRes?.error === 'ACCOUNT_NEEDS_INITIALIZATION' || syncRes?.error === 'PASSWORD_CREDENTIAL_MISSING' || syncRes?.error === 'LEGACY_ACCOUNT_NEEDS_PASSWORD') {
+          setMode('activation');
+          setErrorMsg('');
+          setSuccessMsg('');
+          return;
         } else {
           setErrorMsg(syncRes?.message || 'Authentication failed. Please check your credentials.');
         }
@@ -269,7 +272,139 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
 
           {/* Day Pass Promo Pill for Signup */}
-          {mode === 'register' && (
+          
+            {mode === 'activation' && !activationSent && (
+              <div className="p-6 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-4">
+                <ShieldCheck className="w-10 h-10 text-amber-400 mx-auto" />
+                <h3 className="text-lg font-bold text-white">Account Found</h3>
+                <p className="text-xs text-purple-300 font-sans">
+                  Finish setting up your existing VIXY VAULT account. Verify ownership to create your password.
+                </p>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const reqRes = await fetch('/api/auth/request-activation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email })
+                      }).then(r => r.json());
+                      setLoading(false);
+                      if (reqRes.success) {
+                        setActivationSent(true);
+                        setSuccessMsg('Activation link sent! Check your email.');
+                        if (reqRes.devActivationToken) {
+                          // Auto-fill for testing/dev
+                          setActivationToken(reqRes.devActivationToken);
+                        }
+                      } else {
+                        setErrorMsg(reqRes.message || 'Failed to request activation.');
+                      }
+                    } catch (e) {
+                      setLoading(false);
+                      setErrorMsg('Network error.');
+                    }
+                  }}
+                  className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-3 rounded-xl transition-all"
+                >
+                  Activate Account
+                </button>
+              </div>
+            )}
+            
+            {mode === 'activation' && activationSent && (
+              <div className="space-y-4">
+                <div className="p-4 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-2">
+                  <h3 className="text-sm font-bold text-white">Create Your Password</h3>
+                  <p className="text-xs text-purple-300">Enter the activation code sent to your email and your new password.</p>
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">Activation Code</label>
+                  <input
+                    type="text"
+                    required
+                    value={activationToken}
+                    onChange={(e) => setActivationToken(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <label className="text-purple-300/70 block font-semibold">New Password</label>
+                  <input
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+                
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      const actRes = await fetch('/api/auth/activate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: email, token: activationToken, password: password })
+                      }).then(r => r.json());
+                      
+                      if (actRes.success) {
+                        // Activation logs the user in
+                        setSuccessMsg('Account activated and signed in!');
+                        const serverUser = actRes.user || {};
+                        const canonicalUserId = serverUser.id || serverUser.uid || `usr_${email.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+                        
+                        // Execute same post-login flow
+                        const restoreRes = await fetch('/api/auth/restore-access', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json', 'x-user-email': email, 'x-user-uid': canonicalUserId },
+                          body: JSON.stringify({ email, uid: canonicalUserId })
+                        }).then(r => r.json());
+                        
+                        let assignedRole = email === 'vixyvault0@gmail.com' ? 'ADMIN' : 'UNPAID';
+                        if (restoreRes?.success && restoreRes.tier) {
+                          if (restoreRes.tier === 'DAY_PASS' || restoreRes.tier === 'PRO' || restoreRes.tier === 'ELITE') {
+                            assignedRole = 'PRO';
+                          }
+                        }
+                        
+                        setAuthState({
+                          isAuthenticated: true,
+                          user: {
+                            id: canonicalUserId,
+                            email,
+                            role: assignedRole as 'PRO' | 'ADMIN' | 'UNPAID',
+                            discordLinked: false,
+                            discordId: undefined,
+                            discordTag: undefined
+                          }
+                        });
+                        setUserRole(assignedRole as any);
+                        if (onSuccessNavigate) {
+                          setTimeout(() => onSuccessNavigate(assignedRole as any), 1000);
+                        }
+                      } else {
+                        setLoading(false);
+                        setErrorMsg(actRes.message || 'Activation failed.');
+                      }
+                    } catch (e) {
+                      setLoading(false);
+                      setErrorMsg('Network error.');
+                    }
+                  }}
+                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-3 rounded-xl transition-all"
+                >
+                  Verify & Sign In
+                </button>
+              </div>
+            )}
+
+{mode === 'register' && (
             <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/80 via-[#0E0622] to-cyan-950/80 border border-cyan-500/40 flex items-center justify-between gap-3 text-xs shadow-md">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shrink-0">
@@ -292,7 +427,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <p className="text-emerald-200 font-bold text-xs">{successMsg}</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
+            <form onSubmit={handleSubmit} className={`space-y-4 text-xs font-mono ${mode === 'activation' ? 'hidden' : ''}`}>
               {errorMsg && (
                 <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-xl text-rose-300 font-bold text-[11px]">
                   {errorMsg}

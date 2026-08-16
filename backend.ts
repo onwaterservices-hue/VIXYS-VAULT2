@@ -2633,11 +2633,11 @@ app.post('/api/auth/login', async (req, res) => {
 
   if (!hasPasswordHash) {
     console.log(`[AUTH] email=${cleanEmail} lookup=${resolution.allDocs.length > 0 ? 'FIRESTORE' : 'MEMORY'} candidateCount=${resolution.allDocs.length} credentialSource=NONE verification=FAILED`);
-    console.log(`[AUTH_DEBUG] LEGACY_ACCOUNT_NEEDS_PASSWORD for account ${user.id || user.uid || cleanEmail} reqId=${reqId}`);
+    console.log(`[AUTH_DEBUG] ACCOUNT_NEEDS_INITIALIZATION for account ${user.id || user.uid || cleanEmail} reqId=${reqId}`);
     return res.status(401).json({
       success: false,
-      error: 'LEGACY_ACCOUNT_NEEDS_PASSWORD',
-      message: 'Account exists on file. Please contact VIXY VAULT support for access recovery.'
+      error: 'ACCOUNT_NEEDS_ACTIVATION',
+      message: 'Account requires credential initialization. Please use the Create Account tab to set your password.'
     });
   }
 
@@ -2669,6 +2669,54 @@ app.post('/api/auth/login', async (req, res) => {
   });
 });
 
+
+const activationTokens = new Map<string, { token: string, expires: number }>();
+
+app.post('/api/auth/request-activation', async (req, res) => {
+  const email = String(req.body.email || '').toLowerCase().trim();
+  if (!email) return res.status(400).json({ success: false, message: 'Email required' });
+  
+  const user = serverUsers.find(u => u.email?.toLowerCase() === email);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  
+  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  activationTokens.set(email, { token, expires: Date.now() + 15 * 60 * 1000 }); // 15 mins
+  
+  console.log(`[AUTH ACTIVATION EMAIL MOCK] SENDING TO: ${email} LINK: /activate?token=${token}`);
+  
+  res.json({ success: true, message: 'Activation link sent to your email.', devActivationToken: token });
+});
+
+app.post('/api/auth/activate', async (req, res) => {
+  const { email, token, password } = req.body;
+  const cleanEmail = String(email || '').toLowerCase().trim();
+  
+  if (!cleanEmail || !token || !password) return res.status(400).json({ success: false, message: 'Missing fields' });
+  
+  const record = activationTokens.get(cleanEmail);
+  if (!record || record.token !== token || record.expires < Date.now()) {
+    return res.status(400).json({ success: false, message: 'Invalid or expired activation token' });
+  }
+  
+  const user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+  
+  const hashed = hashPassword(password);
+  user.passwordHash = hashed;
+  activationTokens.delete(cleanEmail);
+  
+  if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+    ensureFirestoreNetworkEnabled().then(() => {
+      setDoc(doc(db, 'users', user.id || user.uid || cleanEmail), { passwordHash: hashed }, { merge: true }).catch(() => {});
+    }).catch(() => {});
+  }
+  savePersistentStore();
+  
+  const serverSession = { ...user };
+  serverSession.passwordHash = undefined;
+  return res.json({ success: true, user: serverSession });
+});
+
 app.post('/api/auth/register', async (req, res) => {
   if (productionMaintenanceState.enabled || productionMaintenanceState.emergencyLock) {
     return res.status(503).json({
@@ -2694,10 +2742,12 @@ app.post('/api/auth/register', async (req, res) => {
   const existing = resolution.user || serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
 
   if (existing) {
+
+
     return res.status(400).json({
       success: false,
       error: 'USER_EXISTS',
-      message: 'Account already exists. Please sign in or contact VIXY VAULT support for access recovery.'
+      message: 'Account already exists. Please sign in.'
     });
   }
 
