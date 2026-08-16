@@ -63,8 +63,12 @@ async function testConnection() {
   try {
     await getDocFromServer(doc(db, '_connection_check', 'init'));
   } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
+    if (error instanceof Error) {
+      if (error.message.includes('Quota limit exceeded') || error.message.includes('RESOURCE_EXHAUSTED')) {
+        console.warn('[Firestore] Notice: Quota limit exceeded on free tier. Using local cache mode.');
+      } else if (error.message.includes('the client is offline')) {
+        console.error('Please check your Firebase configuration.');
+      }
     }
   }
 }

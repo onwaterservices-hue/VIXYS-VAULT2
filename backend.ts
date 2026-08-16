@@ -9127,22 +9127,32 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
   }
 
   // 1. Check in-memory hydrated cache FIRST
-  const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  let memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
   if (memUser) {
     console.log(`[VIXY_AUTH_SOURCE] source=MEMORY_HYDRATED email=${cleanEmail}`);
     return { user: memUser, allDocs: [] };
   }
 
-  // 2. Fallback to Firestore if NOT in memory
+  // Reload disk store in case disk has new users
+  loadPersistentStore();
+  memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  if (memUser) {
+    console.log(`[VIXY_AUTH_SOURCE] source=DISK_STORE email=${cleanEmail}`);
+    return { user: memUser, allDocs: [] };
+  }
+
+  // Check if circuit is open or Firestore is offline before querying Firestore
+  if (!db || isCircuitOpen() || firestoreNetworkDisabled || persistenceState === 'DEGRADED_CACHE_ACTIVE' || persistenceState === 'RESOURCE_EXHAUSTED') {
+    console.log(`[VIXY_AUTH_SOURCE] source=CACHE_FALLBACK_CIRCUIT_OPEN email=${cleanEmail}`);
+    return { user: memUser || null, allDocs: [] };
+  }
+
+  // 2. Fallback to Firestore if NOT in memory and circuit is active
   try {
     await ensureFirebaseReady();
   } catch (initErr: any) {
-    console.error('[AUTH_DEBUG] ensureFirebaseReady error in resolveCanonicalUserByEmail:', initErr?.message || initErr);
-    return { user: null, allDocs: [], error: 'FIREBASE_INIT_FAILED' };
-  }
-
-  if (!db) {
-    return { user: null, allDocs: [] };
+    console.warn('[AUTH_DEBUG] ensureFirebaseReady error in resolveCanonicalUserByEmail:', initErr?.message || initErr);
+    return { user: memUser || null, allDocs: [] };
   }
 
   try {
@@ -9194,15 +9204,10 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
     console.log(`[VIXY_AUTH_SOURCE] source=FIRESTORE email=${cleanEmail}`);
     return { user: resolvedUser, allDocs };
   } catch (firestoreErr: any) {
-    if (firestoreErr?.code === 'resource-exhausted') {
-      persistenceState = 'DEGRADED_CACHE_ACTIVE';
-    }
-    console.error('[AUTH_DEBUG] FIRESTORE_QUERY_ERROR in resolveCanonicalUserByEmail:', {
-      email: cleanEmail,
-      code: firestoreErr?.code,
-      message: firestoreErr?.message
-    });
-    return { user: null, allDocs: [], error: firestoreErr?.message || 'FIRESTORE_ERROR' };
+    handleFirestoreWriteError(firestoreErr, 'resolveCanonicalUserByEmail');
+    console.warn('[AUTH_DEBUG] FIRESTORE_QUERY_NOTICE in resolveCanonicalUserByEmail:', firestoreErr?.message || firestoreErr);
+    const fallbackUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+    return { user: fallbackUser || null, allDocs: [] };
   }
 }
 
@@ -9276,7 +9281,7 @@ async function hydrateUserFromFirestore(email?: string, uid?: string): Promise<S
   }
 
   // Fallback by UID if no email
-  if (cleanUid && db) {
+  if (cleanUid && db && !isCircuitOpen() && !firestoreNetworkDisabled && persistenceState !== 'DEGRADED_CACHE_ACTIVE' && persistenceState !== 'RESOURCE_EXHAUSTED') {
     try {
       await ensureFirestoreNetworkEnabled().catch(() => {});
       const docSnap = await getDoc(doc(db, 'users', cleanUid));
@@ -9302,8 +9307,9 @@ async function hydrateUserFromFirestore(email?: string, uid?: string): Promise<S
         console.log(`[HYDRATE_FIRESTORE] Hydrated user via UID: ${cleanUid}`);
         return user;
       }
-    } catch (e) {
-      console.warn('[HYDRATE_FIRESTORE_ERROR]', e);
+    } catch (e: any) {
+      handleFirestoreWriteError(e, 'hydrateUserFromFirestore');
+      console.warn('[HYDRATE_FIRESTORE_NOTICE]', e?.message || e);
     }
   }
   return null;

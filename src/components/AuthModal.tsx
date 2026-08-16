@@ -135,27 +135,33 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole = assignedRole;
+      let finalRole: string = assignedRole;
       if (res.entitlement) {
          if (res.entitlement.entitlements?.canAccessAdminPanel) finalRole = 'ADMIN';
          else if (res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) finalRole = 'PRO';
       }
+
+      const handleSuccessCB = onSuccess || onSuccessRole;
 
       setAuthState({
         isAuthenticated: true,
         user: {
           id: canonicalUserId,
           email: userEmail,
-          role: finalRole as 'PRO' | 'ADMIN' | 'UNPAID',
+          name: serverUser.name || userEmail.split('@')[0],
+          role: finalRole as any,
+          joinedDate: serverUser.joined || new Date().toISOString().split('T')[0],
           discordLinked: serverUser.discordLinked || false,
           discordId: serverUser.discordId,
           discordTag: serverUser.discordTag
         }
       });
-      setUserRole(finalRole as any);
+      if (typeof setUserRole === 'function') {
+        setUserRole(finalRole as any);
+      }
 
-      if (typeof onSuccessNavigate === 'function') {
-        setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
+      if (typeof handleSuccessCB === 'function') {
+        setTimeout(() => handleSuccessCB(finalRole as any), 1000);
       }
     } catch (err) {
       setLoading(false);
