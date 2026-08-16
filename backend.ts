@@ -4732,6 +4732,12 @@ export interface DayPassRecord {
   troubleshootingGraceApplied?: boolean;
   createdAt: string;
   updatedAt: string;
+  compensationApplied?: boolean;
+  compensationReason?: string;
+  migrationKey?: string;
+  source?: string;
+  paymentVerified?: boolean;
+  plan?: string;
 }
 
 export const userDayPasses = new Map<string, DayPassRecord>();
