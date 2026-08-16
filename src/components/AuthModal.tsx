@@ -34,7 +34,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  // Sync mode and email whenever modal opens or mode prop changes
+  // Clean state and body scroll lock on open/close
   React.useEffect(() => {
     if (isOpen) {
       setMode(initialMode === 'register' ? 'register' : 'login');
@@ -42,13 +42,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setSuccessMsg('');
       setPassword('');
       setConfirmPassword('');
+      setLoading(false);
       if (initialEmail) {
         setEmail(initialEmail);
       } else {
         const stored = localStorage.getItem('vixy_user_email');
         if (stored) setEmail(stored);
       }
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      setLoading(false);
+      setErrorMsg('');
+      setSuccessMsg('');
     }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [isOpen, initialMode, initialEmail]);
 
   if (!isOpen) return null;
@@ -163,6 +174,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (typeof handleSuccessCB === 'function') {
         setTimeout(() => handleSuccessCB(finalRole as any), 150);
       }
+      setLoading(false);
       onClose();
     } catch (err) {
       setLoading(false);
@@ -171,7 +183,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#05020F]/90 backdrop-blur-2xl animate-fadeIn font-mono select-none overflow-y-auto">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#05020F]/90 backdrop-blur-2xl animate-fadeIn font-mono select-none overflow-y-auto"
+    >
       <div className="relative w-full max-w-lg bg-gradient-to-b from-[#130B2A] via-[#0A0518] to-[#070312] border-2 border-purple-500/50 rounded-3xl shadow-2xl shadow-purple-950/90 overflow-hidden text-purple-100 my-auto">
         {/* Glow Header Accent Bar */}
         <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-purple-500 via-cyan-400 to-indigo-500" />

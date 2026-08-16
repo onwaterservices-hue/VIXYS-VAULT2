@@ -18,14 +18,25 @@ export const SmartSearchModal: React.FC<SmartSearchModalProps> = ({
   const [query, setQuery] = useState('');
 
   useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        if (isOpen) onClose();
+        onClose();
+      }
+      if (e.key === 'Escape') {
+        onClose();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -48,7 +59,12 @@ export const SmartSearchModal: React.FC<SmartSearchModalProps> = ({
   ].filter((item) => item.label.toLowerCase().includes(query.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-[100] flex items-start justify-center pt-20 px-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+    >
       <div className="w-full max-w-2xl bg-[#0d071d]/95 rounded-3xl border border-purple-500/20 shadow-2xl shadow-purple-950/80 overflow-hidden flex flex-col font-sans">
         {/* Search Input Bar */}
         <div className="flex items-center px-4 py-3.5 border-b border-purple-900/40 bg-[#120a28]/60">

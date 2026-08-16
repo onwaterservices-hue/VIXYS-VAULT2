@@ -58,6 +58,17 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, [setSettings]);
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   // Real OAuth Connect via Discord Authorization URL
@@ -132,7 +143,12 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 font-mono">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+      className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200 font-mono"
+    >
       <div className="relative w-full max-w-lg bg-[#0F0826] border border-purple-600/40 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden text-white">
         {/* Background Glowing Ambient Orbs */}
         <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
