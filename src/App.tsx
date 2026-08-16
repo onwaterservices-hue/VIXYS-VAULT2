@@ -1052,57 +1052,8 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              ) : !(alertSettings?.discordLinked && alertSettings?.guildMember) ? (
-                /* Logged in, BUT Discord Not Linked or Server Membership Not Verified */
-                <div className="max-w-3xl mx-auto my-8 p-8 rounded-3xl bg-[#0B061A] border-2 border-indigo-500/50 text-center space-y-6 shadow-2xl font-mono animate-fadeIn">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center mx-auto text-indigo-400 shadow-lg shadow-indigo-600/30">
-                    <MessageSquare className="w-8 h-8 text-indigo-300 animate-pulse" />
-                  </div>
-
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 text-xs font-bold uppercase tracking-wider">
-                      <span>STEP 2: DISCORD VERIFICATION REQUIRED</span>
-                    </div>
-                    <h2 className="text-2xl font-black text-white font-sans tracking-tight">
-                      Connect & Verify Your Discord Account
-                    </h2>
-                    <p className="text-sm text-purple-300/80 font-sans max-w-lg mx-auto leading-relaxed">
-                      Discord configuration is required for all VIXY Vault access. Bind your Discord account and confirm server membership to activate live signals, day pass entitlements, and automated role sync.
-                    </p>
-                  </div>
-
-                  <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-800/40 max-w-md mx-auto text-left text-xs font-sans space-y-2 text-purple-200">
-                    <div className="flex items-center justify-between">
-                      <span>1. Connect Discord Account</span>
-                      <span className={alertSettings?.discordLinked ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
-                        {alertSettings?.discordLinked ? '✓ Connected' : 'Pending'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>2. Join VIXY Vault Discord Server</span>
-                      <span className={alertSettings?.guildMember ? 'text-emerald-400 font-bold' : 'text-amber-400'}>
-                        {alertSettings?.guildMember ? '✓ Joined' : 'Pending'}
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span>3. Instant Elite Role & Access Sync</span>
-                      <span className={alertSettings?.guildMember ? 'text-emerald-400 font-bold' : 'text-purple-400/60'}>
-                        {alertSettings?.guildMember ? '✓ Synced' : 'Awaiting Membership'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setIsDiscordModalOpen(true)}
-                    className="px-8 py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-black text-sm uppercase tracking-wider shadow-xl shadow-indigo-600/30 transition-all inline-flex items-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <MessageSquare className="w-5 h-5" />
-                    <span>Connect Discord & Verify Server</span>
-                    <ArrowRight className="w-5 h-5" />
-                  </button>
-                </div>
               ) : !isSubscriptionActive ? (
-                /* Logged in AND Discord Verified, BUT Subscription Inactive / Day Pass Expired -> Redirect to Pricing Page View */
+                /* Logged in, BUT Subscription Inactive / Day Pass Expired -> Redirect to Pricing Page View */
                 <div className="space-y-6 animate-fadeIn">
                   <div className="bg-gradient-to-r from-amber-950/80 via-[#180C04] to-amber-950/80 border-2 border-amber-500/60 rounded-2xl p-5 text-amber-200 font-mono text-xs flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
                     <div className="flex items-center gap-3">
@@ -1111,17 +1062,18 @@ export default function App() {
                       </div>
                       <div>
                         <div className="font-black text-sm text-white font-sans">
-                          STEP 3: ACTIVE 24-HOUR DAY PASS OR SUBSCRIPTION REQUIRED
+                          ACTIVE 24-HOUR DAY PASS OR SUBSCRIPTION REQUIRED
                         </div>
                         <p className="text-amber-300/80 text-xs font-sans">
-                          Discord verified! Purchase a 24-Hour VIXY Elite Day Pass ($9.99) or subscribe below to unlock the live terminal.
+                          Purchase a 24-Hour VIXY Elite Day Pass ($9.99) or subscribe below to unlock live predictions and trading desks.
                         </p>
                       </div>
                     </div>
                     <button
+                      onClick={() => setActiveTab('pricing')}
                       className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 transition-all shadow-lg shadow-amber-500/20"
                     >
-                      Instant Pro Upgrade ($29/mo)
+                      View Pro Plans ($29/mo)
                     </button>
                   </div>
 
@@ -1135,7 +1087,24 @@ export default function App() {
                 </div>
               ) : (
                 /* Logged in AND Active Subscription -> Access Dashboard / Terminal Desks! */
-                <>
+                <div className="relative">
+                  {/* In-App Terminal Maintenance Lock (Trading Actions Locked, Terminal Read-Only) */}
+                  {(maintenanceState.maintenance || maintenanceState.emergencyLock) && userRole !== 'ADMIN' && (
+                    <div className="mb-6 p-6 rounded-2xl bg-[#0d071d]/90 border-2 border-amber-500/60 backdrop-blur-md text-center space-y-3 shadow-2xl">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+                        <span>TERMINAL READ-ONLY // SYSTEM UPDATE IN PROGRESS</span>
+                      </div>
+                      <h3 className="text-xl font-black text-white font-sans">
+                        Live Systems Temporarily Locked for Maintenance
+                      </h3>
+                      <p className="text-sm text-purple-200/80 max-w-xl mx-auto font-sans leading-relaxed">
+                        Your account, active subscription, and Day Pass entitlement remain 100% secure.
+                        Trading execution and order routing are temporarily paused while algorithms and models are calibrated.
+                      </p>
+                    </div>
+                  )}
+
                   {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
                   {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
                     <TopNavControls
@@ -1330,7 +1299,7 @@ export default function App() {
                       </div>
                     )
                   )}
-                </>
+                </div>
               )}
             </>
           )}
