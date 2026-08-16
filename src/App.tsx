@@ -32,7 +32,6 @@ import { AdminPanel } from './components/AdminPanel';
 import { LandingPage } from './components/LandingPage';
 import { CURRENT_DATA_SOURCE } from './utils/statGating';
 import { AuthModal } from './components/AuthModal';
-import { ResetPasswordModal } from './components/ResetPasswordModal';
 import { TradeJournalView } from './components/TradeJournalView';
 import { SettingsView } from './components/SettingsView';
 import { ScalpingDeskView } from './components/ScalpingDeskView';
@@ -132,13 +131,6 @@ export default function App() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const tokenParam = params.get('resetToken') || params.get('token');
-    if (tokenParam) {
-      setResetToken(tokenParam);
-      setShowResetModal(true);
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
     const stripeStatus = params.get('stripe_status');
     
     if (stripeStatus === 'success') {
@@ -172,7 +164,7 @@ export default function App() {
               
               setTimeout(() => {
                 setIsVerifyingPayment(false);
-                setActiveTab('live');
+                setActiveTab('terminal');
                 window.history.replaceState({}, document.title, window.location.pathname);
               }, 1500);
             } else if (attempts >= 10) {
@@ -446,8 +438,6 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState<boolean>(false);
   const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('login');
   const [authModalEmail, setAuthModalEmail] = useState<string>('');
-  const [showResetModal, setShowResetModal] = useState<boolean>(false);
-  const [resetToken, setResetToken] = useState<string>('');
 
   // Toggle Favorite Asset
   const handleToggleFavorite = (symbol: string) => {
@@ -799,6 +789,25 @@ export default function App() {
     userRole === 'ADMIN' ||
     dayPassInfo.active;
 
+  const handleLaunchTerminal = () => {
+    if (!authState.isAuthenticated) {
+      handleOpenAuth('register');
+    } else if (!isSubscriptionActive) {
+      setActiveTab('pricing');
+    } else {
+      setActiveTab('terminal');
+    }
+  };
+
+  const handleAuthSuccess = (role: 'PRO' | 'UNPAID' | 'ADMIN') => {
+    const hasActive = role === 'PRO' || role === 'ADMIN' || dayPassInfo.active || subscription.status === 'active';
+    if (hasActive) {
+      setActiveTab('terminal');
+    } else {
+      setActiveTab('pricing');
+    }
+  };
+
   const isPublicRoute = ['landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
@@ -855,7 +864,7 @@ export default function App() {
           {activeTab === 'landing' && (
             <LandingPage
               ticker={ticker}
-              onLaunchTerminal={() => setActiveTab('terminal')}
+              onLaunchTerminal={handleLaunchTerminal}
               onOpenPricing={() => setActiveTab('pricing')}
               onOpenAuth={handleOpenAuth}
               dataSource={CURRENT_DATA_SOURCE}
@@ -878,7 +887,7 @@ export default function App() {
               authState={authState}
               setAuthState={setAuthState}
               setUserRole={setUserRole}
-              onSuccessNavigate={() => setActiveTab('terminal')}
+              onSuccessNavigate={handleAuthSuccess}
             />
           )}
 
@@ -1295,19 +1304,7 @@ export default function App() {
         initialEmail={authModalEmail}
         setAuthState={setAuthState}
         setUserRole={setUserRole}
-      />
-
-      {/* Reset Password Modal */}
-      <ResetPasswordModal
-        isOpen={showResetModal}
-        onClose={() => setShowResetModal(false)}
-        resetToken={resetToken}
-        onOpenLogin={(email) => {
-          setShowResetModal(false);
-          if (email) setAuthModalEmail(email);
-          setAuthModalMode('login');
-          setShowAuthModal(true);
-        }}
+        onSuccess={handleAuthSuccess}
       />
 
       {/* Footer */}

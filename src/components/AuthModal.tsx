@@ -13,6 +13,7 @@ interface AuthModalProps {
   initialEmail?: string;
   onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
   setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
+  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -24,8 +25,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   initialEmail = '',
   onSuccessRole,
   setUserRole,
+  onSuccess,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>(initialMode);
+  const [mode, setMode] = useState<'login' | 'register'>(initialMode);
   const [email, setEmail] = useState(() => initialEmail || localStorage.getItem('vixy_user_email') || '');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -59,38 +61,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     const userEmail = email.trim() || 'trader@vixysvault.com';
     const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
 
-    if (isAdminEmail && password && password !== 'Seattle007') {
-      setTimeout(() => {
-        setLoading(false);
-        setErrorMsg('Access Denied: Incorrect password for Master Admin account.');
-      }, 500);
-      return;
-    }
-
     if (isAdminEmail) {
       localStorage.setItem('vixy_admin_email', userEmail.toLowerCase());
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
-    }
-
-    if (mode === 'forgot') {
-      try {
-        const fetchRes = await fetch('/api/auth/forgot-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: userEmail })
-        });
-        const resData = await fetchRes.json();
-        setLoading(false);
-        if (!fetchRes.ok && fetchRes.status === 429) {
-          setErrorMsg(resData.message || 'Too many password reset requests. Please wait a few minutes before trying again.');
-          return;
-        }
-        setSuccessMsg(resData.message || `If an account exists for ${userEmail}, you'll receive a password reset link.`);
-      } catch (err) {
-        setLoading(false);
-        setSuccessMsg(`If an account exists for ${userEmail}, you'll receive a password reset link.`);
-      }
-      return;
     }
 
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
@@ -204,16 +177,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             : `Signed in successfully. Welcome back, ${userName}!`
         );
 
-        if (mode === 'register' && !isAdminEmail && finalRole === 'UNPAID') {
-          setTimeout(() => {
-            window.location.href = getStripeDayPassUrl({ email: userEmail, uid: canonicalUserId });
-          }, 1200);
-        } else {
-          setTimeout(() => {
-            setSuccessMsg('');
-            onClose();
-          }, 1000);
-        }
+        setTimeout(() => {
+          setSuccessMsg('');
+          onClose();
+          if (onSuccess) {
+            onSuccess(finalRole as any);
+          }
+        }, 1200);
     } catch (err) {
       setLoading(false);
       setErrorMsg('Authentication failed. Please check your credentials.');
@@ -271,7 +241,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <h2 className="text-2xl sm:text-3xl font-black font-sans tracking-tight text-white">
               {mode === 'login' && 'Sign In to Terminal'}
               {mode === 'register' && 'Create Your VIXY Account'}
-              {mode === 'forgot' && 'Reset Account Password'}
             </h2>
             <p className="text-xs text-purple-200/70 font-sans max-w-sm mx-auto">
               {mode === 'register'
@@ -363,33 +332,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </div>
               </div>
 
-              {mode !== 'forgot' && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Password</label>
-                    {mode === 'login' && (
-                      <button
-                        type="button"
-                        onClick={() => setMode('forgot')}
-                        className="text-[10px] text-cyan-400 hover:underline cursor-pointer"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
-                    />
-                  </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Password</label>
                 </div>
-              )}
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-[#080414] border border-purple-800/60 rounded-xl pl-10 pr-3 py-2.5 text-purple-100 placeholder-purple-400/40 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all"
+                  />
+                </div>
+              </div>
 
               {/* Submit Button */}
               <button
@@ -402,9 +360,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     ? 'Authenticating...'
                     : mode === 'login'
                     ? 'Sign In to Terminal'
-                    : mode === 'register'
-                    ? 'Create Account & Continue'
-                    : 'Send Reset Link'}
+                    : 'Create Account & Continue'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>

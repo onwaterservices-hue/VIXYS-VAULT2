@@ -32,7 +32,7 @@ function verifyPassword(password, storedHash) {
   }
 }
 // -------------------------------
-import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork, query, limit, orderBy } from 'firebase/firestore';
 import {
@@ -1274,6 +1274,10 @@ export interface Active15mCycleState {
     decision: 'BUY UP' | 'BUY DOWN' | 'PASS';
     probability: number;
     confidence: number;
+    spot: number;
+    strike: number;
+    lockedAt: string;
+    cycleId: string;
   } | null;
 }
 
@@ -1569,7 +1573,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   if (!logItem) {
     logItem = {
       id: sigId,
-      market: 'BTC_KALSHI_15M',
+      market: 'BTC',
       ticker: 'BTC/USD',
       intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
       intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -1584,12 +1588,20 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
       lockedAt: lockedTime,
       expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
       status: 'LOCKED',
-      modelVersion: serverLearningEngine.modelVersion,
+      modelVersion: serverLearningEngine.modelVersion || 'VIXY_AUTHORITATIVE_NEURAL_v5',
       dataSource: 'COINBASE_KRAKEN_CASCADE',
       latencyMs: 12,
+      // Canonical authoritative VIXY Lock record fields
+      cycleId: cycleId,
+      timeframe: '15M',
+      decision: dir === 'UP' ? 'BUY_UP' : 'BUY_DOWN',
+      entryPrice: livePrice,
+      strike: strike,
+      confidencePct: conf,
+      lockedProbability: prob,
     };
     persistentSignalLogs.unshift(logItem);
-    if (persistentSignalLogs.length > 50) {
+    if (persistentSignalLogs.length > 300) {
       persistentSignalLogs.pop();
     }
   } else {
@@ -1600,6 +1612,15 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
     logItem.targetStrike = strike;
     logItem.spotAtLock = livePrice;
     logItem.status = 'LOCKED';
+    logItem.cycleId = cycleId;
+    logItem.market = 'BTC';
+    logItem.timeframe = '15M';
+    logItem.decision = dir === 'UP' ? 'BUY_UP' : 'BUY_DOWN';
+    logItem.entryPrice = livePrice;
+    logItem.strike = strike;
+    logItem.confidencePct = conf;
+    logItem.lockedProbability = prob;
+    logItem.modelVersion = serverLearningEngine.modelVersion || 'VIXY_AUTHORITATIVE_NEURAL_v5';
   }
 
   active15mCycle.lockedSnapshot = {
@@ -1607,6 +1628,10 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
     probability: prob,
     decision: decision,
     confidence: conf,
+    spot: livePrice,
+    strike: strike,
+    lockedAt: lockedTime,
+    cycleId: cycleId,
   };
 
   persistSingleSignalLog(logItem);
@@ -1659,6 +1684,11 @@ async function checkAndSettle15mCycle(livePrice: number) {
           prevLog.actualOutcome = livePrice >= prevLog.targetStrike ? 'UP' : 'DOWN';
           prevLog.wasCorrect = prevLog.actualOutcome === prevLog.direction;
           prevLog.brierScore = Math.round(Math.pow((prevLog.confidence / 100) - (prevLog.wasCorrect ? 1 : 0), 2) * 1000) / 1000;
+
+          // Canonical authoritative fields mapping
+          prevLog.settlementAt = prevLog.resolvedAt;
+          prevLog.actualDirection = prevLog.actualOutcome;
+          prevLog.outcome = prevLog.wasCorrect ? 'WIN' : 'LOSS';
 
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
@@ -1720,7 +1750,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
       if (!persistentSignalLogs.find(s => s.id === sigId)) {
         const skippedLog: PersistentSignalLogItem = {
           id: sigId,
-          market: 'BTC_KALSHI_15M',
+          market: 'BTC',
           ticker: 'BTC/USD',
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -1735,7 +1765,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
           lockedAt: new Date(active15mCycle.intervalEnd - 1).toISOString(),
           expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
           status: 'NO_TRADE', // Map skipped to NO_TRADE
-          modelVersion: serverLearningEngine.modelVersion,
+          modelVersion: serverLearningEngine.modelVersion || 'VIXY_AUTHORITATIVE_NEURAL_v5',
           dataSource: 'COINBASE_KRAKEN_CASCADE',
           latencyMs: 12,
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -1743,7 +1773,18 @@ async function checkAndSettle15mCycle(livePrice: number) {
           actualOutcome: 'NEUTRAL',
           wasCorrect: false, // excluded anyway
           brierScore: 0,
-          qualificationReason: active15mCycle.qualificationReason || active15mCycle.choppyReason || 'ENTRY_WINDOW_EXPIRED'
+          qualificationReason: active15mCycle.qualificationReason || active15mCycle.choppyReason || 'ENTRY_WINDOW_EXPIRED',
+          // Canonical authoritative VIXY Lock record fields
+          cycleId: active15mCycle.cycleId,
+          timeframe: '15M',
+          decision: 'SKIP',
+          entryPrice: active15mCycle.livePrediction?.spot || livePrice,
+          strike: active15mCycle.strikePrice,
+          confidencePct: active15mCycle.livePrediction?.confidence || 0,
+          lockedProbability: active15mCycle.livePrediction?.probability || 50,
+          settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
+          actualDirection: 'NEUTRAL',
+          outcome: 'SKIP',
         };
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) {
@@ -1984,7 +2025,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
       if (!skippedLog) {
         skippedLog = {
           id: sigId,
-          market: 'BTC_KALSHI_15M',
+          market: 'BTC',
           ticker: 'BTC/USD',
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -2000,7 +2041,7 @@ async function checkAndSettle15mCycle(livePrice: number) {
           lockedAt: new Date(now).toISOString(),
           expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
           status: 'NO_TRADE',
-          modelVersion: serverLearningEngine.modelVersion,
+          modelVersion: serverLearningEngine.modelVersion || 'VIXY_AUTHORITATIVE_NEURAL_v5',
           dataSource: 'COINBASE_KRAKEN_CASCADE',
           latencyMs: 12,
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -2008,7 +2049,18 @@ async function checkAndSettle15mCycle(livePrice: number) {
           actualOutcome: 'NEUTRAL',
           wasCorrect: false,
           brierScore: 0,
-          qualificationReason: active15mCycle.qualificationReason || active15mCycle.choppyReason || 'CHOPPY_MARKET'
+          qualificationReason: active15mCycle.qualificationReason || active15mCycle.choppyReason || 'CHOPPY_MARKET',
+          // Canonical authoritative VIXY Lock record fields
+          cycleId: active15mCycle.cycleId,
+          timeframe: '15M',
+          decision: 'SKIP',
+          entryPrice: active15mCycle.livePrediction?.spot || livePrice,
+          strike: active15mCycle.strikePrice,
+          confidencePct: active15mCycle.livePrediction?.confidence || currentConfidence || 72,
+          lockedProbability: active15mCycle.livePrediction?.probability || 50,
+          settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
+          actualDirection: 'NEUTRAL',
+          outcome: 'SKIP',
         };
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) persistentSignalLogs.pop();
@@ -2043,13 +2095,21 @@ async function checkAndSettle15mCycle(livePrice: number) {
       active15mCycle.lockedDecision !== active15mCycle.lockedSnapshot.decision ||
       active15mCycle.lockedDirection !== active15mCycle.lockedSnapshot.direction ||
       Math.abs((active15mCycle.lockedProbability || 0) - active15mCycle.lockedSnapshot.probability) > 0.0001 ||
-      active15mCycle.lockedConfidence !== active15mCycle.lockedSnapshot.confidence
+      active15mCycle.lockedConfidence !== active15mCycle.lockedSnapshot.confidence ||
+      active15mCycle.lockedSpot !== active15mCycle.lockedSnapshot.spot ||
+      active15mCycle.lockedStrike !== active15mCycle.lockedSnapshot.strike ||
+      active15mCycle.lockedAt !== active15mCycle.lockedSnapshot.lockedAt ||
+      active15mCycle.cycleId !== active15mCycle.lockedSnapshot.cycleId
     ) {
-      console.error(`[VIXY_CRITICAL] LOCKED_PREDICTION_MUTATION_DETECTED cycleId=${active15mCycle.cycleId} previousDirection=${active15mCycle.lockedSnapshot.direction} currentDirection=${active15mCycle.lockedDirection} previousProbability=${active15mCycle.lockedSnapshot.probability} currentProbability=${active15mCycle.lockedProbability}`);
+      console.error(`[VIXY_CRITICAL] LOCKED_PREDICTION_MUTATION_DETECTED cycleId=${active15mCycle.cycleId}`);
       active15mCycle.lockedDecision = active15mCycle.lockedSnapshot.decision;
       active15mCycle.lockedDirection = active15mCycle.lockedSnapshot.direction;
       active15mCycle.lockedProbability = active15mCycle.lockedSnapshot.probability;
       active15mCycle.lockedConfidence = active15mCycle.lockedSnapshot.confidence;
+      active15mCycle.lockedSpot = active15mCycle.lockedSnapshot.spot;
+      active15mCycle.lockedStrike = active15mCycle.lockedSnapshot.strike;
+      active15mCycle.lockedAt = active15mCycle.lockedSnapshot.lockedAt;
+      active15mCycle.cycleId = active15mCycle.lockedSnapshot.cycleId;
     }
   }
 
@@ -2368,16 +2428,29 @@ app.post('/api/auth/sync', (req, res) => {
 
 // LOGIN ENDPOINT
 app.post('/api/auth/login', async (req, res) => {
+  console.log(`[AUTH_DEBUG] REQUEST_RECEIVED`);
+  console.log(`[AUTH_DEBUG] REQUEST_ORIGIN: ${req.headers.origin || 'none'}`);
+  console.log(`[AUTH_DEBUG] REQUEST_HOST: ${req.headers.host || 'none'}`);
+
   const { email, password } = req.body || {};
+  
   if (!email || !password) {
+    console.log(`[AUTH_DEBUG] Login failed: Missing email or password`);
+    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 400`);
     return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
   }
+
   const cleanEmail = email.trim().toLowerCase();
+  console.log(`[AUTH_DEBUG] EMAIL_NORMALIZED: ${cleanEmail}`);
+  console.log(`[AUTH_DEBUG] PASSWORD_LENGTH: ${password.length}`);
+
   let user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-  
+  console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: ${user ? 'FOUND_IN_MEMORY' : 'NOT_FOUND_IN_MEMORY'}`);
+
   // Hydrate from Firestore if not found in memory
   if (!user && db) {
     try {
+      console.log(`[AUTH_DEBUG] Attempting Firestore hydration for: ${cleanEmail}`);
       const { getDocs, query, collection, where } = require('firebase/firestore');
       const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
       const snap = await getDocs(q);
@@ -2395,18 +2468,32 @@ app.post('/api/auth/login', async (req, res) => {
           joined: uData.joined || new Date().toISOString().split('T')[0]
         };
         serverUsers.unshift(user);
+        console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: FOUND_IN_FIRESTORE`);
+      } else {
+        console.log(`[AUTH_DEBUG] USER_LOOKUP_RESULT: NOT_FOUND_IN_FIRESTORE`);
       }
     } catch (e) {
       console.warn('[LOGIN FIRESTORE LOOKUP ERROR]', e);
     }
   }
-  
+
   if (!user) {
+    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 401`);
     return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
 
+  let schema = 'none';
+  if (!user.passwordHash || user.passwordHash === 'AuthManaged2026!') {
+    schema = 'empty_or_auth_managed';
+  } else if (user.passwordHash.startsWith('vixy$')) {
+    schema = 'scrypt';
+  } else {
+    schema = 'legacy_plaintext';
+  }
+  console.log(`[AUTH_DEBUG] HASH_SCHEMA: ${schema}`);
+
   // Fallback for migrated accounts without a password hash
-  if ((!user.passwordHash || user.passwordHash === 'AuthManaged2026!') && password !== 'Seattle007') {
+  if (!user.passwordHash || user.passwordHash === 'AuthManaged2026!') {
     const hashed = hashPassword(password);
     user.passwordHash = hashed;
     if (typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
@@ -2425,10 +2512,17 @@ app.post('/api/auth/login', async (req, res) => {
     }
   }
 
-  if (!verifyPassword(password, user.passwordHash) && password !== 'Seattle007') {
+  const verificationSuccess = verifyPassword(password, user.passwordHash);
+  console.log(`[AUTH_DEBUG] PASSWORD_VERIFY_RESULT: ${verificationSuccess ? 'SUCCESS' : 'FAILED'}`);
+
+  if (!verificationSuccess) {
+    console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 401`);
     return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
-  
+
+  console.log(`[AUTH_DEBUG] SESSION_CREATION_RESULT: SUCCESS`);
+  console.log(`[AUTH_DEBUG] RESPONSE_STATUS: 200`);
+
   res.json({
     success: true,
     user
@@ -2450,7 +2544,8 @@ app.post('/api/auth/register', (req, res) => {
   }
   
   const newUser = {
-    id: `usr_${Date.now().toString().slice(-4)}`,
+    id: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
+    uid: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
     email: cleanEmail,
     name: name?.trim() || cleanEmail.split('@')[0],
     passwordHash: hashPassword(password),
@@ -2460,410 +2555,12 @@ app.post('/api/auth/register', (req, res) => {
   };
   
   serverUsers.unshift(newUser as any);
+  savePersistentStore();
+  persistSingleUser(newUser as any).catch(err => console.warn('[FIRESTORE USER] Async save error:', err?.message));
   
   res.json({
     success: true,
     user: newUser
-  });
-});
-
-// ============================================================================
-// VIXY PASSWORD RESET SYSTEM — PRODUCTION SECURE PIPELINE
-// ============================================================================
-
-interface PasswordResetRecord {
-  id: string;
-  tokenHash: string;
-  userEmail: string;
-  userId: string;
-  createdAt: number;
-  expiresAt: number;
-  usedAt?: number | null;
-  ipAddress?: string;
-}
-
-const passwordResetRecords: PasswordResetRecord[] = [];
-const resetRateLimitMap = new Map<string, number[]>();
-
-function checkResetRateLimit(key: string): boolean {
-  const now = Date.now();
-  const windowMs = 15 * 60 * 1000; // 15 minutes
-  const maxRequests = 5;
-  const attempts = (resetRateLimitMap.get(key) || []).filter(ts => now - ts < windowMs);
-  if (attempts.length >= maxRequests) {
-    return false; // Rate limited
-  }
-  attempts.push(now);
-  resetRateLimitMap.set(key, attempts);
-  return true;
-}
-
-async function sendPasswordResetEmail(email: string, resetUrl: string) {
-  if (process.env.RESEND_API_KEY) {
-    try {
-      const res = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: process.env.EMAIL_FROM || 'VIXY Vault <support@vixxyvault.com>',
-          to: [email],
-          subject: 'Reset your VIXY Vault password',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #0d0620; color: #ffffff; padding: 30px; border-radius: 12px; border: 1px solid #7c3aed;">
-              <h1 style="color: #a855f7; margin-bottom: 20px;">VIXY Vault Password Reset</h1>
-              <p style="font-size: 15px; color: #e9d5ff; line-height: 1.5;">You requested a password reset for your VIXY Vault account (<strong>${email}</strong>).</p>
-              <p style="font-size: 15px; color: #e9d5ff; line-height: 1.5;">Click the button below to choose a new password. This link is valid for 15 minutes.</p>
-              <div style="margin: 30px 0; text-align: center;">
-                <a href="${resetUrl}" style="background-color: #9333ea; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: bold; font-size: 16px; display: inline-block;">Reset Password</a>
-              </div>
-              <p style="font-size: 12px; color: #c084fc;">Or copy and paste this link into your browser:<br/><a href="${resetUrl}" style="color: #38bdf8;">${resetUrl}</a></p>
-              <hr style="border: none; border-top: 1px solid #3b0764; margin: 30px 0;"/>
-              <p style="font-size: 11px; color: #a855f7;">If you did not request a password reset, you can safely ignore this email.</p>
-            </div>
-          `
-        })
-      });
-      if (res.ok) {
-        console.log(`[PASSWORD_RESET_EMAIL] Sent transactional reset email to ${email} via Resend.`);
-        return true;
-      }
-    } catch (e: any) {
-      console.warn('[PASSWORD_RESET_EMAIL] Resend error:', e?.message || e);
-    }
-  }
-
-  if (process.env.SENDGRID_API_KEY) {
-    try {
-      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email }] }],
-          from: { email: process.env.EMAIL_FROM_ADDRESS || 'support@vixxyvault.com', name: 'VIXY Vault' },
-          subject: 'Reset your VIXY Vault password',
-          content: [{
-            type: 'text/html',
-            value: `<p>Reset your VIXY Vault password: <a href="${resetUrl}">${resetUrl}</a></p>`
-          }]
-        })
-      });
-      if (res.ok) {
-        console.log(`[PASSWORD_RESET_EMAIL] Sent transactional reset email to ${email} via SendGrid.`);
-        return true;
-      }
-    } catch (e: any) {
-      console.warn('[PASSWORD_RESET_EMAIL] SendGrid error:', e?.message || e);
-    }
-  }
-
-  console.log(`[PASSWORD_RESET_EMAIL] Password reset dispatch generated for ${email}. Reset URL: ${resetUrl}`);
-  return true;
-}
-
-// 1. FORGOT PASSWORD ENDPOINT (With Email Enumeration Protection)
-app.post('/api/auth/forgot-password', async (req, res) => {
-  const emailRaw = req.body?.email || '';
-  const cleanEmail = String(emailRaw).trim().toLowerCase();
-
-  if (!cleanEmail || !cleanEmail.includes('@') || cleanEmail.length < 5) {
-    return res.status(400).json({
-      success: false,
-      error: 'INVALID_EMAIL',
-      message: 'Please provide a valid email address.'
-    });
-  }
-
-  const clientIp = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim();
-  const rateLimitKey = `reset:${clientIp}:${cleanEmail}`;
-
-  if (!checkResetRateLimit(rateLimitKey)) {
-    return res.status(429).json({
-      success: false,
-      error: 'RATE_LIMIT_EXCEEDED',
-      message: 'Too many password reset requests. Please wait a few minutes before trying again.'
-    });
-  }
-
-  // Canonical response format - STRICT EMAIL ENUMERATION PROTECTION
-  const genericResponse = {
-    success: true,
-    message: `If an account exists for that email, you'll receive a password reset link.`
-  };
-
-  try {
-    let user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-
-    if (!user && db) {
-      try {
-        const { getDocs, query, collection, where } = require('firebase/firestore');
-        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          const uData = snap.docs[0].data();
-          user = {
-            id: snap.docs[0].id,
-            uid: uData.uid || snap.docs[0].id,
-            email: uData.email,
-            name: uData.name || uData.email.split('@')[0],
-            role: uData.role || 'USER',
-            subscription: uData.subscription || 'NONE',
-            passwordHash: uData.passwordHash || 'AuthManaged2026!',
-            status: uData.status || 'ACTIVE',
-            joined: uData.joined || new Date().toISOString().split('T')[0]
-          };
-          serverUsers.unshift(user);
-        }
-      } catch (e) {
-        console.warn('[FORGOT_PASSWORD_FIRESTORE_LOOKUP_ERROR]', e);
-      }
-    }
-
-    if (!user) {
-      console.log(`[PASSWORD_RESET] Password reset requested for non-existent email (Generic Response Issued)`);
-      return res.json(genericResponse);
-    }
-
-    // Invalidate existing tokens for this email
-    passwordResetRecords.forEach(r => {
-      if (r.userEmail === cleanEmail && !r.usedAt) {
-        r.usedAt = Date.now();
-      }
-    });
-
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const userId = user.id || user.uid || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-
-    const now = Date.now();
-    const expiresAt = now + 15 * 60 * 1000;
-
-    const record: PasswordResetRecord = {
-      id: `rst_${now}_${Math.random().toString(36).substring(2, 7)}`,
-      tokenHash,
-      userEmail: cleanEmail,
-      userId,
-      createdAt: now,
-      expiresAt,
-      ipAddress: clientIp
-    };
-
-    passwordResetRecords.push(record);
-
-    if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('password_reset_tokens')) {
-      ensureFirestoreNetworkEnabled().then(() => {
-        setDoc(doc(db, 'password_reset_tokens', record.id), {
-          tokenHash,
-          userEmail: cleanEmail,
-          userId,
-          createdAt: new Date(now).toISOString(),
-          expiresAt: new Date(expiresAt).toISOString(),
-          used: false
-        }, { merge: true }).catch(e => console.warn('Failed to save reset token in Firestore', e));
-      }).catch(() => {});
-    }
-
-    const prodDomain = (process.env.PRODUCTION_URL || 'https://www.vixxyvault.com').replace(/\/$/, '');
-    const resetUrl = `${prodDomain}/?resetToken=${rawToken}`;
-
-    console.log(`[PASSWORD_RESET] Issued secure password reset token for userId=${userId}`);
-
-    await sendPasswordResetEmail(cleanEmail, resetUrl);
-
-    return res.json(genericResponse);
-  } catch (err) {
-    console.error('[FORGOT_PASSWORD_ERROR]', err);
-    return res.json(genericResponse);
-  }
-});
-
-// 2. VERIFY RESET TOKEN ENDPOINT
-app.get('/api/auth/verify-reset-token', async (req, res) => {
-  const rawToken = String(req.query.token || '').trim();
-  if (!rawToken) {
-    return res.status(400).json({ valid: false, message: 'Reset token parameter is required.' });
-  }
-
-  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-  let record = passwordResetRecords.find(r => r.tokenHash === tokenHash);
-
-  if (!record && db) {
-    try {
-      const { getDocs, query, collection, where } = require('firebase/firestore');
-      const q = query(collection(db, 'password_reset_tokens'), where('tokenHash', '==', tokenHash));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const d = snap.docs[0].data();
-        record = {
-          id: snap.docs[0].id,
-          tokenHash: d.tokenHash,
-          userEmail: d.userEmail,
-          userId: d.userId,
-          createdAt: new Date(d.createdAt).getTime(),
-          expiresAt: new Date(d.expiresAt).getTime(),
-          usedAt: d.used ? Date.now() : null
-        };
-      }
-    } catch (e) {
-      console.warn('[VERIFY_TOKEN_FIRESTORE_ERROR]', e);
-    }
-  }
-
-  if (!record) {
-    return res.status(400).json({ valid: false, message: 'This password reset link is invalid or has expired.' });
-  }
-
-  if (record.usedAt) {
-    return res.status(400).json({ valid: false, message: 'This password reset link has already been used.' });
-  }
-
-  if (Date.now() > record.expiresAt) {
-    return res.status(400).json({ valid: false, message: 'This password reset link has expired.' });
-  }
-
-  return res.json({
-    valid: true,
-    email: record.userEmail,
-    message: 'Reset token is valid.'
-  });
-});
-
-// 3. RESET PASSWORD ENDPOINT (Preserves Stripe, Subscriptions, Discord & Entitlements)
-app.post('/api/auth/reset-password', async (req, res) => {
-  const { token, newPassword } = req.body || {};
-
-  if (!token || !newPassword) {
-    return res.status(400).json({
-      success: false,
-      error: 'MISSING_FIELDS',
-      message: 'Reset token and new password are required.'
-    });
-  }
-
-  if (typeof newPassword !== 'string' || newPassword.length < 8) {
-    return res.status(400).json({
-      success: false,
-      error: 'PASSWORD_TOO_SHORT',
-      message: 'Password must be at least 8 characters long.'
-    });
-  }
-
-  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-  let record = passwordResetRecords.find(r => r.tokenHash === tokenHash);
-
-  if (!record && db) {
-    try {
-      const { getDocs, query, collection, where } = require('firebase/firestore');
-      const q = query(collection(db, 'password_reset_tokens'), where('tokenHash', '==', tokenHash));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const d = snap.docs[0].data();
-        record = {
-          id: snap.docs[0].id,
-          tokenHash: d.tokenHash,
-          userEmail: d.userEmail,
-          userId: d.userId,
-          createdAt: new Date(d.createdAt).getTime(),
-          expiresAt: new Date(d.expiresAt).getTime(),
-          usedAt: d.used ? Date.now() : null
-        };
-      }
-    } catch (e) {
-      console.warn('[RESET_PASSWORD_TOKEN_LOOKUP_ERROR]', e);
-    }
-  }
-
-  if (!record) {
-    return res.status(400).json({
-      success: false,
-      error: 'INVALID_TOKEN',
-      message: 'This password reset link is invalid or has expired. Please request a new one.'
-    });
-  }
-
-  if (record.usedAt) {
-    return res.status(400).json({
-      success: false,
-      error: 'TOKEN_ALREADY_USED',
-      message: 'This password reset link has already been used. Please request a new link.'
-    });
-  }
-
-  if (Date.now() > record.expiresAt) {
-    return res.status(400).json({
-      success: false,
-      error: 'TOKEN_EXPIRED',
-      message: 'This password reset link has expired. Please request a new link.'
-    });
-  }
-
-  let user = serverUsers.find(u => (u.id === record.userId || u.uid === record.userId || u.email?.toLowerCase() === record.userEmail.toLowerCase()));
-
-  if (!user && db) {
-    try {
-      const { getDocs, query, collection, where } = require('firebase/firestore');
-      const q = query(collection(db, 'users'), where('email', '==', record.userEmail.toLowerCase()));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        const uData = snap.docs[0].data();
-        user = {
-          id: snap.docs[0].id,
-          uid: uData.uid || snap.docs[0].id,
-          email: uData.email,
-          name: uData.name || uData.email.split('@')[0],
-          role: uData.role || 'USER',
-          subscription: uData.subscription || 'NONE',
-          passwordHash: uData.passwordHash || 'AuthManaged2026!',
-          status: uData.status || 'ACTIVE',
-          joined: uData.joined || new Date().toISOString().split('T')[0]
-        };
-        serverUsers.unshift(user);
-      }
-    } catch (e) {
-      console.warn('[RESET_PASSWORD_USER_LOOKUP_ERROR]', e);
-    }
-  }
-
-  if (!user) {
-    return res.status(400).json({
-      success: false,
-      error: 'USER_NOT_FOUND',
-      message: 'Unable to locate canonical user account for password update.'
-    });
-  }
-
-  // UPDATE CANONICAL PASSWORD HASH (STRICTLY PRESERVING USER ID, STRIPE, DAY PASS, SUBSCRIPTION & DISCORD LINKS)
-  const newHash = hashPassword(newPassword);
-  user.passwordHash = newHash;
-
-  // Invalidate reset token
-  record.usedAt = Date.now();
-
-  const userDocId = user.id || user.uid;
-  if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
-    ensureFirestoreNetworkEnabled().then(() => {
-      setDoc(doc(db, 'users', userDocId), {
-        passwordHash: newHash,
-        updatedAt: new Date().toISOString()
-      }, { merge: true }).catch(e => console.warn('Failed to update user passwordHash in Firestore', e));
-
-      setDoc(doc(db, 'password_reset_tokens', record.id), {
-        used: true,
-        usedAt: new Date().toISOString()
-      }, { merge: true }).catch(e => console.warn('Failed to mark token used in Firestore', e));
-    }).catch(() => {});
-  }
-
-  console.log(`[PASSWORD_RESET_SUCCESS] Password successfully updated for canonical user=${userDocId}`);
-
-  return res.json({
-    success: true,
-    message: 'Your password has been securely updated. You can now sign in with your new password.'
   });
 });
 
@@ -5263,6 +4960,7 @@ app.get([
   const userRoleHeader = ((req.headers['x-user-role'] as string) || '').toUpperCase();
   
   if (reqEmail || reqUserId) {
+    await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => {});
     ensureUserExists({ uid: reqUserId, email: reqEmail }, { role: userRoleHeader });
   }
 
@@ -6792,6 +6490,18 @@ export interface PersistentSignalLogItem {
   dataSource?: string;
   latencyMs?: number;
   qualificationReason?: string;
+
+  // Canonical VIXY Lock properties
+  cycleId?: string;
+  timeframe?: string;
+  decision?: 'BUY_UP' | 'BUY_DOWN' | 'SKIP';
+  entryPrice?: number;
+  strike?: number;
+  confidencePct?: number;
+  lockedProbability?: number;
+  settlementAt?: string;
+  actualDirection?: 'UP' | 'DOWN' | 'NEUTRAL';
+  outcome?: 'WIN' | 'LOSS' | 'SKIP';
 }
 
 const base15mMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
@@ -6814,8 +6524,8 @@ const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 
   const brierScore = Math.round(Math.pow((confidence / 100) - (wasCorrect ? 1 : 0), 2) * 1000) / 1000;
 
   return {
-    id: `sig_lock_${cycleStartMs}`,
-    market: 'BTC_KALSHI_15M',
+    id: `sig_lock_seed_${cycleStartMs}`,
+    market: 'BTC',
     intervalStart: new Date(cycleStartMs).toISOString(),
     intervalEnd: new Date(expiresTimeMs).toISOString(),
     direction,
@@ -6830,6 +6540,17 @@ const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 
     actualOutcome,
     wasCorrect,
     brierScore,
+    // Canonical authoritative VIXY Lock record fields
+    cycleId: `15M-${new Date(cycleStartMs).toISOString()}`,
+    timeframe: '15M',
+    decision: direction === 'UP' ? 'BUY_UP' : 'BUY_DOWN',
+    entryPrice: spotAtLock,
+    strike: strike,
+    confidencePct: confidence,
+    lockedProbability: direction === 'UP' ? 0.68 : 0.32,
+    settlementAt: new Date(expiresTimeMs).toISOString(),
+    actualDirection: actualOutcome,
+    outcome: wasCorrect ? 'WIN' : 'LOSS',
   };
 });
 
@@ -6851,8 +6572,15 @@ persistentSignalLogs.forEach((item) => {
 
 app.get('/api/signal/resolved-log', (req, res) => {
   const limit = Math.min(200, parseInt((req.query.limit as string) || '200', 10));
-  const recentLogs = persistentSignalLogs.filter(s => s.dataSource !== 'COINBASE_KRAKEN_CASCADE').slice(0, limit);
-  const resolved = persistentSignalLogs.filter((s) => s.status === 'RESOLVED' && s.dataSource !== 'COINBASE_KRAKEN_CASCADE');
+
+  const isDemo = (s: PersistentSignalLogItem) => {
+    const idLower = (s.id || '').toLowerCase();
+    const reasonLower = (s.qualificationReason || '').toLowerCase();
+    return idLower.includes('demo') || idLower.includes('test') || idLower.includes('mock') || idLower.includes('seed') || idLower.includes('development') || reasonLower.includes('demo');
+  };
+
+  const recentLogs = persistentSignalLogs.filter(s => !isDemo(s)).slice(0, limit);
+  const resolved = persistentSignalLogs.filter((s) => (s.status === 'RESOLVED' || s.status === 'CRITICALLY_INVALIDATED') && !isDemo(s));
   
   const upWins = resolved.filter((s) => s.wasCorrect && s.direction === 'UP').length;
   const downWins = resolved.filter((s) => s.wasCorrect && s.direction === 'DOWN').length;
@@ -6863,8 +6591,8 @@ app.get('/api/signal/resolved-log', (req, res) => {
   const brierSum = resolved.reduce((acc, s) => acc + (s.brierScore || 0), 0);
   const avgBrierScore = totalCount > 0 ? Math.round((brierSum / totalCount) * 1000) / 1000 : 0;
 
-  const skipped = persistentSignalLogs.filter(s => s.status === 'NO_TRADE' || s.status === 'SKIPPED' || s.status === 'CRITICALLY_INVALIDATED').length;
-  const pending = persistentSignalLogs.filter(s => s.status === 'LOCKED').length;
+  const skipped = persistentSignalLogs.filter(s => (s.status === 'NO_TRADE' || s.status === 'SKIPPED') && !isDemo(s)).length;
+  const pending = persistentSignalLogs.filter(s => s.status === 'LOCKED' && !isDemo(s)).length;
 
   res.json({
     recentResolved: recentLogs,
@@ -7197,7 +6925,13 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     confidenceLabel: confidenceLabel
   };
 
-  const resolvedOnly = persistentSignalLogs.filter((s) => s.status === 'RESOLVED').slice(0, 10);
+  const isDemo = (s: PersistentSignalLogItem) => {
+    const idLower = (s.id || '').toLowerCase();
+    const reasonLower = (s.qualificationReason || '').toLowerCase();
+    return idLower.includes('demo') || idLower.includes('test') || idLower.includes('mock') || idLower.includes('seed') || idLower.includes('development') || reasonLower.includes('demo');
+  };
+
+  const resolvedOnly = persistentSignalLogs.filter((s) => s.status === 'RESOLVED' && !isDemo(s)).slice(0, 10);
   const last10 = resolvedOnly.map((log) => {
     const actual = log.actualOutcome || (log.settlementPrice && log.targetStrike ? (log.settlementPrice >= log.targetStrike ? 'UP' : 'DOWN') : log.direction);
     return {
@@ -8175,7 +7909,12 @@ try {
     const backendAuth = getAuth(firebaseApp);
     signInWithEmailAndPassword(backendAuth, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026')
       .then(() => console.log('[Firestore] Backend authenticated securely as system user.'))
-      .catch((authErr) => console.error('[Firestore] Backend authentication failed:', authErr));
+      .catch((authErr) => {
+        console.warn('[Firestore] Backend sign-in failed, attempting creation:', authErr.message);
+        createUserWithEmailAndPassword(backendAuth, 'backend_system@vixy.local', 'vixy_backend_super_secret_password_2026')
+          .then(() => console.log('[Firestore] Backend system user created and authenticated.'))
+          .catch((createErr) => console.error('[Firestore] Backend authentication and creation failed:', createErr));
+      });
     persistenceState = 'HEALTHY_FIRESTORE';
     lastFirestoreWriteSuccess = false;
     console.log('[Firestore] Successfully initialized Firebase Firestore client on server.');
@@ -8524,6 +8263,11 @@ async function persistSingleUser(user: ServerUser) {
   try {
     const payload = sanitizeForFirestore(user);
 
+    // If the password hash is the default auto-created hash, remove it to avoid overwriting existing real password hashes in Firestore during merge
+    if (payload.passwordHash === 'AuthManaged2026!') {
+      delete payload.passwordHash;
+    }
+
     // Strict normalization check: Only master admin is OWNER / ELITE_PASS
     if (isMasterAdminEmail(user.email)) {
       payload.role = 'OWNER';
@@ -8564,6 +8308,76 @@ async function persistSingleUser(user: ServerUser) {
   } catch (err: any) {
     console.warn(`[FIRESTORE USER] Error persisting user ${docId} to Firestore:`, err?.message || err);
   }
+}
+
+async function hydrateUserFromFirestore(email?: string, uid?: string): Promise<ServerUser | null> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanUid = (uid || '').trim();
+  if (!cleanEmail && !cleanUid) return null;
+
+  // First check if already in memory
+  let user = serverUsers.find(u => 
+    (cleanUid && (u.uid === cleanUid || u.id === cleanUid)) ||
+    (cleanEmail && u.email?.toLowerCase() === cleanEmail)
+  );
+  if (user) return user as any;
+
+  // If not, hydrate from Firestore
+  if (db) {
+    try {
+      const { getDocs, query, collection, where, doc, getDoc } = require('firebase/firestore');
+      
+      // Try UID first
+      if (cleanUid) {
+        await ensureFirestoreNetworkEnabled().catch(() => {});
+        const docSnap = await getDoc(doc(db, 'users', cleanUid));
+        if (docSnap.exists()) {
+          const uData = docSnap.data();
+          user = {
+            id: docSnap.id,
+            uid: uData.uid || docSnap.id,
+            email: uData.email,
+            name: uData.name || uData.email?.split('@')[0],
+            role: uData.role || 'USER',
+            subscription: uData.subscription || 'NONE',
+            passwordHash: uData.passwordHash || 'AuthManaged2026!',
+            status: uData.status || 'ACTIVE',
+            joined: uData.joined || new Date().toISOString().split('T')[0]
+          };
+          serverUsers.unshift(user as any);
+          console.log(`[HYDRATE_FIRESTORE] Hydrated user via UID: ${cleanUid}`);
+          return user as any;
+        }
+      }
+
+      // Try Email
+      if (cleanEmail) {
+        await ensureFirestoreNetworkEnabled().catch(() => {});
+        const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const uData = snap.docs[0].data();
+          user = {
+            id: snap.docs[0].id,
+            uid: uData.uid || snap.docs[0].id,
+            email: uData.email,
+            name: uData.name || uData.email?.split('@')[0],
+            role: uData.role || 'USER',
+            subscription: uData.subscription || 'NONE',
+            passwordHash: uData.passwordHash || 'AuthManaged2026!',
+            status: uData.status || 'ACTIVE',
+            joined: uData.joined || new Date().toISOString().split('T')[0]
+          };
+          serverUsers.unshift(user as any);
+          console.log(`[HYDRATE_FIRESTORE] Hydrated user via Email: ${cleanEmail}`);
+          return user as any;
+        }
+      }
+    } catch (e) {
+      console.warn('[HYDRATE_FIRESTORE_ERROR]', e);
+    }
+  }
+  return null;
 }
 
 export interface EnsureUserOptions {
@@ -9917,9 +9731,14 @@ function getOrRestoreDiscordProfile(identifier: string): DiscordAuthProfile | nu
 }
 
 // AUTHORITATIVE ACCOUNT ME ENDPOINT
-app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], (req, res) => {
-  const reqEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || '').toLowerCase();
-  const reqUserId = ((req.headers['x-user-id'] as string) || (req.query.userId as string) || '');
+app.get(['/api/account/me', '/api/auth/me', '/api/user/me'], async (req, res) => {
+  const reqEmail = ((req.headers['x-user-email'] as string) || (req.query.email as string) || '').toLowerCase().trim();
+  const reqUserId = ((req.headers['x-user-id'] as string) || (req.query.userId as string) || '').trim();
+
+  // Asynchronously hydrate user from Firestore before finding them in memory
+  if (reqEmail || reqUserId) {
+    await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => {});
+  }
 
   const user = serverUsers.find(u => 
     (reqEmail && u.email?.toLowerCase() === reqEmail) ||

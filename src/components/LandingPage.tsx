@@ -124,25 +124,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             VIXY’s Vault is a real-time prediction market decision terminal for BTC traders, delivering auditable 15-minute signals backed by live orderbook depth, momentum factors, and walk-forward model calibration.
           </p>
 
-          <div className="flex flex-wrap items-center gap-4 pt-2 font-mono">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2 font-mono">
             <button
-              onClick={() => {
-                if (authState?.isAuthenticated) {
-                  onLaunchTerminal();
-                } else {
-                  onOpenAuth('register');
-                }
-              }}
-              className="px-8 py-4 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-xl shadow-purple-600/30 transition-all active:scale-95 cursor-pointer"
+              onClick={onLaunchTerminal}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-purple-600/30 transition-all hover:shadow-purple-500/40 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
             >
-              {authState?.isAuthenticated ? 'ENTER LIVE TERMINAL' : 'ACTIVATE DECISION ENGINE'}
+              <span>LAUNCH TERMINAL</span>
+              <ArrowRight className="w-4 h-4" />
             </button>
 
             <button
-              onClick={onLaunchTerminal}
-              className="px-7 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center gap-2 cursor-pointer"
+              onClick={onOpenPricing}
+              className="px-7 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
             >
-              <span>EXPLORE LIVE TERMINAL</span>
+              <span>EXPLORE PLANS & PRICING</span>
             </button>
           </div>
 

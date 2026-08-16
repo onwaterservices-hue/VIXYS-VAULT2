@@ -22,7 +22,7 @@ interface AuthViewProps {
   authState: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
-  onSuccessNavigate?: () => void;
+  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({
@@ -31,7 +31,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   setUserRole,
   onSuccessNavigate,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login');
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -48,38 +48,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
     const userEmail = email.trim() || 'trader@vixysvault.com';
     const isAdminEmail = userEmail.toLowerCase() === 'vixyvault0@gmail.com';
 
-    if (isAdminEmail && password && password !== 'Seattle007') {
-      setTimeout(() => {
-        setLoading(false);
-        setErrorMsg('Access Denied: Incorrect password for Master Admin account.');
-      }, 500);
-      return;
-    }
-
     if (isAdminEmail) {
       localStorage.setItem('vixy_admin_email', userEmail.toLowerCase());
       localStorage.setItem('vixy_user_email', userEmail.toLowerCase());
-    }
-
-    if (mode === 'forgot') {
-      try {
-        const fetchRes = await fetch('/api/auth/forgot-password', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: userEmail })
-        });
-        const resData = await fetchRes.json();
-        setLoading(false);
-        if (!fetchRes.ok && fetchRes.status === 429) {
-          setErrorMsg(resData.message || 'Too many password reset requests. Please wait a few minutes before trying again.');
-          return;
-        }
-        setSuccessMsg(resData.message || `If an account exists for ${userEmail}, you'll receive a password reset link.`);
-      } catch (err) {
-        setLoading(false);
-        setSuccessMsg(`If an account exists for ${userEmail}, you'll receive a password reset link.`);
-      }
-      return;
     }
 
     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
@@ -124,22 +95,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
           joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
         },
       });
-      setUserRole(serverUser?.role || assignedRole);
+      const finalRole = serverUser?.role || assignedRole;
+      setUserRole(finalRole as any);
       setSuccessMsg(
         isAdminEmail
           ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
           : mode === 'register'
-          ? `Account created successfully! Redirecting to Stripe secure checkout...`
+          ? `Account created successfully! Redirecting to secure billing view...`
           : `Signed in successfully. Welcome back, ${userName}!`
       );
 
-      if (mode === 'register' && !isAdminEmail && assignedRole === 'UNPAID' && serverUser?.role !== 'PRO' && serverUser?.role !== 'ELITE') {
-        setTimeout(() => {
-          const directCheckoutUrl = getStripeDayPassUrl({ email: userEmail, uid: newUserId });
-          window.location.href = directCheckoutUrl;
-        }, 1200);
-      } else if (onSuccessNavigate) {
-        setTimeout(onSuccessNavigate, 1000);
+      if (onSuccessNavigate) {
+        setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
       }
     } catch (err) {
       setLoading(false);
@@ -158,7 +125,6 @@ export const AuthView: React.FC<AuthViewProps> = ({
         <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight font-mono">
           {mode === 'login' && 'SIGN IN TO YOUR TERMINAL'}
           {mode === 'register' && 'CREATE YOUR VIXY AI ACCOUNT'}
-          {mode === 'forgot' && 'RESET YOUR VIXY AI PASSWORD'}
         </h1>
         <p className="text-xs sm:text-sm text-purple-300/70 font-sans">
           Access real-time 15m & 1H Kalshi prediction market signals, L2 order book delta sweeps, and automated Discord bot triggers.
@@ -328,33 +294,22 @@ export const AuthView: React.FC<AuthViewProps> = ({
                 </div>
               </div>
 
-              {mode !== 'forgot' && (
-                <div className="space-y-1.5">
-                  <div className="flex justify-between items-center">
-                    <label className="text-purple-300/70 font-semibold">Password</label>
-                    {mode === 'login' && (
-                      <button
-                        type="button"
-                        onClick={() => setMode('forgot')}
-                        className="text-[11px] text-purple-300 hover:underline"
-                      >
-                        Forgot password?
-                      </button>
-                    )}
-                  </div>
-                  <div className="relative">
-                    <Lock className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
-                    <input
-                      type="password"
-                      required
-                      placeholder="••••••••••••"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                    />
-                  </div>
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-purple-300/70 font-semibold">Password</label>
                 </div>
-              )}
+                <div className="relative">
+                  <Lock className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
+                  <input
+                    type="password"
+                    required
+                    placeholder="••••••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+              </div>
 
               <button
                 type="submit"
@@ -366,9 +321,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     ? 'Authenticating Session...'
                     : mode === 'login'
                     ? 'SIGN IN TO TERMINAL'
-                    : mode === 'register'
-                    ? 'CREATE ACCOUNT & UNLOCK FREE ACCESS'
-                    : 'SEND PASSWORD RESET LINK'}
+                    : 'CREATE ACCOUNT & UNLOCK FREE ACCESS'}
                 </span>
                 {!loading && <ArrowRight className="w-4 h-4" />}
               </button>
