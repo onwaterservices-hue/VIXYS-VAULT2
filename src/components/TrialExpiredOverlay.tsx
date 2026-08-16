@@ -22,6 +22,7 @@ interface TrialExpiredOverlayProps {
   onViewPricing?: () => void;
   onOpenAuth?: (mode?: 'login' | 'signup', prefillEmail?: string) => void;
   onResetTrial?: () => void;
+  onAccessGranted?: () => void;
   isAuthenticated?: boolean;
   userEmail?: string;
   userId?: string;
@@ -31,6 +32,7 @@ interface TrialExpiredOverlayProps {
 export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
   onViewPricing,
   onOpenAuth,
+  onAccessGranted,
   isAuthenticated = false,
   userEmail,
   userId,
@@ -113,9 +115,9 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           type: 'success',
           message: restoreRes.message || 'Active entitlement verified! Loading terminal...',
         });
-        setTimeout(() => {
-          window.location.reload();
-        }, 800);
+        if (onAccessGranted) {
+          onAccessGranted();
+        }
         return;
       }
 
@@ -132,9 +134,9 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           type: 'success',
           message: 'Active plan confirmed! Unlocking terminal...',
         });
-        setTimeout(() => {
-          window.location.reload();
-        }, 800);
+        if (onAccessGranted) {
+          onAccessGranted();
+        }
         return;
       }
 

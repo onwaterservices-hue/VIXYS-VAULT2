@@ -1650,5 +1650,48 @@ export async function getEntitlementDiagnosticsApi(): Promise<any> {
   return await safeFetchJson<any>(`/api/admin/entitlement-diagnostics?_t=${Date.now()}`);
 }
 
+export interface AcceptanceMatrixResponse {
+  success: boolean;
+  timestamp: string;
+  allPassed: boolean;
+  totalPlansTested: number;
+  results: {
+    planType: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT';
+    planName: string;
+    testEmail: string;
+    userId: string;
+    steps: {
+      step: number;
+      name: string;
+      status: 'PASSED' | 'FAILED';
+      details: string;
+    }[];
+    overallStatus: 'PASSED' | 'FAILED';
+    durationMs: number;
+  }[];
+  summary: string;
+}
+
+export async function fetchAcceptanceMatrixApi(): Promise<AcceptanceMatrixResponse | null> {
+  return await safeFetchJson<AcceptanceMatrixResponse>(`/api/admin/acceptance-matrix?_t=${Date.now()}`);
+}
+
+export async function runAcceptanceMatrixApi(): Promise<AcceptanceMatrixResponse | null> {
+  try {
+    const res = await fetch(`/api/admin/run-acceptance-matrix?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAdminHeaders(),
+      },
+    });
+    return (await safeParseJson(res)) as AcceptanceMatrixResponse;
+  } catch (err) {
+    console.error('Acceptance matrix run error:', err);
+    return null;
+  }
+}
+
+
 
 

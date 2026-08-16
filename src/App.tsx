@@ -115,6 +115,7 @@ export default function App() {
     secondsRemaining: number;
   }>({ active: false, secondsRemaining: 0 });
 
+  const [terminalAccessGranted, setTerminalAccessGranted] = useState<boolean>(false);
   const [isEntitlementLoading, setIsEntitlementLoading] = useState<boolean>(true);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [paymentVerificationText, setPaymentVerificationText] = useState<string>('VERIFYING PAYMENT...');
@@ -193,6 +194,7 @@ export default function App() {
               // Also eagerly update the UI state
               setDayPassInfo(ent.dayPass || { active: true, secondsRemaining: 86400 });
               setUserRole('PRO');
+              setTerminalAccessGranted(true);
               
               setTimeout(() => {
                 setIsVerifyingPayment(false);
@@ -229,6 +231,7 @@ export default function App() {
 
     if (!userEmail && !userId) {
       setUserRole('UNPAID');
+      setTerminalAccessGranted(false);
       setIsEntitlementLoading(false);
       return;
     }
@@ -250,6 +253,13 @@ export default function App() {
             paymentMethod: 'Stripe Credit Card',
             billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
+
+          const hasAccess = ent.status === 'active' || ent.dayPass?.active || ent.entitlements.proQuant || ent.entitlements.eliteQuant || ent.entitlements.canAccessAdminPanel;
+          if (hasAccess) {
+             setTerminalAccessGranted(true);
+          } else {
+             setTerminalAccessGranted(false);
+          }
 
           if (ent.entitlements.canAccessAdminPanel) {
             setUserRole('ADMIN');
@@ -1317,13 +1327,17 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {!isEntitlementLoading && userRole === 'UNPAID' && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
+      {!isEntitlementLoading && !terminalAccessGranted && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
         <TrialExpiredOverlay
           isAuthenticated={authState.isAuthenticated}
           userEmail={authState?.user?.email}
           userId={authState?.user?.id}
           discordUserId={authState?.user?.discordId}
           onViewPricing={() => setActiveTab('pricing')}
+          onAccessGranted={() => {
+             setTerminalAccessGranted(true);
+             setIsEntitlementLoading(false);
+          }}
           onOpenAuth={(mode, prefillEmail) => {
             setAuthModalMode(mode === 'signup' ? 'register' : (mode || 'login'));
             if (prefillEmail) setAuthModalEmail(prefillEmail);
