@@ -842,9 +842,12 @@ export default function App() {
   };
 
   const handleAuthSuccess = (role: 'PRO' | 'UNPAID' | 'ADMIN' | string) => {
-    const roleStr = String(role || '');
-    const hasActive = roleStr === 'PRO' || roleStr === 'ADMIN' || roleStr === 'OWNER' || roleStr === 'ELITE' || dayPassInfo.active || subscription.status === 'active';
-    if (hasActive) {
+    const roleStr = String(role || '').toUpperCase();
+    const isPaid = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'DAY_PASS'].includes(roleStr) ||
+                   ['PRO', 'ADMIN', 'OWNER', 'ELITE'].includes(userRole) ||
+                   isSubscriptionActive ||
+                   dayPassInfo.active;
+    if (isPaid) {
       setActiveTab('terminal');
     } else {
       setActiveTab('pricing');

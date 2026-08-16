@@ -9462,12 +9462,21 @@ function loadPersistentStore() {
           if (!existing) {
             serverUsers.push(savedUser);
           } else {
+            if (savedUser.passwordHash && savedUser.passwordHash !== 'AuthManaged2026!' && savedUser.passwordHash.length > 0) {
+              existing.passwordHash = savedUser.passwordHash;
+            }
             if (savedUser.uid && !existing.uid) existing.uid = savedUser.uid;
             if (savedUser.stripeCustomerId && !existing.stripeCustomerId) existing.stripeCustomerId = savedUser.stripeCustomerId;
             if (savedUser.stripeSubscriptionId && !existing.stripeSubscriptionId) existing.stripeSubscriptionId = savedUser.stripeSubscriptionId;
             if (savedUser.discordId && !existing.discordId) existing.discordId = savedUser.discordId;
             if (savedUser.discordTag && !existing.discordTag) existing.discordTag = savedUser.discordTag;
             if (savedUser.discordLinked && !existing.discordLinked) existing.discordLinked = savedUser.discordLinked;
+            if (savedUser.joined && !existing.joined) existing.joined = savedUser.joined;
+            if (savedUser.verificationStatus && !existing.verificationStatus) existing.verificationStatus = savedUser.verificationStatus;
+            if (savedUser.hardwareFingerprint && !existing.hardwareFingerprint) existing.hardwareFingerprint = savedUser.hardwareFingerprint;
+            if (savedUser.ipHash && !existing.ipHash) existing.ipHash = savedUser.ipHash;
+            if (savedUser.status && !existing.status) existing.status = savedUser.status;
+            if (savedUser.volumeTrades !== undefined && existing.volumeTrades === undefined) existing.volumeTrades = savedUser.volumeTrades;
           }
         });
       }
@@ -9600,7 +9609,9 @@ async function loadPersistentStoreAsync() {
           for (const [k, v] of Object.entries(data)) {
             if (k === 'passwordHash') {
               if (v && typeof v === 'string' && v.length > 0 && v !== 'AuthManaged2026!') {
-                existing.passwordHash = v;
+                if (!existing.passwordHash || !existing.passwordHash.startsWith('vixy$') || v.startsWith('vixy$')) {
+                  existing.passwordHash = v;
+                }
               }
             } else if (v !== undefined && v !== null) {
               (existing as any)[k] = v;

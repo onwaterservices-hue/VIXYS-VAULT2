@@ -121,10 +121,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = assignedRole;
+      let finalRole: string = serverUser.role || assignedRole;
       if (res.entitlement) {
-         if (res.entitlement.entitlements?.canAccessAdminPanel) finalRole = 'ADMIN';
-         else if (res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) finalRole = 'PRO';
+         if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
+         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) && finalRole === 'UNPAID') finalRole = 'PRO';
       }
 
       setAuthState({

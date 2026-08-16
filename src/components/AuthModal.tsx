@@ -135,10 +135,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = assignedRole;
+      let finalRole: string = serverUser.role || assignedRole;
       if (res.entitlement) {
-         if (res.entitlement.entitlements?.canAccessAdminPanel) finalRole = 'ADMIN';
-         else if (res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) finalRole = 'PRO';
+         if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
+         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) && finalRole === 'UNPAID') finalRole = 'PRO';
       }
 
       const handleSuccessCB = onSuccess || onSuccessRole;
@@ -161,8 +161,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
 
       if (typeof handleSuccessCB === 'function') {
-        setTimeout(() => handleSuccessCB(finalRole as any), 1000);
+        setTimeout(() => handleSuccessCB(finalRole as any), 150);
       }
+      onClose();
     } catch (err) {
       setLoading(false);
       setErrorMsg('Network error. Please try again.');
