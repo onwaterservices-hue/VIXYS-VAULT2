@@ -34,7 +34,7 @@ function verifyPassword(password, storedHash) {
 // -------------------------------
 import { getAuth, signInWithEmailAndPassword } from 'firebase/auth';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork } from 'firebase/firestore';
+import { getFirestore, collection, doc, getDocs, setDoc, getDoc, deleteDoc, writeBatch, disableNetwork, enableNetwork, query, limit, orderBy } from 'firebase/firestore';
 import {
   initializeDiscordBot,
   getDiscordBotStatus,
@@ -2893,13 +2893,13 @@ app.post('/api/admin/users/create', requireRole(['OWNER', 'ADMIN']), (req, res) 
     email: cleanEmail,
     name: name?.trim() || cleanEmail.split('@')[0],
     role: role === 'ADMIN' || role === 'OWNER' ? role : 'USER',
-    subscription: tier === 'ELITE_PASS' ? 'ELITE_PASS' : tier === 'FREE_TRIAL' ? 'FREE_TRIAL' : 'PRO_PASS',
+    subscription: tier === 'ELITE_PASS' ? 'ELITE_PASS' : (tier === 'FREE_TRIAL' ? 'NONE' : 'PRO_PASS'),
     passwordHash: password ? hashPassword(password) : hashPassword('DefaultPass2026!'),
     verificationStatus,
     hardwareFingerprint: genHwFingerprint,
     ipHash: genIpHash,
     joined: new Date().toISOString().split('T')[0],
-    status: tier === 'FREE_TRIAL' ? 'TRIALING' : 'ACTIVE',
+    status: tier === 'FREE_TRIAL' ? 'INACTIVE' : 'ACTIVE',
     volumeTrades: 0,
     referralCodeUsed: referralCode,
   };
@@ -3363,15 +3363,9 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
     addServerAuditLog('ADMIN', 'USER_ACTIVATED', `Activated user ${user.email} (${user.id})`);
     return res.json({ success: true, message: `User ${user.email} activated/unfrozen`, user });
   } else if (action === 'extend_trial') {
-    user.status = 'TRIALING';
-    user.subscription = 'FREE_TRIAL';
-    addServerAuditLog('ADMIN', 'EXTEND_TRIAL', `Extended free trial for ${user.email}`);
-    return res.json({ success: true, message: `Extended free trial for ${user.email}`, user });
+    return res.status(400).json({ success: false, message: "Free trials are permanently disabled and removed on VIXY Vault." });
   } else if (action === 'revoke_trial') {
-    user.status = 'ACTIVE';
-    user.subscription = 'FREE_TRIAL';
-    addServerAuditLog('ADMIN', 'REVOKE_TRIAL', `Revoked free trial for ${user.email}`, 'WARN');
-    return res.json({ success: true, message: `Revoked free trial for ${user.email}`, user });
+    return res.status(400).json({ success: false, message: "Free trials are permanently disabled and removed on VIXY Vault." });
   } else if (action === 'grant_plan' || action === 'grant_premium') {
     const nextTier = tier === 'ELITE_PASS' || tier === 'ELITE' ? 'ELITE_PASS' : 'PRO_PASS';
     user.subscription = nextTier;
@@ -3380,9 +3374,9 @@ app.post('/api/admin/users/action', requireRole(['OWNER', 'ADMIN']), (req, res) 
     addServerAuditLog('ADMIN', 'GRANT_PREMIUM', `Granted ${nextTier} to ${user.email}`);
     return res.json({ success: true, message: `Granted ${nextTier} to ${user.email}`, user });
   } else if (action === 'revoke_plan' || action === 'revoke_premium') {
-    user.subscription = 'FREE_TRIAL';
+    user.subscription = 'NONE';
     user.role = 'USER';
-    user.status = 'ACTIVE';
+    user.status = 'INACTIVE';
     addServerAuditLog('ADMIN', 'REVOKE_PREMIUM', `Revoked paid plan from ${user.email}`, 'WARN');
     return res.json({ success: true, message: `Revoked paid plan from ${user.email}`, user });
   } else if (action === 'sync_user') {
@@ -4341,29 +4335,10 @@ userSubscriptions.set('vixyvault0@gmail.com', {
 // Helper function to enforce server-side 3-Hour Free Trial rule
 function checkAndUpdateTrialState(user: ServerUser) {
   if (!user) return;
-  const now = Date.now();
-
-  // If trial has been marked consumed, ensure it stays consumed
-  if (user.trialConsumed || (user as any).trial_consumed) {
-    user.trialConsumed = true;
-    (user as any).trial_consumed = true;
-    if (user.subscription === 'FREE_TRIAL') {
-      user.status = 'SUSPENDED';
-    }
-    return;
-  }
-
-  // If trial has expired, mark it as consumed and update status
-  if (user.trial_expires_at) {
-    const expiry = new Date(user.trial_expires_at).getTime();
-    if (now >= expiry) {
-      user.trialConsumed = true;
-      (user as any).trial_consumed = true;
-      if (user.subscription === 'FREE_TRIAL') {
-        user.status = 'SUSPENDED';
-      }
-      console.log(`[TRIAL_EXPIRED] Free trial expired and marked consumed for ${user.email}`);
-    }
+  // Free trials are permanently disabled and removed on VIXY Vault.
+  if (user.subscription === 'FREE_TRIAL' || user.status === 'TRIALING') {
+    user.subscription = 'NONE';
+    user.status = 'INACTIVE';
   }
 }
 
@@ -4815,6 +4790,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
   };
 }
 
+const lastReconcileTime = new Map<string, number>();
+
 // Authoritative Asynchronous Reconciliation Solver across Memory, Firestore, and Real-time Stripe
 export async function reconcileUserEntitlement(identity: {
   email?: string;
@@ -4837,6 +4814,25 @@ export async function reconcileUserEntitlement(identity: {
   ) {
     return getUserEntitlement('vixyvault0@gmail.com');
   }
+
+  // 1.5. FAST-PATH MEMORY CACHE & RATE LIMIT: Prevent Firestore read/write amplification
+  const lookupKey = cleanEmail || cleanUid || 'unknown';
+  let currentFast = getUserEntitlement(lookupKey);
+  const isCurrentlyPaid = currentFast.plan !== 'NONE' || currentFast.dayPass.active;
+
+  // If already paid and active in memory, return immediately without any Firestore reads
+  if (isCurrentlyPaid && !cleanSessionId) {
+    return currentFast;
+  }
+
+  // Frequency-limit reads for unpaid/checking users to once every 30 seconds to defend against quota exhaustion
+  const cacheKey = `${cleanEmail}:${cleanUid}:${cleanSessionId}`;
+  const now = Date.now();
+  const lastTime = lastReconcileTime.get(cacheKey) || 0;
+  if (now - lastTime < 30000 && !cleanSessionId) {
+    return currentFast;
+  }
+  lastReconcileTime.set(cacheKey, now);
 
   // 2. Hydrate from Firestore if available
   if (db) {
@@ -4959,7 +4955,7 @@ export async function reconcileUserEntitlement(identity: {
   }
 
   // 3. Fast check if already active in memory
-  let currentFast = getUserEntitlement(cleanEmail || cleanUid || 'unknown');
+  currentFast = getUserEntitlement(cleanEmail || cleanUid || 'unknown');
   if (currentFast.plan !== 'NONE' || currentFast.dayPass.active) {
     return currentFast;
   }
@@ -5470,8 +5466,8 @@ app.get('/api/user/subscription', (req, res) => {
   res.json({
     authenticated: true,
     email: userEmail,
-    role: entitlement.entitlements.eliteQuant ? 'ELITE' : (entitlement.entitlements.proQuant ? 'PRO' : (entitlement.entitlements.starter ? 'STARTER' : 'FREE')),
-    subscription: entitlement.plan === 'ELITE_QUANT' ? 'ELITE_PASS' : (entitlement.plan === 'PRO_QUANT' ? 'PRO_PASS' : (entitlement.plan === 'STARTER' ? 'STARTER_PASS' : 'FREE_TRIAL')),
+    role: entitlement.entitlements.eliteQuant ? 'ELITE' : (entitlement.entitlements.proQuant ? 'PRO' : (entitlement.entitlements.starter ? 'STARTER' : 'NONE')),
+    subscription: entitlement.plan === 'ELITE_QUANT' ? 'ELITE_PASS' : (entitlement.plan === 'PRO_QUANT' ? 'PRO_PASS' : (entitlement.plan === 'STARTER' ? 'STARTER_PASS' : 'NONE')),
     status: entitlement.status.toUpperCase(),
     stripeVerified: entitlement.stripeVerified,
     referralCode: existing?.referralCode || 'DIRECT',
@@ -5585,16 +5581,16 @@ async function updateSubscriptionInFirestore(email: string, updateData: {
   const cleanEmail = email.toLowerCase().trim();
   if (!cleanEmail) return;
 
-  const rawPlan = (updateData.plan || 'FREE_TRIAL').toUpperCase();
-  const resolvedPlan = rawPlan.includes('ELITE') ? 'ELITE' : (rawPlan.includes('PRO') ? 'PRO' : (rawPlan.includes('STARTER') ? 'STARTER' : 'FREE_TRIAL'));
-  const passName = resolvedPlan === 'FREE_TRIAL' ? 'FREE_TRIAL' : `${resolvedPlan}_PASS`;
+  const rawPlan = (updateData.plan || 'NONE').toUpperCase();
+  const resolvedPlan = rawPlan.includes('ELITE') ? 'ELITE' : (rawPlan.includes('PRO') ? 'PRO' : (rawPlan.includes('STARTER') ? 'STARTER' : 'NONE'));
+  const passName = resolvedPlan === 'NONE' ? 'NONE' : `${resolvedPlan}_PASS`;
   const roleToGrant = resolvedPlan === 'ELITE' ? 'ELITE' : (resolvedPlan === 'PRO' ? 'PRO' : (resolvedPlan === 'STARTER' ? 'PRO' : 'USER'));
 
   // 1. Update in-memory user subscriptions map
   const currentSub = userSubscriptions.get(cleanEmail) || {
     email: cleanEmail,
-    role: 'FREE',
-    plan: 'FREE_TRIAL',
+    role: 'USER',
+    plan: 'NONE',
     status: 'INACTIVE',
     updatedAt: new Date().toISOString(),
   };
@@ -5689,7 +5685,7 @@ async function updateSubscriptionInFirestore(email: string, updateData: {
 
 // Utility to resolve the plan name from a Price ID
 function getPlanFromPriceId(priceId?: string): string {
-  if (!priceId) return 'FREE_TRIAL';
+  if (!priceId) return 'NONE';
   const cleanPrice = priceId.trim();
 
   if (cleanPrice === 'price_1U4cKTCYsvFDvgUJZHASVwRG' || cleanPrice === process.env.STRIPE_DAY_PASS_PRICE_ID) {
@@ -5704,7 +5700,7 @@ function getPlanFromPriceId(priceId?: string): string {
   if (cleanPrice === process.env.STRIPE_ELITE_MONTHLY_PRICE_ID || cleanPrice === process.env.STRIPE_ELITE_ANNUAL_PRICE_ID) {
     return 'ELITE';
   }
-  return 'FREE_TRIAL';
+  return 'NONE';
 }
 
 // POST /api/stripe/webhook — Authoritative Stripe Webhook Processor with Strict Signature Validation
@@ -6160,14 +6156,14 @@ timestamp: ${new Date().toISOString()}`);
         await updateSubscriptionInFirestore(customerEmail, {
           stripeCustomerId: stripeCustId,
           stripeSubscriptionId: sub.id,
-          plan: 'FREE_TRIAL',
+          plan: 'NONE',
           status: 'CANCELED',
           lastStripeEventId: eventId,
         });
 
         const existingUser = serverUsers.find((u) => u.email?.toLowerCase() === customerEmail);
         if (existingUser) {
-          existingUser.subscription = 'FREE_TRIAL';
+          existingUser.subscription = 'NONE';
           existingUser.status = 'SUSPENDED';
         }
 
@@ -6181,7 +6177,7 @@ timestamp: ${new Date().toISOString()}`);
         broadcastAdminEvent({
           eventType: 'ENTITLEMENT_REVOKED',
           userEmail: customerEmail,
-          plan: 'FREE_TRIAL',
+          plan: 'NONE',
           status: 'WARN',
           message: `Access revoked for ${customerEmail}`,
         });
@@ -6215,7 +6211,7 @@ timestamp: ${new Date().toISOString()}`);
         await updateSubscriptionInFirestore(customerEmail, {
           stripeCustomerId: typeof charge.customer === 'string' ? charge.customer : undefined,
           status: 'CANCELED',
-          plan: 'FREE_TRIAL',
+          plan: 'NONE',
           lastStripeEventId: eventId,
         });
 
@@ -6229,7 +6225,7 @@ timestamp: ${new Date().toISOString()}`);
         broadcastAdminEvent({
           eventType: 'ENTITLEMENT_REVOKED',
           userEmail: customerEmail,
-          plan: 'FREE_TRIAL',
+          plan: 'NONE',
           status: 'WARN',
           message: `Access revoked for ${customerEmail} due to charge refund.`,
         });
@@ -8986,7 +8982,7 @@ async function loadPersistentStoreAsync() {
     // Load signal_logs from Firestore
     let fetchedSignalLogsCount = 0;
     try {
-      const signalLogsSnap = await getDocs(collection(db, 'signal_logs'));
+      const signalLogsSnap = await getDocs(query(collection(db, 'signal_logs'), limit(150)));
       signalLogsSnap.forEach((docSnap) => {
         const data = docSnap.data() as PersistentSignalLogItem;
         if (data && data.id) {
@@ -9007,7 +9003,7 @@ async function loadPersistentStoreAsync() {
     // Load telemetry_observations from Firestore
     let fetchedTelemetryCount = 0;
     try {
-      const telemetrySnap = await getDocs(collection(db, 'telemetry_observations'));
+      const telemetrySnap = await getDocs(query(collection(db, 'telemetry_observations'), limit(150)));
       telemetrySnap.forEach((docSnap) => {
         const data = docSnap.data() as TelemetryObservationRecord;
         if (data && data.id) {
@@ -9736,15 +9732,10 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
       vixyUser.discord_connected_at = nowIso;
     }
 
-    // Start trial if applicable
+    // Trials are permanently deactivated.
     if (vixyUser.subscription === 'FREE_TRIAL' || vixyUser.status === 'TRIALING') {
-      if (!vixyUser.trial_started_at) {
-        vixyUser.trial_started_at = nowIso;
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 3);
-        vixyUser.trial_expires_at = expiresAt.toISOString();
-        console.log(`[TRIAL_START] 3-Hour Trial activated for ${vixyUser.email}`);
-      }
+      vixyUser.subscription = 'NONE';
+      vixyUser.status = 'INACTIVE';
     }
     
     // Store in Firestore if available and circuit is closed
