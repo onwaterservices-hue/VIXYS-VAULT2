@@ -1,4 +1,5 @@
-import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot, DiscordBotDiagnostics } from './client';
+import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot, DiscordBotDiagnostics, loadProductionDiscordCredentials } from './client';
+export { loadProductionDiscordCredentials };
 import { createDashboardEmbed } from './embeds/dashboardEmbed';
 import { createStructuredPredictionEmbed } from './embeds/predictionEmbed';
 import { createFreeSignalEmbed, createVipSignalEmbed } from './embeds/signalEmbed';

@@ -1,6 +1,45 @@
 import { Client, GatewayIntentBits, Interaction } from 'discord.js';
+import crypto from 'crypto';
 
 export type DiscordBotMode = 'READY' | 'CONNECTING' | 'RECONNECT_WAIT' | 'DEGRADED' | 'DISABLED';
+
+export interface DiscordCredentials {
+  rawToken: string;
+  sanitizedToken: string;
+  isValid: boolean;
+  fingerprint: string;
+  authHeader: string;
+}
+
+export function loadProductionDiscordCredentials(): DiscordCredentials {
+  const rawToken = (process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN || '').trim();
+  const sanitizedToken = rawToken.replace(/^["']|["']$/g, '').trim();
+  const isValid = Boolean(
+    sanitizedToken &&
+    sanitizedToken.length >= 25 &&
+    !sanitizedToken.includes('YOUR_') &&
+    !sanitizedToken.includes('your_') &&
+    !sanitizedToken.includes('placeholder') &&
+    !sanitizedToken.includes('xxx')
+  );
+
+  let fingerprint = 'UNCONFIGURED';
+  if (isValid) {
+    try {
+      fingerprint = crypto.createHash('sha256').update(sanitizedToken).digest('hex').substring(0, 16) + '...';
+    } catch (_) {
+      fingerprint = 'CONFIGURED';
+    }
+  }
+
+  return {
+    rawToken,
+    sanitizedToken,
+    isValid,
+    fingerprint,
+    authHeader: `Bot ${sanitizedToken}`,
+  };
+}
 
 export interface DiscordBotDiagnostics {
   discordState: DiscordBotMode;
@@ -167,22 +206,8 @@ export class DiscordBotManager {
   }
 
   public async initialize(): Promise<boolean> {
-    const rawToken = process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_TOKEN;
-    if (!rawToken || rawToken.trim().length < 10) {
-      console.log('[DiscordBotManager] No DISCORD_BOT_TOKEN present. Bot subsystem set to DISABLED.');
-      this.mode = 'DISABLED';
-      return false;
-    }
-
-    const token = rawToken.replace(/^["']|["']$/g, '').trim();
-    if (
-      !token ||
-      token.length < 25 ||
-      token.includes('YOUR_') ||
-      token.includes('your_') ||
-      token.includes('placeholder') ||
-      token.includes('xxx')
-    ) {
+    const creds = loadProductionDiscordCredentials();
+    if (!creds.isValid) {
       console.log('[DiscordBotManager] DISCORD_BOT_TOKEN is unconfigured or placeholder. Bot subsystem set to DISABLED.');
       this.mode = 'DISABLED';
       return false;
@@ -210,7 +235,7 @@ export class DiscordBotManager {
       this.reconnectAttempts++;
 
       console.log(`[DiscordBotManager] Attempting Discord gateway connection (Attempt #${this.reconnectAttempts})...`);
-      await this.client.login(token);
+      await this.client.login(creds.sanitizedToken);
       return true;
     } catch (err: any) {
       this.loginInProgress = false;

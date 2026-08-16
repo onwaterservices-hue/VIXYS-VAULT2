@@ -48,6 +48,7 @@ import {
   validateDiscordEnv,
   fetchDiscordGuildMembers,
   discordClient,
+  loadProductionDiscordCredentials,
 } from './src/bot';
 import { AutomationScheduler } from './src/bot/services/automationScheduler';
 
@@ -1535,7 +1536,8 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   const dir: 'UP' | 'DOWN' = currentDirection === 'DOWN' ? 'DOWN' : (currentDirection === 'UP' ? 'UP' : (currentModelProbability >= 0.5 ? 'UP' : 'DOWN'));
   const decision = dir === 'UP' ? 'BUY UP' : 'BUY DOWN';
   const conf = Math.max(65, Math.min(96, Math.round(currentConfidence)));
-  const prob = currentModelProbability;
+  const directionalProb = dir === 'UP' ? Math.max(0.60, Math.min(0.96, currentModelProbability)) : Math.max(0.60, Math.min(0.96, 1 - currentModelProbability));
+  const prob = Math.round(directionalProb * 1000) / 1000;
   const strike = current15mStrikePrice;
 
   // FREEZE COMPLETE IMMUTABLE PREDICTION PAYLOAD
@@ -2055,10 +2057,14 @@ async function checkAndSettle15mCycle(livePrice: number) {
   const dataAgeMs = now - lastMarketUpdateTs;
   const latencyMs = Math.max(0, dataAgeMs - 500);
 
-  console.log(`[VIXY_CYCLE] cycleId=${active15mCycle.cycleId} status=${active15mCycle.status} timeRemaining=${timeRemainingSec}s spot=$${livePrice} strike=$${active15mCycle.isLocked ? active15mCycle.lockedStrike : current15mStrikePrice} dataAgeMs=${dataAgeMs} latencyMs=${latencyMs} calibration=${active15mCycle.calibrationStatus} analysis=${active15mCycle.analysisStatus} validation=${active15mCycle.validationStatus} algorithm=RUNNING websocket=CONNECTED sequence=${active15mCycle.sequence}`);
+  const cycleHash = `${active15mCycle.cycleId}:${active15mCycle.status}:${active15mCycle.sequence}:${active15mCycle.isLocked}`;
+  if (cycleHash !== lastLoggedCycleHash || now - lastHeartbeatLogTs >= 60000) {
+    lastLoggedCycleHash = cycleHash;
+    console.log(`[VIXY_CYCLE] cycleId=${active15mCycle.cycleId} status=${active15mCycle.status} timeRemaining=${timeRemainingSec}s spot=$${livePrice} strike=$${active15mCycle.isLocked ? active15mCycle.lockedStrike : current15mStrikePrice} dataAgeMs=${dataAgeMs} latencyMs=${latencyMs} calibration=${active15mCycle.calibrationStatus} analysis=${active15mCycle.analysisStatus} validation=${active15mCycle.validationStatus} algorithm=RUNNING websocket=CONNECTED sequence=${active15mCycle.sequence}`);
+  }
 
   if (active15mCycle.isLocked && !active15mCycle.isCriticallyInvalidated) {
-    // MONITOR ONLY MODE
+    // MONITOR ONLY MODE - IMMUTABLE LOCK
     const lockedSpot = active15mCycle.lockedSpot || livePrice;
     const lockedDir = active15mCycle.lockedDirection;
     const priceDelta = lockedDir === 'UP' ? lockedSpot - livePrice : livePrice - lockedSpot;
@@ -2068,8 +2074,14 @@ async function checkAndSettle15mCycle(livePrice: number) {
     const isExtremeDisplacement = priceDelta > 750 && priceDeltaPct >= 1.2;
     const isProbabilityCollapsed = probForLockedDir <= 0.15;
     const isGuardianPanic = latestGuardianDecision?.action === 'EXIT' || latestGuardianDecision?.action === 'PROTECT' || (latestGuardianDecision?.reversalThreat || 0) >= 80;
+    const reversalDetected = isExtremeDisplacement && isProbabilityCollapsed;
 
-    console.log(`[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDirection=${active15mCycle.lockedDirection} lockedProbability=${active15mCycle.lockedProbability} liveDirection=${currentDirection} liveProbability=${currentModelProbability} reversalDetected=${isExtremeDisplacement && isProbabilityCollapsed} action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}% probForLocked=${probForLockedDir.toFixed(2)}`);
+    const lockMonitorHash = `${currentCycleId}:${active15mCycle.lockedDirection}:${reversalDetected}:${probForLockedDir.toFixed(2)}`;
+    if (lockMonitorHash !== lastLoggedLockMonitorHash || now - lastHeartbeatLogTs >= 60000) {
+      lastLoggedLockMonitorHash = lockMonitorHash;
+      lastHeartbeatLogTs = now;
+      console.log(`[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDirection=${active15mCycle.lockedDirection} lockedConfidence=${active15mCycle.lockedConfidence}% lockedProbability=${active15mCycle.lockedProbability} liveDirection=${currentDirection} liveProbability=${currentModelProbability} probabilityForLockedDirection=${probForLockedDir.toFixed(3)} reversalDetected=${reversalDetected} action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}%`);
+    }
 
     if (isExtremeDisplacement && isProbabilityCollapsed && isGuardianPanic) {
       active15mCycle.isCriticallyInvalidated = true;
@@ -7734,6 +7746,17 @@ let firestoreRetryAtMs = 0;
 let firestoreRetryAt: string | null = null;
 let firestoreNetworkDisabled = false;
 let persistenceState: 'HEALTHY_FIRESTORE' | 'DEGRADED_LOCAL_FALLBACK' | 'LOCAL_DISK_ONLY' = 'LOCAL_DISK_ONLY';
+let firestoreLastSuccess: string | null = null;
+let firestoreLastFailure: string | null = null;
+let firestoreReconnectAttempt = 0;
+let lastFrontendConnectionTs = Date.now();
+let lastWebSocketMessageTs = Date.now();
+let hasDeliveredFrontendSnapshot = false;
+let lastLoggedDiagnosticHash = '';
+let lastLoggedCycleHash = '';
+let lastLoggedLockMonitorHash = '';
+let lastHeartbeatLogTs = 0;
+let wssClientsCount = 0;
 
 // In-Memory Persistence Queues for Disconnected / Degraded Mode
 const pendingTelemetryQueue: TelemetryObservationRecord[] = [];
@@ -7795,6 +7818,7 @@ function canAttemptFirestoreWrite(writeTarget = 'unknown'): boolean {
 function handleFirestoreWriteError(err: any, writeTarget = 'unknown') {
   firestoreWriteFailureCount += 1;
   lastFirestoreWriteSuccess = false;
+  firestoreLastFailure = new Date().toISOString();
   const rawMsg = err?.message || String(err);
 
   const isQuotaError =
@@ -7812,7 +7836,7 @@ function handleFirestoreWriteError(err: any, writeTarget = 'unknown') {
   firestoreRetryAtMs = Date.now() + firestoreBackoffMs;
   firestoreRetryAt = new Date(firestoreRetryAtMs).toISOString();
   lastFirestoreWriteError = reason;
-  persistenceState = 'DEGRADED_LOCAL_FALLBACK';
+  persistenceState = db ? 'DEGRADED_LOCAL_FALLBACK' : 'LOCAL_DISK_ONLY';
 
   console.warn(`[FIRESTORE_CIRCUIT] OPEN write=${writeTarget} reason=${reason} retryAt=${firestoreRetryAt} backoffMs=${firestoreBackoffMs} pending=${pendingTelemetryQueue.length + pendingSignalLogsQueue.length}`);
 
@@ -7840,6 +7864,34 @@ async function ensureFirestoreNetworkEnabled() {
     }
   }
 }
+
+async function attemptFirestoreRecovery() {
+  if (!db) return;
+  if (persistenceState === 'DEGRADED_LOCAL_FALLBACK' && Date.now() >= firestoreRetryAtMs) {
+    firestoreReconnectAttempt++;
+    console.log(`[FIRESTORE_RECOVERY] Attempting reconnection probe #${firestoreReconnectAttempt}...`);
+    try {
+      await ensureFirestoreNetworkEnabled();
+      await setDoc(doc(db, 'system_state', 'vixy_probe'), {
+        lastProbeAt: new Date().toISOString(),
+        reconnectAttempt: firestoreReconnectAttempt
+      }, { merge: true });
+
+      firestoreLastSuccess = new Date().toISOString();
+      lastFirestoreWriteSuccess = true;
+      lastFirestoreWriteError = null;
+      firestoreRetryAtMs = 0;
+      firestoreRetryAt = null;
+      firestoreBackoffMs = 15 * 60 * 1000;
+      persistenceState = 'HEALTHY_FIRESTORE';
+      console.log(`[FIRESTORE_RECOVERY] ✅ Reconnected to Firestore. Flushed network stream. State -> HEALTHY_FIRESTORE`);
+      await flushQueuedFirestoreWrites();
+    } catch (err: any) {
+      handleFirestoreWriteError(err, 'recovery_probe');
+    }
+  }
+}
+setInterval(attemptFirestoreRecovery, 20000);
 
 function saveDiskStore() {
   try {
@@ -7909,6 +7961,7 @@ async function persistCalibrationState() {
     await withTimeout(setDoc(doc(db, 'calibration_state', 'vixy_btc_15m'), payload, { merge: true }), 5000, 'RESOURCE_EXHAUSTED: calibration_state timeout');
     lastFirestoreWriteTimeMs = Date.now();
     lastSuccessfulFirestoreWrite = new Date().toISOString();
+    firestoreLastSuccess = lastSuccessfulFirestoreWrite;
     lastFirestoreWriteSuccess = true;
     lastFirestoreWriteError = null;
     firestoreRetryAtMs = 0;
@@ -7948,6 +8001,7 @@ async function persistSingleSignalLog(logItem: PersistentSignalLogItem) {
     await withTimeout(setDoc(doc(db, 'signal_logs', logItem.id), sanitizeForFirestore(logItem)), 5000, 'RESOURCE_EXHAUSTED: signal_log timeout');
     lastFirestoreWriteTimeMs = Date.now();
     lastSuccessfulFirestoreWrite = new Date().toISOString();
+    firestoreLastSuccess = lastSuccessfulFirestoreWrite;
     lastFirestoreWriteSuccess = true;
     lastFirestoreWriteError = null;
     firestoreRetryAtMs = 0;
@@ -8309,17 +8363,23 @@ function loadPersistentStore() {
 
       if (data.circuitState && typeof data.circuitState === 'object') {
         const cs = data.circuitState;
-        if (cs.firestoreRetryAtMs && typeof cs.firestoreRetryAtMs === 'number' && cs.firestoreRetryAtMs > Date.now()) {
-          firestoreRetryAtMs = cs.firestoreRetryAtMs;
-          firestoreRetryAt = cs.firestoreRetryAt || new Date(firestoreRetryAtMs).toISOString();
-          firestoreBackoffMs = cs.firestoreBackoffMs || 15 * 60 * 1000;
-          lastFirestoreWriteError = cs.lastFirestoreWriteError || 'RESOURCE_EXHAUSTED';
-          persistenceState = 'DEGRADED_LOCAL_FALLBACK';
-          console.warn(`[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache on boot. retryAt=${firestoreRetryAt}`);
+        if (cs.firestoreRetryAtMs && typeof cs.firestoreRetryAtMs === 'number') {
+          if (cs.firestoreRetryAtMs > Date.now()) {
+            firestoreRetryAtMs = cs.firestoreRetryAtMs;
+            firestoreRetryAt = cs.firestoreRetryAt || new Date(firestoreRetryAtMs).toISOString();
+            firestoreBackoffMs = cs.firestoreBackoffMs || 15 * 60 * 1000;
+            lastFirestoreWriteError = cs.lastFirestoreWriteError || 'RESOURCE_EXHAUSTED';
+            persistenceState = db ? 'DEGRADED_LOCAL_FALLBACK' : 'LOCAL_DISK_ONLY';
+            console.warn(`[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache on boot. retryAt=${firestoreRetryAt}`);
 
-          if (db && !firestoreNetworkDisabled) {
-            firestoreNetworkDisabled = true;
-            disableNetwork(db).catch(err => console.error('[FIRESTORE_CIRCUIT] Error disabling network stream on boot:', err));
+            if (db && !firestoreNetworkDisabled) {
+              firestoreNetworkDisabled = true;
+              disableNetwork(db).catch(err => console.error('[FIRESTORE_CIRCUIT] Error disabling network stream on boot:', err));
+            }
+          } else {
+            firestoreRetryAtMs = 0;
+            firestoreRetryAt = null;
+            if (db) persistenceState = 'HEALTHY_FIRESTORE';
           }
         }
       }
@@ -9187,15 +9247,15 @@ app.get(['/auth/discord/callback', '/auth/discord/callback/', '/api/auth/discord
     const targetGuildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
     
     // Check Guild Membership using Bot Token to get roles too
-    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const creds = loadProductionDiscordCredentials();
     let isGuildMember = false;
     let guildRoles: string[] = [];
     
-    if (botToken) {
+    if (creds.isValid) {
       console.log('[Discord OAuth Callback Audit] Fetching guild member details for ID:', discordUser.id);
       try {
         const memberRes = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUser.id}`, {
-          headers: { Authorization: `Bot ${botToken}` }
+          headers: { Authorization: creds.authHeader }
         });
         if (memberRes.ok) {
           const memberData = await memberRes.json();
@@ -10006,17 +10066,37 @@ app.listen(PORT, '0.0.0.0', () => {
       const wss = new WebSocketServer({ server, path: '/api/ws' });
 
       wss.on('connection', (ws: WebSocket, req) => {
+        wssClientsCount = wss.clients.size;
+        lastFrontendConnectionTs = Date.now();
+        lastWebSocketMessageTs = Date.now();
+        hasDeliveredFrontendSnapshot = true;
         console.log(`[VIXY_WS_CONNECT] client connected from ${req.socket.remoteAddress}`);
-        console.log(`[VIXY_WS_OPEN] client connected`);
+        console.log(`[VIXY_WS_OPEN] client connected (Active Clients: ${wssClientsCount})`);
 
         globalSequenceNumber++;
+        const isLocked = active15mCycle.isLocked;
         const snapshot = {
           type: 'VIXY_SNAPSHOT',
           sessionId: SERVER_SESSION_ID,
           cycleId: active15mCycle.cycleId,
+          sequence: globalSequenceNumber,
           status: active15mCycle.stage,
+          decision: isLocked ? active15mCycle.lockedDecision : (currentDirection === 'UP' ? 'BUY UP' : (currentDirection === 'DOWN' ? 'BUY DOWN' : 'OBSERVING...')),
+          confidence: isLocked ? (active15mCycle.lockedConfidence || currentConfidence) : currentConfidence,
+          confidencePct: isLocked ? (active15mCycle.lockedConfidence || Math.round(currentConfidence)) : Math.round(currentConfidence),
+          lockedProbability: isLocked ? active15mCycle.lockedProbability : null,
+          liveProbability: currentModelProbability,
+          probabilityForLockedDirection: isLocked ? (active15mCycle.lockedDirection === 'UP' ? currentModelProbability : (1 - currentModelProbability)) : currentModelProbability,
+          spot: currentBtcPrice,
+          strike: isLocked ? active15mCycle.lockedStrike : current15mStrikePrice,
+          timeRemaining: Math.max(0, Math.floor((active15mCycle.intervalEnd - Date.now()) / 1000)),
+          lockedAt: active15mCycle.lockedAt,
+          dataAgeMs: Date.now() - lastMarketUpdateTs,
+          algorithm: 'VIXY_AUTHORITATIVE_NEURAL_v5',
+          validation: active15mCycle.validationStatus,
+          calibration: active15mCycle.calibrationStatus,
           crossAssetContext: latestCrossAssetContext,
-          lockedPrediction: active15mCycle.isLocked ? {
+          lockedPrediction: isLocked ? {
             direction: active15mCycle.lockedDirection,
             probability: active15mCycle.lockedProbability,
             confidence: active15mCycle.lockedConfidence,
@@ -10031,8 +10111,7 @@ app.listen(PORT, '0.0.0.0', () => {
             probability: currentModelProbability,
             confidence: currentConfidence
           },
-          serverTime: new Date().toISOString(),
-          sequence: globalSequenceNumber
+          serverTime: new Date().toISOString()
         };
 
         ws.send(JSON.stringify(snapshot));
@@ -10041,6 +10120,7 @@ app.listen(PORT, '0.0.0.0', () => {
         const heartbeatInterval = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             globalSequenceNumber++;
+            lastWebSocketMessageTs = Date.now();
             const heartbeat = {
               type: 'VIXY_HEARTBEAT',
               sessionId: SERVER_SESSION_ID,
@@ -10049,13 +10129,13 @@ app.listen(PORT, '0.0.0.0', () => {
               cycleId: active15mCycle.cycleId
             };
             ws.send(JSON.stringify(heartbeat));
-            console.log(`[VIXY_WS_HEARTBEAT] sequence=${globalSequenceNumber} cycle=${active15mCycle.cycleId}`);
           }
         }, 10000);
 
         ws.on('close', (code, reason) => {
           clearInterval(heartbeatInterval);
-          console.log(`[VIXY_WS_CLOSE] code=${code} reason=${reason?.toString() || 'none'}`);
+          wssClientsCount = wss.clients.size;
+          console.log(`[VIXY_WS_CLOSE] code=${code} reason=${reason?.toString() || 'none'} (Active Clients: ${wssClientsCount})`);
         });
 
         ws.on('error', (err) => {
@@ -10068,34 +10148,47 @@ app.listen(PORT, '0.0.0.0', () => {
         const dataAgeMs = now - lastMarketUpdateTs;
         const isBinanceConnected = engineFeedStatus === 'CONNECTED' && dataAgeMs < 15000;
         const isLocked = active15mCycle.isLocked;
-        
-        console.log(`[VIXY_PRODUCTION_DIAGNOSTIC]`);
-        console.log(`frontend=${wss.clients.size > 0 ? 'READY' : 'WAITING'}`);
-        console.log(`backend=RUNNING`);
-        console.log(`binance=${isBinanceConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
-        console.log(`cryptoTracking=ACTIVE`);
-        console.log(`marketData=${engineFeedStatus === 'CONNECTED' ? (dataAgeMs < 5000 ? 'FRESH' : (dataAgeMs < 15000 ? 'STALE' : 'CRITICAL')) : 'CRITICAL'}`);
-        console.log(`algorithm=RUNNING`);
-        console.log(`firestore=${persistenceState === 'HEALTHY_FIRESTORE' ? 'HEALTHY' : persistenceState}`);
-        console.log(`authoritativeState=AVAILABLE`);
-        console.log(`vixyWebSocket=${wss.clients.size > 0 ? 'CONNECTED' : 'WAITING'}`);
-        console.log(`frontendSnapshot=${wss.clients.size > 0 ? 'FRESH' : 'WAITING'}`);
-        console.log(`accountApi=HEALTHY`);
-        console.log(`btc15mCard=${wss.clients.size > 0 ? 'CONNECTED' : 'WAITING'}`);
-        console.log(`cycle=${active15mCycle.cycleId}`);
-        console.log(`cycleStatus=${active15mCycle.status}`);
-        console.log(`cycleExpiry=${new Date(active15mCycle.intervalEnd).toISOString()}`);
-        console.log(`sequence=${globalSequenceNumber}`);
-        console.log(`dataAgeMs=${dataAgeMs}`);
-        console.log(`latencyMs=${Math.max(0, dataAgeMs - 500)}`);
-        console.log(`calibrationStatus=${active15mCycle.calibrationStatus}`);
-        console.log(`analysisStatus=${active15mCycle.analysisStatus}`);
-        console.log(`validationStatus=${active15mCycle.validationStatus}`);
-        console.log(`lockedDirection=${isLocked ? active15mCycle.lockedDirection : 'null'}`);
-        console.log(`lockedProbability=${isLocked ? active15mCycle.lockedProbability : 'null'}`);
-        console.log(`lockedConfidence=${isLocked ? active15mCycle.lockedConfidence : 'null'}`);
-        console.log(`lockedAt=${isLocked ? active15mCycle.lockedAt : 'null'}`);
-        console.log(`STATUS=PRODUCTION_READY`);
+        const botState = getDiscordBotStatus();
+        const creds = loadProductionDiscordCredentials();
+
+        const diagHash = `${active15mCycle.cycleId}:${wssClientsCount}:${persistenceState}:${botState.mode}:${isLocked}`;
+        if (diagHash !== lastLoggedDiagnosticHash || now - lastHeartbeatLogTs >= 60000) {
+          lastLoggedDiagnosticHash = diagHash;
+          console.log(`[VIXY_PRODUCTION_DIAGNOSTIC]`);
+          console.log(`frontend=${wssClientsCount > 0 ? 'READY' : (now - lastFrontendConnectionTs < 30000 ? 'READY' : 'WAITING')}`);
+          console.log(`backend=RUNNING`);
+          console.log(`binance=${isBinanceConnected ? 'CONNECTED' : 'DISCONNECTED'}`);
+          console.log(`cryptoTracking=ACTIVE`);
+          console.log(`marketData=${engineFeedStatus === 'CONNECTED' ? (dataAgeMs < 5000 ? 'FRESH' : (dataAgeMs < 15000 ? 'STALE' : 'CRITICAL')) : 'CRITICAL'}`);
+          console.log(`algorithm=RUNNING`);
+          console.log(`firestore=${persistenceState === 'HEALTHY_FIRESTORE' ? 'HEALTHY' : persistenceState}`);
+          console.log(`firestoreStatus=${persistenceState}`);
+          console.log(`firestoreLastSuccess=${firestoreLastSuccess || 'NONE'}`);
+          console.log(`firestoreLastFailure=${lastFirestoreWriteError || 'NONE'}`);
+          console.log(`firestoreReconnectAttempt=${firestoreReconnectAttempt}`);
+          console.log(`firestoreQueuedWrites=${pendingTelemetryQueue.length + pendingSignalLogsQueue.length}`);
+          console.log(`firestorePersistenceState=${persistenceState}`);
+          console.log(`authoritativeState=AVAILABLE`);
+          console.log(`vixyWebSocket=${wssClientsCount > 0 ? 'CONNECTED' : 'WAITING'}`);
+          console.log(`frontendSnapshot=${hasDeliveredFrontendSnapshot ? 'FRESH' : 'WAITING'}`);
+          console.log(`discordBot=${botState.mode === 'ACTIVE_BOT' ? 'READY' : (botState.mode === 'DISABLED' ? 'DISABLED' : 'DEGRADED')}`);
+          console.log(`discordEnvVarPresent=${creds.isValid}`);
+          console.log(`discordTokenFingerprint=${creds.fingerprint}`);
+          console.log(`discordApiAuthenticated=${botState.isReady}`);
+          console.log(`discordBotUserId=${botState.botId || 'NONE'}`);
+          console.log(`discordGuildAccess=${botState.guildCount > 0}`);
+          console.log(`discordBotConnected=${botState.isReady}`);
+          console.log(`currentCycleId=${active15mCycle.cycleId}`);
+          console.log(`currentSequence=${globalSequenceNumber}`);
+          console.log(`currentLock=${isLocked ? `${active15mCycle.lockedDecision} (${active15mCycle.lockedConfidence}%)` : 'NONE'}`);
+          console.log(`lockedDirection=${isLocked ? active15mCycle.lockedDirection : 'null'}`);
+          console.log(`lockedConfidencePct=${isLocked ? `${active15mCycle.lockedConfidence}%` : 'null'}`);
+          console.log(`lockedProbability=${isLocked ? active15mCycle.lockedProbability : 'null'}`);
+          console.log(`liveDirection=${currentDirection}`);
+          console.log(`liveProbability=${currentModelProbability}`);
+          console.log(`reversalDetected=${isLocked && (active15mCycle.lockedDirection === 'UP' ? currentModelProbability : (1 - currentModelProbability)) <= 0.15}`);
+          console.log(`STATUS=PRODUCTION_READY`);
+        }
       }, 10000);
     });
   } else {

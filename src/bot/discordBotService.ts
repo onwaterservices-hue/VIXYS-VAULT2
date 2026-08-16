@@ -1,5 +1,5 @@
 import { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, Interaction } from 'discord.js';
-import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot } from './client';
+import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordBot as initClientBot, loadProductionDiscordCredentials } from './client';
 
 export interface DiscordBotState {
   isReady: boolean;
@@ -324,7 +324,8 @@ export async function assignDiscordRoleToUser(
   }
 
   const syncPromise = (async () => {
-    const botToken = process.env.DISCORD_BOT_TOKEN;
+    const creds = loadProductionDiscordCredentials();
+    const botToken = creds.sanitizedToken;
 
     // Determine role IDs from env (with fallbacks for all configured variable naming variations)
     const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
@@ -669,14 +670,15 @@ export async function getDiscordHealthReport(): Promise<{
   status: string;
   message: string;
 }> {
-  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const creds = loadProductionDiscordCredentials();
+  const botToken = creds.sanitizedToken;
   const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
   const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
   const health = {
     discordConfigured: !!(process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET),
-    botTokenPresent: !!botToken,
+    botTokenPresent: creds.isValid,
     guildIdPresent: !!process.env.DISCORD_GUILD_ID,
     proRoleConfigured: !!verifiedRoleId,
     eliteRoleConfigured: !!eliteRoleId,
@@ -689,9 +691,9 @@ export async function getDiscordHealthReport(): Promise<{
     message: 'Health check completed',
   };
 
-  if (!botToken) {
+  if (!creds.isValid) {
     health.status = 'error';
-    health.message = 'DISCORD_BOT_TOKEN missing in environment variables';
+    health.message = 'DISCORD_BOT_TOKEN missing or invalid in environment variables';
     return health;
   }
 
@@ -727,14 +729,15 @@ export async function runDiscordDiagnostics(): Promise<{
   statusMessage: string;
   diagnosticCode: string;
 }> {
-  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const creds = loadProductionDiscordCredentials();
+  const botToken = creds.sanitizedToken;
   const guildId = process.env.DISCORD_GUILD_ID || '1451337712937336985';
   const eliteRoleId = process.env.DISCORD_ELITE_ROLE_ID || process.env.DISCORD_ROLE_ELITE || process.env.DISCORD_VIP_ROLE_ID || '1535025983093215425';
   const aiRoleId = process.env.DISCORD_AI_ROLE_ID || eliteRoleId;
   const verifiedRoleId = process.env.DISCORD_VERIFIED_ROLE_ID || process.env.DISCORD_ROLE_VERIFIED || '1454661279305433202';
 
   const report = {
-    botTokenConfigured: !!botToken,
+    botTokenConfigured: creds.isValid,
     botConnected: discordClient?.isReady() || false,
     botTag: discordClient?.user?.tag || null,
     guildConfigured: !!process.env.DISCORD_GUILD_ID,
@@ -749,8 +752,8 @@ export async function runDiscordDiagnostics(): Promise<{
     diagnosticCode: 'HEALTHY',
   };
 
-  if (!botToken) {
-    report.statusMessage = 'DISCORD_BOT_TOKEN is missing in process.env';
+  if (!creds.isValid) {
+    report.statusMessage = 'DISCORD_BOT_TOKEN is missing or invalid in process.env';
     report.diagnosticCode = 'INVALID_BOT_TOKEN';
     return report;
   }
@@ -758,7 +761,7 @@ export async function runDiscordDiagnostics(): Promise<{
   try {
     // 1. Fetch Guild via REST API
     const guildRes = await fetch(`https://discord.com/api/v10/guilds/${guildId}`, {
-      headers: { Authorization: `Bot ${botToken}` },
+      headers: { Authorization: creds.authHeader },
     });
 
     if (!guildRes.ok) {
@@ -869,7 +872,7 @@ export function setServiceDiscordClient(_client?: Client) {
 // Fetch guild members from Discord server
 export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promise<Array<{ id: string, tag: string, username: string, globalName: string | null, roles: string[], avatar?: string | null }>> {
   const targetGuildId = guildIdOverride || process.env.DISCORD_GUILD_ID || '1451337712937336985';
-  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const creds = loadProductionDiscordCredentials();
 
   // Approach 1: discordClient if connected and ready
   if (discordClient && discordClient.isReady()) {
@@ -894,11 +897,11 @@ export async function fetchDiscordGuildMembers(guildIdOverride?: string): Promis
   }
 
   // Approach 2: Direct REST API call
-  if (botToken) {
+  if (creds.isValid) {
     try {
       console.log('[DiscordBot] Fetching guild members via direct REST API...');
       const res = await fetch(`https://discord.com/api/v10/guilds/${targetGuildId}/members?limit=1000`, {
-        headers: { Authorization: `Bot ${botToken}` }
+        headers: { Authorization: creds.authHeader }
       });
       if (res.ok) {
         const membersData: any[] = await res.json();
