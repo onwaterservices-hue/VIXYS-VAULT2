@@ -74,25 +74,35 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
       let res;
       if (mode === 'register') {
         const fetchRes = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: userEmail, password, name: userName })
+          body: JSON.stringify({ email: userEmail, password, name: userName }),
+          signal: controller.signal
         });
         res = await fetchRes.json();
       } else {
         const fetchRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: userEmail, password })
+          body: JSON.stringify({ email: userEmail, password }),
+          signal: controller.signal
         });
         res = await fetchRes.json();
       }
+      clearTimeout(timeoutId);
 
       if (!res?.success) {
         setLoading(false);
+        if (res?.error === 'ACCOUNT_NEEDS_PASSWORD') {
+           setMode('register');
+           setSuccessMsg('ACCOUNT FOUND: Set a password to finish setup and access your existing entitlement.');
+           return;
+        }
         if (res?.error === 'USER_EXISTS' && mode === 'register') {
            setErrorMsg('Account already exists. Sign in instead.');
            return;
