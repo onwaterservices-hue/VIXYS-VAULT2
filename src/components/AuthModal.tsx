@@ -71,6 +71,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       localStorage.setItem('vixy_user_email', userEmail);
     }
 
+    const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : userEmail.split('@')[0]);
 
     if (mode === 'register') {
@@ -87,130 +88,67 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      let syncRes;
+      let res;
       if (mode === 'register') {
         const fetchRes = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: userEmail, password, name: userName })
         });
-        syncRes = await fetchRes.json();
+        res = await fetchRes.json();
       } else {
         const fetchRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: userEmail, password })
         });
-        syncRes = await fetchRes.json();
+        res = await fetchRes.json();
       }
 
-      if (!syncRes?.success) {
+      if (!res?.success) {
         setLoading(false);
-        if (syncRes?.error === 'ACCOUNT_NEEDS_INITIALIZATION' || syncRes?.error === 'PASSWORD_CREDENTIAL_MISSING' || syncRes?.error === 'LEGACY_ACCOUNT_NEEDS_PASSWORD') {
-          setMode('activation');
-          setErrorMsg('');
-          setSuccessMsg('');
-          return;
-        } else {
-          setErrorMsg(syncRes?.message || 'Authentication failed. Please check your credentials.');
+        if (res?.error === 'USER_EXISTS' && mode === 'register') {
+           setErrorMsg('Account already exists. Sign in instead.');
+           return;
         }
+        if (res?.error === 'INVALID_CREDENTIALS') {
+           setErrorMsg('Invalid email or password.');
+           return;
+        }
+        setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
         return;
       }
 
-      const canonicalUser = syncRes?.user || {};
-      const canonicalUserId = canonicalUser.id || canonicalUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-      const discordUserId = canonicalUser.discordId || canonicalUser.discordUserId;
-
-      // Authoritative server check and automatic restore for active Day Pass or Subscription
-      let hasActiveEntitlement = false;
-      let restoredTierName = '';
-
-      try {
-        const restoreRes = await fetch('/api/auth/restore-access', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-email': userEmail,
-            'x-user-uid': canonicalUserId,
-          },
-          body: JSON.stringify({
-            email: userEmail,
-            uid: canonicalUserId,
-            discordUserId,
-          }),
-        });
-        if (restoreRes.ok) {
-          const restData = await restoreRes.json();
-          if (restData.success && (restData.restored || restData.entitlement?.status === 'active' || restData.entitlement?.dayPass?.active)) {
-            hasActiveEntitlement = true;
-            restoredTierName = restData.tier || restData.entitlement?.tier || '24-Hour Day Pass';
-          }
-        }
-      } catch (_) {}
-
-      // Double check /api/entitlements
-      if (!hasActiveEntitlement) {
-        try {
-          const entRes = await fetch(`/api/entitlements?email=${encodeURIComponent(userEmail)}&userId=${encodeURIComponent(canonicalUserId)}`);
-          if (entRes.ok) {
-            const entData = await entRes.json();
-            if (
-              entData.entitlements?.proQuant ||
-              entData.entitlements?.eliteQuant ||
-              entData.dayPass?.active ||
-              entData.status === 'active' ||
-              entData.plan === 'ELITE_QUANT' ||
-              entData.plan === 'PRO_QUANT' ||
-              entData.plan === 'DAY_PASS'
-            ) {
-              hasActiveEntitlement = true;
-              restoredTierName = entData.plan || '24-Hour Day Pass';
-            }
-          }
-        } catch (_) {}
+      setSuccessMsg('ACCOUNT READY! Entering VIXY Terminal...');
+      
+      const serverUser = res.user || {};
+      const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      
+      let finalRole = assignedRole;
+      if (res.entitlement) {
+         if (res.entitlement.entitlements?.canAccessAdminPanel) finalRole = 'ADMIN';
+         else if (res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) finalRole = 'PRO';
       }
-
-      const finalRole = isAdminEmail ? 'ADMIN' : (canonicalUser.role === 'ADMIN' ? 'ADMIN' : ((canonicalUser.role === 'PRO' || canonicalUser.role === 'ELITE' || hasActiveEntitlement) ? 'PRO' : 'UNPAID'));
 
       setAuthState({
         isAuthenticated: true,
         user: {
           id: canonicalUserId,
           email: userEmail,
-          name: canonicalUser.name || userName,
-          role: finalRole,
-          discordId: discordUserId,
-          discordTag: canonicalUser.discordTag,
-          apiKey: canonicalUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
-          joinedDate: canonicalUser.createdAt ? new Date(canonicalUser.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        },
-      });
-
-      if (setUserRole) setUserRole(finalRole);
-      if (onSuccessRole) onSuccessRole(finalRole);
-
-      setLoading(false);
-      setSuccessMsg(
-        isAdminEmail
-          ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
-          : hasActiveEntitlement
-          ? `Active ${restoredTierName} Restored! Welcome back, ${userName}.`
-          : mode === 'register'
-          ? `Account created successfully! Welcome, ${userName}.`
-          : `Signed in successfully. Welcome back, ${userName}!`
-      );
-
-      setTimeout(() => {
-        setSuccessMsg('');
-        onClose();
-        if (onSuccess) {
-          onSuccess(finalRole as any);
+          role: finalRole as 'PRO' | 'ADMIN' | 'UNPAID',
+          discordLinked: serverUser.discordLinked || false,
+          discordId: serverUser.discordId,
+          discordTag: serverUser.discordTag
         }
-      }, 1200);
+      });
+      setUserRole(finalRole as any);
+
+      if (typeof onSuccessNavigate === 'function') {
+        setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
+      }
     } catch (err) {
       setLoading(false);
-      setErrorMsg('Authentication failed. Please check your credentials.');
-      console.warn('Auth sync error:', err);
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
@@ -266,143 +204,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </h2>
             <p className="text-xs text-purple-200/70 font-sans max-w-sm mx-auto">
               {mode === 'register'
-                ? 'Create your account to unlock 24-Hour Day Pass ($9.99) & Full Terminal Access.'
+                ? 'New to VIXY VAULT? Purchase access through the official Stripe Payment Link, then return here to set up your account.'
                 : 'Enter your credentials to unlock live 15m decision feeds & orderbook deltas.'}
             </p>
           </div>
 
           {/* Day Pass Promo Pill for Signup */}
           
-            {mode === 'activation' && !activationSent && (
-              <div className="p-6 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-4">
-                <ShieldCheck className="w-10 h-10 text-amber-400 mx-auto" />
-                <h3 className="text-lg font-bold text-white">Account Found</h3>
-                <p className="text-xs text-purple-300 font-sans">
-                  Finish setting up your existing VIXY VAULT account. Verify ownership to create your password.
-                </p>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const reqRes = await fetch('/api/auth/request-activation', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email })
-                      }).then(r => r.json());
-                      setLoading(false);
-                      if (reqRes.success) {
-                        setActivationSent(true);
-                        setSuccessMsg('Activation link sent! Check your email.');
-                        if (reqRes.devActivationToken) {
-                          // Auto-fill for testing/dev
-                          setActivationToken(reqRes.devActivationToken);
-                        }
-                      } else {
-                        setErrorMsg(reqRes.message || 'Failed to request activation.');
-                      }
-                    } catch (e) {
-                      setLoading(false);
-                      setErrorMsg('Network error.');
-                    }
-                  }}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-3 rounded-xl transition-all"
-                >
-                  Activate Account
-                </button>
-              </div>
-            )}
             
-            {mode === 'activation' && activationSent && (
-              <div className="space-y-4">
-                <div className="p-4 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-2">
-                  <h3 className="text-sm font-bold text-white">Create Your Password</h3>
-                  <p className="text-xs text-purple-300">Enter the activation code sent to your email and your new password.</p>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/70 block font-semibold">Activation Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={activationToken}
-                    onChange={(e) => setActivationToken(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/70 block font-semibold">New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const actRes = await fetch('/api/auth/activate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email, token: activationToken, password: password })
-                      }).then(r => r.json());
-                      
-                      if (actRes.success) {
-                        // Activation logs the user in
-                        setSuccessMsg('Account activated and signed in!');
-                        const serverUser = actRes.user || {};
-                        const canonicalUserId = serverUser.id || serverUser.uid || `usr_${email.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-                        
-                        // Execute same post-login flow
-                        const restoreRes = await fetch('/api/auth/restore-access', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'x-user-email': email, 'x-user-uid': canonicalUserId },
-                          body: JSON.stringify({ email, uid: canonicalUserId })
-                        }).then(r => r.json());
-                        
-                        let assignedRole = email === 'vixyvault0@gmail.com' ? 'ADMIN' : 'UNPAID';
-                        if (restoreRes?.success && restoreRes.tier) {
-                          if (restoreRes.tier === 'DAY_PASS' || restoreRes.tier === 'PRO' || restoreRes.tier === 'ELITE') {
-                            assignedRole = 'PRO';
-                          }
-                        }
-                        
-                        setAuthState({
-                          isAuthenticated: true,
-                          user: {
-                            id: canonicalUserId,
-                            email,
-                            role: assignedRole as 'PRO' | 'ADMIN' | 'UNPAID',
-                            discordLinked: false,
-                            discordId: undefined,
-                            discordTag: undefined
-                          }
-                        });
-                        setUserRole(assignedRole as any);
-                        if (onSuccessNavigate) {
-                          setTimeout(() => onSuccessNavigate(assignedRole as any), 1000);
-                        }
-                      } else {
-                        setLoading(false);
-                        setErrorMsg(actRes.message || 'Activation failed.');
-                      }
-                    } catch (e) {
-                      setLoading(false);
-                      setErrorMsg('Network error.');
-                    }
-                  }}
-                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-3 rounded-xl transition-all"
-                >
-                  Verify & Sign In
-                </button>
-              </div>
-            )}
+            
+            
+
+
+            
+            
 
 {mode === 'register' && (
             <div className="p-3 rounded-2xl bg-gradient-to-r from-purple-950/80 via-[#0E0622] to-cyan-950/80 border border-cyan-500/40 flex items-center justify-between gap-3 text-xs shadow-md">
@@ -427,7 +242,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <p className="text-emerald-200 font-bold text-xs">{successMsg}</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className={`space-y-4 text-xs font-mono ${mode === 'activation' ? 'hidden' : ''}`}>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
               {errorMsg && (
                 <div className="p-3 bg-rose-500/20 border border-rose-500/50 rounded-xl text-rose-300 font-bold text-[11px]">
                   {errorMsg}

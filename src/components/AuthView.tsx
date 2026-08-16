@@ -29,9 +29,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
   setUserRole,
   onSuccessNavigate,
 }) => {
-  const [mode, setMode] = useState<'login' | 'register' | 'activation'>('login');
-  const [activationToken, setActivationToken] = useState('');
-  const [activationSent, setActivationSent] = useState(false);
+  const [mode, setMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -95,75 +93,48 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
       if (!res?.success) {
         setLoading(false);
-        if (res?.error === 'ACCOUNT_NEEDS_INITIALIZATION' || res?.error === 'PASSWORD_CREDENTIAL_MISSING' || res?.error === 'LEGACY_ACCOUNT_NEEDS_PASSWORD') {
-          setMode('activation');
-          setErrorMsg('');
-          setSuccessMsg('');
-          return;
-        } else {
-          setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
+        if (res?.error === 'USER_EXISTS' && mode === 'register') {
+           setErrorMsg('Account already exists. Sign in instead.');
+           return;
         }
+        if (res?.error === 'INVALID_CREDENTIALS') {
+           setErrorMsg('Invalid email or password.');
+           return;
+        }
+        setErrorMsg(res?.message || 'Authentication failed. Please check your credentials.');
         return;
       }
 
-      const serverUser = res?.user || {};
+      setSuccessMsg('ACCOUNT READY! Entering VIXY Terminal...');
+      
+      const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
+      
+      let finalRole = assignedRole;
+      if (res.entitlement) {
+         if (res.entitlement.entitlements?.canAccessAdminPanel) finalRole = 'ADMIN';
+         else if (res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) finalRole = 'PRO';
+      }
 
-      // Authoritative server check and automatic restore for active Day Pass or Subscription
-      let hasActiveEntitlement = false;
-      let restoredTierName = '';
-
-      try {
-        const restoreRes = await fetch('/api/auth/restore-access', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-user-email': userEmail,
-            'x-user-uid': canonicalUserId,
-          },
-          body: JSON.stringify({
-            email: userEmail,
-            uid: canonicalUserId,
-          }),
-        });
-        if (restoreRes.ok) {
-          const restData = await restoreRes.json();
-          if (restData.success && (restData.restored || restData.entitlement?.status === 'active' || restData.entitlement?.dayPass?.active)) {
-            hasActiveEntitlement = true;
-            restoredTierName = restData.tier || restData.entitlement?.tier || '24-Hour Day Pass';
-          }
-        }
-      } catch (_) {}
-
-      const finalRole = isAdminEmail ? 'ADMIN' : (serverUser?.role === 'ADMIN' ? 'ADMIN' : ((serverUser?.role === 'PRO' || serverUser?.role === 'ELITE' || hasActiveEntitlement) ? 'PRO' : 'UNPAID'));
-
-      setLoading(false);
       setAuthState({
         isAuthenticated: true,
         user: {
           id: canonicalUserId,
           email: userEmail,
-          name: userName,
-          role: finalRole,
-          apiKey: serverUser.apiKey || `vault_live_${Math.random().toString(36).substring(2, 8)}`,
-          joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' }),
-        },
+          role: finalRole as 'PRO' | 'ADMIN' | 'UNPAID',
+          discordLinked: serverUser.discordLinked || false,
+          discordId: serverUser.discordId,
+          discordTag: serverUser.discordTag
+        }
       });
       setUserRole(finalRole as any);
-      setSuccessMsg(
-        isAdminEmail
-          ? `Master Admin Verified! Full Vault Admin Control Center unlocked.`
-          : mode === 'register'
-          ? `Account created successfully! Redirecting to secure billing view...`
-          : `Signed in successfully. Welcome back, ${userName}!`
-      );
 
-      if (onSuccessNavigate) {
+      if (typeof onSuccessNavigate === 'function') {
         setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
       }
     } catch (err) {
       setLoading(false);
-      setErrorMsg('Authentication failed. Please try again.');
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
@@ -246,7 +217,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           <div className="flex items-center bg-[#0B051A] p-1.5 rounded-2xl border border-purple-900/60">
             <button
               onClick={() => {
-                setActivationSent(false);
+                
                 setMode('login');
                 setErrorMsg('');
                 setSuccessMsg('');
@@ -282,143 +253,20 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <p className="text-xs text-purple-300 font-sans">Redirecting you to the trading terminal...</p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className={`space-y-4 text-xs font-mono ${mode === 'activation' ? 'hidden' : ''}`}>
+            <form onSubmit={handleSubmit} className="space-y-4 text-xs font-mono">
               {errorMsg && (
                 <div className="p-3.5 bg-rose-500/20 border border-rose-500/40 rounded-xl text-rose-300 font-bold text-xs">
                   {errorMsg}
                 </div>
               )}
               
-            {mode === 'activation' && !activationSent && (
-              <div className="p-6 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-4">
-                <ShieldCheck className="w-10 h-10 text-amber-400 mx-auto" />
-                <h3 className="text-lg font-bold text-white">Account Found</h3>
-                <p className="text-xs text-purple-300 font-sans">
-                  Finish setting up your existing VIXY VAULT account. Verify ownership to create your password.
-                </p>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const reqRes = await fetch('/api/auth/request-activation', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email })
-                      }).then(r => r.json());
-                      setLoading(false);
-                      if (reqRes.success) {
-                        setActivationSent(true);
-                        setSuccessMsg('Activation link sent! Check your email.');
-                        if (reqRes.devActivationToken) {
-                          // Auto-fill for testing/dev
-                          setActivationToken(reqRes.devActivationToken);
-                        }
-                      } else {
-                        setErrorMsg(reqRes.message || 'Failed to request activation.');
-                      }
-                    } catch (e) {
-                      setLoading(false);
-                      setErrorMsg('Network error.');
-                    }
-                  }}
-                  className="w-full bg-amber-500 hover:bg-amber-400 text-black font-black py-3 rounded-xl transition-all"
-                >
-                  Activate Account
-                </button>
-              </div>
-            )}
             
-            {mode === 'activation' && activationSent && (
-              <div className="space-y-4">
-                <div className="p-4 bg-purple-500/10 border border-purple-500/40 rounded-2xl text-center space-y-2">
-                  <h3 className="text-sm font-bold text-white">Create Your Password</h3>
-                  <p className="text-xs text-purple-300">Enter the activation code sent to your email and your new password.</p>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/70 block font-semibold">Activation Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={activationToken}
-                    onChange={(e) => setActivationToken(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-purple-300/70 block font-semibold">New Password</label>
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-                  />
-                </div>
-                
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      const actRes = await fetch('/api/auth/activate', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ email: email, token: activationToken, password: password })
-                      }).then(r => r.json());
-                      
-                      if (actRes.success) {
-                        // Activation logs the user in
-                        setSuccessMsg('Account activated and signed in!');
-                        const serverUser = actRes.user || {};
-                        const canonicalUserId = serverUser.id || serverUser.uid || `usr_${email.replace(/[^a-zA-Z0-9_]/g, '_')}`;
-                        
-                        // Execute same post-login flow
-                        const restoreRes = await fetch('/api/auth/restore-access', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'x-user-email': email, 'x-user-uid': canonicalUserId },
-                          body: JSON.stringify({ email, uid: canonicalUserId })
-                        }).then(r => r.json());
-                        
-                        let assignedRole = email === 'vixyvault0@gmail.com' ? 'ADMIN' : 'UNPAID';
-                        if (restoreRes?.success && restoreRes.tier) {
-                          if (restoreRes.tier === 'DAY_PASS' || restoreRes.tier === 'PRO' || restoreRes.tier === 'ELITE') {
-                            assignedRole = 'PRO';
-                          }
-                        }
-                        
-                        setAuthState({
-                          isAuthenticated: true,
-                          user: {
-                            id: canonicalUserId,
-                            email,
-                            role: assignedRole as 'PRO' | 'ADMIN' | 'UNPAID',
-                            discordLinked: false,
-                            discordId: undefined,
-                            discordTag: undefined
-                          }
-                        });
-                        setUserRole(assignedRole as any);
-                        if (onSuccessNavigate) {
-                          setTimeout(() => onSuccessNavigate(assignedRole as any), 1000);
-                        }
-                      } else {
-                        setLoading(false);
-                        setErrorMsg(actRes.message || 'Activation failed.');
-                      }
-                    } catch (e) {
-                      setLoading(false);
-                      setErrorMsg('Network error.');
-                    }
-                  }}
-                  className="w-full bg-purple-600 hover:bg-purple-500 text-white font-black py-3 rounded-xl transition-all"
-                >
-                  Verify & Sign In
-                </button>
-              </div>
-            )}
+            
+            
+
+
+            
+            
 
 {mode === 'register' && (
                 <>

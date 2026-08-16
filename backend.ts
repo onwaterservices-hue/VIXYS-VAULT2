@@ -2625,20 +2625,14 @@ app.post('/api/auth/login', async (req, res) => {
   if (!user) {
     console.log(`[AUTH] email=${cleanEmail} lookup=NONE candidateCount=0 credentialSource=NONE verification=FAILED`);
     console.log(`[AUTH LOGIN FAILURE] email=${cleanEmail} reason=USER_NOT_FOUND`);
-    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' });
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
 
   const hasPasswordHash = !!(user.passwordHash && typeof user.passwordHash === 'string' && user.passwordHash !== 'AuthManaged2026!' && user.passwordHash.length > 0);
   console.log(`[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith('vixy$') || false} reqId=${reqId}`);
 
   if (!hasPasswordHash) {
-    console.log(`[AUTH] email=${cleanEmail} lookup=${resolution.allDocs.length > 0 ? 'FIRESTORE' : 'MEMORY'} candidateCount=${resolution.allDocs.length} credentialSource=NONE verification=FAILED`);
-    console.log(`[AUTH_DEBUG] ACCOUNT_NEEDS_INITIALIZATION for account ${user.id || user.uid || cleanEmail} reqId=${reqId}`);
-    return res.status(401).json({
-      success: false,
-      error: 'ACCOUNT_NEEDS_ACTIVATION',
-      message: 'Account requires credential initialization. Please use the Create Account tab to set your password.'
-    });
+    return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
   }
 
   const verificationSuccess = verifyPassword(password, user.passwordHash);
@@ -2663,94 +2657,83 @@ app.post('/api/auth/login', async (req, res) => {
   }
 
   console.log(`[AUTH LOGIN SUCCESS] email=${cleanEmail} userId=${user.id || user.uid}`);
+  
+  const serverSession = { ...user, passwordHash: undefined };
+  const entitlement = getUserEntitlement(cleanEmail);
+  
   res.json({
     success: true,
-    user
+    user: serverSession,
+    entitlement
   });
 });
 
 
-const activationTokens = new Map<string, { token: string, expires: number }>();
 
-app.post('/api/auth/request-activation', async (req, res) => {
-  const email = String(req.body.email || '').toLowerCase().trim();
-  if (!email) return res.status(400).json({ success: false, message: 'Email required' });
-  
-  const user = serverUsers.find(u => u.email?.toLowerCase() === email);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  
-  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-  activationTokens.set(email, { token, expires: Date.now() + 15 * 60 * 1000 }); // 15 mins
-  
-  console.log(`[AUTH ACTIVATION EMAIL MOCK] SENDING TO: ${email} LINK: /activate?token=${token}`);
-  
-  res.json({ success: true, message: 'Activation link sent to your email.', devActivationToken: token });
-});
 
-app.post('/api/auth/activate', async (req, res) => {
-  const { email, token, password } = req.body;
-  const cleanEmail = String(email || '').toLowerCase().trim();
-  
-  if (!cleanEmail || !token || !password) return res.status(400).json({ success: false, message: 'Missing fields' });
-  
-  const record = activationTokens.get(cleanEmail);
-  if (!record || record.token !== token || record.expires < Date.now()) {
-    return res.status(400).json({ success: false, message: 'Invalid or expired activation token' });
-  }
-  
-  const user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
-  if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-  
-  const hashed = hashPassword(password);
-  user.passwordHash = hashed;
-  activationTokens.delete(cleanEmail);
-  
-  if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
-    ensureFirestoreNetworkEnabled().then(() => {
-      setDoc(doc(db, 'users', user.id || user.uid || cleanEmail), { passwordHash: hashed }, { merge: true }).catch(() => {});
-    }).catch(() => {});
-  }
-  savePersistentStore();
-  
-  const serverSession = { ...user };
-  serverSession.passwordHash = undefined;
-  return res.json({ success: true, user: serverSession });
-});
-
+app.post('/api/admin/strip-pwd', async (req, res) => {
+      const { email } = req.body;
+      const user = serverUsers.find(u => u.email === email);
+      if (user) {
+          user.passwordHash = "";
+          if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+              ensureFirestoreNetworkEnabled().then(() => {
+                  setDoc(doc(db, 'users', user.id || user.uid || email), { passwordHash: "" }, { merge: true }).catch(() => {});
+              }).catch(() => {});
+          }
+          savePersistentStore();
+          return res.json({ success: true });
+      }
+      return res.json({ success: false });
+  });
 app.post('/api/auth/register', async (req, res) => {
   if (productionMaintenanceState.enabled || productionMaintenanceState.emergencyLock) {
-    return res.status(503).json({
-      success: false,
-      error: 'MAINTENANCE_MODE',
-      message: 'VIXY VAULT IS CURRENTLY UPDATING. Registrations are temporarily paused.',
-    });
+    return res.status(503).json({ success: false, error: 'MAINTENANCE_MODE', message: 'VIXY VAULT IS CURRENTLY UPDATING. Registrations are temporarily paused.' });
   }
 
   const { email, password, name } = req.body || {};
   if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'EMAIL_AND_PASSWORD_REQUIRED', message: 'Email and password are required.' });
+    return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
   }
   const cleanEmail = email.trim().toLowerCase();
 
-  try {
-    await ensureFirebaseReady();
-  } catch (initErr: any) {
-    console.error('[AUTH_DEBUG] Firebase init error during register:', initErr?.message);
-  }
+  try { await ensureFirebaseReady(); } catch (initErr: any) {}
 
   const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null, allDocs: [] }));
   const existing = resolution.user || serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
 
   if (existing) {
-
-
-    return res.status(400).json({
-      success: false,
-      error: 'USER_EXISTS',
-      message: 'Account already exists. Please sign in.'
-    });
+    const hasPasswordHash = !!(existing.passwordHash && typeof existing.passwordHash === 'string' && existing.passwordHash !== 'AuthManaged2026!' && existing.passwordHash.length > 0);
+    
+    // If they already have a password, they should just sign in
+    if (hasPasswordHash) {
+      return res.status(400).json({
+        success: false,
+        error: 'USER_EXISTS',
+        message: 'Account already exists. Sign in instead.'
+      });
+    } else {
+      // They are a passwordless customer (e.g. from an existing Day Pass/Subscription record)
+      // Attach the new password to their existing canonical record safely.
+      const hashed = hashPassword(password);
+      existing.passwordHash = hashed;
+      existing.name = name?.trim() || existing.name || cleanEmail.split('@')[0];
+      
+      if (db && typeof canAttemptFirestoreWrite === 'function' && canAttemptFirestoreWrite('users')) {
+        ensureFirestoreNetworkEnabled().then(() => {
+          setDoc(doc(db, 'users', existing.id || existing.uid || cleanEmail), { passwordHash: hashed, name: existing.name }, { merge: true }).catch(() => {});
+        }).catch(() => {});
+      }
+      savePersistentStore();
+      
+      const serverSession = { ...existing, passwordHash: undefined };
+      const entitlement = getUserEntitlement(cleanEmail);
+      
+      return res.json({ success: true, user: serverSession, entitlement });
+    }
   }
 
+  // Entirely new user
   const newUser: ServerUser = {
     id: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
     uid: `usr_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`,
@@ -2766,10 +2749,10 @@ app.post('/api/auth/register', async (req, res) => {
   savePersistentStore();
   persistSingleUser(newUser as any).catch(err => console.warn('[FIRESTORE USER] Async save error:', err?.message));
 
-  res.json({
-    success: true,
-    user: newUser
-  });
+  const serverSession = { ...newUser, passwordHash: undefined };
+  const entitlement = getUserEntitlement(cleanEmail);
+
+  return res.json({ success: true, user: serverSession, entitlement });
 });
 
 // USER PROFILE / AUTH STATE ENDPOINT
