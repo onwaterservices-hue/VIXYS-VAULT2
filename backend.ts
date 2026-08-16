@@ -154,7 +154,7 @@ if (process.env.GEMINI_API_KEY) {
 function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  return clean === 'vixyvault0@gmail.com' || clean === 'onwaterservices@gmail.com' || clean === 'nghle749@gmmail.com' || clean === 'nghle749@gmail.com';
+  return clean === 'vixyvault0@gmail.com' || clean === 'onwaterservices@gmail.com';
 }
 
 // Canonical Authority Sanitizer: Guarantees vixyvault0@gmail.com and onwaterservices@gmail.com are OWNER accounts with valid password hashes
@@ -253,7 +253,7 @@ function sanitizeAndNormalizeServerUsers() {
         uid: `usr_mod_${modEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
         email: modEmail,
         name: 'NGH Le (Mod)',
-        role: 'OWNER',
+        role: 'USER',
         subscription: 'ELITE_PASS',
         status: 'ACTIVE',
         joined: '2026-08-16',
@@ -262,7 +262,7 @@ function sanitizeAndNormalizeServerUsers() {
       };
       serverUsers.unshift(modUser);
     } else {
-      modUser.role = 'OWNER';
+      modUser.role = 'USER';
       modUser.subscription = 'ELITE_PASS';
       modUser.status = 'ACTIVE';
       if (!modUser.passwordHash || !modUser.passwordHash.startsWith('vixy$')) {
@@ -288,14 +288,14 @@ function sanitizeAndNormalizeServerUsers() {
     });
     userSubscriptions.set('nghle749@gmmail.com', {
       email: 'nghle749@gmmail.com',
-      role: 'OWNER',
+      role: 'USER',
       plan: 'ELITE_PASS',
       status: 'ACTIVE',
       updatedAt: new Date().toISOString(),
     });
     userSubscriptions.set('nghle749@gmail.com', {
       email: 'nghle749@gmail.com',
-      role: 'OWNER',
+      role: 'USER',
       plan: 'ELITE_PASS',
       status: 'ACTIVE',
       updatedAt: new Date().toISOString(),
@@ -9978,7 +9978,7 @@ function seedInitialUsers() {
       id: 'usr_mod_nghle_gmmail',
       email: 'nghle749@gmmail.com',
       name: 'NGH Le (Mod)',
-      role: 'OWNER',
+      role: 'USER',
       subscription: 'ELITE_PASS',
       status: 'ACTIVE',
       joined: '2026-08-16',
@@ -9989,7 +9989,7 @@ function seedInitialUsers() {
       id: 'usr_mod_nghle_gmail',
       email: 'nghle749@gmail.com',
       name: 'NGH Le (Mod)',
-      role: 'OWNER',
+      role: 'USER',
       subscription: 'ELITE_PASS',
       status: 'ACTIVE',
       joined: '2026-08-16',
