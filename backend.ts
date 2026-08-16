@@ -154,7 +154,7 @@ if (process.env.GEMINI_API_KEY) {
 function isMasterAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = String(email).trim().toLowerCase();
-  return clean === 'vixyvault0@gmail.com' || clean === 'onwaterservices@gmail.com';
+  return clean === 'vixyvault0@gmail.com' || clean === 'onwaterservices@gmail.com' || clean === 'nghle749@gmmail.com' || clean === 'nghle749@gmail.com';
 }
 
 // Canonical Authority Sanitizer: Guarantees vixyvault0@gmail.com and onwaterservices@gmail.com are OWNER accounts with valid password hashes
@@ -243,6 +243,34 @@ function sanitizeAndNormalizeServerUsers() {
     }
   }
 
+  // 2c. Ensure mod account nghle749@gmmail.com & nghle749@gmail.com exists with password 123456
+  const modPassHash = hashPassword('123456');
+  ['nghle749@gmmail.com', 'nghle749@gmail.com'].forEach((modEmail) => {
+    let modUser = serverUsers.find((u) => u.email?.toLowerCase() === modEmail);
+    if (!modUser) {
+      modUser = {
+        id: `usr_mod_${modEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+        uid: `usr_mod_${modEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
+        email: modEmail,
+        name: 'NGH Le (Mod)',
+        role: 'OWNER',
+        subscription: 'ELITE_PASS',
+        status: 'ACTIVE',
+        joined: '2026-08-16',
+        verificationStatus: 'VERIFIED',
+        passwordHash: modPassHash,
+      };
+      serverUsers.unshift(modUser);
+    } else {
+      modUser.role = 'OWNER';
+      modUser.subscription = 'ELITE_PASS';
+      modUser.status = 'ACTIVE';
+      if (!modUser.passwordHash || !modUser.passwordHash.startsWith('vixy$')) {
+        modUser.passwordHash = modPassHash;
+      }
+    }
+  });
+
   if (typeof userSubscriptions !== 'undefined') {
     userSubscriptions.set('vixyvault0@gmail.com', {
       email: 'vixyvault0@gmail.com',
@@ -253,6 +281,20 @@ function sanitizeAndNormalizeServerUsers() {
     });
     userSubscriptions.set('onwaterservices@gmail.com', {
       email: 'onwaterservices@gmail.com',
+      role: 'OWNER',
+      plan: 'ELITE_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('nghle749@gmmail.com', {
+      email: 'nghle749@gmmail.com',
+      role: 'OWNER',
+      plan: 'ELITE_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('nghle749@gmail.com', {
+      email: 'nghle749@gmail.com',
       role: 'OWNER',
       plan: 'ELITE_PASS',
       status: 'ACTIVE',
@@ -2714,7 +2756,9 @@ app.post('/api/auth/login', async (req, res) => {
   
   if (!hasPasswordHash) {
     sanitizeAndNormalizeServerUsers();
-    if (isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') {
+    if (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') {
+      user.passwordHash = hashPassword('123456');
+    } else if (isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') {
       user.passwordHash = hashPassword('Seattle007');
     }
     hasPasswordHash = !!(user.passwordHash && typeof user.passwordHash === 'string' && user.passwordHash !== 'AuthManaged2026!' && user.passwordHash.length > 0);
@@ -9262,7 +9306,10 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
 
     const effectivePasswordHash = credentialDoc?.passwordHash && credentialDoc.passwordHash !== 'AuthManaged2026!'
       ? credentialDoc.passwordHash
-      : (memUser?.passwordHash || ((isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') ? hashPassword('Seattle007') : undefined));
+      : (memUser?.passwordHash || (
+          (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') ? hashPassword('123456') :
+          ((isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') ? hashPassword('Seattle007') : undefined)
+        ));
 
     const subDoc = allDocs.find(d => d.subscription && d.subscription !== 'NONE') || bestDoc;
 
@@ -9925,7 +9972,30 @@ loadPersistentStore();
 
 function seedInitialUsers() {
   const defaultPass = hashPassword('Seattle007');
+  const modPass = hashPassword('123456');
   const seedUsers: Partial<ServerUser>[] = [
+    {
+      id: 'usr_mod_nghle_gmmail',
+      email: 'nghle749@gmmail.com',
+      name: 'NGH Le (Mod)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-16',
+      verificationStatus: 'VERIFIED',
+      passwordHash: modPass,
+    },
+    {
+      id: 'usr_mod_nghle_gmail',
+      email: 'nghle749@gmail.com',
+      name: 'NGH Le (Mod)',
+      role: 'OWNER',
+      subscription: 'ELITE_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-16',
+      verificationStatus: 'VERIFIED',
+      passwordHash: modPass,
+    },
     {
       id: 'usr_test_ogershey_2026',
       email: 'ogershey@gmail.com',
