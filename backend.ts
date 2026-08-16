@@ -2355,13 +2355,38 @@ app.post('/api/auth/sync', (req, res) => {
 });
 
 // LOGIN ENDPOINT
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) {
     return res.status(400).json({ success: false, error: 'CREDENTIALS_REQUIRED', message: 'Email and password are required.' });
   }
   const cleanEmail = email.trim().toLowerCase();
-  const user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  let user = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+  
+  // Hydrate from Firestore if not found in memory
+  if (!user && db) {
+    try {
+      const { getDocs, query, collection, where } = require('firebase/firestore');
+      const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const uData = snap.docs[0].data();
+        user = {
+          id: snap.docs[0].id,
+          uid: uData.uid || snap.docs[0].id,
+          email: uData.email,
+          name: uData.name || uData.email.split('@')[0],
+          role: uData.role || 'USER',
+          subscription: uData.subscription || 'NONE',
+          passwordHash: uData.passwordHash || 'AuthManaged2026!',
+          status: uData.status || 'ACTIVE'
+        };
+        serverUsers.unshift(user);
+      }
+    } catch (e) {
+      console.warn('[LOGIN FIRESTORE LOOKUP ERROR]', e);
+    }
+  }
   
   if (!user) {
     return res.status(401).json({ success: false, error: 'INVALID_CREDENTIALS', message: 'Invalid email or password.' });
@@ -4528,7 +4553,7 @@ export async function reconcileUserEntitlement(identity: {
         });
         if (session && session.payment_status === 'paid') {
           const targetEmail = (session.customer_details?.email || session.customer_email || cleanEmail || '').toLowerCase().trim();
-          const isDayPass = session.mode === 'payment' || session.amount_total === 999;
+          const expectedPriceId = process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG'; const isDayPass = session.mode === 'payment' && session.line_items?.data.some(item => item.price?.id === expectedPriceId);
           const sessionCreatedMs = session.created ? session.created * 1000 : Date.now();
           const nowMs = Date.now();
           const elapsedMs = nowMs - sessionCreatedMs;
@@ -4704,7 +4729,7 @@ export async function reconcileUserEntitlement(identity: {
           );
 
           if (matchingSession) {
-            const isDayPass = matchingSession.mode === 'payment' || matchingSession.amount_total === 999;
+            const expectedPriceId2 = process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG'; const isDayPass = matchingSession.mode === 'payment' && matchingSession.line_items?.data.some(item => item.price?.id === expectedPriceId2);
             const sessionCreatedMs = matchingSession.created * 1000;
             const nowMs = Date.now();
             const elapsedMs = nowMs - sessionCreatedMs;
@@ -4886,6 +4911,56 @@ app.post(['/api/auth/restore-access', '/api/restore-access', '/api/user/restore-
 });
 
 // GET /api/admin/entitlement-diagnostics — Comprehensive access control & entitlement telemetry
+
+// DAY PASS DIAGNOSTIC ENDPOINT
+app.get('/api/auth/diagnostic', async (req, res) => {
+  const reqEmail = ((req.headers['x-user-email'] || req.query.email || '') as string).toLowerCase().trim();
+  const reqUserId = ((req.headers['x-user-id'] || req.query.uid || req.query.userId || '') as string).trim();
+  
+  if (!reqEmail && !reqUserId) {
+    return res.status(400).json({ error: 'Missing email or uid for diagnostic' });
+  }
+
+  const cleanEmail = reqEmail;
+  const cleanUid = reqUserId;
+
+  let userFound = false;
+  let user = serverUsers.find(u => (cleanEmail && u.email?.toLowerCase() === cleanEmail) || (cleanUid && (u.id === cleanUid || u.uid === cleanUid)));
+  
+  if (user) userFound = true;
+
+  // Stripe checks
+  let stripeCustomerFound = Boolean(user?.stripeCustomerId);
+  let stripePaymentVerified = false;
+  
+  const entitlement = await reconcileUserEntitlement({ email: cleanEmail, userId: cleanUid });
+  
+  const dayPassEntitlementFound = Boolean(entitlement.dayPass && (entitlement.dayPass.active || userDayPasses.has(cleanEmail) || userDayPasses.has(cleanUid)));
+  const entitlementActive = entitlement.dayPass?.active || entitlement.status === 'active';
+  
+  if (entitlement.stripeVerified || dayPassEntitlementFound) {
+    stripePaymentVerified = true;
+  }
+  
+  let discordLinked = Boolean(entitlement.discordVerified || entitlement.discordUserId);
+  let botAccess = Boolean(entitlementActive && discordLinked);
+  
+  const diagnosticReport = {
+    AUTHENTICATED: true,
+    "USER FOUND": userFound,
+    "STRIPE CUSTOMER FOUND": stripeCustomerFound,
+    "STRIPE PAYMENT VERIFIED": stripePaymentVerified,
+    "DAY PASS ENTITLEMENT FOUND": dayPassEntitlementFound,
+    "ENTITLEMENT ACTIVE": entitlementActive,
+    "EXPIRATION TIME": entitlement.dayPass?.active ? (userDayPasses.get(cleanEmail)?.expiresAt || 'Active') : 'N/A',
+    "DISCORD LINKED": discordLinked,
+    "BOT ACCESS": botAccess,
+    "FINAL ACCESS DECISION": botAccess ? 'GRANTED' : (entitlementActive ? 'WEB_ONLY' : 'DENIED')
+  };
+
+  res.json(diagnosticReport);
+});
+
 app.get('/api/admin/entitlement-diagnostics', (req: express.Request, res: express.Response) => {
   const activeDayPasses: DayPassRecord[] = [];
   const expiredDayPasses: DayPassRecord[] = [];
@@ -5278,7 +5353,19 @@ timestamp: ${new Date().toISOString()}`);
       }
 
       const entitlementType = session.metadata?.entitlementType || session.metadata?.productType || session.metadata?.plan;
-      const isDayPass = session.mode === 'payment' || entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS';
+      
+      // Strict verification of the Day Pass Price ID
+      const expectedDayPassPriceId = process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG';
+      let isDayPass = false;
+      
+      try {
+         const lineItems = await stripe.checkout.sessions.listLineItems(session.id);
+         isDayPass = lineItems.data.some(item => item.price?.id === expectedDayPassPriceId);
+      } catch (err) {
+         console.warn('[STRIPE WEBHOOK ERROR] Could not fetch line items for session', session.id, err);
+         // Fallback to strict metadata if line items fail
+         isDayPass = (entitlementType === 'VIXY_DAY_PASS' || entitlementType === 'DAY_PASS') && session.mode === 'payment';
+      }
 
       if (isDayPass) {
         // Deterministic Canonical User Resolution
