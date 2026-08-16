@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AuthState } from '../types';
 import { syncAuthUserApi } from '../services/api';
+import { getStripeDayPassUrl } from '../config/stripeLinks';
 
 interface AuthViewProps {
   authState: AuthState;
@@ -96,7 +97,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
       if (mode === 'register' && !isAdminEmail) {
         setTimeout(() => {
-          const directCheckoutUrl = `https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09?prefilled_email=${encodeURIComponent(userEmail)}&client_reference_id=${newUserId}`;
+          const directCheckoutUrl = getStripeDayPassUrl({ email: userEmail, uid: newUserId });
           window.location.href = directCheckoutUrl;
         }, 1200);
       } else if (onSuccessNavigate) {
