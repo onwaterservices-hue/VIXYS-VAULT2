@@ -785,6 +785,7 @@ export default function App() {
   const isSubscriptionActive =
     subscription.status === 'active' ||
     userRole === 'PRO' ||
+    userRole === 'ELITE' ||
     userRole === 'ADMIN' ||
     dayPassInfo.active;
 
