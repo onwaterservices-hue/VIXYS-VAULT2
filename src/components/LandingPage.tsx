@@ -56,6 +56,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showRiskModal, setShowRiskModal] = useState(false);
 
+  const handleCheckoutClick = (url: string) => {
+    if (!authState?.isAuthenticated) {
+      onOpenAuth('register');
+      return;
+    }
+    window.location.href = url;
+  };
+
   const estimatedEdge = (calcModelProb - calcMarketProb).toFixed(1);
 
   const modelFactors = [
@@ -196,7 +204,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               {/* Primary Action CTA Button */}
               <div className="space-y-2 pt-1">
                 <button
-                  onClick={() => { window.location.href = getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }); }}
+                  onClick={() => handleCheckoutClick(getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }))}
                   className="w-full py-4 px-5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-cyan-950/90 border border-cyan-300/40 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-[0.99]"
                 >
                   <ShieldCheck className="w-4 h-4 text-cyan-200 group-hover/btn:scale-110 transition-transform" />
@@ -594,7 +602,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             <button
-              onClick={() => { window.location.href = getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }); }}
+              onClick={() => handleCheckoutClick(getStripeDayPassUrl({ email: authState?.user?.email, uid: authState?.user?.id }))}
               className="w-full sm:w-auto px-8 py-4 rounded-2xl bg-gradient-to-r from-purple-600 via-violet-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm uppercase tracking-wider shadow-xl shadow-purple-900/50 border border-purple-400/30 transition-all flex items-center justify-center gap-2 group/btn cursor-pointer active:scale-95"
             >
               <ShieldCheck className="w-4 h-4 text-cyan-300 group-hover/btn:scale-110 transition-transform" />

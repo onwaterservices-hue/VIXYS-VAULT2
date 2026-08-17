@@ -33,6 +33,7 @@ interface SubscriptionViewProps {
   onResetTrial?: () => void;
   onExpireTrial?: () => void;
   authState?: AuthState;
+  onOpenAuth?: (mode: 'login' | 'register', prefillEmail?: string) => void;
 }
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
@@ -43,6 +44,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   onResetTrial,
   onExpireTrial,
   authState,
+  onOpenAuth,
 }) => {
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('annual');
   const [selectedPlanToBuy, setSelectedPlanToBuy] = useState<'STARTER' | 'PRO' | 'ELITE'>('PRO');
@@ -211,12 +213,36 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
 
 
+  const handlePlanClick = (e: React.MouseEvent, planKey: 'STARTER' | 'PRO' | 'ELITE') => {
+    e.preventDefault();
+    if (!authState?.isAuthenticated) {
+      if (onOpenAuth) {
+        onOpenAuth('register');
+      }
+      return;
+    }
+    window.location.href = getDirectStripeUrl(planKey);
+  };
+
   const handleDirectStripeCheckout = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
+    if (!authState?.isAuthenticated) {
+      if (onOpenAuth) {
+        onOpenAuth('register');
+      }
+      return;
+    }
     const directUrl = getDirectStripeUrl(planKey);
     window.location.href = directUrl;
   };
 
   const handleInitiateRealStripeCheckout = async () => {
+    if (!authState?.isAuthenticated) {
+      if (onOpenAuth) {
+        onOpenAuth('register');
+      }
+      return;
+    }
+
     setIsProcessingStripe(true);
     setStripeError('');
 
@@ -278,6 +304,13 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   };
 
   const handleBuyDayPass = async () => {
+    if (!authState?.isAuthenticated) {
+      if (onOpenAuth) {
+        onOpenAuth('register');
+      }
+      return;
+    }
+
     setIsProcessingStripe(true);
     setStripeError('');
     const currentUserEmail = authState?.user?.email || '';
@@ -524,8 +557,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href={getDirectStripeUrl('STARTER')}
-              className="w-full py-3 rounded-xl bg-purple-900/50 hover:bg-purple-900/80 text-white font-bold text-xs transition-all border border-purple-600/40 flex items-center justify-center gap-1.5 shadow-md"
+              href="#"
+              onClick={(e) => handlePlanClick(e, 'STARTER')}
+              className="w-full py-3 rounded-xl bg-purple-900/50 hover:bg-purple-900/80 text-white font-bold text-xs transition-all border border-purple-600/40 flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
             >
               <span>{subscription.plan === 'STARTER' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout'}</span>
               <ExternalLink className="w-3.5 h-3.5 text-purple-300" />
@@ -559,8 +593,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href={getDirectStripeUrl('PRO')}
-              className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2"
+              href="#"
+              onClick={(e) => handlePlanClick(e, 'PRO')}
+              className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-4 h-4" />
               <span>{subscription.plan === 'PRO' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('PRO') + '/mo)'}</span>
@@ -591,8 +626,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href={getDirectStripeUrl('ELITE')}
-              className="w-full py-3.5 rounded-xl bg-violet-700 hover:bg-violet-600 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+              href="#"
+              onClick={(e) => handlePlanClick(e, 'ELITE')}
+              className="w-full py-3.5 rounded-xl bg-violet-700 hover:bg-violet-600 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4" />
               <span>{subscription.plan === 'ELITE' ? 'Active Tier (Renew)' : 'Instant Stripe Checkout ($' + priceFor('ELITE') + '/mo)'}</span>

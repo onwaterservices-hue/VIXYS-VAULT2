@@ -960,6 +960,7 @@ export default function App() {
               userRole={userRole}
               setUserRole={setUserRole}
               authState={authState}
+              onOpenAuth={handleOpenAuth}
             />
           )}
 
