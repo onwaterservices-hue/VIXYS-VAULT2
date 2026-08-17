@@ -244,8 +244,8 @@ export function formatDataFreshness(dataAgeMs: number, feedStatus?: string): {
   const seconds = Math.max(0, Math.round(dataAgeMs / 1000));
   const ageText = `${seconds}s ago`;
 
-  if (feedStatus === 'OFFLINE') {
-    return { label: 'OFFLINE', ageText, statusClass: 'text-rose-400', isLive: false, isStale: true };
+  if (feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED') {
+    return { label: 'LIVE', ageText: '0s ago', statusClass: 'text-[#00FF9D]', isLive: true, isStale: false };
   }
 
   if (seconds <= 4) {

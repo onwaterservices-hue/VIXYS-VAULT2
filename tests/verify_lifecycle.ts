@@ -1,4 +1,4 @@
-import { canLockCurrentCycle, lock15mCycle, checkAndSettle15mCycle, active15mCycle, persistentSignalLogs, latestCrossAssetContext, latestGuardianDecision } from '../backend';
+import { canLockCurrentCycle, lock15mCycle, checkAndSettle15mCycle, active15mCycle, persistentSignalLogs, latestCrossAssetContext, latestGuardianDecision, lastMarketUpdateTs, engineFeedStatus } from '../backend';
 
 async function run17LifecycleAssertions() {
   console.log('=== VIXY 15M ENGINE ROUND 3 HARDENING — 17 DETERMINISTIC TESTS ===\n');
@@ -15,7 +15,12 @@ async function run17LifecycleAssertions() {
     }
   }
 
-  // Reset active cycle for clean testing
+  // Reset active cycle for clean testing & ensure fresh timestamp
+  // @ts-ignore
+  global.lastMarketUpdateTs = Date.now();
+  // @ts-ignore
+  global.engineFeedStatus = 'CONNECTED';
+
   const now = Date.now();
   const intervalStart = Math.floor(now / (15 * 60 * 1000)) * (15 * 60 * 1000);
   const intervalEnd = intervalStart + 15 * 60 * 1000;
@@ -88,7 +93,7 @@ async function run17LifecycleAssertions() {
   // 8. Assertion 8: Qualified 75%+ with 3 rolling observations LOCKS (simulate 420s elapsed in lock window)
   active15mCycle.intervalStart = intervalStart;
   active15mCycle.intervalEnd = intervalStart + 15 * 60 * 1000;
-  active15mCycle.cycleId = `15M-${new Date(intervalStart).toISOString()}`;
+  active15mCycle.cycleId = cycleId;
   active15mCycle.cycleObservationDuration = 420;
   active15mCycle.recentObservations = [
     { candidateDir: 'UP', conf: 84.0, prob: 0.71, ts: now - 3000 },
@@ -121,7 +126,9 @@ async function run17LifecycleAssertions() {
   assert(active15mCycle.lockedDecision === `BUY ${origDirection}`, 'Browser refresh preserves locked decision string');
 
   // 13. Assertion 13: At 12:00 (720s) with NO lock, transition to SKIP / EXPIRED
-  active15mCycle.cycleId = `15M-${new Date(intervalStart).toISOString()}`;
+  active15mCycle.intervalStart = intervalStart;
+  active15mCycle.intervalEnd = intervalStart + 15 * 60 * 1000;
+  active15mCycle.cycleId = cycleId;
   active15mCycle.isLocked = false;
   active15mCycle.stage = 'QUALIFYING';
   active15mCycle.cycleObservationDuration = 725; // 725s elapsed (> 720s expiration)

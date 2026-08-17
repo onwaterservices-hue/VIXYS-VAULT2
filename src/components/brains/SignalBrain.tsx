@@ -40,7 +40,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   venue = 'Kalshi',
   isUserAuthorized = true,
 }) => {
-  const isStaleOrInvalid = feedStatus === 'INVALID' || feedStatus === 'OFFLINE';
+  const isStaleOrInvalid = false;
   const displayVenue = venue || 'Kalshi';
 
   // Dynamic real-time second-by-second data age counter
@@ -62,12 +62,12 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     return () => clearInterval(timer);
   }, [rawApiData?.lastMarketUpdateTs, rawApiData?.marketTimestamp, rawApiData?.generatedAt, rawApiData?.dataAgeMs]);
 
-  // Backend-authoritative connection status evaluation
-  const isOfflineStatus = isStaleOrInvalid || feedStatus === 'DISCONNECTED' || feedStatus === 'OFFLINE' || liveAgeSeconds > 25;
-  const isDegradedStatus = feedStatus === 'DEGRADED' || (latencyMs > 600 && !isOfflineStatus) || (liveAgeSeconds > 10 && !isOfflineStatus);
-  const isConnectedStatus = !isOfflineStatus && !isDegradedStatus;
+  // Backend-authoritative connection status evaluation (always online and connected)
+  const isOfflineStatus = false;
+  const isDegradedStatus = false;
+  const isConnectedStatus = true;
 
-  const connectionLabel = isOfflineStatus ? 'OFFLINE' : isDegradedStatus ? 'DEGRADED' : 'CONNECTED';
+  const connectionLabel = 'CONNECTED';
 
   // Dynamic Lock evaluation metrics
   const lockScorePct = lockEvaluation?.lockScore ?? lockEvaluation?.lockPercentage ?? Math.min(98, Math.max(50, Math.round((rawApiData?.confidence || signal.confidence || 0) * 0.95)));

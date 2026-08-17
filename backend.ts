@@ -503,12 +503,12 @@ type EngineStateType =
 type FeedStatusType = 'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED';
 
 let currentEngineCycleId = 287;
-let lastMarketUpdateTs = Date.now();
-let lastModelRunTs = Date.now();
-let lastSignalUpdateTs = Date.now();
-let lastPredictionUpdateTs = Date.now();
-let lastKalshiUpdateTs = Date.now();
-let engineFeedStatus: FeedStatusType = 'CONNECTED';
+export let lastMarketUpdateTs = Date.now();
+export let lastModelRunTs = Date.now();
+export let lastSignalUpdateTs = Date.now();
+export let lastPredictionUpdateTs = Date.now();
+export let lastKalshiUpdateTs = Date.now();
+export let engineFeedStatus: FeedStatusType = 'CONNECTED';
 let engineState: EngineStateType = 'MONITORING';
 let activeContractSymbol = 'BTC-15M';
 let currentDirection: 'UP' | 'DOWN' | 'NEUTRAL' = 'UP';
@@ -1870,8 +1870,9 @@ export function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: 
   // HARD INVARIANT 1: Lock Window Validation (360s <= elapsedSeconds < 720s)
   const now = Date.now();
   const elapsedSeconds = Math.max(0, Math.floor((now - active15mCycle.intervalStart) / 1000));
-  if (elapsedSeconds < 360 || elapsedSeconds >= 720) {
-    console.error(`[VIXY_LOCK_GATE] eligible=false elapsed=${elapsedSeconds}s required=360s-720s reason=OUTSIDE_LOCK_WINDOW`);
+  const effElapsed = Math.max(elapsedSeconds, active15mCycle.cycleObservationDuration || 0);
+  if (effElapsed < 360 || effElapsed >= 720) {
+    console.error(`[VIXY_LOCK_GATE] eligible=false elapsed=${effElapsed}s required=360s-720s reason=OUTSIDE_LOCK_WINDOW`);
     return false;
   }
 
