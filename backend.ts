@@ -322,8 +322,8 @@ function sanitizeAndNormalizeServerUsers() {
     }
   });
 
-  // Venmo Day Pass Manual Grant: Sergioaddiaz@icloud.com
-  const targetEmail = 'sergioaddiaz@icloud.com';
+  // Venmo Day Pass Manual Grant: Sergioaddiaz1711@icloud.com
+  const targetEmail = 'sergioaddiaz1711@icloud.com';
   let targetUser = serverUsers.find((u) => u.email?.toLowerCase() === targetEmail);
   const targetPassHash = 'vixy$348668e190bd040c88ddc42824b6f7f1:617e10f91795d4beabb11129831bfbd9eb652c4c21e8ad197264f6ed06abbca6a36be8dd275388acf4dafc5376c79add037fb7cee243a64920e298e31d2e6b7d'; // 'Aldair22'
   
@@ -333,7 +333,7 @@ function sanitizeAndNormalizeServerUsers() {
 
   const venmoDp: DayPassRecord = {
     entitlementId: 'dp_venmo_grant_1786934314000',
-    userId: 'usr_sergioaddiaz_icloud_com',
+    userId: 'usr_sergioaddiaz1711_icloud_com',
     email: targetEmail,
     discordUserId: undefined,
     guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
@@ -359,15 +359,15 @@ function sanitizeAndNormalizeServerUsers() {
 
   if (!targetUser) {
     targetUser = {
-      id: 'usr_sergioaddiaz_icloud_com',
-      uid: 'usr_sergioaddiaz_icloud_com',
+      id: 'usr_sergioaddiaz1711_icloud_com',
+      uid: 'usr_sergioaddiaz1711_icloud_com',
       email: targetEmail,
-      name: 'sergioaddiaz',
+      name: 'sergioaddiaz1711',
       role: 'USER',
       subscription: 'ELITE_PASS',
       passwordHash: targetPassHash,
       verificationStatus: 'UNVERIFIED', // Still needs to verify discord
-      hardwareFingerprint: 'hw_venmo_sergio',
+      hardwareFingerprint: 'hw_venmo_sergio1711',
       ipHash: '172.16.0.10',
       joined: '2026-08-17',
       status: 'ACTIVE',
@@ -389,7 +389,7 @@ function sanitizeAndNormalizeServerUsers() {
 
   if (typeof userDayPasses !== 'undefined') {
     userDayPasses.set(targetEmail, venmoDp);
-    userDayPasses.set('usr_sergioaddiaz_icloud_com', venmoDp);
+    userDayPasses.set('usr_sergioaddiaz1711_icloud_com', venmoDp);
   }
   if (typeof userSubscriptions !== 'undefined') {
     userSubscriptions.set(targetEmail, {
@@ -5692,8 +5692,8 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
     };
   }
 
-  // Venmo Day Pass Manual Bypass Override: Sergioaddiaz@icloud.com
-  if (clean === 'sergioaddiaz@icloud.com') {
+  // Venmo Day Pass Manual Bypass Override: Sergioaddiaz1711@icloud.com
+  if (clean === 'sergioaddiaz1711@icloud.com') {
     const grantStartedAt = '2026-08-17T02:38:34.000Z';
     const grantExpiresAt = '2026-08-20T02:38:34.000Z';
     const nowMs = Date.now();
@@ -5703,14 +5703,14 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
 
     const eliteEntitlements = getEntitlementsFromSubscription('ELITE_QUANT', 'ACTIVE', false);
 
-    const memUser = serverUsers.find((u) => u.email?.toLowerCase() === 'sergioaddiaz@icloud.com');
+    const memUser = serverUsers.find((u) => u.email?.toLowerCase() === 'sergioaddiaz1711@icloud.com');
     const discordVerified = Boolean(memUser && memUser.verificationStatus === 'VERIFIED' && memUser.discordLinked);
 
     return {
       authenticated: true,
       entitled: active,
       access: active,
-      userId: memUser?.id || 'usr_sergioaddiaz_icloud_com',
+      userId: memUser?.id || 'usr_sergioaddiaz1711_icloud_com',
       email: clean,
       stripeVerified: false,
       plan: active ? 'ELITE_QUANT' : 'NONE',
@@ -10064,7 +10064,7 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
       guildVerified: bestDoc.guildVerified || memUser?.guildVerified || undefined
     };
 
-    if (cleanEmail === 'sergioaddiaz@icloud.com') {
+    if (cleanEmail === 'sergioaddiaz1711@icloud.com') {
       resolvedUser.status = 'ACTIVE';
       resolvedUser.subscription = 'ELITE_PASS';
       resolvedUser.verificationStatus = 'UNVERIFIED';
