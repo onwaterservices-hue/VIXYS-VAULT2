@@ -91,9 +91,10 @@ async function run17LifecycleAssertions() {
   latestCrossAssetContext.directionalAgreementRatio = 1.0;
 
   // 8. Assertion 8: Qualified 75%+ with 3 rolling observations LOCKS (simulate 420s elapsed in lock window)
-  active15mCycle.intervalStart = intervalStart;
-  active15mCycle.intervalEnd = intervalStart + 15 * 60 * 1000;
-  active15mCycle.cycleId = cycleId;
+  const currentIntervalStart = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
+  active15mCycle.intervalStart = currentIntervalStart;
+  active15mCycle.intervalEnd = currentIntervalStart + 15 * 60 * 1000;
+  active15mCycle.cycleId = `15M-${new Date(currentIntervalStart).toISOString()}`;
   active15mCycle.cycleObservationDuration = 420;
   active15mCycle.recentObservations = [
     { candidateDir: 'UP', conf: 84.0, prob: 0.71, ts: now - 3000 },

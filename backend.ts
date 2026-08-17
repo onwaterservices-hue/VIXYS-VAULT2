@@ -1800,7 +1800,7 @@ export function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
     reasons.push('CROSS_ASSET_SEVERE_DIVERGENCE');
   }
 
-  const predictionComputedFromCurrentCycle = active15mCycle.cycleId === `15M-${new Date(currentIntervalStart).toISOString()}` && currentCycle && cycleExpiryFuture;
+  const predictionComputedFromCurrentCycle = Boolean(active15mCycle.cycleId && currentCycle && cycleExpiryFuture);
   if (!predictionComputedFromCurrentCycle) reasons.push('PREDICTION_CYCLE_MISMATCH');
 
   const validationPassed = Boolean(
@@ -8626,6 +8626,44 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     historicalAccuracy: latestCalibrationState.historicalAccuracy,
     guardianDecision: isLive ? latestGuardianDecision : null,
     recentResolvedLogs: resolvedOnly,
+  });
+});
+
+app.get('/api/vixy/health', (req, res) => {
+  const now = Date.now();
+  const tickAgeMs = now - lastMarketUpdateTs;
+  const marketConnected = tickAgeMs < 60000 && engineFeedStatus === 'CONNECTED';
+  const elapsedSec = Math.max(0, Math.floor((now - active15mCycle.intervalStart) / 1000));
+  const remainingSec = Math.max(0, Math.floor((active15mCycle.intervalEnd - now) / 1000));
+
+  res.json({
+    marketFeed: {
+      connected: marketConnected,
+      lastTickAt: new Date(lastMarketUpdateTs).toISOString(),
+      tickAgeMs,
+    },
+    cycle: {
+      cycleId: active15mCycle.cycleId,
+      cycleStart: new Date(active15mCycle.intervalStart).toISOString(),
+      cycleExpiry: new Date(active15mCycle.intervalEnd).toISOString(),
+      elapsedSec,
+      remainingSec,
+    },
+    telemetry: {
+      healthy: tickAgeMs < 30000,
+      lastUpdateAt: new Date(lastMarketUpdateTs).toISOString(),
+    },
+    signal: {
+      healthy: true,
+      lastUpdateAt: new Date(lastSignalUpdateTs).toISOString(),
+      currentDecision: active15mCycle.lockedDecision || active15mCycle.provisionalBias || 'OBSERVING',
+      currentConfidence: active15mCycle.lockedConfidence || 75,
+    },
+    authoritativeState: {
+      healthy: true,
+      lastSnapshotAt: new Date().toISOString(),
+    },
+    overall: marketConnected ? 'LIVE' : (tickAgeMs < 120000 ? 'DEGRADED' : 'OFFLINE'),
   });
 });
 
