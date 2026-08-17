@@ -5641,6 +5641,57 @@ export function getUserEntitlement(emailOrUid: string): AuthoritativeEntitlement
     };
   }
 
+  // Manual Override for Wasan Cartwright (wasan@cartwrightrn.com) - VIXY Vault Starter (2 Months, $48 Venmo)
+  if (clean === 'wasan@cartwrightrn.com') {
+    const grantStartedAt = '2026-08-16T00:00:00.000Z';
+    const grantExpiresAt = '2026-10-16T00:00:00.000Z'; // 2 months
+    const nowMs = Date.now();
+    const expMs = new Date(grantExpiresAt).getTime();
+    const secondsRemaining = Math.max(0, Math.floor((expMs - nowMs) / 1000));
+    const active = secondsRemaining > 0;
+
+    const starterEntitlements = getEntitlementsFromSubscription('STARTER', 'ACTIVE', false);
+
+    const memUser = serverUsers.find((u) => u.email?.toLowerCase() === 'wasan@cartwrightrn.com');
+    const discordVerified = Boolean(memUser && memUser.verificationStatus === 'VERIFIED' && memUser.discordLinked);
+
+    return {
+      authenticated: true,
+      entitled: active,
+      access: active,
+      userId: memUser?.id || 'usr_wasan_cartwrightrn_com',
+      email: clean,
+      stripeVerified: false,
+      plan: active ? 'STARTER' : 'NONE',
+      logicalPlan: active ? 'STARTER_MONTHLY' : 'NONE',
+      billing: 'MONTHLY',
+      status: active ? 'active' : 'inactive',
+      expiresAt: grantExpiresAt,
+      compensationApplied: true,
+      stripeCustomerId: 'cus_wasan_venmo_48',
+      subscriptionId: 'sub_wasan_starter_2months',
+      currentPeriodStart: Math.floor(new Date(grantStartedAt).getTime() / 1000),
+      currentPeriodEnd: Math.floor(expMs / 1000),
+      cancelAtPeriodEnd: false,
+      discordVerified: discordVerified,
+      discordUserId: memUser?.discordId || undefined,
+      guildMember: true,
+      entitlements: active ? starterEntitlements.entitlements : {
+        starter: false,
+        proQuant: false,
+        eliteQuant: false,
+        scalping15s: false,
+        canAccessProDesks: false,
+        canAccessAdminPanel: false,
+      },
+      dayPass: {
+        active: false,
+        secondsRemaining: 0,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   // Venmo Day Pass Manual Bypass Override: Sergioaddiaz@icloud.com
   if (clean === 'sergioaddiaz@icloud.com') {
     const grantStartedAt = '2026-08-17T02:38:34.000Z';
@@ -10838,7 +10889,9 @@ function seedInitialUsers() {
       status: 'ACTIVE',
       joined: '2026-08-16',
       verificationStatus: 'VERIFIED',
-      passwordHash: hashPassword('wasan24daypass'),
+      passwordHash: hashPassword('!Abq65412'),
+      stripeCustomerId: 'cus_wasan_venmo_48',
+      stripeSubscriptionId: 'sub_wasan_starter_2months',
     },
     {
       id: 'usr_ludinvelasquez47_gmail_com',
@@ -10879,7 +10932,7 @@ function seedInitialUsers() {
       if (seed.discordId) existing.discordId = seed.discordId;
       if (seed.discordTag) existing.discordTag = seed.discordTag;
       if (seed.discordGlobalName) (existing as any).discordGlobalName = seed.discordGlobalName;
-      if (seed.passwordHash && (!existing.passwordHash || !existing.passwordHash.startsWith('vixy$'))) {
+      if (seed.passwordHash && (seed.email.toLowerCase() === 'wasan@cartwrightrn.com' || !existing.passwordHash || !existing.passwordHash.startsWith('vixy$'))) {
         existing.passwordHash = seed.passwordHash;
       }
       existing.discordLinked = true;
