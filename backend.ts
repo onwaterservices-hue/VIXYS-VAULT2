@@ -5372,6 +5372,39 @@ export function initializeProtectedAugust15Users() {
       }
     }
   });
+
+  // Seed Wasan Cartwright $24 Day Pass (purchased twice -> stacked 48-hour access)
+  const wasanEmail = 'wasan@cartwrightrn.com';
+  const wasanExisting = userDayPasses.get(wasanEmail);
+  const wasanExpires = new Date(Date.now() + 48 * 3600 * 1000).toISOString();
+  if (!wasanExisting) {
+    const wasanDp: DayPassRecord = {
+      entitlementId: `dp_wasan_stacked_2x`,
+      userId: `usr_wasan_cartwrightrn_com`,
+      email: wasanEmail,
+      guildId: process.env.DISCORD_GUILD_ID || '1451337712937336985',
+      entitlementType: 'DAY_PASS',
+      accessTier: 'ELITE',
+      status: 'ACTIVE',
+      duration: 'Stacked $24 Day Pass Access (48 Hours - 2x Purchases)',
+      activatedAt: new Date().toISOString(),
+      startedAt: new Date().toISOString(),
+      expiresAt: wasanExpires,
+      stripePaymentStatus: 'PAID',
+      stripePaymentLink: 'https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09',
+      stripePriceId: process.env.STRIPE_DAY_PASS_PRICE_ID || 'price_1U4cKTCYsvFDvgUJZHASVwRG',
+      discordRoleId: process.env.DISCORD_24H_ROLE_ID || '1538094678870593547',
+      discordRoleAssigned: false,
+      troubleshootingGraceApplied: true,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    userDayPasses.set(wasanEmail, wasanDp);
+    userDayPasses.set(wasanDp.userId, wasanDp);
+  } else {
+    wasanExisting.expiresAt = new Date(Math.max(new Date(wasanExisting.expiresAt).getTime(), new Date(wasanExpires).getTime())).toISOString();
+    wasanExisting.status = 'ACTIVE';
+  }
 }
 
 initializeProtectedAugust15Users();
@@ -10756,6 +10789,17 @@ function seedInitialUsers() {
       joined: '2026-08-16',
       verificationStatus: 'VERIFIED',
       passwordHash: hashPassword('goghac-towda2-murqeD'),
+    },
+    {
+      id: 'usr_wasan_cartwrightrn_com',
+      email: 'wasan@cartwrightrn.com',
+      name: 'Wasan Cartwright',
+      role: 'USER',
+      subscription: 'NONE',
+      status: 'ACTIVE',
+      joined: '2026-08-16',
+      verificationStatus: 'VERIFIED',
+      passwordHash: hashPassword('wasan24daypass'),
     },
     {
       id: 'usr_ludinvelasquez47_gmail_com',
