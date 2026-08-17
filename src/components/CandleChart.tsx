@@ -84,11 +84,13 @@ function useContainerSize() {
 
     const updateSize = () => {
       const rect = element.getBoundingClientRect();
-      if (rect.width > 0) {
-        setWidth(Math.floor(rect.width));
+      const newWidth = Math.floor(rect.width);
+      const newHeight = Math.floor(rect.height);
+      if (newWidth > 0) {
+        setWidth((prev) => (prev === newWidth ? prev : newWidth));
       }
-      if (rect.height > 0) {
-        setHeight(Math.floor(rect.height));
+      if (newHeight > 0) {
+        setHeight((prev) => (prev === newHeight ? prev : newHeight));
       }
     };
 
@@ -97,8 +99,10 @@ function useContainerSize() {
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect && entry.contentRect.width > 0) {
-          setHeight(Math.floor(entry.contentRect.height));
-          setWidth(Math.floor(entry.contentRect.width));
+          const newW = Math.floor(entry.contentRect.width);
+          const newH = Math.floor(entry.contentRect.height);
+          if (newW > 0) setWidth((prev) => (prev === newW ? prev : newW));
+          if (newH > 0) setHeight((prev) => (prev === newH ? prev : newH));
         }
       }
     });
@@ -354,10 +358,12 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
     const updateDimensions = () => {
       const rect = el.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setPlotDimensions({
-          width: Math.floor(rect.width),
-          height: Math.floor(rect.height),
+      const newW = Math.floor(rect.width);
+      const newH = Math.floor(rect.height);
+      if (newW > 0 && newH > 0) {
+        setPlotDimensions((prev) => {
+          if (prev.width === newW && prev.height === newH) return prev;
+          return { width: newW, height: newH };
         });
       }
     };
@@ -367,10 +373,14 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     const observer = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          setPlotDimensions({
-            width: Math.floor(entry.contentRect.width),
-            height: Math.floor(entry.contentRect.height),
-          });
+          const newW = Math.floor(entry.contentRect.width);
+          const newH = Math.floor(entry.contentRect.height);
+          if (newW > 0 && newH > 0) {
+            setPlotDimensions((prev) => {
+              if (prev.width === newW && prev.height === newH) return prev;
+              return { width: newW, height: newH };
+            });
+          }
         }
       }
     });

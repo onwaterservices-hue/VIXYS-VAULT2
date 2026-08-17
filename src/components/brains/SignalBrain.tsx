@@ -14,6 +14,9 @@ import {
 import { safeToFixed, safeNumber } from '../../utils/numeric';
 import { VixyNeuralEngine } from './VixyNeuralEngine';
 import { VixyProtectionSummary } from './VixyProtectionSummary';
+import { ProtectionBrain } from './ProtectionBrain';
+import { WhaleBrain } from './WhaleBrain';
+import { InstitutionalIntelRadar } from './InstitutionalIntelRadar';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -49,18 +52,18 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   useEffect(() => {
     const calcAge = () => {
       const ts = rawApiData?.lastMarketUpdateTs || rawApiData?.marketTimestamp || (rawApiData?.generatedAt ? new Date(rawApiData.generatedAt).getTime() : 0);
+      let newAge = 0;
       if (ts > 0) {
-        setLiveAgeSeconds(Math.max(0, Math.floor((Date.now() - ts) / 1000)));
+        newAge = Math.max(0, Math.floor((Date.now() - ts) / 1000));
       } else if (rawApiData?.dataAgeMs !== undefined) {
-        setLiveAgeSeconds(Math.max(0, Math.floor(rawApiData.dataAgeMs / 1000)));
-      } else {
-        setLiveAgeSeconds(0);
+        newAge = Math.max(0, Math.floor(rawApiData.dataAgeMs / 1000));
       }
+      setLiveAgeSeconds((prev) => (prev === newAge ? prev : newAge));
     };
     calcAge();
     const timer = setInterval(calcAge, 1000);
     return () => clearInterval(timer);
-  }, [rawApiData?.lastMarketUpdateTs, rawApiData?.marketTimestamp, rawApiData?.generatedAt, rawApiData?.dataAgeMs]);
+  }, [rawApiData?.lastMarketUpdateTs, rawApiData?.marketTimestamp, rawApiData?.dataAgeMs]);
 
   // Backend-authoritative connection status evaluation (always online and connected)
   const isOfflineStatus = false;
@@ -76,6 +79,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   // Event-driven micro-vibration trigger (runs 350ms on click or signal criteria updates)
   const [isVibrating, setIsVibrating] = useState(false);
+  const prevLockScoreRef = React.useRef<number>(lockScorePct);
+  const prevFeedStatusRef = React.useRef<string>(feedStatus);
 
   const triggerHapticPulse = useCallback(() => {
     setIsVibrating(true);
@@ -83,10 +88,16 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     return () => clearTimeout(timer);
   }, []);
 
-  // Trigger brief micro-vibration when lock percentage or feed status updates
+  // Trigger brief micro-vibration only when lock percentage or feed status actually changes
   useEffect(() => {
-    triggerHapticPulse();
-  }, [lockScorePct, feedStatus, triggerHapticPulse]);
+    if (prevLockScoreRef.current !== lockScorePct || prevFeedStatusRef.current !== feedStatus) {
+      prevLockScoreRef.current = lockScorePct;
+      prevFeedStatusRef.current = feedStatus;
+      setIsVibrating(true);
+      const timer = setTimeout(() => setIsVibrating(false), 350);
+      return () => clearTimeout(timer);
+    }
+  }, [lockScorePct, feedStatus]);
 
   // Safe backend-authoritative execution state
   // Safe backend-authoritative execution state
@@ -563,7 +574,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         onExecute={triggerHapticPulse}
       />
 
-      {/* COMPACT STATE-SYNCED VIXY PROTECTION SUMMARY CARD */}
+      {/* STEP 2 — VIXY PROTECTION™ (POSITION GUARDIAN BRIDGE LAYER) */}
       <VixyProtectionSummary
         isActuallyLocked={isActuallyLocked}
         signal={signal}
@@ -741,46 +752,30 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         </div>
       </div>
 
-      {/* SECONDARY MARKET CONTEXT CARDS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Card 1: TARGET STRIKE */}
-        <div className="bg-[#06020c] border border-purple-900/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg">
-          <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">TARGET STRIKE</div>
-          <div className="flex items-center gap-3">
-            <div className="text-3xl font-black text-purple-200 tracking-tighter">${targetPrice ? targetPrice.toLocaleString() : '---'}</div>
-            <div className={`px-2 py-1 rounded text-[8px] font-bold tracking-widest uppercase ${isConfirmedUp ? 'bg-emerald-950/40 text-emerald-300 border border-emerald-800/50' : isConfirmedDown ? 'bg-rose-950/40 text-rose-300 border border-rose-800/50' : 'bg-purple-900/30 text-purple-300 border border-purple-800/50'}`}>
-              MUST EXPIRE {isConfirmedUp ? 'ABOVE' : isConfirmedDown ? 'BELOW' : 'RANGE'} ${targetPrice ? targetPrice.toLocaleString() : '---'}
-            </div>
-          </div>
-          <div className="flex justify-between items-end text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30">
-            <span className="text-purple-500/80">LIVE SPOT: <span className="text-purple-300">${currentPrice?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-            <span className="text-slate-400">{displayVenue} {timeframe}</span>
-          </div>
+      {/* LOWER 3-COLUMN INTELLIGENCE AREA: VIXY PROTECTION | WHALE WATCH | INSTITUTIONAL RADAR */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+        <div className="h-full">
+          <ProtectionBrain
+            signal={signal}
+            ticker={ticker}
+            isDiscordVerified={isUserAuthorized}
+            rawApiData={rawApiData}
+          />
         </div>
-
-        {/* Card 2: DISTANCE TO STRIKE */}
-        <div className={`bg-[#06020c] border rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg ${spotVsStrikeDelta >= 0 ? 'border-emerald-900/40' : 'border-rose-900/40'}`}>
-          <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">DISTANCE TO STRIKE</div>
-          <div>
-            <div className={`text-3xl font-black tracking-tighter ${spotVsStrikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {formattedSpotVsStrikeVal}
-            </div>
-            <div className={`text-sm font-bold tracking-widest ${spotVsStrikeDelta >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-              ({formattedSpotVsStrikePct})
-            </div>
-          </div>
-          <div className={`text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30 ${spotVsStrikeDelta >= 0 ? 'text-emerald-500/80' : 'text-rose-500/80'}`}>
-            {spotVsStrikeDelta >= 0 ? 'LIVE SPOT ABOVE STRIKE' : 'LIVE SPOT BELOW STRIKE'}
-          </div>
+        <div className="h-full">
+          <WhaleBrain
+            ticker={ticker}
+            selectedAsset={displayVenue}
+          />
         </div>
-
-        {/* Card 3: TIME REMAINING */}
-        <div className="bg-[#06020c] border border-purple-900/40 rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-lg">
-          <div className="text-[10px] text-purple-400/70 font-bold tracking-[0.2em] uppercase">TIME REMAINING</div>
-          <div className="text-4xl font-black text-purple-200 tracking-tighter">{timeString}</div>
-          <div className="text-[10px] font-bold tracking-widest uppercase pt-2 border-t border-purple-900/30 text-purple-500/80">
-            UNTIL EXPIRY
-          </div>
+        <div className="h-full">
+          <InstitutionalIntelRadar
+            rawApiData={rawApiData}
+            survivalScore={Math.max(5, Math.min(99, 100 - reversalRisk))}
+            reversalRisk={reversalRisk}
+            orderFlowState={orderFlowState}
+            isProtectState={isProtectState}
+          />
         </div>
       </div>
 

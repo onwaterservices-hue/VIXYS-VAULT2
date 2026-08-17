@@ -293,7 +293,7 @@ export const useLiveSignal = (asset: string, desk: string) => {
     states.set(key, { signal: null, status: null, isRateLimited: false });
   }
 
-  const [data, setData] = useState<SharedSignalState>(states.get(key)!);
+  const [data, setData] = useState<SharedSignalState>(() => states.get(key) || { signal: null, status: null, isRateLimited: false });
 
   useEffect(() => {
     connectVixyWebSocket();
@@ -303,7 +303,13 @@ export const useLiveSignal = (asset: string, desk: string) => {
     }
     
     const handler = () => {
-      setData({ ...(states.get(key) || { signal: null, status: null, isRateLimited: false }) });
+      const current = states.get(key) || { signal: null, status: null, isRateLimited: false };
+      setData((prev) => {
+        if (prev.signal === current.signal && prev.status === current.status && prev.isRateLimited === current.isRateLimited) {
+          return prev;
+        }
+        return { ...current };
+      });
     };
     subscribers.get(key)!.add(handler);
 
@@ -314,8 +320,6 @@ export const useLiveSignal = (asset: string, desk: string) => {
       }, 15000);
       intervals.set(key, interval);
     }
-
-    setData({ ...(states.get(key) || { signal: null, status: null, isRateLimited: false }) });
 
     return () => {
       const subs = subscribers.get(key);
@@ -332,7 +336,7 @@ export const useLiveSignal = (asset: string, desk: string) => {
         }
       }
     };
-  }, [key]);
+  }, [key, effAsset, effDesk]);
 
   return data;
 };

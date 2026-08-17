@@ -288,3 +288,109 @@ export interface SignalPredictionState {
   signalConfirmed: boolean;
 }
 
+export type LockQualityTier = 'HIGH_CONVICTION' | 'QUALIFIED' | 'SKIP';
+
+export interface EvidenceFamilyState {
+  name:
+    | 'PRICE_STRUCTURE'
+    | 'ORDER_FLOW'
+    | 'MOMENTUM'
+    | 'VOLATILITY'
+    | 'LIQUIDITY'
+    | 'REGIME'
+    | 'STRIKE_EXPIRY'
+    | 'TIME_TO_EXPIRY'
+    | 'CROSS_MARKET'
+    | 'REVERSAL_RISK'
+    | 'DATA_QUALITY';
+  label: string;
+  bias: 'UP' | 'DOWN' | 'NEUTRAL';
+  status: string;
+  score: number;
+  weight: number;
+  agreement: boolean;
+  details: string;
+}
+
+export interface Btc15mDataQualityState {
+  feedFreshnessMs: number;
+  websocketStatus: 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
+  staleTickDetected: boolean;
+  driftMs: number;
+  status: 'OPTIMAL' | 'DEGRADED' | 'STALE' | 'OFFLINE';
+  score: number;
+}
+
+export interface Btc15mEnginePipelineData {
+  lockQuality: number;
+  lockQualityTier: LockQualityTier;
+  evidenceAgreementCount: number;
+  totalEvidenceFamilies: number;
+  evidenceFamilies: EvidenceFamilyState[];
+  multiTimeframeAlignment: {
+    tf15m: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    tf5m: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    tf1m: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    tf30s: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    tf15s: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    alignedCount: number;
+    totalCount: number;
+    state: 'FULL_ALIGNMENT' | 'PARTIAL_ALIGNMENT' | 'CONFLICT';
+    momentumClassification: 'ACCELERATING' | 'STABLE' | 'DECELERATING' | 'REVERSING' | 'NEUTRAL';
+  };
+  volatilityExpectedMove: {
+    realizedVol15mPct: number;
+    volatilityRegime: 'COMPRESSED' | 'NORMAL' | 'EXPANDING' | 'EXTREME';
+    expectedMoveUSD: number;
+    requiredMoveUSD: number;
+    coverageRatio: number;
+    isStrikeFeasible: boolean;
+  };
+  priceStructure: {
+    highLowStructure: 'HIGHER_HIGHS' | 'LOWER_LOWS' | 'RANGE_BOUND' | 'COMPRESSED';
+    vwap: number;
+    vwapRelationship: 'ABOVE_VWAP' | 'BELOW_VWAP' | 'AT_VWAP';
+    localSupport: number;
+    localResistance: number;
+    displacementUSD: number;
+    breakoutState: 'BREAKOUT_BULL' | 'BREAKOUT_BEAR' | 'FAILED_BREAKOUT' | 'RANGE_BOUND';
+  };
+  orderFlowAnalytics: {
+    takerBuyRatio: number;
+    netDeltaBTC: number;
+    bidAskImbalancePct: number;
+    absorptionState: 'CONTINUING' | 'ABSORBED' | 'EXHAUSTING' | 'REVERSING' | 'NEUTRAL';
+    flowClassification: 'CONTINUATION' | 'ABSORPTION' | 'EXHAUSTING' | 'REVERSAL' | 'NEUTRAL';
+  };
+  chopAnalytics: {
+    chopScore: number;
+    isChopFiltered: boolean;
+    directionFlips: number;
+    persistenceSeconds: number;
+    reason: string | null;
+  };
+  reversalAssessment: {
+    threatScore: number;
+    threatLevel: 'LOW' | 'WATCH' | 'WARNING' | 'CRITICAL';
+    vetoActive: boolean;
+    primaryTriggers: string[];
+  };
+  dataQuality: Btc15mDataQualityState;
+  edgeVsConfidence: {
+    modelProbability: number;
+    kalshiImpliedProbability: number;
+    realEdgePct: number;
+    calibratedConfidencePct: number;
+    pUp: number;
+    pDown: number;
+    uncertaintyPct: number;
+  };
+  explainability: {
+    direction: 'UP' | 'DOWN' | 'SKIP';
+    summaryReason: string;
+    keyTailwinds: string[];
+    keyRisks: string[];
+    lockApproved: boolean;
+  };
+}
+

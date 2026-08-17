@@ -296,14 +296,27 @@ export default function App() {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
               const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'UNPAID')) as 'PRO' | 'OWNER' | 'ADMIN' | 'UNPAID';
+              const isLinked = !!(res.user.discordLinked || res.discord?.linked);
+              const dId = res.user.discordId || res.discord?.discordUserId;
+              const dTag = res.user.discordTag || res.discord?.discordUsername;
+
+              if (
+                prev.user.role === computedRole &&
+                (prev.user as any).discordLinked === isLinked &&
+                (prev.user as any).discordId === dId &&
+                (prev.user as any).discordTag === dTag
+              ) {
+                return prev;
+              }
+
               const updatedUser: NonNullable<AuthState['user']> = {
                 ...prev.user,
                 // @ts-ignore
-                discordLinked: !!(res.user.discordLinked || res.discord?.linked),
+                discordLinked: isLinked,
                 // @ts-ignore
-                discordId: res.user.discordId || res.discord?.discordUserId,
+                discordId: dId,
                 // @ts-ignore
-                discordTag: res.user.discordTag || res.discord?.discordUsername,
+                discordTag: dTag,
                 role: computedRole,
                 // @ts-ignore
                 subscription: res.user.subscription,
@@ -609,16 +622,33 @@ export default function App() {
           const d = accountRes.discord as any;
           if (d.linked || d.discordUserId) {
             const isGuildMember = d.guildMember ?? d.profile?.guildMember ?? false;
-            setAlertSettings((prev) => ({
-              ...prev,
-              discordLinked: true,
-              discordUsername: d.discordUsername || d.profile?.discordUsername || prev.discordUsername,
-              discordUserId: d.discordUserId || d.profile?.discordUserId || prev.discordUserId,
-              guildMember: isGuildMember ?? prev.guildMember,
-              roleAssigned: d.profile?.guildRoles?.[0] || (isGuildMember ? 'PRO' : 'None'),
-              lastSyncTimestamp: new Date().toLocaleTimeString(),
-              syncStatus: isGuildMember ? 'HEALTHY' : 'NEEDS_GUILD',
-            }));
+            const dUsername = d.discordUsername || d.profile?.discordUsername;
+            const dUserId = d.discordUserId || d.profile?.discordUserId;
+            const role = d.profile?.guildRoles?.[0] || (isGuildMember ? 'PRO' : 'None');
+            const syncStatus = isGuildMember ? 'HEALTHY' : 'NEEDS_GUILD';
+
+            setAlertSettings((prev) => {
+              if (
+                prev.discordLinked === true &&
+                prev.discordUsername === (dUsername || prev.discordUsername) &&
+                prev.discordUserId === (dUserId || prev.discordUserId) &&
+                prev.guildMember === isGuildMember &&
+                prev.roleAssigned === role &&
+                prev.syncStatus === syncStatus
+              ) {
+                return prev;
+              }
+              return {
+                ...prev,
+                discordLinked: true,
+                discordUsername: dUsername || prev.discordUsername,
+                discordUserId: dUserId || prev.discordUserId,
+                guildMember: isGuildMember,
+                roleAssigned: role,
+                lastSyncTimestamp: new Date().toLocaleTimeString(),
+                syncStatus,
+              };
+            });
             return;
           }
         }
@@ -626,41 +656,54 @@ export default function App() {
         // 2. Direct Discord profile query fallback
         const res = await getDiscordUserProfileApi(activeEmail, activeUserId);
         if (res && res.linked && res.profile) {
-          setAlertSettings((prev) => ({
-            ...prev,
-            discordLinked: true,
-            discordUsername: res.profile.discordUsername || prev.discordUsername,
-            discordUserId: res.profile.discordUserId || prev.discordUserId,
-            guildMember: res.profile.guildMember ?? prev.guildMember,
-            roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
-            lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
-            syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
-          }));
-        } else if (alertSettings.discordLinked || authState.user?.discordId || (authState.user as any)?.discordLinked) {
+          const isGuildMember = res.profile.guildMember ?? false;
+          const role = res.profile.guildRoles?.[0] || (isGuildMember ? 'PRO' : 'None');
+          const syncStatus = res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD';
+
+          setAlertSettings((prev) => {
+            if (
+              prev.discordLinked === true &&
+              prev.discordUsername === (res.profile.discordUsername || prev.discordUsername) &&
+              prev.discordUserId === (res.profile.discordUserId || prev.discordUserId) &&
+              prev.guildMember === isGuildMember &&
+              prev.roleAssigned === role &&
+              prev.syncStatus === syncStatus
+            ) {
+              return prev;
+            }
+            return {
+              ...prev,
+              discordLinked: true,
+              discordUsername: res.profile.discordUsername || prev.discordUsername,
+              discordUserId: res.profile.discordUserId || prev.discordUserId,
+              guildMember: isGuildMember,
+              roleAssigned: role,
+              lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
+              syncStatus,
+            };
+          });
+        } else if (authState.user?.discordId || (authState.user as any)?.discordLinked) {
           // Permanently preserve linked Discord identity even during transient background refreshes
-          setAlertSettings((prev) => ({
-            ...prev,
-            discordLinked: true,
-            discordUserId: prev.discordUserId || authState.user?.discordId,
-            discordUsername: prev.discordUsername || (authState.user as any)?.discordTag,
-          }));
-        } else {
-          setAlertSettings((prev) => ({
-            ...prev,
-            discordLinked: false,
-            discordUsername: undefined,
-            discordUserId: undefined,
-            guildMember: false,
-            roleAssigned: 'NONE',
-            syncStatus: 'DISCONNECTED',
-          }));
+          setAlertSettings((prev) => {
+            const nextUserId = prev.discordUserId || authState.user?.discordId;
+            const nextUserTag = prev.discordUsername || (authState.user as any)?.discordTag;
+            if (prev.discordLinked === true && prev.discordUserId === nextUserId && prev.discordUsername === nextUserTag) {
+              return prev;
+            }
+            return {
+              ...prev,
+              discordLinked: true,
+              discordUserId: nextUserId,
+              discordUsername: nextUserTag,
+            };
+          });
         }
       } catch (e) {
         console.warn('Discord profile sync notice:', e);
       }
     }
     syncProfile();
-  }, [authState.user?.email, authState.user?.id, alertSettings.emailAddress]);
+  }, [authState.user?.email, authState.user?.id]);
 
   useEffect(() => {
     try {

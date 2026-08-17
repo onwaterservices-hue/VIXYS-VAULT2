@@ -36,10 +36,8 @@ import { VixyAiStatusCard } from './VixyAiStatusCard';
 import { CommunityAccessNode } from './CommunityAccessNode';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
 
-// Five AI Brains
+// AI Brains
 import { SignalBrain } from './brains/SignalBrain';
-import { ProtectionBrain } from './brains/ProtectionBrain';
-import { WhaleBrain } from './brains/WhaleBrain';
 import { ExecutionBrain } from './brains/ExecutionBrain';
 import { AiThinkingBrain } from './brains/AiThinkingBrain';
 import { OrderFlowPressure } from './brains/OrderFlowPressure';
@@ -158,33 +156,57 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
     const data = liveApiData;
     
-    if (data.latencyMs !== undefined) setLatencyMs(data.latencyMs);
+    if (data.latencyMs !== undefined) setLatencyMs((prev) => (prev === data.latencyMs ? prev : data.latencyMs));
     setRawApiData(data);
-    if (data.engineState) setEngineState(data.engineState);
-    if (data.feedStatus) setFeedStatus(data.feedStatus as any);
-    if (data.lockEvaluation) setLockEvaluation(data.lockEvaluation);
+    if (data.engineState) setEngineState((prev) => (prev === data.engineState ? prev : data.engineState));
+    if (data.feedStatus) setFeedStatus((prev) => (prev === data.feedStatus ? prev : data.feedStatus as any));
+    if (data.lockEvaluation) {
+      setLockEvaluation((prev) => {
+        if (
+          prev.qualified === data.lockEvaluation.qualified &&
+          prev.direction === data.lockEvaluation.direction &&
+          prev.reason === data.lockEvaluation.reason &&
+          prev.persistenceSeconds === data.lockEvaluation.persistenceSeconds
+        ) {
+          return prev;
+        }
+        return data.lockEvaluation;
+      });
+    }
 
     if (data.direction !== undefined) {
       const isBull = (data.direction as string) === 'UP' || (data.direction as string) === 'YES';
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
-      if (Number.isFinite(data.timeRemaining)) { setSecondsRemaining15M(data.timeRemaining); } else if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
-        setSecondsRemaining15M(data.features.crossVenue.timeRemainingSec);
+      if (Number.isFinite(data.timeRemaining)) {
+        setSecondsRemaining15M((prev) => (prev === data.timeRemaining ? prev : data.timeRemaining));
+      } else if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
+        setSecondsRemaining15M((prev) => (prev === data.features.crossVenue.timeRemainingSec ? prev : data.features.crossVenue.timeRemainingSec));
       }
       
       setSignal((prev) => {
-        // Authoritative backend wins! If data says null, it's 0 or we keep it depending on UX, but the prompt says:
-        // "The authoritative backend must win over client cache."
+        const newDirection = data.direction ? (isBull ? 'YES' : 'NO') : 'NO';
         const newConfidence = data.confidence !== null ? data.confidence : 0;
         const newModelProb = data.modelProbability !== null ? Math.round(data.modelProbability * 1000) / 10 : 0;
         const newEdgePct = data.edgePct !== null ? data.edgePct : 0;
         const newTargetPrice = data.features?.crossVenue?.kalshiStrike || prev.targetPrice;
+
+        if (
+          prev.direction === newDirection &&
+          prev.confidence === newConfidence &&
+          prev.modelProb === newModelProb &&
+          prev.marketProb === kalshiProbPct &&
+          prev.edgePct === newEdgePct &&
+          prev.targetPrice === newTargetPrice
+        ) {
+          return prev;
+        }
         
         return {
           ...prev,
           timestamp: Date.now(),
-          direction: data.direction ? (isBull ? 'YES' : 'NO') : 'NO',
+          direction: newDirection,
           confidence: newConfidence,
           modelProb: newModelProb,
           marketProb: kalshiProbPct,
@@ -193,9 +215,9 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         };
       });
 
-      
       setVenueOdds((prev) => {
         const newBestEdge = Number.isFinite(data.edgePct) ? Math.abs(data.edgePct) : prev.bestEdgeValue;
+        if (prev.bestEdgeValue === newBestEdge) return prev;
         return {
           ...prev,
           bestEdgeValue: newBestEdge
@@ -476,7 +498,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."
       >
         <div className="space-y-6">
-          {/* 5. PRIMARY DECISION CENTER */}
+          {/* 5. PRIMARY DECISION CENTER (NEURAL CORE + STEP 2 PROTECTION + TELEMETRY + 3-PANEL INTEL) */}
           <div>
             <SignalBrain
               signal={signal}
@@ -492,53 +514,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             />
           </div>
 
-          {/* 6. INSTITUTIONAL INTELLIGENCE MODULE: VIXY PROTECTION (LEFT) + WHALE WATCH (RIGHT) */}
-          <div className="space-y-3">
-            {/* Shared Institutional Module Section Connector Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 font-black text-cyan-300">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
-                  <span>INSTITUTIONAL INTELLIGENCE MATRIX</span>
-                </div>
-                <span className="hidden md:inline text-purple-400/80 text-[10px] font-bold uppercase tracking-wider">
-                  POSITION DEFENSE ↔ INSTITUTIONAL FLOW
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-[10px] text-purple-300/80 font-bold flex-wrap">
-                <span className="flex items-center gap-1">
-                  <span className="text-cyan-400 font-mono">POSITION DEFENSE:</span> HEALTH • RISK • GUARDIAN
-                </span>
-                <span className="hidden lg:inline text-purple-700">|</span>
-                <span className="hidden lg:flex items-center gap-1">
-                  <span className="text-cyan-400 font-mono">INSTITUTIONAL FLOW:</span> DARK POOL • DESK • IMPACT
-                </span>
-              </div>
-            </div>
+          {/* VIXY ORDER FLOW PRESSURE TAPE */}
+          <OrderFlowPressure
+            rawApiData={liveApiData}
+            venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
+            timeframe={timeframe}
+          />
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-              <div className="h-full">
-                <ProtectionBrain 
-                  signal={signal} 
-                  ticker={ticker} 
-                  isDiscordVerified={isDiscordVerified} 
-                  rawApiData={liveApiData}
-                />
-              </div>
-              <div className="h-full">
-                <WhaleBrain ticker={ticker} selectedAsset={selectedAsset} />
-              </div>
-            </div>
-
-            {/* VIXY ORDER FLOW PRESSURE (MOVED BELOW WHALE WATCH & VIXY PROTECTION) */}
-            <OrderFlowPressure
-              rawApiData={liveApiData}
-              venue={selectedVenues && selectedVenues.length > 0 ? selectedVenues[0] : selectedVenue || 'Kalshi'}
-              timeframe={timeframe}
-            />
-          </div>
-
-          {/* 7. STAGE 1: MARKET EVIDENCE & NEURAL ORDER FLOW */}
+          {/* 6. STAGE 1: MARKET EVIDENCE & NEURAL ORDER FLOW */}
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
