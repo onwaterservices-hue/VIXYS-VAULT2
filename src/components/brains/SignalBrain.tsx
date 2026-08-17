@@ -13,6 +13,7 @@ import {
 } from '../../utils/metrics';
 import { safeToFixed, safeNumber } from '../../utils/numeric';
 import { VixyNeuralEngine } from './VixyNeuralEngine';
+import { VixyProtectionSummary } from './VixyProtectionSummary';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -573,6 +574,20 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         isOfflineOrStale={isOfflineOrStale}
         directionVisualState={directionVisualState}
         isUserAuthorized={isUserAuthorized}
+        onExecute={triggerHapticPulse}
+      />
+
+      {/* COMPACT STATE-SYNCED VIXY PROTECTION SUMMARY CARD */}
+      <VixyProtectionSummary
+        isActuallyLocked={isActuallyLocked}
+        signal={signal}
+        ticker={ticker}
+        rawApiData={rawApiData}
+        isProtectState={isProtectState}
+        reversalRisk={reversalRisk}
+        currentPrice={currentPrice}
+        targetPrice={targetPrice}
+        timeRemainingSec={rawApiData?.timeRemainingSec || rawApiData?.features?.timeRemaining || 540}
         onExecute={triggerHapticPulse}
       />
 
