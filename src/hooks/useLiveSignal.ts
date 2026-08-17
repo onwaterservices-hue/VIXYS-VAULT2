@@ -81,7 +81,39 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     market15mState: null
   } : { ...state.signal };
 
-  const isLocked = Boolean(snapshot.isLocked === true || snapshot.status === 'LOCKED' || snapshot.status === 'CRITICALLY_INVALIDATED');
+  const isLocked = Boolean(snapshot.isLocked === true || snapshot.status === 'LOCKED' || snapshot.stage === 'LOCKED' || snapshot.cycleStage === 'LOCKED');
+
+  const lockedDirection = isLocked ? (snapshot.lockedPrediction?.direction || snapshot.lockedDirection || (snapshot.direction === 'UP' || snapshot.direction === 'DOWN' ? snapshot.direction : undefined)) : undefined;
+  const lockedProbability = isLocked ? (snapshot.lockedPrediction?.probability ?? snapshot.lockedProbability ?? snapshot.probability) : undefined;
+  const lockedConfidence = isLocked ? (snapshot.lockedPrediction?.confidence ?? snapshot.lockedConfidence ?? snapshot.confidence) : undefined;
+  const lockedAt = isLocked ? (snapshot.lockedPrediction?.lockedAt || snapshot.lockedAt) : undefined;
+  const spotAtLock = isLocked ? (snapshot.lockedPrediction?.spotAtLock ?? snapshot.spotAtLock ?? snapshot.lockedSpot) : undefined;
+  const lockedStrike = isLocked ? (snapshot.lockedPrediction?.strike ?? snapshot.lockedStrike ?? snapshot.strike) : undefined;
+  const lockedDecision = isLocked ? (snapshot.lockedPrediction?.decision || snapshot.lockedDecision) : undefined;
+  const lockedReason = isLocked ? (snapshot.lockedPrediction?.reason || snapshot.lockedReason) : undefined;
+
+  const effConfidence = isLocked 
+    ? (lockedConfidence ?? 75)
+    : (snapshot.livePrediction?.confidence ?? snapshot.confidence ?? 50);
+
+  const effProbability = isLocked
+    ? (lockedProbability ?? 0.75)
+    : (snapshot.livePrediction?.probability ?? snapshot.probability ?? 0.50);
+
+  const effDirection = isLocked
+    ? (lockedDirection || 'NEUTRAL')
+    : (snapshot.livePrediction?.direction || snapshot.direction || 'NEUTRAL');
+
+  const lockedPrediction = isLocked ? {
+    direction: lockedDirection,
+    probability: lockedProbability,
+    confidence: lockedConfidence,
+    lockedAt,
+    spotAtLock,
+    strike: lockedStrike,
+    reason: lockedReason,
+    decision: lockedDecision
+  } : null;
 
   state.signal = {
     ...baseSignal,
@@ -93,21 +125,42 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     calibrationStatus: snapshot.calibrationStatus,
     analysisStatus: snapshot.analysisStatus,
     validationStatus: snapshot.validationStatus,
-    lockedDirection: isLocked ? snapshot.lockedPrediction?.direction : undefined,
-    lockedProbability: isLocked ? snapshot.lockedPrediction?.probability : undefined,
-    lockedConfidence: isLocked ? snapshot.lockedPrediction?.confidence : undefined,
-    lockedAt: isLocked ? snapshot.lockedPrediction?.lockedAt : undefined,
-    spotAtLock: isLocked ? snapshot.lockedPrediction?.spotAtLock : undefined,
-    strike: snapshot.strike || (isLocked ? snapshot.lockedPrediction?.strike : undefined),
-    currentPrice: snapshot.spot,
-    timeRemaining: snapshot.timeRemaining,
-    modelProbability: snapshot.livePrediction?.probability,
-    confidence: snapshot.livePrediction?.confidence,
-    direction: isLocked ? snapshot.lockedPrediction?.direction : snapshot.livePrediction?.direction,
+    lockedPrediction: lockedPrediction,
+    livePrediction: snapshot.livePrediction || {
+      direction: snapshot.livePrediction?.direction || snapshot.direction || 'NEUTRAL',
+      probability: snapshot.livePrediction?.probability || snapshot.probability || 0.5,
+      confidence: snapshot.livePrediction?.confidence || snapshot.confidence || 50
+    },
+    lockedDirection: lockedDirection,
+    lockedProbability: lockedProbability,
+    lockedConfidence: lockedConfidence,
+    lockedAt: lockedAt,
+    spotAtLock: spotAtLock,
+    lockedSpot: spotAtLock,
+    lockedStrike: lockedStrike,
+    lockedDecision: lockedDecision,
+    lockedReason: lockedReason,
+    strike: snapshot.strike || lockedStrike,
+    currentPrice: snapshot.spot ?? snapshot.currentPrice,
+    spot: snapshot.spot ?? snapshot.currentPrice,
+    timeRemaining: snapshot.timeRemaining ?? snapshot.timeRemainingSec,
+    timeRemainingSec: snapshot.timeRemainingSec ?? snapshot.timeRemaining,
+    cycleStart: snapshot.cycleStart,
+    cycleEnd: snapshot.cycleEnd,
+    evidenceAgreement: snapshot.evidenceAgreement,
+    hasConflict: snapshot.hasConflict,
+    signalUnstable: snapshot.signalUnstable,
+    provisionalBias: snapshot.provisionalBias,
+    historicalSimilarityPct: snapshot.historicalSimilarityPct,
+    modelProbability: effProbability,
+    confidence: effConfidence,
+    direction: effDirection,
     crossAssetContext: snapshot.crossAssetContext || (baseSignal as any).crossAssetContext,
     feedStatus: 'LIVE',
     sequenceNumber: snapshot.sequence,
-    action: isLocked ? (snapshot.lockedPrediction?.direction === 'UP' ? 'BUY_YES' : 'BUY_NO') : 'HOLD',
+    action: isLocked ? (lockedDirection === 'UP' ? 'BUY_YES' : 'BUY_NO') : 'HOLD',
+    last10: snapshot.last10 || baseSignal.last10,
+    last10Summary: snapshot.last10Summary || baseSignal.last10Summary,
   } as any;
 
   states.set(key, state);
@@ -201,8 +254,7 @@ const poll = async (asset: string, desk: string) => {
     let changed = false;
 
     if (sig) {
-      state.signal = sig;
-      changed = true;
+      updateSignalFromAuthoritative(sig);
     }
     if (stat) {
       state.status = stat;

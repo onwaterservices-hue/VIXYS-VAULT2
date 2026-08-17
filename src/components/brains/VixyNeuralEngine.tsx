@@ -94,6 +94,14 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const isNoTrade = !isServerLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED');
   const isCriticallyInvalidated = rawApiData?.status === 'CRITICALLY_INVALIDATED' || rawApiData?.isCriticallyInvalidated;
 
+  // 1.1 EVIDENCE AGREEMENT & CONFLICT DATA FROM SERVER
+  const evidenceAgreement = String(rawApiData?.evidenceAgreement || 'MODERATE_AGREEMENT').toUpperCase();
+  const hasConflict = Boolean(rawApiData?.hasConflict || rawApiData?.provisionalBias === 'SIGNAL_CONFLICT');
+  const signalUnstable = Boolean(rawApiData?.signalUnstable || rawApiData?.provisionalBias === 'SIGNAL_UNSTABLE');
+  const provisionalBias = String(rawApiData?.provisionalBias || 'NEUTRAL_BIAS').toUpperCase();
+  const historicalSimilarityPct = Number(rawApiData?.historicalSimilarityPct || 84);
+  const isChoppy = Boolean(rawApiData?.isChoppy);
+
   const cycleId = String(rawApiData?.cycleId || '15M-ACTIVE-CYCLE');
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
@@ -102,23 +110,30 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const isUp = isServerLocked && (rawDirection.includes('UP') || rawDirection.includes('YES'));
   const isDown = isServerLocked && (rawDirection.includes('DOWN') || rawDirection.includes('NO'));
 
-  const lockedDecision = isServerLocked
+  // Primary Headline Text (NO DANCING UI DURING PRE-LOCK)
+  const primaryDecisionHeadline = isServerLocked
     ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
     : isNoTrade
     ? 'VIXY SKIP'
-    : isObserving
-    ? 'OBSERVING'
+    : 'VIXY ANALYZING';
+
+  // Sub-badge / Provisional Status Badge for Pre-Lock Analysis
+  const provisionalSubStatus = isServerLocked
+    ? (isUp ? 'CALL DIRECTION LOCKED' : isDown ? 'PUT DIRECTION LOCKED' : 'NEUTRAL RANGE')
+    : isNoTrade
+    ? 'NO HIGH-CONVICTION SETUP'
+    : hasConflict
+    ? 'SIGNAL CONFLICT'
+    : signalUnstable
+    ? 'SIGNAL UNSTABLE'
+    : provisionalBias === 'UP_BIAS'
+    ? 'UP BIAS (PROVISIONAL)'
+    : provisionalBias === 'DOWN_BIAS'
+    ? 'DOWN BIAS (PROVISIONAL)'
     : isCalibrating
-    ? 'CALIBRATING'
-    : isAnalyzing
-    ? 'ANALYZING'
-    : isQualifying
-    ? 'QUALIFYING'
-    : isValidating
-    ? 'VALIDATING'
-    : isReadyToLock
-    ? 'LOCKING'
-    : 'ANALYZING';
+    ? 'CALIBRATING ENGINE'
+    : 'EVIDENCE BUILDING';
+
   const lockedStrike = Number(rawApiData?.lockedStrike || rawApiData?.strike || targetPrice || 64100);
   const lockedSpot = Number(rawApiData?.lockedSpot || rawApiData?.spotAtLock || currentPrice || 64100);
 
@@ -167,6 +182,16 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const hasReversalThreat = isPostLockGated && (reversalRiskValue >= 30);
   const hasActiveReversal = isPostLockGated && (reversalRiskValue >= 45 || isProtectState);
   const reversalDetected = hasActiveReversal;
+
+  // Strict Yellow Pulse: ONLY activates on actual danger, conflict, chop, or protection
+  const isYellowPulseActive = Boolean(
+    hasConflict ||
+    signalUnstable ||
+    isChoppy ||
+    hasReversalThreat ||
+    isProtectState ||
+    isCriticallyInvalidated
+  );
 
   // ─── 2. DIAGNOSTIC REAL INPUT VECTORS (Direct telemetry) ───
   const diagnosticNodes = useMemo(() => {
@@ -327,7 +352,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             ) : isServerLocked ? (
               <>
                 <Lock className="w-3.5 h-3.5 animate-pulse" />
-                <span>STATE 04: LOCKED — {lockedDecision}</span>
+                <span>STATE 04: LOCKED — {primaryDecisionHeadline}</span>
               </>
             ) : isObserving ? (
               <>
@@ -574,26 +599,32 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   ? isUp 
                     ? 'border-emerald-500/40 bg-[#020d08]' 
                     : 'border-rose-500/40 bg-[#0e0205]' 
-                  : 'border-purple-900/40 bg-[#06020e]/60'
+                  : isYellowPulseActive
+                    ? 'border-yellow-500/80 bg-yellow-950/20 vixy-animate-pulse-yellow'
+                    : 'border-purple-900/40 bg-[#06020e]/60'
             }`}
             style={{
               boxShadow: reversalDetected 
                 ? '0 0 25px rgba(239, 68, 68, 0.45)' 
+                : isYellowPulseActive
+                ? '0 0 20px rgba(234, 179, 8, 0.4)'
                 : 'none',
             }}
           >
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
                 <span className="text-[9.5px] font-bold tracking-[0.2em] text-purple-400/80 uppercase font-mono">
-                  {isServerLocked ? 'LOCKED DECISION' : 'LIVE ENGINE STATUS'}
+                  {isServerLocked ? 'LOCKED DECISION' : isNoTrade ? 'CYCLE STATUS' : 'LIVE ANALYSIS'}
                 </span>
-                {isServerLocked && (
-                  <span className={`text-[8.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
-                    reversalDetected ? 'bg-red-950/60 text-red-400 border border-red-500/40' : 'bg-purple-950/40 text-purple-400'
-                  }`}>
-                    {reversalDetected ? 'REVERSAL RISK ACTIVE' : 'SECURE HARDWARE ENCLAVE'}
-                  </span>
-                )}
+                <span className={`text-[8.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
+                  reversalDetected
+                    ? 'bg-red-950/60 text-red-400 border-red-500/40'
+                    : isYellowPulseActive
+                    ? 'bg-yellow-950/60 text-yellow-300 border-yellow-500/40 animate-pulse'
+                    : 'bg-purple-950/40 text-purple-300 border-purple-800/40'
+                }`}>
+                  {reversalDetected ? 'REVERSAL RISK ACTIVE' : isYellowPulseActive ? provisionalSubStatus : isServerLocked ? 'SECURE HARDWARE ENCLAVE' : provisionalSubStatus}
+                </span>
               </div>
 
               <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-3">
@@ -601,13 +632,15 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   <div
                     className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2"
                     style={{
-                      color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : themeNeon,
+                      color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : isYellowPulseActive ? '#FACC15' : themeNeon,
                       textShadow: reversalDetected 
                         ? '0 0 25px rgba(239, 68, 68, 0.8)' 
+                        : isYellowPulseActive
+                        ? '0 0 25px rgba(234, 179, 8, 0.8)'
                         : `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
                     }}
                   >
-                    <span>{lockedDecision}</span>
+                    <span>{primaryDecisionHeadline}</span>
                     {isServerLocked && (
                       <span 
                         className={`text-3xl sm:text-4xl md:text-5xl ${reversalDetected ? 'animate-pulse text-red-500' : ''}`}
@@ -622,7 +655,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   </div>
 
                   <div className="text-[10px] font-extrabold tracking-[0.15em] text-slate-300 uppercase font-mono">
-                    {isServerLocked ? (isUp ? 'CALL DIRECTION' : isDown ? 'PUT DIRECTION' : 'NEUTRAL RANGE') : 'PRE-LOCK ANALYSIS PHASE'}
+                    {provisionalSubStatus}
                   </div>
                 </div>
 
@@ -993,8 +1026,10 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           <span>
             {isOfflineOrStale
               ? 'EXECUTION PAUSED'
+              : isNoTrade
+              ? '⚡ CYCLE SKIPPED — NO TRADE'
               : isServerLocked
-              ? `⚡ LOCKED — ${lockedDecision}`
+              ? `⚡ LOCKED — ${primaryDecisionHeadline}`
               : '⚡ VIXY ANALYZING CYCLE...'}
           </span>
           <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />

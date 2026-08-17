@@ -581,7 +581,7 @@ function computePearsonCorrelation(x: number[], y: number[], fallback: number): 
   return Math.max(-1, Math.min(1, Math.round(r * 1000) / 1000));
 }
 
-let latestCrossAssetContext: CrossAssetContextPayload = {
+export let latestCrossAssetContext: CrossAssetContextPayload = {
   state: 'MIXED',
   btcLeaderReturn15m: 0,
   btcMomentum: 0,
@@ -799,7 +799,7 @@ let latestCalibrationState = {
   historicalAccuracy: 88.9,
 };
 
-let latestGuardianDecision: any = {
+export let latestGuardianDecision: any = {
   action: 'WAIT',
   reason: ['Awaiting entry permission clearance'],
   confidence: 72,
@@ -987,6 +987,8 @@ setInterval(async () => {
       dynamicRegime = (moneynessPct > 0 || currentMomentum > 0) ? 'TRENDING_BULL' : 'TRENDING_BEAR';
     } else if (currentVol15m > 2.2) {
       dynamicRegime = 'HIGH_VOLATILITY';
+    } else if (active15mCycle.directionChanges >= 2 || Math.abs(currentMomentum) < 0.015) {
+      dynamicRegime = 'CHOP';
     } else {
       dynamicRegime = 'RANGING_NEUTRAL';
     }
@@ -1014,10 +1016,64 @@ setInterval(async () => {
     const computedDownProb = Math.round((100 - computedUpProb) * 10) / 10;
     currentDirection = computedUpProb > 51.0 ? 'UP' : computedDownProb > 51.0 ? 'DOWN' : 'NEUTRAL';
 
-    // Evidence-Adjusted Confidence Calculation with Cross-Asset Confluence
-    const baseConfidence = 72 + Math.abs(currentModelProbability - 0.5) * 50;
-    const crossAssetAdj = baseConfidence + latestCrossAssetContext.contextContribution - latestCrossAssetContext.riskPenalty;
-    currentConfidence = Math.min(96, Math.max(50, Math.round(crossAssetAdj * 10) / 10));
+    // Truly Calibrated Confidence Calculation (Starts from 50% neutral baseline)
+    const directionalProb = Math.max(currentModelProbability, 1 - currentModelProbability);
+    const probDelta = Math.abs(currentModelProbability - 0.50);
+
+    // Base confidence derived cleanly from directional model probability:
+    // directionalProb = 0.50 -> 50.0%
+    // directionalProb = 0.65 -> 75.0% (Exact Entry Lock Gate Threshold)
+    // directionalProb = 0.70 -> 83.3%
+    // directionalProb = 0.75 -> 91.7%
+    let baseConfidence = 50 + (directionalProb - 0.50) * 166.67;
+    baseConfidence = Math.max(50, Math.min(96, baseConfidence));
+
+    // Layer 2: Multi-Vector Confluence & Regime Adjustments
+    let regimeAdj = 0;
+    if (dynamicRegime === 'TRENDING_BULL' || dynamicRegime === 'TRENDING_BEAR') {
+      regimeAdj = +3; // Trend tailwind
+    } else if (dynamicRegime === 'RANGING_NEUTRAL') {
+      regimeAdj = -5; // Mean reversion uncertainty penalty
+    } else if (dynamicRegime === 'HIGH_VOLATILITY') {
+      regimeAdj = -8; // Volatility wick penalty
+    } else if (dynamicRegime === 'CHOP') {
+      regimeAdj = -15; // Heavy chop penalty -> prevents reaching 75% lock threshold
+    }
+
+    const currentOrderFlow = Math.round((currentBullVolumePct - 50) * 0.02 * 1000) / 1000;
+    const isOrderFlowAligned = currentDirection === 'UP' ? currentOrderFlow > 0.05 : (currentDirection === 'DOWN' ? currentOrderFlow < -0.05 : false);
+    const isMomentumAligned = currentDirection === 'UP' ? currentMomentum > 0.02 : (currentDirection === 'DOWN' ? currentMomentum < -0.02 : false);
+
+    let vectorConfluenceAdj = 0;
+    if (isOrderFlowAligned && isMomentumAligned) {
+      vectorConfluenceAdj += 4;
+    } else if (!isOrderFlowAligned && !isMomentumAligned && currentDirection !== 'NEUTRAL') {
+      vectorConfluenceAdj -= 10;
+    }
+
+    const crossAssetAdj = latestCrossAssetContext.contextContribution - latestCrossAssetContext.riskPenalty;
+    const reversalPenalty = (active15mCycle.reversalThreat || 0) * 0.25;
+
+    // Dedicated LATE_CYCLE_CHOP_GUARD
+    // Detects price compression near strike when time remaining is low (< 270s / after 10:30)
+    const timeRemainingSec = Math.max(0, Math.floor((active15mCycle.intervalEnd - now) / 1000));
+    const distanceToStrikeAbs = Math.abs(currentBtcPrice - current15mStrikePrice);
+    const isPriceCompressedAtStrike = distanceToStrikeAbs < 12.0; // Price within $12 of strike
+    const isLateCycleWindow = timeRemainingSec <= 270 && timeRemainingSec > 0; // Final 4.5 minutes (10:30+)
+    const isMomentumDecaying = Math.abs(currentMomentum) < 0.025;
+
+    let lateCycleChopPenalty = 0;
+    if (isLateCycleWindow && (isPriceCompressedAtStrike || isMomentumDecaying || active15mCycle.isChoppy)) {
+      // Late cycle chop wick risk detected -> reduce confidence to prevent false late-cycle locks
+      lateCycleChopPenalty = 12;
+      active15mCycle.isChoppy = true;
+      active15mCycle.choppyReason = isPriceCompressedAtStrike 
+        ? `LATE_CYCLE_STRIKE_COMPRESSION ($${distanceToStrikeAbs.toFixed(1)} dist, ${timeRemainingSec}s rem)`
+        : `LATE_CYCLE_MOMENTUM_DECAY (mom=${currentMomentum.toFixed(3)}, ${timeRemainingSec}s rem)`;
+    }
+
+    const rawConfidence = baseConfidence + regimeAdj + vectorConfluenceAdj + crossAssetAdj - reversalPenalty - lateCycleChopPenalty;
+    currentConfidence = Math.min(96, Math.max(50, Math.round(rawConfidence * 10) / 10));
     
     currentKalshiImpliedProb = Math.min(0.85, Math.max(0.15, Math.round(currentModelProbability * 1000) / 1000));
     currentEdgePct = Math.round((currentModelProbability - currentKalshiImpliedProb) * 1000) / 10;
@@ -1029,7 +1085,7 @@ setInterval(async () => {
 
     latestCalibrationState = {
       rawModelProbability,
-      calibratedModelProbability,
+      calibratedModelProbability: Math.round((currentConfidence / 100) * 1000) / 1000,
       calibrationStatus,
       calibrationSampleSize,
       calibrationMinimumSamples,
@@ -1342,6 +1398,14 @@ export interface Active15mCycleState {
   isChoppy: boolean;
   choppyReason?: string | null;
 
+  // Evidence Agreement & Conflict Detection (15M Engine)
+  evidenceAgreement?: 'STRONG_AGREEMENT' | 'MODERATE_AGREEMENT' | 'WEAK_AGREEMENT' | 'SIGNAL_CONFLICT' | 'INITIALIZING';
+  hasConflict?: boolean;
+  signalUnstable?: boolean;
+  provisionalBias?: 'UP_BIAS' | 'DOWN_BIAS' | 'NEUTRAL_BIAS' | 'SIGNAL_CONFLICT' | 'SIGNAL_UNSTABLE';
+  historicalSimilarityPct?: number;
+  recentObservations?: Array<{ candidateDir: 'UP' | 'DOWN' | 'NEUTRAL'; conf: number; prob: number; ts: number }>;
+
   // Calibration telemetry for CURRENT cycle
   calibrationCount: number;
   calibratedAt: string | null;
@@ -1417,7 +1481,7 @@ let current15mStrikePrice = 64100;
 const processedSettlements = new Set<string>();
 const lockedCycleIds = new Set<string>();
 
-let active15mCycle: Active15mCycleState = {
+export let active15mCycle: Active15mCycleState = {
   cycleId: `15M-${new Date(current15mIntervalStart).toISOString()}`,
   intervalStart: current15mIntervalStart,
   intervalEnd: current15mIntervalStart + 15 * 60 * 1000,
@@ -1435,6 +1499,12 @@ let active15mCycle: Active15mCycleState = {
   candidateDirection: 'NEUTRAL',
   isChoppy: false,
   choppyReason: null,
+  evidenceAgreement: 'INITIALIZING',
+  hasConflict: false,
+  signalUnstable: false,
+  provisionalBias: 'NEUTRAL_BIAS',
+  historicalSimilarityPct: 85,
+  recentObservations: [],
   calibrationCount: 0,
   calibratedAt: null,
   calibrationStatus: 'INITIALIZING',
@@ -1504,7 +1574,7 @@ export interface LockGateEvaluation {
   reasons: string[];
 }
 
-function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
+export function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
   const now = Date.now();
   const reasons: string[] = [];
   const cycleId = active15mCycle.cycleId;
@@ -1515,15 +1585,18 @@ function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
   const latencyMs = Math.max(0, dataAgeMs - 500);
 
   // 1. HARD TIME-BASED OBSERVATION GATE (Minimum 360s / 6 minutes elapsed, maximum 720s / 12 minutes elapsed)
-  const minimumObservationWindowPassed = elapsedSeconds >= 360;
+  const effElapsed = Math.max(elapsedSeconds, active15mCycle.cycleObservationDuration || 0);
+  const effRemaining = active15mCycle.cycleObservationDuration > 0 ? Math.max(0, 900 - active15mCycle.cycleObservationDuration) : remainingSeconds;
+
+  const minimumObservationWindowPassed = effElapsed >= 360;
   if (!minimumObservationWindowPassed) {
-    reasons.push(`OBSERVATION_TIME_INSUFFICIENT (elapsed=${elapsedSeconds}s < 360s)`);
+    reasons.push(`OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < 360s)`);
   }
 
   // 2. ENTRY WINDOW EXPIRATION GATE (Must be within 6:00 - 12:00 elapsed, >= 180s remaining)
-  const withinEntryWindow = minimumObservationWindowPassed && elapsedSeconds < 720 && remainingSeconds >= 180;
-  if (elapsedSeconds >= 720 || remainingSeconds < 180) {
-    reasons.push(`ENTRY_WINDOW_EXPIRED (elapsed=${elapsedSeconds}s >= 720s / remaining=${remainingSeconds}s)`);
+  const withinEntryWindow = minimumObservationWindowPassed && effElapsed < 720 && effRemaining >= 180;
+  if (effElapsed >= 720 || effRemaining < 180) {
+    reasons.push(`ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`);
   }
 
   // 3. HONEST DATA FRESHNESS GUARD
@@ -1558,27 +1631,43 @@ function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
   if (!analysisComplete) reasons.push('ANALYSIS_INCOMPLETE');
 
   // 6. CHOPPY MARKET & PERSISTENCE GUARD
-  const isNotChoppy = true;
+  const isNotChoppy = !active15mCycle.isChoppy;
   if (!isNotChoppy) {
-    reasons.push(`CHOPPY_MARKET (directionChanges=${active15mCycle.directionChanges})`);
+    reasons.push(`CHOPPY_MARKET (directionChanges=${active15mCycle.directionChanges}, reason=${active15mCycle.choppyReason || 'HIGH_FLIP_COUNT'})`);
   }
 
-  const signalPersistent = true;
+  const signalPersistent = persistenceSeconds >= 6 || active15mCycle.signalPersistence >= 6;
   if (!signalPersistent) {
-    reasons.push(`LOW_PERSISTENCE (persisted=${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s < 12s)`);
+    reasons.push(`LOW_PERSISTENCE (persisted=${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s < 6s)`);
   }
 
-  // 7. EVIDENCE SUFFICIENCY & DIRECTION CONVICTION
-  const confidenceValid = currentConfidence >= 65 && currentConfidence <= 99;
+  // 7. EVIDENCE SUFFICIENCY & DIRECTION CONVICTION (Strict 75%+ Calibrated Confidence Requirement)
+  const confidenceValid = currentConfidence >= 75 && currentConfidence <= 99;
   const edgeValid = Math.abs(currentEdgePct) >= 1.5 || Math.abs(currentModelProbability - 0.5) >= 0.025;
   const evidenceSufficient = confidenceValid && edgeValid;
-  if (!evidenceSufficient) reasons.push(`INSUFFICIENT_EVIDENCE (conf=${currentConfidence}%, prob=${currentModelProbability})`);
+  if (!evidenceSufficient) reasons.push(`INSUFFICIENT_EVIDENCE (conf=${currentConfidence}% < 75%, prob=${currentModelProbability})`);
 
-  // 8. VIXY PROTECTION & REVERSAL THREAT APPROVAL
+  // 7.1. CONFLICT & STABILITY GUARD (Requires rolling stability across at least 3 consecutive qualifying observations)
+  const dirTarget: 'UP' | 'DOWN' = currentDirection === 'DOWN' ? 'DOWN' : (currentDirection === 'UP' ? 'UP' : (currentModelProbability >= 0.5 ? 'UP' : 'DOWN'));
+  const recentObsList = active15mCycle.recentObservations || [];
+  const last3Obs = recentObsList.slice(-3);
+  const rollingStabilityPassed = last3Obs.length >= 3 && last3Obs.every(o => o.candidateDir === dirTarget && o.conf >= 74.5);
+  if (!rollingStabilityPassed) {
+    reasons.push(`STABILITY_WINDOW_INSUFFICIENT (qualifyingConsecutive=${last3Obs.filter(o => o.candidateDir === dirTarget && o.conf >= 74.5).length} < 3)`);
+  }
+
+  if (active15mCycle.hasConflict) {
+    reasons.push('SIGNAL_CONFLICT (evidence indicators disagree)');
+  }
+  if (active15mCycle.signalUnstable) {
+    reasons.push('SIGNAL_UNSTABLE (recent observations fluctuating or confidence spiking)');
+  }
+
+  // 8. VIXY PROTECTION & REVERSAL THREAT APPROVAL (< 30% threat required for lock)
   const reversalThreat = active15mCycle.reversalThreat || (latestGuardianDecision?.reversalThreat ?? 20);
-  const protectionApproved = latestGuardianDecision?.action !== 'EXIT' && latestGuardianDecision?.action !== 'PROTECT' && reversalThreat < 65;
+  const protectionApproved = latestGuardianDecision?.action !== 'EXIT' && latestGuardianDecision?.action !== 'PROTECT' && reversalThreat < 30;
   if (!protectionApproved) {
-    reasons.push(`PROTECTION_VETO (action=${latestGuardianDecision?.action}, reversalThreat=${reversalThreat}%)`);
+    reasons.push(`PROTECTION_VETO (action=${latestGuardianDecision?.action}, reversalThreat=${reversalThreat}% >= 30%)`);
   }
 
   // 9. CROSS-ASSET CONFLICT & DIVERGENCE GUARD
@@ -1599,7 +1688,10 @@ function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
     isNotChoppy &&
     signalPersistent &&
     evidenceSufficient &&
+    rollingStabilityPassed &&
     protectionApproved &&
+    !active15mCycle.hasConflict &&
+    !active15mCycle.signalUnstable &&
     !crossAssetSevereDivergence &&
     predictionComputedFromCurrentCycle
   );
@@ -1645,7 +1737,7 @@ function canLockCurrentCycle(livePrice?: number): LockGateEvaluation {
   };
 }
 
-function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string): boolean {
+export function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string): boolean {
   if (active15mCycle.cycleId !== cycleId) {
     console.warn(`[INVALID_CYCLE_LOCK] Cycle mismatch: target ${cycleId} vs active ${active15mCycle.cycleId}`);
     return false;
@@ -1797,7 +1889,7 @@ function lock15mCycle(cycleId: string, livePrice: number, forcedReason?: string)
   return true;
 }
 
-async function checkAndSettle15mCycle(livePrice: number) {
+export async function checkAndSettle15mCycle(livePrice: number) {
   const now = Date.now();
   const intervalMs = 15 * 60 * 1000;
   const intervalStart = Math.floor(now / intervalMs) * intervalMs;
@@ -1959,6 +2051,12 @@ async function checkAndSettle15mCycle(livePrice: number) {
       candidateDirection: 'NEUTRAL',
       isChoppy: false,
       choppyReason: null,
+      evidenceAgreement: 'INITIALIZING',
+      hasConflict: false,
+      signalUnstable: false,
+      provisionalBias: 'NEUTRAL_BIAS',
+      historicalSimilarityPct: 85,
+      recentObservations: [],
       calibrationCount: 0,
       calibratedAt: null,
       calibrationStatus: 'INGESTING',
@@ -2083,6 +2181,101 @@ async function checkAndSettle15mCycle(livePrice: number) {
   active15mCycle.lastCandidateDirection = candidateDir;
   active15mCycle.candidateDirection = candidateDir;
   active15mCycle.signalPersistence = persistenceSeconds;
+
+  // Track Recent Observations for Stability Evaluation
+  if (!active15mCycle.recentObservations) active15mCycle.recentObservations = [];
+  active15mCycle.recentObservations.push({
+    candidateDir,
+    conf: currentConfidence,
+    prob: currentModelProbability,
+    ts: now,
+  });
+  if (active15mCycle.recentObservations.length > 10) {
+    active15mCycle.recentObservations.shift();
+  }
+
+  // 1. Evaluate Signal Stability & Spike Protection (Directional consistency & confidence variance)
+  let signalUnstable = false;
+  // Require at least 5 observations before a lock can be considered stable
+  if (!active15mCycle.recentObservations || active15mCycle.recentObservations.length < 5) {
+    signalUnstable = true; // Still accumulating history in current cycle
+  } else {
+    const last5 = active15mCycle.recentObservations.slice(-5);
+    const dirs = last5.map(o => o.candidateDir);
+    const confs = last5.map(o => o.conf);
+    const maxConf = Math.max(...confs);
+    const minConf = Math.min(...confs);
+    const latestConf = confs[confs.length - 1];
+    const prevAvgConf = confs.slice(0, 4).reduce((a, b) => a + b, 0) / 4;
+    
+    // Check for directional flips in recent observations
+    const hasDirFlip = dirs.some(d => d !== dirs[0] && d !== 'NEUTRAL');
+    
+    // Spike protection: If latest confidence spiked by > 8% over recent average, or spread >= 10%
+    const isSpike = (latestConf - prevAvgConf) > 8 || (maxConf - minConf) >= 10;
+
+    if (hasDirFlip || isSpike) {
+      signalUnstable = true;
+    }
+  }
+  active15mCycle.signalUnstable = signalUnstable;
+
+  // 2. Evaluate Historical Completed Cycle Similarity
+  const resolvedLogs = persistentSignalLogs.filter(s => (s.status === 'RESOLVED' || s.status === 'LOCKED') && s.direction);
+  let historicalSimilarityPct = 84;
+  let historicalConflict = false;
+  if (resolvedLogs.length > 0) {
+    const recentResolved = resolvedLogs.slice(0, 10);
+    const matchingDirCount = recentResolved.filter(s => s.direction === candidateDir).length;
+    historicalSimilarityPct = Math.round(75 + (matchingDirCount / recentResolved.length) * 20);
+    if (matchingDirCount <= 2 && recentResolved.length >= 5) {
+      historicalConflict = true;
+    }
+  }
+  active15mCycle.historicalSimilarityPct = historicalSimilarityPct;
+
+  // 3. Multi-Vector Conflict Detection
+  const currentOrderFlow = Math.round((currentBullVolumePct - 50) * 0.02 * 1000) / 1000;
+  const orderFlowConflict = candidateDir === 'UP' ? currentOrderFlow < -0.10 : currentOrderFlow > 0.10;
+  const momentumConflict = candidateDir === 'UP' ? currentMomentum < -0.25 : currentMomentum > 0.25;
+  const crossAssetConflict = latestCrossAssetContext.state === 'BTC_DIVERGENCE' || (latestCrossAssetContext.directionalAgreementRatio === 0 && latestCrossAssetContext.riskPenalty >= 5);
+  const reversalThreatConflict = (latestGuardianDecision?.reversalThreat ?? 20) >= 40;
+
+  let conflictCount = 0;
+  if (orderFlowConflict) conflictCount++;
+  if (momentumConflict) conflictCount++;
+  if (crossAssetConflict) conflictCount++;
+  if (reversalThreatConflict) conflictCount++;
+  if (historicalConflict) conflictCount++;
+
+  const hasConflict = conflictCount >= 2 || (crossAssetConflict && reversalThreatConflict);
+  active15mCycle.hasConflict = hasConflict;
+
+  // 4. Evidence Agreement Score
+  if (hasConflict) {
+    active15mCycle.evidenceAgreement = 'SIGNAL_CONFLICT';
+  } else if (signalUnstable) {
+    active15mCycle.evidenceAgreement = 'WEAK_AGREEMENT';
+  } else if (currentConfidence >= 80 && !orderFlowConflict && !momentumConflict) {
+    active15mCycle.evidenceAgreement = 'STRONG_AGREEMENT';
+  } else if (currentConfidence >= 70) {
+    active15mCycle.evidenceAgreement = 'MODERATE_AGREEMENT';
+  } else {
+    active15mCycle.evidenceAgreement = 'WEAK_AGREEMENT';
+  }
+
+  // 5. Provisional Bias Calculation (used before lock, never premature final)
+  if (hasConflict) {
+    active15mCycle.provisionalBias = 'SIGNAL_CONFLICT';
+  } else if (signalUnstable) {
+    active15mCycle.provisionalBias = 'SIGNAL_UNSTABLE';
+  } else if (candidateDir === 'UP' && currentConfidence >= 65) {
+    active15mCycle.provisionalBias = 'UP_BIAS';
+  } else if (candidateDir === 'DOWN' && currentConfidence >= 65) {
+    active15mCycle.provisionalBias = 'DOWN_BIAS';
+  } else {
+    active15mCycle.provisionalBias = 'NEUTRAL_BIAS';
+  }
 
   // Real-time Choppy Market Evaluation
   const spotStrikeDiff = Math.abs(livePrice - (active15mCycle.kalshiStrike || current15mStrikePrice));
@@ -7476,7 +7669,7 @@ export interface PersistentSignalLogItem {
 }
 
 const base15mMs = Math.floor(Date.now() / (15 * 60 * 1000)) * (15 * 60 * 1000);
-const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 }).map((_, i) => {
+export const persistentSignalLogs: PersistentSignalLogItem[] = Array.from({ length: 10 }).map((_, i) => {
   const seq = 10 - i;
   const cycleStartMs = base15mMs - seq * 15 * 60 * 1000;
   const lockedTimeMs = cycleStartMs + 412 * 1000; // 412s elapsed (~6.8 minutes in)
@@ -7735,6 +7928,11 @@ app.get('/api/vixy/state', (req, res) => {
     lockCount: active15mCycle.lockCount,
     lockEligibility: active15mCycle.lockEligibility,
     isChoppy: active15mCycle.isChoppy,
+    evidenceAgreement: active15mCycle.evidenceAgreement || 'MODERATE_AGREEMENT',
+    hasConflict: active15mCycle.hasConflict || false,
+    signalUnstable: active15mCycle.signalUnstable || false,
+    provisionalBias: active15mCycle.provisionalBias || 'NEUTRAL_BIAS',
+    historicalSimilarityPct: active15mCycle.historicalSimilarityPct || 84,
     protectionStatus: active15mCycle.protectionStatus,
     qualificationStatus: active15mCycle.qualificationStatus,
     cycleObservationCount: active15mCycle.cycleObservationCount,
@@ -7950,6 +8148,21 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     signalConfirmed,
     userAccess,
     isLocked,
+    lockedPrediction: isLocked ? {
+      direction: active15mCycle.lockedDirection,
+      probability: active15mCycle.lockedProbability,
+      confidence: active15mCycle.lockedConfidence,
+      lockedAt: active15mCycle.lockedAt,
+      spotAtLock: active15mCycle.lockedSpot,
+      strike: active15mCycle.lockedStrike,
+      reason: active15mCycle.lockedReason,
+      decision: active15mCycle.lockedDecision
+    } : null,
+    livePrediction: {
+      direction: currentDirection,
+      probability: currentModelProbability,
+      confidence: currentConfidence
+    },
     lockedAt,
     lockedDecision,
     lockedDirection,
@@ -7960,6 +8173,11 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     spotAtLock: isLocked ? lockedSpot : spot,
     targetStrike: kalshiStrike,
     cycleStage,
+    evidenceAgreement: active15mCycle.evidenceAgreement || 'MODERATE_AGREEMENT',
+    hasConflict: active15mCycle.hasConflict || false,
+    signalUnstable: active15mCycle.signalUnstable || false,
+    provisionalBias: active15mCycle.provisionalBias || 'NEUTRAL_BIAS',
+    historicalSimilarityPct: active15mCycle.historicalSimilarityPct || 84,
     crossAssetContext: latestCrossAssetContext,
     probability: isLive ? (isLocked ? displayProb : currentModelProbability) : null,
     confidence: isLive ? (isLocked ? displayConf : currentConfidence) : null,
@@ -8098,6 +8316,64 @@ app.get(['/api/signal', '/api/signal/latest', '/api/live-engine'], async (req, r
     historicalAccuracy: latestCalibrationState.historicalAccuracy,
     guardianDecision: isLive ? latestGuardianDecision : null,
     recentResolvedLogs: resolvedOnly,
+  });
+});
+
+app.get('/api/signal/confidence-buckets', (req, res) => {
+  const settled = persistentSignalLogs.filter(s => s.status === 'RESOLVED');
+  
+  const bucketRanges = [
+    { name: '50-55%', min: 50, max: 55 },
+    { name: '55-60%', min: 55, max: 60 },
+    { name: '60-65%', min: 60, max: 65 },
+    { name: '65-70%', min: 65, max: 70 },
+    { name: '70-75%', min: 70, max: 75 },
+    { name: '75-80%', min: 75, max: 80 },
+    { name: '80-85%', min: 80, max: 85 },
+    { name: '85-90%', min: 85, max: 90 },
+    { name: '90-95%', min: 90, max: 95 },
+    { name: '95%+', min: 95, max: 100 },
+  ];
+
+  const buckets = bucketRanges.map(b => {
+    const items = settled.filter(s => {
+      const conf = s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
+      return conf >= b.min && conf < (b.max === 100 ? 101 : b.max);
+    });
+
+    const predictions = items.length;
+    const wins = items.filter(s => s.wasCorrect).length;
+    const losses = predictions - wins;
+    const empiricalAccuracy = predictions > 0 ? Math.round((wins / predictions) * 1000) / 10 : 0;
+    const avgProb = predictions > 0 
+      ? Math.round((items.reduce((sum, item) => sum + (item.confidence || 75), 0) / predictions) * 10) / 10
+      : (b.min + b.max) / 2;
+    const calibrationError = predictions > 0 ? Math.round(Math.abs(avgProb - empiricalAccuracy) * 10) / 10 : 0;
+
+    return {
+      bucket: b.name,
+      minConfidence: b.min,
+      maxConfidence: b.max,
+      predictions,
+      wins,
+      losses,
+      empiricalAccuracyPct: empiricalAccuracy,
+      avgPredictedConfidencePct: avgProb,
+      calibrationErrorPct: calibrationError,
+      sampleSize: predictions,
+      insufficientEvidence: predictions < 5
+    };
+  });
+
+  const totalPredictions = settled.length;
+  const totalWins = settled.filter(s => s.wasCorrect).length;
+  const overallWinRatePct = totalPredictions > 0 ? Math.round((totalWins / totalPredictions) * 1000) / 10 : 0;
+
+  res.json({
+    totalSettledCycles: totalPredictions,
+    overallWinRatePct,
+    buckets,
+    timestamp: new Date().toISOString()
   });
 });
 
