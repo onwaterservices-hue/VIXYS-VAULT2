@@ -11521,12 +11521,21 @@ async function startServer() {
   }
 
   if (!process.env.VERCEL) {
-    const server = 
-app.listen(PORT, '0.0.0.0', () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
       console.log("Discord Redirect URI:", process.env.DISCORD_REDIRECT_URI || 'https://www.vixxyvault.com/api/auth/discord/callback');
+    });
 
-      const wss = new WebSocketServer({ server, path: '/api/ws' });
+    server.on('error', (err: any) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`[SERVER_EADDRINUSE] Port ${PORT} is already in use. Exiting process cleanly...`);
+        process.exit(1);
+      } else {
+        console.error('[SERVER_ERROR] HTTP server error:', err);
+      }
+    });
+
+    const wss = new WebSocketServer({ server, path: '/api/ws' });
 
       wss.on('connection', (ws: WebSocket, req) => {
         wssClientsCount = wss.clients.size;
@@ -11653,7 +11662,6 @@ app.listen(PORT, '0.0.0.0', () => {
           console.log(`STATUS=PRODUCTION_READY`);
         }
       }, 10000);
-    });
   } else {
     console.log("[Vercel] Serverless function initialized successfully.");
   }
