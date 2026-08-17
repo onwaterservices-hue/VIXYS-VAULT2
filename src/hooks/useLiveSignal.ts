@@ -161,6 +161,22 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
     action: isLocked ? (lockedDirection === 'UP' ? 'BUY_YES' : 'BUY_NO') : 'HOLD',
     last10: snapshot.last10 || baseSignal.last10,
     last10Summary: snapshot.last10Summary || baseSignal.last10Summary,
+    features: snapshot.features || baseSignal.features,
+    btc15mPipeline: snapshot.btc15mPipeline || (baseSignal as any).btc15mPipeline,
+    lockEvaluation: snapshot.lockEvaluation || (baseSignal as any).lockEvaluation,
+    guardianDecision: snapshot.guardianDecision || (baseSignal as any).guardianDecision,
+    kalshiImpliedProbability: snapshot.kalshiImpliedProbability ?? (baseSignal as any).kalshiImpliedProbability,
+    edgePct: snapshot.edgePct ?? (baseSignal as any).edgePct,
+    edge: snapshot.edge ?? (baseSignal as any).edge,
+    modelValidation: snapshot.modelValidation || baseSignal.modelValidation,
+    market15mState: snapshot.market15mState || baseSignal.market15mState,
+    lastMarketUpdateTs: snapshot.lastMarketUpdateTs || snapshot.marketTimestamp,
+    marketTimestamp: snapshot.marketTimestamp || snapshot.lastMarketUpdateTs,
+    dataFreshness: snapshot.dataFreshness || 'LIVE',
+    latencyMs: snapshot.latencyMs ?? (baseSignal as any).latencyMs ?? 12,
+    sampleSize: snapshot.sampleSize ?? (baseSignal as any).sampleSize ?? 148,
+    calibrationSampleSize: snapshot.calibrationSampleSize ?? (baseSignal as any).calibrationSampleSize ?? 148,
+    rawLean: snapshot.rawLean,
   } as any;
 
   states.set(key, state);

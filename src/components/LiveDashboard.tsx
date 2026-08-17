@@ -41,6 +41,7 @@ import { SignalBrain } from './brains/SignalBrain';
 import { ExecutionBrain } from './brains/ExecutionBrain';
 import { AiThinkingBrain } from './brains/AiThinkingBrain';
 import { OrderFlowPressure } from './brains/OrderFlowPressure';
+import { MultiVenueIntelligencePanel } from './MultiVenueIntelligencePanel';
 
 interface LiveDashboardProps {
   ticker: BTCTicker;
@@ -513,6 +514,14 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
               isUserAuthorized={isIntelligenceUnlocked}
             />
           </div>
+
+          {/* ⚡ MULTI-VENUE DECISION & RECONCILIATION INTELLIGENCE */}
+          <MultiVenueIntelligencePanel
+            ticker={ticker}
+            rawApiData={liveApiData}
+            selectedAsset={selectedAsset}
+            onSelectAsset={onSelectAsset}
+          />
 
           {/* VIXY ORDER FLOW PRESSURE TAPE */}
           <OrderFlowPressure
