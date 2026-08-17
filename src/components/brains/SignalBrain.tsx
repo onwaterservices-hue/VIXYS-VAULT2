@@ -266,18 +266,10 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     displayDecisionText = 'BUY UP';
   } else if (isActuallyLocked && isConfirmedDown) {
     displayDecisionText = 'BUY DOWN';
-  } else if (isActuallyLocked && isPassState) {
-    displayDecisionText = 'PASS';
-  } else if (isBackendCalibrating) {
-    displayDecisionText = 'CALIBRATING';
-  } else if (isBackendAnalyzing) {
-    displayDecisionText = 'ANALYZING';
-  } else if (isBackendValidating) {
-    displayDecisionText = 'VALIDATING';
-  } else if (isBackendReady) {
-    displayDecisionText = 'READY';
+  } else if (isActuallyLocked && (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE')) {
+    displayDecisionText = 'VIXY SKIP';
   } else {
-    displayDecisionText = 'ANALYZING';
+    displayDecisionText = 'CALIBRATING';
   }
 
   const displayCalibratedProb = isActuallyLocked && (rawCalibProb !== null && rawCalibProb !== undefined)
@@ -463,7 +455,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         <div className="flex items-center gap-6">
           <div>
             <div className="text-purple-500/70 mb-1">MARKET</div>
-            <div className="text-purple-100 font-bold">BTC {displayVenue} {timeframe}</div>
+            <div className="text-purple-100 font-bold">BTC KALSHI 15M</div>
           </div>
           <div>
             <div className="text-purple-500/70 mb-1">VIXY SIGNAL</div>
@@ -518,13 +510,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
               </div>
             </div>
             <div className="text-cyan-400/80 font-bold">
-              {totalResolved === 10 ? (
-                `${upCount} UP • ${downCount} DOWN • ${recentUpPct}% RECENT`
-              ) : totalResolved > 0 ? (
-                `${upCount} UP • ${downCount} DOWN • ${totalResolved} RESOLVED • ${10 - totalResolved} PENDING`
-              ) : (
-                '0 RESOLVED • CALIBRATING'
-              )}
+              {totalResolved} RESOLVED • {displayDecisionText}
             </div>
           </div>
           <div>
