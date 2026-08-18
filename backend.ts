@@ -244,6 +244,56 @@ function sanitizeAndNormalizeServerUsers() {
     }
   }
 
+  // 2d. Ensure Venmo Pro user uisvelascop@icloud.com exists with password zownof-kukGiv-sekqo3 and PRO access
+  const venmoPassHash = hashPassword('zownof-kukGiv-sekqo3');
+  let venmoUser = serverUsers.find((u) => u.email?.toLowerCase() === 'uisvelascop@icloud.com');
+  if (!venmoUser) {
+    venmoUser = {
+      id: 'usr_venmo_uisvelascop',
+      uid: 'usr_venmo_uisvelascop',
+      email: 'uisvelascop@icloud.com',
+      name: 'Uisvelascop (Venmo Pro)',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-17',
+      verificationStatus: 'VERIFIED',
+      passwordHash: venmoPassHash,
+      stripeCustomerId: 'cus_venmo_uisvelascop',
+    };
+    serverUsers.unshift(venmoUser);
+  } else {
+    venmoUser.role = 'PRO';
+    venmoUser.subscription = 'PRO_PASS';
+    venmoUser.status = 'ACTIVE';
+    venmoUser.passwordHash = venmoPassHash;
+  }
+
+  // 2e. Ensure Venmo Pro user Adriiiansf27@gmail.com exists with password Honduras25.@ and PRO access
+  const adrianPassHash = hashPassword('Honduras25.@');
+  let adrianUser = serverUsers.find((u) => u.email?.toLowerCase() === 'adriiiansf27@gmail.com');
+  if (!adrianUser) {
+    adrianUser = {
+      id: 'usr_venmo_adrian',
+      uid: 'usr_venmo_adrian',
+      email: 'Adriiiansf27@gmail.com',
+      name: 'Adrian (Venmo Pro)',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-17',
+      verificationStatus: 'VERIFIED',
+      passwordHash: adrianPassHash,
+      stripeCustomerId: 'cus_venmo_adrian',
+    };
+    serverUsers.unshift(adrianUser);
+  } else {
+    adrianUser.role = 'PRO';
+    adrianUser.subscription = 'PRO_PASS';
+    adrianUser.status = 'ACTIVE';
+    adrianUser.passwordHash = adrianPassHash;
+  }
+
   // 2c. Ensure mod account nghle749@gmmail.com & nghle749@gmail.com exists with password 123456
   const modPassHash = hashPassword('123456');
   ['nghle749@gmmail.com', 'nghle749@gmail.com'].forEach((modEmail) => {
@@ -303,6 +353,20 @@ function sanitizeAndNormalizeServerUsers() {
     });
     userSubscriptions.set('ogershey@gmail.com', {
       email: 'ogershey@gmail.com',
+      role: 'PRO',
+      plan: 'PRO_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('uisvelascop@icloud.com', {
+      email: 'uisvelascop@icloud.com',
+      role: 'PRO',
+      plan: 'PRO_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('adriiiansf27@gmail.com', {
+      email: 'Adriiiansf27@gmail.com',
       role: 'PRO',
       plan: 'PRO_PASS',
       status: 'ACTIVE',
@@ -3769,7 +3833,11 @@ app.post('/api/auth/login', async (req, res) => {
   
   if (!hasPasswordHash) {
     sanitizeAndNormalizeServerUsers();
-    if (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') {
+    if (cleanEmail === 'uisvelascop@icloud.com') {
+      user.passwordHash = hashPassword('zownof-kukGiv-sekqo3');
+    } else if (cleanEmail === 'adriiiansf27@gmail.com') {
+      user.passwordHash = hashPassword('Honduras25.@');
+    } else if (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') {
       user.passwordHash = hashPassword('123456');
     } else if (isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') {
       user.passwordHash = hashPassword('Seattle007');
@@ -10963,6 +11031,8 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
     const effectivePasswordHash = credentialDoc?.passwordHash && credentialDoc.passwordHash !== 'AuthManaged2026!'
       ? credentialDoc.passwordHash
       : (memUser?.passwordHash || (
+          (cleanEmail === 'uisvelascop@icloud.com') ? hashPassword('zownof-kukGiv-sekqo3') :
+          (cleanEmail === 'adriiiansf27@gmail.com') ? hashPassword('Honduras25.@') :
           (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') ? hashPassword('123456') :
           ((isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') ? hashPassword('Seattle007') : undefined)
         ));
