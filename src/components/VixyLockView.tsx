@@ -34,6 +34,7 @@ import { VixyStreamManager } from '../services/streamManager';
 
 interface VixyLockViewProps {
   ticker?: BTCTicker;
+  userEmail?: string;
   onOpenTerminal: () => void;
   onOpenReplay: () => void;
   onOpenPricing: () => void;
@@ -41,6 +42,7 @@ interface VixyLockViewProps {
 
 export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ticker,
+  userEmail,
   onOpenTerminal,
   onOpenReplay,
   onOpenPricing,
@@ -209,6 +211,62 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     { o: 64120, h: 64150, l: 64060, c: 64080, up: false },
     { o: 64080, h: 64190, l: 64070, c: 64174, up: true },
   ];
+
+  const isMaster = userEmail?.toLowerCase() === 'onwaterservices@gmail.com' || userEmail?.toLowerCase() === 'vixyvault0@gmail.com';
+
+  if (!isMaster) {
+    return (
+      <div className="relative min-h-[70vh] flex flex-col items-center justify-center bg-[#06030c] rounded-2xl border border-purple-900/40 p-8 overflow-hidden my-6">
+        {/* Futuristic Grid background */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#150a2e_1px,transparent_1px),linear-gradient(to_bottom,#150a2e_1px,transparent_1px)] bg-[size:32px_32px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_50%,#000_70%,transparent_100%)] opacity-30 pointer-events-none"></div>
+        
+        {/* Pulsing neon sphere */}
+        <div className="absolute w-[350px] h-[350px] bg-purple-600/10 rounded-full blur-[100px] animate-pulse"></div>
+        <div className="absolute w-[200px] h-[200px] bg-cyan-500/5 rounded-full blur-[80px]"></div>
+
+        <div className="relative z-10 text-center max-w-md mx-auto space-y-6">
+          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-purple-950/80 border border-purple-500/30 text-purple-300 text-xs font-mono tracking-wider shadow-[0_0_15px_rgba(168,85,247,0.15)] animate-pulse">
+            <Lock className="w-3.5 h-3.5 text-purple-400" />
+            <span>VIXY LIVE TERMINAL</span>
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-white tracking-tight uppercase">
+              IN PRODUCTION
+            </h2>
+            <div className="h-1 w-24 bg-gradient-to-r from-purple-500 to-cyan-400 mx-auto rounded-full"></div>
+          </div>
+
+          <p className="text-xs text-purple-200/60 font-sans leading-relaxed">
+            The VIXY Live 15-Minute Crypto Market Decision Engine is currently undergoing final model alignment and feed calibration. 
+            Real-time cross-venue replication will become publicly active upon validation check completion.
+          </p>
+
+          <div className="bg-[#100922] p-4 rounded-xl border border-purple-950/60 font-mono text-[10px] text-purple-300 text-left space-y-2">
+            <div className="flex items-center justify-between">
+              <span>FEED STATUS:</span>
+              <span className="text-amber-400 font-bold">CALIBRATION IN PROGRESS</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>ACCURACY BASELINE:</span>
+              <span className="text-cyan-400 font-bold">&gt;94% EXPECTED</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>TARGET CYCLE:</span>
+              <span className="text-white">BTC-15M KALSHI INDEX</span>
+            </div>
+          </div>
+
+          <button
+            onClick={onOpenTerminal}
+            className="px-6 py-2.5 rounded-xl bg-purple-950 hover:bg-purple-900 border border-purple-500/40 text-purple-200 text-xs font-bold tracking-wider transition-all shadow-[0_0_15px_rgba(168,85,247,0.2)] inline-flex items-center space-x-2 cursor-pointer"
+          >
+            <span>RETURN TO TERMINAL PORTAL</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#07040E] text-gray-100 font-mono pb-20 selection:bg-purple-500 selection:text-white">

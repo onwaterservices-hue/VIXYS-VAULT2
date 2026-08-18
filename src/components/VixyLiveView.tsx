@@ -135,6 +135,27 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
 
     let isMounted = true;
     let reconnectTimeout: any = null;
+    let fallbackPollInterval: any = null;
+
+    const runFallbackPoll = async () => {
+      if (!isMounted) return;
+      // Skip if WS is open
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        return;
+      }
+      try {
+        const res = await fetch(`/api/signal?asset=BTC&desk=15m&_t=${Date.now()}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted) {
+            setLiveSnapshot((prev: any) => ({ ...prev, ...data, type: 'VIXY_SNAPSHOT' }));
+            setWsStatus('LIVE');
+          }
+        }
+      } catch (e) {
+        // Silent degrade
+      }
+    };
 
     const connectWebSocket = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -163,27 +184,32 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
           }
         };
 
-        ws.onerror = (err) => {
+        ws.onerror = () => {
           if (isMounted) {
             setWsStatus('DEGRADED');
+            runFallbackPoll();
           }
         };
 
         ws.onclose = () => {
           if (isMounted) {
             setWsStatus('DEGRADED');
+            runFallbackPoll();
             reconnectTimeout = setTimeout(connectWebSocket, 3000);
           }
         };
       } catch (e) {
         if (isMounted) {
           setWsStatus('DEGRADED');
+          runFallbackPoll();
           reconnectTimeout = setTimeout(connectWebSocket, 3000);
         }
       }
     };
 
     connectWebSocket();
+    runFallbackPoll();
+    fallbackPollInterval = setInterval(runFallbackPoll, 3000);
 
     const intervalId = setInterval(() => {
       fetchResolvedLogs();
@@ -192,6 +218,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
     return () => {
       isMounted = false;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (fallbackPollInterval) clearInterval(fallbackPollInterval);
       if (intervalId) clearInterval(intervalId);
       if (wsRef.current) wsRef.current.close();
     };

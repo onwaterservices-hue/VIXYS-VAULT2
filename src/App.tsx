@@ -1183,6 +1183,7 @@ export default function App() {
                   {activeTab === 'vixylive' && (
                     <VixyLockView
                       ticker={ticker}
+                      userEmail={authState.user?.email || undefined}
                       onOpenTerminal={() => setActiveTab('terminal')}
                       onOpenReplay={() => setActiveTab('replay')}
                       onOpenPricing={() => setActiveTab('pricing')}
