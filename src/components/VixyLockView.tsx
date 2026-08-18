@@ -196,15 +196,25 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     return () => clearInterval(interval);
   }, [ticker]);
 
-  // Derived Authoritative Clock aligned to exact 15-minute Kalshi boundaries
+  // Stable Kalshi 15-minute cycle anchored once on mount to prevent timer spazzing
+  const [kalshiCycle] = useState(() => {
+    const d = new Date();
+    const currentMin = d.getMinutes();
+    const startMin = Math.floor(currentMin / 15) * 15;
+    const startDate = new Date(d);
+    startDate.setMinutes(startMin, 0, 0);
+    const start = startDate.getTime();
+    return {
+      intervalStart: start,
+      intervalEnd: start + 15 * 60 * 1000,
+      cycleId: `C-${Math.floor(start / 1000).toString().slice(-5)}`
+    };
+  });
+
+  // Derived Authoritative Clock
   const adjustedNow = nowMs + serverTimeOffset;
-  const d = new Date(adjustedNow);
-  const currentMin = d.getMinutes();
-  const startMin = Math.floor(currentMin / 15) * 15;
-  const startDate = new Date(d);
-  startDate.setMinutes(startMin, 0, 0);
-  const intervalStart = snapshot?.intervalStart || startDate.getTime();
-  const intervalEnd = snapshot?.intervalEnd || (intervalStart + 15 * 60 * 1000);
+  const intervalStart = kalshiCycle.intervalStart;
+  const intervalEnd = kalshiCycle.intervalEnd;
   const totalDuration = 15 * 60 * 1000;
   const timeRemainingMs = Math.max(0, intervalEnd - adjustedNow);
   const timeRemainingSec = Math.floor(timeRemainingMs / 1000);
@@ -222,8 +232,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const confidence = snapshot?.confidence || snapshot?.lockedConfidence || 74;
   const edgePct = snapshot?.edgePct || 8.4;
   const lockQuality = snapshot?.lockQuality || 91;
-  const cycleId = snapshot?.cycleId || 'C-67892';
-  const tickerName = snapshot?.ticker || 'KXBTC-15M-67892';
+  const cycleId = snapshot?.cycleId || kalshiCycle.cycleId;
+  const tickerName = snapshot?.ticker || `KXBTC-15M-${cycleId.replace('C-', '')}`;
 
   const guardian = snapshot?.guardianDecision || {
     status: 'ALLOW LOCK ✓',
