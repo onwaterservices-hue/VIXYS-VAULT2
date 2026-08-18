@@ -29,6 +29,7 @@ import {
   Shield
 } from 'lucide-react';
 import { BTCTicker } from '../types';
+import { fetchBTCTicker } from '../services/api';
 
 interface VixyLockViewProps {
   ticker?: BTCTicker;
@@ -48,6 +49,24 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [resolvedLog, setResolvedLog] = useState<any>(null);
   const [serverTimeOffset, setServerTimeOffset] = useState<number>(0);
   const [nowMs, setNowMs] = useState<number>(Date.now());
+  const [liveTicker, setLiveTicker] = useState<BTCTicker | null>(null);
+
+  // Live Ticker Polling
+  useEffect(() => {
+    const updateTicker = async () => {
+      try {
+        const t = await fetchBTCTicker();
+        if (t && t.price) {
+          setLiveTicker(t);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    updateTicker();
+    const interval = setInterval(updateTicker, 2000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Clock tick timer
   useEffect(() => {
@@ -189,9 +208,9 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const countdownFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   const progressPct = Math.min(100, Math.max(0, ((adjustedNow - intervalStart) / totalDuration) * 100));
 
-  const spotPrice = snapshot?.spot || ticker?.price || 64174.83;
-  const priceChange = ticker?.change24h || 572.18;
-  const priceChangePct = 0.90;
+  const spotPrice = liveTicker?.price || snapshot?.spot || ticker?.price || 64174.83;
+  const priceChange = liveTicker?.change24h !== undefined ? (liveTicker.price * liveTicker.change24h / 100) : (ticker?.change24h || 572.18);
+  const priceChangePct = liveTicker?.change24h !== undefined ? liveTicker.change24h : 0.90;
 
   const isLocked = snapshot?.isLocked ?? true;
   const decisionText = isLocked ? (snapshot?.lockedDecision || 'LOCKED — UP') : 'OBSERVING...';
