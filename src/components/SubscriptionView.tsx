@@ -388,7 +388,59 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   };
 
   return (
-    <div className="space-y-12 py-4 font-sans text-purple-100">
+    <>
+      {!authState?.isAuthenticated ? (
+        <div className="max-w-3xl mx-auto py-12 px-4 font-sans text-purple-100">
+          <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/60 rounded-3xl p-8 sm:p-12 text-center space-y-6 shadow-2xl shadow-purple-950/90 font-mono">
+            <div className="w-16 h-16 bg-purple-500/20 border-2 border-purple-400/50 rounded-2xl flex items-center justify-center mx-auto text-purple-300 shadow-[0_0_30px_rgba(168,85,247,0.4)]">
+              <Lock className="w-8 h-8 text-cyan-400 animate-pulse" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">
+                ACCOUNT CREATION REQUIRED
+              </span>
+              <h2 className="text-2xl sm:text-4xl font-black text-white uppercase tracking-tight">
+                Create Account Before Viewing Billing Info
+              </h2>
+              <p className="text-xs sm:text-sm text-purple-200/90 max-w-xl mx-auto font-sans">
+                To ensure your Stripe payment and subscription link directly to your VIXY Vault account and Elite Discord role without orphan transactions, you must create your account or sign in first.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-md mx-auto pt-2">
+              <button
+                onClick={() => onOpenAuth && onOpenAuth('register')}
+                className="w-full py-3.5 px-5 rounded-xl bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white font-black text-xs uppercase tracking-wider shadow-lg shadow-cyan-950/80 border border-cyan-300/40 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Sparkles className="w-4 h-4 text-cyan-200" />
+                <span>Create Account</span>
+                <ArrowRight className="w-4 h-4 text-cyan-200" />
+              </button>
+              <button
+                onClick={() => onOpenAuth && onOpenAuth('login')}
+                className="w-full py-3.5 px-5 rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-200 font-bold text-xs uppercase tracking-wider border border-purple-700/60 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              >
+                <Lock className="w-4 h-4 text-purple-300" />
+                <span>Sign In</span>
+              </button>
+            </div>
+
+            <div className="bg-[#080414] border border-purple-900/60 rounded-2xl p-4 text-left space-y-2 max-w-lg mx-auto text-[11px] text-purple-300/80">
+              <div className="font-bold text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Why account creation first matters:</span>
+              </div>
+              <div className="space-y-1 text-purple-200/90 font-sans">
+                <div>• Binds your Stripe Customer ID & Subscription ID instantly to your login.</div>
+                <div>• Automatically assigns your Elite Discord role upon successful payment.</div>
+                <div>• Prevents duplicate accounts or unlinked payment receipts.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-12 py-4 font-sans text-purple-100">
       {/* High-Impact Psychological Conversion Quote Callout - Bigger & Bolder */}
       <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/50 rounded-3xl p-8 sm:p-14 text-center relative overflow-hidden shadow-2xl shadow-purple-950/80 font-mono">
         {/* Subtle Ambient Radial Glow */}
@@ -704,8 +756,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           VIXY AI is an analytical decision-support tool created for informational and probability research purposes. VIXY AI does NOT guarantee profits or offer personalized financial, investment, or trading advice. Prediction market trading carries significant financial risk. Users remain solely responsible for managing their own risk and execution decisions.
         </p>
       </div>
-
-
-    </div>
+        </div>
+      )}
+    </>
   );
 };
