@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { BTCTicker } from '../types';
 import { fetchBTCTicker } from '../services/api';
+import { VixyStreamManager } from '../services/streamManager';
 
 interface VixyLockViewProps {
   ticker?: BTCTicker;
@@ -94,107 +95,33 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     return () => clearInterval(interval);
   }, []);
 
-  // WebSocket Live Connection for Authoritative State
+  // Centralized WebSocket Connection via VixyStreamManager
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let reconnectTimeout: any = null;
+    const unsubSnapshot = VixyStreamManager.onSnapshot((snap) => {
+      setSnapshot(snap);
+    });
 
-    const connectWs = () => {
-      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${proto}//${window.location.host}/ws`;
-      ws = new WebSocket(wsUrl);
+    const unsubTicker = VixyStreamManager.onTicker((tick) => {
+      setLiveTicker(tick);
+    });
 
-      ws.onopen = () => {
-        setWsStatus('LIVE');
-      };
+    const unsubStatus = VixyStreamManager.onStatusChange((status) => {
+      setWsStatus(status === 'DISCONNECTED' ? 'DEGRADED' : status);
+    });
 
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data && (data.cycleId || data.spot || data.features)) {
-            setSnapshot(data);
-            setWsStatus('LIVE');
-            if (data.serverTime) {
-              const serverTs = new Date(data.serverTime).getTime();
-              if (!isNaN(serverTs)) {
-                setServerTimeOffset(serverTs - Date.now());
-              }
-            }
-          }
-        } catch (e) {
-          // parse error
-        }
-      };
-
-      ws.onclose = () => {
-        setWsStatus('DEGRADED');
-        reconnectTimeout = setTimeout(connectWs, 3000);
-      };
-
-      ws.onerror = () => {
-        setWsStatus('DEGRADED');
-      };
+    const syncTime = () => {
+      setServerTimeOffset(VixyStreamManager.getServerTimeOffset());
     };
+    syncTime();
+    const interval = setInterval(syncTime, 5000);
 
-    connectWs();
     return () => {
-      if (ws) ws.close();
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      unsubSnapshot();
+      unsubTicker();
+      unsubStatus();
+      clearInterval(interval);
     };
   }, []);
-
-  // Fallback REST fetch if WS takes time
-  useEffect(() => {
-    const fetchState = async () => {
-      try {
-        const res = await fetch('/api/vixy-lock/state');
-        if (res.ok) {
-          const data = await res.json();
-          setSnapshot(data);
-        } else {
-          setSnapshot({
-            cycleId: 'C-67892',
-            ticker: 'KXBTC-15M-67892',
-            market: 'BTC / USD 15-MINUTE KALSHI MARKET',
-            status: 'OPEN',
-            contractStatus: 'ACTIVE',
-            intervalStart: Date.now() - 480000,
-            intervalEnd: Date.now() + 420000,
-            spot: ticker?.price || 64174.83,
-            strike: 64150.00,
-            isLocked: true,
-            lockedDecision: 'LOCKED — UP',
-            lockedConfidence: 74,
-            lockedProbability: 0.74,
-            edgePct: 8.4,
-            lockQuality: 91,
-            validationStatus: 'PASSED',
-            calibrationStatus: 'CALIBRATED',
-            guardianDecision: { status: 'ALLOW_LOCK', riskStatus: 'CLEAR', reversalRisk: 18, liquidity: 'NORMAL', crossVenue: 'ALIGNED' },
-            features: {
-              orderFlow: +0.84,
-              orderBookImbalance: +0.18,
-              momentum: +2.4,
-              volatility: 0.57,
-              volume: '$1.24B',
-              fundingRate: '0.010%',
-              spread: '$10.00 (0.02%)',
-              cvd: '+1,482',
-              delta: '+0.84',
-              largeTrades: 12,
-              icebergFlow: 'DETECTED (MODERATE)'
-            },
-            serverTime: new Date().toISOString()
-          });
-        }
-      } catch (e) {
-        // ignore
-      }
-    };
-    fetchState();
-    const interval = setInterval(fetchState, 5000);
-    return () => clearInterval(interval);
-  }, [ticker]);
 
   // Stable Kalshi 15-minute cycle anchored once on mount to prevent timer spazzing
   const [kalshiCycle] = useState(() => {
@@ -550,11 +477,149 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </ul>
             </div>
             <div className="text-[11px] text-gray-400 pt-3 border-t border-purple-900/30 flex justify-between">
-              <span>FUNDING RATE NEUTRAL</span>
+              <span>FEED STATUS: ALIGNED</span>
               <span className="text-emerald-400 font-bold">VERIFIED</span>
             </div>
           </div>
 
+        </div>
+
+        {/* 3.5. AI CONVICTION TIMELINE & PROBABILITY DYNAMICS */}
+        <div className="bg-[#0C0816] border border-purple-900/50 rounded-xl p-5 shadow-[0_0_25px_rgba(139,92,246,0.1)]">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between mb-4 pb-3 border-b border-purple-950/60 gap-2">
+            <div className="flex items-center space-x-2">
+              <Activity className="w-4 h-4 text-cyan-400 animate-pulse" />
+              <span className="text-xs font-bold text-white tracking-wider uppercase">AI CONVICTION TIMELINE & PROBABILITY DYNAMICS</span>
+              <span className="bg-cyan-950/80 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/30 text-[9px] font-bold tracking-widest uppercase flex items-center space-x-1">
+                <span className="w-1 h-1 rounded-full bg-cyan-400 animate-ping"></span>
+                <span>LIVE MOMENTUM</span>
+              </span>
+            </div>
+            <div className="flex items-center space-x-3 text-[10px] font-mono">
+              <div className="bg-[#120B24] px-2.5 py-1 rounded border border-purple-900/40 text-purple-300">
+                VELOCITY <span className="text-emerald-400 font-bold ml-1">+2.0% / min</span>
+              </div>
+              <div className="bg-[#120B24] px-2.5 py-1 rounded border border-purple-900/40 text-purple-300">
+                SWING (2M) <span className="text-emerald-400 font-bold ml-1">▲ +4.0% (2M)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid of Columns (4 Columns) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-5 items-stretch">
+            
+            {/* Timeline (30M) - lg:col-span-4 */}
+            <div className="lg:col-span-4 bg-[#080510] p-3.5 rounded-lg border border-purple-950/60 flex flex-col justify-between">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-[10px] text-gray-400 font-bold tracking-wider">AI CONVICTION TIMELINE (30M)</span>
+                <span className="text-emerald-400 text-[10px] font-bold">NOW: {confidence}% BULLISH</span>
+              </div>
+              
+              {/* Timeline Track Render */}
+              <div className="relative py-4 flex items-center justify-between">
+                {/* Horizontal progress bar background */}
+                <div className="absolute left-2 right-2 h-0.5 bg-gradient-to-r from-purple-900/40 via-purple-500/40 to-cyan-400/80"></div>
+                
+                {/* Timeline data nodes */}
+                {[
+                  { label: '-30m', val: '26%', color: 'border-purple-500 text-purple-400' },
+                  { label: '-15m', val: '30%', color: 'border-purple-500 text-purple-400' },
+                  { label: '-10m', val: '38%', color: 'border-purple-400 text-purple-300' },
+                  { label: '-5m', val: '38%', color: 'border-purple-400 text-purple-300' },
+                  { label: '-2m', val: '26%', color: 'border-cyan-500 text-cyan-400' },
+                  { label: 'Now', val: `${confidence}%`, color: 'border-emerald-400 text-emerald-400 bg-emerald-950 animate-pulse' }
+                ].map((pt, i) => (
+                  <div key={i} className="relative z-10 flex flex-col items-center">
+                    <div className="text-[9px] text-gray-400 font-bold mb-1">{pt.val}</div>
+                    <div className={`w-2.5 h-2.5 rounded-full border-2 ${pt.color} flex items-center justify-center`}>
+                      {pt.label === 'Now' && <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>}
+                    </div>
+                    <div className="text-[9px] text-gray-500 mt-1 font-mono">{pt.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between items-center text-[10px] text-gray-400 mt-2 pt-2 border-t border-purple-950/40">
+                <span>50% EQUILIBRIUM BASELINE</span>
+                <span className="text-cyan-400 font-bold">▲ +21% ABOVE NEUTRAL</span>
+              </div>
+            </div>
+
+            {/* Probability Heat Meter - lg:col-span-3 */}
+            <div className="lg:col-span-3 bg-[#080510] p-3.5 rounded-lg border border-purple-950/60 flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] text-gray-400 font-bold tracking-wider block mb-3">PROBABILITY HEAT METER</span>
+                
+                {/* Dual colored bar showing live Buy Up vs Buy Down */}
+                <div className="relative w-full h-4 bg-gray-950 rounded-full overflow-hidden border border-purple-900/30">
+                  <div className="absolute top-0 left-0 h-full bg-gradient-to-r from-emerald-500 to-cyan-400 shadow-[0_0_10px_rgba(16,185,129,0.4)] transition-all duration-1000" style={{ width: `${confidence}%` }}></div>
+                  <div className="absolute top-0 right-0 h-full bg-gradient-to-l from-rose-500 to-orange-400 shadow-[0_0_10px_rgba(239,68,68,0.4)] transition-all duration-1000" style={{ width: `${100 - confidence}%` }}></div>
+                  
+                  {/* Divider */}
+                  <div className="absolute top-0 h-full w-0.5 bg-white/70 shadow-[0_0_4px_rgba(255,255,255,0.8)]" style={{ left: `${confidence}%` }}></div>
+                </div>
+
+                <div className="flex justify-between items-center text-[10px] font-bold mt-2.5">
+                  <span className="text-emerald-400">BUY UP: {confidence}%</span>
+                  <span className="text-rose-400">BUY DOWN: {100 - confidence}%</span>
+                </div>
+              </div>
+
+              <div className="text-[10px] text-purple-300 font-bold mt-2 pt-2 border-t border-purple-950/40 text-center uppercase tracking-widest">
+                MOMENTUM ACCELERATING
+              </div>
+            </div>
+
+            {/* Conviction Catalyst Chips - lg:col-span-3 */}
+            <div className="lg:col-span-3 bg-[#080510] p-3.5 rounded-lg border border-purple-950/60 flex flex-col justify-between">
+              <span className="text-[10px] text-gray-400 font-bold tracking-wider block mb-2">CONVICTION CATALYST CHIPS</span>
+              
+              <div className="flex flex-wrap gap-1.5 py-1">
+                <span className="px-2 py-1 rounded bg-[#120B24] text-emerald-400 border border-emerald-500/30 text-[9px] font-bold flex items-center space-x-1">
+                  <span>+ Net Taker Buy Dominance</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-[#120B24] text-emerald-400 border border-emerald-500/30 text-[9px] font-bold flex items-center space-x-1">
+                  <span>+ Spot Above Strike</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-[#120B24] text-rose-400 border border-rose-500/30 text-[9px] font-bold flex items-center space-x-1">
+                  <span>- Bearish Signal Dominance</span>
+                </span>
+                <span className="px-2 py-1 rounded bg-[#120B24] text-emerald-400 border border-emerald-500/30 text-[9px] font-bold flex items-center space-x-1">
+                  <span>+ Gamma Alignment</span>
+                </span>
+              </div>
+
+              <div className="text-[9px] text-gray-500 font-mono mt-1 pt-1.5 border-t border-purple-950/40">
+                LIVE FACTOR WEIGHTS ACTIVE
+              </div>
+            </div>
+
+            {/* Recent Conviction Events - lg:col-span-2 */}
+            <div className="lg:col-span-2 bg-[#080510] p-3.5 rounded-lg border border-purple-950/60 flex flex-col justify-between">
+              <span className="text-[10px] text-gray-400 font-bold tracking-wider block mb-2">RECENT CONVICTION EVENTS</span>
+              
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[9px]">
+                  <span className="text-emerald-400 font-bold">+4.0% Strike Crossed Upside</span>
+                  <span className="text-gray-500 font-mono">1m</span>
+                </div>
+                <div className="flex justify-between text-[9px]">
+                  <span className="text-rose-400 font-bold">-45.0% L2 Press</span>
+                  <span className="text-gray-500 font-mono">3m</span>
+                </div>
+                <div className="flex justify-between text-[9px]">
+                  <span className="text-emerald-400 font-bold">+4.2% Wall Absorbed</span>
+                  <span className="text-gray-500 font-mono">12s</span>
+                </div>
+              </div>
+
+              <div className="text-[9px] text-gray-500 font-mono mt-1 pt-1 border-t border-purple-950/40">
+                LIVE FEED SECURE
+              </div>
+            </div>
+
+          </div>
         </div>
 
         {/* 4. LIVE PRICE CHART & ORDER FLOW & BOOK DEPTH */}

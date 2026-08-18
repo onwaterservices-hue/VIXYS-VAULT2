@@ -45,14 +45,5 @@
     "vite": "^6.2.3",
     "ws": "^8.21.3",
     "zod": "^4.4.3"
-  },
-  "files": [
-    "dist",
-    "server.ts",
-    "backend.ts",
-    "src",
-    "public",
-    "index.html",
-    "package.json"
-  ]
+  }
 }

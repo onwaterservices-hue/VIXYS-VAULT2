@@ -227,7 +227,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Active Market Chip */}
           {(() => {
             const ageSec = ticker.timestamp ? Math.max(0, Math.floor((Date.now() - ticker.timestamp) / 1000)) : 0;
-            const isStale = ageSec > 10;
+            const isStale = ageSec > 25;
             return (
               <div className="flex items-center gap-2 font-bold text-purple-200 bg-[#140C2E] px-2.5 py-1 rounded-xl border border-purple-800/40">
                 <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80'}`} />
@@ -248,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
                   {ticker.change24h.toFixed(2)}%
                 </span>
                 <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${isStale ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold' : 'text-purple-400/80'}`}>
-                  {isStale ? 'STALE (10s+)' : `${ageSec}s ago`}
+                  {isStale ? 'STALE (25s+)' : `${ageSec}s ago`}
                 </span>
               </div>
             );
