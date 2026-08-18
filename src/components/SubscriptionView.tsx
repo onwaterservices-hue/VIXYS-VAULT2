@@ -221,7 +221,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       }
       return;
     }
-    window.location.href = getDirectStripeUrl(planKey);
+    setSelectedPlanToBuy(planKey);
+    handleInitiateRealStripeCheckout();
   };
 
   const handleDirectStripeCheckout = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
@@ -231,8 +232,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       }
       return;
     }
-    const directUrl = getDirectStripeUrl(planKey);
-    window.location.href = directUrl;
+    setSelectedPlanToBuy(planKey);
+    handleInitiateRealStripeCheckout();
   };
 
   const handleInitiateRealStripeCheckout = async () => {
