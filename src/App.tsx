@@ -57,7 +57,7 @@ import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
-import { VixyLiveView } from './components/VixyLiveView';
+import { VixyLockView } from './components/VixyLockView';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -1181,7 +1181,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'vixylive' && (
-                    <VixyLiveView
+                    <VixyLockView
                       ticker={ticker}
                       onOpenTerminal={() => setActiveTab('terminal')}
                       onOpenReplay={() => setActiveTab('replay')}
