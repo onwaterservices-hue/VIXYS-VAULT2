@@ -898,7 +898,7 @@ export default function App() {
     }
   };
 
-  const isPublicRoute = ['vixylive', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
+  const isPublicRoute = ['vixylive', 'vixylocks', 'history', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
     <>
@@ -986,7 +986,7 @@ export default function App() {
         {/* Main Content Workspace Area */}
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
           {/* 1. Public Pages always accessible */}
-          {activeTab === 'vixylive' && (
+          {(activeTab === 'vixylive' || activeTab === 'vixylocks') && (
             <VixyLockView
               ticker={ticker}
               userEmail={authState.user?.email || undefined}
@@ -994,6 +994,10 @@ export default function App() {
               onOpenReplay={() => setActiveTab('replay')}
               onOpenPricing={() => setActiveTab('pricing')}
             />
+          )}
+
+          {activeTab === 'history' && (
+            <HistoricalAccuracy history={history} />
           )}
 
           {activeTab === 'landing' && (
