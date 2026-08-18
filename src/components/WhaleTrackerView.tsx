@@ -340,11 +340,11 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                 No whale block orders match current filter criteria.
               </div>
             ) : (
-              filteredOrders.map((order) => {
+              filteredOrders.map((order, index) => {
                 const isCritical = order.impact === 'CRITICAL';
                 return (
                   <div
-                    key={order.id}
+                    key={`${order.id || 'wh'}-${order.time || ''}-${index}`}
                     className={`p-4 rounded-2xl border transition-all duration-200 group hover:border-purple-500/60 ${
                       isCritical
                         ? 'bg-gradient-to-r from-[#170a33] via-[#0d0620] to-[#12072b] border-purple-500/50 shadow-lg shadow-purple-950/40'

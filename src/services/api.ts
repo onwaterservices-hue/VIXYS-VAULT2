@@ -1704,6 +1704,55 @@ export async function runAcceptanceMatrixApi(): Promise<AcceptanceMatrixResponse
   }
 }
 
+export interface ActiveCycleLockData {
+  cycleId: string;
+  intervalStart: number;
+  intervalEnd: number;
+  timeRemainingSec: number;
+  decision: string;
+  direction: string;
+  confidence: number;
+  probability: number;
+  targetStrike: number;
+  spotAtLock: number;
+  spotPrice: number;
+  edgePct: number;
+  lockQuality: number;
+  validationStatus: string;
+  calibrationStatus: string;
+  regime: string;
+  activeRegimeProfile?: string;
+  optimalWeights?: Record<string, number>;
+  indicatorAttributions?: any[];
+  consecutiveWins?: number;
+  consecutiveLosses?: number;
+  failsafeActive: boolean;
+  failsafeReason?: string | null;
+  updatedAt: string;
+}
 
+export async function fetchActiveCycleLock(): Promise<ActiveCycleLockData | null> {
+  return await safeFetchJson<ActiveCycleLockData>(`/api/engine/active-lock?_t=${Date.now()}`);
+}
 
+export async function fetchRegimeMemoryBank(): Promise<any> {
+  return await safeFetchJson<any>(`/api/engine/regime-memory?_t=${Date.now()}`);
+}
 
+export async function fetchAlgorithmLedger(): Promise<any> {
+  return await safeFetchJson<any>(`/api/engine/algorithm-ledger?_t=${Date.now()}`);
+}
+
+export async function triggerManualRecalibration(regime?: string): Promise<any> {
+  try {
+    const res = await fetch(`/api/engine/recalibrate?_t=${Date.now()}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ regime }),
+    });
+    return await safeParseJson(res);
+  } catch (err) {
+    console.error('Manual recalibration error:', err);
+    return null;
+  }
+}

@@ -27,6 +27,12 @@ export interface KalshiSnapshot {
     liquidity: string;
     crossVenue: string;
   };
+  regime?: string;
+  activeRegimeProfile?: string;
+  optimalWeights?: Record<string, number>;
+  indicatorAttributions?: any[];
+  failsafeActive?: boolean;
+  failsafeReason?: string | null;
   features?: {
     orderFlow: number;
     orderBookImbalance: number;
@@ -164,6 +170,12 @@ class VixyStreamManagerService {
           liquidity: 'NORMAL',
           crossVenue: 'ALIGNED'
         },
+        regime: data.regime || data.features?.regime || 'RANGING_NEUTRAL',
+        activeRegimeProfile: data.activeRegimeProfile || 'BALANCED_BAYESIAN',
+        optimalWeights: data.optimalWeights || data.weights,
+        indicatorAttributions: data.indicatorAttributions || data.attributionMatrix,
+        failsafeActive: Boolean(data.failsafeActive),
+        failsafeReason: data.failsafeReason || null,
         features: data.features,
         serverTime: data.serverTime || new Date().toISOString()
       };

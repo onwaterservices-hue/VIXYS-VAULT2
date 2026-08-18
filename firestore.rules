@@ -78,6 +78,18 @@ service cloud.firestore {
     match /settlement_locks/{lockId} {
       allow read, write: if isBackend();
     }
+    match /active_cycle_lock/{lockId} {
+      allow read: if true;
+      allow write: if isBackend();
+    }
+    match /regime_memory_bank/{memoryId} {
+      allow read: if true;
+      allow write: if isBackend();
+    }
+    match /algorithm_performance_history/{historyId} {
+      allow read: if true;
+      allow write: if isBackend();
+    }
     match /discord_profiles/{profileId} {
       allow read: if isSignedIn() || isBackend();
       allow write: if isBackend();

@@ -101,6 +101,59 @@
         "engineState": { "type": "string", "maxLength": 50 }
       },
       "required": ["id", "timestamp", "timestampMs", "asset", "btcPrice", "modelProb", "engineState"]
+    },
+    "activeCycleLock": {
+      "title": "Active Cycle Lock",
+      "description": "Authoritative single-source-of-truth 15-minute locked contract state",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "intervalStart": { "type": "number" },
+        "intervalEnd": { "type": "number" },
+        "decision": { "type": "string", "maxLength": 50 },
+        "direction": { "type": "string", "maxLength": 20 },
+        "confidence": { "type": "number" },
+        "probability": { "type": "number" },
+        "targetStrike": { "type": "number" },
+        "spotAtLock": { "type": "number" },
+        "spotPrice": { "type": "number" },
+        "edgePct": { "type": "number" },
+        "lockQuality": { "type": "number" },
+        "regime": { "type": "string", "maxLength": 50 },
+        "failsafeActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["cycleId", "intervalStart", "intervalEnd", "decision", "confidence", "targetStrike"]
+    },
+    "regimeMemory": {
+      "title": "Regime Memory Vault",
+      "description": "Long-term historical optimal weight profile for specific market regimes",
+      "type": "object",
+      "properties": {
+        "regimeId": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 100 },
+        "historicalWinRate": { "type": "number" },
+        "totalCyclesTrained": { "type": "number" },
+        "optimalWeights": { "type": "object" },
+        "lastOptimizedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["regimeId", "title", "historicalWinRate", "totalCyclesTrained"]
+    },
+    "algorithmHistory": {
+      "title": "Algorithm Learning Performance History",
+      "description": "Cycle-by-cycle Signal Attribution Matrix score grade and Bayesian weight shift record",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "regime": { "type": "string", "maxLength": 50 },
+        "marketOutcome": { "type": "string", "maxLength": 20 },
+        "accuracyScore": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "totalIndicators": { "type": "number" },
+        "weightShiftSummary": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["cycleId", "timestamp", "regime", "marketOutcome", "accuracyScore"]
     }
   },
   "firestore": {
@@ -127,6 +180,18 @@
     "/telemetry_observations/{obsId}": {
       "schema": { "$ref": "#/entities/telemetryObservation" },
       "description": "Real-time telemetry observations"
+    },
+    "/active_cycle_lock/{lockId}": {
+      "schema": { "$ref": "#/entities/activeCycleLock" },
+      "description": "Authoritative real-time active cycle lock payload"
+    },
+    "/regime_memory_bank/{memoryId}": {
+      "schema": { "$ref": "#/entities/regimeMemory" },
+      "description": "Deep learning long-term regime memory vault"
+    },
+    "/algorithm_performance_history/{historyId}": {
+      "schema": { "$ref": "#/entities/algorithmHistory" },
+      "description": "Cycle-by-cycle self-learning attribution scores and grades"
     }
   }
 }
