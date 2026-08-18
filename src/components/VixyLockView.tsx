@@ -149,6 +149,10 @@ interface VixyLockViewProps {
   onOpenTerminal: () => void;
   onOpenReplay: () => void;
   onOpenPricing: () => void;
+  isAuthenticated?: boolean;
+  hasActiveAccess?: boolean;
+  onOpenAuth?: (mode: 'login' | 'register') => void;
+  dayPassCountdown?: string;
 }
 
 export const VixyLockView: React.FC<VixyLockViewProps> = ({
@@ -157,6 +161,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   onOpenTerminal,
   onOpenReplay,
   onOpenPricing,
+  isAuthenticated = false,
+  hasActiveAccess = false,
+  onOpenAuth,
+  dayPassCountdown,
 }) => {
   const [snapshot, setSnapshot] = useState<any>(null);
   const [wsStatus, setWsStatus] = useState<'CONNECTING' | 'LIVE' | 'DEGRADED'>('CONNECTING');
@@ -384,6 +392,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // Centralized WebSocket Connection via VixyStreamManager
   useEffect(() => {
+    if (!hasActiveAccess) return;
+
     const unsubSnapshot = VixyStreamManager.onSnapshot((snap) => {
       setSnapshot(snap);
     });
@@ -408,10 +418,12 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       unsubStatus();
       clearInterval(interval);
     };
-  }, []);
+  }, [hasActiveAccess]);
 
   // Single Source of Truth Firestore Real-Time Sync on 'active_cycle_lock/current_15m'
   useEffect(() => {
+    if (!hasActiveAccess) return;
+
     let unsubscribe: (() => void) | undefined;
     try {
       if (db) {
@@ -478,7 +490,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       if (unsubscribe) unsubscribe();
       clearInterval(pollInterval);
     };
-  }, [activeCycleDecision]);
+  }, [hasActiveAccess, activeCycleDecision]);
 
   // Strict 15-minute epoch-aligned timing calculations
   const EPOCH_15M = 15 * 60 * 1000;
@@ -904,6 +916,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // Connect to live Binance aggTrade stream to capture real whale volume
   useEffect(() => {
+    if (!hasActiveAccess) return;
+
     let ws: WebSocket | null = null;
     let fallbackInterval: NodeJS.Timeout | null = null;
 
@@ -996,7 +1010,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       if (ws) ws.close();
       if (fallbackInterval) clearInterval(fallbackInterval);
     };
-  }, [spotPrice]);
+  }, [hasActiveAccess, spotPrice]);
 
   // Macro Risk Calendar
   const macroEvents = [
@@ -1028,7 +1042,86 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   return (
-    <div className="min-h-screen bg-[#080B10] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none">
+    <div className="relative min-h-screen">
+      {/* PAYWALL / SUBSCRIPTION ACCESS GUARD OVERLAY */}
+      {!hasActiveAccess && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05020F]/85 backdrop-blur-xl animate-fadeIn font-mono">
+          <div className="max-w-xl w-full p-6 sm:p-8 rounded-3xl bg-[#0D071E] border-2 border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.4)] text-center space-y-6 relative overflow-hidden">
+            {/* Ambient radiant corner glow */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-400/40 flex items-center justify-center mx-auto text-cyan-300 shadow-lg shadow-cyan-500/20">
+              <Lock className="w-8 h-8 text-cyan-400" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold">
+                <ShieldCheck className="w-4 h-4 text-cyan-400" />
+                <span>AUTHENTICATION & ACTIVE SUBSCRIPTION REQUIRED</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-white font-sans tracking-tight">
+                Unlock 24H Day Pass or Pro Tier to View Live 15-Minute Decision Telemetry
+              </h2>
+              <p className="text-xs sm:text-sm text-purple-200/80 font-sans max-w-md mx-auto leading-relaxed">
+                {isAuthenticated
+                  ? "Your account is logged in, but requires an active 24-Hour Day Pass ($9.99) or Pro subscription to stream real-time order flow delta, Bayesian calibration, and live trade signals."
+                  : "Create a secure VIXY account to activate your 24-Hour Day Pass ($9.99) and unlock live prediction telemetry, Bayesian strike calculations, and cross-venue signal streaming."}
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2 font-sans">
+              {!isAuthenticated ? (
+                <>
+                  <button
+                    onClick={() => onOpenAuth ? onOpenAuth('register') : onOpenPricing()}
+                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-cyan-950/80 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Sparkles className="w-4 h-4 text-cyan-200" />
+                    <span>Create Account & Unlock Access</span>
+                  </button>
+                  <button
+                    onClick={() => onOpenAuth ? onOpenAuth('login') : onOpenPricing()}
+                    className="px-6 py-3.5 rounded-2xl bg-purple-900/40 border border-purple-500/40 hover:bg-purple-800/40 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Lock className="w-4 h-4" />
+                    <span>Sign In to Account</span>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={onOpenPricing}
+                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-amber-500/30 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 text-slate-950" />
+                    <span>Unlock 24H Day Pass ($9.99)</span>
+                  </button>
+                  <button
+                    onClick={onOpenPricing}
+                    className="px-6 py-3.5 rounded-2xl bg-purple-900/40 border border-purple-500/40 hover:bg-purple-800/40 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <span>View Pro Plans ($29/mo)</span>
+                  </button>
+                </>
+              )}
+            </div>
+
+            <div className="pt-2 text-xs text-purple-300/60 font-sans flex items-center justify-center gap-4">
+              <button onClick={onOpenTerminal} className="hover:text-white transition-colors underline">
+                Return to Dashboard
+              </button>
+              <span>•</span>
+              <button onClick={onOpenPricing} className="hover:text-white transition-colors underline">
+                Pricing & Plans
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Terminal View (blurred backdrop when access not active) */}
+      <div className={`min-h-screen bg-[#080B10] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none transition-all duration-500 ${!hasActiveAccess ? 'filter blur-[14px] opacity-25 pointer-events-none select-none overflow-hidden h-[90vh]' : ''}`}>
       
       {/* 1. TOP BAR: SYSTEM LATENCIES & SERVER TIME & STATE MACHINE TRIGGER */}
       <div className="flex flex-wrap items-center justify-between bg-[#0C101A] border border-[#1E2638] rounded-xl px-4 py-2.5 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
@@ -2331,6 +2424,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         </div>
       </div>
 
+      </div>
     </div>
   );
 };

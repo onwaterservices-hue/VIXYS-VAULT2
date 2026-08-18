@@ -31,6 +31,7 @@ import {
   LifeBuoy,
   Info,
   Bot,
+  Lock,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -40,6 +41,9 @@ interface SidebarProps {
   onCloseMobile: () => void;
   onOpenSearch: () => void;
   userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  hasActiveAccess?: boolean;
+  isAuthenticated?: boolean;
+  onOpenAuth?: (mode: 'login' | 'register') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -49,6 +53,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onOpenSearch,
   userRole = 'ADMIN',
+  hasActiveAccess = false,
+  isAuthenticated = false,
+  onOpenAuth,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('vixy_sidebar_collapsed') === 'true';
@@ -226,55 +233,75 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
                   .map((item) => {
                     const IconComponent = item.icon;
-                  const isActive = activeTab === item.id;
+                    const isActive = activeTab === item.id;
+                    const isGated = (item.id === 'vixylive' || item.id === 'terminal') && !hasActiveAccess;
 
-                  if (isCollapsed) {
+                    const handleItemClick = () => {
+                      if (isGated) {
+                        if (!isAuthenticated) {
+                          if (onOpenAuth) onOpenAuth('register');
+                        } else {
+                          setActiveTab('pricing');
+                        }
+                      } else {
+                        setActiveTab(item.id);
+                      }
+                    };
+
+                    if (isCollapsed) {
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={handleItemClick}
+                          title={`${item.label} ${item.badge ? `(${item.badge})` : ''} ${isGated ? '(Subscription Required)' : ''}`}
+                          className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group cursor-pointer ${
+                            isActive
+                              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                              : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
+                          }`}
+                        >
+                          <IconComponent className="w-5 h-5" />
+                          {isGated ? (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#0a0518]" />
+                          ) : item.badge && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
+                          )}
+                          {/* Hover Tooltip Popup */}
+                          <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#130A2A] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                            {item.label} {isGated ? <span className="text-amber-400 font-mono text-[10px]">[LOCKED]</span> : item.badge && <span className="text-amber-300 font-mono text-[10px]">[{item.badge}]</span>}
+                          </div>
+                        </button>
+                      );
+                    }
+
                     return (
                       <button
                         key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        title={`${item.label} ${item.badge ? `(${item.badge})` : ''}`}
-                        className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group ${
+                        onClick={handleItemClick}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group cursor-pointer ${
                           isActive
                             ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
-                            : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
+                            : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
                         }`}
                       >
-                        <IconComponent className="w-5 h-5" />
-                        {item.badge && (
-                          <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
-                        )}
-                        {/* Hover Tooltip Popup */}
-                        <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#130A2A] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                          {item.label} {item.badge && <span className="text-amber-300 font-mono text-[10px]">[{item.badge}]</span>}
+                        <div className="flex items-center gap-3">
+                          <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} />
+                          <span>{item.label}</span>
                         </div>
+
+                        {isGated ? (
+                          <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/40">
+                            <Lock className="w-2.5 h-2.5 text-purple-300" />
+                            <span>LOCK</span>
+                          </span>
+                        ) : item.badge && (
+                          <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/30">
+                            {item.badge}
+                          </span>
+                        )}
                       </button>
                     );
-                  }
-
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setActiveTab(item.id)}
-                      className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group ${
-                        isActive
-                          ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
-                          : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} />
-                        <span>{item.label}</span>
-                      </div>
-
-                      {item.badge && (
-                        <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/30">
-                          {item.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
+                  })}
               </div>
             </div>
           ))}

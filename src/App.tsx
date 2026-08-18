@@ -58,6 +58,7 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
+import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -868,20 +869,36 @@ export default function App() {
     setActiveTab('landing');
   };
 
-  const isSubscriptionActive =
-    subscription.status === 'active' ||
-    userRole === 'PRO' ||
-    (userRole as string) === 'ELITE' ||
-    userRole === 'ADMIN' || (userRole as string) === 'OWNER' ||
-    dayPassInfo.active;
+  const {
+    isAuthenticated,
+    hasActiveAccess,
+    passCountdownFormatted
+  } = useAuthSubscription({
+    authState,
+    subscription,
+    userRole,
+    dayPassInfo
+  });
+
+  const isSubscriptionActive = hasActiveAccess;
 
   const handleLaunchTerminal = () => {
     if (!authState.isAuthenticated) {
       handleOpenAuth('register');
-    } else if (!isSubscriptionActive) {
+    } else if (!hasActiveAccess) {
       setActiveTab('pricing');
     } else {
       setActiveTab('terminal');
+    }
+  };
+
+  const handleLaunchVixyLive = () => {
+    if (!authState.isAuthenticated) {
+      handleOpenAuth('register');
+    } else if (!hasActiveAccess) {
+      setActiveTab('pricing');
+    } else {
+      setActiveTab('vixylive');
     }
   };
 
@@ -980,6 +997,9 @@ export default function App() {
             onCloseMobile={() => setIsMobileSidebarOpen(false)}
             onOpenSearch={() => setIsSearchOpen(true)}
             userRole={userRole}
+            hasActiveAccess={hasActiveAccess}
+            isAuthenticated={isAuthenticated}
+            onOpenAuth={handleOpenAuth}
           />
         )}
 
@@ -993,6 +1013,10 @@ export default function App() {
               onOpenTerminal={() => setActiveTab('terminal')}
               onOpenReplay={() => setActiveTab('replay')}
               onOpenPricing={() => setActiveTab('pricing')}
+              isAuthenticated={isAuthenticated}
+              hasActiveAccess={hasActiveAccess}
+              onOpenAuth={handleOpenAuth}
+              dayPassCountdown={passCountdownFormatted}
             />
           )}
 
@@ -1004,7 +1028,7 @@ export default function App() {
             <LandingPage
               ticker={ticker}
               onLaunchTerminal={handleLaunchTerminal}
-              onLaunchVixyLive={() => setActiveTab('vixylive')}
+              onLaunchVixyLive={handleLaunchVixyLive}
               onOpenPricing={() => setActiveTab('pricing')}
               onOpenAuth={handleOpenAuth}
               dataSource={CURRENT_DATA_SOURCE}

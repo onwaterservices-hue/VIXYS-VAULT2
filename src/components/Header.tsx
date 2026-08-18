@@ -16,11 +16,13 @@ import {
   BrainCircuit,
   Globe,
   Sliders,
+  Lock,
 } from 'lucide-react';
 import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys, AlertSettings } from '../types';
 import { Logo } from './Logo';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { useLiveSignal } from '../hooks/useLiveSignal';
+import { useAuthSubscription } from '../hooks/useAuthSubscription';
 import { DiscordCompactBadge } from './DiscordCompactBadge';
 
 interface HeaderProps {
@@ -95,6 +97,37 @@ export const Header: React.FC<HeaderProps> = ({
 
   const { signal: apiSignal, status: modelStatus } = useLiveSignal(selectedAsset || 'BTC', selectedTimeframe || '15M');
 
+  const {
+    isAuthenticated,
+    hasActiveAccess,
+    passCountdownFormatted,
+    isDayPassActive
+  } = useAuthSubscription({
+    authState,
+    subscription,
+    userRole,
+    dayPassInfo
+  });
+
+  const handleNavigateVixyLive = () => {
+    if (!isAuthenticated) {
+      onOpenAuth('register');
+    } else if (!hasActiveAccess) {
+      setActiveTab('pricing');
+    } else {
+      setActiveTab('vixylive');
+    }
+  };
+
+  const handleNavigateTerminal = () => {
+    if (!isAuthenticated) {
+      onOpenAuth('register');
+    } else if (!hasActiveAccess) {
+      setActiveTab('pricing');
+    } else {
+      setActiveTab('terminal');
+    }
+  };
 
   if (activeTab === 'landing') {
     return (
@@ -117,12 +150,23 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Public Navigation */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-purple-200">
             <button
-              onClick={() => setActiveTab('vixylive')}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:opacity-95 transition-all"
+              onClick={handleNavigateVixyLive}
+              className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 transition-all cursor-pointer ${
+                hasActiveAccess
+                  ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-lg shadow-amber-500/20 hover:opacity-95'
+                  : 'bg-[#180C2E] border border-purple-800/60 text-purple-300 hover:text-white hover:border-purple-500'
+              }`}
             >
-              <Flame className="w-3.5 h-3.5 text-slate-950 animate-pulse" />
+              <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
               <span>VIXY LIVE</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
+              {hasActiveAccess ? (
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
+              ) : (
+                <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[9px] font-black border border-purple-500/40">
+                  <Lock className="w-2.5 h-2.5" />
+                  <span>LOCKED</span>
+                </span>
+              )}
             </button>
 
             <button
@@ -141,11 +185,12 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
 
             <button
-              onClick={() => setActiveTab('terminal')}
+              onClick={handleNavigateTerminal}
               className="hover:text-amber-300 transition-colors text-purple-300 hover:text-white flex items-center gap-1"
             >
               <Zap className="w-3.5 h-3.5 text-amber-400" />
               <span>Live Terminal</span>
+              {!hasActiveAccess && <Lock className="w-3 h-3 text-purple-400" />}
             </button>
           </nav>
 
@@ -159,6 +204,12 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
             ) : authState.isAuthenticated ? (
               <div className="flex items-center gap-2">
+                {hasActiveAccess && passCountdownFormatted && (
+                  <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/50 text-[11px] font-bold text-emerald-300 shadow-sm animate-pulse">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>PASS ACTIVE: {passCountdownFormatted}</span>
+                  </div>
+                )}
                 <button
                   onClick={() => setActiveTab(userRole === 'ADMIN' ? 'admin' : 'settings')}
                   title={userRole === 'ADMIN' ? 'Master Admin Control Center' : 'User Settings'}
@@ -168,11 +219,12 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="hidden sm:inline truncate whitespace-nowrap">{authState.user?.name || 'Quant Member'}</span>
                 </button>
                 <button
-                  onClick={() => setActiveTab('terminal')}
+                  onClick={handleNavigateTerminal}
                   className="px-4.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
                 >
                   <LayoutDashboard className="w-4 h-4" />
                   <span>Enter Terminal</span>
+                  {!hasActiveAccess && <Lock className="w-3 h-3 text-purple-200" />}
                 </button>
                 <button
                   onClick={onLogout}
@@ -411,8 +463,8 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Desktop Navigation - High-Contrast Ergonomic Nav Board */}
         <nav className="hidden lg:flex items-center gap-1.5 bg-[#0D071E] p-1.5 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">
           <button
-            onClick={() => setActiveTab('terminal')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+            onClick={handleNavigateTerminal}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'terminal'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
@@ -420,11 +472,12 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <LayoutDashboard className="w-4 h-4 text-purple-300" />
             <span>Dashboard</span>
+            {!hasActiveAccess && <Lock className="w-3 h-3 text-purple-400" />}
           </button>
 
           <button
-            onClick={() => setActiveTab('vixylive')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+            onClick={handleNavigateVixyLive}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 cursor-pointer ${
               activeTab === 'vixylive'
                 ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-lg shadow-amber-500/30 border border-amber-400/50'
                 : 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/30'
@@ -432,7 +485,14 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
             <span className="tracking-wide">VIXY LIVE</span>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            {hasActiveAccess ? (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            ) : (
+              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[9px] font-black border border-purple-500/40">
+                <Lock className="w-2.5 h-2.5" />
+                <span>LOCKED</span>
+              </span>
+            )}
           </button>
 
           <button
@@ -624,17 +684,29 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Mobile Bar */}
       <div className="lg:hidden flex items-center justify-around bg-[#0E0822] border-t border-purple-900/30 px-2 py-2 overflow-x-auto text-[11px] font-mono">
         <button
-          onClick={() => setActiveTab('vixylive')}
-          className={`flex flex-col items-center gap-1 px-2.5 py-1 rounded-lg ${activeTab === 'vixylive' ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black' : 'text-amber-300 font-bold'}`}
+          onClick={handleNavigateVixyLive}
+          className={`flex flex-col items-center gap-1 px-2.5 py-1 rounded-lg cursor-pointer ${activeTab === 'vixylive' ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black' : 'text-amber-300 font-bold'}`}
         >
-          <Flame className="w-4 h-4 animate-pulse text-amber-400" />
-          <span>VIXY LIVE</span>
+          <div className="relative flex items-center justify-center">
+            <Flame className="w-4 h-4 animate-pulse text-amber-400" />
+            {!hasActiveAccess && (
+              <Lock className="w-2.5 h-2.5 text-purple-300 absolute -top-1 -right-2" />
+            )}
+          </div>
+          <span className="flex items-center gap-1">
+            VIXY LIVE
+          </span>
         </button>
         <button
-          onClick={() => setActiveTab('terminal')}
-          className={`flex flex-col items-center gap-1 px-2 py-1 ${activeTab === 'terminal' ? 'text-purple-400 font-bold' : 'text-purple-300/60'}`}
+          onClick={handleNavigateTerminal}
+          className={`flex flex-col items-center gap-1 px-2 py-1 cursor-pointer ${activeTab === 'terminal' ? 'text-purple-400 font-bold' : 'text-purple-300/60'}`}
         >
-          <LayoutDashboard className="w-4 h-4" />
+          <div className="relative flex items-center justify-center">
+            <LayoutDashboard className="w-4 h-4" />
+            {!hasActiveAccess && (
+              <Lock className="w-2.5 h-2.5 text-purple-400 absolute -top-1 -right-2" />
+            )}
+          </div>
           Dashboard
         </button>
         <button
