@@ -898,7 +898,7 @@ export default function App() {
     }
   };
 
-  const isPublicRoute = ['landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
+  const isPublicRoute = ['vixylive', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
     <>
@@ -986,10 +986,21 @@ export default function App() {
         {/* Main Content Workspace Area */}
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
           {/* 1. Public Pages always accessible */}
+          {activeTab === 'vixylive' && (
+            <VixyLockView
+              ticker={ticker}
+              userEmail={authState.user?.email || undefined}
+              onOpenTerminal={() => setActiveTab('terminal')}
+              onOpenReplay={() => setActiveTab('replay')}
+              onOpenPricing={() => setActiveTab('pricing')}
+            />
+          )}
+
           {activeTab === 'landing' && (
             <LandingPage
               ticker={ticker}
               onLaunchTerminal={handleLaunchTerminal}
+              onLaunchVixyLive={() => setActiveTab('vixylive')}
               onOpenPricing={() => setActiveTab('pricing')}
               onOpenAuth={handleOpenAuth}
               dataSource={CURRENT_DATA_SOURCE}
@@ -1177,16 +1188,6 @@ export default function App() {
                       onToggleFavorite={handleToggleFavorite}
                       onOpenSearch={() => setIsSearchOpen(true)}
                       onOpenCompare={() => setActiveTab('compare')}
-                    />
-                  )}
-
-                  {activeTab === 'vixylive' && (
-                    <VixyLockView
-                      ticker={ticker}
-                      userEmail={authState.user?.email || undefined}
-                      onOpenTerminal={() => setActiveTab('terminal')}
-                      onOpenReplay={() => setActiveTab('replay')}
-                      onOpenPricing={() => setActiveTab('pricing')}
                     />
                   )}
 
@@ -1386,7 +1387,7 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {!isEntitlementLoading && !terminalAccessGranted && !['pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
+      {!isEntitlementLoading && !terminalAccessGranted && !['vixylive', 'pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
         <TrialExpiredOverlay
           isAuthenticated={authState.isAuthenticated}
           userEmail={authState?.user?.email}

@@ -31,6 +31,7 @@ import { getStripeDayPassUrl } from '../config/stripeLinks';
 interface LandingPageProps {
   ticker: BTCTicker;
   onLaunchTerminal: () => void;
+  onLaunchVixyLive?: () => void;
   onOpenPricing: () => void;
   onOpenAuth: (mode: 'login' | 'register') => void;
   dataSource?: 'mock' | 'live';
@@ -40,6 +41,7 @@ interface LandingPageProps {
 export const LandingPage: React.FC<LandingPageProps> = ({
   ticker,
   onLaunchTerminal,
+  onLaunchVixyLive,
   onOpenPricing,
   onOpenAuth,
   dataSource = 'live',
@@ -132,20 +134,28 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             VIXY’s Vault is a real-time prediction market decision terminal for BTC traders, delivering auditable 15-minute signals backed by live orderbook depth, momentum factors, and walk-forward model calibration.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2 font-mono">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2 font-mono">
+            <button
+              onClick={onLaunchVixyLive || onLaunchTerminal}
+              className="px-8 py-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-purple-600 text-slate-950 hover:opacity-95 font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-amber-500/30 transition-all hover:shadow-amber-400/40 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-700 animate-ping" />
+              <span>LAUNCH VIXY LIVE</span>
+              <ArrowRight className="w-4 h-4 text-slate-950" />
+            </button>
+
             <button
               onClick={onLaunchTerminal}
-              className="px-8 py-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-purple-600/30 transition-all hover:shadow-purple-500/40 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
+              className="px-6 py-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs sm:text-sm tracking-wider uppercase shadow-xl shadow-purple-600/30 transition-all hover:shadow-purple-500/40 active:scale-[0.98] cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>LAUNCH TERMINAL</span>
-              <ArrowRight className="w-4 h-4" />
+              <span>DASHBOARD</span>
             </button>
 
             <button
               onClick={onOpenPricing}
-              className="px-7 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              className="px-6 py-4 rounded-xl bg-[#0D081D] hover:bg-slate-800 border border-slate-800 text-slate-200 font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
             >
-              <span>EXPLORE PLANS & PRICING</span>
+              <span>PLANS &amp; PRICING</span>
             </button>
           </div>
 

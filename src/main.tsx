@@ -7,6 +7,10 @@ import './index.css';
 if (typeof window !== 'undefined') {
   const isWebSocketError = (err: any) => {
     if (!err) return false;
+    // Handle raw Event objects from WebSockets (like isTrusted: true error events)
+    if (err instanceof Event && (err.target instanceof WebSocket || String(err.target?.constructor?.name).toLowerCase().includes('websocket'))) {
+      return true;
+    }
     const str = String(
       err?.message ||
       err?.reason ||

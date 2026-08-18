@@ -117,8 +117,17 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Public Navigation */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-purple-200">
             <button
+              onClick={() => setActiveTab('vixylive')}
+              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black flex items-center gap-1.5 shadow-lg shadow-amber-500/20 hover:opacity-95 transition-all"
+            >
+              <Flame className="w-3.5 h-3.5 text-slate-950 animate-pulse" />
+              <span>VIXY LIVE</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
+            </button>
+
+            <button
               onClick={() => setActiveTab('landing')}
-              className="hover:text-amber-300 transition-colors text-amber-300 font-black flex items-center gap-1"
+              className="hover:text-amber-300 transition-colors text-purple-300 hover:text-white flex items-center gap-1"
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
               <span>Overview</span>
@@ -614,6 +623,13 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Mobile Bar */}
       <div className="lg:hidden flex items-center justify-around bg-[#0E0822] border-t border-purple-900/30 px-2 py-2 overflow-x-auto text-[11px] font-mono">
+        <button
+          onClick={() => setActiveTab('vixylive')}
+          className={`flex flex-col items-center gap-1 px-2.5 py-1 rounded-lg ${activeTab === 'vixylive' ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black' : 'text-amber-300 font-bold'}`}
+        >
+          <Flame className="w-4 h-4 animate-pulse text-amber-400" />
+          <span>VIXY LIVE</span>
+        </button>
         <button
           onClick={() => setActiveTab('terminal')}
           className={`flex flex-col items-center gap-1 px-2 py-1 ${activeTab === 'terminal' ? 'text-purple-400 font-bold' : 'text-purple-300/60'}`}
