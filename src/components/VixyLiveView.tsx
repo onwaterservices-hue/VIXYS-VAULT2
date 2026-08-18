@@ -139,17 +139,31 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
 
     const runFallbackPoll = async () => {
       if (!isMounted) return;
-      // Skip if WS is open
-      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-        return;
-      }
       try {
-        const res = await fetch(`/api/signal?asset=BTC&desk=15m&_t=${Date.now()}`);
-        if (res.ok) {
-          const data = await res.json();
+        const [signalRes, lockRes] = await Promise.allSettled([
+          fetch(`/api/signal?asset=BTC&desk=15m&_t=${Date.now()}`),
+          fetch(`/api/engine/active-lock?_t=${Date.now()}`)
+        ]);
+
+        if (signalRes.status === 'fulfilled' && signalRes.value.ok) {
+          const data = await signalRes.value.json();
           if (isMounted) {
             setLiveSnapshot((prev: any) => ({ ...prev, ...data, type: 'VIXY_SNAPSHOT' }));
             setWsStatus('LIVE');
+          }
+        }
+
+        if (lockRes.status === 'fulfilled' && lockRes.value.ok) {
+          const lockData = await lockRes.value.json();
+          if (isMounted && lockData) {
+            setLiveSnapshot((prev: any) => ({
+              ...prev,
+              activeLock: lockData,
+              isLocked: lockData.isLocked ?? prev?.isLocked,
+              decision: lockData.decision || prev?.decision,
+              spot: lockData.spotAtLock || prev?.spot,
+              timeRemainingSec: lockData.timeRemainingSec ?? prev?.timeRemainingSec
+            }));
           }
         }
       } catch (e) {
@@ -209,17 +223,30 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
 
     connectWebSocket();
     runFallbackPoll();
-    fallbackPollInterval = setInterval(runFallbackPoll, 3000);
+    // High-frequency auto-updating daemon for full real-time freshness
+    fallbackPollInterval = setInterval(runFallbackPoll, 2000);
 
     const intervalId = setInterval(() => {
       fetchResolvedLogs();
-    }, 15000);
+    }, 5000);
+
+    // Sub-second smooth countdown ticker for real-time timer progression
+    const timerInterval = setInterval(() => {
+      if (isMounted) {
+        setLiveSnapshot((prev: any) => {
+          if (!prev || prev.timeRemainingSec === undefined) return prev;
+          if (prev.timeRemainingSec <= 0) return { ...prev, timeRemainingSec: 899 };
+          return { ...prev, timeRemainingSec: prev.timeRemainingSec - 1 };
+        });
+      }
+    }, 1000);
 
     return () => {
       isMounted = false;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
       if (fallbackPollInterval) clearInterval(fallbackPollInterval);
       if (intervalId) clearInterval(intervalId);
+      if (timerInterval) clearInterval(timerInterval);
       if (wsRef.current) wsRef.current.close();
     };
   }, []);
@@ -422,11 +449,16 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
             <button
               onClick={fetchResolvedLogs}
               disabled={isLoadingResolved}
-              className="px-3.5 py-2 rounded-xl bg-purple-900/50 hover:bg-purple-800/70 text-purple-200 border border-purple-700/50 text-xs font-bold flex items-center gap-2 cursor-pointer transition-all"
-              title="Refresh Authoritative Audit Logs"
+              className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:via-indigo-500 hover:to-cyan-400 text-white font-black text-xs sm:text-sm tracking-wider uppercase border-2 border-cyan-400/80 shadow-[0_0_25px_rgba(168,85,247,0.55)] hover:shadow-[0_0_35px_rgba(6,182,212,0.7)] flex items-center gap-2.5 cursor-pointer transform hover:scale-105 active:scale-95 transition-all duration-200 ring-2 ring-purple-400/40 relative group overflow-hidden"
+              title="Refresh Authoritative Audit Logs & Live Engine Stream"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingResolved ? 'animate-spin text-cyan-400' : ''}`} />
-              <span>SYNC LEDGER</span>
+              <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+              </span>
+              <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 text-cyan-200 transition-transform ${isLoadingResolved ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
+              <span className="font-mono font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">SYNC LEDGER</span>
             </button>
           </div>
         </div>

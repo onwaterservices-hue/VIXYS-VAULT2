@@ -596,7 +596,37 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         onExecute={triggerHapticPulse}
       />
 
-      {/* 5 EVIDENCE METRICS & REAL-TIME FEATURE SIGNALS */}
+      {/* 1. LOWER 3-COLUMN INTELLIGENCE AREA: VIXY PROTECTION | WHALE WATCH | INSTITUTIONAL RADAR */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+        <div className="h-full">
+          <ProtectionBrain
+            signal={signal}
+            ticker={ticker}
+            isDiscordVerified={isUserAuthorized}
+            rawApiData={rawApiData}
+          />
+        </div>
+        <div className="h-full">
+          <WhaleBrain
+            ticker={ticker}
+            selectedAsset={displayVenue}
+          />
+        </div>
+        <div className="h-full">
+          <InstitutionalIntelRadar
+            rawApiData={rawApiData}
+            survivalScore={Math.max(5, Math.min(99, 100 - reversalRisk))}
+            reversalRisk={reversalRisk}
+            orderFlowState={orderFlowState}
+            isProtectState={isProtectState}
+          />
+        </div>
+      </div>
+
+      {/* 2. DECISION ENGINE DIAGNOSTICS & PROBABILITY MATRIX */}
+      <DecisionEngineDiagnostics rawApiData={rawApiData} />
+
+      {/* 3. 5 EVIDENCE METRICS & REAL-TIME FEATURE SIGNALS (MARKET EVIDENCE TELEMETRY) */}
       <div className="relative overflow-hidden rounded-2xl border border-purple-900/40 p-4 sm:p-5 space-y-4 font-mono bg-[#030106] shadow-[0_0_30px_rgba(0,0,0,0.8)]">
         <div className="flex items-center justify-between border-b border-purple-900/30 pb-3">
           <div className="flex items-center gap-2.5">
@@ -757,36 +787,6 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
              <span className="text-purple-400/60">QUALIFIED EVIDENCE FACTORS</span>
              <span className="text-purple-300">{verifiedCriteriaCount} / {totalCriteriaCount} CONFIRMED</span>
            </div>
-        </div>
-      </div>
-
-      {/* DECISION ENGINE DIAGNOSTICS & PROBABILITY MATRIX */}
-      <DecisionEngineDiagnostics rawApiData={rawApiData} />
-
-      {/* LOWER 3-COLUMN INTELLIGENCE AREA: VIXY PROTECTION | WHALE WATCH | INSTITUTIONAL RADAR */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-        <div className="h-full">
-          <ProtectionBrain
-            signal={signal}
-            ticker={ticker}
-            isDiscordVerified={isUserAuthorized}
-            rawApiData={rawApiData}
-          />
-        </div>
-        <div className="h-full">
-          <WhaleBrain
-            ticker={ticker}
-            selectedAsset={displayVenue}
-          />
-        </div>
-        <div className="h-full">
-          <InstitutionalIntelRadar
-            rawApiData={rawApiData}
-            survivalScore={Math.max(5, Math.min(99, 100 - reversalRisk))}
-            reversalRisk={reversalRisk}
-            orderFlowState={orderFlowState}
-            isProtectState={isProtectState}
-          />
         </div>
       </div>
 

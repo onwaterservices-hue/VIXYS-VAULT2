@@ -472,7 +472,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
 
     pollEngine();
-    const pollInterval = setInterval(pollEngine, 8000);
+    const pollInterval = setInterval(pollEngine, 2000);
 
     return () => {
       if (unsubscribe) unsubscribe();
@@ -1027,59 +1027,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     { cycleId: 'C-67883', time: '11:57 PM', decision: 'LOCKED DOWN', probability: 0.66, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.150 }
   ];
 
-  // Master user check for calibrated live access
-  const isMaster = userEmail?.toLowerCase() === 'onwaterservices@gmail.com' || userEmail?.toLowerCase() === 'vixyvault0@gmail.com';
-
-  if (!isMaster) {
-    return (
-      <div className="relative min-h-[70vh] flex flex-col items-center justify-center bg-[#080B10] rounded-2xl border border-[#1E2638] p-8 overflow-hidden my-6 font-mono">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#0C101A_1px,transparent_1px),linear-gradient(to_bottom,#0C101A_1px,transparent_1px)] bg-[size:32px_32px] opacity-40 pointer-events-none"></div>
-        <div className="absolute w-[350px] h-[350px] bg-[#9D4EDD]/10 rounded-full blur-[100px] animate-pulse"></div>
-        
-        <div className="relative z-10 text-center max-w-md mx-auto space-y-6">
-          <div className="inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-full bg-[#0C101A] border border-[#9D4EDD]/40 text-[#9D4EDD] text-xs font-mono tracking-wider shadow-[0_0_15px_rgba(157,78,221,0.2)] animate-pulse">
-            <Lock className="w-3.5 h-3.5 text-[#9D4EDD]" />
-            <span>VIXY LIVE HIGH-DENSITY TERMINAL</span>
-          </div>
-
-          <div className="space-y-2">
-            <h2 className="text-3xl font-black text-white tracking-tight uppercase">
-              IN PRODUCTION
-            </h2>
-            <div className="h-1 w-24 bg-gradient-to-r from-[#9D4EDD] to-[#00FF88] mx-auto rounded-full"></div>
-          </div>
-
-          <p className="text-xs text-gray-400 font-sans leading-relaxed">
-            The VIXY Live 15-Minute Crypto Market Decision Engine is currently undergoing final model alignment, deep telemetry integration, and high-frequency feed calibration. 
-            Real-time cross-venue replication will become publicly active upon validation check completion.
-          </p>
-
-          <div className="bg-[#0C101A] p-4 rounded-xl border border-[#1E2638] font-mono text-[10px] text-gray-300 text-left space-y-2">
-            <div className="flex items-center justify-between">
-              <span>FEED STATUS:</span>
-              <span className="text-amber-400 font-bold">CALIBRATION IN PROGRESS</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>ACCURACY BASELINE:</span>
-              <span className="text-[#00FF88] font-bold">&gt;94% EXPECTED</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span>TARGET CYCLE:</span>
-              <span className="text-white">BTC-15M KALSHI INDEX</span>
-            </div>
-          </div>
-
-          <button
-            onClick={onOpenTerminal}
-            className="px-6 py-2.5 rounded-xl bg-[#0C101A] hover:bg-[#1E2638] border border-[#9D4EDD]/60 text-purple-200 text-xs font-bold tracking-wider transition-all shadow-[0_0_15px_rgba(157,78,221,0.2)] inline-flex items-center space-x-2 cursor-pointer"
-          >
-            <span>RETURN TO TERMINAL PORTAL</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#080B10] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none">
       
@@ -1128,19 +1075,27 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           <button
             onClick={() => triggerCycleCalibration(currentEpochIndex)}
             disabled={cyclePhase === 'CALIBRATING'}
-            className="px-2.5 py-1 rounded bg-[#9D4EDD]/15 hover:bg-[#9D4EDD]/30 border border-[#9D4EDD]/50 text-purple-200 text-[9px] font-bold tracking-wider transition-all flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
-            title="Test the 4-step rollover & calibration sequence immediately"
+            className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:via-indigo-500 hover:to-cyan-400 border-2 border-cyan-400/80 text-white text-xs sm:text-sm font-black tracking-wider uppercase shadow-[0_0_20px_rgba(168,85,247,0.6)] hover:shadow-[0_0_30px_rgba(6,182,212,0.8)] flex items-center space-x-2 cursor-pointer disabled:opacity-50 transform hover:scale-105 active:scale-95 transition-all duration-200 ring-2 ring-purple-400/40 relative group overflow-hidden"
+            title="Trigger Immediate Rollover & Bayesian Calibration Sequence"
           >
-            <RefreshCw className={`w-3 h-3 text-[#9D4EDD] ${cyclePhase === 'CALIBRATING' ? 'animate-spin' : ''}`} />
-            <span>{cyclePhase === 'CALIBRATING' ? 'CALIBRATING...' : 'TEST CYCLE ROLLOVER'}</span>
+            <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-300 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
+            </span>
+            <RefreshCw className={`w-4 h-4 text-cyan-200 transition-transform ${cyclePhase === 'CALIBRATING' ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
+            <span className="font-mono font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
+              {cyclePhase === 'CALIBRATING' ? 'CALIBRATING ENGINE...' : 'TEST CYCLE ROLLOVER'}
+            </span>
           </button>
 
-          <div className="text-[10px] text-gray-400 flex items-center space-x-1.5">
+          <div className="text-[10px] text-gray-400 flex items-center space-x-1.5 font-mono">
             <span>SERVER TIME</span>
             <span className="text-white font-bold">{new Date(adjustedNow).toLocaleTimeString()} EST</span>
           </div>
-          <div className="px-2 py-0.5 rounded bg-[#00FF88]/10 border border-[#00FF88]/30 text-[#00FF88] text-[9px] font-bold uppercase tracking-wider hidden md:block">
-            ALL SYSTEMS OPERATIONAL
+          <div className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wider hidden md:flex items-center space-x-1.5 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>ALL SYSTEMS OPERATIONAL</span>
           </div>
         </div>
       </div>

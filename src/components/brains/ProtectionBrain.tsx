@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
   ShieldAlert, 
@@ -17,7 +17,11 @@ import {
   Clock,
   Shield,
   Layers,
-  Flame
+  Flame,
+  ArrowUpRight,
+  ArrowDownRight,
+  LogOut,
+  Sparkles
 } from 'lucide-react';
 import { PredictionSignal, BTCTicker } from '../../types';
 import { safeNumber, safeToFixed } from '../../utils/numeric';
@@ -37,8 +41,26 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
 }) => {
   // Live spot and reference strike math
   const currentPrice = safeNumber(ticker?.price, safeNumber(signal?.currentPrice, safeNumber(rawApiData?.spot, 64376.65)));
-  const lockedDirection = String(rawApiData?.lockedDirection || (signal?.direction === 'YES' ? 'UP' : signal?.direction === 'NO' ? 'DOWN' : 'UP')).toUpperCase();
-  const isUp = lockedDirection.includes('UP') || lockedDirection.includes('YES');
+  
+  // ─── 1. AUTHORITATIVE LOCK & DIRECTION FROM VIXY EXECUTION CORE ───
+  const isActuallyLocked = Boolean(
+    rawApiData?.isLocked === true &&
+    (rawApiData?.status === 'LOCKED' || 
+     rawApiData?.cycleStage === 'LOCKED' || 
+     rawApiData?.vixyLockState === 'LOCKED')
+  );
+
+  const rawDirectionStr = String(
+    isActuallyLocked
+      ? (rawApiData?.lockedDirection || rawApiData?.decision || rawApiData?.direction || 'NONE')
+      : (rawApiData?.decision || rawApiData?.candidateDirection || rawApiData?.direction || (signal?.direction === 'YES' ? 'UP' : signal?.direction === 'NO' ? 'DOWN' : 'NONE'))
+  ).toUpperCase();
+
+  const isUp = rawDirectionStr.includes('UP') || rawDirectionStr.includes('YES') || rawDirectionStr === 'BUY_YES';
+  const isDown = rawDirectionStr.includes('DOWN') || rawDirectionStr.includes('NO') && !rawDirectionStr.includes('NO_TRADE') && !rawDirectionStr.includes('NO_EXECUTION');
+  const isNoTrade = rawDirectionStr.includes('SKIP') || rawDirectionStr.includes('NO_TRADE') || rawApiData?.stage === 'NO_TRADE' || rawApiData?.status === 'NO_TRADE';
+
+  const lockedDirection = isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'NONE';
   const targetPrice = Math.round(safeNumber(rawApiData?.lockedStrike, safeNumber(signal?.targetPrice, isUp ? currentPrice - 95.65 : currentPrice + 95.65)));
   
   const spotVsStrikeDelta = currentPrice - targetPrice;
@@ -54,7 +76,7 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
     rawApiData?.guardianDecision?.reversalThreat ?? 
     pipelineReversal?.threatScore ?? 
     rawApiData?.reversalThreat ?? 
-    35
+    (isNoTrade ? 68 : isActuallyLocked ? 18 : 35)
   );
   
   const rawReversalRisk = Math.min(99, Math.max(5, Math.round(backendThreatScore)));
@@ -68,8 +90,93 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   const timeRemainingSec = rawApiData?.timeRemainingSec || rawApiData?.features?.timeRemaining || 60;
   const minsLeft = Math.max(1, Math.ceil(timeRemainingSec / 60));
 
-  // Recommendation message
-  const recommendationText = `VIXY is WAITING — reversal risk is ${rawReversalRisk >= 35 ? 'high threat' : 'subdued'}, spot is $${safeToFixed(Math.abs(spotVsStrikeDelta), 2)} ${spotVsStrikeDelta >= 0 ? 'above' : 'below'} strike with ${minsLeft} minutes left`;
+  // Authoritative Confidence
+  const exactConfidencePct = Math.min(99, Math.max(50, Math.round(
+    Number(rawApiData?.confidence ?? rawApiData?.lockedConfidence ?? signal?.confidence ?? 74)
+  )));
+
+  // ─── 2. LIVE POSITION TRACKING & REVERSAL REVIEW STATE ───
+  const [isInPosition, setIsInPosition] = useState<boolean>(false);
+  const [positionEntryPrice, setPositionEntryPrice] = useState<number | null>(null);
+  const [positionEntryTime, setPositionEntryTime] = useState<string | null>(null);
+  const [lastActionFeedback, setLastActionFeedback] = useState<string | null>(null);
+
+  // Auto-reset position when cycle changes
+  const activeCycleId = rawApiData?.cycleId || 'CURRENT';
+  useEffect(() => {
+    // If cycle is not locked or no-trade, or cycle changes, user is not forced in position
+    if (!isActuallyLocked) {
+      setIsInPosition(false);
+      setPositionEntryPrice(null);
+    }
+  }, [activeCycleId, isActuallyLocked]);
+
+  // Position PnL calculation if user entered trade
+  const positionProfitDelta = positionEntryPrice !== null 
+    ? (isUp ? (currentPrice - positionEntryPrice) : (positionEntryPrice - currentPrice))
+    : 0;
+
+  // Sensed reversal triggers
+  const isCriticalReversalTriggered = rawReversalRisk >= 38 || survivalScore < 45 || Boolean(rawApiData?.isProtectState);
+
+  // Dynamic recommendation text and button behavior
+  let recommendationHeadline = '';
+  let buttonLabel = '';
+  let buttonStyle = '';
+  let buttonActionType: 'BUY' | 'WAIT' | 'CANCEL' | 'HOLD' | 'SKIP' = 'WAIT';
+
+  if (isInPosition) {
+    if (isCriticalReversalTriggered) {
+      recommendationHeadline = `⚠️ CRITICAL REVERSAL SOURCED (${rawReversalRisk}% risk) — Strike defense deteriorating. CANCEL / EXIT TRADE immediately to preserve capital!`;
+      buttonLabel = 'CANCEL / EXIT TRADE';
+      buttonStyle = 'bg-gradient-to-r from-rose-600 via-rose-500 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-[0_0_20px_rgba(244,63,94,0.8)] border border-rose-400/80 animate-pulse';
+      buttonActionType = 'CANCEL';
+    } else {
+      recommendationHeadline = `🛡️ IN POSITION & MONITORED — Position ${isFavorableMoneyness ? 'In-The-Money' : 'Near Strike'} (${formattedDeltaVal}). Defense is ${survivalScore}% healthy (${minsLeft}m left).`;
+      buttonLabel = 'IN TRADE (SAFE)';
+      buttonStyle = 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.3)] hover:bg-emerald-500/30';
+      buttonActionType = 'HOLD';
+    }
+  } else if (isActuallyLocked && (isUp || isDown)) {
+    recommendationHeadline = `⚡ VIXY LOCKED ${lockedDirection} (${exactConfidencePct}% Conf) — ${formattedDeltaVal} to strike. ENTRY QUALIFIED. Click BUY NOW to enter!`;
+    buttonLabel = isUp ? 'BUY NOW (▲ UP)' : 'BUY NOW (▼ DOWN)';
+    buttonStyle = isUp 
+      ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-[#00FF9D] hover:from-emerald-400 hover:to-[#00FF9D] text-slate-950 shadow-[0_0_25px_rgba(0,255,157,0.7)] border-2 border-emerald-300 transform hover:scale-105 active:scale-95'
+      : 'bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 text-white shadow-[0_0_25px_rgba(244,63,94,0.7)] border-2 border-rose-300 transform hover:scale-105 active:scale-95';
+    buttonActionType = 'BUY';
+  } else if (isNoTrade) {
+    recommendationHeadline = `🛡️ VIXY SKIP / NO-TRADE ACTIVE — Market choppy or conflicting flow (${rawReversalRisk}% threat). Capital preserved.`;
+    buttonLabel = 'SKIP';
+    buttonStyle = 'bg-purple-950/80 text-purple-300 border border-purple-800/60 opacity-80';
+    buttonActionType = 'SKIP';
+  } else {
+    // Observing / Analyzing / Calibrating
+    recommendationHeadline = `VIXY is WAITING — analyzing 15M order flow & reversal vectors (${rawReversalRisk}% threat). Spot is ${formattedDeltaVal} vs strike.`;
+    buttonLabel = 'WAIT';
+    buttonStyle = 'bg-amber-400 hover:bg-amber-300 text-black shadow-[0_0_12px_rgba(251,191,36,0.6)]';
+    buttonActionType = 'WAIT';
+  }
+
+  const handleButtonClick = () => {
+    if (buttonActionType === 'BUY') {
+      setIsInPosition(true);
+      setPositionEntryPrice(currentPrice);
+      setPositionEntryTime(new Date().toLocaleTimeString());
+      setLastActionFeedback(`Position entered @ $${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Guardian reviewing live threat!`);
+      setTimeout(() => setLastActionFeedback(null), 5000);
+    } else if (buttonActionType === 'CANCEL') {
+      setIsInPosition(false);
+      setPositionEntryPrice(null);
+      setLastActionFeedback('Trade cancelled & position exited. Capital safely preserved!');
+      setTimeout(() => setLastActionFeedback(null), 5000);
+    } else if (buttonActionType === 'HOLD') {
+      // Optional exit if user clicks while safe
+      setIsInPosition(false);
+      setPositionEntryPrice(null);
+      setLastActionFeedback('Position closed by user.');
+      setTimeout(() => setLastActionFeedback(null), 4000);
+    }
+  };
 
   return (
     <div 
@@ -96,29 +203,57 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
 
         {/* Status Badges */}
         <div className="flex items-center gap-2 text-[9px] font-bold">
-          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/90 text-emerald-300 border border-emerald-500/60 shadow-[0_0_8px_rgba(52,211,153,0.3)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>GUARDIAN ACTIVE</span>
+          <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded border ${
+            isInPosition 
+              ? (isCriticalReversalTriggered ? 'bg-rose-950/90 text-rose-300 border-rose-500/80 animate-pulse shadow-[0_0_12px_rgba(244,63,94,0.5)]' : 'bg-emerald-950/90 text-[#00FF9D] border-emerald-500/60 shadow-[0_0_10px_rgba(0,255,157,0.3)]')
+              : isActuallyLocked
+              ? 'bg-cyan-950/90 text-cyan-300 border-cyan-500/60'
+              : 'bg-emerald-950/90 text-emerald-300 border-emerald-500/60'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${isInPosition ? (isCriticalReversalTriggered ? 'bg-rose-400 animate-ping' : 'bg-[#00FF9D] animate-ping') : 'bg-emerald-400 animate-pulse'}`} />
+            <span>{isInPosition ? (isCriticalReversalTriggered ? '⚠️ REVERSAL ALERT' : 'IN POSITION ACTIVE') : 'GUARDIAN ACTIVE'}</span>
           </span>
           <span className="px-2 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/60 uppercase">
-            STATUS: TERMINAL
+            {isActuallyLocked ? `LOCKED: ${lockedDirection}` : 'STATUS: TERMINAL'}
           </span>
         </div>
       </div>
 
       {/* VIXY AI / DEFENDER RECOMMENDATION BANNER */}
-      <div className="bg-[#080216] border border-purple-900/60 rounded-xl p-3 flex items-center justify-between gap-3 relative z-10 mb-3 shadow-md">
+      <div className={`border rounded-xl p-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 relative z-10 mb-3 shadow-md transition-all duration-300 ${
+        isCriticalReversalTriggered && isInPosition 
+          ? 'bg-rose-950/40 border-rose-500/80 shadow-[0_0_20px_rgba(244,63,94,0.35)]' 
+          : isActuallyLocked 
+          ? 'bg-[#0b051f] border-cyan-500/50 shadow-[0_0_20px_rgba(6,182,212,0.2)]'
+          : 'bg-[#080216] border-purple-900/60'
+      }`}>
         <div className="space-y-0.5 flex-1 min-w-0">
-          <div className="text-[8px] text-purple-400/80 font-bold uppercase tracking-widest flex items-center gap-1">
-            <Zap className="w-3 h-3 text-amber-400" />
-            <span>VIXY AI / DEFENDER RECOMMENDATION:</span>
+          <div className="text-[8px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+            <Zap className={`w-3 h-3 ${isCriticalReversalTriggered && isInPosition ? 'text-rose-400 animate-bounce' : isActuallyLocked ? 'text-[#00FF9D]' : 'text-amber-400'}`} />
+            <span className={isCriticalReversalTriggered && isInPosition ? 'text-rose-300 font-black' : 'text-purple-400/80'}>
+              {isInPosition ? 'POSITION REVIEW & DEFENDER' : 'VIXY AI / DEFENDER RECOMMENDATION:'}
+            </span>
           </div>
-          <div className="text-[10px] sm:text-[11px] font-bold text-slate-200 truncate leading-snug">
-            {recommendationText}
+          <div className="text-[10px] sm:text-[11px] font-bold text-slate-100 truncate leading-snug">
+            {recommendationHeadline}
           </div>
+          {lastActionFeedback && (
+            <div className="text-[9px] font-bold text-cyan-300 animate-pulse">
+              ✓ {lastActionFeedback}
+            </div>
+          )}
         </div>
-        <button className="px-3 py-1.5 rounded-lg bg-amber-400 text-black font-black text-xs uppercase tracking-wider shrink-0 shadow-[0_0_12px_rgba(251,191,36,0.6)] cursor-pointer hover:bg-amber-300 active:scale-95 transition-all">
-          WAIT
+
+        {/* CALIBRATED ACTION BUTTON (BUY NOW -> REVIEW -> CANCEL / EXIT) */}
+        <button 
+          onClick={handleButtonClick}
+          className={`px-4 py-2 rounded-xl font-black text-xs uppercase tracking-wider shrink-0 cursor-pointer transition-all duration-200 flex items-center gap-1.5 ${buttonStyle}`}
+          title={isInPosition ? (isCriticalReversalTriggered ? 'Click to cancel/exit and preserve capital' : 'Click to exit position') : 'Click to execute calibrated entry'}
+        >
+          {buttonActionType === 'BUY' && <Sparkles className="w-3.5 h-3.5 animate-spin text-slate-950" />}
+          {buttonActionType === 'CANCEL' && <LogOut className="w-3.5 h-3.5 text-white animate-bounce" />}
+          {buttonActionType === 'HOLD' && <ShieldCheck className="w-3.5 h-3.5 text-[#00FF9D]" />}
+          <span>{buttonLabel}</span>
         </button>
       </div>
 
@@ -130,17 +265,29 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
             <span className="text-purple-400/80 font-bold uppercase tracking-wider">
               POSITION SURVIVAL SCORE
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase bg-amber-950/80 text-amber-300 border border-amber-500/50">
+            <span className={`px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase border ${
+              survivalScore >= 65 
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' 
+                : survivalScore >= 45 
+                ? 'bg-amber-950/80 text-amber-300 border-amber-500/50' 
+                : 'bg-rose-950/80 text-rose-300 border-rose-500/50 animate-pulse'
+            }`}>
               {survivalLabel}
             </span>
           </div>
 
           <div className="my-1">
-            <div className="text-4xl sm:text-5xl font-black text-amber-300 font-mono tracking-tight drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]">
+            <div className={`text-4xl sm:text-5xl font-black font-mono tracking-tight transition-colors ${
+              survivalScore >= 65 
+                ? 'text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.4)]' 
+                : survivalScore >= 45 
+                ? 'text-amber-300 drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]' 
+                : 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]'
+            }`}>
               {survivalScore}%
             </div>
-            <div className="text-[8.5px] font-bold text-amber-400/90 uppercase tracking-widest mt-0.5">
-              {survivalLabel}
+            <div className="text-[8.5px] font-bold uppercase tracking-widest mt-0.5 text-purple-300">
+              {isInPosition ? `POSITION ACTIVE • ${positionProfitDelta >= 0 ? '+' : '-'}$${Math.abs(positionProfitDelta).toFixed(2)} P&L` : `${survivalLabel} CONDITION`}
             </div>
           </div>
 
@@ -158,8 +305,12 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
             <span className="text-purple-400/80 font-bold uppercase tracking-wider">
               REVERSAL THREAT
             </span>
-            <span className="px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase bg-amber-950/80 text-amber-300 border border-amber-500/50">
-              {threatFactor} HIGH THREAT
+            <span className={`px-1.5 py-0.2 rounded text-[7.5px] font-black uppercase border ${
+              rawReversalRisk >= 38 
+                ? 'bg-rose-950/80 text-rose-300 border-rose-500/50 animate-pulse' 
+                : 'bg-amber-950/80 text-amber-300 border-amber-500/50'
+            }`}>
+              {threatFactor} {rawReversalRisk >= 38 ? 'HIGH THREAT' : 'NORMAL'}
             </span>
           </div>
 
@@ -168,21 +319,39 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
           </div>
 
           <ul className="text-[8.5px] font-mono space-y-1 text-purple-200/90 leading-tight">
-            <li className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-cyan-400 shrink-0" />
-              <span>Price/Cap alignment: <strong className="text-cyan-300">42% confidence</strong></span>
+            <li className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-cyan-400 shrink-0" />
+                <span>Price/Cap alignment:</span>
+              </span>
+              <strong className="text-cyan-300">{exactConfidencePct}% conf ({formattedDeltaVal})</strong>
             </li>
-            <li className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />
-              <span>Volume spike threat: <strong className="text-amber-300">realtime risk</strong></span>
+            <li className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-amber-400 shrink-0" />
+                <span>Volume spike threat:</span>
+              </span>
+              <strong className={rawReversalRisk >= 38 ? 'text-rose-400' : 'text-amber-300'}>
+                {rawReversalRisk >= 38 ? 'realtime risk' : 'order flow balanced'}
+              </strong>
             </li>
-            <li className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-rose-400 shrink-0" />
-              <span>Order flow exhaustion: <strong className="text-rose-300">watch reversal</strong></span>
+            <li className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-rose-400 shrink-0" />
+                <span>Order flow exhaustion:</span>
+              </span>
+              <strong className={rawReversalRisk >= 38 ? 'text-rose-400 font-bold' : 'text-purple-300'}>
+                {rawReversalRisk >= 38 ? 'watch reversal ⚠️' : 'stable drift'}
+              </strong>
             </li>
-            <li className="flex items-center gap-1">
-              <span className="w-1 h-1 rounded-full bg-purple-400 shrink-0" />
-              <span>Volatility expansion: <strong className="text-purple-200">high probability</strong></span>
+            <li className="flex items-center justify-between gap-1">
+              <span className="flex items-center gap-1">
+                <span className="w-1 h-1 rounded-full bg-purple-400 shrink-0" />
+                <span>Volatility expansion:</span>
+              </span>
+              <strong className="text-purple-200">
+                {rawReversalRisk >= 50 ? 'high expansion' : 'controlled bounds'}
+              </strong>
             </li>
           </ul>
         </div>
