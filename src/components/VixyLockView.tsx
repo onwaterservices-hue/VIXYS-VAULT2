@@ -245,7 +245,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
 
     // Update Last 10 Rounds Settlement Strip immediately
-    setRecentSettlementRounds(prev => [settledRoundItem, ...prev.slice(0, 9)]);
+    setRecentSettlementRounds(prev => {
+      const filtered = prev.filter(r => r.id !== settledRoundItem.id);
+      return [settledRoundItem, ...filtered.slice(0, 9)];
+    });
 
     // Update streak statistics
     if (outcomeResult === 'WIN') {
@@ -529,7 +532,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               isMegaWhale: sizeUsd >= 1000000
             };
 
-            setWhaleTrades(prev => [newTrade, ...prev.slice(0, 5)]);
+            setWhaleTrades(prev => {
+              const filtered = prev.filter(t => t.id !== newTrade.id);
+              return [newTrade, ...filtered.slice(0, 5)];
+            });
 
             setWhaleFlowData(prev => {
               const currentTotalBuy = (prev.buyPct / 100) * 10000000 + (side === 'BUY' ? sizeUsd : 0);
@@ -579,7 +585,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           isMegaWhale: size >= 1000000
         };
 
-        setWhaleTrades(prev => [fallbackTrade, ...prev.slice(0, 5)]);
+        setWhaleTrades(prev => {
+          const filtered = prev.filter(t => t.id !== fallbackTrade.id);
+          return [fallbackTrade, ...filtered.slice(0, 5)];
+        });
       }, 7000);
     }
 
