@@ -17,6 +17,7 @@ import { VixyProtectionSummary } from './VixyProtectionSummary';
 import { ProtectionBrain } from './ProtectionBrain';
 import { WhaleBrain } from './WhaleBrain';
 import { InstitutionalIntelRadar } from './InstitutionalIntelRadar';
+import { DecisionEngineDiagnostics } from '../DecisionEngineDiagnostics';
 
 interface SignalBrainProps {
   feedStatus?: string;
@@ -758,6 +759,9 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
         </div>
       </div>
+
+      {/* DECISION ENGINE DIAGNOSTICS & PROBABILITY MATRIX */}
+      <DecisionEngineDiagnostics rawApiData={rawApiData} />
 
       {/* LOWER 3-COLUMN INTELLIGENCE AREA: VIXY PROTECTION | WHALE WATCH | INSTITUTIONAL RADAR */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">

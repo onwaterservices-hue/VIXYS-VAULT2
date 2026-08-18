@@ -2159,7 +2159,7 @@ export interface Active15mCycleState {
   analysisCount: number;
   analyzedAt: string | null;
   analysisStatus: 'NOT_STARTED' | 'ANALYZING' | 'COMPLETE' | 'FAILED';
-  qualificationStatus: 'NOT_STARTED' | 'QUALIFYING' | 'PASSED' | 'FAILED' | 'SKIPPED';
+  qualificationStatus: 'NOT_STARTED' | 'QUALIFYING' | 'PASSED' | 'FAILED' | 'SKIPPED' | 'ENTRY_WINDOW_CLOSED';
   qualificationReason?: string | null;
   validationStatus: 'NOT_STARTED' | 'VALIDATING' | 'PASSED' | 'FAILED' | 'PASS' | 'FAIL';
   validationReason?: string | null;
@@ -3148,12 +3148,13 @@ export async function checkAndSettle15mCycle(livePrice: number) {
         lock15mCycle(currentCycleId, livePrice, 'QUALIFIED_AUTHORITATIVE_ENTRY');
       }
     } else if (elapsedSeconds >= 720 && !active15mCycle.isLocked) {
-      // Safety Window Expired (>= 720s elapsed / remaining < 180s and unlocked) -> Do not lock
-      active15mCycle.status = 'NO_TRADE';
-      active15mCycle.stage = 'NO_TRADE';
-      active15mCycle.qualificationStatus = 'SKIPPED';
+      // Entry Window Expired (>= 720s elapsed / remaining < 180s and unlocked)
+      // Decoupled from VIXY SKIP: Entry window is closed for new locks, but cycle remains ANALYZING / MONITORING until 900s Cycle Expiry
+      active15mCycle.status = 'ANALYZING';
+      active15mCycle.stage = 'ANALYZING';
+      active15mCycle.qualificationStatus = 'ENTRY_WINDOW_CLOSED';
       active15mCycle.qualificationReason = 'ENTRY_WINDOW_EXPIRED';
-      console.log(`[VIXY_NO_TRADE] cycleId=${currentCycleId} reason=ENTRY_WINDOW_EXPIRED`);
+      console.log(`[VIXY_ENTRY_WINDOW] cycleId=${currentCycleId} status=ENTRY_WINDOW_CLOSED (analyzable through 900s cycle expiry)`);
     }
 
     // Immediately record active NO_TRADE / SKIPPED cycle in persistentSignalLogs for VIXY LOCKS & Firestore learning engine
@@ -5429,6 +5430,13 @@ const createCheckoutSessionHandler = async (req: express.Request, res: express.R
   const cleanUserEmail = String(userEmail || req.headers['x-user-email'] || '').trim().toLowerCase();
   const cleanUid = String(uid || req.headers['x-user-uid'] || '').trim();
 
+  if (!cleanUserEmail || !cleanUserEmail.includes('@') || cleanUserEmail.length < 5) {
+    return res.status(401).json({
+      error: 'ACCOUNT_REQUIRED',
+      message: 'You must create an account and sign in before paying via Stripe to ensure your license & Discord role link instantly to your profile.',
+    });
+  }
+
   const allowedPlans = ['STARTER', 'PRO', 'ELITE'];
   const targetPlan = (plan || 'PRO').toString().toUpperCase();
   const safePlan = allowedPlans.includes(targetPlan) ? targetPlan : 'PRO';
@@ -5607,6 +5615,13 @@ const createDayPassCheckoutHandler = async (req: express.Request, res: express.R
     (req.headers['x-user-id'] as string) ||
     ''
   ).trim();
+
+  if (!cleanUserEmail || !cleanUserEmail.includes('@') || cleanUserEmail.length < 5) {
+    return res.status(401).json({
+      error: 'ACCOUNT_REQUIRED',
+      message: 'You must create an account and sign in before paying via Stripe to ensure your license & Discord role link instantly to your profile.',
+    });
+  }
 
   const cleanReferral = (req.body.referralCode || req.body.ref || '').toString().trim().toUpperCase();
   const user = ensureUserExists({ uid: cleanUid, email: cleanUserEmail, name: cleanUserEmail ? cleanUserEmail.split('@')[0] : 'Day Pass User' });
