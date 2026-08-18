@@ -196,11 +196,16 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     return () => clearInterval(interval);
   }, [ticker]);
 
-  // Derived Authoritative Clock
+  // Derived Authoritative Clock aligned to exact 15-minute Kalshi boundaries
   const adjustedNow = nowMs + serverTimeOffset;
-  const intervalEnd = snapshot?.intervalEnd || (adjustedNow + 420000);
-  const intervalStart = snapshot?.intervalStart || (adjustedNow - 480000);
-  const totalDuration = Math.max(1, intervalEnd - intervalStart);
+  const d = new Date(adjustedNow);
+  const currentMin = d.getMinutes();
+  const startMin = Math.floor(currentMin / 15) * 15;
+  const startDate = new Date(d);
+  startDate.setMinutes(startMin, 0, 0);
+  const intervalStart = snapshot?.intervalStart || startDate.getTime();
+  const intervalEnd = snapshot?.intervalEnd || (intervalStart + 15 * 60 * 1000);
+  const totalDuration = 15 * 60 * 1000;
   const timeRemainingMs = Math.max(0, intervalEnd - adjustedNow);
   const timeRemainingSec = Math.floor(timeRemainingMs / 1000);
   const mins = Math.floor(timeRemainingSec / 60);
@@ -366,9 +371,23 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             <div className="flex items-center justify-between w-full text-[11px] text-gray-400 px-1 mt-1">
-              <div>OPEN <span className="text-gray-200">{new Date(intervalStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} AM</span></div>
+              <div>OPEN <span className="text-gray-200">{(() => {
+                const d = new Date(intervalStart);
+                let h = d.getHours();
+                const m = d.getMinutes();
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12; h = h ? h : 12;
+                return `${h < 10 ? '0' + h : h}:${m < 10 ? '0' + m : m} ${ampm}`;
+              })()}</span></div>
               <div className="text-cyan-400 font-bold">{Math.round(progressPct)}%</div>
-              <div>CLOSE <span className="text-gray-200">{new Date(intervalEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} AM</span></div>
+              <div>CLOSE <span className="text-gray-200">{(() => {
+                const d = new Date(intervalEnd);
+                let h = d.getHours();
+                const m = d.getMinutes();
+                const ampm = h >= 12 ? 'PM' : 'AM';
+                h = h % 12; h = h ? h : 12;
+                return `${h < 10 ? '0' + h : h}:${m < 10 ? '0' + m : m} ${ampm}`;
+              })()}</span></div>
             </div>
           </div>
 
@@ -708,15 +727,30 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               <div className="text-[10px] text-gray-500 mt-2">VOL $234.7M • 196ms</div>
             </div>
 
-            <div className="bg-[#080510] p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between shadow-[0_0_15px_rgba(16,185,129,0.15)]">
-              <div>
-                <div className="text-[10px] text-emerald-400 font-semibold mb-1">CROSS VENUE SPREAD</div>
-                <div className="text-xl font-black text-white">$8.62</div>
-                <div className="text-xs text-emerald-400 font-bold">(0.01%)</div>
+            <div className="bg-[#080510] p-4 rounded-xl border border-emerald-500/30 flex flex-col justify-between shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-[10px] text-emerald-400 font-semibold mb-1">CROSS VENUE SPREAD</div>
+                  <div className="text-xl font-black text-white">$8.62</div>
+                  <div className="text-xs text-emerald-400 font-bold">(0.01%)</div>
+                </div>
+                <div className="flex flex-col items-center justify-center">
+                  <svg className="w-14 h-11 text-emerald-400 drop-shadow-[0_0_12px_rgba(16,185,129,0.9)]" viewBox="0 0 100 65" fill="currentColor">
+                    <path d="M15,40 C15,25 30,20 45,22 C55,12 75,15 85,25 C95,32 90,45 80,48 C70,52 35,52 15,40 Z" fill="#10B981" />
+                    <path d="M80,25 C88,22 92,28 88,35 C85,40 78,38 75,32 Z" fill="#34D399" />
+                    <path d="M86,22 C92,12 82,10 78,16 Z" fill="#6EE7B7" />
+                    <path d="M82,24 C88,18 94,24 90,28 Z" fill="#6EE7B7" />
+                    <path d="M35,22 C45,15 65,18 75,25 C65,32 45,32 35,22 Z" fill="#34D399" opacity="0.8" />
+                    <rect x="25" y="45" width="6" height="15" rx="3" fill="#047857" />
+                    <rect x="42" y="46" width="6" height="14" rx="3" fill="#047857" />
+                    <rect x="68" y="44" width="6" height="16" rx="3" fill="#047857" />
+                    <rect x="78" y="45" width="6" height="15" rx="3" fill="#047857" />
+                  </svg>
+                </div>
               </div>
               <div className="text-[10px] text-emerald-400 font-bold mt-2 flex items-center space-x-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span>STATUS: ALIGNED</span>
+                <span>STATUS: ALIGNED ✓</span>
               </div>
             </div>
 
@@ -845,14 +879,22 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </div>
 
               {/* Hologrammatic Bull Aura Box */}
-              <div className="my-3 h-24 bg-gradient-to-br from-emerald-950/60 via-[#080510] to-emerald-950/30 rounded-lg border border-emerald-500/40 flex items-center justify-center relative overflow-hidden shadow-[inset_0_0_20px_rgba(16,185,129,0.3)]">
-                <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#10B981_1px,transparent_1px)] bg-[size:16px_16px]"></div>
-                <div className="relative z-10 text-center">
-                  <div className="text-3xl font-black text-emerald-400 tracking-widest drop-shadow-[0_0_15px_rgba(16,185,129,0.8)] animate-pulse">
-                    🐂 ⚡
-                  </div>
-                  <div className="text-[10px] text-emerald-300 font-bold tracking-widest mt-1">
-                    HOLOGRAMIC BULL AURA
+              <div className="my-3 h-28 bg-gradient-to-br from-emerald-950/80 via-[#080510] to-emerald-950/40 rounded-lg border border-emerald-500/50 flex items-center justify-center relative overflow-hidden shadow-[inset_0_0_25px_rgba(16,185,129,0.4)]">
+                <div className="absolute inset-0 opacity-25 bg-[radial-gradient(#10B981_1.5px,transparent_1.5px)] bg-[size:12px_12px]"></div>
+                <div className="relative z-10 flex flex-col items-center justify-center">
+                  <svg className="w-22 h-16 text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.9)]" viewBox="0 0 100 65" fill="currentColor">
+                    <path d="M15,40 C15,25 30,20 45,22 C55,12 75,15 85,25 C95,32 90,45 80,48 C70,52 35,52 15,40 Z" fill="#10B981" />
+                    <path d="M80,25 C88,22 92,28 88,35 C85,40 78,38 75,32 Z" fill="#34D399" />
+                    <path d="M86,22 C92,12 82,10 78,16 Z" fill="#6EE7B7" />
+                    <path d="M82,24 C88,18 94,24 90,28 Z" fill="#6EE7B7" />
+                    <path d="M35,22 C45,15 65,18 75,25 C65,32 45,32 35,22 Z" fill="#34D399" opacity="0.8" />
+                    <rect x="25" y="45" width="6" height="15" rx="3" fill="#047857" />
+                    <rect x="42" y="46" width="6" height="14" rx="3" fill="#047857" />
+                    <rect x="68" y="44" width="6" height="16" rx="3" fill="#047857" />
+                    <rect x="78" y="45" width="6" height="15" rx="3" fill="#047857" />
+                  </svg>
+                  <div className="text-[10px] text-emerald-300 font-mono font-bold tracking-widest mt-1 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/40">
+                    BULL AURA ACTIVE
                   </div>
                 </div>
               </div>
