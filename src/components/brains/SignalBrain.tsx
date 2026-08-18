@@ -102,27 +102,30 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   // Safe backend-authoritative execution state
   // Safe backend-authoritative execution state
   // We prefer the explicit `execution` payload from the backend if it exists.
-  // Otherwise, we derive it cleanly from `direction` and `engineState`.
+  // Otherwise, we derive it cleanly from `direction`, `candidateDirection`, `decision`, and `engineState`.
   const isActuallyLocked = Boolean(
     rawApiData?.isLocked === true &&
     (rawApiData?.status === 'LOCKED' || rawApiData?.stage === 'LOCKED' || rawApiData?.cycleStage === 'LOCKED')
   );
 
-  const rawDirection = isActuallyLocked
-    ? (rawApiData?.lockedDirection || 'NONE')
-    : 'NONE';
+  const rawDirectionStr = String(
+    isActuallyLocked
+      ? (rawApiData?.lockedDirection || rawApiData?.decision || rawApiData?.direction || 'NONE')
+      : (rawApiData?.decision || rawApiData?.candidateDirection || rawApiData?.direction || (signal?.direction === 'YES' ? 'UP' : signal?.direction === 'NO' ? 'DOWN' : 'NONE'))
+  ).toUpperCase();
 
-  const isUp = isActuallyLocked && (rawDirection === 'BUY UP' || rawDirection === 'UP' || rawDirection === 'BUY_YES');
-  const isDown = isActuallyLocked && (rawDirection === 'BUY DOWN' || rawDirection === 'DOWN' || rawDirection === 'BUY_NO');
+  const isUp = (rawDirectionStr.includes('UP') || rawDirectionStr.includes('YES') || rawDirectionStr === 'BUY_YES');
+  const isDown = (rawDirectionStr.includes('DOWN') || rawDirectionStr.includes('NO') && !rawDirectionStr.includes('NO_TRADE') && !rawDirectionStr.includes('NO_EXECUTION'));
+  const isSkipExplicit = rawDirectionStr.includes('SKIP') || rawDirectionStr.includes('NO_TRADE') || rawDirectionStr === 'PASS';
 
-  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'OBSERVING';
+  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'QUALIFYING';
   const isBackendObserving = !isActuallyLocked && rawStage === 'OBSERVING';
   const isBackendCalibrating = !isActuallyLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
   const isBackendAnalyzing = !isActuallyLocked && rawStage === 'ANALYZING';
   const isBackendQualifying = !isActuallyLocked && rawStage === 'QUALIFYING';
   const isBackendValidating = !isActuallyLocked && (rawStage === 'VALIDATING' || rawStage === 'LOCKING');
   const isBackendReady = !isActuallyLocked && rawStage === 'READY_TO_LOCK';
-  const isBackendNoTrade = !isActuallyLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED');
+  const isBackendNoTrade = isSkipExplicit || (!isActuallyLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED'));
   const isPassExplicit = rawApiData?.lockedDirection === 'PASS' || isBackendNoTrade;
 
   const execution = rawApiData?.execution || {
@@ -130,47 +133,47 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS')
       : isBackendNoTrade
       ? 'NO_TRADE'
+      : isUp
+      ? 'CONFIRMED_UP'
+      : isDown
+      ? 'CONFIRMED_DOWN'
       : isBackendObserving
       ? 'OBSERVING'
       : isBackendCalibrating
       ? 'CALIBRATING'
       : isBackendAnalyzing
       ? 'ANALYZING'
-      : isBackendQualifying
-      ? 'QUALIFYING'
-      : isBackendValidating
-      ? 'VALIDATING'
-      : isBackendReady
-      ? 'READY'
-      : 'OBSERVING',
+      : 'QUALIFYING',
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
-    authorized: isActuallyLocked && (isUp || isDown),
+    authorized: (isActuallyLocked || isBackendQualifying || isBackendReady) && (isUp || isDown),
     actionLabel: isActuallyLocked
-      ? (isUp ? 'BUY UP → READY' : isDown ? 'BUY DOWN → READY' : 'ENTRY NOT QUALIFIED')
+      ? (isUp ? 'LOCKED BUY UP → READY' : isDown ? 'LOCKED BUY DOWN → READY' : 'ENTRY NOT QUALIFIED')
       : isBackendNoTrade
       ? 'CYCLE SKIPPED (NO QUALIFIED ENTRY)'
+      : isUp
+      ? 'BUY UP → QUALIFIED'
+      : isDown
+      ? 'BUY DOWN → QUALIFIED'
       : isBackendObserving
       ? 'OBSERVING MARKET ORDER FLOW'
       : isBackendCalibrating
       ? 'CALIBRATING ENGINE'
-      : isBackendAnalyzing
-      ? 'ANALYZING CYCLE'
-      : isBackendQualifying
-      ? 'QUALIFYING CONFLUENCE'
-      : isBackendValidating
-      ? 'VALIDATING EVIDENCE'
-      : 'READY TO LOCK',
+      : 'EVALUATING CONFLUENCE',
     reason: isActuallyLocked
       ? (rawApiData?.lockReason || 'IMMUTABLE LOCK')
       : isBackendNoTrade
       ? (rawApiData?.qualificationReason || 'Protection / Choppy market filter')
+      : isUp
+      ? 'Independent P(UP) dominance verified'
+      : isDown
+      ? 'Independent P(DOWN) dominance verified'
       : `Current Phase: ${rawStage}`,
-    qualified: isActuallyLocked
+    qualified: isActuallyLocked || isUp || isDown
   };
 
-  const isConfirmedUp = isActuallyLocked && isUp;
-  const isConfirmedDown = isActuallyLocked && isDown;
-  const isPassState = isActuallyLocked && isPassExplicit;
+  const isConfirmedUp = (isActuallyLocked && isUp) || (!isBackendNoTrade && isUp);
+  const isConfirmedDown = (isActuallyLocked && isDown) || (!isBackendNoTrade && isDown);
+  const isPassState = isBackendNoTrade || (isActuallyLocked && isPassExplicit);
 
   const sigAny = signal as any;
   const rawEffectiveProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
@@ -270,22 +273,26 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || liveAgeSeconds > 60;
   const isOfflineOrStale = isActualOffline && !hasValidRawData;
 
-  let displayDecisionText = 'CALIBRATING';
+  let displayDecisionText = 'ANALYZING';
   if (isOfflineOrStale) {
     displayDecisionText = 'DATA STALE';
-  } else if (isActuallyLocked && isConfirmedUp) {
-    displayDecisionText = 'BUY UP';
-  } else if (isActuallyLocked && isConfirmedDown) {
-    displayDecisionText = 'BUY DOWN';
-  } else if (isActuallyLocked && (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE')) {
+  } else if (isConfirmedUp) {
+    displayDecisionText = isActuallyLocked ? 'LOCKED BUY UP' : 'BUY UP';
+  } else if (isConfirmedDown) {
+    displayDecisionText = isActuallyLocked ? 'LOCKED BUY DOWN' : 'BUY DOWN';
+  } else if (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE') {
     displayDecisionText = 'VIXY SKIP';
-  } else {
+  } else if (isBackendObserving) {
+    displayDecisionText = 'OBSERVING';
+  } else if (isBackendCalibrating) {
     displayDecisionText = 'CALIBRATING';
+  } else {
+    displayDecisionText = 'QUALIFYING';
   }
 
-  const displayCalibratedProb = isActuallyLocked && (rawCalibProb !== null && rawCalibProb !== undefined)
+  const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
     ? `${Math.round(rawCalibProb * (rawCalibProb <= 1 ? 100 : 1))}%`
-    : (isActuallyLocked && rawApiData?.confidence ? `${Math.round(rawApiData.confidence)}%` : '');
+    : (authoritativeConfidenceNum ? `${Math.round(authoritativeConfidenceNum)}%` : '');
 
   // Compute execution dispatch panel state (STRICTLY INDEPENDENT FROM ACCESS GATE)
   let executionPanelState: 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING' = 'CALIBRATING';
@@ -293,11 +300,11 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     executionPanelState = 'STALE';
   } else if (isProtectState) {
     executionPanelState = 'PROTECT';
-  } else if (isActuallyLocked && isConfirmedUp) {
+  } else if (isConfirmedUp) {
     executionPanelState = 'CONFIRMED_UP';
-  } else if (isActuallyLocked && isConfirmedDown) {
+  } else if (isConfirmedDown) {
     executionPanelState = 'CONFIRMED_DOWN';
-  } else if (isActuallyLocked && isPassState) {
+  } else if (isPassState) {
     executionPanelState = 'PASS';
   } else if (isBackendCalibrating) {
     executionPanelState = 'CALIBRATING';

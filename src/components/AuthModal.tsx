@@ -324,7 +324,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )}
 
               <div className="space-y-1.5">
-                <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Email Address</label>
+                <div className="flex justify-between items-center">
+                  <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Email Address</label>
+                  {(email.toLowerCase().trim() === 'vixyvault0@gmail.com' || email.toLowerCase().trim() === 'onwaterservices@gmail.com') && (
+                    <span className="text-[10px] text-amber-400 font-bold bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-full">
+                      👑 Master Admin (Level 0)
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
                   <input

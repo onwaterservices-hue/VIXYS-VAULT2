@@ -1,16 +1,16 @@
 /**
  * VIXY VAULT — Meta-Decision Engine & Two-Stage Decision Architecture (Step 10-14, 18, 19)
  * Authoritative decision generator connecting:
- * - Step 1: Neural Execution Core (Calculates core directional probability & edge)
+ * - Step 1: Neural Execution Core (Calculates core directional probability & independent P(UP) / P(DOWN))
  * - Step 2: VIXY Protection™ Guardian (Validates safety, reversal threat, cross-venue divergence, liquidity drain)
- * - Hard SKIP System with unambiguous operational reasons
- * - Explainability Vectors
+ * - Three-Way State Evaluation Architecture ('BUY UP' | 'BUY DOWN' | 'SKIP')
+ * - Explainability Vectors & Lock Eligibility Gating
  */
 
 import { UnderlyingAssetMetrics } from '../market/assetIntelligence';
 import { CrossVenueReconciliationResult } from './crossVenueReconciliation';
 import { UnifiedFeatureVector } from './regimeEngine';
-import { EnsembleProbabilityResult } from './probabilityAndCalibrationEngine';
+import { EnsembleProbabilityResult, IndependentProbabilityScores } from './probabilityAndCalibrationEngine';
 
 export type DecisionOutcome = 'BUY UP' | 'BUY DOWN' | 'SKIP' | 'OBSERVING';
 export type ProtectionStatusType = 'PASS' | 'WATCH' | 'WARNING' | 'VETO';
@@ -21,7 +21,7 @@ export interface VixyTwoStageDecision {
   timestamp: number;
   stage: 'OBSERVING' | 'CALIBRATING' | 'ANALYZING' | 'QUALIFYING' | 'LOCKED' | 'NO_TRADE';
   
-  // Final Authoritative Output
+  // Final Authoritative Output (Explicit 3-Way Evaluation)
   decision: DecisionOutcome;
   direction: 'UP' | 'DOWN' | 'NEUTRAL';
   confidencePct: number;
@@ -30,6 +30,16 @@ export interface VixyTwoStageDecision {
   isQualifiedForLock: boolean;
   lockStatus: 'LOCKED' | 'ELIGIBLE' | 'BLOCKED' | 'SKIPPED' | 'WAITING';
   
+  // Independent Probability Scorer Breakdown
+  independentProbability: {
+    pUpPct: number;
+    pDownPct: number;
+    uncertaintyPct: number;
+    edgeUpPct: number;
+    edgeDownPct: number;
+    directionalBias: 'UP' | 'DOWN' | 'NEUTRAL';
+  };
+
   // Step 1: Neural Core Output
   neuralCore: {
     bias: 'UP' | 'DOWN' | 'NEUTRAL';
@@ -48,7 +58,7 @@ export interface VixyTwoStageDecision {
     activeProtections: string[];
   };
 
-  // Hard Skip System
+  // Hard Skip & Rejection System
   skipDetails: {
     isSkipped: boolean;
     primaryReason: string | null;
@@ -80,23 +90,34 @@ export function evaluateTwoStageDecision(
   lockedSnapshot?: any
 ): VixyTwoStageDecision {
   const now = Date.now();
+  const independent = ensemble.independentScores;
 
   // If already locked, return the locked authoritative snapshot
   if (isAlreadyLocked && lockedSnapshot) {
+    const lockedDir = lockedSnapshot.direction === 'DOWN' ? 'DOWN' : 'UP';
+    const lockedDecision: DecisionOutcome = lockedSnapshot.decision || (lockedDir === 'UP' ? 'BUY UP' : 'BUY DOWN');
     return {
       cycleId,
       asset: underlying.asset,
       timestamp: now,
       stage: 'LOCKED',
-      decision: lockedSnapshot.decision || (lockedSnapshot.direction === 'UP' ? 'BUY UP' : 'BUY DOWN'),
-      direction: lockedSnapshot.direction || 'UP',
+      decision: lockedDecision,
+      direction: lockedDir,
       confidencePct: lockedSnapshot.confidence || 85,
       calibratedProbability: lockedSnapshot.probability || ensemble.calibratedProbability,
       rawProbability: ensemble.rawProbability,
       isQualifiedForLock: true,
       lockStatus: 'LOCKED',
+      independentProbability: {
+        pUpPct: independent?.pUpPct ?? (lockedDir === 'UP' ? 72 : 28),
+        pDownPct: independent?.pDownPct ?? (lockedDir === 'DOWN' ? 72 : 28),
+        uncertaintyPct: independent?.uncertaintyPct ?? 4,
+        edgeUpPct: independent?.edgeUpPct ?? (lockedDir === 'UP' ? 12 : -8),
+        edgeDownPct: independent?.edgeDownPct ?? (lockedDir === 'DOWN' ? 12 : -8),
+        directionalBias: lockedDir,
+      },
       neuralCore: {
-        bias: lockedSnapshot.direction || 'UP',
+        bias: lockedDir,
         rawConfidencePct: lockedSnapshot.confidence || 85,
         edgePct: ensemble.edgeVsConsensusPct,
         moduleConfluenceCount: 6,
@@ -116,7 +137,7 @@ export function evaluateTwoStageDecision(
         rejectionCategory: 'NONE',
       },
       explainability: {
-        summary: `Cycle ${cycleId} immutably locked for ${lockedSnapshot.decision} at $${lockedSnapshot.spot || underlying.spotPrice}`,
+        summary: `Cycle ${cycleId} immutably locked for ${lockedDecision} at $${lockedSnapshot.spot || underlying.spotPrice}`,
         whyDirection: `Confluence across order flow and multi-timeframe momentum`,
         keyTailwinds: ['Strong multi-venue agreement', 'Favorable strike displacement'],
         keyRisks: ['Normal late-interval volatility variance'],
@@ -126,11 +147,11 @@ export function evaluateTwoStageDecision(
     };
   }
 
-  // --- STEP 1: NEURAL EXECUTION CORE ---
-  const favorableModules = ensemble.modules.filter(m => m.vote === (ensemble.direction === 'UP' ? 'BULLISH' : 'BEARISH')).length;
-  const coreBias = ensemble.direction;
+  // --- STEP 1: NEURAL EXECUTION CORE (Independent P(UP) / P(DOWN) Evaluation) ---
+  const coreBias: 'UP' | 'DOWN' | 'NEUTRAL' = ensemble.direction || independent.directionalBias;
+  const favorableModules = ensemble.modules.filter(m => m.vote === (coreBias === 'UP' ? 'BULLISH' : 'BEARISH')).length;
   const coreConfidence = ensemble.earnedConfidencePct;
-  const coreEdge = ensemble.edgeVsConsensusPct;
+  const coreEdge = ensemble.edgeVsKalshiPct;
 
   // --- STEP 2: VIXY PROTECTION GUARDIAN ---
   const activeProtections: string[] = [];
@@ -163,61 +184,77 @@ export function evaluateTwoStageDecision(
     vetoReason = 'Market data latency exceeds maximum tolerance (>15s)';
   }
 
-  // Check 4: Chop & Reversal Drift
+  // Check 4: Chop Filter (Elevates threat score, but does not veto outright unless conflicted)
   if (features.isChoppy) {
-    threatScore += 30;
+    threatScore += 20;
     activeProtections.push('CHOP_FILTER');
   }
 
   threatScore = Math.min(100, Math.max(0, threatScore));
-  if (threatScore >= 65) protectionStatus = 'VETO';
+  if (threatScore >= 65 || isVetoActive) protectionStatus = 'VETO';
   else if (threatScore >= 45) protectionStatus = 'WARNING';
   else if (threatScore >= 25) protectionStatus = 'WATCH';
+  else protectionStatus = 'PASS';
 
-  // --- HARD SKIP SYSTEM EVALUATION ---
+  // --- THREE-WAY STATE EVALUATION & HARD SKIP SYSTEM ---
   const secondaryReasons: string[] = [];
   let isSkipped = false;
   let primarySkipReason: string | null = null;
   let rejectionCategory: 'NONE' | 'CHOP' | 'DISAGREEMENT' | 'LOW_EDGE' | 'STALE_DATA' | 'PROTECTION_VETO' | 'EXPIRED_WINDOW' = 'NONE';
 
+  const isWindowExpired = elapsedSec >= 870 || remainingSec < 30;
+
   if (isVetoActive) {
     isSkipped = true;
     primarySkipReason = vetoReason || 'Protection Guardian Veto Active';
-    rejectionCategory = crossVenue.severeDisagreementDetected ? 'DISAGREEMENT' : 'PROTECTION_VETO';
-  } else if (features.isChoppy) {
+    rejectionCategory = crossVenue.severeDisagreementDetected ? 'DISAGREEMENT' : (underlying.feedHealth.status === 'STALE' || underlying.feedHealth.status === 'OFFLINE' ? 'STALE_DATA' : 'PROTECTION_VETO');
+  } else if (coreBias === 'NEUTRAL' && Math.abs(independent.pUpPct - independent.pDownPct) < 2.0 && features.isChoppy) {
+    // Only skip when there is truly no statistical edge in either direction
     isSkipped = true;
-    primarySkipReason = features.chopReason || 'Conflicted chop structure / lack of momentum confluence';
+    primarySkipReason = features.chopReason || 'Neutral market chop without directional momentum';
     rejectionCategory = 'CHOP';
-    secondaryReasons.push('Timeframe momentum alignment < 50%');
-  } else if (Math.abs(coreEdge) < 1.5 && coreConfidence < 72) {
-    isSkipped = true;
-    primarySkipReason = `Insufficient statistical edge (${coreEdge > 0 ? '+' : ''}${coreEdge.toFixed(1)}% vs required +1.5%)`;
-    rejectionCategory = 'LOW_EDGE';
-  } else if (elapsedSec >= 720) {
-    isSkipped = true;
-    primarySkipReason = 'Optimal entry lock window expired (remaining < 180s)';
-    rejectionCategory = 'EXPIRED_WINDOW';
+    secondaryReasons.push('P(UP) and P(DOWN) within 2% neutral parity band');
   }
 
-  // --- QUALIFICATION FOR LOCK ---
-  const isQualifiedForLock = !isSkipped && coreConfidence >= 75 && favorableModules >= 4 && elapsedSec >= 180 && elapsedSec <= 660;
+  // --- QUALIFICATION FOR IMMUTABLE LOCK ---
+  // Lock criteria: 180s <= elapsedSec <= 750s, confidence >= 60%, >= 3 favorable modules
+  const isQualifiedForLock = !isSkipped && !isWindowExpired && coreConfidence >= 60 && favorableModules >= 3 && elapsedSec >= 180 && elapsedSec <= 750;
 
-  // Final Decision Label
+  // --- EXPLICIT THREE-WAY DECISION STATE MACHINE ---
+  // Outcomes: 'BUY UP' | 'BUY DOWN' | 'SKIP' (and 'OBSERVING' if early elapsed < 180s with no trade)
   let finalDecision: DecisionOutcome = 'OBSERVING';
+  let finalDirection: 'UP' | 'DOWN' | 'NEUTRAL' = coreBias;
   let lockStatus: 'LOCKED' | 'ELIGIBLE' | 'BLOCKED' | 'SKIPPED' | 'WAITING' = 'WAITING';
 
   if (isSkipped) {
     finalDecision = 'SKIP';
+    finalDirection = 'NEUTRAL';
     lockStatus = 'SKIPPED';
-  } else if (isQualifiedForLock) {
-    finalDecision = coreBias === 'UP' ? 'BUY UP' : 'BUY DOWN';
-    lockStatus = 'ELIGIBLE';
+  } else if (coreBias === 'UP') {
+    finalDecision = 'BUY UP';
+    finalDirection = 'UP';
+    if (isWindowExpired) lockStatus = 'BLOCKED';
+    else if (isQualifiedForLock) lockStatus = 'ELIGIBLE';
+    else if (elapsedSec < 180) lockStatus = 'WAITING';
+    else lockStatus = 'ELIGIBLE';
+  } else if (coreBias === 'DOWN') {
+    finalDecision = 'BUY DOWN';
+    finalDirection = 'DOWN';
+    if (isWindowExpired) lockStatus = 'BLOCKED';
+    else if (isQualifiedForLock) lockStatus = 'ELIGIBLE';
+    else if (elapsedSec < 180) lockStatus = 'WAITING';
+    else lockStatus = 'ELIGIBLE';
   } else if (elapsedSec < 180) {
     finalDecision = 'OBSERVING';
+    finalDirection = 'NEUTRAL';
     lockStatus = 'WAITING';
   } else {
-    finalDecision = 'OBSERVING';
-    lockStatus = 'BLOCKED';
+    // If neutral after observation period, explicitly evaluate as SKIP
+    finalDecision = 'SKIP';
+    finalDirection = 'NEUTRAL';
+    lockStatus = 'SKIPPED';
+    primarySkipReason = 'Insufficient directional asymmetry between P(UP) and P(DOWN)';
+    rejectionCategory = 'LOW_EDGE';
   }
 
   // --- EXPLAINABILITY VECTORS ---
@@ -227,6 +264,8 @@ export function evaluateTwoStageDecision(
   if (underlying.momentum.directionalBias === coreBias) keyTailwinds.push(`Multi-timeframe momentum is aligned ${coreBias}`);
   if (underlying.orderFlow.flowState.includes(coreBias === 'UP' ? 'BUYING' : 'SELLING')) keyTailwinds.push(`Order flow taker volume heavily favors ${coreBias}`);
   if (crossVenue.consensusDirection === coreBias) keyTailwinds.push(`Kalshi and Polymarket consensus confirms ${coreBias}`);
+  if (independent.pUpPct >= 60) keyTailwinds.push(`Independent P(UP) evaluates at ${independent.pUpPct}% (+${independent.edgeUpPct}% edge)`);
+  if (independent.pDownPct >= 60) keyTailwinds.push(`Independent P(DOWN) evaluates at ${independent.pDownPct}% (+${independent.edgeDownPct}% edge)`);
 
   if (crossVenue.crossVenueSpreadPct > 3.0) keyRisks.push(`Cross-venue spread variance is elevated (${crossVenue.crossVenueSpreadPct}%)`);
   if (underlying.volatility.regime === 'EXPANDING') keyRisks.push(`Volatility is expanding, requiring higher buffer`);
@@ -238,14 +277,22 @@ export function evaluateTwoStageDecision(
     timestamp: now,
     stage: isSkipped ? 'NO_TRADE' : (isQualifiedForLock ? 'QUALIFYING' : (cycleStage as any)),
     decision: finalDecision,
-    direction: coreBias,
+    direction: finalDirection,
     confidencePct: coreConfidence,
     calibratedProbability: ensemble.calibratedProbability,
     rawProbability: ensemble.rawProbability,
     isQualifiedForLock,
     lockStatus,
+    independentProbability: {
+      pUpPct: independent.pUpPct,
+      pDownPct: independent.pDownPct,
+      uncertaintyPct: independent.uncertaintyPct,
+      edgeUpPct: independent.edgeUpPct,
+      edgeDownPct: independent.edgeDownPct,
+      directionalBias: independent.directionalBias,
+    },
     neuralCore: {
-      bias: coreBias,
+      bias: finalDirection,
       rawConfidencePct: coreConfidence,
       edgePct: coreEdge,
       moduleConfluenceCount: favorableModules,
@@ -267,7 +314,7 @@ export function evaluateTwoStageDecision(
     explainability: {
       summary: isSkipped
         ? `CYCLE SKIPPED: ${primarySkipReason}`
-        : `${finalDecision} qualified with ${coreConfidence}% calibrated confidence across ${favorableModules}/${ensemble.modules.length} quantitative modules`,
+        : `${finalDecision} evaluated with ${coreConfidence}% confidence [P(UP): ${independent.pUpPct}% | P(DOWN): ${independent.pDownPct}%] across ${favorableModules}/${ensemble.modules.length} quantitative modules`,
       whyDirection: `Confluence driven by ${underlying.orderFlow.bullVolumePct}% taker buy volume and ${underlying.momentum.directionalBias} momentum vector.`,
       keyTailwinds: keyTailwinds.length > 0 ? keyTailwinds : ['Baseline order flow stability'],
       keyRisks: keyRisks.length > 0 ? keyRisks : ['Normal intra-interval spread variance'],

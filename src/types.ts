@@ -65,6 +65,8 @@ export interface PredictionSignal {
   modelProb: number; // e.g. 64.2%
   marketProb: number; // e.g. 52.0%
   edgePct: number; // percentage vs market, e.g. +12.2%
+  upProbability?: number; // e.g. 68.4%
+  downProbability?: number; // e.g. 31.6%
   tradeGrade: 'A+' | 'A' | 'B' | 'SKIP';
   reasoning: string;
   keyFactors: string[];
@@ -322,6 +324,7 @@ export interface Btc15mDataQualityState {
 }
 
 export interface Btc15mEnginePipelineData {
+  candidateDirection?: 'UP' | 'DOWN' | 'NEUTRAL';
   lockQuality: number;
   lockQualityTier: LockQualityTier;
   evidenceAgreementCount: number;

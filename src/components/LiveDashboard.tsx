@@ -175,8 +175,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       });
     }
 
-    if (data.direction !== undefined) {
-      const isBull = (data.direction as string) === 'UP' || (data.direction as string) === 'YES';
+    if (data.direction !== undefined || data.candidateDirection !== undefined || data.decision !== undefined) {
+      const rawDirectionStr = String(data.decision || data.direction || data.candidateDirection || '').toUpperCase();
+      const isBull = rawDirectionStr.includes('UP') || rawDirectionStr.includes('YES') || rawDirectionStr === 'BUY_YES';
+      const isBear = rawDirectionStr.includes('DOWN') || rawDirectionStr.includes('NO') && !rawDirectionStr.includes('NO_TRADE') && !rawDirectionStr.includes('NO_EXECUTION');
+      const isSkip = rawDirectionStr.includes('SKIP') || rawDirectionStr.includes('NO_TRADE') || rawDirectionStr === 'PASS';
+      
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
@@ -186,33 +190,28 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         setSecondsRemaining15M((prev) => (prev === data.features.crossVenue.timeRemainingSec ? prev : data.features.crossVenue.timeRemainingSec));
       }
       
+      // Calculate or extract independent probabilities
+      const pUpVal = data.pUp !== undefined ? (data.pUp <= 1 ? data.pUp * 100 : data.pUp) : (data.independentProbability?.pUpPct ?? (isBull ? 68.4 : 31.6));
+      const pDownVal = data.pDown !== undefined ? (data.pDown <= 1 ? data.pDown * 100 : data.pDown) : (data.independentProbability?.pDownPct ?? (isBear ? 68.4 : 31.6));
+
       setSignal((prev) => {
-        const newDirection = data.direction ? (isBull ? 'YES' : 'NO') : 'NO';
-        const newConfidence = data.confidence !== null ? data.confidence : 0;
-        const newModelProb = data.modelProbability !== null ? Math.round(data.modelProbability * 1000) / 10 : 0;
-        const newEdgePct = data.edgePct !== null ? data.edgePct : 0;
+        const newDirection = isBull ? 'YES' : (isBear ? 'NO' : (isSkip ? 'NO' : (pUpVal >= pDownVal ? 'YES' : 'NO')));
+        const newConfidence = data.confidence !== null && data.confidence !== undefined ? data.confidence : (Math.max(pUpVal, pDownVal));
+        const newModelProb = data.modelProbability !== null && data.modelProbability !== undefined ? Math.round(data.modelProbability * (data.modelProbability <= 1 ? 1000 : 10)) / 10 : (isBull ? pUpVal : pDownVal);
+        const newEdgePct = data.edgePct !== null && data.edgePct !== undefined ? data.edgePct : (newModelProb - kalshiProbPct);
         const newTargetPrice = data.features?.crossVenue?.kalshiStrike || prev.targetPrice;
 
-        if (
-          prev.direction === newDirection &&
-          prev.confidence === newConfidence &&
-          prev.modelProb === newModelProb &&
-          prev.marketProb === kalshiProbPct &&
-          prev.edgePct === newEdgePct &&
-          prev.targetPrice === newTargetPrice
-        ) {
-          return prev;
-        }
-        
         return {
           ...prev,
           timestamp: Date.now(),
           direction: newDirection,
-          confidence: newConfidence,
-          modelProb: newModelProb,
+          confidence: Math.round(newConfidence),
+          modelProb: Math.round(newModelProb * 10) / 10,
           marketProb: kalshiProbPct,
-          edgePct: newEdgePct,
+          edgePct: Math.round(newEdgePct * 10) / 10,
           targetPrice: newTargetPrice,
+          upProbability: Math.round(pUpVal * 10) / 10,
+          downProbability: Math.round(pDownVal * 10) / 10,
         };
       });
 

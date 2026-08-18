@@ -727,11 +727,23 @@ export interface ApiSignalResponse {
   disclaimer: string;
   action: 'BUY_YES' | 'BUY_NO' | 'HOLD' | null;
   direction?: 'UP' | 'DOWN' | 'NEUTRAL' | string | null;
+  candidateDirection?: 'UP' | 'DOWN' | 'NEUTRAL' | string | null;
   signalState?: SignalStateType;
   signalConfirmed?: boolean;
   modelProbability: number | null;
   upProbability?: number;
   downProbability?: number;
+  pUp?: number;
+  pDown?: number;
+  uncertaintyPct?: number;
+  independentProbability?: {
+    pUpPct: number;
+    pDownPct: number;
+    uncertaintyPct: number;
+    edgeUpPct: number;
+    edgeDownPct: number;
+    directionalBias: 'UP' | 'DOWN' | 'NEUTRAL';
+  };
   evidenceQuality?: number;
   vixyLockState?: string;
   decision?: string;
