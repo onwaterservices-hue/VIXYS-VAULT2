@@ -96,7 +96,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: 'RESEARCH',
       items: [
         { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'CORE' },
-        { id: 'perflab', label: 'Performance Lab', icon: Award, badge: 'LAB' },
+        { id: 'perflab', label: 'Performance War Room', icon: Award, badge: 'V1.0' },
         { id: 'replay', label: 'Replay Center', icon: History },
         { id: 'journal', label: 'Trade Journal', icon: BookOpen },
       ],

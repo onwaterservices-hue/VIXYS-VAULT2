@@ -414,6 +414,19 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('vixylive')}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+              activeTab === 'vixylive'
+                ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-lg shadow-amber-500/30 border border-amber-400/50'
+                : 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/30'
+            }`}
+          >
+            <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span className="tracking-wide">VIXY LIVE</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          </button>
+
+          <button
             onClick={() => setActiveTab('compare')}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
               activeTab === 'compare'
