@@ -75,6 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'COMMAND',
       items: [
+        { id: 'vixylive', label: 'VIXY LIVE', icon: Activity, badge: 'NEW' },
         { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
         { id: 'compare', label: 'Asset Compare', icon: Sliders, badge: 'VS' },
         { id: 'scalping', label: 'Scalping Desk', icon: Zap, badge: '15S' },

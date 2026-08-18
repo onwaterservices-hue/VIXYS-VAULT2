@@ -57,6 +57,7 @@ import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
+import { VixyLiveView } from './components/VixyLiveView';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -337,7 +338,7 @@ export default function App() {
 
 
   const VALID_ROUTES = [
-    'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
+    'vixylive', 'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
     'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
     'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
     'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot'
@@ -368,7 +369,7 @@ export default function App() {
       const savedAuth = localStorage.getItem('vixy_auth');
       if (savedAuth) {
         const parsed = JSON.parse(savedAuth);
-        if (parsed?.isAuthenticated) return 'terminal';
+        if (parsed?.isAuthenticated) return 'vixylive';
       }
     } catch (e) {
       console.error(e);
@@ -1176,6 +1177,15 @@ export default function App() {
                       onToggleFavorite={handleToggleFavorite}
                       onOpenSearch={() => setIsSearchOpen(true)}
                       onOpenCompare={() => setActiveTab('compare')}
+                    />
+                  )}
+
+                  {activeTab === 'vixylive' && (
+                    <VixyLiveView
+                      ticker={ticker}
+                      onOpenTerminal={() => setActiveTab('terminal')}
+                      onOpenReplay={() => setActiveTab('replay')}
+                      onOpenPricing={() => setActiveTab('pricing')}
                     />
                   )}
 

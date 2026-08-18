@@ -294,6 +294,31 @@ function sanitizeAndNormalizeServerUsers() {
     adrianUser.passwordHash = adrianPassHash;
   }
 
+  // 2f. Ensure Starter user maxo1011@outlook.com exists with password max1011 and PRO/Starter access
+  const maxPassHash = hashPassword('max1011');
+  let maxUser = serverUsers.find((u) => u.email?.toLowerCase() === 'maxo1011@outlook.com');
+  if (!maxUser) {
+    maxUser = {
+      id: 'usr_starter_max1011',
+      uid: 'usr_starter_max1011',
+      email: 'maxo1011@outlook.com',
+      name: 'Max (Starter Sub)',
+      role: 'PRO',
+      subscription: 'PRO_PASS',
+      status: 'ACTIVE',
+      joined: '2026-08-17',
+      verificationStatus: 'VERIFIED',
+      passwordHash: maxPassHash,
+      stripeCustomerId: 'cus_starter_max1011',
+    };
+    serverUsers.unshift(maxUser);
+  } else {
+    maxUser.role = 'PRO';
+    maxUser.subscription = 'PRO_PASS';
+    maxUser.status = 'ACTIVE';
+    maxUser.passwordHash = maxPassHash;
+  }
+
   // 2c. Ensure mod account nghle749@gmmail.com & nghle749@gmail.com exists with password 123456
   const modPassHash = hashPassword('123456');
   ['nghle749@gmmail.com', 'nghle749@gmail.com'].forEach((modEmail) => {
@@ -367,6 +392,13 @@ function sanitizeAndNormalizeServerUsers() {
     });
     userSubscriptions.set('adriiiansf27@gmail.com', {
       email: 'Adriiiansf27@gmail.com',
+      role: 'PRO',
+      plan: 'PRO_PASS',
+      status: 'ACTIVE',
+      updatedAt: new Date().toISOString(),
+    });
+    userSubscriptions.set('maxo1011@outlook.com', {
+      email: 'maxo1011@outlook.com',
       role: 'PRO',
       plan: 'PRO_PASS',
       status: 'ACTIVE',
@@ -3837,6 +3869,8 @@ app.post('/api/auth/login', async (req, res) => {
       user.passwordHash = hashPassword('zownof-kukGiv-sekqo3');
     } else if (cleanEmail === 'adriiiansf27@gmail.com') {
       user.passwordHash = hashPassword('Honduras25.@');
+    } else if (cleanEmail === 'maxo1011@outlook.com') {
+      user.passwordHash = hashPassword('max1011');
     } else if (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') {
       user.passwordHash = hashPassword('123456');
     } else if (isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') {
@@ -11033,6 +11067,7 @@ async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUser
       : (memUser?.passwordHash || (
           (cleanEmail === 'uisvelascop@icloud.com') ? hashPassword('zownof-kukGiv-sekqo3') :
           (cleanEmail === 'adriiiansf27@gmail.com') ? hashPassword('Honduras25.@') :
+          (cleanEmail === 'maxo1011@outlook.com') ? hashPassword('max1011') :
           (cleanEmail === 'nghle749@gmmail.com' || cleanEmail === 'nghle749@gmail.com') ? hashPassword('123456') :
           ((isMasterAdminEmail(cleanEmail) || cleanEmail === 'ogershey@gmail.com') ? hashPassword('Seattle007') : undefined)
         ));
