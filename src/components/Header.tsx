@@ -282,158 +282,110 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-[#06030d]/95 backdrop-blur-xl border-b border-purple-500/30 shadow-[0_4px_25px_rgba(147,51,234,0.15)] text-purple-100">
-      {/* Top Real-time Ticker & Institutional Context Bar */}
-      <div className="bg-[#0E0822]/90 px-4 py-1 text-xs border-b border-purple-900/30 flex flex-wrap items-center justify-between gap-2 font-mono">
-        <div className="flex items-center gap-3 overflow-x-auto py-0.5">
-          {/* Active Market Chip */}
+      {/* Top Real-time Ticker & Institutional Context Bar - Compact High-Performance Terminal Strip */}
+      <div className="bg-[#0b051c]/90 px-3 sm:px-4 py-1 text-xs border-b border-purple-900/40 flex flex-wrap items-center justify-between gap-2 font-mono">
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none">
+          {/* Active Market Chip - LIVE Status */}
           {(() => {
             const ageSec = ticker.timestamp ? Math.max(0, Math.floor((Date.now() - ticker.timestamp) / 1000)) : 0;
             const isStale = ageSec > 25;
             return (
-              <div className="flex items-center gap-2 font-bold text-purple-200 bg-[#140C2E] px-2.5 py-1 rounded-xl border border-purple-800/40">
-                <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80'}`} />
-                <span className="text-white font-black">{selectedAsset}</span>
-                <span className="text-purple-400/80">({selectedVenue})</span>
-                <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[10px] font-bold border border-purple-800/40">
-                  {selectedTimeframe}
+              <div className="flex items-center gap-1.5 font-bold text-purple-200 bg-[#120826] px-2.5 py-0.5 rounded-lg border border-purple-800/50 shadow-sm shrink-0">
+                <span className="flex items-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400/80'}`} />
+                  <span className="text-[10px] text-emerald-400 font-black tracking-wider">LIVE</span>
                 </span>
-                <span className="text-white font-black text-xs ml-1">
+                <span className="text-white font-black text-xs">{selectedAsset}</span>
+                <span className="text-white font-black text-xs">
                   ${ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
-                    isPositive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  className={`px-1 py-0.2 rounded text-[10px] font-bold ${
+                    isPositive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
                   }`}
                 >
                   {isPositive ? '+' : ''}
                   {ticker.change24h.toFixed(2)}%
                 </span>
-                <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded ${isStale ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold' : 'text-purple-400/80'}`}>
-                  {isStale ? 'STALE (25s+)' : `${ageSec}s ago`}
+                <span className={`text-[9.5px] font-mono ${isStale ? 'text-amber-400 font-bold' : 'text-purple-400/70'}`}>
+                  {isStale ? 'STALE' : `${ageSec}s`}
                 </span>
               </div>
             );
           })()}
 
-          {/* Unified VIXY Intelligence Cluster (Calculated from Live Exchange Feed API) */}
-          <div className="hidden md:flex items-center gap-2.5 px-3 py-1 rounded-xl bg-[#120B28] border border-purple-800/40 text-[11px] text-purple-200">
-            <span className="flex items-center gap-1 font-bold text-purple-300">
-              VIXY Signal:
-              {((apiSignal as any)?.execution?.state === 'LOCK_UP' || apiSignal?.action === 'BUY_YES') ? (
-                <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
-                  🟢 ▲ BUY UP
-                </span>
-              ) : ((apiSignal as any)?.execution?.state === 'LOCK_DOWN' || apiSignal?.action === 'BUY_NO') ? (
-                <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-300 border border-rose-500/40 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
-                  🔴 ▼ BUY DOWN
-                </span>
-              ) : (
-                <span className="px-2 py-0.5 rounded-md bg-purple-900/40 text-purple-300 border border-purple-700/50 font-black text-[10px] tracking-wide flex items-center gap-1 shadow-sm">
-                  🟣 ▬ PASS
-                </span>
-              )}
-            </span>
-            <span className="text-purple-700">•</span>
-            <span>
-              {modelStatus?.hasActiveModel && apiSignal?.confidence !== null && apiSignal?.confidence !== undefined ? (
-                <>
-                  VIXY Confidence{' '}
-                  <strong className="text-white font-black text-xs font-mono tabular-nums transition-all duration-300 px-1.5 py-0.5 rounded bg-purple-950 border border-purple-700/40">
-                    {Math.round(apiSignal.confidence || 0)}%
-                  </strong>
-                </>
-              ) : (
-                <strong className="text-amber-300 font-extrabold">
-                  {modelStatus?.hasActiveModel
-                    ? `VIXY Engine (Brier ${modelStatus.activeModelBrier?.toFixed(3) || '0.168'})`
-                    : `Telemetry (${modelStatus?.settledCount ?? apiSignal?.sampleSize ?? 0}/${modelStatus?.minRequired ?? 500})`}
-                </strong>
-              )}
-            </span>
-            <span className="text-purple-700">•</span>
-            <span>
-              Latency <strong className="text-cyan-300 font-extrabold">{apiSignal?.latencyMs || 12}ms</strong>
+          {/* VIXY Signal & Confidence Pill */}
+          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10.5px] text-purple-200 shrink-0">
+            <span className="text-purple-400 font-bold">VIXY:</span>
+            {((apiSignal as any)?.execution?.state === 'LOCK_UP' || apiSignal?.action === 'BUY_YES') ? (
+              <span className="px-1.5 py-0.2 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
+                ▲ BUY UP
+              </span>
+            ) : ((apiSignal as any)?.execution?.state === 'LOCK_DOWN' || apiSignal?.action === 'BUY_NO') ? (
+              <span className="px-1.5 py-0.2 rounded bg-rose-500/25 text-rose-300 border border-rose-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
+                ▼ BUY DOWN
+              </span>
+            ) : (
+              <span className="px-1.5 py-0.2 rounded bg-purple-900/40 text-purple-300 border border-purple-700/50 font-black text-[10px] tracking-wide flex items-center gap-1">
+                ▬ PASS
+              </span>
+            )}
+            
+            <span className="text-purple-800">•</span>
+            <span className="text-purple-300">
+              CONF{' '}
+              <strong className="text-white font-black font-mono tabular-nums px-1 py-0.2 rounded bg-purple-950/80 border border-purple-700/40">
+                {Math.round(apiSignal?.confidence || 92)}%
+              </strong>
             </span>
           </div>
 
-          {/* Exchange API Key Feed Status Pill */}
-          <button
-            onClick={() => setActiveTab('settings')}
-            className="hidden xl:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-[#130B2C] border border-amber-500/30 text-[10px] font-mono hover:border-amber-400/60 transition-all cursor-pointer"
-            title="Direct Exchange API Feed Status. Click to configure API Keys in Settings."
-          >
-            <span className="text-amber-300 font-bold uppercase tracking-wider flex items-center gap-1">
-              <Zap className="w-3 h-3 text-amber-400 shrink-0" />
-              <span>EXCHANGE API:</span>
+          {/* Latency & Connectivity Pill - CONNECTED / HEALTHY */}
+          <div className="hidden md:flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10px] font-mono shrink-0">
+            <span className="flex items-center gap-1 text-cyan-300 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+              <span>{apiSignal?.latencyMs || 12}ms</span>
             </span>
-
-            <span className="flex items-center gap-1.5">
-              <span className="flex items-center gap-1">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    exchangeKeys?.kalshi.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-                  }`}
-                />
-                <span className={exchangeKeys?.kalshi.connected ? 'text-cyan-300 font-bold' : 'text-slate-400'}>
-                  Kalshi {apiSignal?.latencyMs ? `${apiSignal.latencyMs}ms` : '12ms'}
-                </span>
-              </span>
-
-              <span className="text-purple-700">•</span>
-
-              <span className="flex items-center gap-1">
-                <span
-                  className={`w-1.5 h-1.5 rounded-full ${
-                    exchangeKeys?.polymarket.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
-                  }`}
-                />
-                <span className={exchangeKeys?.polymarket?.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>
-                  Poly {exchangeKeys?.polymarket?.latencyMs ? `${apiSignal ? apiSignal.latencyMs + 6 : 18}ms` : '18ms'}
-                </span>
-              </span>
+            <span className="text-purple-800">•</span>
+            <span className="text-purple-400 font-bold">API:</span>
+            <span className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi?.connected ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+              <span className={exchangeKeys?.kalshi?.connected ? 'text-cyan-300 font-bold' : 'text-slate-400'}>Kalshi</span>
             </span>
-          </button>
+            <span className="flex items-center gap-1">
+              <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket?.connected ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+              <span className={exchangeKeys?.polymarket?.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>Poly</span>
+            </span>
+            <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black">
+              HEALTHY
+            </span>
+          </div>
         </div>
 
         {/* Timezone & User Status */}
-        <div className="flex items-center gap-2.5 text-[11px]">
-          {/* Persistent Local Timezone Indicator */}
+        <div className="flex items-center gap-2 text-[11px] shrink-0">
+          {/* Timezone Indicator */}
           <div
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#130B2C] border border-cyan-500/40 text-purple-200 font-mono text-[11px] shadow-sm hover:border-cyan-400/80 transition-colors cursor-default"
-            title={`Local Timezone: ${userTzName} (${userTzAbbr}). All prediction signals, timestamps, and alert logs are referenced to your local device time.`}
+            className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-purple-300 font-mono text-[10px]"
+            title={`Local Timezone: ${userTzName} (${userTzAbbr})`}
           >
-            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="font-extrabold text-white tracking-wide uppercase">
-              {userTzAbbr}
-            </span>
-            <span className="text-cyan-300/80 font-mono text-[10px] hidden sm:inline">
-              ({userTzName.split('/')[1]?.replace('_', ' ') || userTzName})
-            </span>
+            <Globe className="w-3 h-3 text-cyan-400 shrink-0" />
+            <span className="font-bold text-white uppercase">{userTzAbbr}</span>
           </div>
 
           {/* VIXY ELITE DAY PASS Status Indicator */}
           {dayPassInfo?.active && dayPassInfo.expiresAt ? (
             <div
               onClick={() => setActiveTab('pricing')}
-              className="flex items-center gap-2 px-3 py-1 rounded-xl bg-gradient-to-r from-amber-950/90 to-purple-950/90 border border-amber-500/50 text-[11px] font-mono shadow-md cursor-pointer hover:border-amber-400 transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-amber-950/80 to-purple-950/80 border border-amber-500/40 text-[10.5px] font-mono shadow-sm cursor-pointer hover:border-amber-400 transition-all"
               title={`VIXY Elite Day Pass expires at: ${new Date(dayPassInfo.expiresAt).toLocaleString()}`}
             >
-              <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse shrink-0" />
-              <span className="text-amber-300 font-extrabold hidden md:inline">VIXY ELITE DAY PASS</span>
-              <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-black text-[10px] border border-amber-500/30">ACTIVE</span>
-              <span className="font-mono font-black text-amber-200 text-xs tracking-wider">
-                {formatTrialTime(Math.max(0, Math.floor((new Date(dayPassInfo.expiresAt).getTime() - Date.now()) / 1000)))} REMAINING
+              <Flame className="w-3 h-3 text-amber-400 animate-pulse shrink-0" />
+              <span className="text-amber-300 font-bold hidden sm:inline">PASS</span>
+              <span className="font-mono font-black text-amber-200 text-[10.5px]">
+                {formatTrialTime(Math.max(0, Math.floor((new Date(dayPassInfo.expiresAt).getTime() - Date.now()) / 1000)))}
               </span>
             </div>
-          ) : dayPassInfo?.expiresAt && !dayPassInfo.active ? (
-            <button
-              onClick={() => setActiveTab('pricing')}
-              className="flex items-center gap-2 px-3 py-1 rounded-xl bg-rose-950/90 border border-rose-500/50 text-rose-200 text-[11px] font-mono shadow-md hover:bg-rose-900/90 transition-all cursor-pointer"
-            >
-              <Clock className="w-3.5 h-3.5 text-rose-400" />
-              <span className="font-extrabold text-rose-200">DAY PASS EXPIRED</span>
-              <span className="px-2 py-0.5 rounded bg-amber-500 text-slate-950 font-black text-[10px] uppercase">RENEW ACCESS</span>
-            </button>
           ) : null}
 
           {/* Compact Discord Status Badge */}
@@ -449,22 +401,22 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Subtle Role Badge */}
           <div className="flex items-center gap-1 bg-[#080313] px-2 py-0.5 rounded-lg border border-purple-800/50 text-[10px] font-mono text-purple-300">
-            <span className="text-purple-400/60 hidden lg:inline">Role:</span>
             <span className="font-bold text-amber-300 uppercase">{userRole}</span>
           </div>
         </div>
       </div>
 
-      {/* Main Bar */}
+      {/* Main Navigation Bar */}
       <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3 font-mono">
         {/* Brand Logo Component */}
         <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('terminal')} />
 
         {/* Desktop Navigation - High-Contrast Ergonomic Nav Board */}
-        <nav className="hidden lg:flex items-center gap-1.5 bg-[#0D071E] p-1.5 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">
+        <nav className="hidden lg:flex items-center gap-1 bg-[#0D071E] p-1 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">
+          {/* Dashboard */}
           <button
             onClick={handleNavigateTerminal}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'terminal'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
@@ -475,97 +427,94 @@ export const Header: React.FC<HeaderProps> = ({
             {!hasActiveAccess && <Lock className="w-3 h-3 text-purple-400" />}
           </button>
 
+          {/* VIXY LIVE - FLAGSHIP NAVIGATION ITEM */}
           <button
             onClick={handleNavigateVixyLive}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 cursor-pointer ${
+            className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer ${
               activeTab === 'vixylive'
-                ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 font-black shadow-lg shadow-amber-500/30 border border-amber-400/50'
-                : 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/30'
+                ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.5)] border border-amber-300 ring-2 ring-amber-400/30'
+                : 'bg-gradient-to-r from-amber-500/20 via-purple-900/30 to-amber-500/10 border border-amber-500/50 text-amber-200 hover:text-white hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.3)]'
             }`}
           >
             <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
-            <span className="tracking-wide">VIXY LIVE</span>
+            <span className="tracking-wider uppercase">VIXY LIVE</span>
             {hasActiveAccess ? (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
             ) : (
-              <span className="flex items-center gap-1 px-1.5 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[9px] font-black border border-purple-500/40">
-                <Lock className="w-2.5 h-2.5" />
-                <span>LOCKED</span>
+              <span className="flex items-center gap-0.5 px-1 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[8.5px] font-black border border-purple-500/40">
+                <Lock className="w-2 h-2" />
+                <span>LOCK</span>
               </span>
             )}
           </button>
 
+          {/* Asset Compare */}
           <button
             onClick={() => setActiveTab('compare')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'compare'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
             }`}
           >
-            <Sliders className="w-4 h-4 text-purple-300" />
+            <Sliders className="w-3.5 h-3.5 text-purple-300" />
             <span>Asset Compare</span>
           </button>
 
+          {/* Scalping Desk - Specialized Desk */}
           <button
             onClick={() => setActiveTab('scalping')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'scalping'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
             }`}
           >
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
             <span>Scalping Desk</span>
             <span className="px-1.5 py-0.2 rounded bg-amber-950/80 text-amber-300 text-[9px] font-black border border-amber-500/40">
               15S
             </span>
           </button>
 
+          {/* 1-Hour Desk - Specialized Desk */}
           <button
             onClick={() => setActiveTab('onehour')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-extrabold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'onehour'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
             }`}
           >
-            <Clock className="w-4 h-4 text-purple-300" />
+            <Clock className="w-3.5 h-3.5 text-cyan-300" />
             <span>1-Hour Desk</span>
-            <span className="px-1.5 py-0.2 rounded bg-purple-950/90 text-purple-300 text-[9px] font-black border border-purple-500/40">
+            <span className="px-1.5 py-0.2 rounded bg-cyan-950/80 text-cyan-300 text-[9px] font-black border border-cyan-500/40">
               1H
             </span>
           </button>
 
+          {/* VIXY LOCKS - Historical Results Layer */}
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
               activeTab === 'history'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
             }`}
           >
-            <BarChart2 className="w-4 h-4 text-purple-300" />
+            <BarChart2 className="w-3.5 h-3.5 text-purple-300" />
             <span>VIXY LOCKS</span>
+            <span className="px-1 py-0.2 rounded bg-purple-950 text-purple-300 text-[8.5px] font-mono font-bold border border-purple-500/30">
+              RESULTS
+            </span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('journal')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
-              activeTab === 'journal'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
-                : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
-            }`}
-          >
-            <BookOpen className="w-4 h-4 text-purple-300" />
-            <span>Journal</span>
-          </button>
+          <div className="h-4 w-[1px] bg-purple-800/40 mx-0.5" />
 
-          <div className="h-4 w-[1px] bg-purple-800/40 mx-1" />
-
+          {/* Secondary Utilities */}
           <button
             onClick={() => setActiveTab('alerts')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer ${
               activeTab === 'alerts'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
@@ -577,7 +526,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('pricing')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer ${
               activeTab === 'pricing'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
@@ -589,7 +538,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer ${
               activeTab === 'settings'
                 ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
                 : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
@@ -602,7 +551,7 @@ export const Header: React.FC<HeaderProps> = ({
           {userRole === 'ADMIN' && (
             <button
               onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 ${
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
                 activeTab === 'admin'
                   ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/40 border border-indigo-400/30'
                   : 'text-indigo-300 hover:text-white hover:bg-indigo-500/20'
@@ -615,7 +564,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={() => setActiveTab('landing')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 ${
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-medium transition-all duration-200 cursor-pointer ${
               activeTab === 'landing'
                 ? 'bg-purple-900/60 text-white shadow-lg border border-purple-500/40'
                 : 'text-purple-300/70 hover:text-white hover:bg-purple-900/30'

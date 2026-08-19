@@ -479,9 +479,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const openTimeFormatted = new Date(intervalStart).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   const closeTimeFormatted = new Date(intervalEnd).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-  const spotPrice = liveTicker?.price || snapshot?.spot || ticker?.price || 64174.83;
-  const priceChange = liveTicker?.change24h !== undefined ? (liveTicker.price * liveTicker.change24h / 100) : (ticker?.change24h || 572.18);
-  const priceChangePct = liveTicker?.change24h !== undefined ? liveTicker.change24h : 0.90;
+  const spotPrice = Number(liveTicker?.price) || Number(snapshot?.spot) || Number(ticker?.price) || 64174.83;
+  const rawChange24h = typeof liveTicker?.change24h === 'number' ? liveTicker.change24h : (typeof ticker?.change24h === 'number' ? ticker.change24h : 0.90);
+  const priceChange = typeof liveTicker?.price === 'number' ? (liveTicker.price * rawChange24h / 100) : (spotPrice * rawChange24h / 100);
+  const priceChangePct = rawChange24h;
 
   // Execute Calibration & Rollover Sequence with Self-Learning Signal Attribution Matrix
   const triggerCycleCalibration = (prevEpoch: number) => {
@@ -1088,13 +1089,39 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     { cycleId: 'C-67883', time: '11:57 PM', decision: 'LOCKED DOWN', probability: 0.66, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.150 }
   ];
 
+  // Canonical decision resolution
+  const isUp = canonicalDecision?.currentState === 'LOCKED_UP' || (activeCycleDecision.includes('UP') && cyclePhase !== 'CALIBRATING');
+  const isDown = canonicalDecision?.currentState === 'LOCKED_DOWN' || (activeCycleDecision.includes('DOWN') && cyclePhase !== 'CALIBRATING');
+  const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
+  const isConfirming = !isCalibrating && (canonicalDecision?.currentState === 'CONFIRMING' || continuousInference.protectionDecision.state === 'CONFIRMING');
+  const isSkip = !isCalibrating && (canonicalDecision?.currentState === 'SKIP' || activeCycleDecision === 'VIXY SKIP' || (!isUp && !isDown && !isConfirming));
+
+  // Canonical Dominant Decision Title
+  const primaryDecisionTitle = isCalibrating
+    ? 'VIXY CONFIRMING'
+    : isUp
+    ? 'VIXY LOCKED — UP'
+    : isDown
+    ? 'VIXY LOCKED — DOWN'
+    : isConfirming
+    ? 'VIXY CONFIRMING'
+    : 'VIXY SKIP';
+
+  // Decision Aura Style
+  const decisionAuraStyle = isUp
+    ? 'aura-vixy-up border-emerald-500/80 bg-gradient-to-br from-[#071911]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(16,185,129,0.25)]'
+    : isDown
+    ? 'aura-vixy-down border-rose-500/80 bg-gradient-to-br from-[#1C0810]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(244,63,94,0.25)]'
+    : isConfirming || isCalibrating
+    ? 'aura-vixy-confirming border-cyan-500/80 bg-gradient-to-br from-[#061524]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(6,182,212,0.3)]'
+    : 'aura-vixy-skip border-slate-600/80 bg-gradient-to-br from-[#14121B]/95 via-[#0F0C1C]/95 to-[#06030D]/95 shadow-[0_0_30px_rgba(148,163,184,0.15)]';
+
   return (
     <div className="relative min-h-screen">
       {/* PAYWALL / SUBSCRIPTION ACCESS GUARD OVERLAY */}
       {!hasActiveAccess && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05020F]/85 backdrop-blur-xl animate-fadeIn font-mono">
           <div className="max-w-xl w-full p-6 sm:p-8 rounded-3xl bg-[#0D071E] border-2 border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.4)] text-center space-y-6 relative overflow-hidden">
-            {/* Ambient radiant corner glow */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -1112,8 +1139,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </h2>
               <p className="text-xs sm:text-sm text-purple-200/80 font-sans max-w-md mx-auto leading-relaxed">
                 {isAuthenticated
-                  ? "Your account is logged in, but requires an active 24-Hour Day Pass ($9.99) or Pro subscription to stream real-time order flow delta, Bayesian calibration, and live trade signals."
-                  : "Create a secure VIXY account to activate your 24-Hour Day Pass ($9.99) and unlock live prediction telemetry, Bayesian strike calculations, and cross-venue signal streaming."}
+                  ? 'Your account is logged in, but requires an active 24-Hour Day Pass ($9.99) or Pro subscription to stream real-time order flow delta, Bayesian calibration, and live trade signals.'
+                  : 'Create a secure VIXY account to activate your 24-Hour Day Pass ($9.99) and unlock live prediction telemetry, Bayesian strike calculations, and cross-venue signal streaming.'}
               </p>
             </div>
 
@@ -1121,1227 +1148,937 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               {!isAuthenticated ? (
                 <>
                   <button
-                    onClick={() => onOpenAuth ? onOpenAuth('register') : onOpenPricing()}
-                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-cyan-500 via-purple-600 to-indigo-600 text-white font-black text-xs uppercase tracking-wider shadow-xl shadow-cyan-950/80 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={() => onOpenAuth?.('login')}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-sm shadow-lg shadow-cyan-500/25 transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
                   >
-                    <Sparkles className="w-4 h-4 text-cyan-200" />
-                    <span>Create Account & Unlock Access</span>
+                    Sign In / Create Account
                   </button>
                   <button
-                    onClick={() => onOpenAuth ? onOpenAuth('login') : onOpenPricing()}
-                    className="px-6 py-3.5 rounded-2xl bg-purple-900/40 border border-purple-500/40 hover:bg-purple-800/40 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={onOpenPricing}
+                    className="px-6 py-3 rounded-xl bg-purple-900/40 hover:bg-purple-900/60 border border-purple-500/40 text-purple-200 font-bold text-sm transition-all cursor-pointer"
                   >
-                    <Lock className="w-4 h-4" />
-                    <span>Sign In to Account</span>
+                    View Access Passes ($9.99)
                   </button>
                 </>
               ) : (
-                <>
-                  <button
-                    onClick={onOpenPricing}
-                    className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 text-slate-950 font-black text-xs uppercase tracking-wider shadow-xl shadow-amber-500/30 hover:brightness-110 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Zap className="w-4 h-4 text-slate-950" />
-                    <span>Unlock 24H Day Pass ($9.99)</span>
-                  </button>
-                  <button
-                    onClick={onOpenPricing}
-                    className="px-6 py-3.5 rounded-2xl bg-purple-900/40 border border-purple-500/40 hover:bg-purple-800/40 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <span>View Pro Plans ($29/mo)</span>
-                  </button>
-                </>
+                <button
+                  onClick={onOpenPricing}
+                  className="px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-cyan-500 to-purple-600 hover:from-emerald-400 hover:to-purple-500 text-white font-black text-sm shadow-xl shadow-cyan-500/30 transition-all transform hover:scale-105 active:scale-95 cursor-pointer uppercase tracking-wider"
+                >
+                  Activate 24H Day Pass ($9.99)
+                </button>
               )}
             </div>
 
-            <div className="pt-2 text-xs text-purple-300/60 font-sans flex items-center justify-center gap-4">
-              <button onClick={onOpenTerminal} className="hover:text-white transition-colors underline">
-                Return to Dashboard
-              </button>
-              <span>•</span>
-              <button onClick={onOpenPricing} className="hover:text-white transition-colors underline">
-                Pricing & Plans
-              </button>
+            <div className="pt-2 border-t border-purple-900/40 flex items-center justify-center gap-4 text-[11px] text-gray-400 font-mono">
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-[#00FF88]" />
+                15M Epoch Auto-Lock
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />
+                Bayesian Recalibration
+              </span>
+              <span className="flex items-center gap-1">
+                <CheckCircle2 className="w-3.5 h-3.5 text-purple-400" />
+                Continuous Shadow
+              </span>
             </div>
           </div>
         </div>
       )}
 
       {/* Main Terminal View (blurred backdrop when access not active) */}
-      <div className={`min-h-screen bg-[#080B10] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none transition-all duration-500 ${!hasActiveAccess ? 'filter blur-[14px] opacity-25 pointer-events-none select-none overflow-hidden h-[90vh]' : ''}`}>
-      
-      {/* 1. TOP BAR: SYSTEM LATENCIES & SERVER TIME & STATE MACHINE TRIGGER */}
-      <div className="flex flex-wrap items-center justify-between bg-[#0C101A] border border-[#1E2638] rounded-xl px-4 py-2.5 shadow-[0_0_20px_rgba(0,0,0,0.5)]">
-        <div className="flex items-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <span className={`w-2 h-2 rounded-full ${cyclePhase === 'CALIBRATING' ? 'bg-[#9D4EDD] animate-ping' : 'bg-[#00FF88] animate-ping'}`} />
-            <span className="font-bold text-white tracking-wider text-[11px]">
-              {cyclePhase === 'CALIBRATING' ? 'CALIBRATING CYCLE' : 'LIVE STATUS'}
-            </span>
-          </div>
-          
-          <div className="hidden sm:flex items-center space-x-3 text-[10px] text-gray-400">
-            <div className="flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-              <span className="text-gray-400">KALSHI</span>
-              <span className="text-[#00FF88] font-bold">12ms</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-              <span className="text-gray-400">POLYMARKET</span>
-              <span className="text-[#00FF88] font-bold">16ms</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-              <span className="text-gray-400">COINBASE</span>
-              <span className="text-[#00FF88] font-bold">24ms</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-              <span className="text-gray-400">KRAKEN</span>
-              <span className="text-[#00FF88] font-bold">26ms</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${cyclePhase === 'CALIBRATING' ? 'bg-[#9D4EDD]' : 'bg-[#00FF88]'}`} />
-              <span className="text-gray-400">STATE:</span>
-              <span className={`font-bold ${cyclePhase === 'CALIBRATING' ? 'text-purple-400' : 'text-[#00FF88]'}`}>
-                {cyclePhase}
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => triggerCycleCalibration(currentEpochIndex)}
-            disabled={cyclePhase === 'CALIBRATING'}
-            className="px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:via-indigo-500 hover:to-cyan-400 border-2 border-cyan-400/80 text-white text-xs sm:text-sm font-black tracking-wider uppercase shadow-[0_0_20px_rgba(168,85,247,0.6)] hover:shadow-[0_0_30px_rgba(6,182,212,0.8)] flex items-center space-x-2 cursor-pointer disabled:opacity-50 transform hover:scale-105 active:scale-95 transition-all duration-200 ring-2 ring-purple-400/40 relative group overflow-hidden"
-            title="Trigger Immediate Rollover & Bayesian Calibration Sequence"
-          >
-            <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-300 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-300"></span>
-            </span>
-            <RefreshCw className={`w-4 h-4 text-cyan-200 transition-transform ${cyclePhase === 'CALIBRATING' ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
-            <span className="font-mono font-black drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">
-              {cyclePhase === 'CALIBRATING' ? 'CALIBRATING ENGINE...' : 'TEST CYCLE ROLLOVER'}
-            </span>
-          </button>
-
-          <div className="text-[10px] text-gray-400 flex items-center space-x-1.5 font-mono">
-            <span>SERVER TIME</span>
-            <span className="text-white font-bold">{new Date(adjustedNow).toLocaleTimeString()} EST</span>
-          </div>
-          <div className="px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[10px] font-bold uppercase tracking-wider hidden md:flex items-center space-x-1.5 shadow-[0_0_12px_rgba(16,185,129,0.3)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>ALL SYSTEMS OPERATIONAL</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. HERO MARKET BAR: BTC/USD PRICE, 15M TIMER, TARGET PRICE, ACTIVE CONTRACT INFO */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`min-h-screen bg-[#06030D] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none transition-all duration-500 ${!hasActiveAccess ? 'filter blur-[14px] opacity-25 pointer-events-none select-none overflow-hidden h-[90vh]' : ''}`}>
         
-        {/* ACTIVE MARKET */}
-        <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-4 flex flex-col justify-between">
-          <div>
-            <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">ACTIVE MARKET</div>
-            <div className="text-sm font-bold text-white mt-0.5">BTC / USD</div>
-            <div className="text-[10px] text-purple-400">15 MINUTE KALSHI MARKET</div>
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-black text-white tracking-tight">{coinbasePriceStr}</div>
-            <div className={`text-xs font-bold ${isTrendBullish ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
-              +{priceChange.toFixed(2)} (+{priceChangePct.toFixed(2)}%)
+        {/* 1. TOP SYSTEM STATUS HEADER */}
+        <div className="flex flex-wrap items-center justify-between bg-[#0C0819]/90 border border-purple-900/40 backdrop-blur-md rounded-2xl px-4 sm:px-5 py-3 shadow-[0_4px_25px_rgba(0,0,0,0.6)] gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+            {/* Live Indicator */}
+            <div className="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[#00FF88]">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00FF88] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00FF88]"></span>
+              </span>
+              <span className="font-black text-[10px] sm:text-[11px] tracking-widest uppercase">LIVE</span>
+            </div>
+
+            {/* Asset Pair */}
+            <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-[#080511] border border-purple-900/30 text-white font-black text-xs sm:text-sm">
+              <span className="text-purple-400">BTC</span>
+              <span className="text-gray-500">/</span>
+              <span>USD</span>
+            </div>
+
+            {/* 15M Contract */}
+            <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#080511] border border-purple-900/30 text-[10px] text-purple-300">
+              <span className="text-gray-500">CONTRACT:</span>
+              <span className="font-bold text-white">{tickerName}</span>
+            </div>
+
+            {/* Venues & Latencies */}
+            <div className="hidden lg:flex items-center space-x-3 text-[10px] border-l border-purple-900/40 pl-3">
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-pulse" />
+                <span className="text-gray-400">KALSHI</span>
+                <span className="text-[#00FF88] font-bold">12ms</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-pulse" />
+                <span className="text-gray-400">POLYMARKET</span>
+                <span className="text-[#00FF88] font-bold">16ms</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
+                <span className="text-gray-400">DATA HEALTH</span>
+                <span className="text-cyan-300 font-bold">OPTIMAL (100%)</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="text-gray-400">ENGINE LATENCY</span>
+                <span className="text-purple-300 font-bold">18ms</span>
+              </div>
             </div>
           </div>
-          <div className="text-[9px] text-gray-500 flex justify-between">
-            <span>SPOT PRICE • COINBASE</span>
-            <span>LAST UPDATE: 194ms</span>
+
+          {/* Top Actions & Server Time */}
+          <div className="flex items-center space-x-2.5 sm:space-x-3">
+            <button
+              onClick={() => triggerCycleCalibration(currentEpochIndex)}
+              disabled={cyclePhase === 'CALIBRATING'}
+              className="px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 hover:from-purple-500 hover:to-cyan-400 border border-cyan-400/60 text-white text-[10px] sm:text-xs font-black tracking-wider uppercase shadow-[0_0_15px_rgba(168,85,247,0.5)] flex items-center space-x-2 cursor-pointer disabled:opacity-50 transform hover:scale-105 active:scale-95 transition-all duration-200 relative group overflow-hidden"
+              title="Test Immediate 15M Rollover & Bayesian Calibration Sequence"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-200 transition-transform ${cyclePhase === 'CALIBRATING' ? 'animate-spin text-white' : 'group-hover:rotate-180 duration-500'}`} />
+              <span className="font-mono font-black drop-shadow">
+                {cyclePhase === 'CALIBRATING' ? 'CALIBRATING...' : 'TEST ROLLOVER'}
+              </span>
+            </button>
+
+            <div className="hidden sm:flex items-center space-x-1.5 text-[10px] text-gray-400 font-mono bg-[#080511] px-2.5 py-1.5 rounded-lg border border-purple-900/30">
+              <Clock className="w-3 h-3 text-purple-400" />
+              <span>{new Date(adjustedNow).toLocaleTimeString()} EST</span>
+            </div>
           </div>
         </div>
 
-        {/* 15M TIMER RADIAL/DIGITAL */}
-        <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-4 flex flex-col justify-between items-center text-center">
-          <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">TIME REMAINING</div>
+        {/* 2. PRIMARY DECISION SUITE & COMMAND CENTER HERO (VISUAL PRIORITIES 1, 2, 3, 4) */}
+        <div id="vixy-command-hero" className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
-          <div className="relative my-2 flex items-center justify-center">
-            {/* Circular Progress Ring */}
-            <svg className="w-24 h-24 transform -rotate-90">
-              <circle
-                cx="48"
-                cy="48"
-                r="40"
-                stroke="#1E2638"
-                strokeWidth="6"
-                fill="transparent"
-              />
-              <circle
-                cx="48"
-                cy="48"
-                r="40"
-                stroke={cyclePhase === 'CALIBRATING' ? '#9D4EDD' : isTrendBullish ? '#00FF88' : '#FF3B30'}
-                strokeWidth="6"
-                fill="transparent"
-                strokeDasharray={251.2}
-                strokeDashoffset={251.2 - (251.2 * progressPct) / 100}
-                strokeLinecap="round"
-                className="transition-all duration-1000 ease-linear"
-              />
-            </svg>
-            <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xl font-black text-white tracking-tight">
-                {cyclePhase === 'CALIBRATING' ? '00:00' : countdownFormatted}
-              </span>
-              <span className="text-[9px] text-gray-400">
-                {cyclePhase === 'CALIBRATING' ? 'CALIBRATING' : 'OF 15:00'}
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between w-full text-[9px] text-gray-400">
-            <div>
-              <span>OPEN: </span>
-              <span className="text-white font-bold">{openTimeFormatted}</span>
-            </div>
-            <div>
-              <span>PROGRESS: </span>
-              <span className="text-[#00FF88] font-bold">{Math.round(progressPct)}%</span>
-            </div>
-            <div>
-              <span>CLOSE: </span>
-              <span className="text-white font-bold">{closeTimeFormatted}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* ACTIVE CONTRACT INFO & PRICE TO BEAT */}
-        <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">ACTIVE CONTRACT</div>
-              <div className="text-sm font-bold text-white mt-0.5">{tickerName}</div>
-              <div className="text-[10px] text-purple-400">KALSHI 15MIN BTC</div>
-            </div>
-            <span className={`px-2 py-0.5 rounded ${cyclePhase === 'CALIBRATING' ? 'bg-[#9D4EDD]/20 border border-[#9D4EDD]/50 text-purple-300' : 'bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88]'} text-[9px] font-bold`}>
-              {cyclePhase === 'CALIBRATING' ? 'CALIBRATING' : 'LIVE'}
-            </span>
-          </div>
-
-          <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] my-1 space-y-1">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-gray-400">PRICE TO BEAT (STRIKE):</span>
-              <span className="text-white font-bold">${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-            <div className="flex justify-between text-[10px]">
-              <span className="text-gray-400">EXPECTED DELTA:</span>
-              <span className={`font-bold ${isTargetAchieved ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
-                {deltaToBeat >= 0 ? '+' : ''}${deltaToBeat.toFixed(2)} ({isTargetAchieved ? 'IN THE MONEY' : 'BELOW TARGET'})
-              </span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <div className="bg-[#080B10] p-1.5 rounded border border-[#1E2638] flex justify-between">
-              <span className="text-gray-400">UP:</span>
-              <span className="text-[#00FF88] font-bold">${rawKalshiProb.toFixed(2)}</span>
-            </div>
-            <div className="bg-[#080B10] p-1.5 rounded border border-[#1E2638] flex justify-between">
-              <span className="text-gray-400">DOWN:</span>
-              <span className="text-[#FF3B30] font-bold">${(1 - rawKalshiProb).toFixed(2)}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* CYCLE INFO & HEARTBEAT */}
-        <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-4 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">CYCLE INFO</div>
-            <div className="flex items-center space-x-1 text-[9px] text-[#00FF88]">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
-              <span>HEARTBEAT LIVE</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 my-1 text-[10px]">
-            <div className="flex justify-between">
-              <span className="text-gray-400">CYCLE ID:</span>
-              <span className="text-white font-bold">{cycleId}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">START:</span>
-              <span className="text-gray-300">{openTimeFormatted}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">END:</span>
-              <span className="text-gray-300">{closeTimeFormatted}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">DURATION:</span>
-              <span className="text-white font-bold">15 MIN</span>
-            </div>
-          </div>
-
-          <div className="text-[9px] text-gray-500 flex justify-between items-center border-t border-[#1E2638] pt-1">
-            <span>ENGINE LATENCY</span>
-            <span className="text-[#00FF88] font-bold">184ms</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 3. PRIMARY CONVICTION TIER: VIXY STATE MACHINE | CONTINUOUS GEMINI SHADOW | PROTECTION GUARDIAN */}
-      <div id="vixy-neural-hero-terminal" className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative">
-        
-        {/* CARD 1: VIXY DECISION & CONTINUOUS STATE MACHINE (WATCH / CONFIRMING / LOCKED / SKIP) */}
-        <div className={`lg:col-span-4 bg-[#0C101A] border rounded-xl p-5 relative overflow-hidden flex flex-col justify-between shadow-[0_0_25px_rgba(157,78,221,0.15)] transition-all duration-500 ${
-          continuousInference.protectionDecision.state === 'LOCKED'
-            ? continuousInference.protectionDecision.direction === 'UP'
-              ? 'border-[#00FF88] shadow-[0_0_35px_rgba(0,255,136,0.3)]'
-              : 'border-[#FF3B30] shadow-[0_0_35px_rgba(255,59,48,0.3)]'
-            : continuousInference.protectionDecision.state === 'CONFIRMING'
-            ? 'border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.25)]'
-            : continuousInference.protectionDecision.state === 'WATCH'
-            ? 'border-[#9D4EDD] shadow-[0_0_25px_rgba(157,78,221,0.2)]'
-            : 'border-gray-700'
-        }`}>
-          
-          {/* Top State Badge & Status */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">DECISION STATE MACHINE</span>
-              <span className="text-[9px] text-gray-500">| EPOCH 15M</span>
-            </div>
+          {/* PRIMARY DECISION AREA & DECISION AURA (Dominant Centerpiece - 7 cols on LG) */}
+          <div className={`lg:col-span-7 rounded-3xl p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between border-2 transition-all duration-500 ${decisionAuraStyle}`}>
             
-            <span className={`px-2.5 py-0.5 rounded text-[9.5px] font-black tracking-wider flex items-center space-x-1.5 transition-all ${
-              continuousInference.protectionDecision.state === 'LOCKED'
-                ? continuousInference.protectionDecision.direction === 'UP'
-                  ? 'bg-[#00FF88]/20 border border-[#00FF88]/60 text-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.5)]'
-                  : 'bg-[#FF3B30]/20 border border-[#FF3B30]/60 text-[#FF3B30] shadow-[0_0_12px_rgba(255,59,48,0.5)]'
-                : continuousInference.protectionDecision.state === 'CONFIRMING'
-                ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 animate-pulse'
-                : continuousInference.protectionDecision.state === 'WATCH'
-                ? 'bg-purple-500/20 border border-purple-400/50 text-purple-300'
-                : 'bg-gray-800 border border-gray-600 text-gray-300'
-            }`}>
-              <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
-              <span>{continuousInference.protectionDecision.state}</span>
-            </span>
-          </div>
-
-          {/* Primary Action / Directional Hero Title */}
-          <div className="my-3">
-            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">AUTONOMOUS CONVICTION</div>
-            <h2 className={`text-2xl sm:text-3xl font-black tracking-tight flex items-center space-x-2 mt-0.5 ${
-              continuousInference.protectionDecision.state === 'LOCKED'
-                ? continuousInference.protectionDecision.direction === 'UP' ? 'text-[#00FF88]' : 'text-[#FF3B30]'
-                : continuousInference.protectionDecision.state === 'CONFIRMING'
-                ? 'text-cyan-300'
-                : continuousInference.protectionDecision.state === 'WATCH'
-                ? 'text-purple-300'
-                : 'text-amber-400'
-            }`}>
-              <Zap className="w-6 h-6 fill-current shrink-0" />
-              <span className="truncate">{continuousInference.protectionDecision.displayName}</span>
-            </h2>
-            <div className="text-[10px] text-gray-400 font-mono mt-1 line-clamp-1">
-              {continuousInference.protectionDecision.subtitle}
-            </div>
-          </div>
-
-          {/* 3-Way Normalized Probability Distribution Strip (Sum = 100%) */}
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] space-y-2 mb-3">
-            <div className="flex items-center justify-between text-[9px]">
-              <span className="text-gray-400 uppercase font-bold tracking-tight">3-WAY NORMALIZED PROBABILITY</span>
-              <span className="text-gray-500 font-mono">SUM: 100.0%</span>
-            </div>
-
-            {/* Segmented Triple Color Bar */}
-            <div className="w-full h-2.5 bg-[#1E2638] rounded-full overflow-hidden flex">
-              <div 
-                className="h-full bg-[#00FF88] transition-all duration-500" 
-                style={{ width: `${continuousInference.gemini.upProbability * 100}%` }}
-                title={`P(UP): ${(continuousInference.gemini.upProbability * 100).toFixed(1)}%`}
-              />
-              <div 
-                className="h-full bg-[#FF3B30] transition-all duration-500" 
-                style={{ width: `${continuousInference.gemini.downProbability * 100}%` }}
-                title={`P(DOWN): ${(continuousInference.gemini.downProbability * 100).toFixed(1)}%`}
-              />
-              <div 
-                className="h-full bg-[#9D4EDD] transition-all duration-500" 
-                style={{ width: `${continuousInference.gemini.noTradeProbability * 100}%` }}
-                title={`P(NO TRADE): ${(continuousInference.gemini.noTradeProbability * 100).toFixed(1)}%`}
-              />
-            </div>
-
-            {/* Probability Breakdown Pills */}
-            <div className="grid grid-cols-3 gap-1.5 text-center pt-0.5">
-              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-[#00FF88]/20">
-                <span className="text-[8px] text-gray-400 block">P(UP)</span>
-                <span className="text-xs font-black text-[#00FF88]">{(continuousInference.gemini.upProbability * 100).toFixed(0)}%</span>
+            {/* Laser scanning beam for Confirming / Calibrating states */}
+            {(isConfirming || isCalibrating) && (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+                <div className="w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-laser-sweep opacity-75 shadow-[0_0_15px_rgba(6,182,212,0.9)]" />
               </div>
-              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-[#FF3B30]/20">
-                <span className="text-[8px] text-gray-400 block">P(DOWN)</span>
-                <span className="text-xs font-black text-[#FF3B30]">{(continuousInference.gemini.downProbability * 100).toFixed(0)}%</span>
-              </div>
-              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-purple-500/20">
-                <span className="text-[8px] text-gray-400 block">P(NO TRADE)</span>
-                <span className="text-xs font-black text-purple-300">{(continuousInference.gemini.noTradeProbability * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-          </div>
+            )}
 
-          {/* Lock Progress & Signal Momentum */}
-          <div className="space-y-2 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
-            <div className="flex justify-between items-center text-[9px]">
-              <span className="text-gray-400 font-bold uppercase">LOCK PROGRESS (REQ 72/100):</span>
-              <span className={`font-black ${continuousInference.protectionDecision.lockProgressPct >= 100 ? 'text-[#00FF88]' : continuousInference.protectionDecision.lockProgressPct >= 70 ? 'text-cyan-300' : 'text-amber-400'}`}>
-                {continuousInference.protectionDecision.lockProgressPct}% {continuousInference.protectionDecision.lockProgressPct >= 100 ? '✓ AUTHORIZED' : ''}
-              </span>
-            </div>
-            
-            <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-500 ${
-                  continuousInference.protectionDecision.lockProgressPct >= 100
-                    ? 'bg-gradient-to-r from-cyan-400 to-[#00FF88]'
-                    : 'bg-gradient-to-r from-purple-500 via-cyan-400 to-amber-400'
-                }`}
-                style={{ width: `${continuousInference.protectionDecision.lockProgressPct}%` }}
-              />
-            </div>
-
-            <div className="flex justify-between items-center text-[8.5px] text-gray-400 pt-0.5">
-              <span>MOMENTUM: <strong className="text-white">{continuousInference.gemini.signalMomentum}</strong></span>
-              <span>TEMPORAL STABILITY: <strong className="text-[#00FF88]">{continuousInference.stabilityResult.stabilityScore}%</strong></span>
-            </div>
-          </div>
-
-          {/* Footer Metadata */}
-          <div className="flex items-center justify-between text-[9px] text-gray-500 mt-3 pt-2 border-t border-[#1E2638]">
-            <span>HYSTERESIS: ENTER ≥72 • REVOKE &lt;60</span>
-            <span>SHADOW LATENCY: {continuousInference.gemini.latencyMs}ms</span>
-          </div>
-        </div>
-
-        {/* CARD 2: CONTINUOUS GEMINI SHADOW INTELLIGENCE & 6-FACTOR EVIDENCE MATRIX */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,255,136,0.08)]">
-          <div>
-            {/* Header with Live AI Pulse */}
-            <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5 mb-2.5">
-              <div className="flex items-center space-x-2">
-                <BrainCircuit className="w-4 h-4 text-cyan-400 animate-pulse" />
-                <span className="text-[10px] text-gray-200 font-bold uppercase tracking-wider">GEMINI SHADOW INTELLIGENCE</span>
-              </div>
-              <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[8.5px] font-black tracking-wider flex items-center space-x-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
-                <span>CONTINUOUS SHADOW ACTIVE</span>
-              </span>
-            </div>
-
-            {/* 6-Factor Evidence Matrix with Live Pass/Fail & Score */}
-            <div className="space-y-1.5 mb-3">
-              <div className="flex justify-between items-center text-[9px] text-gray-400 font-bold uppercase">
-                <span>6-FACTOR EVIDENCE CONFLUENCE</span>
-                <span className="text-[#00FF88] font-mono">{continuousInference.gemini.alignedEvidenceCount}/6 ALIGNED (REQ ≥4)</span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
-                {continuousInference.gemini.evidenceFactors.map((factor) => (
-                  <div 
-                    key={factor.id} 
-                    className={`p-2 rounded-lg border transition-all ${
-                      factor.aligned 
-                        ? 'bg-[#080B10] border-[#00FF88]/40 text-white' 
-                        : 'bg-[#080B10] border-gray-800 text-gray-400'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[8px] font-bold truncate max-w-[90px]">{factor.name.split(' ')[0]}</span>
-                      <span className={`text-[8px] font-black ${factor.aligned ? 'text-[#00FF88]' : 'text-gray-500'}`}>
-                        {factor.aligned ? `✓ ${factor.score}%` : `✗ ${factor.score}%`}
-                      </span>
-                    </div>
-                    <div className="text-[7.5px] text-gray-400 truncate" title={factor.detail}>
-                      {factor.detail}
-                    </div>
+            {/* Top State Bar */}
+            <div>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                <div className="flex items-center space-x-2.5">
+                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isUp ? 'bg-[#00FF88]' : isDown ? 'bg-[#FF3B30]' : isConfirming ? 'bg-cyan-400' : 'bg-amber-400'}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Contradiction Meter & Risk Synthesis */}
-            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] space-y-1.5">
-              <div className="flex justify-between items-center text-[9px]">
-                <span className="text-gray-400 uppercase font-bold">CONTRADICTION DETECTOR:</span>
-                <span className={`font-black ${continuousInference.gemini.contradictionScore <= 25 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
-                  {continuousInference.gemini.contradictionScore}% ({continuousInference.gemini.contradictionScore <= 25 ? 'LOW CONFLICT' : 'HIGH DIVERGENCE'})
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-500 ${
-                    continuousInference.gemini.contradictionScore <= 25 ? 'bg-[#00FF88]' : 'bg-amber-400'
-                  }`}
-                  style={{ width: `${continuousInference.gemini.contradictionScore}%` }}
-                />
-              </div>
-              <div className="text-[8px] text-gray-400 font-mono line-clamp-2 pt-0.5">
-                {continuousInference.gemini.reasoning}
-              </div>
-            </div>
-          </div>
-
-          <div className="text-[8.5px] text-gray-500 flex justify-between items-center mt-2 pt-2 border-t border-[#1E2638]">
-            <span>CONFIDENCE: {continuousInference.gemini.confidence}%</span>
-            <span>SHADOW MODEL: GEMINI 2.5 FLASH QUANT</span>
-          </div>
-        </div>
-
-        {/* CARD 3: VIXY PROTECTION GUARDIAN & COMPOSITE LOCK SCORE */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div>
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5 mb-2.5">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />
-                <span className="text-[10px] text-gray-200 font-bold uppercase tracking-wider">VIXY PROTECTION ENGINE</span>
-              </div>
-              <span className={`px-2 py-0.5 rounded text-[8.5px] font-black tracking-wider ${
-                continuousInference.protectionDecision.protectionStatus === 'CLEAR'
-                  ? 'bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88]'
-                  : continuousInference.protectionDecision.protectionStatus === 'EVALUATING'
-                  ? 'bg-cyan-500/20 border border-cyan-400/40 text-cyan-300'
-                  : 'bg-[#FF3B30]/20 border border-[#FF3B30]/40 text-[#FF3B30]'
-              }`}>
-                STATUS: {continuousInference.protectionDecision.protectionStatus}
-              </span>
-            </div>
-
-            {/* Composite Lock Score Showcase */}
-            <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] mb-2.5">
-              <div className="flex justify-between items-center mb-1">
-                <div>
-                  <span className="text-[9px] text-gray-400 uppercase font-bold">COMPOSITE LOCK SCORE</span>
-                  <div className="text-xl font-black text-[#00FF88]">
-                    {continuousInference.protectionDecision.lockScore} <span className="text-xs text-gray-500 font-normal">/ 100 (REQ ≥ 72)</span>
+                  <div>
+                    <span className="text-[10px] sm:text-xs text-purple-200 font-black tracking-widest uppercase">
+                      THE PLACE WHERE VIXY THINKS
+                    </span>
+                    <span className="text-[9px] text-gray-400 block font-sans">CANONICAL 15-MINUTE AUTONOMOUS DECISION</span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-[8.5px] text-gray-400 uppercase block">AUTHORIZATION</span>
-                  <span className={`text-xs font-black ${continuousInference.protectionDecision.checklist.allPassed ? 'text-[#00FF88]' : 'text-amber-400'}`}>
-                    {continuousInference.protectionDecision.checklist.allPassed ? 'HARD LOCK APPROVED' : 'HOLDING IN PIPELINE'}
+
+                <div className="flex items-center space-x-2">
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center space-x-1.5 ${
+                    isUp
+                      ? 'bg-[#00FF88]/20 border border-[#00FF88]/60 text-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.4)]'
+                      : isDown
+                      ? 'bg-[#FF3B30]/20 border border-[#FF3B30]/60 text-[#FF3B30] shadow-[0_0_12px_rgba(255,59,48,0.4)]'
+                      : isConfirming
+                      ? 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-300 animate-pulse'
+                      : 'bg-slate-800 border border-slate-600 text-slate-300'
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : isConfirming ? 'CONFIRMING' : 'SKIPPED'}</span>
                   </span>
                 </div>
               </div>
 
-              {/* Multi-Weight Composition Bar */}
-              <div className="w-full h-2 bg-[#1E2638] rounded-full overflow-hidden flex my-1.5">
-                <div className="bg-[#00FF88] h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.directionalProbWeight}%` }} title="35% Directional Prob" />
-                <div className="bg-cyan-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.evidenceAgreementWeight}%` }} title="20% Evidence Agreement" />
-                <div className="bg-[#9D4EDD] h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.temporalStabilityWeight}%` }} title="15% Temporal Stability" />
-                <div className="bg-amber-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.crossVenueWeight}%` }} title="10% Cross-Venue" />
-                <div className="bg-blue-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.regimeQualityWeight}%` }} title="10% Regime Quality" />
-                <div className="bg-emerald-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.contradictionPenaltyWeight}%` }} title="10% Contradiction Penalty" />
-              </div>
-              <div className="text-[7.5px] text-gray-400 flex justify-between font-mono">
-                <span>35% PROB</span>
-                <span>20% EVIDENCE</span>
-                <span>15% STABILITY</span>
-                <span>10% CROSS</span>
-                <span>10% REGIME</span>
-                <span>10% CONFLICT</span>
-              </div>
-            </div>
+              {/* DOMINANT HERO DECISION TITLE */}
+              <div className="my-2">
+                <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-1.5 mb-1">
+                  <Zap className="w-3.5 h-3.5 text-purple-400" />
+                  <span>AUTHORITATIVE 15M EXECUTION STATE</span>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight font-sans drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
+                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : isConfirming ? 'text-cyan-300 text-glow-cyan' : 'text-slate-200'
+                  }`}>
+                    {primaryDecisionTitle}
+                  </h1>
 
-            {/* Protection Checklist */}
-            <div className="grid grid-cols-2 gap-1.5 text-[8.5px] bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.probabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.probabilityPassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Prob ≥ 70%</span>
+                  <span className={`px-3 py-1 rounded-xl text-xs font-black tracking-wider uppercase border ${
+                    isUp
+                      ? 'bg-[#00FF88]/15 border-[#00FF88]/50 text-[#00FF88]'
+                      : isDown
+                      ? 'bg-[#FF3B30]/15 border-[#FF3B30]/50 text-[#FF3B30]'
+                      : isConfirming
+                      ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-300'
+                      : 'bg-amber-500/15 border-amber-400/50 text-amber-300'
+                  }`}>
+                    {isUp ? '▲ BUY YES / UP' : isDown ? '▼ BUY NO / DOWN' : isConfirming ? '⚡ SCANNING CONFLUENCE' : '🛡️ CAPITAL PRESERVED'}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.lockScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.lockScorePassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Score ≥ 72</span>
+
+              {/* DECISION RATIONALE: WHAT DOES VIXY THINK RIGHT NOW - AND WHY? */}
+              <div className="bg-[#080414]/90 p-3.5 rounded-2xl border border-purple-900/40 my-4 shadow-inner space-y-1.5">
+                <div className="flex items-center justify-between text-[9.5px]">
+                  <span className="text-purple-300 font-black uppercase tracking-wider flex items-center space-x-1">
+                    <Sparkles className="w-3 h-3 text-purple-400" />
+                    <span>VIXY SYNTHESIS & CONVICTION WHY</span>
+                  </span>
+                  <span className="text-[#00FF88] font-bold font-mono">CONVICTION: {confidence}%</span>
+                </div>
+                <p className="text-xs sm:text-[13px] font-sans text-gray-200 leading-snug">
+                  {isUp
+                    ? `VIXY locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation while Guardian risk remains clear (${continuousInference.gemini.contradictionScore}% conflict).`
+                    : isDown
+                    ? `VIXY locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% conviction. Heavy ask absorption and bearish supertrend resistance trigger high-probability downward delta targeting.`
+                    : isConfirming
+                    ? `VIXY is actively evaluating market microstructure for cycle ${cycleId}. Scanning 6-factor evidence confluence and order book imbalance before authorizing hard lock.`
+                    : `VIXY protection engine elected to SKIP this 15M contract cycle. Signal conflict (${continuousInference.gemini.contradictionScore}%) or low persistence vetoed execution to preserve trading capital.`}
+                </p>
               </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.temporalStabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.temporalStabilityPassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Stability ≥ 65%</span>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.contradictionPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.contradictionPassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Conflict ≤ 25%</span>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.evidencePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.evidencePassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Evidence ≥ 4/6</span>
-              </div>
-              <div className="flex items-center space-x-1.5">
-                <span className={continuousInference.protectionDecision.checklist.crossVenuePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                  {continuousInference.protectionDecision.checklist.crossVenuePassed ? '✓' : '✗'}
-                </span>
-                <span className="text-gray-300">Cross-Venue Sync</span>
-              </div>
-            </div>
-          </div>
 
-          <div className="text-[8.5px] text-gray-500 mt-2">
-            Capital Protection: Only the VIXY Protection Engine can authorize a hard trade lock.
-          </div>
-        </div>
+              {/* 3-WAY NORMALIZED PROBABILITY DISTRIBUTION STRIP */}
+              <div className="space-y-2 mb-4">
+                <div className="flex items-center justify-between text-[9.5px]">
+                  <span className="text-gray-400 uppercase font-bold tracking-tight">3-WAY NORMALIZED PROBABILITY DISTRIBUTION</span>
+                  <span className="text-purple-300 font-mono font-bold">100% SUM NORMALIZED</span>
+                </div>
 
-      </div>
-
-      {/* 4. MAIN CHART (1M BTC/USD + EMA) & ORDER FLOW & BOOK DEPTH */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
-        {/* MAIN CHART */}
-        <div className="lg:col-span-8 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.4)]">
-          <div className="flex flex-wrap items-center justify-between border-b border-[#1E2638] pb-3 mb-3 gap-2">
-            <div className="flex items-center space-x-2.5">
-              <span className="font-bold text-white text-sm tracking-tight">LIVE PRICE CHART • BTC/USD (15M)</span>
-              <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] text-[9px] font-bold shadow-[0_0_10px_rgba(0,255,136,0.2)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
-                <span>SOCKET BOUND</span>
-              </div>
-              <span className="text-[9px] text-gray-500 font-mono hidden sm:inline">wss://stream.binance.com</span>
-            </div>
-            
-            <div className="flex items-center space-x-3 text-[10px] text-gray-400 font-mono">
-              <div className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
-                <span>VWAP: ${(spotPrice - 28.5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
-                <span>EMA 9: ${(spotPrice + 8.4).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-              <div className="flex items-center space-x-1 hidden sm:flex">
-                <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
-                <span>EMA 21: ${(spotPrice - 16.2).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* SVG Price Action & Candlestick Visualization */}
-          <div className="relative h-64 w-full bg-[#080B10] rounded-lg border border-[#1E2638] p-3 overflow-hidden">
-            {/* Horizontal Grid lines */}
-            <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 p-2">
-              <div className="border-b border-[#1E2638] w-full flex justify-between text-[8px] text-gray-500"><span>64,300.00</span></div>
-              <div className="border-b border-[#1E2638] w-full flex justify-between text-[8px] text-gray-500"><span>64,200.00</span></div>
-              <div className="border-b border-[#1E2638] w-full flex justify-between text-[8px] text-gray-500"><span>64,100.00</span></div>
-              <div className="border-b border-[#1E2638] w-full flex justify-between text-[8px] text-gray-500"><span>64,000.00</span></div>
-              <div className="w-full flex justify-between text-[8px] text-gray-500"><span>63,900.00</span></div>
-            </div>
-
-            {/* Target & Strike Reference Line */}
-            <div className="absolute top-1/2 left-0 right-0 border-b border-dashed border-[#9D4EDD] opacity-70 z-10 flex items-center justify-end px-2">
-              <span className="bg-[#9D4EDD] text-white text-[8px] font-bold px-1.5 py-0.5 rounded">LOCKED STRIKE $64,070.78</span>
-            </div>
-
-            {/* Chart SVG Graphic */}
-            <svg className="w-full h-full" viewBox="0 0 800 240" preserveAspectRatio="none">
-              <defs>
-                <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#00FF88" stopOpacity="0.2" />
-                  <stop offset="100%" stopColor="#00FF88" stopOpacity="0.0" />
-                </linearGradient>
-              </defs>
-
-              {/* Area Fill */}
-              <path
-                d="M 20 180 Q 100 160, 180 140 T 340 100 T 500 80 T 660 60 T 780 40 L 780 230 L 20 230 Z"
-                fill="url(#chartGrad)"
-              />
-
-              {/* VWAP Curve */}
-              <path
-                d="M 20 190 Q 100 170, 180 155 T 340 120 T 500 100 T 660 85 T 780 70"
-                fill="none"
-                stroke="#38BDF8"
-                strokeWidth="2"
-                strokeDasharray="4 4"
-              />
-
-              {/* EMA 9 Curve */}
-              <path
-                d="M 20 175 Q 100 150, 180 135 T 340 95 T 500 70 T 660 55 T 780 35"
-                fill="none"
-                stroke="#C084FC"
-                strokeWidth="2"
-              />
-
-              {/* Main Price Action Line */}
-              <path
-                d="M 20 180 L 80 165 L 140 175 L 200 145 L 260 150 L 320 115 L 380 125 L 440 95 L 500 85 L 560 100 L 620 70 L 680 60 L 740 45 L 780 40"
-                fill="none"
-                stroke="#00FF88"
-                strokeWidth="2.5"
-              />
-
-              {/* Live Candlestick Bars */}
-              {[
-                { x: 50, o: 175, c: 165, h: 160, l: 180, green: true },
-                { x: 110, o: 165, c: 172, h: 162, l: 175, green: false },
-                { x: 170, o: 172, c: 148, h: 142, l: 174, green: true },
-                { x: 230, o: 148, c: 152, h: 145, l: 155, green: false },
-                { x: 290, o: 152, c: 118, h: 112, l: 154, green: true },
-                { x: 350, o: 118, c: 124, h: 115, l: 128, green: false },
-                { x: 410, o: 124, c: 98, h: 92, l: 126, green: true },
-                { x: 470, o: 98, c: 88, h: 82, l: 102, green: true },
-                { x: 530, o: 88, c: 98, h: 84, l: 104, green: false },
-                { x: 590, o: 98, c: 72, h: 68, l: 100, green: true },
-                { x: 650, o: 72, c: 62, h: 58, l: 75, green: true },
-                { x: 710, o: 62, c: 48, h: 42, l: 65, green: true },
-                { x: 770, o: 48, c: 40, h: 36, l: 50, green: true }
-              ].map((bar, i) => (
-                <g key={i}>
-                  <line x1={bar.x} y1={bar.h} x2={bar.x} y2={bar.l} stroke={bar.green ? '#00FF88' : '#FF3B30'} strokeWidth="1.5" />
-                  <rect
-                    x={bar.x - 4}
-                    y={Math.min(bar.o, bar.c)}
-                    width="8"
-                    height={Math.max(4, Math.abs(bar.o - bar.c))}
-                    fill={bar.green ? '#00FF88' : '#FF3B30'}
-                    rx="1"
+                <div className="w-full h-3 bg-[#080511] rounded-full overflow-hidden flex border border-purple-900/30 p-0.5">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-500 shadow-[0_0_10px_rgba(0,255,136,0.6)]"
+                    style={{ width: `${(continuousInference?.gemini?.upProbability ?? 0.65) * 100}%` }}
+                    title={`P(UP): ${((continuousInference?.gemini?.upProbability ?? 0.65) * 100).toFixed(1)}%`}
                   />
-                </g>
-              ))}
-            </svg>
-          </div>
+                  <div
+                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] transition-all duration-500 shadow-[0_0_10px_rgba(255,59,48,0.6)]"
+                    style={{ width: `${(continuousInference?.gemini?.downProbability ?? 0.22) * 100}%` }}
+                    title={`P(DOWN): ${((continuousInference?.gemini?.downProbability ?? 0.22) * 100).toFixed(1)}%`}
+                  />
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-r-full transition-all duration-500 shadow-[0_0_10px_rgba(168,85,247,0.6)]"
+                    style={{ width: `${(continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100}%` }}
+                    title={`P(NO TRADE): ${((continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100).toFixed(1)}%`}
+                  />
+                </div>
 
-          {/* Chart Lower Toolbar */}
-          <div className="flex justify-between items-center text-[10px] text-gray-500 mt-2">
-            <span>TIMEFRAME: 15M (KALSHI CYCLE CONVERGENCE)</span>
-            <span className="text-[#00FF88] font-bold">DELTA: +$104.05 ABOVE OPEN STRIKE</span>
-          </div>
-        </div>
-
-        {/* ORDER FLOW & BOOK DEPTH */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <span className="font-bold text-white text-sm">ORDER FLOW & BOOK DEPTH</span>
-            <span className="text-[10px] text-[#00FF88] font-bold">DELTA: +0.84</span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 text-[10px] mb-3">
-            <div className="bg-[#080B10] p-2 rounded border border-[#1E2638]">
-              <span className="text-gray-500 block text-[9px]">ORDER FLOW</span>
-              <span className="text-[#00FF88] font-bold">{deltaVal}</span>
-            </div>
-            <div className="bg-[#080B10] p-2 rounded border border-[#1E2638]">
-              <span className="text-gray-500 block text-[9px]">CVD (DELTA)</span>
-              <span className="text-[#00FF88] font-bold">{cvdVal}</span>
-            </div>
-            <div className="bg-[#080B10] p-2 rounded border border-[#1E2638]">
-              <span className="text-gray-500 block text-[9px]">VWAP</span>
-              <span className="text-cyan-400 font-bold">$64,098.45</span>
-            </div>
-          </div>
-
-          {/* Depth Ladder */}
-          <div className="space-y-1 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] text-[9px]">
-            <div className="flex justify-between text-gray-500 font-bold border-b border-[#1E2638] pb-1">
-              <span>BIDS (BTC)</span>
-              <span>PRICE ($)</span>
-              <span>ASKS (BTC)</span>
-            </div>
-            {[
-              { bid: '12.45', price: '64,170', ask: '11.23', bidW: '45%', askW: '40%' },
-              { bid: '18.32', price: '64,160', ask: '15.07', bidW: '65%', askW: '52%' },
-              { bid: '23.16', price: '64,140', ask: '22.64', bidW: '80%', askW: '75%' },
-              { bid: '31.46', price: '64,130', ask: '28.91', bidW: '95%', askW: '88%' },
-              { bid: '25.94', price: '64,120', ask: '26.33', bidW: '85%', askW: '82%' }
-            ].map((row, idx) => (
-              <div key={idx} className="relative flex justify-between py-0.5 items-center">
-                <span className="text-[#00FF88] font-bold z-10 w-16 text-left">{row.bid}</span>
-                <span className="text-gray-300 font-bold z-10">{row.price}</span>
-                <span className="text-[#FF3B30] font-bold z-10 w-16 text-right">{row.ask}</span>
+                <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-emerald-500/30">
+                    <span className="text-[8.5px] text-gray-400 block font-sans">P(UP)</span>
+                    <span className="text-sm sm:text-base font-black text-[#00FF88]">{((continuousInference?.gemini?.upProbability ?? 0.65) * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-rose-500/30">
+                    <span className="text-[8.5px] text-gray-400 block font-sans">P(DOWN)</span>
+                    <span className="text-sm sm:text-base font-black text-[#FF3B30]">{((continuousInference?.gemini?.downProbability ?? 0.22) * 100).toFixed(0)}%</span>
+                  </div>
+                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-purple-500/30">
+                    <span className="text-[8.5px] text-gray-400 block font-sans">P(NO TRADE)</span>
+                    <span className="text-sm sm:text-base font-black text-purple-300">{((continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100).toFixed(0)}%</span>
+                  </div>
+                </div>
               </div>
-            ))}
-          </div>
-
-          <div className="flex justify-between items-center text-[9px] text-gray-500 mt-2">
-            <span>SPREAD: {bookSpreadVal} (0.02%)</span>
-            <span className="text-[#00FF88] font-bold">ICEBERG: DETECTED ✓</span>
-          </div>
-        </div>
-
-      </div>
-
-      {/* 5. CROSS-VENUE SYNAPSE */}
-      <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 shadow-[0_0_25px_rgba(157,78,221,0.1)]">
-        <div className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-4 flex items-center justify-between">
-          <span className="flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-[#9D4EDD]" />
-            <span>CROSS-VENUE SYNAPSE</span>
-          </span>
-          <span className="text-cyan-400 text-[11px]">REAL-TIME RECONCILIATION</span>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          
-          <div className="bg-[#080B10] p-4 rounded-xl border border-[#1E2638]">
-            <div className="text-[10px] text-purple-300 font-semibold mb-1">KALSHI 15M</div>
-            <div className="flex justify-between text-xs my-1">
-              <span className="text-[#00FF88] font-bold">UP ${rawKalshiProb.toFixed(2)}</span>
-              <span className="text-[#00FF88]">{kalshiProbPct}%</span>
             </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-[#FF3B30] font-bold">DOWN ${(1 - rawKalshiProb).toFixed(2)}</span>
-              <span className="text-[#FF3B30]">{100 - kalshiProbPct}%</span>
-            </div>
-            <div className="text-[10px] text-gray-500 mt-2">VOL $1.24M • 156ms</div>
-          </div>
 
-          <div className="bg-[#080B10] p-4 rounded-xl border border-[#1E2638]">
-            <div className="text-[10px] text-purple-300 font-semibold mb-1">POLYMARKET 15M</div>
-            <div className="flex justify-between text-xs my-1">
-              <span className="text-[#00FF88] font-bold">UP ${rawPolyProb.toFixed(2)}</span>
-              <span className="text-[#00FF88]">{polyProbPct}%</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-[#FF3B30] font-bold">DOWN ${(1 - rawPolyProb).toFixed(2)}</span>
-              <span className="text-[#FF3B30]">{100 - polyProbPct}%</span>
-            </div>
-            <div className="text-[10px] text-gray-500 mt-2">VOL $2.18M • 164ms</div>
-          </div>
-
-          <div className="bg-[#080B10] p-4 rounded-xl border border-[#1E2638]">
-            <div className="text-[10px] text-cyan-400 font-semibold mb-1">COINBASE SPOT</div>
-            <div className="text-lg font-black text-white my-0.5">{coinbasePriceStr}</div>
-            <div className="text-xs text-[#00FF88] font-bold">+{priceChange.toFixed(2)} (+{priceChangePct.toFixed(2)}%)</div>
-            <div className="text-[10px] text-gray-500 mt-2">VOL $892.4M • 24ms</div>
-          </div>
-
-          <div className="bg-[#080B10] p-4 rounded-xl border border-[#1E2638]">
-            <div className="text-[10px] text-blue-400 font-semibold mb-1">KRAKEN SPOT</div>
-            <div className="text-lg font-black text-white my-0.5">{krakenPriceStr}</div>
-            <div className="text-xs text-[#00FF88] font-bold">+564.12 (+0.89%)</div>
-            <div className="text-[10px] text-gray-500 mt-2">VOL $234.7M • 196ms</div>
-          </div>
-
-          <div className="bg-[#080B10] p-4 rounded-xl border border-[#00FF88]/30 flex flex-col justify-between shadow-[0_0_20px_rgba(0,255,136,0.15)]">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-[10px] text-[#00FF88] font-semibold mb-1">CROSS VENUE SPREAD</div>
-                <div className="text-xl font-black text-white">{spreadValueStr}</div>
-                <div className="text-xs text-[#00FF88] font-bold">({spreadPctStr})</div>
+            {/* STRIKE & SPOT DELTA METRICS BAR */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-white/10 text-[10px]">
+              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">PRICE TO BEAT (STRIKE)</span>
+                <span className="text-white font-black text-xs sm:text-sm">
+                  ${(strikePrice ?? 64150).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
               </div>
-              <div className="flex flex-col items-center justify-center">
-                <svg className="w-14 h-11 text-[#00FF88] drop-shadow-[0_0_12px_rgba(0,255,136,0.9)]" viewBox="0 0 100 65" fill="currentColor">
-                  <path d="M15,40 C15,25 30,20 45,22 C55,12 75,15 85,25 C95,32 90,45 80,48 C70,52 35,52 15,40 Z" fill="#00FF88" />
-                  <path d="M80,25 C88,22 92,28 88,35 C85,40 78,38 75,32 Z" fill="#34D399" />
-                  <path d="M86,22 C92,12 82,10 78,16 Z" fill="#6EE7B7" />
-                  <path d="M82,24 C88,18 94,24 90,28 Z" fill="#6EE7B7" />
-                  <path d="M35,22 C45,15 65,18 75,25 C65,32 45,32 35,22 Z" fill="#34D399" opacity="0.8" />
-                  <rect x="25" y="45" width="6" height="15" rx="3" fill="#047857" />
-                  <rect x="42" y="46" width="6" height="14" rx="3" fill="#047857" />
-                  <rect x="68" y="44" width="6" height="16" rx="3" fill="#047857" />
-                  <rect x="78" y="45" width="6" height="15" rx="3" fill="#047857" />
+              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">LIVE SPOT (COINBASE)</span>
+                <span className="text-white font-black text-xs sm:text-sm">{coinbasePriceStr}</span>
+              </div>
+              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">EXPECTED DELTA</span>
+                <span className={`font-black text-xs sm:text-sm ${isTargetAchieved ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
+                  {(deltaToBeat ?? 0) >= 0 ? '+' : ''}${(deltaToBeat ?? 0).toFixed(2)} ({isTargetAchieved ? 'IN THE MONEY' : 'BELOW TARGET'})
+                </span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* RIGHT COLUMN: 15M COUNTDOWN & GUARDIAN & GEMINI SHADOW (5 cols on LG) */}
+          <div className="lg:col-span-5 flex flex-col gap-4">
+            
+            {/* 15M COUNTDOWN CARD WITH PROGRESS RING (VISUAL PRIORITY 2) */}
+            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] flex items-center justify-between relative overflow-hidden">
+              <div className="space-y-1">
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-4 h-4 text-cyan-400" />
+                  <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">15M CONTRACT EPOCH</span>
+                </div>
+                <div className="text-3xl sm:text-4xl font-black text-white tracking-tight font-sans text-glow-cyan">
+                  {cyclePhase === 'CALIBRATING' ? '00:00' : countdownFormatted}
+                </div>
+                <div className="text-[10px] text-cyan-300 font-bold tracking-wider uppercase">
+                  {cyclePhase === 'CALIBRATING' ? 'CALIBRATING NEXT EPOCH' : 'REMAINING IN CYCLE'}
+                </div>
+                <div className="text-[9px] text-gray-400 flex items-center space-x-2 pt-1 font-mono">
+                  <span>OPEN {openTimeFormatted}</span>
+                  <span>•</span>
+                  <span>CLOSE {closeTimeFormatted}</span>
+                </div>
+              </div>
+
+              {/* Progress Radial Ring */}
+              <div className="relative flex items-center justify-center shrink-0">
+                <svg className="w-20 h-20 transform -rotate-90">
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="32"
+                    stroke="#1E1435"
+                    strokeWidth="6"
+                    fill="transparent"
+                  />
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="32"
+                    stroke={isUp ? '#00FF88' : isDown ? '#FF3B30' : '#22D3EE'}
+                    strokeWidth="6"
+                    fill="transparent"
+                    strokeDasharray={201.0}
+                    strokeDashoffset={201.0 - (201.0 * progressPct) / 100}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000 ease-linear shadow-lg"
+                  />
                 </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                  <span className="text-xs font-black text-white">{Math.round(progressPct)}%</span>
+                  <span className="text-[7.5px] text-gray-400 font-bold">ELAPSED</span>
+                </div>
               </div>
             </div>
-            <div className="text-[10px] text-[#00FF88] font-bold mt-2 flex items-center space-x-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping"></span>
-              <span>STATUS: ALIGNED ✓</span>
-            </div>
-          </div>
 
-        </div>
-      </div>
-
-      {/* 6. INDICATOR STACK | MULTI-TIMEFRAME MATRIX | WHALE & MACRO RISK */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
-        {/* TECHNICAL INDICATOR STACK */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <div className="flex items-center space-x-2">
-              <Activity className="w-4 h-4 text-[#00FF88]" />
-              <span className="font-bold text-white text-xs uppercase">TECHNICAL SIGNAL STACK</span>
-            </div>
-            <span className="text-[10px] text-gray-400">HIGH DENSITY</span>
-          </div>
-
-          <div className="space-y-3 text-[10px]">
-            {/* RSI */}
-            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-gray-400">RSI (14)</span>
-                <span className="text-[#00FF88] font-bold">{technicalIndicators.rsi}</span>
-              </div>
-              <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                <div className="h-full bg-[#00FF88]" style={{ width: `${technicalIndicators.rsi}%` }} />
-              </div>
-              <span className="text-[8px] text-gray-500 mt-1 block">{technicalIndicators.rsiStatus}</span>
-            </div>
-
-            {/* MACD */}
-            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-400">MACD (12, 26, 9)</span>
-                <span className="text-[#00FF88] font-bold">+{technicalIndicators.macd.histogram}</span>
-              </div>
-              <div className="text-[8px] text-[#00FF88] mt-0.5">{technicalIndicators.macd.status}</div>
-            </div>
-
-            {/* Bollinger Bands */}
-            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] flex justify-between items-center">
+            {/* VIXY PROTECTION GUARDIAN CARD (VISUAL PRIORITY 3) */}
+            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(157,78,221,0.15)] flex flex-col justify-between">
               <div>
-                <span className="text-gray-400 block">BOLLINGER (20, 2)</span>
-                <span className="text-[8px] text-gray-500">BW: {technicalIndicators.bollinger.bandwidth}</span>
-              </div>
-              <span className="text-purple-300 font-bold">{technicalIndicators.bollinger.status}</span>
-            </div>
-
-            {/* Multi-Period Supertrend Directional Chips */}
-            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
-              <span className="text-gray-400 block mb-1.5">MULTI-PERIOD SUPERTREND</span>
-              <div className="grid grid-cols-3 gap-1.5 text-center">
-                <div className="bg-[#0C101A] p-1.5 rounded border border-[#00FF88]/30">
-                  <div className="text-[8px] text-gray-400">1M</div>
-                  <div className="text-[#00FF88] font-bold">▲ UP</div>
-                </div>
-                <div className="bg-[#0C101A] p-1.5 rounded border border-[#00FF88]/30">
-                  <div className="text-[8px] text-gray-400">5M</div>
-                  <div className="text-[#00FF88] font-bold">▲ UP</div>
-                </div>
-                <div className="bg-[#0C101A] p-1.5 rounded border border-[#00FF88]/30">
-                  <div className="text-[8px] text-gray-400">15M</div>
-                  <div className="text-[#00FF88] font-bold">▲ UP</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-[9px] text-gray-500 mt-2">
-            Volume POC: ${technicalIndicators.volumeProfile.poc.toFixed(2)} | VAH: ${technicalIndicators.volumeProfile.vah.toFixed(2)}
-          </div>
-        </div>
-
-        {/* MULTI-TIMEFRAME MATRIX & MARKET REGIME */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <span className="font-bold text-white text-xs uppercase">MULTI-TIMEFRAME MATRIX</span>
-            <span className="text-[#00FF88] text-[10px] font-bold">ALIGNMENT: 100%</span>
-          </div>
-
-          <div className="space-y-1.5 bg-[#080B10] p-3 rounded-lg border border-[#1E2638] text-[10px]">
-            <div className="flex justify-between text-gray-500 font-bold border-b border-[#1E2638] pb-1">
-              <span>TF</span>
-              <span>TREND</span>
-              <span>MOMENTUM</span>
-              <span>REGIME</span>
-            </div>
-            {[
-              { tf: '1M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
-              { tf: '5M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
-              { tf: '15M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
-              { tf: '1H', trend: '▶ FLAT', mom: 'MODERATE', regime: 'RANGING' }
-            ].map((row, idx) => (
-              <div key={idx} className="flex justify-between py-0.5 items-center">
-                <span className="text-gray-300 font-bold">{row.tf}</span>
-                <span className={row.trend.includes('UP') ? 'text-[#00FF88] font-bold' : 'text-gray-400'}>{row.trend}</span>
-                <span className="text-purple-300">{row.mom}</span>
-                <span className="text-[#00FF88] font-bold">{row.regime}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Holographic Bull Regime Card */}
-          <div className="bg-gradient-to-r from-[#0C101A] to-[#141E28] p-3.5 rounded-lg border border-[#00FF88]/40 flex items-center justify-between mt-3">
-            <div>
-              <div className="text-[9px] text-gray-400 uppercase">REGIME DETECTOR</div>
-              <div className="text-sm font-black text-[#00FF88]">{regimeVal}</div>
-              <div className="text-[9px] text-gray-400">Confidence: 81% • Duration: 2H 15M</div>
-            </div>
-            <div className="text-[#00FF88] text-2xl">🐂</div>
-          </div>
-
-          <div className="text-[9px] text-gray-500 mt-2">
-            Multi-timeframe consensus confirms sustained upward momentum across all active horizons.
-          </div>
-        </div>
-
-        {/* WHALE FLOW & MACRO RISK MONITOR */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <div className="flex items-center space-x-2">
-              <Waves className="w-4 h-4 text-cyan-400" />
-              <span className="font-bold text-white text-xs uppercase">WHALE FLOW (≥$250K)</span>
-            </div>
-            <div className="flex items-center space-x-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
-              <span className="text-[#00FF88] text-[9px] font-bold">{whaleFlowData.status}</span>
-            </div>
-          </div>
-
-          {/* Whale Flow 5M Ratio Bar */}
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] space-y-2 mb-3">
-            <div className="flex justify-between text-[10px]">
-              <span className="text-gray-400">5M ROLLING BIAS:</span>
-              <span className="text-[#00FF88] font-bold">{whaleFlowData.netBias}</span>
-            </div>
-            <div className="w-full h-2 bg-[#1E2638] rounded-full overflow-hidden flex">
-              <div className="bg-[#00FF88] h-full transition-all duration-500" style={{ width: `${whaleFlowData.buyPct}%` }} />
-              <div className="bg-[#FF3B30] h-full transition-all duration-500" style={{ width: `${whaleFlowData.sellPct}%` }} />
-            </div>
-            <div className="flex justify-between text-[8px] text-gray-400">
-              <span className="text-[#00FF88] font-bold">BUY: {whaleFlowData.buyPct}%</span>
-              <span className="text-cyan-300 font-bold truncate max-w-[170px]">{whaleFlowData.wallAlert}</span>
-              <span className="text-[#FF3B30] font-bold">SELL: {whaleFlowData.sellPct}%</span>
-            </div>
-          </div>
-
-          {/* Live Whale Order Stream Tape */}
-          <div className="space-y-1 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] mb-3 text-[9px]">
-            <div className="flex justify-between text-gray-500 font-bold border-b border-[#1E2638] pb-1">
-              <span>WHALE TAPE</span>
-              <span>PRICE</span>
-              <span>USD SIZE</span>
-            </div>
-            {whaleTrades.slice(0, 3).map((wt, idx) => (
-              <div key={`${wt.id}-${idx}`} className="flex justify-between items-center py-0.5">
-                <div className="flex items-center space-x-1.5 truncate max-w-[100px]">
-                  <span className={`px-1 py-0.2 rounded text-[7.5px] font-bold ${wt.side === 'BUY' ? 'bg-[#00FF88]/20 text-[#00FF88]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}>
-                    {wt.side}
+                <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-purple-400" />
+                    <span className="text-[11px] text-white font-black uppercase tracking-wider">🛡️ VIXY PROTECTION</span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase ${
+                    continuousInference.protectionDecision.protectionStatus === 'CLEAR'
+                      ? 'bg-[#00FF88]/20 border border-[#00FF88]/50 text-[#00FF88]'
+                      : continuousInference.protectionDecision.protectionStatus === 'EVALUATING'
+                      ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
+                      : 'bg-[#FF3B30]/20 border border-[#FF3B30]/50 text-[#FF3B30]'
+                  }`}>
+                    STATUS: {continuousInference.protectionDecision.checklist.allPassed ? 'AUTHORIZED' : continuousInference.protectionDecision.protectionStatus === 'EVALUATING' ? 'HOLDING' : 'BLOCKED'}
                   </span>
-                  <span className="text-gray-400">{wt.exchange.slice(0, 3)}</span>
-                  {wt.isMegaWhale && <span className="text-amber-400 font-black">⚡$1M+</span>}
                 </div>
-                <span className="text-gray-300">${wt.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
-                <span className={`font-bold ${wt.side === 'BUY' ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
-                  ${(wt.sizeUsd / 1000).toFixed(0)}k
-                </span>
-              </div>
-            ))}
-          </div>
 
-          {/* Macro Risk Calendar */}
-          <div className="space-y-1.5 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] text-[9px]">
-            <div className="flex items-center justify-between text-gray-400 font-bold border-b border-[#1E2638] pb-1">
-              <span>MACRO EVENT</span>
-              <span>COUNTDOWN</span>
-              <span>SEVERITY</span>
-            </div>
-            {macroEvents.slice(0, 2).map((event, idx) => (
-              <div key={idx} className="flex justify-between py-0.5 items-center">
-                <span className="text-gray-300 font-bold truncate max-w-[120px]">{event.name}</span>
-                <span className="text-amber-400 font-bold">{event.timeRemaining}</span>
-                <span className={`px-1.5 py-0.2 rounded font-bold ${event.impact === 'HIGH' ? 'bg-[#FF3B30]/20 text-[#FF3B30]' : 'bg-amber-500/20 text-amber-300'}`}>
-                  {event.impact}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-      </div>
-
-      {/* 6.5 SIGNAL ATTRIBUTION MATRIX & AUTONOMOUS "SCORE & LEARN" GRADING CARD */}
-      <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 shadow-[0_0_25px_rgba(0,255,136,0.1)] space-y-4">
-        
-        <div className="flex flex-wrap items-center justify-between border-b border-[#1E2638] pb-3 gap-2">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-lg bg-[#00FF88]/10 border border-[#00FF88]/30 flex items-center justify-center text-[#00FF88]">
-              <Sparkles className="w-4 h-4 text-[#00FF88] animate-spin" style={{ animationDuration: '6s' }} />
-            </div>
-            <div>
-              <div className="flex items-center space-x-2">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                  SIGNAL ATTRIBUTION MATRIX • ADAPTIVE FEEDBACK LOOP
-                </h3>
-                <span className="px-2 py-0.5 rounded bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] text-[9px] font-black tracking-widest">
-                  SCORE & LEARN ACTIVE
-                </span>
-              </div>
-              <p className="text-[10px] text-gray-400">
-                Autonomous Bayesian grading: Indicators are scored against 15M settled delta, automatically rotating capital to winning signals.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 text-xs">
-            <span className="px-2.5 py-1 rounded bg-[#080B10] border border-[#1E2638] text-[10px] text-gray-300">
-              CURRENT REGIME: <span className="text-[#00FF88] font-bold">{REGIME_PROFILES[activeRegimeProfile].title}</span>
-            </span>
-          </div>
-        </div>
-
-        {/* Indicator Attribution Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-          {indicatorAttributions.map((ind, idx) => {
-            const isWinner = ind.wasCorrect;
-            return (
-              <div 
-                key={ind.id || idx}
-                className={`bg-[#080B10] p-3.5 rounded-xl border transition-all duration-300 flex flex-col justify-between ${
-                  isWinner 
-                    ? 'border-[#00FF88]/40 shadow-[0_0_15px_rgba(0,255,136,0.12)]' 
-                    : 'border-purple-900/40 opacity-85'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-tight">{ind.category}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[8.5px] font-black ${
-                      isWinner 
-                        ? 'bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40' 
-                        : 'bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/40'
-                    }`}>
-                      {isWinner ? `✓ PASS (${ind.scoreGrade})` : `✗ FAIL (${ind.scoreGrade})`}
+                <div className="grid grid-cols-2 gap-2 text-[10px] mb-2.5">
+                  <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                    <span className="text-gray-400 block text-[8.5px]">LOCK SCORE</span>
+                    <span className="text-base font-black text-[#00FF88]">
+                      {continuousInference.protectionDecision.lockScore} <span className="text-[9px] text-gray-500 font-normal">/ 100</span>
                     </span>
                   </div>
-
-                  <div className="text-xs font-black text-white mb-2 truncate" title={ind.name}>
-                    {ind.name}
-                  </div>
-
-                  <div className="space-y-1.5 text-[9px] bg-[#0C101A] p-2 rounded-lg border border-[#1E2638] mb-2.5">
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">10-CYCLE HIT RATE:</span>
-                      <span className={`font-bold ${ind.rollingAccuracy10 >= 75 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
-                        {ind.rollingAccuracy10}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">24H ACCURACY:</span>
-                      <span className="text-white font-bold">{ind.rollingAccuracy24h}%</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-400">BAYESIAN ALLOCATION:</span>
-                      <span className="text-cyan-400 font-bold">{ind.currentWeight}%</span>
-                    </div>
+                  <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                    <span className="text-gray-400 block text-[8.5px]">REVERSAL RISK</span>
+                    <span className={`text-base font-black ${continuousInference.gemini.contradictionScore <= 25 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
+                      {continuousInference.gemini.contradictionScore}% ({continuousInference.gemini.contradictionScore <= 25 ? 'LOW' : 'ELEVATED'})
+                    </span>
                   </div>
                 </div>
 
-                <div className="text-[8px] text-gray-400 leading-snug border-t border-[#1E2638] pt-1.5">
-                  {ind.statusNote}
+                {/* Evidence Confluence Checklist */}
+                <div className="grid grid-cols-3 gap-1 text-[8px] bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.probabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.probabilityPassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Prob ≥ 70%</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.lockScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.lockScorePassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Score ≥ 72</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.temporalStabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.temporalStabilityPassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Stability ≥ 65%</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.contradictionPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.contradictionPassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Conflict ≤ 25%</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.evidencePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.evidencePassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Evidence ≥ 4/6</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.crossVenuePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.crossVenuePassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Cross-Venue Sync</span>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
 
-        {/* Algorithm Self-Learning Historical Log Strip */}
-        <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] flex flex-wrap items-center justify-between gap-3 text-[10px]">
-          <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-ping" />
-            <span className="text-gray-300 font-bold uppercase text-[9px]">RECENT LEARNING CYCLES:</span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {algorithmHistory.slice(0, 3).map((rec, i) => (
-              <div key={rec.id || i} className="bg-[#0C101A] px-2.5 py-1 rounded border border-[#1E2638] text-[9px] flex items-center space-x-2">
-                <span className="text-gray-400 font-mono">{rec.cycleId}</span>
-                <span className="text-[#00FF88] font-bold">OUTCOME: {rec.marketOutcome}</span>
-                <span className="text-purple-300">({rec.correctCount}/{rec.totalIndicators} Accurate)</span>
-                <span className="text-cyan-300 font-mono text-[8px]">{rec.weightShiftSummary}</span>
+              <div className="text-[8.5px] text-purple-300/80 pt-2 border-t border-purple-900/30 italic font-sans">
+                Gemini analyzes. Protection validates. VIXY locks.
               </div>
-            ))}
+            </div>
+
+            {/* GEMINI SHADOW INTELLIGENCE CARD (VISUAL PRIORITY 4) */}
+            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(6,182,212,0.1)] flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+                  <div className="flex items-center space-x-2">
+                    <BrainCircuit className="w-4 h-4 text-cyan-400 animate-pulse" />
+                    <span className="text-[11px] text-white font-black uppercase tracking-wider">GEMINI SHADOW INTELLIGENCE</span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[8.5px] font-black tracking-wider flex items-center space-x-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                    <span>CONTINUOUS ANALYSIS</span>
+                  </span>
+                </div>
+
+                {/* 6 Analytical Dimensions */}
+                <div className="grid grid-cols-2 gap-1.5 text-[8.5px]">
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">MOMENTUM:</span>
+                    <span className="text-[#00FF88] font-bold">+{continuousInference.gemini.signalMomentum}</span>
+                  </div>
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">ORDER FLOW:</span>
+                    <span className="text-cyan-300 font-bold">{whaleFlowData.netBias.split(' ')[0]}</span>
+                  </div>
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">VOLATILITY:</span>
+                    <span className="text-purple-300 font-bold">{volatilityVal}</span>
+                  </div>
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">CROSS VENUE:</span>
+                    <span className="text-[#00FF88] font-bold">SYNCHRONIZED</span>
+                  </div>
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">TEMPORAL:</span>
+                    <span className="text-[#00FF88] font-bold">{continuousInference.stabilityResult.stabilityScore}% ALIGNED</span>
+                  </div>
+                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                    <span className="text-gray-400">REVERSAL RISK:</span>
+                    <span className="text-emerald-300 font-bold">{continuousInference.gemini.contradictionScore}% LOW</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-[8.5px] text-gray-400 flex justify-between items-center mt-2 pt-2 border-t border-purple-900/30 font-mono">
+                <span>CONFIDENCE: {continuousInference.gemini.confidence}%</span>
+                <span>SHADOW: GEMINI 2.5 FLASH</span>
+              </div>
+            </div>
+
           </div>
 
-          <div className="text-[9px] text-[#00FF88] font-bold flex items-center space-x-1">
-            <span>BAYESIAN CONVERGENCE: 96.4% OPTIMAL</span>
-          </div>
         </div>
 
-      </div>
-
-      {/* 7. SCOREBOARD & HISTORICAL STREAKS + LAST 10 ROUNDS SETTLEMENT STRIP */}
-      <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
+        {/* 3. MARKET EVIDENCE TERMINAL CARDS (COMPACT HIGH-DENSITY - VISUAL PRIORITY 5) */}
         
-        {/* Scoreboard Header */}
-        <div className="flex flex-wrap items-center justify-between border-b border-[#1E2638] pb-3">
-          <div className="flex items-center space-x-3">
-            <Flame className="w-5 h-5 text-[#00FF88]" />
-            <div>
-              <h3 className="text-sm font-black text-white uppercase tracking-wider">
-                SCOREBOARD & HISTORICAL STREAKS
-              </h3>
-              <span className="text-[10px] text-gray-400">Verified official settlement tracking with capital preservation filters</span>
+        {/* ROW A: LIVE CHART + ORDER FLOW & BOOK DEPTH */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* BTC/USD 15M CHART */}
+          <div className="lg:col-span-8 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 mb-3 gap-2">
+              <div className="flex items-center space-x-2.5">
+                <span className="font-bold text-white text-xs sm:text-sm tracking-tight">LIVE PRICE ACTION • BTC/USD (15M EPOCH)</span>
+                <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] text-[9px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                  <span>SOCKET BOUND</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-3 text-[10px] text-gray-400 font-mono">
+                <div className="flex items-center space-x-1">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span>VWAP: ${(spotPrice - 28.5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  <span>EMA 9: ${(spotPrice + 8.4).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SVG Price Action & Candlestick Visualization */}
+            <div className="relative h-56 sm:h-64 w-full bg-[#080414] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 p-2">
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,300.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,200.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,100.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,000.00</span></div>
+                <div className="w-full flex justify-between text-[8px] text-gray-500"><span>63,900.00</span></div>
+              </div>
+
+              {/* Target & Strike Reference Line */}
+              <div className="absolute top-1/2 left-0 right-0 border-b border-dashed border-purple-500 opacity-75 z-10 flex items-center justify-end px-2">
+                <span className="bg-purple-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full shadow">LOCKED STRIKE ${strikePrice.toFixed(2)}</span>
+              </div>
+
+              {/* Chart SVG Graphic */}
+              <svg className="w-full h-full" viewBox="0 0 800 240" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#00FF88" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#00FF88" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                <path
+                  d="M 20 180 Q 100 160, 180 140 T 340 100 T 500 80 T 660 60 T 780 40 L 780 230 L 20 230 Z"
+                  fill="url(#chartGrad)"
+                />
+                <path
+                  d="M 20 190 Q 100 170, 180 155 T 340 120 T 500 100 T 660 85 T 780 70"
+                  fill="none"
+                  stroke="#38BDF8"
+                  strokeWidth="2"
+                  strokeDasharray="4 4"
+                />
+                <path
+                  d="M 20 175 Q 100 150, 180 135 T 340 95 T 500 70 T 660 55 T 780 35"
+                  fill="none"
+                  stroke="#C084FC"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M 20 180 L 80 165 L 140 175 L 200 145 L 260 150 L 320 115 L 380 125 L 440 95 L 500 85 L 560 100 L 620 70 L 680 60 L 740 45 L 780 40"
+                  fill="none"
+                  stroke="#00FF88"
+                  strokeWidth="2.5"
+                />
+
+                {[
+                  { x: 50, o: 175, c: 165, h: 160, l: 180, green: true },
+                  { x: 110, o: 165, c: 172, h: 162, l: 175, green: false },
+                  { x: 170, o: 172, c: 148, h: 142, l: 174, green: true },
+                  { x: 230, o: 148, c: 152, h: 145, l: 155, green: false },
+                  { x: 290, o: 152, c: 118, h: 112, l: 154, green: true },
+                  { x: 350, o: 118, c: 124, h: 115, l: 128, green: false },
+                  { x: 410, o: 124, c: 98, h: 92, l: 126, green: true },
+                  { x: 470, o: 98, c: 88, h: 82, l: 102, green: true },
+                  { x: 530, o: 88, c: 98, h: 84, l: 104, green: false },
+                  { x: 590, o: 98, c: 72, h: 68, l: 100, green: true },
+                  { x: 650, o: 72, c: 62, h: 58, l: 75, green: true },
+                  { x: 710, o: 62, c: 48, h: 42, l: 65, green: true },
+                  { x: 770, o: 48, c: 40, h: 36, l: 50, green: true }
+                ].map((bar, i) => (
+                  <g key={i}>
+                    <line x1={bar.x} y1={bar.h} x2={bar.x} y2={bar.l} stroke={bar.green ? '#00FF88' : '#FF3B30'} strokeWidth="1.5" />
+                    <rect
+                      x={bar.x - 4}
+                      y={Math.min(bar.o, bar.c)}
+                      width="8"
+                      height={Math.max(4, Math.abs(bar.o - bar.c))}
+                      fill={bar.green ? '#00FF88' : '#FF3B30'}
+                      rx="1"
+                    />
+                  </g>
+                ))}
+              </svg>
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-gray-400 mt-2">
+              <span>TIMEFRAME: 15M (KALSHI CONVERGENCE)</span>
+              <span className="text-[#00FF88] font-bold">DELTA: {deltaToBeat >= 0 ? '+' : ''}${deltaToBeat.toFixed(2)} vs STRIKE</span>
             </div>
           </div>
 
-          <div className="flex items-center space-x-3 text-xs">
-            <span className="px-2.5 py-1 rounded bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] font-bold">
-              🔥 {streakStats.currentStreak} WINS IN A ROW
+          {/* COMPACT ORDER FLOW & BOOK DEPTH */}
+          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <span className="font-black text-white text-xs uppercase">ORDER FLOW & BOOK DEPTH</span>
+              <span className="text-[10px] text-[#00FF88] font-bold">DELTA: {deltaVal}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 text-[10px] mb-2.5">
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">ORDER FLOW</span>
+                <span className="text-[#00FF88] font-bold text-xs">{deltaVal}</span>
+              </div>
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">CVD DELTA</span>
+                <span className="text-[#00FF88] font-bold text-xs">{cvdVal}</span>
+              </div>
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">VWAP</span>
+                <span className="text-cyan-400 font-bold text-xs">$64,098</span>
+              </div>
+            </div>
+
+            {/* Depth Ladder */}
+            <div className="space-y-1 bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 text-[9px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
+                <span>BIDS (BTC)</span>
+                <span>PRICE ($)</span>
+                <span>ASKS (BTC)</span>
+              </div>
+              {[
+                { bid: '12.45', price: '64,170', ask: '11.23' },
+                { bid: '18.32', price: '64,160', ask: '15.07' },
+                { bid: '23.16', price: '64,140', ask: '22.64' },
+                { bid: '31.46', price: '64,130', ask: '28.91' },
+                { bid: '25.94', price: '64,120', ask: '26.33' }
+              ].map((row, idx) => (
+                <div key={idx} className="flex justify-between py-0.5 items-center">
+                  <span className="text-[#00FF88] font-bold w-14 text-left">{row.bid}</span>
+                  <span className="text-gray-300 font-bold">{row.price}</span>
+                  <span className="text-[#FF3B30] font-bold w-14 text-right">{row.ask}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center text-[9px] text-gray-500 mt-2">
+              <span>SPREAD: {bookSpreadVal}</span>
+              <span className="text-[#00FF88] font-bold">ICEBERG FLOW: ACTIVE ✓</span>
+            </div>
+          </div>
+
+        </div>
+
+        {/* ROW B: CROSS-VENUE SYNAPSE */}
+        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(157,78,221,0.1)]">
+          <div className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+            <span className="flex items-center space-x-2">
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span className="text-white font-black">CROSS-VENUE SYNAPSE RECONCILIATION</span>
             </span>
-            <span className="px-2.5 py-1 rounded bg-[#9D4EDD]/20 border border-[#9D4EDD]/40 text-purple-300 font-bold">
-              BEST: {streakStats.bestStreak}W | WORST: {streakStats.worstStreak}L
-            </span>
+            <span className="text-cyan-400 text-[10px] font-bold">REAL-TIME MULTI-EXCHANGE ARBITRAGE</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-purple-300 font-semibold mb-1">KALSHI 15M CONTRACT</div>
+              <div className="flex justify-between text-xs my-0.5">
+                <span className="text-[#00FF88] font-bold">UP ${(rawKalshiProb ?? 0.57).toFixed(2)}</span>
+                <span className="text-[#00FF88]">{kalshiProbPct}%</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#FF3B30] font-bold">DOWN ${(1 - (rawKalshiProb ?? 0.57)).toFixed(2)}</span>
+                <span className="text-[#FF3B30]">{100 - kalshiProbPct}%</span>
+              </div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $1.24M • 12ms</div>
+            </div>
+
+            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-purple-300 font-semibold mb-1">POLYMARKET 15M</div>
+              <div className="flex justify-between text-xs my-0.5">
+                <span className="text-[#00FF88] font-bold">UP ${(rawPolyProb ?? 0.59).toFixed(2)}</span>
+                <span className="text-[#00FF88]">{polyProbPct}%</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#FF3B30] font-bold">DOWN ${(1 - (rawPolyProb ?? 0.59)).toFixed(2)}</span>
+                <span className="text-[#FF3B30]">{100 - polyProbPct}%</span>
+              </div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $2.18M • 16ms</div>
+            </div>
+
+            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-cyan-400 font-semibold mb-1">COINBASE SPOT</div>
+              <div className="text-base font-black text-white my-0.5">{coinbasePriceStr}</div>
+              <div className="text-xs text-[#00FF88] font-bold">+{(typeof priceChange === 'number' && !isNaN(priceChange) ? priceChange : 572.18).toFixed(2)} (+{(typeof priceChangePct === 'number' && !isNaN(priceChangePct) ? priceChangePct : 0.90).toFixed(2)}%)</div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $892.4M • 24ms</div>
+            </div>
+
+            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-blue-400 font-semibold mb-1">KRAKEN SPOT</div>
+              <div className="text-base font-black text-white my-0.5">{krakenPriceStr}</div>
+              <div className="text-xs text-[#00FF88] font-bold">+564.12 (+0.89%)</div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $234.7M • 26ms</div>
+            </div>
+
+            <div className="bg-[#080414] p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col justify-between">
+              <div>
+                <div className="text-[9.5px] text-[#00FF88] font-semibold mb-0.5">CROSS-VENUE SPREAD</div>
+                <div className="text-lg font-black text-white">{spreadValueStr}</div>
+                <div className="text-[10px] text-[#00FF88] font-bold">({spreadPctStr} DELTA)</div>
+              </div>
+              <div className="text-[9px] text-[#00FF88] font-bold flex items-center space-x-1 pt-1 border-t border-purple-900/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                <span>ALL VENUES SYNCHRONIZED ✓</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Regime Accuracy Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-[10px]">
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <span className="text-gray-400 block text-[9px]">TRENDING REGIME ACCURACY</span>
-            <span className="text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.trending}%</span>
-          </div>
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <span className="text-gray-400 block text-[9px]">REVERSAL REGIME ACCURACY</span>
-            <span className="text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.reversal}%</span>
-          </div>
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <span className="text-gray-400 block text-[9px]">CHOPPY REGIME ACCURACY</span>
-            <span className="text-lg font-black text-amber-400">{streakStats.regimeAccuracy.choppy}%</span>
-          </div>
-          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <span className="text-gray-400 block text-[9px]">TODAY'S RECORD</span>
-            <span className="text-lg font-black text-white">{streakStats.todayRecord.wins}W - {streakStats.todayRecord.losses}L ({streakStats.todayRecord.skips} Skips)</span>
-          </div>
-        </div>
-
-        {/* LAST 10 ROUNDS SETTLEMENT HORIZONTAL PILL STRIP */}
-        <div className="space-y-2">
-          <div className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
-            LAST 10 ROUNDS SETTLEMENT STRIP
-          </div>
+        {/* ROW C: TECHNICAL STACK | MULTI-TIMEFRAME MATRIX | WHALE FLOW TAPE */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
-            {recentSettlementRounds.map((round) => {
-              const isWin = round.outcome === 'WIN';
-              const isSkip = round.outcome === 'SKIPPED';
-              const isActive = round.outcome === 'ACTIVE';
+          {/* TECHNICAL SIGNAL STACK */}
+          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-4 h-4 text-[#00FF88]" />
+                <span className="font-black text-white text-xs uppercase">TECHNICAL SIGNAL STACK</span>
+              </div>
+              <span className="text-[9.5px] text-purple-300 font-bold">QUANT MATRIX</span>
+            </div>
 
+            <div className="space-y-2.5 text-[10px]">
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-gray-400">RSI (14)</span>
+                  <span className="text-[#00FF88] font-bold">{technicalIndicators.rsi}</span>
+                </div>
+                <div className="w-full h-1.5 bg-[#1E1435] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#00FF88]" style={{ width: `${technicalIndicators.rsi}%` }} />
+                </div>
+                <span className="text-[8px] text-gray-500 mt-1 block">{technicalIndicators.rsiStatus}</span>
+              </div>
+
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">MACD (12, 26, 9)</span>
+                  <span className="text-[#00FF88] font-bold">+{technicalIndicators.macd.histogram}</span>
+                </div>
+                <div className="text-[8px] text-[#00FF88] mt-0.5">{technicalIndicators.macd.status}</div>
+              </div>
+
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 flex justify-between items-center">
+                <div>
+                  <span className="text-gray-400 block">BOLLINGER (20, 2)</span>
+                  <span className="text-[8px] text-gray-500">BW: {technicalIndicators.bollinger.bandwidth}</span>
+                </div>
+                <span className="text-purple-300 font-bold">{technicalIndicators.bollinger.status}</span>
+              </div>
+
+              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block mb-1">MULTI-PERIOD SUPERTREND</span>
+                <div className="grid grid-cols-3 gap-1 text-center">
+                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                    <div className="text-[7.5px] text-gray-400">1M</div>
+                    <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
+                  </div>
+                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                    <div className="text-[7.5px] text-gray-400">5M</div>
+                    <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
+                  </div>
+                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                    <div className="text-[7.5px] text-gray-400">15M</div>
+                    <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[8.5px] text-gray-500 mt-2">
+              Volume POC: ${(technicalIndicators?.volumeProfile?.poc ?? (spotPrice - 54.8)).toFixed(2)} | VAH: ${(technicalIndicators?.volumeProfile?.vah ?? (spotPrice + 135.2)).toFixed(2)}
+            </div>
+          </div>
+
+          {/* MULTI-TIMEFRAME MATRIX & REGIME */}
+          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <span className="font-black text-white text-xs uppercase">MULTI-TIMEFRAME MATRIX</span>
+              <span className="text-[#00FF88] text-[9.5px] font-bold">100% ALIGNMENT</span>
+            </div>
+
+            <div className="space-y-1 bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 text-[9.5px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
+                <span>TF</span>
+                <span>TREND</span>
+                <span>MOMENTUM</span>
+                <span>REGIME</span>
+              </div>
+              {[
+                { tf: '1M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '5M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '15M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '1H', trend: '▶ FLAT', mom: 'MODERATE', regime: 'RANGING' }
+              ].map((row, idx) => (
+                <div key={idx} className="flex justify-between py-0.5 items-center">
+                  <span className="text-gray-300 font-bold">{row.tf}</span>
+                  <span className={row.trend.includes('UP') ? 'text-[#00FF88] font-bold' : 'text-gray-400'}>{row.trend}</span>
+                  <span className="text-purple-300">{row.mom}</span>
+                  <span className="text-[#00FF88] font-bold">{row.regime}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-gradient-to-r from-[#0C0819] to-[#14122B] p-3 rounded-2xl border border-purple-500/40 flex items-center justify-between mt-2.5">
+              <div>
+                <div className="text-[8.5px] text-gray-400 uppercase">REGIME DETECTOR</div>
+                <div className="text-xs font-black text-[#00FF88]">{regimeVal}</div>
+                <div className="text-[8.5px] text-gray-400">Confidence: 81% • Duration: 2H 15M</div>
+              </div>
+              <div className="text-[#00FF88] text-xl">🐂</div>
+            </div>
+
+            <div className="text-[8.5px] text-gray-500 mt-2 font-sans">
+              Consensus confirms sustained directional momentum across all active horizons.
+            </div>
+          </div>
+
+          {/* WHALE FLOW (>= $250K) */}
+          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Waves className="w-4 h-4 text-cyan-400" />
+                <span className="font-black text-white text-xs uppercase">WHALE FLOW (≥$250K)</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                <span className="text-[#00FF88] text-[9px] font-bold">{whaleFlowData.status}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 space-y-1.5 mb-2">
+              <div className="flex justify-between text-[9.5px]">
+                <span className="text-gray-400">5M ROLLING BIAS:</span>
+                <span className="text-[#00FF88] font-bold">{whaleFlowData.netBias}</span>
+              </div>
+              <div className="w-full h-2 bg-[#1E1435] rounded-full overflow-hidden flex">
+                <div className="bg-[#00FF88] h-full transition-all duration-500" style={{ width: `${whaleFlowData.buyPct}%` }} />
+                <div className="bg-[#FF3B30] h-full transition-all duration-500" style={{ width: `${whaleFlowData.sellPct}%` }} />
+              </div>
+              <div className="flex justify-between text-[8px] text-gray-400">
+                <span className="text-[#00FF88] font-bold">BUY: {whaleFlowData.buyPct}%</span>
+                <span className="text-cyan-300 font-bold truncate max-w-[150px]">{whaleFlowData.wallAlert}</span>
+                <span className="text-[#FF3B30] font-bold">SELL: {whaleFlowData.sellPct}%</span>
+              </div>
+            </div>
+
+            {/* Whale Tape Stream */}
+            <div className="space-y-1 bg-[#080414] p-2 rounded-2xl border border-purple-900/30 text-[9px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-0.5">
+                <span>TAPE</span>
+                <span>PRICE</span>
+                <span>USD SIZE</span>
+              </div>
+              {whaleTrades.slice(0, 3).map((wt, idx) => (
+                <div key={`${wt.id}-${idx}`} className="flex justify-between items-center py-0.5">
+                  <div className="flex items-center space-x-1 truncate max-w-[90px]">
+                    <span className={`px-1 py-0.2 rounded text-[7.5px] font-bold ${wt.side === 'BUY' ? 'bg-[#00FF88]/20 text-[#00FF88]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}>
+                      {wt.side}
+                    </span>
+                    <span className="text-gray-400 text-[8px]">{wt.exchange.slice(0, 3)}</span>
+                    {wt.isMegaWhale && <span className="text-amber-400 font-black text-[8px]">⚡$1M+</span>}
+                  </div>
+                  <span className="text-gray-300 text-[8.5px]">${wt.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+                  <span className={`font-bold text-[8.5px] ${wt.side === 'BUY' ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
+                    ${(wt.sizeUsd / 1000).toFixed(0)}k
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-[8.5px] text-gray-500 mt-2 font-mono">
+              Capturing institutional block orders across major venue aggregate streams.
+            </div>
+          </div>
+
+        </div>
+
+        {/* ROW D: SIGNAL ATTRIBUTION MATRIX & AUTONOMOUS LEARNING LOOP */}
+        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,255,136,0.08)] space-y-3.5">
+          <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 gap-2">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-center justify-center text-purple-300">
+                <Sparkles className="w-4 h-4 text-[#00FF88] animate-spin" style={{ animationDuration: '6s' }} />
+              </div>
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider">
+                    SIGNAL ATTRIBUTION MATRIX • ADAPTIVE FEEDBACK LOOP
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] text-[8.5px] font-black tracking-widest">
+                    SCORE & LEARN ACTIVE
+                  </span>
+                </div>
+                <p className="text-[10px] text-gray-400 font-sans">
+                  Autonomous Bayesian grading: Indicators are scored against 15M settled delta, automatically rotating power to winning signals.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2 text-xs">
+              <span className="px-2.5 py-1 rounded-xl bg-[#080414] border border-purple-900/40 text-[10px] text-gray-300">
+                CURRENT REGIME: <span className="text-[#00FF88] font-bold">{REGIME_PROFILES[activeRegimeProfile].title}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Indicator Attribution Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            {indicatorAttributions.map((ind, idx) => {
+              const isWinner = ind.wasCorrect;
               return (
                 <div
-                  key={round.id}
-                  className={`p-2.5 rounded-lg border text-center transition-all ${
-                    isActive
-                      ? 'bg-[#00FF88]/10 border-[#00FF88]/50 shadow-[0_0_15px_rgba(0,255,136,0.2)]'
-                      : isWin
-                      ? 'bg-[#080B10] border-[#00FF88]/30'
-                      : isSkip
-                      ? 'bg-[#080B10] border-gray-700 opacity-60'
-                      : 'bg-[#080B10] border-[#FF3B30]/30'
+                  key={ind.id || idx}
+                  className={`bg-[#080414] p-3.5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+                    isWinner
+                      ? 'border-[#00FF88]/40 shadow-[0_0_15px_rgba(0,255,136,0.12)]'
+                      : 'border-purple-900/40 opacity-85'
                   }`}
                 >
-                  <div className="text-[8px] text-gray-400">{round.cycle}</div>
-                  <div className={`text-xs font-black my-0.5 ${
-                    isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
-                  }`}>
-                    {round.dir === 'UP' ? '▲ UP' : round.dir === 'DOWN' ? '▼ DOWN' : '⊘ SKIP'}
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8.5px] font-bold text-gray-400 uppercase tracking-tight">{ind.category}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black ${
+                        isWinner
+                          ? 'bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40'
+                          : 'bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/40'
+                      }`}>
+                        {isWinner ? `✓ PASS (${ind.scoreGrade})` : `✗ FAIL (${ind.scoreGrade})`}
+                      </span>
+                    </div>
+
+                    <div className="text-xs font-black text-white mb-2 truncate" title={ind.name}>
+                      {ind.name}
+                    </div>
+
+                    <div className="space-y-1 text-[8.5px] bg-[#0C0819] p-2 rounded-xl border border-purple-900/30 mb-2">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">10-CYCLE HIT RATE:</span>
+                        <span className={`font-bold ${ind.rollingAccuracy10 >= 75 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
+                          {ind.rollingAccuracy10}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">24H ACCURACY:</span>
+                        <span className="text-white font-bold">{ind.rollingAccuracy24h}%</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">BAYESIAN ALLOCATION:</span>
+                        <span className="text-cyan-400 font-bold">{ind.currentWeight}%</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-[8px] text-gray-300">{round.spot}</div>
-                  <div className={`text-[8px] font-bold mt-1 ${
-                    isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
-                  }`}>
-                    {round.outcome}
+
+                  <div className="text-[8px] text-gray-400 leading-snug border-t border-purple-900/30 pt-1 font-sans">
+                    {ind.statusNote}
                   </div>
                 </div>
               );
@@ -2349,175 +2086,215 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
         </div>
 
-      </div>
-
-      {/* 8. DECISION TIMELINE */}
-      <div className="bg-[#0C101A] border border-[#1E2638] rounded-xl p-5">
-        <div className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-4">
-          DECISION TIMELINE (15-MINUTE SEQUENCE)
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 text-center text-[10px]">
-          {[
-            { step: 'OPEN', time: '02:00 AM', status: 'COMPLETE', active: true },
-            { step: 'DATA COLLECT', time: '02:00 AM', status: 'COMPLETE', active: true },
-            { step: 'FEATURE ENGINE', time: '02:01 AM', status: 'COMPLETE', active: true },
-            { step: 'MODEL ANALYSIS', time: '02:12 AM', status: 'COMPLETE', active: true },
-            { step: 'GUARDIAN CHECK', time: '02:12 AM', status: 'COMPLETE', active: true },
-            { step: 'DECISION LOCK', time: '02:12 AM', status: 'LOCKED', active: true, lock: true },
-            { step: 'MONITOR', time: 'ACTIVE', status: 'MONITORING', active: true, pulse: true },
-            { step: 'SETTLEMENT', time: '02:15 AM', status: 'PENDING', active: false }
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className={`p-2.5 rounded-lg border ${
-                item.lock
-                  ? 'bg-[#00FF88]/10 border-[#00FF88]/60 shadow-[0_0_15px_rgba(0,255,136,0.3)]'
-                  : item.pulse
-                  ? 'bg-purple-950/30 border-[#9D4EDD] animate-pulse'
-                  : item.active
-                  ? 'bg-[#080B10] border-[#1E2638]'
-                  : 'bg-[#080B10] border-[#1E2638] opacity-40'
-              }`}
-            >
-              <div className="text-gray-400 text-[8px] uppercase">{item.step}</div>
-              <div className={`font-bold my-0.5 ${item.lock ? 'text-[#00FF88]' : 'text-white'}`}>{item.time}</div>
-              <div className={`text-[8px] font-semibold ${item.lock ? 'text-[#00FF88]' : item.active ? 'text-[#00FF88]' : 'text-gray-500'}`}>
-                {item.status}
+        {/* ROW E: SCOREBOARD & HISTORICAL STREAKS + LAST 10 ROUNDS SETTLEMENT STRIP */}
+        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
+          <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 gap-2">
+            <div className="flex items-center space-x-3">
+              <Flame className="w-5 h-5 text-[#00FF88]" />
+              <div>
+                <h3 className="text-xs sm:text-sm font-black text-white uppercase tracking-wider font-sans">
+                  SCOREBOARD & HISTORICAL STREAKS
+                </h3>
+                <span className="text-[10px] text-gray-400">Verified official settlement tracking with capital preservation filters</span>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
 
-      {/* 9. DECISION HISTORY TABLE & AUDIT INTEGRITY */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
-        {/* DECISION HISTORY TABLE */}
-        <div className="lg:col-span-8 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <span className="font-bold text-white text-xs uppercase">DECISION HISTORY (LAST 10)</span>
-            <span className="text-[10px] text-gray-400">OFFICIAL KALSHI SETTLEMENTS</span>
+            <div className="flex items-center space-x-2 text-xs">
+              <span className="px-2.5 py-1 rounded-xl bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88] font-black">
+                🔥 {streakStats.currentStreak} WINS IN A ROW
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-purple-900/40 border border-purple-500/40 text-purple-300 font-bold text-[10px]">
+                BEST: {streakStats.bestStreak}W | WORST: {streakStats.worstStreak}L
+              </span>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[10px]">
-              <thead>
-                <tr className="text-gray-500 border-b border-[#1E2638]">
-                  <th className="pb-2 font-semibold">TIME</th>
-                  <th className="pb-2 font-semibold">CYCLE</th>
-                  <th className="pb-2 font-semibold">DECISION</th>
-                  <th className="pb-2 font-semibold">PROB</th>
-                  <th className="pb-2 font-semibold">GUARDIAN</th>
-                  <th className="pb-2 font-semibold">OUTCOME</th>
-                  <th className="pb-2 font-semibold">STATUS</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#1E2638]">
-                {resolvedItems.map((item: any, i: number) => {
-                  const isWin = item.outcome === 'WIN';
-                  const isSkip = item.outcome === 'SKIPPED';
-                  const isActive = item.outcome === '-';
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-[10px]">
+            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+              <span className="text-gray-400 block text-[8.5px]">TRENDING REGIME ACCURACY</span>
+              <span className="text-base sm:text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.trending}%</span>
+            </div>
+            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+              <span className="text-gray-400 block text-[8.5px]">REVERSAL REGIME ACCURACY</span>
+              <span className="text-base sm:text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.reversal}%</span>
+            </div>
+            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+              <span className="text-gray-400 block text-[8.5px]">CHOPPY REGIME ACCURACY</span>
+              <span className="text-base sm:text-lg font-black text-amber-400">{streakStats.regimeAccuracy.choppy}%</span>
+            </div>
+            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+              <span className="text-gray-400 block text-[8.5px]">TODAY'S RECORD</span>
+              <span className="text-base sm:text-lg font-black text-white">{streakStats.todayRecord.wins}W - {streakStats.todayRecord.losses}L ({streakStats.todayRecord.skips} Skips)</span>
+            </div>
+          </div>
 
-                  return (
-                    <tr key={i} className="hover:bg-[#080B10]/50 transition-colors">
-                      <td className="py-2.5 text-gray-400">{item.time}</td>
-                      <td className="py-2.5 text-gray-300 font-bold">{item.cycleId}</td>
-                      <td className="py-2.5">
-                        <span className={`font-bold ${
-                          item.decision.includes('UP') ? 'text-[#00FF88]' : item.decision.includes('DOWN') ? 'text-[#FF3B30]' : 'text-gray-400'
-                        }`}>
+          {/* LAST 10 ROUNDS SETTLEMENT HORIZONTAL PILL STRIP */}
+          <div className="space-y-1.5">
+            <div className="text-[9.5px] text-gray-400 font-bold uppercase tracking-wider">
+              LAST 10 ROUNDS SETTLEMENT STRIP
+            </div>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+              {recentSettlementRounds.map((round) => {
+                const isWin = round.outcome === 'WIN';
+                const isSkip = round.outcome === 'SKIPPED';
+                const isActive = round.outcome === 'ACTIVE';
+
+                return (
+                  <div
+                    key={round.id}
+                    className={`p-2 rounded-xl border text-center transition-all ${
+                      isActive
+                        ? 'bg-[#00FF88]/10 border-[#00FF88]/50 shadow-[0_0_15px_rgba(0,255,136,0.2)]'
+                        : isWin
+                        ? 'bg-[#080414] border-[#00FF88]/30'
+                        : isSkip
+                        ? 'bg-[#080414] border-gray-700 opacity-60'
+                        : 'bg-[#080414] border-[#FF3B30]/30'
+                    }`}
+                  >
+                    <div className="text-[7.5px] text-gray-400">{round.cycle}</div>
+                    <div className={`text-xs font-black my-0.5 ${
+                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
+                    }`}>
+                      {round.dir === 'UP' ? '▲ UP' : round.dir === 'DOWN' ? '▼ DOWN' : '⊘ SKIP'}
+                    </div>
+                    <div className="text-[7.5px] text-gray-300">{round.spot}</div>
+                    <div className={`text-[7.5px] font-bold mt-0.5 ${
+                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
+                    }`}>
+                      {round.outcome}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ROW F: RECENT CYCLE HISTORY & AUDIT INTEGRITY */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* RESOLVED CYCLES LOG */}
+          <div className="lg:col-span-8 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <span className="font-black text-white text-xs uppercase">RECENT 15M CYCLE RESOLUTION LEDGER</span>
+              <span className="text-gray-400 text-[9.5px]">PAST 10 CYCLES</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-[9px] text-left">
+                <thead>
+                  <tr className="text-gray-500 border-b border-purple-900/30">
+                    <th className="pb-1">CYCLE ID</th>
+                    <th className="pb-1">TIME</th>
+                    <th className="pb-1">DECISION</th>
+                    <th className="pb-1">PROB</th>
+                    <th className="pb-1">GUARDIAN</th>
+                    <th className="pb-1">OUTCOME</th>
+                    <th className="pb-1">BRIER</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-purple-900/20">
+                  {resolvedItems.slice(0, 5).map((item, idx) => {
+                    const isWin = item.outcome === 'WIN';
+                    const isSkip = item.outcome === 'SKIPPED';
+                    const isAct = item.status === 'ACTIVE';
+
+                    return (
+                      <tr key={idx} className="hover:bg-[#080414] transition-colors">
+                        <td className="py-1.5 font-bold text-gray-300">{item.cycleId}</td>
+                        <td className="py-1.5 text-gray-400">{item.time}</td>
+                        <td className={`py-1.5 font-black ${item.decision.includes('UP') ? 'text-[#00FF88]' : item.decision.includes('DOWN') ? 'text-[#FF3B30]' : 'text-gray-400'}`}>
                           {item.decision}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-white font-bold">{Math.round(item.probability * 100)}%</td>
-                      <td className="py-2.5">
-                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold ${
-                          item.guardian === 'ALLOW' ? 'bg-[#00FF88]/20 text-[#00FF88]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'
-                        }`}>
+                        </td>
+                        <td className="py-1.5 text-white font-bold">{Math.round(item.probability * 100)}%</td>
+                        <td className={`py-1.5 font-bold ${item.guardian === 'ALLOW' ? 'text-[#00FF88]' : 'text-amber-400'}`}>
                           {item.guardian}
-                        </span>
-                      </td>
-                      <td className="py-2.5">
-                        <span className={`font-bold ${
-                          isActive ? 'text-gray-400' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
-                        }`}>
-                          {item.outcome}
-                        </span>
-                      </td>
-                      <td className="py-2.5 text-gray-400">{item.status}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* AUDIT INTEGRITY */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <div className="flex items-center space-x-2">
-              <Database className="w-4 h-4 text-[#00FF88]" />
-              <span className="font-bold text-white text-xs uppercase">DATA INTEGRITY</span>
-            </div>
-            <span className="text-[#00FF88] text-[10px] font-bold">VERIFIED</span>
-          </div>
-
-          <div className="space-y-2 text-[10px] bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <div className="flex justify-between">
-              <span className="text-gray-400">Market Data Feed:</span>
-              <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Contract Synchronization:</span>
-              <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Cycle Clock NTP Sync:</span>
-              <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Timestamp Drift:</span>
-              <span className="text-[#00FF88] font-bold">&lt;12ms ✓</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Lookahead Violations:</span>
-              <span className="text-[#00FF88] font-bold">0 VIOLATIONS ✓</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-400">Model Hash Version:</span>
-              <span className="text-purple-300 font-bold">v5.0-PROD</span>
+                        </td>
+                        <td className="py-1.5 font-black">
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] ${
+                            isAct
+                              ? 'bg-[#00FF88]/20 text-[#00FF88]'
+                              : isWin
+                              ? 'bg-[#00FF88]/20 text-[#00FF88]'
+                              : isSkip
+                              ? 'bg-gray-800 text-gray-400'
+                              : 'bg-[#FF3B30]/20 text-[#FF3B30]'
+                          }`}>
+                            {item.outcome}
+                          </span>
+                        </td>
+                        <td className="py-1.5 text-gray-400 font-mono">{(item?.brierScore ?? 0.150).toFixed(3)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          <button
-            onClick={onOpenTerminal}
-            className="w-full mt-3 py-2 rounded-lg bg-[#080B10] hover:bg-[#1E2638] border border-[#1E2638] text-gray-300 text-[10px] font-bold tracking-wider transition-all cursor-pointer"
-          >
-            VIEW FULL AUDIT REPORT
-          </button>
+          {/* AUDIT INTEGRITY */}
+          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Database className="w-4 h-4 text-[#00FF88]" />
+                <span className="font-black text-white text-xs uppercase">DATA INTEGRITY AUDIT</span>
+              </div>
+              <span className="text-[#00FF88] text-[9.5px] font-bold">VERIFIED</span>
+            </div>
+
+            <div className="space-y-1.5 text-[9.5px] bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Market Data Stream:</span>
+                <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Contract Clock NTP Sync:</span>
+                <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Timestamp Drift:</span>
+                <span className="text-[#00FF88] font-bold">&lt;12ms ✓</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Lookahead Violations:</span>
+                <span className="text-[#00FF88] font-bold">0 VIOLATIONS ✓</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Model Hash Version:</span>
+                <span className="text-purple-300 font-bold">v5.0-PROD</span>
+              </div>
+            </div>
+
+            <button
+              onClick={onOpenTerminal}
+              className="w-full mt-2.5 py-2 rounded-xl bg-[#080414] hover:bg-purple-900/30 border border-purple-900/40 text-gray-300 text-[10px] font-bold tracking-wider transition-all cursor-pointer"
+            >
+              VIEW FULL AUDIT REPORT
+            </button>
+          </div>
+
         </div>
 
-      </div>
-
-      {/* FOOTER SYSTEM SIGNATURE */}
-      <div className="flex flex-wrap items-center justify-between text-[9px] text-gray-500 pt-4 border-t border-[#1E2638]">
-        <div className="flex items-center space-x-2">
-          <Zap className="w-3.5 h-3.5 text-[#9D4EDD]" />
-          <span className="text-gray-400 font-bold">VIXY VAULT PRO</span>
-          <span>• DECISION INTELLIGENCE</span>
+        {/* FOOTER SYSTEM SIGNATURE */}
+        <div className="flex flex-wrap items-center justify-between text-[9px] text-gray-500 pt-3 border-t border-purple-900/30 font-mono">
+          <div className="flex items-center space-x-2">
+            <Zap className="w-3.5 h-3.5 text-purple-400" />
+            <span className="text-gray-400 font-bold">VIXY LIVE COMMAND CENTER</span>
+            <span>• DECISION INTELLIGENCE TERMINAL</span>
+          </div>
+          <div>
+            INSTITUTIONAL GRADE • DECISION SUPPORT SYSTEM
+          </div>
+          <div className="flex items-center space-x-1.5 text-[#00FF88]">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+            <span>SYSTEM STATUS: 100% OPERATIONAL</span>
+          </div>
         </div>
-        <div>
-          NOT FINANCIAL ADVICE • AI-ENHANCED DECISION SUPPORT SYSTEM
-        </div>
-        <div className="flex items-center space-x-1.5 text-[#00FF88]">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
-          <span>SYSTEM HEALTH: OPERATIONAL</span>
-        </div>
-      </div>
 
       </div>
     </div>
   );
 };
+

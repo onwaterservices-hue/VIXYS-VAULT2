@@ -80,19 +80,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navSections = [
     {
-      title: 'COMMAND',
+      title: 'VIXY VAULT',
       items: [
-        { id: 'vixylive', label: 'VIXY LIVE', icon: Activity, badge: 'NEW' },
         { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
+        { id: 'vixylive', label: 'VIXY LIVE', icon: Flame, badge: 'FLAGSHIP', isFlagship: true },
         { id: 'compare', label: 'Asset Compare', icon: Sliders, badge: 'VS' },
-        { id: 'scalping', label: 'Scalping Desk', icon: Zap, badge: '15S' },
-        { id: 'onehour', label: '1-Hour Desk', icon: Sparkles, badge: '1H' },
+        { id: 'scalping', label: 'Scalping Desk', icon: Zap, badge: '15S', isDesk: true },
+        { id: 'onehour', label: '1-Hour Desk', icon: Clock, badge: '1H', isDesk: true },
       ],
     },
     {
       title: 'INTELLIGENCE',
       items: [
-        { id: 'history', label: 'VIXY LOCKS', icon: BarChart2, badge: 'VIXY' },
+        { id: 'history', label: 'VIXY LOCKS', icon: BarChart2, badge: 'RESULTS', isLockLayer: true },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
         { id: 'markets', label: 'Markets', icon: TrendingUp },
         { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
@@ -111,13 +111,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'SYSTEM',
       items: [
-        { id: 'alerts', label: 'Alerts & Webhooks', icon: Bell },
-        { id: 'pricing', label: 'Pricing & Plans', icon: CreditCard, badge: 'PRO' },
+        { id: 'alerts', label: 'Alerts', icon: Bell },
+        { id: 'pricing', label: 'Pricing', icon: CreditCard, badge: 'PRO' },
         { id: 'settings', label: 'Settings', icon: Settings },
         { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'ADMIN' },
         { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'TOP' },
         { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
-        { id: 'landing', label: 'Landing Page', icon: Globe },
+        { id: 'landing', label: 'Landing', icon: Globe },
       ],
     },
     {
@@ -256,13 +256,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           title={`${item.label} ${item.badge ? `(${item.badge})` : ''} ${isGated ? '(Subscription Required)' : ''}`}
                           className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group cursor-pointer ${
                             isActive
-                              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                              ? (item as any).isFlagship
+                                ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 shadow-[0_0_20px_rgba(251,191,36,0.5)] border border-amber-300 ring-2 ring-amber-400/30'
+                                : 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                              : (item as any).isFlagship
+                              ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40 hover:bg-amber-900/50 hover:text-white shadow-[0_0_12px_rgba(251,191,36,0.2)]'
                               : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
                           }`}
                         >
-                          <IconComponent className="w-5 h-5" />
+                          <IconComponent className={`w-5 h-5 ${(item as any).isFlagship ? 'text-amber-400 animate-pulse' : ''}`} />
                           {isGated ? (
                             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#0a0518]" />
+                          ) : (item as any).isFlagship ? (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping border border-[#0a0518]" />
                           ) : item.badge && (
                             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
                           )}
@@ -274,19 +280,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       );
                     }
 
+                    const isFlagship = (item as any).isFlagship;
+                    const isDesk = (item as any).isDesk;
+
                     return (
                       <button
                         key={item.id}
                         onClick={handleItemClick}
                         className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group cursor-pointer ${
                           isActive
-                            ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                            ? isFlagship
+                              ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] border border-amber-300 ring-2 ring-amber-400/30'
+                              : 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                            : isFlagship
+                            ? 'bg-gradient-to-r from-amber-500/15 via-purple-900/30 to-transparent border border-amber-500/40 text-amber-200 hover:text-white hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.25)]'
+                            : isDesk
+                            ? 'text-purple-200/90 hover:text-white hover:bg-purple-900/30 border border-purple-900/30 hover:border-purple-600/40'
                             : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
                         }`}
                       >
                         <div className="flex items-center gap-3">
-                          <IconComponent className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-400 group-hover:text-purple-300'}`} />
-                          <span>{item.label}</span>
+                          <IconComponent
+                            className={`w-4 h-4 ${
+                              isActive
+                                ? isFlagship
+                                  ? 'text-slate-950'
+                                  : 'text-white'
+                                : isFlagship
+                                ? 'text-amber-400 animate-pulse'
+                                : isDesk
+                                ? 'text-amber-300 group-hover:text-amber-200'
+                                : 'text-purple-400 group-hover:text-purple-300'
+                            }`}
+                          />
+                          <span className={isFlagship ? 'font-black tracking-wider uppercase' : ''}>
+                            {item.label}
+                          </span>
                         </div>
 
                         {isGated ? (
@@ -294,8 +323,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <Lock className="w-2.5 h-2.5 text-purple-300" />
                             <span>LOCK</span>
                           </span>
+                        ) : isFlagship ? (
+                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
+                            isActive
+                              ? 'bg-slate-950 text-amber-300 border-amber-400/60 shadow-sm'
+                              : 'bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-[0_0_8px_rgba(251,191,36,0.3)]'
+                          }`}>
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                            <span>LIVE</span>
+                          </span>
                         ) : item.badge && (
-                          <span className="px-1.5 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] font-mono font-bold border border-purple-500/30">
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
+                            item.badge === '15S'
+                              ? 'bg-amber-950/70 text-amber-300 border-amber-500/40'
+                              : item.badge === '1H'
+                              ? 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40'
+                              : item.badge === 'RESULTS'
+                              ? 'bg-purple-950 text-purple-300 border-purple-500/40'
+                              : 'bg-purple-950 text-purple-300 border-purple-500/30'
+                          }`}>
                             {item.badge}
                           </span>
                         )}
@@ -400,28 +446,71 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
                       .map((item) => {
                         const IconComponent = item.icon;
-                      const isActive = activeTab === item.id;
+                        const isActive = activeTab === item.id;
+                        const isFlagship = (item as any).isFlagship;
+                        const isDesk = (item as any).isDesk;
 
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => {
-                            setActiveTab(item.id);
-                            onCloseMobile();
-                          }}
-                          className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all ${
-                            isActive
-                              ? 'bg-purple-600 text-white shadow-lg'
-                              : 'text-purple-200 hover:bg-purple-900/30'
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <IconComponent className="w-4 h-4 text-purple-400" />
-                            <span>{item.label}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
+                        return (
+                          <button
+                            key={item.id}
+                            onClick={() => {
+                              setActiveTab(item.id);
+                              onCloseMobile();
+                            }}
+                            className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all cursor-pointer ${
+                              isActive
+                                ? isFlagship
+                                  ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.4)] border border-amber-300'
+                                  : 'bg-purple-600 text-white shadow-lg'
+                                : isFlagship
+                                ? 'bg-amber-950/30 text-amber-200 border border-amber-500/40 shadow-sm'
+                                : isDesk
+                                ? 'text-purple-200 hover:bg-purple-900/30 border border-purple-900/30'
+                                : 'text-purple-200 hover:bg-purple-900/30'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <IconComponent
+                                className={`w-4 h-4 ${
+                                  isActive
+                                    ? isFlagship
+                                      ? 'text-slate-950'
+                                      : 'text-white'
+                                    : isFlagship
+                                    ? 'text-amber-400 animate-pulse'
+                                    : isDesk
+                                    ? 'text-amber-300'
+                                    : 'text-purple-400'
+                                }`}
+                              />
+                              <span className={isFlagship ? 'font-black tracking-wider uppercase' : ''}>
+                                {item.label}
+                              </span>
+                            </div>
+
+                            {isFlagship ? (
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
+                                isActive
+                                  ? 'bg-slate-950 text-amber-300 border-amber-400/60'
+                                  : 'bg-amber-500/25 text-amber-300 border-amber-400/50'
+                              }`}>
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                <span>LIVE</span>
+                              </span>
+                            ) : item.badge && (
+                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
+                                item.badge === '15S'
+                                  ? 'bg-amber-950/70 text-amber-300 border-amber-500/40'
+                                  : item.badge === '1H'
+                                  ? 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40'
+                                  : 'bg-purple-950 text-purple-300 border-purple-500/30'
+                              }`}>
+                                {item.badge}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
               ))}
