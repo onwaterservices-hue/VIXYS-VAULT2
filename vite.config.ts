@@ -15,21 +15,6 @@ export default defineConfig({
     watch: process.env.DISABLE_HMR === 'true' ? null : {},
   },
   build: {
-    outDir: "dist",
-    emptyOutDir: false,
-    sourcemap: false,
-    chunkSizeWarningLimit: 1200,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('lucide-react')) return 'vendor-lucide';
-            if (id.includes('recharts') || id.includes('d3')) return 'vendor-charts';
-            if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
-            if (id.includes('stripe')) return 'vendor-stripe';
-          }
-        },
-      },
-    },
-  },
+    outDir: 'dist'
+  }
 });

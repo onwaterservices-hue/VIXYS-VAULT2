@@ -1020,14 +1020,14 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
   const isFinal5Minutes = timeRemaining <= 300 && timeRemaining > 0;
 
   // Normalized Probabilities (Sum strictly to 100%)
-  const rawUp = effectiveDecision?.gemini?.upProbability ?? 0.50;
-  const rawDown = effectiveDecision?.gemini?.downProbability ?? 0.50;
-  const rawSkip = effectiveDecision?.gemini?.noTradeProbability ?? 0.00;
+  const rawUp = effectiveDecision?.gemini?.upProbability ?? 0.334;
+  const rawDown = effectiveDecision?.gemini?.downProbability ?? 0.333;
+  const rawSkip = effectiveDecision?.gemini?.noTradeProbability ?? 0.333;
   const totalProb = (rawUp + rawDown + rawSkip) || 1.0;
   
-  const upProb = Math.round((rawUp / totalProb) * 1000) / 10;
-  const downProb = Math.round((rawDown / totalProb) * 1000) / 10;
-  const skipProb = Math.round((rawSkip / totalProb) * 1000) / 10;
+  const upProb = Math.round((rawUp / totalProb) * 100);
+  const downProb = Math.round((rawDown / totalProb) * 100);
+  const skipProb = Math.round((rawSkip / totalProb) * 100);
 
   // Canonical State Identification
   const state = effectiveDecision?.currentState || 'WATCH';
@@ -1472,15 +1472,15 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
                     <div className="flex items-center justify-between text-[11px]">
                       <div className="flex flex-col items-start">
                         <span className="text-zinc-500 text-[8px] font-bold">UP</span>
-                        <span className="text-emerald-400 font-black">{upProb.toFixed(0)}%</span>
+                        <span className="text-emerald-400 font-black">{safeToFixed(upProb, 0)}%</span>
                       </div>
                       <div className="flex flex-col items-center">
                         <span className="text-zinc-500 text-[8px] font-bold">NO TRADE</span>
-                        <span className="text-zinc-400 font-black">{skipProb.toFixed(0)}%</span>
+                        <span className="text-zinc-400 font-black">{safeToFixed(skipProb, 0)}%</span>
                       </div>
                       <div className="flex flex-col items-end">
                         <span className="text-zinc-500 text-[8px] font-bold">DOWN</span>
-                        <span className="text-red-400 font-black">{downProb.toFixed(0)}%</span>
+                        <span className="text-red-400 font-black">{safeToFixed(downProb, 0)}%</span>
                       </div>
                     </div>
 
@@ -1795,7 +1795,7 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
                   <div className="flex justify-between p-2 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
                     <span className="text-zinc-400">Feed Freshness:</span>
                     <span className="font-bold text-emerald-400">
-                      {Math.max(0.1, (Date.now() - lastTickTs) / 1000).toFixed(1)}s ago
+                      {safeToFixed(Math.max(0.1, (Date.now() - lastTickTs) / 1000), 1)}s ago
                     </span>
                   </div>
 

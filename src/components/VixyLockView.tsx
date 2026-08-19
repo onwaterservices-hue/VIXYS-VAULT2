@@ -770,14 +770,14 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const bPressVal = Math.round(50 + orderFlowVal * 50);
   const sPressVal = 100 - bPressVal;
 
-  const volatilityVal = snapshot?.features?.volatility !== undefined 
+  const volatilityVal = typeof snapshot?.features?.volatility === 'number' 
     ? (typeof snapshot.features.volatility === 'number' ? `${snapshot.features.volatility.toFixed(2)}%` : snapshot.features.volatility) 
     : '0.57%';
 
   const volumeVal = snapshot?.features?.volume || '$1.24B';
   const fundingRateVal = snapshot?.features?.fundingRate || '0.010%';
   const bookSpreadVal = snapshot?.features?.spread || '$10.00';
-  const bookImbalanceVal = snapshot?.features?.orderBookImbalance !== undefined 
+  const bookImbalanceVal = typeof snapshot?.features?.orderBookImbalance === 'number' 
     ? (snapshot.features.orderBookImbalance >= 0 ? '+' : '') + snapshot.features.orderBookImbalance.toFixed(2)
     : '+0.18';
 
