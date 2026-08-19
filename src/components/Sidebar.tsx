@@ -32,6 +32,8 @@ import {
   Info,
   Bot,
   Lock,
+  Flame,
+  Clock,
 } from 'lucide-react';
 
 interface SidebarProps {
