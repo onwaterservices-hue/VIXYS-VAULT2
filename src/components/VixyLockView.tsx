@@ -45,6 +45,17 @@ import { fetchBTCTicker, fetchActiveCycleLock, fetchRegimeMemoryBank, fetchAlgor
 import { VixyStreamManager } from '../services/streamManager';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import {
+  runGeminiShadowInference,
+  evaluateVixyProtectionLock,
+  calculateTemporalStability,
+  GeminiShadowAnalysis,
+  TemporalObservation,
+  VixyProtectedLockDecision,
+  DecisionState,
+  SignalMomentum,
+  SkipReasonCode
+} from '../services/intelligence';
 
 export type MarketRegimeType = 'TRENDING_BULLISH' | 'TRENDING_BEARISH' | 'RANGING_CHOPPY' | 'HIGH_VOLATILITY_BREAKOUT';
 
@@ -822,6 +833,86 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
   }, [spotPrice]);
 
+  // --- CONTINUOUS GEMINI SHADOW INTELLIGENCE & TEMPORAL MEMORY STORE ---
+  const [temporalHistory, setTemporalHistory] = useState<TemporalObservation[]>([
+    { timestamp: Date.now() - 15000, upProbability: 0.61, downProbability: 0.25, noTradeProbability: 0.14, confidence: 66, directionalBias: 'UP', evidenceScore: 68, contradictionScore: 22, regime: 'TRENDING_BULLISH', spotPrice: 64140, lockScore: 64 },
+    { timestamp: Date.now() - 12000, upProbability: 0.63, downProbability: 0.23, noTradeProbability: 0.14, confidence: 70, directionalBias: 'UP', evidenceScore: 72, contradictionScore: 20, regime: 'TRENDING_BULLISH', spotPrice: 64152, lockScore: 67 },
+    { timestamp: Date.now() - 9000, upProbability: 0.66, downProbability: 0.21, noTradeProbability: 0.13, confidence: 74, directionalBias: 'UP', evidenceScore: 78, contradictionScore: 16, regime: 'TRENDING_BULLISH', spotPrice: 64160, lockScore: 71 },
+    { timestamp: Date.now() - 6000, upProbability: 0.69, downProbability: 0.18, noTradeProbability: 0.13, confidence: 79, directionalBias: 'UP', evidenceScore: 82, contradictionScore: 14, regime: 'TRENDING_BULLISH', spotPrice: 64168, lockScore: 75 },
+    { timestamp: Date.now() - 3000, upProbability: 0.72, downProbability: 0.16, noTradeProbability: 0.12, confidence: 83, directionalBias: 'UP', evidenceScore: 86, contradictionScore: 12, regime: 'TRENDING_BULLISH', spotPrice: 64174, lockScore: 80 }
+  ]);
+
+  // Continuous Gemini Shadow Inference + Vixy Protection Evaluation
+  const continuousInference = useMemo(() => {
+    const rawCvdNum = parseFloat(cvdVal.replace(/[^0-9.-]/g, '')) || 1482;
+    const rawAtr = 124.5;
+
+    const gemini = runGeminiShadowInference({
+      spotPrice,
+      openStrike: strikePrice,
+      kalshiProb: rawKalshiProb,
+      polyProb: rawPolyProb,
+      orderFlowDelta: orderFlowVal,
+      cvdDelta: rawCvdNum,
+      rsi14: technicalIndicators.rsi,
+      macdHist: technicalIndicators.macd.histogram,
+      supertrendBullish: isTrendBullish,
+      volatilityAtr: rawAtr,
+      regime: activeRegimeProfile,
+      timeRemainingSec,
+      previousObservations: temporalHistory
+    });
+
+    const stabilityResult = calculateTemporalStability(temporalHistory);
+
+    const protectionDecision = evaluateVixyProtectionLock({
+      cycleId,
+      gemini,
+      temporalStability: stabilityResult.stabilityScore,
+      timeRemainingSec,
+      currentLockedState: isLocked,
+      currentLockDirection: activeCycleDecision.includes('UP') ? 'UP' : activeCycleDecision.includes('DOWN') ? 'DOWN' : 'NEUTRAL',
+      customWeights: {
+        probWeight: 0.35,
+        evidenceWeight: 0.20,
+        stabilityWeight: 0.15,
+        crossVenueWeight: 0.10,
+        regimeWeight: 0.10,
+        contradictionWeight: 0.10
+      }
+    });
+
+    return {
+      gemini,
+      stabilityResult,
+      protectionDecision
+    };
+  }, [spotPrice, strikePrice, rawKalshiProb, rawPolyProb, orderFlowVal, cvdVal, technicalIndicators, isTrendBullish, activeRegimeProfile, timeRemainingSec, temporalHistory, isLocked, activeCycleDecision, cycleId]);
+
+  // Rolling update to Temporal Memory
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const g = continuousInference.gemini;
+      const newObs: TemporalObservation = {
+        timestamp: Date.now(),
+        upProbability: g.upProbability,
+        downProbability: g.downProbability,
+        noTradeProbability: g.noTradeProbability,
+        confidence: g.confidence,
+        directionalBias: g.signalDirection,
+        evidenceScore: (g.alignedEvidenceCount / 6) * 100,
+        contradictionScore: g.contradictionScore,
+        regime: g.regime,
+        spotPrice,
+        lockScore: continuousInference.protectionDecision.lockScore
+      };
+
+      setTemporalHistory(prev => [...prev.slice(-19), newObs]);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [continuousInference, spotPrice]);
+
   // Auto-Recalibration Weights Engine with Live Tuning Events
   const [recalibrationState, setRecalibrationState] = useState({
     momentumWeight: 36,
@@ -1344,272 +1435,314 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
       </div>
 
-      {/* 3. PRIMARY CONVICTION TIER: VIXY DECISION | PROTECTION GUARDIAN | AUTO-RECALIBRATION WEIGHTS */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative">
+      {/* 3. PRIMARY CONVICTION TIER: VIXY STATE MACHINE | CONTINUOUS GEMINI SHADOW | PROTECTION GUARDIAN */}
+      <div id="vixy-neural-hero-terminal" className="grid grid-cols-1 lg:grid-cols-12 gap-4 relative">
         
-        {/* VIXY DECISION */}
-        <div className={`lg:col-span-4 bg-[#0C101A] border ${cyclePhase === 'CALIBRATING' ? 'border-[#9D4EDD] shadow-[0_0_35px_rgba(157,78,221,0.4)]' : 'border-[#1E2638]'} rounded-xl p-5 relative overflow-hidden flex flex-col justify-between shadow-[0_0_25px_rgba(157,78,221,0.15)] transition-all duration-500`}>
+        {/* CARD 1: VIXY DECISION & CONTINUOUS STATE MACHINE (WATCH / CONFIRMING / LOCKED / SKIP) */}
+        <div className={`lg:col-span-4 bg-[#0C101A] border rounded-xl p-5 relative overflow-hidden flex flex-col justify-between shadow-[0_0_25px_rgba(157,78,221,0.15)] transition-all duration-500 ${
+          continuousInference.protectionDecision.state === 'LOCKED'
+            ? continuousInference.protectionDecision.direction === 'UP'
+              ? 'border-[#00FF88] shadow-[0_0_35px_rgba(0,255,136,0.3)]'
+              : 'border-[#FF3B30] shadow-[0_0_35px_rgba(255,59,48,0.3)]'
+            : continuousInference.protectionDecision.state === 'CONFIRMING'
+            ? 'border-cyan-500 shadow-[0_0_30px_rgba(6,182,212,0.25)]'
+            : continuousInference.protectionDecision.state === 'WATCH'
+            ? 'border-[#9D4EDD] shadow-[0_0_25px_rgba(157,78,221,0.2)]'
+            : 'border-gray-700'
+        }`}>
           
-          {/* Live Calibration Overlay Banner while state == 'CALIBRATING' */}
-          {cyclePhase === 'CALIBRATING' && (
-            <div className="absolute inset-0 bg-[#0C101A]/95 backdrop-blur-sm z-20 flex flex-col justify-between p-5 border-2 border-[#9D4EDD] animate-pulse">
-              <div className="flex items-center justify-between">
-                <span className="px-2.5 py-1 rounded bg-[#9D4EDD]/20 border border-[#9D4EDD]/50 text-purple-300 text-[10px] font-black tracking-wider flex items-center space-x-1.5">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#9D4EDD]" />
-                  <span>RE-CALIBRATING WEIGHTS...</span>
-                </span>
-                <span className="text-[#00FF88] font-black text-sm">{calibratingProgress}%</span>
-              </div>
-
-              <div className="my-2 space-y-2">
-                <div className="text-xs text-white font-bold tracking-tight">
-                  EVALUATING 15M MARKET PARAMETERS
-                </div>
-                <div className="text-[10px] text-purple-300 font-mono">
-                  {calibrationScanStep}
-                </div>
-                
-                {/* Calibration progress bar */}
-                <div className="w-full h-2 bg-[#1E2638] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#9D4EDD] via-cyan-400 to-[#00FF88] transition-all duration-300"
-                    style={{ width: `${calibratingProgress}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="text-[9px] text-gray-400 flex justify-between pt-2 border-t border-[#1E2638]">
-                <span>NEW CONTRACT: {tickerName}</span>
-                <span className="text-[#00FF88] font-bold">SYNAPSE ACTIVE</span>
-              </div>
-            </div>
-          )}
-
+          {/* Top State Badge & Status */}
           <div className="flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">VIXY DECISION</span>
-            <span className="px-2 py-0.5 rounded bg-[#9D4EDD]/20 border border-[#9D4EDD]/40 text-[#9D4EDD] text-[9px] font-bold tracking-wider">
-              HIGH CONVICTION
+            <div className="flex items-center space-x-2">
+              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">DECISION STATE MACHINE</span>
+              <span className="text-[9px] text-gray-500">| EPOCH 15M</span>
+            </div>
+            
+            <span className={`px-2.5 py-0.5 rounded text-[9.5px] font-black tracking-wider flex items-center space-x-1.5 transition-all ${
+              continuousInference.protectionDecision.state === 'LOCKED'
+                ? continuousInference.protectionDecision.direction === 'UP'
+                  ? 'bg-[#00FF88]/20 border border-[#00FF88]/60 text-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.5)]'
+                  : 'bg-[#FF3B30]/20 border border-[#FF3B30]/60 text-[#FF3B30] shadow-[0_0_12px_rgba(255,59,48,0.5)]'
+                : continuousInference.protectionDecision.state === 'CONFIRMING'
+                ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300 animate-pulse'
+                : continuousInference.protectionDecision.state === 'WATCH'
+                ? 'bg-purple-500/20 border border-purple-400/50 text-purple-300'
+                : 'bg-gray-800 border border-gray-600 text-gray-300'
+            }`}>
+              <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
+              <span>{continuousInference.protectionDecision.state}</span>
             </span>
           </div>
 
+          {/* Primary Action / Directional Hero Title */}
           <div className="my-3">
-            <h2 className="text-3xl font-black text-[#00FF88] tracking-tight flex items-center space-x-2">
-              <Zap className="w-6 h-6 text-[#00FF88] fill-[#00FF88]" />
-              <span>{decisionText}</span>
+            <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wide">AUTONOMOUS CONVICTION</div>
+            <h2 className={`text-2xl sm:text-3xl font-black tracking-tight flex items-center space-x-2 mt-0.5 ${
+              continuousInference.protectionDecision.state === 'LOCKED'
+                ? continuousInference.protectionDecision.direction === 'UP' ? 'text-[#00FF88]' : 'text-[#FF3B30]'
+                : continuousInference.protectionDecision.state === 'CONFIRMING'
+                ? 'text-cyan-300'
+                : continuousInference.protectionDecision.state === 'WATCH'
+                ? 'text-purple-300'
+                : 'text-amber-400'
+            }`}>
+              <Zap className="w-6 h-6 fill-current shrink-0" />
+              <span className="truncate">{continuousInference.protectionDecision.displayName}</span>
             </h2>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <div>
-              <div className="text-[9px] text-gray-400 uppercase">CALIBRATED PROBABILITY</div>
-              <div className="text-xl font-black text-white">{confidence}%</div>
-            </div>
-            <div>
-              <div className="text-[9px] text-gray-400 uppercase">MARKET EDGE</div>
-              <div className="text-xl font-black text-[#00FF88]">+{edgePct}%</div>
+            <div className="text-[10px] text-gray-400 font-mono mt-1 line-clamp-1">
+              {continuousInference.protectionDecision.subtitle}
             </div>
           </div>
 
-          <div className="flex items-center justify-between text-[9px] text-gray-500 mt-3 pt-2 border-t border-[#1E2638]">
-            <span>MODEL: v5.0 • CALIBRATED</span>
-            <span>UPDATED 184ms AGO</span>
-          </div>
-        </div>
+          {/* 3-Way Normalized Probability Distribution Strip (Sum = 100%) */}
+          <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] space-y-2 mb-3">
+            <div className="flex items-center justify-between text-[9px]">
+              <span className="text-gray-400 uppercase font-bold tracking-tight">3-WAY NORMALIZED PROBABILITY</span>
+              <span className="text-gray-500 font-mono">SUM: 100.0%</span>
+            </div>
 
-        {/* PROTECTION GUARDIAN */}
-        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />
-              <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">PROTECTION GUARDIAN</span>
+            {/* Segmented Triple Color Bar */}
+            <div className="w-full h-2.5 bg-[#1E2638] rounded-full overflow-hidden flex">
+              <div 
+                className="h-full bg-[#00FF88] transition-all duration-500" 
+                style={{ width: `${continuousInference.gemini.upProbability * 100}%` }}
+                title={`P(UP): ${(continuousInference.gemini.upProbability * 100).toFixed(1)}%`}
+              />
+              <div 
+                className="h-full bg-[#FF3B30] transition-all duration-500" 
+                style={{ width: `${continuousInference.gemini.downProbability * 100}%` }}
+                title={`P(DOWN): ${(continuousInference.gemini.downProbability * 100).toFixed(1)}%`}
+              />
+              <div 
+                className="h-full bg-[#9D4EDD] transition-all duration-500" 
+                style={{ width: `${continuousInference.gemini.noTradeProbability * 100}%` }}
+                title={`P(NO TRADE): ${(continuousInference.gemini.noTradeProbability * 100).toFixed(1)}%`}
+              />
             </div>
-            <span className="text-[#00FF88] text-[10px] font-bold">STATUS: CLEAR</span>
-          </div>
 
-          <div className="my-2 flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-lg bg-[#00FF88]/10 border border-[#00FF88]/30 flex items-center justify-center text-[#00FF88]">
-              <Shield className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-lg font-black text-[#00FF88]">{guardian.status}</div>
-              <div className="text-[10px] text-gray-400">Zero veto conditions detected on book depth</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-[10px] bg-[#080B10] p-3 rounded-lg border border-[#1E2638]">
-            <div>
-              <span className="text-gray-400">REVERSAL RISK:</span>
-              <div className="text-white font-bold">{guardian.reversalRisk}% (LOW)</div>
-            </div>
-            <div>
-              <span className="text-gray-400">LIQUIDITY:</span>
-              <div className="text-[#00FF88] font-bold">{guardian.liquidity}</div>
-            </div>
-            <div>
-              <span className="text-gray-400">CROSS-VENUE:</span>
-              <div className="text-[#00FF88] font-bold">{guardian.crossVenue}</div>
-            </div>
-            <div>
-              <span className="text-gray-400">VOLATILITY SHOCK:</span>
-              <div className="text-[#00FF88] font-bold">PASSED ✓</div>
-            </div>
-          </div>
-
-          <div className="text-[9px] text-gray-500 mt-2">
-            Auto-protect threshold: &gt;45% reversal probability triggers immediate lock veto.
-          </div>
-        </div>
-
-        {/* AUTO-RECALIBRATION WEIGHTS PANEL */}
-        <div className={`lg:col-span-4 bg-[#0C101A] border ${recalibrationState.isFlashing ? 'border-[#00FF88] shadow-[0_0_25px_rgba(0,255,136,0.35)] ring-1 ring-[#00FF88]/50' : 'border-[#1E2638]'} rounded-xl p-5 flex flex-col justify-between transition-all duration-500`}>
-          <div>
-            <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5 mb-2.5">
-              <div className="flex items-center space-x-2">
-                <BrainCircuit className="w-4 h-4 text-[#00FF88] animate-pulse" />
-                <span className="text-[10px] text-gray-300 font-bold uppercase tracking-wider">AUTO-RECALIBRATION ENGINE</span>
+            {/* Probability Breakdown Pills */}
+            <div className="grid grid-cols-3 gap-1.5 text-center pt-0.5">
+              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-[#00FF88]/20">
+                <span className="text-[8px] text-gray-400 block">P(UP)</span>
+                <span className="text-xs font-black text-[#00FF88]">{(continuousInference.gemini.upProbability * 100).toFixed(0)}%</span>
               </div>
-              
-              <div className="flex items-center space-x-1.5">
-                <span className={`px-2 py-0.5 rounded text-[9px] font-black tracking-wider transition-all duration-300 ${
-                  recalibrationState.isFlashing 
-                    ? 'bg-[#00FF88] text-black shadow-[0_0_15px_rgba(0,255,136,0.9)] scale-105 animate-bounce' 
-                    : 'bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88]'
-                }`}>
-                  {recalibrationState.status} ●
-                </span>
+              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-[#FF3B30]/20">
+                <span className="text-[8px] text-gray-400 block">P(DOWN)</span>
+                <span className="text-xs font-black text-[#FF3B30]">{(continuousInference.gemini.downProbability * 100).toFixed(0)}%</span>
               </div>
-            </div>
-
-            {/* Regime Profile Selector Bar */}
-            <div className="bg-[#080B10] p-1.5 rounded-lg border border-[#1E2638] mb-2.5">
-              <div className="flex items-center justify-between mb-1 px-1 text-[8.5px]">
-                <span className="text-gray-400 font-bold uppercase">MARKET REGIME PROFILE:</span>
-                <span className="text-[#00FF88] font-bold">
-                  {REGIME_PROFILES[activeRegimeProfile].badge}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-1">
-                {(['TRENDING_BULLISH', 'RANGING_CHOPPY', 'HIGH_VOLATILITY_BREAKOUT'] as MarketRegimeType[]).map((key) => {
-                  const prof = REGIME_PROFILES[key];
-                  const isActive = activeRegimeProfile === key;
-                  return (
-                    <button
-                      key={key}
-                      onClick={() => applyRegimeProfile(key)}
-                      className={`px-1.5 py-1 rounded text-[8px] font-bold tracking-tight transition-all text-center truncate ${
-                        isActive 
-                          ? 'bg-[#00FF88] text-black shadow-[0_0_10px_rgba(0,255,136,0.6)] font-black' 
-                          : 'bg-[#0C101A] text-gray-400 hover:text-white border border-[#1E2638]'
-                      }`}
-                      title={prof.description}
-                    >
-                      {prof.badge}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Dynamic Bayesian Sliders */}
-            <div className="space-y-2.5 text-[10px]">
-              {/* Momentum Weight */}
-              <div>
-                <div className="flex justify-between text-gray-300 mb-1">
-                  <span className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]" />
-                    <span className="font-semibold">MOMENTUM (MACD/RSI)</span>
-                  </span>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[9px] text-[#00FF88] bg-[#00FF88]/10 px-1 py-0.2 rounded font-bold">+1.8%</span>
-                    <span className="text-[#00FF88] font-bold">{recalibrationState.momentumWeight}%</span>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#00FF88]/70 to-[#00FF88] transition-all duration-700 ease-out" 
-                    style={{ width: `${recalibrationState.momentumWeight}%` }} 
-                  />
-                </div>
-              </div>
-
-              {/* Flow Weight (Whale Tape) */}
-              <div>
-                <div className="flex justify-between text-gray-300 mb-1">
-                  <span className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#38BDF8]" />
-                    <span className="font-semibold">WHALE FLOW (≥$250K)</span>
-                  </span>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[9px] text-cyan-300 bg-cyan-400/10 px-1 py-0.2 rounded font-bold">+4.5%</span>
-                    <span className="text-cyan-400 font-bold">{recalibrationState.flowWeight}%</span>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#38BDF8]/70 to-[#38BDF8] transition-all duration-700 ease-out" 
-                    style={{ width: `${recalibrationState.flowWeight}%` }} 
-                  />
-                </div>
-              </div>
-
-              {/* Supertrend Weight */}
-              <div>
-                <div className="flex justify-between text-gray-300 mb-1">
-                  <span className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#9D4EDD]" />
-                    <span className="font-semibold">SUPERTREND (MULTI-TF)</span>
-                  </span>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[9px] text-purple-300 bg-purple-500/10 px-1 py-0.2 rounded font-bold">-1.2%</span>
-                    <span className="text-purple-400 font-bold">{recalibrationState.supertrendWeight}%</span>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#9D4EDD]/70 to-[#9D4EDD] transition-all duration-700 ease-out" 
-                    style={{ width: `${recalibrationState.supertrendWeight}%` }} 
-                  />
-                </div>
-              </div>
-
-              {/* CVD Weight */}
-              <div>
-                <div className="flex justify-between text-gray-300 mb-1">
-                  <span className="flex items-center space-x-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#F59E0B]" />
-                    <span className="font-semibold">CVD / BOOK DEPTH</span>
-                  </span>
-                  <div className="flex items-center space-x-1.5">
-                    <span className="text-[9px] text-amber-300 bg-amber-500/10 px-1 py-0.2 rounded font-bold">+2.1%</span>
-                    <span className="text-amber-400 font-bold">{recalibrationState.cvdWeight}%</span>
-                  </div>
-                </div>
-                <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-[#F59E0B]/70 to-[#F59E0B] transition-all duration-700 ease-out" 
-                    style={{ width: `${recalibrationState.cvdWeight}%` }} 
-                  />
-                </div>
+              <div className="bg-[#0C101A] py-1 px-1.5 rounded border border-purple-500/20">
+                <span className="text-[8px] text-gray-400 block">P(NO TRADE)</span>
+                <span className="text-xs font-black text-purple-300">{(continuousInference.gemini.noTradeProbability * 100).toFixed(0)}%</span>
               </div>
             </div>
           </div>
 
-          {/* Tuning Telemetry Strip */}
-          <div className="space-y-1.5 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] text-[9px] mt-3">
-            <div className="flex items-center justify-between">
-              <span className="text-gray-400">24H LEARNING ACCURACY:</span>
-              <span className="text-[#00FF88] font-bold">
-                {recalibrationState.oneHourAccuracy.correct}/{recalibrationState.oneHourAccuracy.total} ({recalibrationState.oneHourAccuracy.pct}%)
+          {/* Lock Progress & Signal Momentum */}
+          <div className="space-y-2 bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
+            <div className="flex justify-between items-center text-[9px]">
+              <span className="text-gray-400 font-bold uppercase">LOCK PROGRESS (REQ 72/100):</span>
+              <span className={`font-black ${continuousInference.protectionDecision.lockProgressPct >= 100 ? 'text-[#00FF88]' : continuousInference.protectionDecision.lockProgressPct >= 70 ? 'text-cyan-300' : 'text-amber-400'}`}>
+                {continuousInference.protectionDecision.lockProgressPct}% {continuousInference.protectionDecision.lockProgressPct >= 100 ? '✓ AUTHORIZED' : ''}
               </span>
             </div>
-            <div className="text-[8px] text-gray-400 font-mono line-clamp-1 border-t border-[#1E2638]/60 pt-1">
-              {recalibrationState.adjustmentReason}
+            
+            <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
+              <div 
+                className={`h-full transition-all duration-500 ${
+                  continuousInference.protectionDecision.lockProgressPct >= 100
+                    ? 'bg-gradient-to-r from-cyan-400 to-[#00FF88]'
+                    : 'bg-gradient-to-r from-purple-500 via-cyan-400 to-amber-400'
+                }`}
+                style={{ width: `${continuousInference.protectionDecision.lockProgressPct}%` }}
+              />
             </div>
-            <div className="flex items-center justify-between text-[8px] text-gray-500 pt-0.5">
-              <span>VOL MULT: {recalibrationState.volatilityMultiplier}</span>
-              <span className="text-cyan-400 font-semibold">POWER SHIFT: {recalibrationState.weightDrift}</span>
-              <span className="text-gray-500">{recalibrationState.lastAdjustedTime}</span>
+
+            <div className="flex justify-between items-center text-[8.5px] text-gray-400 pt-0.5">
+              <span>MOMENTUM: <strong className="text-white">{continuousInference.gemini.signalMomentum}</strong></span>
+              <span>TEMPORAL STABILITY: <strong className="text-[#00FF88]">{continuousInference.stabilityResult.stabilityScore}%</strong></span>
             </div>
+          </div>
+
+          {/* Footer Metadata */}
+          <div className="flex items-center justify-between text-[9px] text-gray-500 mt-3 pt-2 border-t border-[#1E2638]">
+            <span>HYSTERESIS: ENTER ≥72 • REVOKE &lt;60</span>
+            <span>SHADOW LATENCY: {continuousInference.gemini.latencyMs}ms</span>
+          </div>
+        </div>
+
+        {/* CARD 2: CONTINUOUS GEMINI SHADOW INTELLIGENCE & 6-FACTOR EVIDENCE MATRIX */}
+        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,255,136,0.08)]">
+          <div>
+            {/* Header with Live AI Pulse */}
+            <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <BrainCircuit className="w-4 h-4 text-cyan-400 animate-pulse" />
+                <span className="text-[10px] text-gray-200 font-bold uppercase tracking-wider">GEMINI SHADOW INTELLIGENCE</span>
+              </div>
+              <span className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[8.5px] font-black tracking-wider flex items-center space-x-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping" />
+                <span>CONTINUOUS SHADOW ACTIVE</span>
+              </span>
+            </div>
+
+            {/* 6-Factor Evidence Matrix with Live Pass/Fail & Score */}
+            <div className="space-y-1.5 mb-3">
+              <div className="flex justify-between items-center text-[9px] text-gray-400 font-bold uppercase">
+                <span>6-FACTOR EVIDENCE CONFLUENCE</span>
+                <span className="text-[#00FF88] font-mono">{continuousInference.gemini.alignedEvidenceCount}/6 ALIGNED (REQ ≥4)</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 text-[9px]">
+                {continuousInference.gemini.evidenceFactors.map((factor) => (
+                  <div 
+                    key={factor.id} 
+                    className={`p-2 rounded-lg border transition-all ${
+                      factor.aligned 
+                        ? 'bg-[#080B10] border-[#00FF88]/40 text-white' 
+                        : 'bg-[#080B10] border-gray-800 text-gray-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="text-[8px] font-bold truncate max-w-[90px]">{factor.name.split(' ')[0]}</span>
+                      <span className={`text-[8px] font-black ${factor.aligned ? 'text-[#00FF88]' : 'text-gray-500'}`}>
+                        {factor.aligned ? `✓ ${factor.score}%` : `✗ ${factor.score}%`}
+                      </span>
+                    </div>
+                    <div className="text-[7.5px] text-gray-400 truncate" title={factor.detail}>
+                      {factor.detail}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Contradiction Meter & Risk Synthesis */}
+            <div className="bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638] space-y-1.5">
+              <div className="flex justify-between items-center text-[9px]">
+                <span className="text-gray-400 uppercase font-bold">CONTRADICTION DETECTOR:</span>
+                <span className={`font-black ${continuousInference.gemini.contradictionScore <= 25 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
+                  {continuousInference.gemini.contradictionScore}% ({continuousInference.gemini.contradictionScore <= 25 ? 'LOW CONFLICT' : 'HIGH DIVERGENCE'})
+                </span>
+              </div>
+              <div className="w-full h-1.5 bg-[#1E2638] rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${
+                    continuousInference.gemini.contradictionScore <= 25 ? 'bg-[#00FF88]' : 'bg-amber-400'
+                  }`}
+                  style={{ width: `${continuousInference.gemini.contradictionScore}%` }}
+                />
+              </div>
+              <div className="text-[8px] text-gray-400 font-mono line-clamp-2 pt-0.5">
+                {continuousInference.gemini.reasoning}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[8.5px] text-gray-500 flex justify-between items-center mt-2 pt-2 border-t border-[#1E2638]">
+            <span>CONFIDENCE: {continuousInference.gemini.confidence}%</span>
+            <span>SHADOW MODEL: GEMINI 2.5 FLASH QUANT</span>
+          </div>
+        </div>
+
+        {/* CARD 3: VIXY PROTECTION GUARDIAN & COMPOSITE LOCK SCORE */}
+        <div className="lg:col-span-4 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
+          <div>
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-[#1E2638] pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-4 h-4 text-[#9D4EDD]" />
+                <span className="text-[10px] text-gray-200 font-bold uppercase tracking-wider">VIXY PROTECTION ENGINE</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-[8.5px] font-black tracking-wider ${
+                continuousInference.protectionDecision.protectionStatus === 'CLEAR'
+                  ? 'bg-[#00FF88]/20 border border-[#00FF88]/40 text-[#00FF88]'
+                  : continuousInference.protectionDecision.protectionStatus === 'EVALUATING'
+                  ? 'bg-cyan-500/20 border border-cyan-400/40 text-cyan-300'
+                  : 'bg-[#FF3B30]/20 border border-[#FF3B30]/40 text-[#FF3B30]'
+              }`}>
+                STATUS: {continuousInference.protectionDecision.protectionStatus}
+              </span>
+            </div>
+
+            {/* Composite Lock Score Showcase */}
+            <div className="bg-[#080B10] p-3 rounded-lg border border-[#1E2638] mb-2.5">
+              <div className="flex justify-between items-center mb-1">
+                <div>
+                  <span className="text-[9px] text-gray-400 uppercase font-bold">COMPOSITE LOCK SCORE</span>
+                  <div className="text-xl font-black text-[#00FF88]">
+                    {continuousInference.protectionDecision.lockScore} <span className="text-xs text-gray-500 font-normal">/ 100 (REQ ≥ 72)</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-[8.5px] text-gray-400 uppercase block">AUTHORIZATION</span>
+                  <span className={`text-xs font-black ${continuousInference.protectionDecision.checklist.allPassed ? 'text-[#00FF88]' : 'text-amber-400'}`}>
+                    {continuousInference.protectionDecision.checklist.allPassed ? 'HARD LOCK APPROVED' : 'HOLDING IN PIPELINE'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Multi-Weight Composition Bar */}
+              <div className="w-full h-2 bg-[#1E2638] rounded-full overflow-hidden flex my-1.5">
+                <div className="bg-[#00FF88] h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.directionalProbWeight}%` }} title="35% Directional Prob" />
+                <div className="bg-cyan-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.evidenceAgreementWeight}%` }} title="20% Evidence Agreement" />
+                <div className="bg-[#9D4EDD] h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.temporalStabilityWeight}%` }} title="15% Temporal Stability" />
+                <div className="bg-amber-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.crossVenueWeight}%` }} title="10% Cross-Venue" />
+                <div className="bg-blue-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.regimeQualityWeight}%` }} title="10% Regime Quality" />
+                <div className="bg-emerald-400 h-full" style={{ width: `${continuousInference.protectionDecision.scoreComponents.contradictionPenaltyWeight}%` }} title="10% Contradiction Penalty" />
+              </div>
+              <div className="text-[7.5px] text-gray-400 flex justify-between font-mono">
+                <span>35% PROB</span>
+                <span>20% EVIDENCE</span>
+                <span>15% STABILITY</span>
+                <span>10% CROSS</span>
+                <span>10% REGIME</span>
+                <span>10% CONFLICT</span>
+              </div>
+            </div>
+
+            {/* Protection Checklist */}
+            <div className="grid grid-cols-2 gap-1.5 text-[8.5px] bg-[#080B10] p-2.5 rounded-lg border border-[#1E2638]">
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.probabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.probabilityPassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Prob ≥ 70%</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.lockScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.lockScorePassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Score ≥ 72</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.temporalStabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.temporalStabilityPassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Stability ≥ 65%</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.contradictionPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.contradictionPassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Conflict ≤ 25%</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.evidencePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.evidencePassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Evidence ≥ 4/6</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className={continuousInference.protectionDecision.checklist.crossVenuePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                  {continuousInference.protectionDecision.checklist.crossVenuePassed ? '✓' : '✗'}
+                </span>
+                <span className="text-gray-300">Cross-Venue Sync</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-[8.5px] text-gray-500 mt-2">
+            Capital Protection: Only the VIXY Protection Engine can authorize a hard trade lock.
           </div>
         </div>
 
