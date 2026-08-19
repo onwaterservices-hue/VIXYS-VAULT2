@@ -3,12 +3,13 @@
  * 
  * The single authoritative service responsible for:
  * 1. Managing the active BTC 15-minute contract cycle & decision object
- * 2. Ingesting live market telemetry & executing Gemini shadow inference
- * 3. Evaluating the VIXY Protection Engine & authorizing locks
+ * 2. Ingesting live market telemetry & executing continuous 10-factor Gemini shadow inference
+ * 3. Evaluating the VIXY Protection Engine & hard 5-minute time gate
  * 4. Enforcing legal monotonic state transitions (no CONFIRMING <-> LOCKED bouncing)
- * 5. Enforcing duplicate lock prevention
+ * 5. Enforcing duplicate lock prevention & capital-preservation-first discipline
  * 6. Auto-settling expired cycles and initializing new contracts
- * 7. Persisting canonical state to Firestore (active_cycle_lock/current_15m)
+ * 7. Emitting structured [C15M] telemetry tags for institutional auditability
+ * 8. Persisting canonical state to Firestore (active_cycle_lock/current_15m)
  */
 
 import {
@@ -70,6 +71,8 @@ export function createInitial15mDecision(params?: {
   const spot = params?.spotPrice || 64250.00;
   const { cycleStart, cycleEnd, cycleId, contractId, decisionId } = get15mEpochBoundaries(nowMs);
   const timeRemainingSec = Math.max(0, Math.floor((cycleEnd - nowMs) / 1000));
+  const minutesRemaining = timeRemainingSec / 60;
+  const secondsRemaining = timeRemainingSec;
 
   return {
     cycleId,
@@ -81,6 +84,8 @@ export function createInitial15mDecision(params?: {
     cycleStart,
     cycleEnd,
     timeRemainingSec,
+    minutesRemaining,
+    secondsRemaining,
     openStrike: spot,
     currentSpot: spot,
     spotAtLock: null,
@@ -89,9 +94,13 @@ export function createInitial15mDecision(params?: {
     direction: 'NEUTRAL',
     confidence: 50,
     lockScore: 45,
-    evidenceAlignment: 3,
-    temporalStability: 70,
-    contradictionScore: 15,
+    reversalRisk: 12,
+    capitalPreservationScore: 15,
+    capitalPreserved: false,
+    regime: 'TRENDING_BULL',
+    evidenceAlignment: 4,
+    temporalStability: 72,
+    contradictionScore: 12,
     protectionStatus: 'WATCH',
 
     gemini: {
@@ -99,46 +108,66 @@ export function createInitial15mDecision(params?: {
       downProbability: 0.333,
       noTradeProbability: 0.333,
       confidence: 50,
-      regime: 'TRENDING_BULLISH',
-      alignedEvidenceCount: 3,
+      regime: 'TRENDING_BULL',
+      alignedEvidenceCount: 4,
       evidenceFactors: [],
-      contradictionScore: 15,
+      contradictionScore: 12,
+      reversalRisk: 12,
       signalDirection: 'NEUTRAL',
       signalMomentum: 'STABLE',
-      reasoning: 'Cycle initialized. Calibrating multi-venue order book telemetry.',
-      primaryHypothesis: 'Evaluating directional baseline',
-      counterHypothesis: 'Awaiting order flow expansion',
+      reasoning: 'Cycle initialized. Calibrating multi-venue orderbook telemetry across 10 factor groups.',
+      primaryHypothesis: 'Evaluating directional confluence baseline',
+      counterHypothesis: 'Awaiting order flow expansion and book depth stabilization',
       recommendedState: 'WATCH',
-      latencyMs: 18
+      latencyMs: 16
     },
 
     protection: {
       lockScore: 45,
       lockProgressPct: 62,
-      temporalStability: 70,
+      temporalStability: 72,
+      reversalRisk: 12,
+      capitalPreservationScore: 15,
+      capitalPreserved: false,
+      lateCycleProtectionActive: false,
       protectionStatus: 'WATCH',
       checklist: {
-        probabilityPassed: false,
-        lockScorePassed: false,
-        temporalStabilityPassed: true,
-        contradictionPassed: true,
-        evidencePassed: false,
-        crossVenuePassed: true,
-        regimePassed: true,
-        persistencePassed: true,
+        cycleActive: true,
         timeWindowPassed: true,
+        regimePassed: true,
+        directionalScorePassed: false,
+        confidencePassed: false,
+        temporalStabilityPassed: true,
+        crossVenuePassed: true,
+        reversalRiskPassed: true,
+        evidenceConfluencePassed: false,
+        noContradictionPassed: true,
+        protectionEnginePassed: true,
+        dataFreshnessPassed: true,
         allPassed: false
       },
       skipReasonCode: null,
       skipReasonTitle: null,
       skipReasonDescription: null,
       scoreComponents: {
-        directionalProbWeight: 18,
-        evidenceAgreementWeight: 10,
-        temporalStabilityWeight: 10,
-        crossVenueWeight: 5,
-        regimeQualityWeight: 9,
-        contradictionPenaltyWeight: 8
+        directionalEdge: 45,
+        evidenceConfluence: 40,
+        temporalStability: 72,
+        marketRegimeQuality: 85,
+        crossVenueAgreement: 88,
+        reversalProtection: 88,
+        dataFreshness: 98,
+        modelConsensus: 50
+      },
+      activeWeightingProfile: {
+        PRICE_STRUCTURE: 0.20,
+        MOMENTUM: 0.20,
+        ORDER_FLOW: 0.20,
+        MULTI_TIMEFRAME: 0.10,
+        TEMPORAL_STABILITY: 0.10,
+        MODEL_CONSENSUS: 0.10,
+        CROSS_VENUE: 0.05,
+        ORDERBOOK_LIQUIDITY: 0.05
       }
     },
 
@@ -166,15 +195,17 @@ export function getCanonical15mDecision(): Canonical15mDecision {
   const { cycleId } = get15mEpochBoundaries(now);
 
   if (!canonicalState || canonicalState.cycleId !== cycleId) {
-    // If state doesn't exist or previous cycle has rolled over, initialize clean state
     if (canonicalState && canonicalState.cycleId !== cycleId && canonicalState.settlementStatus === 'PENDING') {
       settleCanonical15mCycle(canonicalState.currentSpot, now);
     }
     canonicalState = createInitial15mDecision({ nowMs: now });
+    console.log(`[C15M:ROLLOVER] Initialized new cycle ${cycleId} at ${new Date(now).toISOString()}`);
   }
 
-  // Update time remaining
-  canonicalState.timeRemainingSec = Math.max(0, Math.floor((canonicalState.cycleEnd - now) / 1000));
+  const timeRemainingSec = Math.max(0, Math.floor((canonicalState.cycleEnd - now) / 1000));
+  canonicalState.timeRemainingSec = timeRemainingSec;
+  canonicalState.minutesRemaining = timeRemainingSec / 60;
+  canonicalState.secondsRemaining = timeRemainingSec;
   return canonicalState;
 }
 
@@ -206,6 +237,8 @@ export async function settleCanonical15mCycle(settlementSpot: number, nowMs: num
   canonicalState.stateVersion += 1;
   canonicalState.updatedAt = new Date(nowMs).toISOString();
 
+  console.log(`[C15M:SETTLEMENT] Cycle ${canonicalState.cycleId} Settled: Outcome=${outcome} Price=$${settlementSpot.toFixed(2)} Strike=$${strike.toFixed(2)}`);
+
   // Persist settlement record to Firestore signal_logs
   try {
     if (db) {
@@ -223,6 +256,8 @@ export async function settleCanonical15mCycle(settlementSpot: number, nowMs: num
         lockScore: canonicalState.lockScore,
         temporalStability: canonicalState.temporalStability,
         contradictionScore: canonicalState.contradictionScore,
+        reversalRisk: canonicalState.reversalRisk,
+        capitalPreserved: canonicalState.capitalPreserved,
         lockedAt: canonicalState.lockedAt,
         settledAt: nowMs,
         createdAt: canonicalState.createdAt,
@@ -238,8 +273,9 @@ export async function settleCanonical15mCycle(settlementSpot: number, nowMs: num
 
 /**
  * Single Authoritative Tick Execution Pipeline:
- * Ingests live telemetry -> runs Gemini shadow inference -> evaluates VIXY Protection
- * -> applies monotonic state transition rules -> updates canonical object -> syncs Firestore
+ * Ingests live telemetry -> classifies regime -> runs 10-factor Gemini shadow inference
+ * -> evaluates VIXY Protection & 5-minute time gate -> applies monotonic state transition rules
+ * -> updates canonical object -> syncs Firestore
  */
 export async function executeCanonical15mTick(params?: {
   spotPrice?: number;
@@ -279,7 +315,10 @@ export async function executeCanonical15mTick(params?: {
   }
 
   const timeRemainingSec = Math.max(0, Math.floor((cycleEnd - nowMs) / 1000));
+  const minutesRemaining = timeRemainingSec / 60;
   canonicalState.timeRemainingSec = timeRemainingSec;
+  canonicalState.minutesRemaining = minutesRemaining;
+  canonicalState.secondsRemaining = timeRemainingSec;
   canonicalState.currentSpot = spot;
 
   // 3. Telemetry parameter extraction
@@ -290,7 +329,7 @@ export async function executeCanonical15mTick(params?: {
   const kalshiProb = params?.kalshiProb ?? 0.58;
   const polyProb = params?.polyProb ?? 0.56;
 
-  // 4. Run Continuous Gemini Shadow Inference
+  // 4. Run Continuous 10-Factor Gemini Shadow Inference
   const gemini = runGeminiShadowInference({
     spotPrice: spot,
     openStrike: canonicalState.openStrike,
@@ -302,10 +341,12 @@ export async function executeCanonical15mTick(params?: {
     macdHist,
     supertrendBullish: true,
     volatilityAtr: 124.5,
-    regime: 'TRENDING_BULLISH',
     timeRemainingSec,
     previousObservations: temporalObservations
   });
+
+  console.log(`[C15M:REGIME_CLASSIFIED] Regime=${gemini.regime} Confidence=${gemini.confidence}%`);
+  console.log(`[C15M:EVIDENCE_UPDATED] Aligned=${gemini.alignedEvidenceCount}/10 ReversalRisk=${gemini.reversalRisk}% Contradiction=${gemini.contradictionScore}%`);
 
   // Record temporal observation
   temporalObservations.push({
@@ -315,27 +356,42 @@ export async function executeCanonical15mTick(params?: {
     noTradeProbability: gemini.noTradeProbability,
     confidence: gemini.confidence,
     directionalBias: gemini.signalDirection,
-    evidenceScore: Math.round((gemini.alignedEvidenceCount / 6) * 100),
+    evidenceScore: Math.round((gemini.alignedEvidenceCount / 10) * 100),
     contradictionScore: gemini.contradictionScore,
+    reversalRisk: gemini.reversalRisk,
     regime: gemini.regime,
     spotPrice: spot,
-    lockScore: Math.round((Math.max(gemini.upProbability, gemini.downProbability) * 100) * 0.7 + (gemini.alignedEvidenceCount / 6) * 30)
+    lockScore: Math.round((Math.max(gemini.upProbability, gemini.downProbability) * 100) * 0.6 + (gemini.alignedEvidenceCount / 10) * 40)
   });
-  if (temporalObservations.length > 25) temporalObservations.shift();
+  if (temporalObservations.length > 30) temporalObservations.shift();
 
-  // 5. Evaluate VIXY Protection Engine
+  // 5. Evaluate VIXY Protection Engine & Hard 5-Minute Time Gate
   const isCurrentlyLocked = canonicalState.currentState === 'LOCKED_UP' || canonicalState.currentState === 'LOCKED_DOWN';
   const lockHoldTimeMs = isCurrentlyLocked && canonicalState.lockedAt ? nowMs - canonicalState.lockedAt : 0;
   
   const protection = evaluateVixyProtectionLock({
     cycleId,
     gemini,
-    temporalStability: 78,
+    temporalStability: canonicalState.temporalStability || 75,
     timeRemainingSec,
     currentLockedState: isCurrentlyLocked,
     currentLockDirection: canonicalState.direction === 'UP' ? 'UP' : canonicalState.direction === 'DOWN' ? 'DOWN' : 'NEUTRAL',
     currentLockHoldTimeMs: lockHoldTimeMs
   });
+
+  console.log(`[C15M:LOCK_EVALUATION] LockScore=${protection.lockScore}/100 CapitalPreservationScore=${protection.capitalPreservationScore}% Status=${protection.protectionStatus}`);
+
+  if (protection.lateCycleProtectionActive && !isCurrentlyLocked) {
+    console.log(`[C15M:LATE_CYCLE_BLOCK] Time remaining ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s < 5:00. New locks blocked. Capital preserved.`);
+  }
+
+  if (gemini.regime === 'CHOPPY' || gemini.regime === 'TRANSITION') {
+    console.log(`[C15M:CHOP_PROTECTION] Regime ${gemini.regime} detected. Trade filtered to preserve capital.`);
+  }
+
+  if (gemini.reversalRisk > 25) {
+    console.log(`[C15M:REVERSAL_PROTECTION] Reversal risk ${gemini.reversalRisk}% exceeds threshold (25%). Entry blocked.`);
+  }
 
   // 6. Monotonic State Transition Evaluation
   let proposedState: Canonical15mState = 'WATCH';
@@ -344,13 +400,18 @@ export async function executeCanonical15mTick(params?: {
   if (isCurrentlyLocked) {
     // HYSTERESIS & LOCK PROTECTION:
     // Once LOCKED, normal probability fluctuations CANNOT demote back to CONFIRMING or WATCH!
-    const topProb = Math.max(gemini.upProbability, gemini.downProbability);
-    const isEmergencyVeto = gemini.contradictionScore > 55 || (canonicalState.direction === 'UP' && gemini.downProbability > 0.48) || (canonicalState.direction === 'DOWN' && gemini.upProbability > 0.48);
+    const isEmergencyVeto = 
+      gemini.contradictionScore > 50 || 
+      gemini.reversalRisk > 60 ||
+      (canonicalState.direction === 'UP' && gemini.downProbability > 0.45) ||
+      (canonicalState.direction === 'DOWN' && gemini.upProbability > 0.45);
 
     if (isEmergencyVeto) {
       proposedState = 'SKIP';
       proposedDirection = 'SKIP';
       canonicalState.unlockedAt = nowMs;
+      canonicalState.capitalPreserved = true;
+      console.log(`[C15M:REVERSAL_PROTECTION] Emergency veto executed on locked position.`);
     } else {
       // Retain existing locked state
       proposedState = canonicalState.currentState;
@@ -358,16 +419,22 @@ export async function executeCanonical15mTick(params?: {
     }
   } else {
     // Not currently locked: evaluate entry
-    if (protection.checklist.allPassed) {
+    if (protection.lateCycleProtectionActive) {
+      proposedState = 'SKIP';
+      proposedDirection = 'SKIP';
+    } else if (protection.checklist.allPassed) {
       // DUPLICATE LOCK PREVENTION: Exactly one lock per contract
       proposedState = gemini.signalDirection === 'UP' ? 'LOCKED_UP' : 'LOCKED_DOWN';
       proposedDirection = gemini.signalDirection;
-    } else if (protection.skipReasonCode !== null && (gemini.contradictionScore > 35 || timeRemainingSec < 60)) {
+      console.log(`[C15M:LOCK_AUTHORIZED] Lock authorized for direction ${proposedDirection}. LockScore=${protection.lockScore}`);
+    } else if (protection.skipReasonCode !== null && (gemini.contradictionScore > 30 || gemini.reversalRisk > 25 || gemini.regime === 'CHOPPY')) {
       proposedState = 'SKIP';
       proposedDirection = 'SKIP';
-    } else if (protection.lockProgressPct >= 65 || (gemini.alignedEvidenceCount >= 4 && Math.max(gemini.upProbability, gemini.downProbability) >= 0.60)) {
+      console.log(`[C15M:LOCK_REJECTED] Reason: ${protection.skipReasonCode} (${protection.skipReasonTitle})`);
+    } else if (protection.lockProgressPct >= 65 || (gemini.alignedEvidenceCount >= 5 && Math.max(gemini.upProbability, gemini.downProbability) >= 0.60)) {
       proposedState = 'CONFIRMING';
       proposedDirection = gemini.signalDirection;
+      console.log(`[C15M:CONFIRMATION_STARTED] Confluence building: ${gemini.alignedEvidenceCount}/10 aligned.`);
     } else {
       proposedState = 'WATCH';
       proposedDirection = gemini.signalDirection;
@@ -388,32 +455,31 @@ export async function executeCanonical15mTick(params?: {
       canonicalState.currentState = proposedState;
       canonicalState.direction = proposedDirection;
 
-      console.log(`[C15M] State Transition Approved:
+      console.log(`[C15M:STATE_TRANSITION]
   cycleId: ${canonicalState.cycleId}
   contractId: ${canonicalState.contractId}
   decisionId: ${canonicalState.decisionId}
-  previousState: ${previousState}
-  nextState: ${proposedState}
-  previousVersion: ${previousVersion}
-  nextVersion: ${previousVersion + 1}
+  previousState: ${previousState} -> nextState: ${proposedState}
+  previousVersion: ${previousVersion} -> nextVersion: ${previousVersion + 1}
   direction: ${proposedDirection}
   confidence: ${gemini.confidence}%
   lockScore: ${protection.lockScore}
+  capitalPreservationScore: ${protection.capitalPreservationScore}%
   protectionStatus: ${protection.protectionStatus}
-  trigger: ${proposedState.startsWith('LOCKED') ? 'LOCK_AUTHORIZED' : proposedState === 'CONFIRMING' ? 'CONFLUENCE_THRESHOLD_MET' : 'EVALUATION_STEP'}
+  trigger: ${proposedState.startsWith('LOCKED') ? 'LOCK_AUTHORIZED' : proposedState === 'CONFIRMING' ? 'CONFLUENCE_THRESHOLD_MET' : 'CAPITAL_PRESERVATION_EVALUATION'}
   source: canonicalDecisionEngine`);
     } else {
-      console.warn(`[C15M] ILLEGAL TRANSITION REJECTED:
-  cycleId: ${canonicalState.cycleId}
-  attempted: ${previousState} -> ${proposedState}
-  reason: Strict Lock Hysteresis prevents demoting locked state to ${proposedState}
-  source: canonicalDecisionEngine`);
+      console.warn(`[C15M:ILLEGAL_TRANSITION_REJECTED] Attempted: ${previousState} -> ${proposedState} on cycle ${canonicalState.cycleId}`);
     }
   }
 
   // Update canonical properties
   canonicalState.confidence = gemini.confidence;
   canonicalState.lockScore = protection.lockScore;
+  canonicalState.reversalRisk = gemini.reversalRisk;
+  canonicalState.capitalPreservationScore = protection.capitalPreservationScore;
+  canonicalState.capitalPreserved = protection.capitalPreserved;
+  canonicalState.regime = gemini.regime;
   canonicalState.evidenceAlignment = gemini.alignedEvidenceCount;
   canonicalState.temporalStability = protection.temporalStability;
   canonicalState.contradictionScore = gemini.contradictionScore;

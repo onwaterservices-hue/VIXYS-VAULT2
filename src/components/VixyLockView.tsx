@@ -48,15 +48,13 @@ import {
   runGeminiShadowInference,
   evaluateVixyProtectionLock,
   calculateTemporalStability,
-  GeminiShadowAnalysis,
   TemporalObservation,
   VixyProtectedLockDecision,
   DecisionState,
   SignalMomentum,
   SkipReasonCode
 } from '../services/intelligence';
-
-export type MarketRegimeType = 'TRENDING_BULLISH' | 'TRENDING_BEARISH' | 'RANGING_CHOPPY' | 'HIGH_VOLATILITY_BREAKOUT';
+import { MarketRegimeType, CanonicalGeminiShadowData } from '../types/canonicalDecision';
 
 export interface RegimeProfile {
   id: MarketRegimeType;
@@ -73,8 +71,8 @@ export interface RegimeProfile {
 }
 
 export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
-  TRENDING_BULLISH: {
-    id: 'TRENDING_BULLISH',
+  TRENDING_BULL: {
+    id: 'TRENDING_BULL',
     title: 'MOMENTUM BULL PROFILE',
     badge: 'MOMENTUM',
     description: 'High MACD & Whale Flow allocation. Capitalizes on directional breakout persistence.',
@@ -86,8 +84,8 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
     },
     focusIndicators: ['MACD Velocity', 'Whale Flow Bias', 'Supertrend 15M']
   },
-  TRENDING_BEARISH: {
-    id: 'TRENDING_BEARISH',
+  TRENDING_BEAR: {
+    id: 'TRENDING_BEAR',
     title: 'MOMENTUM BEAR PROFILE',
     badge: 'MOMENTUM',
     description: 'Taker sell delta & Supertrend resistance prioritized over mean reversion.',
@@ -99,8 +97,8 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
     },
     focusIndicators: ['Whale Dump Tape', 'Order Flow Delta', 'Supertrend 5M/15M']
   },
-  RANGING_CHOPPY: {
-    id: 'RANGING_CHOPPY',
+  RANGE_BOUND: {
+    id: 'RANGE_BOUND',
     title: 'MEAN REVERSION PROFILE',
     badge: 'MEAN REVERSION',
     description: 'RSI Divergence & Book Imbalance prioritized. Supertrend weight decayed to prevent chop drag.',
@@ -112,8 +110,21 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
     },
     focusIndicators: ['RSI Divergence', 'Orderbook Walls', 'Bollinger Width']
   },
-  HIGH_VOLATILITY_BREAKOUT: {
-    id: 'HIGH_VOLATILITY_BREAKOUT',
+  CHOPPY: {
+    id: 'CHOPPY',
+    title: 'CAPITAL PRESERVATION PROFILE',
+    badge: 'CHOP SHIELD',
+    description: 'Equilibrium chop detected. Lock entries blocked and trades filtered to preserve capital.',
+    baseWeights: {
+      momentumWeight: 10,
+      flowWeight: 15,
+      supertrendWeight: 5,
+      cvdWeight: 70
+    },
+    focusIndicators: ['Candle Overlap', 'Spread Stability', 'Reversal Frequency']
+  },
+  HIGH_VOLATILITY: {
+    id: 'HIGH_VOLATILITY',
     title: 'WHALE BREAKOUT PROFILE',
     badge: 'BREAKOUT',
     description: 'Institutional whale orderbook sweep & cross-venue liquidity voids prioritized (≥$1M orders).',
@@ -124,6 +135,32 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
       cvdWeight: 16
     },
     focusIndicators: ['Mega-Whale Flow (≥$1M)', 'CVD Velocity', 'Liquidity Voids']
+  },
+  TRANSITION: {
+    id: 'TRANSITION',
+    title: 'REGIME SHIFT PROFILE',
+    badge: 'TRANSITION',
+    description: 'Structural transition in progress. High temporal stability required before authorizing locks.',
+    baseWeights: {
+      momentumWeight: 20,
+      flowWeight: 20,
+      supertrendWeight: 20,
+      cvdWeight: 40
+    },
+    focusIndicators: ['Temporal Drift', 'Cross-Venue Delta', 'Order Flow Squeeze']
+  },
+  UNKNOWN: {
+    id: 'UNKNOWN',
+    title: 'DEFENSIVE BASELINE PROFILE',
+    badge: 'CALIBRATING',
+    description: 'Awaiting sufficient tick density to calibrate institutional market regime.',
+    baseWeights: {
+      momentumWeight: 25,
+      flowWeight: 25,
+      supertrendWeight: 25,
+      cvdWeight: 25
+    },
+    focusIndicators: ['Feed Quality', 'Latency', 'Tick Arrival Rate']
   }
 };
 
@@ -792,11 +829,11 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // --- CONTINUOUS GEMINI SHADOW INTELLIGENCE & TEMPORAL MEMORY STORE ---
   const [temporalHistory, setTemporalHistory] = useState<TemporalObservation[]>([
-    { timestamp: Date.now() - 15000, upProbability: 0.61, downProbability: 0.25, noTradeProbability: 0.14, confidence: 66, directionalBias: 'UP', evidenceScore: 68, contradictionScore: 22, regime: 'TRENDING_BULLISH', spotPrice: 64140, lockScore: 64 },
-    { timestamp: Date.now() - 12000, upProbability: 0.63, downProbability: 0.23, noTradeProbability: 0.14, confidence: 70, directionalBias: 'UP', evidenceScore: 72, contradictionScore: 20, regime: 'TRENDING_BULLISH', spotPrice: 64152, lockScore: 67 },
-    { timestamp: Date.now() - 9000, upProbability: 0.66, downProbability: 0.21, noTradeProbability: 0.13, confidence: 74, directionalBias: 'UP', evidenceScore: 78, contradictionScore: 16, regime: 'TRENDING_BULLISH', spotPrice: 64160, lockScore: 71 },
-    { timestamp: Date.now() - 6000, upProbability: 0.69, downProbability: 0.18, noTradeProbability: 0.13, confidence: 79, directionalBias: 'UP', evidenceScore: 82, contradictionScore: 14, regime: 'TRENDING_BULLISH', spotPrice: 64168, lockScore: 75 },
-    { timestamp: Date.now() - 3000, upProbability: 0.72, downProbability: 0.16, noTradeProbability: 0.12, confidence: 83, directionalBias: 'UP', evidenceScore: 86, contradictionScore: 12, regime: 'TRENDING_BULLISH', spotPrice: 64174, lockScore: 80 }
+    { timestamp: Date.now() - 15000, upProbability: 0.61, downProbability: 0.25, noTradeProbability: 0.14, confidence: 66, directionalBias: 'UP', evidenceScore: 68, contradictionScore: 22, reversalRisk: 12, regime: 'TRENDING_BULL', spotPrice: 64140, lockScore: 64 },
+    { timestamp: Date.now() - 12000, upProbability: 0.63, downProbability: 0.23, noTradeProbability: 0.14, confidence: 70, directionalBias: 'UP', evidenceScore: 72, contradictionScore: 20, reversalRisk: 12, regime: 'TRENDING_BULL', spotPrice: 64152, lockScore: 67 },
+    { timestamp: Date.now() - 9000, upProbability: 0.66, downProbability: 0.21, noTradeProbability: 0.13, confidence: 74, directionalBias: 'UP', evidenceScore: 78, contradictionScore: 16, reversalRisk: 10, regime: 'TRENDING_BULL', spotPrice: 64160, lockScore: 71 },
+    { timestamp: Date.now() - 6000, upProbability: 0.69, downProbability: 0.18, noTradeProbability: 0.13, confidence: 79, directionalBias: 'UP', evidenceScore: 82, contradictionScore: 14, reversalRisk: 10, regime: 'TRENDING_BULL', spotPrice: 64168, lockScore: 75 },
+    { timestamp: Date.now() - 3000, upProbability: 0.72, downProbability: 0.16, noTradeProbability: 0.12, confidence: 83, directionalBias: 'UP', evidenceScore: 86, contradictionScore: 12, reversalRisk: 8, regime: 'TRENDING_BULL', spotPrice: 64174, lockScore: 80 }
   ]);
 
   // Continuous Gemini Shadow Inference + Vixy Protection Evaluation
@@ -828,15 +865,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       temporalStability: stabilityResult.stabilityScore,
       timeRemainingSec,
       currentLockedState: isLocked,
-      currentLockDirection: activeCycleDecision.includes('UP') ? 'UP' : activeCycleDecision.includes('DOWN') ? 'DOWN' : 'NEUTRAL',
-      customWeights: {
-        probWeight: 0.35,
-        evidenceWeight: 0.20,
-        stabilityWeight: 0.15,
-        crossVenueWeight: 0.10,
-        regimeWeight: 0.10,
-        contradictionWeight: 0.10
-      }
+      currentLockDirection: activeCycleDecision.includes('UP') ? 'UP' : activeCycleDecision.includes('DOWN') ? 'DOWN' : 'NEUTRAL'
     });
 
     return {
@@ -857,8 +886,9 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         noTradeProbability: g.noTradeProbability,
         confidence: g.confidence,
         directionalBias: g.signalDirection,
-        evidenceScore: (g.alignedEvidenceCount / 6) * 100,
+        evidenceScore: (g.alignedEvidenceCount / 10) * 100,
         contradictionScore: g.contradictionScore,
+        reversalRisk: g.reversalRisk,
         regime: g.regime,
         spotPrice,
         lockScore: continuousInference.protectionDecision.lockScore
@@ -1326,9 +1356,19 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       ? 'bg-[#FF3B30]/15 border-[#FF3B30]/50 text-[#FF3B30]'
                       : isConfirming
                       ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-300'
-                      : 'bg-amber-500/15 border-amber-400/50 text-amber-300'
+                      : continuousInference.protectionDecision.lateCycleProtectionActive
+                      ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 animate-pulse'
+                      : 'bg-purple-500/15 border-purple-400/50 text-purple-300'
                   }`}>
-                    {isUp ? '▲ BUY YES / UP' : isDown ? '▼ BUY NO / DOWN' : isConfirming ? '⚡ SCANNING CONFLUENCE' : '🛡️ CAPITAL PRESERVED'}
+                    {isUp
+                      ? '▲ BUY YES / UP'
+                      : isDown
+                      ? '▼ BUY NO / DOWN'
+                      : isConfirming
+                      ? '⚡ SCANNING CONFLUENCE'
+                      : continuousInference.protectionDecision.lateCycleProtectionActive
+                      ? '🛡️ LATE-CYCLE PROTECTION (≤ 5:00)'
+                      : '🛡️ CAPITAL PRESERVED — INSUFFICIENT EDGE'}
                   </span>
                 </div>
               </div>
@@ -1348,8 +1388,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     : isDown
                     ? `VIXY locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% conviction. Heavy ask absorption and bearish supertrend resistance trigger high-probability downward delta targeting.`
                     : isConfirming
-                    ? `VIXY is actively evaluating market microstructure for cycle ${cycleId}. Scanning 6-factor evidence confluence and order book imbalance before authorizing hard lock.`
-                    : `VIXY protection engine elected to SKIP this 15M contract cycle. Signal conflict (${continuousInference.gemini.contradictionScore}%) or low persistence vetoed execution to preserve trading capital.`}
+                    ? `VIXY is actively evaluating market microstructure for cycle ${cycleId}. Scanning 10-factor evidence confluence and order book imbalance before authorizing hard lock.`
+                    : continuousInference.protectionDecision.lateCycleProtectionActive
+                    ? `VIXY hard 5-minute time gate active (${Math.floor(timeRemainingSec / 60)}m ${timeRemainingSec % 60}s remaining). Late entries are blocked to prevent theta decay and execution slippage. Capital preserved.`
+                    : `VIXY capital preservation engine elected to SKIP this 15M cycle. ${continuousInference.protectionDecision.skipReasonTitle || 'Insufficient directional confluence'} (${continuousInference.gemini.contradictionScore}% conflict, ${continuousInference.gemini.reversalRisk}% reversal risk). Capital preserved.`}
                 </p>
               </div>
 
@@ -1508,14 +1550,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 {/* Evidence Confluence Checklist */}
                 <div className="grid grid-cols-3 gap-1 text-[8px] bg-[#080414] p-2 rounded-xl border border-purple-900/30">
                   <div className="flex items-center space-x-1">
-                    <span className={continuousInference.protectionDecision.checklist.probabilityPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                      {continuousInference.protectionDecision.checklist.probabilityPassed ? '✓' : '✗'}
-                    </span>
-                    <span className="text-gray-300">Prob ≥ 70%</span>
-                  </div>
-                  <div className="flex items-center space-x-1">
-                    <span className={continuousInference.protectionDecision.checklist.lockScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                      {continuousInference.protectionDecision.checklist.lockScorePassed ? '✓' : '✗'}
+                    <span className={continuousInference.protectionDecision.checklist.directionalScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.directionalScorePassed ? '✓' : '✗'}
                     </span>
                     <span className="text-gray-300">Score ≥ 72</span>
                   </div>
@@ -1526,16 +1562,22 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     <span className="text-gray-300">Stability ≥ 65%</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <span className={continuousInference.protectionDecision.checklist.contradictionPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                      {continuousInference.protectionDecision.checklist.contradictionPassed ? '✓' : '✗'}
+                    <span className={continuousInference.protectionDecision.checklist.noContradictionPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.noContradictionPassed ? '✓' : '✗'}
                     </span>
                     <span className="text-gray-300">Conflict ≤ 25%</span>
                   </div>
                   <div className="flex items-center space-x-1">
-                    <span className={continuousInference.protectionDecision.checklist.evidencePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
-                      {continuousInference.protectionDecision.checklist.evidencePassed ? '✓' : '✗'}
+                    <span className={continuousInference.protectionDecision.checklist.evidenceConfluencePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.evidenceConfluencePassed ? '✓' : '✗'}
                     </span>
-                    <span className="text-gray-300">Evidence ≥ 4/6</span>
+                    <span className="text-gray-300">Factors ≥ 7/10</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.reversalRiskPassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.reversalRiskPassed ? '✓' : '✗'}
+                    </span>
+                    <span className="text-gray-300">Reversal ≤ 25%</span>
                   </div>
                   <div className="flex items-center space-x-1">
                     <span className={continuousInference.protectionDecision.checklist.crossVenuePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>

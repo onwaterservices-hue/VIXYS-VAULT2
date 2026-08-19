@@ -5,8 +5,6 @@
  * and frontend client visualizers (VIXY LIVE, Dashboard, VIXY LOCKS, Results Terminal).
  */
 
-import { MarketRegimeType } from '../components/VixyLockView';
-
 export type Canonical15mState = 
   | 'WATCH'
   | 'CONFIRMING'
@@ -20,23 +18,40 @@ export type Canonical15mDirection = 'UP' | 'DOWN' | 'NEUTRAL' | 'SKIP';
 export type Canonical15mSettlement = 'PENDING' | 'SETTLED';
 export type Canonical15mOutcome = 'WIN' | 'LOSS' | 'SKIPPED' | null;
 
+export type MarketRegimeType = 
+  | 'TRENDING_BULL'
+  | 'TRENDING_BEAR'
+  | 'RANGE_BOUND'
+  | 'CHOPPY'
+  | 'HIGH_VOLATILITY'
+  | 'TRANSITION'
+  | 'UNKNOWN';
+
+export interface ConfluenceFactorItem {
+  id: string;
+  name: string;
+  group: 'PRICE_STRUCTURE' | 'MOMENTUM' | 'ORDER_FLOW' | 'ORDERBOOK_LIQUIDITY' | 'CROSS_VENUE_AGREEMENT' | 'MULTI_TIMEFRAME_ALIGNMENT' | 'VOLATILITY_REGIME' | 'TEMPORAL_STABILITY' | 'REVERSAL_RISK' | 'MODEL_CONSENSUS';
+  direction: 'UP' | 'DOWN' | 'NEUTRAL';
+  score: number;       // 0 to 100
+  confidence: number;  // 0 to 100
+  quality: number;     // 0 to 100
+  weight: number;      // Adaptive weight (e.g. 0.15)
+  aligned: boolean;
+  freshnessSec: number;
+  timestamp: number;
+  detail: string;
+}
+
 export interface CanonicalGeminiShadowData {
-  upProbability: number;      // 0.00 to 1.00 (e.g. 0.72)
-  downProbability: number;    // 0.00 to 1.00 (e.g. 0.16)
-  noTradeProbability: number; // 0.00 to 1.00 (e.g. 0.12)
+  upProbability: number;      // 0.00 to 1.00 (e.g. 0.58)
+  downProbability: number;    // 0.00 to 1.00 (e.g. 0.27)
+  noTradeProbability: number; // 0.00 to 1.00 (e.g. 0.15)
   confidence: number;         // 0 to 100
   regime: MarketRegimeType;
-  alignedEvidenceCount: number; // 0 to 6
-  evidenceFactors: Array<{
-    id: string;
-    name: string;
-    category: string;
-    aligned: boolean;
-    score: number;
-    detail: string;
-    weight: number;
-  }>;
+  alignedEvidenceCount: number; // 0 to 10
+  evidenceFactors: ConfluenceFactorItem[];
   contradictionScore: number; // 0 to 100 (lower is safer)
+  reversalRisk: number;       // 0 to 100
   signalDirection: Canonical15mDirection;
   signalMomentum: 'ACCELERATING' | 'STABLE' | 'DETERIORATING';
   reasoning: string;
@@ -46,34 +61,46 @@ export interface CanonicalGeminiShadowData {
   latencyMs: number;
 }
 
+export interface LockScoreBreakdown {
+  directionalEdge: number;      // 0 to 100
+  evidenceConfluence: number;   // 0 to 100
+  temporalStability: number;    // 0 to 100
+  marketRegimeQuality: number;  // 0 to 100
+  crossVenueAgreement: number;  // 0 to 100
+  reversalProtection: number;   // 0 to 100
+  dataFreshness: number;        // 0 to 100
+  modelConsensus: number;       // 0 to 100
+}
+
 export interface CanonicalProtectionData {
-  lockScore: number;          // 0 to 100 composite score
-  lockProgressPct: number;    // 0 to 100% progress towards requirement (>= 72)
-  temporalStability: number;  // 0 to 100%
+  lockScore: number;                 // 0 to 100 composite score
+  lockProgressPct: number;           // 0 to 100% progress towards requirement (>= 72)
+  temporalStability: number;         // 0 to 100%
+  reversalRisk: number;              // 0 to 100%
+  capitalPreservationScore: number;  // 0 to 100% (higher = stronger reason to stay out)
+  capitalPreserved: boolean;
+  lateCycleProtectionActive: boolean;// true when minutesRemaining < 5
   protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
   checklist: {
-    probabilityPassed: boolean;
-    lockScorePassed: boolean;
-    temporalStabilityPassed: boolean;
-    contradictionPassed: boolean;
-    evidencePassed: boolean;
-    crossVenuePassed: boolean;
-    regimePassed: boolean;
-    persistencePassed: boolean;
-    timeWindowPassed: boolean;
+    cycleActive: boolean;
+    timeWindowPassed: boolean;       // minutesRemaining >= 5
+    regimePassed: boolean;           // regime is acceptable (not CHOPPY / UNKNOWN)
+    directionalScorePassed: boolean; // >= 72
+    confidencePassed: boolean;       // >= 70
+    temporalStabilityPassed: boolean;// >= 65
+    crossVenuePassed: boolean;       // agreement within 8%
+    reversalRiskPassed: boolean;     // reversalRisk <= 25
+    evidenceConfluencePassed: boolean;// >= 7/10 factors aligned
+    noContradictionPassed: boolean;  // contradictionScore <= 25
+    protectionEnginePassed: boolean; // AUTHORIZED
+    dataFreshnessPassed: boolean;    // no stale telemetry
     allPassed: boolean;
   };
   skipReasonCode: string | null;
   skipReasonTitle: string | null;
   skipReasonDescription: string | null;
-  scoreComponents: {
-    directionalProbWeight: number;
-    evidenceAgreementWeight: number;
-    temporalStabilityWeight: number;
-    crossVenueWeight: number;
-    regimeQualityWeight: number;
-    contradictionPenaltyWeight: number;
-  };
+  scoreComponents: LockScoreBreakdown;
+  activeWeightingProfile: Record<string, number>;
 }
 
 export interface Canonical15mDecision {
@@ -89,6 +116,8 @@ export interface Canonical15mDecision {
   cycleStart: number;         // Unix timestamp ms
   cycleEnd: number;           // Unix timestamp ms
   timeRemainingSec: number;   // Seconds remaining in 15M cycle
+  minutesRemaining: number;   // Minutes remaining (float / int)
+  secondsRemaining: number;   // Seconds remaining
   openStrike: number;         // Opening strike price to beat
   currentSpot: number;        // Latest live spot price
   spotAtLock: number | null;  // Spot price recorded at lock moment
@@ -98,7 +127,11 @@ export interface Canonical15mDecision {
   direction: Canonical15mDirection;
   confidence: number;         // 0 to 100
   lockScore: number;          // 0 to 100 composite score
-  evidenceAlignment: number;  // 0 to 6
+  reversalRisk: number;       // 0 to 100
+  capitalPreservationScore: number; // 0 to 100
+  capitalPreserved: boolean;
+  regime: MarketRegimeType;
+  evidenceAlignment: number;  // 0 to 10
   temporalStability: number;  // 0 to 100
   contradictionScore: number; // 0 to 100
   protectionStatus: string;   // 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED'
@@ -133,7 +166,7 @@ export function isValid15mStateTransition(
   currentState: Canonical15mState,
   proposedState: Canonical15mState
 ): boolean {
-  // If staying in the same state (e.g. updating probabilities), always valid
+  // If staying in the same state, always valid
   if (currentState === proposedState) return true;
 
   // Once settled, cannot transition
@@ -173,7 +206,7 @@ export function isValid15mStateTransition(
       return proposedState === 'SETTLED' || proposedState === 'SKIP';
 
     case 'SKIP':
-      // In skip state, can settle at epoch close, or return to WATCH if cycle has plenty of time
+      // In skip state, can settle at epoch close, or return to WATCH if cycle has plenty of time (> 5 min)
       return proposedState === 'WATCH' || proposedState === 'SETTLED';
 
     default:
