@@ -258,7 +258,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
   // Compute Live Derived Metrics from Canonical Decision & Market Telemetry
   const btcPriceNum = canonical15m.currentSpot || liveSnapshot?.spot || ticker?.price || 64098.19;
   const btcPrice = btcPriceNum ? `$${btcPriceNum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'DATA UNAVAILABLE';
-  const priceChange = typeof ticker?.change24h === 'number' ? `${ticker.change24h >= 0 ? '+' : ''}${ticker.change24h.toFixed(2)}%` : '+1.15%';
+  const priceChange = ticker?.change24h !== undefined ? `${ticker.change24h >= 0 ? '+' : ''}${ticker.change24h.toFixed(2)}%` : '+1.15%';
   const isPositive = !priceChange.startsWith('-');
 
   const activeCycleTimer = canonical15m.timeRemainingSec ?? (liveSnapshot?.timeRemainingSec !== undefined ? liveSnapshot.timeRemainingSec : 842);
@@ -284,8 +284,8 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
   const calibratedConfidence = Math.round(canonical15m.confidence || liveSnapshot?.confidencePct || 74);
   const predictabilityScore = Math.round(canonical15m.lockScore || 88);
   const lockQualityScore = Math.round(canonical15m.lockScore || 91);
-  const rawEdge = typeof liveSnapshot?.edgePct === 'number' ? liveSnapshot.edgePct : 8.4;
-  const marketEdge = typeof rawEdge === 'number' ? `${rawEdge >= 0 ? '+' : ''}${typeof rawEdge === 'number' ? rawEdge.toFixed(1) : rawEdge}%` : '+8.4%';
+  const rawEdge = liveSnapshot?.edgePct !== undefined ? liveSnapshot.edgePct : 8.4;
+  const marketEdge = rawEdge !== undefined ? `${rawEdge >= 0 ? '+' : ''}${typeof rawEdge === 'number' ? rawEdge.toFixed(1) : rawEdge}%` : '+8.4%';
   
   const protectionGuardianStatus = canonical15m.protectionStatus || (authoritativeState === 'PROTECTED' ? 'WATCH' : 'CLEAR');
   const reversalRisk = Math.round(canonical15m.contradictionScore || 18);
@@ -918,14 +918,14 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
           <div className="bg-[#0A0518] p-4 rounded-2xl border border-purple-900/50 space-y-1.5">
             <div className="text-[10px] text-purple-400 uppercase">MOMENTUM</div>
             <div className="text-lg font-black text-emerald-400">
-              {typeof liveSnapshot?.features?.momentum === 'number' ? `${liveSnapshot.features.momentum >= 0 ? '+' : ''}${typeof liveSnapshot.features.momentum === 'number' ? liveSnapshot.features.momentum.toFixed(2) : liveSnapshot.features.momentum}%` : '+0.06%'}
+              {liveSnapshot?.features?.momentum !== undefined ? `${liveSnapshot.features.momentum >= 0 ? '+' : ''}${typeof liveSnapshot.features.momentum === 'number' ? liveSnapshot.features.momentum.toFixed(2) : liveSnapshot.features.momentum}%` : '+0.06%'}
             </div>
             <div className="text-[10px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded inline-block font-bold">🟢 Positive</div>
           </div>
           <div className="bg-[#0A0518] p-4 rounded-2xl border border-purple-900/50 space-y-1.5">
             <div className="text-[10px] text-purple-400 uppercase">VOLATILITY</div>
             <div className="text-lg font-black text-purple-200">
-              {typeof liveSnapshot?.features?.volatility === 'number' ? `${typeof liveSnapshot.features.volatility === 'number' ? liveSnapshot.features.volatility.toFixed(2) : liveSnapshot.features.volatility}%` : '0.57%'}
+              {liveSnapshot?.features?.volatility !== undefined ? `${typeof liveSnapshot.features.volatility === 'number' ? liveSnapshot.features.volatility.toFixed(2) : liveSnapshot.features.volatility}%` : '0.57%'}
             </div>
             <div className="text-[10px] text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded inline-block font-bold">🟣 Normal Vol</div>
           </div>

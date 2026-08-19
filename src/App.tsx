@@ -59,15 +59,6 @@ import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
-import { AdminTikTokLiveErrorBoundary } from './components/AdminTikTokLiveErrorBoundary';
-
-// Lazy-loaded routes for strict isolation and zero overhead on main app shell
-const TikTokLiveView = React.lazy(() =>
-  import('./components/TikTokLiveView').then((m) => ({ default: m.TikTokLiveView }))
-);
-const AdminTikTokLiveView = React.lazy(() =>
-  import('./components/AdminTikTokLiveView').then((m) => ({ default: m.AdminTikTokLiveView }))
-);
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -351,22 +342,17 @@ export default function App() {
     'vixylive', 'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
     'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
     'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
-    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot',
-    'tiktok', 'tiktok-live', 'admin-tiktok-live', 'admin/tiktok-live', 'admin/tiktok'
+    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot'
   ];
 
   const getTabFromLocation = (): string => {
     try {
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
-      if (hash === 'admin/tiktok-live' || hash === 'admin-tiktok-live' || hash === 'admin/tiktok') return 'admin-tiktok-live';
-      if (hash === 'tiktok' || hash === 'tiktok-live') return 'tiktok';
       if (hash && VALID_ROUTES.includes(hash)) return hash;
       if (hash === 'subscription') return 'pricing';
       if (hash && !VALID_ROUTES.includes(hash)) return '404';
 
       const path = window.location.pathname.replace(/^\//, '').trim();
-      if (path === 'admin/tiktok-live' || path === 'admin-tiktok-live' || path === 'admin/tiktok') return 'admin-tiktok-live';
-      if (path === 'tiktok' || path === 'tiktok-live') return 'tiktok';
       if (path && VALID_ROUTES.includes(path)) return path;
       if (path === 'subscription') return 'pricing';
       if (path && !VALID_ROUTES.includes(path)) return '404';
@@ -929,10 +915,7 @@ export default function App() {
     }
   };
 
-  const isPublicRoute = [
-    'vixylive', 'vixylocks', 'tiktok', 'tiktok-live', 'admin-tiktok-live', 'admin/tiktok-live', 'admin/tiktok',
-    'history', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'
-  ].includes(activeTab);
+  const isPublicRoute = ['vixylive', 'vixylocks', 'history', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
 
   return (
     <>
@@ -1035,50 +1018,6 @@ export default function App() {
               onOpenAuth={handleOpenAuth}
               dayPassCountdown={passCountdownFormatted}
             />
-          )}
-
-          {activeTab === 'tiktok' && (
-            <React.Suspense fallback={<div className="min-h-screen bg-[#070709] flex items-center justify-center text-purple-400 font-mono text-xs">Loading Broadcast Preview...</div>}>
-              <TikTokLiveView
-                ticker={ticker}
-                onOpenTerminal={() => setActiveTab('terminal')}
-                onOpenPricing={() => setActiveTab('pricing')}
-              />
-            </React.Suspense>
-          )}
-
-          {(activeTab === 'admin-tiktok-live' || activeTab === 'admin/tiktok-live') && (
-            (userRole === 'ADMIN' || authState.user?.role === 'ADMIN' || authState.user?.role === 'OWNER') ? (
-              <AdminTikTokLiveErrorBoundary onReturnToDashboard={() => setActiveTab('terminal')}>
-                <React.Suspense fallback={<div className="min-h-screen bg-[#070709] flex items-center justify-center text-purple-400 font-mono text-xs">Loading Broadcast Studio...</div>}>
-                  <AdminTikTokLiveView
-                    ticker={ticker}
-                    userEmail={authState.user?.email || undefined}
-                    userId={authState.user?.id || undefined}
-                    onOpenTerminal={() => setActiveTab('terminal')}
-                    onOpenAdminPanel={() => setActiveTab('admin')}
-                  />
-                </React.Suspense>
-              </AdminTikTokLiveErrorBoundary>
-            ) : (
-              <div className="flex-1 min-h-screen bg-[#070410] flex flex-col items-center justify-center p-8 text-center space-y-4">
-                <div className="w-16 h-16 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto shadow-lg shadow-rose-500/20">
-                  <Lock className="w-8 h-8" />
-                </div>
-                <h2 className="text-2xl font-black text-white font-sans tracking-tight">403 — Restricted Broadcast Area</h2>
-                <p className="text-sm text-purple-300/70 font-sans max-w-md mx-auto leading-relaxed">
-                  This live broadcast panel is restricted to Master Admins. Please sign in with an authorized administrator account to continue.
-                </p>
-                <div className="pt-4 flex items-center justify-center gap-4">
-                  <button onClick={() => setActiveTab('terminal')} className="px-5 py-2.5 rounded-xl bg-purple-900/30 hover:bg-purple-900/50 text-white font-mono text-xs font-bold transition-all border border-purple-500/30">
-                    Return to Terminal
-                  </button>
-                  <button onClick={() => handleOpenAuth('login')} className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-bold transition-all shadow-lg shadow-purple-600/30">
-                    Admin Sign In
-                  </button>
-                </div>
-              </div>
-            )
           )}
 
           {activeTab === 'history' && (
@@ -1476,7 +1415,7 @@ export default function App() {
       
 
       {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
-      {!isEntitlementLoading && !terminalAccessGranted && !['vixylive', 'vixylocks', 'pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact', 'auth', 'tiktok', 'tiktok-live', 'admin-tiktok-live', 'admin/tiktok-live'].includes(activeTab) && (
+      {!isEntitlementLoading && !terminalAccessGranted && !['vixylive', 'pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
         <TrialExpiredOverlay
           isAuthenticated={authState.isAuthenticated}
           userEmail={authState?.user?.email}

@@ -34,7 +34,6 @@ import {
   Lock,
   Flame,
   Clock,
-  Radio,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -95,8 +94,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: 'INTELLIGENCE',
       items: [
-        { id: 'vixylive', label: 'VIXY LIVE', icon: Flame, badge: 'CANONICAL' },
-        { id: 'tiktok', label: 'TikTok LIVE Stream', icon: Radio, badge: 'BROADCAST' },
         { id: 'history', label: 'VIXY LOCKS', icon: BarChart2, badge: 'RESULTS', isLockLayer: true },
         { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
         { id: 'markets', label: 'Markets', icon: TrendingUp },
@@ -119,7 +116,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
         { id: 'alerts', label: 'Alerts', icon: Bell },
         { id: 'pricing', label: 'Pricing', icon: CreditCard, badge: 'PRO' },
         { id: 'settings', label: 'Settings', icon: Settings },
-        ...(userRole === 'ADMIN' ? [{ id: 'admin-tiktok-live', label: 'TikTok Broadcast Control', icon: Radio, badge: 'ADMIN' }] : []),
         { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'ADMIN' },
         { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'TOP' },
         { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
@@ -231,7 +227,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div key={secIdx} className="space-y-1">
               {!isCollapsed && (
                 <div className="px-3 pt-2 pb-1 text-[10px] font-mono font-black text-purple-400/60 uppercase tracking-widest">
-                  {sec?.title || 'Navigation'}
+                  {sec.title}
                 </div>
               )}
               <div className="space-y-1">
@@ -445,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {navSections.map((sec, secIdx) => (
                 <div key={secIdx} className="space-y-1">
                   <div className="px-3 text-[10px] font-mono font-black text-purple-400/60 uppercase tracking-widest">
-                    {sec?.title || 'Navigation'}
+                    {sec.title}
                   </div>
                   <div className="space-y-1">
                     {sec.items
