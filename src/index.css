@@ -336,3 +336,7 @@
 .animate-laser-sweep {
   animation: sweepLaserHorizontal 2.2s ease-in-out infinite;
 }
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}

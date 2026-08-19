@@ -1212,21 +1212,26 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
       )}
 
       {/* Main Split Layout: Broadcast Canvas (Left) + Admin Telemetry (Right) */}
-      <div className={`flex-1 flex ${isBroadcastMode ? 'flex-col items-center justify-center p-0' : 'flex-col lg:flex-row gap-6 p-4 sm:p-6'} max-w-[1800px] w-full mx-auto`}>
+      <div className={`flex-1 flex ${isBroadcastMode ? 'fixed inset-0 z-50 bg-[#050308] items-center justify-center p-0' : 'flex-col lg:flex-row gap-6 p-4 sm:p-6'} w-full max-w-full mx-auto`}>
         
         {/* ========================================================================= */}
         {/* LEFT / CENTER: CINEMATIC 9:16 BROADCAST CANVAS                            */}
         {/* ========================================================================= */}
-        <div className={`flex flex-col items-center ${isBroadcastMode ? 'w-full min-h-screen justify-center' : 'w-full lg:w-[470px] xl:w-[490px] shrink-0'}`}>
+        <div className={`flex flex-col items-center ${isBroadcastMode ? 'w-full h-[100dvh] justify-center relative' : 'w-full lg:w-[470px] xl:w-[490px] shrink-0'}`}>
           
           {/* Canvas Outer Frame (1080 x 1920 / 9:16 Aspect) */}
           <div
-            className={`relative w-full ${isBroadcastMode ? 'max-w-[490px] h-[871px]' : 'h-[850px]'} rounded-3xl bg-[#08080C] border-2 ${stateBorderGlow} flex flex-col justify-between p-4 sm:p-5 overflow-hidden shadow-2xl transition-all duration-500`}
+            className={`relative ${isBroadcastMode ? 'h-full max-h-[100dvh] w-auto' : 'w-full h-[850px] rounded-3xl'} bg-[#08080C] border-2 ${isBroadcastMode ? 'border-transparent' : stateBorderGlow} flex flex-col justify-between p-4 sm:p-5 overflow-hidden transition-all duration-500`}
             style={{ aspectRatio: '9 / 16' }}
           >
             {/* Background Ambient Glow Layers */}
-            <div className="absolute inset-0 bg-gradient-to-b from-purple-950/25 via-[#08080C] to-black pointer-events-none" />
-            <div className={`absolute -top-24 left-1/2 -translate-x-1/2 w-80 h-80 rounded-full blur-[100px] pointer-events-none transition-colors duration-700 ${isLockedUp ? 'bg-emerald-500/20' : isLockedDown ? 'bg-red-500/20' : isConfirming ? 'bg-amber-500/15' : 'bg-purple-600/15'}`} />
+            <div className="absolute inset-0 bg-gradient-to-b from-[#0A0710] via-[#050308] to-[#000000] pointer-events-none" />
+            
+            {/* Cyberpunk Grid / Scanline overlay */}
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(139,92,246,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(139,92,246,0.03)_1px,transparent_1px)] bg-[size:20px_20px] pointer-events-none mix-blend-overlay" />
+            <div className="absolute inset-0 pointer-events-none animate-[scanline_8s_linear_infinite] bg-gradient-to-b from-transparent via-purple-500/5 to-transparent h-32" />
+
+            <div className={`absolute -top-24 left-1/2 -translate-x-1/2 w-96 h-96 rounded-full blur-[120px] pointer-events-none transition-colors duration-700 ${isLockedUp ? 'bg-emerald-500/20' : isLockedDown ? 'bg-red-500/20' : isConfirming ? 'bg-amber-500/15' : 'bg-purple-600/15'}`} />
 
             {/* Broadcast Mode Exit Overlay Control */}
             {isBroadcastMode && (
@@ -1313,47 +1318,51 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
             {/* ------------------------------------------------------------- */}
             {/* 1. TOP HEADER: VIXY VAULT & LIVE STATUS                       */}
             {/* ------------------------------------------------------------- */}
-            <div className="relative z-10 space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-2xl bg-purple-900/70 border border-purple-400/60 flex items-center justify-center text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.4)]">
-                    <Zap className="w-5 h-5 fill-current text-purple-300" />
+            <div className="relative z-10 space-y-2.5">
+              <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-900/90 to-black border border-purple-500/40 flex items-center justify-center text-purple-300 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                    <Sparkles className="w-5 h-5 fill-current text-purple-400" />
                   </div>
                   <div>
-                    <h2 className="text-xs font-black tracking-widest uppercase font-mono text-white flex items-center gap-1.5">
-                      <span>VIXY VAULT</span>
+                    <h2 className="text-[14px] leading-none font-black tracking-[0.2em] uppercase font-mono text-white flex items-center gap-1.5">
+                      VIXY VAULT
                     </h2>
-                    <span className="text-[9px] font-mono text-purple-300 tracking-wider uppercase font-semibold">
+                    <span className="text-[9px] font-mono text-purple-400 tracking-[0.3em] uppercase font-bold mt-1 block">
                       AI MARKET INTELLIGENCE
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-950/90 border border-zinc-800 text-[10px] font-mono shadow-sm">
-                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                    <span className="text-white font-bold">● LIVE</span>
-                    <span className="text-zinc-400 font-bold ml-1">BTC / USD</span>
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-red-950/40 border border-red-500/30 text-[11px] font-mono shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    <span className="text-white font-black tracking-widest">LIVE</span>
                   </div>
+                  <div className="text-[10px] font-mono font-bold text-zinc-400 tracking-wider pr-1">BTC / USD</div>
                 </div>
               </div>
 
               {/* Small Institutional Telemetry Badges */}
-              <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-                <div className="px-2 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 text-[9px] font-mono text-center flex items-center justify-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  <span className="text-zinc-400">KALSHI</span>
-                  <span className="text-emerald-400 font-bold">● LIVE</span>
+              <div className="flex items-center justify-between pt-0.5">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1 text-[8px] font-mono text-zinc-400 tracking-wider">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]" />
+                    KALSHI LIVE
+                  </div>
+                  <span className="text-zinc-700">•</span>
+                  <div className="flex items-center gap-1 text-[8px] font-mono text-zinc-400 tracking-wider">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]" />
+                    POLY LIVE
+                  </div>
+                  <span className="text-zinc-700">•</span>
+                  <div className="flex items-center gap-1 text-[8px] font-mono text-zinc-400 tracking-wider">
+                    <span className="w-1 h-1 rounded-full bg-emerald-400 shadow-[0_0_5px_rgba(52,211,153,0.8)]" />
+                    ENGINE ACTIVE
+                  </div>
                 </div>
-                <div className="px-2 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 text-[9px] font-mono text-center flex items-center justify-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-                  <span className="text-zinc-400">POLY</span>
-                  <span className="text-purple-300 font-bold">● LIVE</span>
-                </div>
-                <div className="px-2 py-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 text-[9px] font-mono text-center flex items-center justify-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-                  <span className="text-zinc-400">ENGINE</span>
-                  <span className="text-cyan-300 font-bold">ONLINE</span>
+                <div className="text-[8px] font-mono text-purple-400 tracking-widest font-bold">
+                  15M MARKET
                 </div>
               </div>
             </div>
@@ -1361,101 +1370,67 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
             {/* ------------------------------------------------------------- */}
             {/* 2. HUGE CENTRAL DECISION: WHAT DOES VIXY THINK?               */}
             {/* ------------------------------------------------------------- */}
-            <div className="relative z-10 space-y-2.5 my-auto">
+            <div className="relative z-10 space-y-3 my-auto">
               
               {/* Header Label */}
               <div className="text-center">
-                <span className="text-[10px] font-mono font-bold tracking-widest text-zinc-400 uppercase">
-                  WHAT DOES VIXY THINK?
+                <span className="text-[12px] font-mono font-black tracking-[0.25em] text-zinc-400 uppercase">
+                  VIXY'S CURRENT READ
                 </span>
               </div>
 
               {/* Enormous State Hero Card */}
-              <div className={`p-4 sm:p-5 rounded-3xl border-2 ${stateHeroBg} text-center space-y-2 shadow-2xl transition-all`}>
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-[11px] font-mono font-bold tracking-widest uppercase opacity-80">
-                    VIXY
+              <div className={`p-6 sm:p-7 rounded-[2rem] border-[3px] ${isSkip ? 'border-zinc-800 bg-zinc-950/80' : isLockedUp ? 'border-emerald-500/50 bg-emerald-950/40 shadow-[0_0_50px_rgba(16,185,129,0.2)]' : isLockedDown ? 'border-red-500/50 bg-red-950/40 shadow-[0_0_50px_rgba(239,68,68,0.2)]' : 'border-purple-500/30 bg-purple-950/20 shadow-[0_0_30px_rgba(168,85,247,0.1)]'} text-center flex flex-col items-center justify-center relative overflow-hidden backdrop-blur-md`}>
+                
+                {/* Neural Processing Animation Layer */}
+                {!isLocked && !isSkip && !isSettled && (
+                  <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-30">
+                    <div className="w-[200%] h-[200%] bg-[radial-gradient(ellipse_at_center,rgba(168,85,247,0.15)_0%,transparent_50%)] animate-[spin_10s_linear_infinite]" />
+                    <div className="w-[150%] h-[150%] bg-[radial-gradient(ellipse_at_center,rgba(168,85,247,0.1)_0%,transparent_50%)] animate-[spin_7s_linear_infinite_reverse]" />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-center gap-3 relative z-10 mb-2">
+                  <span className={`text-[12px] font-mono font-black tracking-widest uppercase ${isSkip ? 'text-zinc-500' : isConfirming ? 'text-amber-400' : 'text-purple-400'}`}>
+                    {isSkip ? 'SIGNAL FILTERED' : isLocked ? 'ONE-CYCLE LOCK' : 'CONTINUOUS ANALYSIS'}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-center gap-3">
-                  {isLockedUp && <TrendingUp className="w-8 h-8 text-emerald-400 animate-bounce" />}
-                  {isLockedDown && <TrendingDown className="w-8 h-8 text-red-400 animate-bounce" />}
-                  {isConfirming && <Activity className="w-7 h-7 text-amber-400 animate-spin" />}
-                  {isSkip && <ShieldCheck className="w-7 h-7 text-zinc-300" />}
-                  {!isLocked && !isConfirming && !isSkip && <Eye className="w-7 h-7 text-purple-400" />}
-
-                  <h3 className="text-2xl sm:text-3xl font-black tracking-tight uppercase font-mono drop-shadow-md">
-                    {stateBigTitle}
+                <div className="flex items-center justify-center relative z-10 w-full py-2">
+                  <h3 className={`text-5xl sm:text-6xl font-black tracking-tighter uppercase font-mono ${isSkip ? 'text-zinc-300' : isLockedUp ? 'text-emerald-400 drop-shadow-[0_0_15px_rgba(16,185,129,0.8)]' : isLockedDown ? 'text-red-400 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]' : isConfirming ? 'text-amber-300' : 'text-white'}`}>
+                    {isLockedUp ? 'UP' : isLockedDown ? 'DOWN' : isSkip ? 'SKIP' : isConfirming ? 'CONFIRMING' : 'WATCH'}
                   </h3>
                 </div>
 
-                <div className="text-center font-mono text-[11px] px-2 leading-relaxed opacity-90">
-                  {isLockedUp && '⚡ ONE-CYCLE IMMUTABLE LOCK • BUY YES'}
-                  {isLockedDown && '⚡ ONE-CYCLE IMMUTABLE LOCK • BUY NO'}
-                  {isConfirming && '⚡ 4/5 TF CONFLUENCE ACCELERATING • EVALUATING'}
-                  {isSkip && '🛡️ CAPITAL PRESERVED • CHOPPY REGIME FILTERED'}
-                  {isSettled && '🎯 CYCLE SETTLED • 100% AUTHORITATIVE LEDGER'}
-                  {!isLocked && !isConfirming && !isSkip && !isSettled && 'OBSERVING ORDER FLOW & VOLATILITY CONFLUENCE'}
+                <div className="relative z-10 text-center font-mono text-[12px] leading-relaxed mt-3 px-4 py-2 rounded-xl bg-black/40 border border-white/5 w-full">
+                  {isLockedUp && <span className="text-emerald-300">Strong multi-timeframe volume confluence.</span>}
+                  {isLockedDown && <span className="text-red-300">Distribution detected. Selling pressure high.</span>}
+                  {isConfirming && <span className="text-amber-300">Momentum vectors aligning. Awaiting gate.</span>}
+                  {isSkip && <span className="text-zinc-400">Choppy regime. Capital preserved.</span>}
+                  {isSettled && <span className="text-zinc-400">Cycle settled and logged to ledger.</span>}
+                  {!isLocked && !isConfirming && !isSkip && !isSettled && <span className="text-purple-300">Waiting for stronger multi-venue confirmation.</span>}
                 </div>
               </div>
 
               {/* ----------------------------------------------------------- */}
-              {/* 3. VIXY PROTECTION MODULE (Futuristic Radar / Guardian)      */}
+              {/* 3 & 4. 15M COUNTDOWN + NORMALIZED 3-WAY PROBABILITY         */}
               {/* ----------------------------------------------------------- */}
-              <div className="p-3 rounded-2xl bg-zinc-950/90 border border-purple-900/40 space-y-2">
-                <div className="flex items-center justify-between text-[10px] font-mono">
-                  <span className="font-bold text-purple-300 flex items-center gap-1.5">
-                    <Radar className="w-3.5 h-3.5 text-purple-400 animate-spin" />
-                    VIXY PROTECTION
-                  </span>
-                  <span className={`font-bold ${isSkip ? 'text-zinc-400' : isLocked ? 'text-emerald-400' : 'text-purple-400'}`}>
-                    {effectiveDecision?.protectionStatus || 'ACTIVE_SHIELD'}
-                  </span>
-                </div>
-
-                {/* Grid of 5 Protection Metrics */}
-                <div className="grid grid-cols-5 gap-1 text-center font-mono">
-                  <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800">
-                    <div className="text-[8px] text-zinc-400 uppercase">LOCK SCORE</div>
-                    <div className="text-xs font-black text-emerald-400">{effectiveDecision?.lockScore || 0}/100</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800">
-                    <div className="text-[8px] text-zinc-400 uppercase">REV RISK</div>
-                    <div className={`text-xs font-black ${(effectiveDecision?.reversalRisk || 0) > 25 ? 'text-red-400' : 'text-emerald-400'}`}>
-                      {effectiveDecision?.reversalRisk || 0}%
-                    </div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800">
-                    <div className="text-[8px] text-zinc-400 uppercase">EVIDENCE</div>
-                    <div className="text-xs font-black text-white">{effectiveDecision?.evidenceAlignment || 8}/10</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800">
-                    <div className="text-[8px] text-zinc-400 uppercase">TEMPORAL</div>
-                    <div className="text-xs font-black text-purple-300">{effectiveDecision?.temporalStability || 90}%</div>
-                  </div>
-                  <div className="p-1.5 rounded-lg bg-zinc-900/90 border border-zinc-800">
-                    <div className="text-[8px] text-zinc-400 uppercase">CROSS-VENUE</div>
-                    <div className="text-[10px] font-black text-cyan-300">SYNCED</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* ----------------------------------------------------------- */}
-              {/* 4 & 5. 15M COUNTDOWN + NORMALIZED 3-WAY PROBABILITY         */}
-              {/* ----------------------------------------------------------- */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-3 relative z-10">
                 
                 {/* 15M Circular Countdown Gauge */}
-                <div className="p-2.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 flex items-center gap-2.5">
-                  <div className="relative w-14 h-14 shrink-0 flex items-center justify-center">
-                    <svg className="w-14 h-14 -rotate-90" viewBox="0 0 100 100">
+                <div className="p-3.5 rounded-2xl bg-gradient-to-b from-[#0F0C16] to-[#0A0710] border border-purple-500/20 flex flex-col items-center justify-center relative shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                  <div className="text-[10px] text-zinc-400 font-mono font-bold tracking-widest uppercase mb-2">
+                    15M MARKET
+                  </div>
+                  
+                  <div className="relative w-20 h-20 flex items-center justify-center">
+                    <svg className="w-20 h-20 -rotate-90 absolute inset-0 drop-shadow-[0_0_8px_rgba(168,85,247,0.4)]" viewBox="0 0 100 100">
                       <circle
                         cx="50"
                         cy="50"
                         r={circleRadius}
-                        className="text-zinc-800"
-                        strokeWidth="8"
+                        className="text-purple-950/40"
+                        strokeWidth="6"
                         stroke="currentColor"
                         fill="transparent"
                       />
@@ -1464,7 +1439,7 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
                         cy="50"
                         r={circleRadius}
                         className={isFinal5Minutes ? 'text-amber-400' : 'text-purple-500'}
-                        strokeWidth="8"
+                        strokeWidth="6"
                         strokeDasharray={circumference}
                         strokeDashoffset={strokeDashoffset}
                         strokeLinecap="round"
@@ -1473,127 +1448,183 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
                         style={{ transition: 'stroke-dashoffset 1s linear' }}
                       />
                     </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <span className="text-[11px] font-black font-mono text-white tracking-tighter">
+                    
+                    {/* Inner Timer Text */}
+                    <div className="flex flex-col items-center justify-center relative z-10">
+                      <span className="text-xl font-black font-mono text-white tracking-tighter">
                         {timeFormatted}
                       </span>
                     </div>
                   </div>
-
-                  <div className="font-mono space-y-0.5">
-                    <div className="text-[8px] text-zinc-400 uppercase tracking-wider">15M CONTRACT</div>
-                    <div className={`text-[10px] font-black uppercase ${isFinal5Minutes ? 'text-amber-400 animate-pulse' : 'text-white'}`}>
-                      {isFinal5Minutes ? 'FINAL 5 MINS' : 'CYCLE ACTIVE'}
-                    </div>
-                    <div className="text-[8px] text-zinc-400 truncate">
-                      {isSkip ? 'SKIP • PRESERVED' : isConfirming ? 'GATE ACTIVE' : isLocked ? 'LOCKED' : 'MONITORING'}
-                    </div>
+                  
+                  <div className={`text-[9px] font-black font-mono uppercase mt-2 tracking-widest ${isFinal5Minutes ? 'text-amber-400 animate-pulse' : 'text-purple-400'}`}>
+                    {isFinal5Minutes ? 'FINAL WINDOW' : 'REMAINING'}
                   </div>
                 </div>
 
                 {/* 3-Way Probability Bar (100% Normalized) */}
-                <div className="p-2.5 rounded-2xl bg-zinc-950/90 border border-zinc-800 space-y-1.5 flex flex-col justify-center font-mono">
-                  <div className="flex items-center justify-between text-[9px]">
-                    <span className="text-emerald-400 font-bold">UP {upProb.toFixed(0)}%</span>
-                    <span className="text-zinc-400 font-bold">SKIP {skipProb.toFixed(0)}%</span>
-                    <span className="text-red-400 font-bold">DN {downProb.toFixed(0)}%</span>
+                <div className="p-3.5 rounded-2xl bg-gradient-to-b from-[#0F0C16] to-[#0A0710] border border-purple-500/20 flex flex-col justify-center font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+                  <div className="text-[10px] text-zinc-400 font-mono font-bold tracking-widest uppercase mb-3 text-center">
+                    LIVE MODEL DISTRIBUTION
                   </div>
 
-                  {/* 3-Color Normalized Meter */}
-                  <div className="w-full h-3 rounded-full bg-zinc-900 flex overflow-hidden border border-zinc-800">
-                    <div style={{ width: `${upProb}%` }} className="bg-emerald-500 h-full transition-all duration-500" />
-                    {skipProb > 0 && <div style={{ width: `${skipProb}%` }} className="bg-zinc-600 h-full transition-all duration-500" />}
-                    <div style={{ width: `${downProb}%` }} className="bg-red-500 h-full transition-all duration-500" />
-                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex flex-col items-start">
+                        <span className="text-zinc-500 text-[8px] font-bold">UP</span>
+                        <span className="text-emerald-400 font-black">{upProb.toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col items-center">
+                        <span className="text-zinc-500 text-[8px] font-bold">NO TRADE</span>
+                        <span className="text-zinc-400 font-black">{skipProb.toFixed(0)}%</span>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        <span className="text-zinc-500 text-[8px] font-bold">DOWN</span>
+                        <span className="text-red-400 font-black">{downProb.toFixed(0)}%</span>
+                      </div>
+                    </div>
 
-                  <div className="text-[8px] text-zinc-500 text-center tracking-widest uppercase">
-                    100% NORMALIZED CONSENSUS
+                    {/* 3-Color Normalized Meter */}
+                    <div className="w-full h-4 rounded-full bg-[#050308] flex overflow-hidden border border-zinc-800/80 shadow-[inset_0_2px_4px_rgba(0,0,0,0.4)]">
+                      <div style={{ width: `${upProb}%` }} className="bg-gradient-to-r from-emerald-600 to-emerald-400 h-full transition-all duration-500 relative">
+                        <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_ease-in-out_infinite]" />
+                      </div>
+                      {skipProb > 0 && <div style={{ width: `${skipProb}%` }} className="bg-zinc-600 h-full transition-all duration-500" />}
+                      <div style={{ width: `${downProb}%` }} className="bg-gradient-to-r from-red-500 to-red-400 h-full transition-all duration-500 relative">
+                        <div className="absolute inset-0 bg-white/20 animate-[pulse_2s_ease-in-out_infinite_0.5s]" />
+                      </div>
+                    </div>
                   </div>
                 </div>
 
               </div>
 
               {/* ----------------------------------------------------------- */}
-              {/* 6. LIVE BTC MARKET SPOT & COMPACT SPARKLINE CHART           */}
+              {/* 5. VIXY PROTECTION MODULE (Futuristic Radar / Guardian)      */}
               {/* ----------------------------------------------------------- */}
-              <div className="p-3 rounded-2xl bg-zinc-950/90 border border-zinc-800/80 space-y-2">
-                <div className="flex items-center justify-between font-mono">
-                  <div>
-                    <div className="text-[8px] text-zinc-400 uppercase">BTC / USD SPOT</div>
-                    <div className="text-base sm:text-lg font-black text-white">
-                      ${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              <div className="p-3 rounded-2xl bg-[#08050C] border border-purple-500/20 relative z-10 shadow-[inset_0_0_20px_rgba(168,85,247,0.05)]">
+                <div className="flex items-center justify-between font-mono mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded-md bg-purple-900/50 border border-purple-500/40 flex items-center justify-center">
+                      <Radar className="w-3.5 h-3.5 text-purple-400 animate-[spin_4s_linear_infinite]" />
+                    </div>
+                    <span className="font-black tracking-widest text-[11px] text-white">VIXY PROTECTION</span>
+                  </div>
+                  
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#100A1A] border border-purple-900/50">
+                    <span className={`w-1.5 h-1.5 rounded-full ${isSkip ? 'bg-zinc-400' : isLocked ? 'bg-emerald-400' : 'bg-purple-400'} animate-pulse`} />
+                    <span className={`font-bold tracking-widest text-[9px] uppercase ${isSkip ? 'text-zinc-400' : isLocked ? 'text-emerald-400' : 'text-purple-400'}`}>
+                      {effectiveDecision?.protectionStatus === 'EVALUATING' ? 'ARMED' : (effectiveDecision?.protectionStatus || 'ACTIVE')}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Grid of 4 Core Protection Metrics */}
+                <div className="grid grid-cols-4 gap-2 text-center font-mono pt-1">
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-[8px] text-zinc-500 uppercase font-bold mb-0.5">LOCK QUALITY</div>
+                    <div className="text-sm font-black text-white">{effectiveDecision?.lockScore || 0}<span className="text-[9px] text-zinc-500">/100</span></div>
+                  </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-[8px] text-zinc-500 uppercase font-bold mb-0.5">REV RISK</div>
+                    <div className={`text-sm font-black ${(effectiveDecision?.reversalRisk || 0) > 25 ? 'text-red-400' : 'text-emerald-400'}`}>
+                      {effectiveDecision?.reversalRisk || 0}% <span className="text-[9px] font-normal uppercase">{(effectiveDecision?.reversalRisk || 0) > 25 ? 'HIGH' : 'LOW'}</span>
                     </div>
                   </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-[8px] text-zinc-500 uppercase font-bold mb-0.5">EVIDENCE</div>
+                    <div className="text-sm font-black text-cyan-300">{effectiveDecision?.evidenceAlignment || 8}<span className="text-[9px] text-zinc-500">/10</span></div>
+                  </div>
+                  <div className="flex flex-col items-center justify-center">
+                    <div className="text-[8px] text-zinc-500 uppercase font-bold mb-0.5">STABILITY</div>
+                    <div className="text-sm font-black text-purple-300">{effectiveDecision?.temporalStability || 90}%</div>
+                  </div>
+                </div>
+              </div>
 
-                  <div className="text-center">
-                    <div className="text-[8px] text-zinc-400 uppercase">DISTANCE TO STRIKE</div>
-                    <div className={`text-xs font-black ${distanceToStrike >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {distanceToStrike >= 0 ? '+' : ''}${distanceToStrike.toFixed(1)}
+              {/* ----------------------------------------------------------- */}
+              {/* 6. LIVE BTC MARKET SPOT & COMPACT SPARKLINE CHART           */}
+              {/* ----------------------------------------------------------- */}
+              <div className="p-4 rounded-2xl bg-[#08050C] border border-purple-500/20 relative z-10 space-y-3">
+                <div className="flex items-center justify-between font-mono">
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-6 bg-purple-500 rounded-full" />
+                    <div>
+                      <div className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">LIVE BTC MARKET STRUCTURE</div>
+                      <div className="text-xl sm:text-2xl font-black text-white tracking-tighter">
+                        ${livePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </div>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <div className="text-[8px] text-zinc-400 uppercase">15M STRIKE</div>
-                    <div className="text-xs font-black text-purple-300">
+                    <div className="text-[9px] text-zinc-400 uppercase font-bold tracking-widest">STRIKE</div>
+                    <div className="text-sm font-black text-purple-400">
                       ${strikePrice.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                     </div>
                   </div>
                 </div>
 
                 {/* Compact Animated Sparkline */}
-                <div className="w-full h-11 relative">
-                  <canvas ref={canvasRef} className="w-full h-full block" />
+                <div className="w-full h-16 relative bg-[#050308] rounded-xl overflow-hidden border border-zinc-800/50">
+                  {/* Grid Lines */}
+                  <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:10px_10px]" />
+                  <canvas ref={canvasRef} className="w-full h-full block relative z-10" />
                 </div>
               </div>
 
               {/* ----------------------------------------------------------- */}
               {/* 7. WHY VIXY? (Explainability & Confluence Breakdown)        */}
               {/* ----------------------------------------------------------- */}
-              <div className="p-3 rounded-2xl bg-[#0C0A14] border border-purple-900/30 space-y-1.5 font-mono">
-                <div className="flex items-center justify-between text-[10px] font-bold">
-                  <span className="text-purple-300 flex items-center gap-1">
-                    <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
-                    {isSkip ? 'WHY VIXY SKIPPED' : 'WHY VIXY?'}
-                  </span>
-                  <span className="text-[9px] text-zinc-400">REAL TELEMETRY</span>
+              <div className="p-3.5 rounded-2xl bg-[#08050C] border border-purple-500/20 relative z-10 font-mono">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-5 h-5 rounded bg-purple-900/40 flex items-center justify-center">
+                      <BrainCircuit className="w-3.5 h-3.5 text-purple-400" />
+                    </div>
+                    <span className="text-[11px] font-black tracking-widest text-white uppercase">
+                      {isSkip ? 'WHY VIXY SKIPPED' : 'WHY VIXY?'}
+                    </span>
+                  </div>
+                  <span className="text-[8px] font-bold tracking-widest text-zinc-500 uppercase">REAL TELEMETRY</span>
                 </div>
 
                 {isSkip ? (
-                  <div className="grid grid-cols-2 gap-1.5 text-[9px] text-zinc-300">
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <XCircle className="w-3 h-3 text-red-400 shrink-0" />
-                      <span>SIGNAL CONFLICT &gt; 30%</span>
+                  <div className="grid grid-cols-2 gap-2 text-[9px] text-zinc-300">
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span className="font-bold tracking-wider">SIGNAL CONFLICT &gt; 30%</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <Shield className="w-3 h-3 text-amber-400 shrink-0" />
-                      <span>REVERSAL THREAT ELEVATED</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <Shield className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="font-bold tracking-wider">REVERSAL THREAT ELEVATED</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <XCircle className="w-3 h-3 text-red-400 shrink-0" />
-                      <span>INSUFFICIENT PERSISTENCE</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <XCircle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                      <span className="font-bold tracking-wider">INSUFFICIENT PERSISTENCE</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>CAPITAL PRESERVED</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-bold tracking-wider">CAPITAL PRESERVED</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-1.5 text-[9px] text-zinc-300">
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>INSTITUTIONAL FLOW (+1,482 BTC)</span>
+                  <div className="grid grid-cols-2 gap-2 text-[9px] text-zinc-300">
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-bold tracking-wider">INSTITUTIONAL FLOW (+1,482 BTC)</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>TEMPORAL ALIGNMENT (91%)</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-bold tracking-wider">TEMPORAL ALIGNMENT (91%)</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />
-                      <span>CROSS-VENUE SYNCHRONIZED</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span className="font-bold tracking-wider">CROSS-VENUE SYNCHRONIZED</span>
                     </div>
-                    <div className="p-1 rounded bg-zinc-900/80 border border-zinc-800 flex items-center gap-1">
-                      <ShieldCheck className="w-3 h-3 text-purple-400 shrink-0" />
-                      <span>REVERSAL RISK (10% LOW)</span>
+                    <div className="p-2 rounded-xl bg-[#100A1A] border border-purple-900/30 flex items-center gap-2">
+                      <ShieldCheck className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                      <span className="font-bold tracking-wider">REVERSAL RISK (10% LOW)</span>
                     </div>
                   </div>
                 )}
@@ -1602,23 +1633,21 @@ const AuthorizedAdminTikTokLiveContent: React.FC<{
               {/* ----------------------------------------------------------- */}
               {/* 8. LIVE AI ACTIVITY CONTINUOUS ANALYSIS FEED                */}
               {/* ----------------------------------------------------------- */}
-              <div className="p-2.5 rounded-2xl bg-zinc-950/90 border border-zinc-800/80 space-y-1 font-mono">
-                <div className="flex items-center justify-between text-[9px] text-zinc-400">
-                  <span className="flex items-center gap-1 text-purple-400 font-bold">
-                    <Activity className="w-3 h-3 animate-pulse" />
-                    VIXY AI CONTINUOUS ANALYSIS
+              <div className="p-3.5 rounded-2xl bg-[#08050C] border border-purple-500/20 relative z-10 font-mono">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="flex items-center gap-1.5 text-[10px] text-purple-400 font-bold tracking-widest uppercase">
+                    <Activity className="w-3.5 h-3.5 animate-pulse" />
+                    VIXY AI LIVE ANALYSIS
                   </span>
-                  <span className="text-[8px] text-zinc-500">LIVE FEED</span>
                 </div>
 
-                <div className="space-y-1 max-h-12 overflow-hidden">
+                <div className="space-y-2.5 max-h-16 overflow-hidden">
                   {aiActivityFeed.slice(0, 2).map((item) => (
-                    <div key={item.id} className="text-[9px] flex items-center justify-between text-zinc-300">
-                      <div className="flex items-center gap-1.5 truncate">
-                        <span className="text-zinc-500 text-[8px]">{item.timestamp}</span>
+                    <div key={item.id} className="text-[10px] flex items-center justify-between text-zinc-300">
+                      <div className="flex items-center gap-2 truncate">
+                        <span className="text-zinc-500 text-[9px] font-bold">{item.timestamp}</span>
                         <span className="truncate">{item.text}</span>
                       </div>
-                      <span className="text-[8px] text-purple-400 shrink-0 font-bold">VERIFIED</span>
                     </div>
                   ))}
                 </div>
