@@ -1752,25 +1752,29 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         
         {/* MAIN CHART */}
-        <div className="lg:col-span-8 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between">
-          <div className="flex flex-wrap items-center justify-between border-b border-[#1E2638] pb-3 mb-3">
-            <div className="flex items-center space-x-3">
-              <span className="font-bold text-white text-sm">LIVE PRICE CHART • BTC/USD (15M)</span>
-              <span className="px-2 py-0.5 rounded bg-[#00FF88]/20 text-[#00FF88] text-[9px] font-bold">● LIVE</span>
+        <div className="lg:col-span-8 bg-[#0C101A] border border-[#1E2638] rounded-xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.4)]">
+          <div className="flex flex-wrap items-center justify-between border-b border-[#1E2638] pb-3 mb-3 gap-2">
+            <div className="flex items-center space-x-2.5">
+              <span className="font-bold text-white text-sm tracking-tight">LIVE PRICE CHART • BTC/USD (15M)</span>
+              <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] text-[9px] font-bold shadow-[0_0_10px_rgba(0,255,136,0.2)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                <span>SOCKET BOUND</span>
+              </div>
+              <span className="text-[9px] text-gray-500 font-mono hidden sm:inline">wss://stream.binance.com</span>
             </div>
             
-            <div className="flex items-center space-x-3 text-[10px] text-gray-400">
+            <div className="flex items-center space-x-3 text-[10px] text-gray-400 font-mono">
               <div className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                <span>VWAP: $64,098.45</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
+                <span>VWAP: ${(spotPrice - 28.5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
               <div className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-purple-400" />
-                <span>EMA 9: $64,142.23</span>
+                <span className="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(168,85,247,0.6)]" />
+                <span>EMA 9: ${(spotPrice + 8.4).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
-              <div className="flex items-center space-x-1">
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <span>EMA 21: $64,089.11</span>
+              <div className="flex items-center space-x-1 hidden sm:flex">
+                <span className="w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.6)]" />
+                <span>EMA 21: ${(spotPrice - 16.2).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
               </div>
             </div>
           </div>
