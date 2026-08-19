@@ -43,8 +43,7 @@ import {
 import { BTCTicker } from '../types';
 import { fetchBTCTicker, fetchActiveCycleLock, fetchRegimeMemoryBank, fetchAlgorithmLedger, triggerManualRecalibration } from '../services/api';
 import { VixyStreamManager } from '../services/streamManager';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
 import {
   runGeminiShadowInference,
   evaluateVixyProtectionLock,
@@ -177,6 +176,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   onOpenAuth,
   dayPassCountdown,
 }) => {
+  const { decision: canonicalDecision } = useCanonical15mDecision();
   const [snapshot, setSnapshot] = useState<any>(null);
   const [wsStatus, setWsStatus] = useState<'CONNECTING' | 'LIVE' | 'DEGRADED'>('CONNECTING');
   const [resolvedLog, setResolvedLog] = useState<any>(null);
@@ -431,77 +431,33 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
   }, [hasActiveAccess]);
 
-  // Single Source of Truth Firestore Real-Time Sync on 'active_cycle_lock/current_15m'
+  // Single Authoritative Synchronization from Canonical 15M Engine
   useEffect(() => {
-    if (!hasActiveAccess) return;
-
-    let unsubscribe: (() => void) | undefined;
-    try {
-      if (db) {
-        const lockRef = doc(db, 'active_cycle_lock', 'current_15m');
-        unsubscribe = onSnapshot(lockRef, (docSnap) => {
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            if (data.decision && data.decision !== activeCycleDecision) {
-              setActiveCycleDecision(data.decision as 'LOCKED — UP' | 'LOCKED — DOWN' | 'VIXY SKIP');
-            }
-            if (data.activeRegimeProfile) {
-              setActiveRegimeProfile(data.activeRegimeProfile as MarketRegimeType);
-            }
-            if (data.optimalWeights) {
-              setRecalibrationState(prev => ({
-                ...prev,
-                ...data.optimalWeights,
-                lastAdjustedTime: 'Synced from Global Ledger'
-              }));
-            }
-            if (data.indicatorAttributions && Array.isArray(data.indicatorAttributions)) {
-              setIndicatorAttributions(data.indicatorAttributions);
-            }
-          }
-        }, (error) => {
-          console.warn('[Firestore active_cycle_lock sync notice]:', error.message);
-        });
-      }
-    } catch (e) {
-      console.warn('[Firestore active_cycle_lock init notice]:', e);
+    if (!canonicalDecision) return;
+    
+    if (canonicalDecision.currentState === 'LOCKED_UP') {
+      setActiveCycleDecision('LOCKED — UP');
+      setCyclePhase('DECISION_EXECUTED');
+    } else if (canonicalDecision.currentState === 'LOCKED_DOWN') {
+      setActiveCycleDecision('LOCKED — DOWN');
+      setCyclePhase('DECISION_EXECUTED');
+    } else if (canonicalDecision.currentState === 'CONFIRMING') {
+      setActiveCycleDecision(canonicalDecision.direction === 'UP' ? 'LOCKED — UP' : 'LOCKED — DOWN');
+      setCyclePhase('MONITORING');
+    } else if (canonicalDecision.currentState === 'SKIP') {
+      setActiveCycleDecision('VIXY SKIP');
+      setCyclePhase('MONITORING');
+    } else if (canonicalDecision.currentState === 'SETTLED') {
+      setCyclePhase('SETTLEMENT_PENDING');
+    } else {
+      setActiveCycleDecision('VIXY SKIP');
+      setCyclePhase('MONITORING');
     }
 
-    // Fallback REST polling for autonomous engine status
-    const pollEngine = async () => {
-      try {
-        const lockData = await fetchActiveCycleLock();
-        if (lockData && lockData.decision) {
-          if (lockData.decision !== activeCycleDecision) {
-            setActiveCycleDecision(lockData.decision as 'LOCKED — UP' | 'LOCKED — DOWN' | 'VIXY SKIP');
-          }
-          if (lockData.activeRegimeProfile) {
-            setActiveRegimeProfile(lockData.activeRegimeProfile as MarketRegimeType);
-          }
-          if (lockData.optimalWeights) {
-            setRecalibrationState(prev => ({
-              ...prev,
-              ...lockData.optimalWeights,
-              lastAdjustedTime: 'Synced from Autonomous Daemon'
-            }));
-          }
-          if (lockData.indicatorAttributions && Array.isArray(lockData.indicatorAttributions)) {
-            setIndicatorAttributions(lockData.indicatorAttributions);
-          }
-        }
-      } catch (err) {
-        // Fallback gracefully
-      }
-    };
-
-    pollEngine();
-    const pollInterval = setInterval(pollEngine, 2000);
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-      clearInterval(pollInterval);
-    };
-  }, [hasActiveAccess, activeCycleDecision]);
+    if (canonicalDecision.confidence) {
+      setActiveConfidence(Math.round(canonicalDecision.confidence));
+    }
+  }, [canonicalDecision]);
 
   // Strict 15-minute epoch-aligned timing calculations
   const EPOCH_15M = 15 * 60 * 1000;
