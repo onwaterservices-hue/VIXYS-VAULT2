@@ -58,9 +58,15 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
-import { TikTokLiveView } from './components/TikTokLiveView';
-import { AdminTikTokLiveView } from './components/AdminTikTokLiveView';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
+
+// Lazy-loaded routes for strict isolation and zero overhead on main app shell
+const TikTokLiveView = React.lazy(() =>
+  import('./components/TikTokLiveView').then((m) => ({ default: m.TikTokLiveView }))
+);
+const AdminTikTokLiveView = React.lazy(() =>
+  import('./components/AdminTikTokLiveView').then((m) => ({ default: m.AdminTikTokLiveView }))
+);
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -922,7 +928,10 @@ export default function App() {
     }
   };
 
-  const isPublicRoute = ['vixylive', 'vixylocks', 'tiktok', 'history', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'].includes(activeTab);
+  const isPublicRoute = [
+    'vixylive', 'vixylocks', 'tiktok', 'tiktok-live', 'admin-tiktok-live', 'admin/tiktok-live', 'admin/tiktok',
+    'history', 'landing', 'pricing', 'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', '404'
+  ].includes(activeTab);
 
   return (
     <>
@@ -1028,21 +1037,25 @@ export default function App() {
           )}
 
           {activeTab === 'tiktok' && (
-            <TikTokLiveView
-              ticker={ticker}
-              onOpenTerminal={() => setActiveTab('terminal')}
-              onOpenPricing={() => setActiveTab('pricing')}
-            />
+            <React.Suspense fallback={<div className="min-h-screen bg-[#070709] flex items-center justify-center text-purple-400 font-mono text-xs">Loading Broadcast Preview...</div>}>
+              <TikTokLiveView
+                ticker={ticker}
+                onOpenTerminal={() => setActiveTab('terminal')}
+                onOpenPricing={() => setActiveTab('pricing')}
+              />
+            </React.Suspense>
           )}
 
           {(activeTab === 'admin-tiktok-live' || activeTab === 'admin/tiktok-live') && (
-            <AdminTikTokLiveView
-              ticker={ticker}
-              userEmail={authState.user?.email || undefined}
-              userId={authState.user?.id || undefined}
-              onOpenTerminal={() => setActiveTab('terminal')}
-              onOpenAdminPanel={() => setActiveTab('admin')}
-            />
+            <React.Suspense fallback={<div className="min-h-screen bg-[#070709] flex items-center justify-center text-purple-400 font-mono text-xs">Loading Broadcast Studio...</div>}>
+              <AdminTikTokLiveView
+                ticker={ticker}
+                userEmail={authState.user?.email || undefined}
+                userId={authState.user?.id || undefined}
+                onOpenTerminal={() => setActiveTab('terminal')}
+                onOpenAdminPanel={() => setActiveTab('admin')}
+              />
+            </React.Suspense>
           )}
 
           {activeTab === 'history' && (
