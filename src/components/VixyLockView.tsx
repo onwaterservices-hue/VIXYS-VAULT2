@@ -164,6 +164,21 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
   }
 };
 
+export const getRegimeProfile = (regimeKey?: string): RegimeProfile => {
+  if (!regimeKey) return REGIME_PROFILES.TRENDING_BULL;
+  if (REGIME_PROFILES[regimeKey as MarketRegimeType]) {
+    return REGIME_PROFILES[regimeKey as MarketRegimeType];
+  }
+  const clean = String(regimeKey).toUpperCase();
+  if (clean.includes('BEAR')) return REGIME_PROFILES.TRENDING_BEAR;
+  if (clean.includes('BULL')) return REGIME_PROFILES.TRENDING_BULL;
+  if (clean.includes('CHOP') || clean.includes('PRESERV')) return REGIME_PROFILES.CHOPPY;
+  if (clean.includes('VOLATIL') || clean.includes('BREAKOUT')) return REGIME_PROFILES.HIGH_VOLATILITY;
+  if (clean.includes('RANGE') || clean.includes('NEUTRAL')) return REGIME_PROFILES.RANGE_BOUND;
+  if (clean.includes('TRANSITION') || clean.includes('SHIFT')) return REGIME_PROFILES.TRANSITION;
+  return REGIME_PROFILES.UNKNOWN || REGIME_PROFILES.TRENDING_BULL;
+};
+
 export interface IndicatorAttribution {
   id: string;
   name: string;
@@ -231,7 +246,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [activeStrikeOffset, setActiveStrikeOffset] = useState<number>(-104.05);
 
   // Adaptive Feedback Loop & Regime Profile State
-  const [activeRegimeProfile, setActiveRegimeProfile] = useState<MarketRegimeType>('TRENDING_BULLISH');
+  const [activeRegimeProfile, setActiveRegimeProfile] = useState<MarketRegimeType>('TRENDING_BULL');
   const [isAutoRegimeSwitch, setIsAutoRegimeSwitch] = useState<boolean>(true);
   const [showAttributionHistoryModal, setShowAttributionHistoryModal] = useState<boolean>(false);
 
@@ -309,7 +324,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-1',
       cycleId: 'C-67891',
       timestamp: '15m ago',
-      regime: 'TRENDING_BULLISH',
+      regime: 'TRENDING_BULL',
       marketOutcome: 'UP',
       correctCount: 4,
       totalIndicators: 5,
@@ -320,7 +335,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-2',
       cycleId: 'C-67890',
       timestamp: '30m ago',
-      regime: 'TRENDING_BULLISH',
+      regime: 'TRENDING_BULL',
       marketOutcome: 'UP',
       correctCount: 5,
       totalIndicators: 5,
@@ -331,7 +346,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-3',
       cycleId: 'C-67889',
       timestamp: '45m ago',
-      regime: 'HIGH_VOLATILITY_BREAKOUT',
+      regime: 'HIGH_VOLATILITY',
       marketOutcome: 'DOWN',
       correctCount: 4,
       totalIndicators: 5,
@@ -779,7 +794,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   // Switch Regime Profile Helper
   const applyRegimeProfile = (regimeKey: MarketRegimeType) => {
     setActiveRegimeProfile(regimeKey);
-    const profile = REGIME_PROFILES[regimeKey];
+    const profile = getRegimeProfile(regimeKey);
     setRecalibrationState(prev => ({
       ...prev,
       momentumWeight: profile.baseWeights.momentumWeight,
@@ -789,7 +804,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       status: 'ADJUSTED',
       isFlashing: true,
       lastAdjustedTime: 'Just now',
-      adjustmentReason: `Loaded ${profile.title}: ${profile.description}`
+      adjustmentReason: `Loaded ${profile.title || 'Profile'}: ${profile.description || ''}`
     }));
     setTimeout(() => {
       setRecalibrationState(prev => ({ ...prev, isFlashing: false }));
@@ -2067,7 +2082,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
             <div className="flex items-center space-x-2 text-xs">
               <span className="px-2.5 py-1 rounded-xl bg-[#080414] border border-purple-900/40 text-[10px] text-gray-300">
-                CURRENT REGIME: <span className="text-[#00FF88] font-bold">{REGIME_PROFILES[activeRegimeProfile].title}</span>
+                CURRENT REGIME: <span className="text-[#00FF88] font-bold">{getRegimeProfile(activeRegimeProfile)?.title || 'MOMENTUM BULL PROFILE'}</span>
               </span>
             </div>
           </div>

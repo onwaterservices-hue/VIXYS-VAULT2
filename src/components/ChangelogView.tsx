@@ -344,10 +344,10 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
 
               <div className="space-y-2 font-sans">
                 <h3 className="text-base font-bold text-white font-mono">
-                  {rel.title}
+                  {rel?.title || 'Release'}
                 </h3>
                 <p className="text-xs text-purple-200/80 leading-relaxed">
-                  {rel.description}
+                  {rel?.description || ''}
                 </p>
               </div>
 
