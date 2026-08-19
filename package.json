@@ -6,12 +6,9 @@
   "main": "dist/server.cjs",
   "scripts": {
     "dev": "tsx backend.ts",
-    "prebuild": "mkdir -p dist",
     "build": "vite build && esbuild backend.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node server.ts",
-    "daemon": "tsx src/services/daemon/continuousEngineDaemon.ts",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

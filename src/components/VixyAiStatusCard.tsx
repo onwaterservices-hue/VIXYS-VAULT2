@@ -531,7 +531,7 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
             <div className="flex items-center gap-2">
               <span className="text-base font-black text-indigo-300 flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-indigo-400" />
-                🧠 AI LESSON: {lessons[activeLessonIndex].title}
+                🧠 AI LESSON: {lessons[activeLessonIndex]?.title || lessons[0]?.title || 'Orderbook Imbalance'}
               </span>
             </div>
             <span className="text-xs text-purple-300/60">Community Education</span>
@@ -549,7 +549,7 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
                     : 'bg-[#12072e] text-purple-300/70 hover:text-white'
                 }`}
               >
-                {item.title}
+                {item?.title || 'Topic'}
               </button>
             ))}
           </div>
@@ -557,15 +557,15 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
           <div className="space-y-3 font-sans text-xs text-slate-200">
             <div className="p-3 bg-[#12072e] rounded-xl border border-purple-800/40 space-y-1">
               <span className="text-xs font-black text-indigo-300 font-mono block">Core Concept:</span>
-              <p className="text-sm font-bold text-white">{lessons[activeLessonIndex].concept}</p>
+              <p className="text-sm font-bold text-white">{lessons[activeLessonIndex]?.concept || lessons[0]?.concept || ''}</p>
             </div>
 
             <p className="text-xs leading-relaxed text-purple-200/90 font-sans">
-              {lessons[activeLessonIndex].body}
+              {lessons[activeLessonIndex]?.body || lessons[0]?.body || ''}
             </p>
 
             <div className="bg-[#0d0522] p-3 rounded-xl border border-purple-700/40 font-mono text-purple-200 text-xs">
-              💡 {lessons[activeLessonIndex].detail}
+              💡 {lessons[activeLessonIndex]?.detail || lessons[0]?.detail || ''}
             </div>
 
             <div className="bg-[#0a031a] p-4 rounded-xl border border-amber-500/50 space-y-2 font-mono">

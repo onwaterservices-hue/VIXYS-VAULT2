@@ -987,7 +987,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
                   const isLastCandle = i === visibleCandles.length - 1;
                   const sigTitle = matchingSig
-                    ? matchingSig.title
+                    ? matchingSig?.title || (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN')
                     : isLastCandle
                     ? `VIXY: ${activeSignal.direction || (isBull ? 'BUY UP' : 'BUY DOWN')}`
                     : (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN');
@@ -999,7 +999,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                     : '';
 
                   const sigColor = matchingSig
-                    ? matchingSig.color
+                    ? matchingSig?.color || (isBull ? '#10b981' : '#f43f5e')
                     : (isBull ? '#10b981' : '#f43f5e');
 
                   const guideStartY = isBull ? y(c.low) + 4 : y(c.high) - 4;

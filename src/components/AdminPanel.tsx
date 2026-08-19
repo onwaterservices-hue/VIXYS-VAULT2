@@ -941,8 +941,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     className="p-3 bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 rounded-xl text-left transition transform hover:-translate-y-0.5 cursor-pointer shadow-lg"
                   >
                     <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold tracking-wider uppercase mb-1">
-                      <span>{kpi.title}</span>
-                      <Icon className={`w-3.5 h-3.5 ${kpi.color}`} />
+                      <span>{kpi?.title || 'Metric'}</span>
+                      <Icon className={`w-3.5 h-3.5 ${kpi?.color || 'text-purple-400'}`} />
                     </div>
                     <div className={`text-base font-black font-mono tracking-tight ${kpi.color}`}>
                       {kpi.value}

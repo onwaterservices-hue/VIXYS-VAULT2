@@ -655,10 +655,10 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                   </span>
                   <div className="flex-1 space-y-0.5">
                     <div className="flex items-center justify-between">
-                      <span className="text-white font-bold">{evt.title}</span>
-                      <span className="text-emerald-400 text-[10px] font-bold">Edge {evt.edgeDelta}</span>
+                      <span className="text-white font-bold">{evt?.title || 'System Event'}</span>
+                      <span className="text-emerald-400 text-[10px] font-bold">Edge {evt?.edgeDelta || '+0.0%'}</span>
                     </div>
-                    <p className="text-slate-400 text-[11px] font-sans">{evt.desc}</p>
+                    <p className="text-slate-400 text-[11px] font-sans">{evt?.desc || ''}</p>
                   </div>
                 </div>
               ))}
