@@ -37,15 +37,15 @@ export const ReplayCenterView: React.FC = () => {
     },
   ];
 
-  const active = scenarios[selectedScenario] || scenarios[0];
-  const stepData = active?.steps?.[currentStep] || active?.steps?.[0] || { time: 'T-0m', conf: 0, edge: '0%', event: 'Idle', status: 'WAIT' };
+  const active = scenarios[selectedScenario];
+  const stepData = active.steps[currentStep];
 
   React.useEffect(() => {
     let interval: any;
     if (isPlaying) {
       interval = setInterval(() => {
         setCurrentStep((prev) => {
-          if (!active?.steps || prev >= active.steps.length - 1) {
+          if (prev >= active.steps.length - 1) {
             setIsPlaying(false);
             return prev;
           }
@@ -54,7 +54,7 @@ export const ReplayCenterView: React.FC = () => {
       }, 2000);
     }
     return () => clearInterval(interval);
-  }, [isPlaying, active?.steps?.length]);
+  }, [isPlaying, active.steps.length]);
 
   return (
     <div className="space-y-6 font-sans text-slate-200">
@@ -114,15 +114,15 @@ export const ReplayCenterView: React.FC = () => {
               <RotateCcw className="w-5 h-5" />
             </button>
             <div className="font-mono text-xs">
-              <span className="text-white font-bold block">{active?.title || 'Simulation Scenario'}</span>
-              <span className="text-slate-400">Step {currentStep + 1} of {active?.totalSteps || 5}</span>
+              <span className="text-white font-bold block">{active.title}</span>
+              <span className="text-slate-400">Step {currentStep + 1} of {active.totalSteps}</span>
             </div>
           </div>
 
           <div className="flex items-center gap-2 font-mono">
             <span className="text-xs text-slate-400">Current Timeframe State:</span>
             <span className="px-3 py-1 rounded-xl bg-purple-900/40 text-purple-300 font-bold border border-purple-500/30 text-xs">
-              {stepData?.time || 'T-0m'}
+              {stepData.time}
             </span>
           </div>
         </div>

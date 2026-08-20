@@ -164,21 +164,6 @@ export const REGIME_PROFILES: Record<MarketRegimeType, RegimeProfile> = {
   }
 };
 
-export const getRegimeProfile = (regimeKey?: string): RegimeProfile => {
-  if (!regimeKey) return REGIME_PROFILES.TRENDING_BULL;
-  if (REGIME_PROFILES[regimeKey as MarketRegimeType]) {
-    return REGIME_PROFILES[regimeKey as MarketRegimeType];
-  }
-  const clean = String(regimeKey).toUpperCase();
-  if (clean.includes('BEAR')) return REGIME_PROFILES.TRENDING_BEAR;
-  if (clean.includes('BULL')) return REGIME_PROFILES.TRENDING_BULL;
-  if (clean.includes('CHOP') || clean.includes('PRESERV')) return REGIME_PROFILES.CHOPPY;
-  if (clean.includes('VOLATIL') || clean.includes('BREAKOUT')) return REGIME_PROFILES.HIGH_VOLATILITY;
-  if (clean.includes('RANGE') || clean.includes('NEUTRAL')) return REGIME_PROFILES.RANGE_BOUND;
-  if (clean.includes('TRANSITION') || clean.includes('SHIFT')) return REGIME_PROFILES.TRANSITION;
-  return REGIME_PROFILES.UNKNOWN || REGIME_PROFILES.TRENDING_BULL;
-};
-
 export interface IndicatorAttribution {
   id: string;
   name: string;
@@ -246,7 +231,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [activeStrikeOffset, setActiveStrikeOffset] = useState<number>(-104.05);
 
   // Adaptive Feedback Loop & Regime Profile State
-  const [activeRegimeProfile, setActiveRegimeProfile] = useState<MarketRegimeType>('TRENDING_BULL');
+  const [activeRegimeProfile, setActiveRegimeProfile] = useState<MarketRegimeType>('TRENDING_BULLISH');
   const [isAutoRegimeSwitch, setIsAutoRegimeSwitch] = useState<boolean>(true);
   const [showAttributionHistoryModal, setShowAttributionHistoryModal] = useState<boolean>(false);
 
@@ -324,7 +309,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-1',
       cycleId: 'C-67891',
       timestamp: '15m ago',
-      regime: 'TRENDING_BULL',
+      regime: 'TRENDING_BULLISH',
       marketOutcome: 'UP',
       correctCount: 4,
       totalIndicators: 5,
@@ -335,7 +320,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-2',
       cycleId: 'C-67890',
       timestamp: '30m ago',
-      regime: 'TRENDING_BULL',
+      regime: 'TRENDING_BULLISH',
       marketOutcome: 'UP',
       correctCount: 5,
       totalIndicators: 5,
@@ -346,7 +331,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       id: 'rec-3',
       cycleId: 'C-67889',
       timestamp: '45m ago',
-      regime: 'HIGH_VOLATILITY',
+      regime: 'HIGH_VOLATILITY_BREAKOUT',
       marketOutcome: 'DOWN',
       correctCount: 4,
       totalIndicators: 5,
@@ -794,7 +779,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   // Switch Regime Profile Helper
   const applyRegimeProfile = (regimeKey: MarketRegimeType) => {
     setActiveRegimeProfile(regimeKey);
-    const profile = getRegimeProfile(regimeKey);
+    const profile = REGIME_PROFILES[regimeKey];
     setRecalibrationState(prev => ({
       ...prev,
       momentumWeight: profile.baseWeights.momentumWeight,
@@ -804,7 +789,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       status: 'ADJUSTED',
       isFlashing: true,
       lastAdjustedTime: 'Just now',
-      adjustmentReason: `Loaded ${profile.title || 'Profile'}: ${profile.description || ''}`
+      adjustmentReason: `Loaded ${profile.title}: ${profile.description}`
     }));
     setTimeout(() => {
       setRecalibrationState(prev => ({ ...prev, isFlashing: false }));
@@ -1135,20 +1120,22 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   // Canonical decision resolution
-  const isUp = canonicalDecision?.currentState === 'LOCKED_UP' || (resolvedLog?.decision === 'BUY UP');
-  const isDown = canonicalDecision?.currentState === 'LOCKED_DOWN' || (resolvedLog?.decision === 'BUY DOWN');
-  const isCalibrating = !isUp && !isDown;
-  const isConfirming = false;
-  const isSkip = false;
+  const isUp = canonicalDecision?.currentState === 'LOCKED_UP' || (activeCycleDecision.includes('UP') && cyclePhase !== 'CALIBRATING');
+  const isDown = canonicalDecision?.currentState === 'LOCKED_DOWN' || (activeCycleDecision.includes('DOWN') && cyclePhase !== 'CALIBRATING');
+  const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
+  const isConfirming = !isCalibrating && (canonicalDecision?.currentState === 'CONFIRMING' || continuousInference.protectionDecision.state === 'CONFIRMING');
+  const isSkip = !isCalibrating && (canonicalDecision?.currentState === 'SKIP' || activeCycleDecision === 'VIXY SKIP' || (!isUp && !isDown && !isConfirming));
 
   // Canonical Dominant Decision Title
   const primaryDecisionTitle = isCalibrating
-    ? ((continuousInference?.gemini?.upProbability ?? 0) > (continuousInference?.gemini?.downProbability ?? 0) ? 'VIXY CALIBRATING — UP' : 'VIXY CALIBRATING — DOWN')
+    ? 'VIXY CONFIRMING'
     : isUp
     ? 'VIXY LOCKED — UP'
     : isDown
     ? 'VIXY LOCKED — DOWN'
-    : 'VIXY CALIBRATING';
+    : isConfirming
+    ? 'VIXY CONFIRMING'
+    : 'VIXY SKIP';
 
   // Decision Aura Style
   const decisionAuraStyle = isUp
@@ -1343,7 +1330,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       : 'bg-slate-800 border border-slate-600 text-slate-300'
                   }`}>
                     <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : (isConfirming || isCalibrating) ? 'OBSERVING' : 'SKIPPED'}</span>
+                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : isConfirming ? 'CONFIRMING' : 'SKIPPED'}</span>
                   </span>
                 </div>
               </div>
@@ -1357,7 +1344,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight font-sans drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
-                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : (isConfirming || isCalibrating) ? 'text-cyan-300 text-glow-cyan' : 'text-slate-200'
+                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : isConfirming ? 'text-cyan-300 text-glow-cyan' : 'text-slate-200'
                   }`}>
                     {primaryDecisionTitle}
                   </h1>
@@ -1367,7 +1354,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       ? 'bg-[#00FF88]/15 border-[#00FF88]/50 text-[#00FF88]'
                       : isDown
                       ? 'bg-[#FF3B30]/15 border-[#FF3B30]/50 text-[#FF3B30]'
-                      : (isConfirming || isCalibrating)
+                      : isConfirming
                       ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-300'
                       : continuousInference.protectionDecision.lateCycleProtectionActive
                       ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 animate-pulse'
@@ -1377,11 +1364,11 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       ? '▲ BUY YES / UP'
                       : isDown
                       ? '▼ BUY NO / DOWN'
-                      : (isConfirming || isCalibrating)
+                      : isConfirming
                       ? '⚡ SCANNING CONFLUENCE'
                       : continuousInference.protectionDecision.lateCycleProtectionActive
                       ? '🛡️ LATE-CYCLE PROTECTION (≤ 5:00)'
-                      : (isCalibrating ? '⚡ AWAITING SIGNAL' : '🛡️ CAPITAL PRESERVED — INSUFFICIENT EDGE')}
+                      : '🛡️ CAPITAL PRESERVED — INSUFFICIENT EDGE'}
                   </span>
                 </div>
               </div>
@@ -1400,8 +1387,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     ? `VIXY locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation while Guardian risk remains clear (${continuousInference.gemini.contradictionScore}% conflict).`
                     : isDown
                     ? `VIXY locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% conviction. Heavy ask absorption and bearish supertrend resistance trigger high-probability downward delta targeting.`
-                    : isCalibrating
-                    ? `VIXY is continuously observing live market conditions for cycle ${cycleId}. Awaiting a high-conviction setup. Scanning multi-factor evidence confluence and order book imbalance before authorizing hard lock.`
+                    : isConfirming
+                    ? `VIXY is actively evaluating market microstructure for cycle ${cycleId}. Scanning 10-factor evidence confluence and order book imbalance before authorizing hard lock.`
                     : continuousInference.protectionDecision.lateCycleProtectionActive
                     ? `VIXY hard 5-minute time gate active (${Math.floor(timeRemainingSec / 60)}m ${timeRemainingSec % 60}s remaining). Late entries are blocked to prevent theta decay and execution slippage. Capital preserved.`
                     : `VIXY capital preservation engine elected to SKIP this 15M cycle. ${continuousInference.protectionDecision.skipReasonTitle || 'Insufficient directional confluence'} (${continuousInference.gemini.contradictionScore}% conflict, ${continuousInference.gemini.reversalRisk}% reversal risk). Capital preserved.`}
@@ -2080,7 +2067,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
             <div className="flex items-center space-x-2 text-xs">
               <span className="px-2.5 py-1 rounded-xl bg-[#080414] border border-purple-900/40 text-[10px] text-gray-300">
-                CURRENT REGIME: <span className="text-[#00FF88] font-bold">{getRegimeProfile(activeRegimeProfile)?.title || 'MOMENTUM BULL PROFILE'}</span>
+                CURRENT REGIME: <span className="text-[#00FF88] font-bold">{REGIME_PROFILES[activeRegimeProfile].title}</span>
               </span>
             </div>
           </div>

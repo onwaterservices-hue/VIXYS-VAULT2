@@ -31,7 +31,7 @@ import {
 
 interface ScalpingDeskViewProps {
   ticker: BTCTicker;
-  userRole: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;

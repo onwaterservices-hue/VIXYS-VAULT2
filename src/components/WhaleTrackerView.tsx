@@ -24,7 +24,7 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface WhaleTrackerViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
   onOpenDiscordModal?: () => void;
 }
 

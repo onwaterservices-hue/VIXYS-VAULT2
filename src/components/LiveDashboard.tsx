@@ -51,7 +51,7 @@ interface LiveDashboardProps {
   onOpenPricing: () => void;
   onOpenJournal: () => void;
   onOpenCompare?: () => void;
-  userRole: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
   selectedAsset?: string;
   onSelectAsset?: (symbol: string) => void;
   selectedTimeframe?: string;

@@ -19,8 +19,8 @@ import { AuthState } from '../types';
 interface AuthViewProps {
   authState: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
-  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER') => void;
-  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER') => void;
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
+  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({
@@ -74,68 +74,27 @@ export const AuthView: React.FC<AuthViewProps> = ({
     }
 
     try {
-      const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const body = mode === 'register' 
-        ? { email: userEmail, password, name: userName }
-        : { email: userEmail, password };
-
-      let fetchRes: Response | null = null;
-      let lastErr: any = null;
-
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
-          fetchRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          if (fetchRes.ok || fetchRes.status < 500) {
-            break;
-          }
-        } catch (err: any) {
-          lastErr = err;
-          if (attempt < 3) {
-            await new Promise((r) => setTimeout(r, 400 * attempt));
-          }
-        }
-      }
-
-      if (!fetchRes) {
-        throw lastErr || new Error('Network error connecting to VIXY server');
-      }
-
-      if (!fetchRes.ok) {
-        setLoading(false);
-        if (fetchRes.status === 401) {
-          setErrorMsg('Invalid email or password.');
-          return;
-        } else if (fetchRes.status === 403) {
-          setErrorMsg('Account access is currently restricted.');
-          return;
-        } else if (fetchRes.status === 404) {
-          setErrorMsg('Account not found.');
-          return;
-        } else if (fetchRes.status === 429) {
-          setErrorMsg('Too many attempts. Please wait and try again.');
-          return;
-        } else if (fetchRes.status >= 500) {
-          setErrorMsg('VIXY authentication service is temporarily unavailable.');
-          return;
-        }
-      }
-
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
       let res;
-      try {
+      if (mode === 'register') {
+        const fetchRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password, name: userName }),
+          signal: controller.signal
+        });
         res = await fetchRes.json();
-      } catch (jsonErr) {
-        setLoading(false);
-        setErrorMsg('Invalid response from server.');
-        return;
+      } else {
+        const fetchRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password }),
+          signal: controller.signal
+        });
+        res = await fetchRes.json();
       }
+      clearTimeout(timeoutId);
 
       if (!res?.success) {
         setLoading(false);
@@ -186,43 +145,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
       if (typeof onSuccessNavigate === 'function') {
         setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
       }
-    } catch (err: any) {
-      if (isAdminEmail) {
-        console.warn('[AuthView] Emergency offline fallback applied for Master Admin');
-        localStorage.setItem('vixy_admin_email', userEmail);
-        localStorage.setItem('vixy_user_email', userEmail);
-        
-        setAuthState({
-          isAuthenticated: true,
-          user: {
-            id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            email: userEmail,
-            name: 'Master Admin',
-            role: 'OWNER',
-            joinedDate: new Date().toISOString().split('T')[0],
-            discordLinked: true
-          }
-        });
-
-        if (typeof setUserRole === 'function') {
-          setUserRole('OWNER');
-        }
-
-        if (typeof onSuccessNavigate === 'function') {
-          setTimeout(() => onSuccessNavigate('OWNER'), 1000);
-        }
-
-        setLoading(false);
-        return;
-      }
-
+    } catch (err) {
       setLoading(false);
-      const errString = String(err?.message || err).toLowerCase();
-      if (errString.includes('abort') || errString.includes('timeout')) {
-        setErrorMsg('Request timed out. Please try signing in again.');
-      } else {
-        setErrorMsg('Unable to connect to VIXY server. Please try again.');
-      }
+      setErrorMsg('Network error. Please try again.');
     }
   };
 

@@ -29,8 +29,8 @@ interface HeaderProps {
   ticker: BTCTicker;
   activeTab: 'terminal' | 'scalping' | 'onehour' | 'history' | 'journal' | 'alerts' | 'pricing' | 'settings' | 'admin' | 'landing' | 'auth' | 'markets' | 'compare' | string;
   setActiveTab: (tab: any) => void;
-  userRole: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
-  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER') => void;
+  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
   subscription: UserSubscription;
   authState: AuthState;
   exchangeKeys?: ExchangeApiKeys;

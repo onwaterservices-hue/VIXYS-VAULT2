@@ -9,9 +9,9 @@ interface AuthModalProps {
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
   initialEmail?: string;
-  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER') => void;
+  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
   setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
-  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER') => void;
+  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -99,80 +99,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
 
     try {
-      const endpoint = mode === 'register' ? '/api/auth/register' : '/api/auth/login';
-      const body = mode === 'register' 
-        ? { email: userEmail, password, name: userName }
-        : { email: userEmail, password };
-
-      let fetchRes: Response | null = null;
-      let lastErr: any = null;
-
-      // Retry up to 3 times for resilience against transient network/proxy drops
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 12000);
-          fetchRes = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal
-          });
-          clearTimeout(timeoutId);
-          if (fetchRes.ok || fetchRes.status < 500) {
-            break;
-          }
-        } catch (err: any) {
-          lastErr = err;
-          if (attempt < 3) {
-            await new Promise((r) => setTimeout(r, 400 * attempt));
-          }
-        }
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+      let res;
+      if (mode === 'register') {
+        const fetchRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password, name: userName }),
+          signal: controller.signal
+        });
+        res = await fetchRes.json();
+      } else {
+        const fetchRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: userEmail, password }),
+          signal: controller.signal
+        });
+        res = await fetchRes.json();
       }
+      clearTimeout(timeoutId);
 
-      if (!fetchRes) {
-        throw lastErr || new Error('Network error connecting to VIXY server');
-      }
-
-      if (!fetchRes.ok) {
-        setLoading(false);
-        if (fetchRes.status === 401) {
-          setErrorMsg('Invalid email or password.');
-          return;
-        } else if (fetchRes.status === 403) {
-          setErrorMsg('Account access is currently restricted.');
-          return;
-        } else if (fetchRes.status === 404) {
-          setErrorMsg('Account not found.');
-          return;
-        } else if (fetchRes.status === 429) {
-          setErrorMsg('Too many attempts. Please wait and try again.');
-          return;
-        } else if (fetchRes.status >= 500) {
-          if (isAdminEmail) {
-            // Master Admin emergency fallback if server returns 50x error
-            console.warn('[AuthModal] Master admin fallback triggered on server 50x error');
-          } else {
-            setErrorMsg('VIXY authentication service is temporarily updating. Please try again in a moment.');
-            return;
-          }
-        }
-      }
-
-      let res: any = null;
-      if (fetchRes.ok) {
-        try {
-          res = await fetchRes.json();
-        } catch (jsonErr) {
-          if (!isAdminEmail) {
-            setLoading(false);
-            setErrorMsg('Invalid response from server.');
-            return;
-          }
-        }
-      }
-
-      if (!res?.success && !isAdminEmail) {
+      if (!res?.success) {
         setLoading(false);
         if (res?.error === 'ACCOUNT_NEEDS_PASSWORD') {
            setMode('register');
@@ -194,80 +143,42 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
       setSuccessMsg('ACCOUNT READY! Entering VIXY Terminal...');
       
-      const serverUser = res?.user || {};
+      const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = serverUser.role || (isAdminEmail ? 'OWNER' : assignedRole);
-      if (res?.entitlement) {
+      let finalRole: string = serverUser.role || assignedRole;
+      if (res.entitlement) {
          if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
          else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) && finalRole === 'UNPAID') finalRole = 'PRO';
       }
 
       const handleSuccessCB = onSuccess || onSuccessRole;
+
       setAuthState({
         isAuthenticated: true,
         user: {
           id: canonicalUserId,
           email: userEmail,
-          name: serverUser.name || (isAdminEmail ? 'Master Admin' : userEmail.split('@')[0]),
-          role: (isAdminEmail ? 'OWNER' : finalRole) as any,
+          name: serverUser.name || userEmail.split('@')[0],
+          role: finalRole as any,
           joinedDate: serverUser.joined || new Date().toISOString().split('T')[0],
           discordLinked: serverUser.discordLinked || false,
           discordId: serverUser.discordId,
           discordTag: serverUser.discordTag
         }
       });
-
       if (typeof setUserRole === 'function') {
-        setUserRole((isAdminEmail ? 'OWNER' : finalRole) as any);
+        setUserRole(finalRole as any);
       }
 
       if (typeof handleSuccessCB === 'function') {
-        setTimeout(() => handleSuccessCB((isAdminEmail ? 'OWNER' : finalRole) as any), 150);
+        setTimeout(() => handleSuccessCB(finalRole as any), 150);
       }
-
       setLoading(false);
       onClose();
-    } catch (err: any) {
-      if (isAdminEmail) {
-        // Emergency offline fallback for Master Admin / Owner
-        console.warn('[AuthModal] Emergency offline fallback applied for Master Admin');
-        localStorage.setItem('vixy_admin_email', userEmail);
-        localStorage.setItem('vixy_user_email', userEmail);
-        
-        setAuthState({
-          isAuthenticated: true,
-          user: {
-            id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-            email: userEmail,
-            name: 'Master Admin',
-            role: 'OWNER',
-            joinedDate: new Date().toISOString().split('T')[0],
-            discordLinked: true
-          }
-        });
-
-        if (typeof setUserRole === 'function') {
-          setUserRole('OWNER');
-        }
-
-        const handleSuccessCB = onSuccess || onSuccessRole;
-        if (typeof handleSuccessCB === 'function') {
-          setTimeout(() => handleSuccessCB('OWNER'), 150);
-        }
-
-        setLoading(false);
-        onClose();
-        return;
-      }
-
+    } catch (err) {
       setLoading(false);
-      const errString = String(err?.message || err).toLowerCase();
-      if (errString.includes('abort') || errString.includes('timeout')) {
-        setErrorMsg('Request timed out. Please try signing in again.');
-      } else {
-        setErrorMsg('Unable to connect to VIXY server. Please try again.');
-      }
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
