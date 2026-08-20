@@ -191,7 +191,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           if (ent && (ent.stripeVerified || ent.status === 'active' || ent.plan !== 'NONE' || ent.dayPass?.active)) {
             clearInterval(pollInterval);
             setIsVerifyingWebhook(false);
-            const planKey = (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE') ? 'ELITE' : ((ent.plan === 'PRO_QUANT' || ent.plan === 'PRO') ? 'PRO' : 'STARTER');
+            const planKey = ((ent.plan as string) === 'ELITE_QUANT' || (ent.plan as string) === 'ELITE') ? 'ELITE' : (((ent.plan as string) === 'PRO_QUANT' || (ent.plan as string) === 'PRO') ? 'PRO' : 'STARTER');
             setSubscription({
               plan: planKey,
               status: 'active',
