@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import re
+
+content = """import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Activity, Zap, ShieldCheck, TrendingUp, TrendingDown, ArrowRight,
   CheckCircle2, Radio, Layers, BarChart3, Info, RefreshCw, Compass,
@@ -358,3 +360,9 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
     </div>
   );
 };
+"""
+
+with open("src/components/VixyLiveView.tsx", "w") as f:
+    f.write(content)
+
+print("VixyLiveView replaced for perfect realtime!")

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import re
+
+new_content = """import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Activity, Zap, ShieldCheck, TrendingUp, TrendingDown, ArrowRight,
   CheckCircle2, Radio, Layers, BarChart3, Info, RefreshCw, Compass,
@@ -20,52 +22,20 @@ export type AuthoritativeState = 'CALIBRATING' | 'BUILDING UP' | 'BUILDING DOWN'
 export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
   ticker, onOpenTerminal, onOpenReplay, onOpenPricing
 }) => {
-  const { decision: canonical15m, localUpdatedAt } = useCanonical15mDecision();
+  const { decision: canonical15m } = useCanonical15mDecision();
   
-  // Real-time ticking clock for exact countdowns and freshness
-  const [now, setNow] = useState<number>(Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 500);
-    return () => clearInterval(timer);
-  }, []);
-
   // Ref for tracking state transitions to populate thought stream
   const [thoughtStream, setThoughtStream] = useState<{id: string, text: string, type: 'info'|'alert'|'success'|'warning'}[]>([]);
-  
-  // Refs for change detection
   const prevContractIdRef = useRef<string>('');
-  const prevSpotRef = useRef<number>(0);
-  const prevReversalRiskRef = useRef<number>(0);
-  const prevConfidenceRef = useRef<number>(0);
   
-  const dataAgeMs = now - localUpdatedAt;
-  const isStale = dataAgeMs >= 10000;
+  // Real-time VIXY LIVE state machine (completely independent of normal dashboard SKIP)
+  const elapsedSec = 900 - canonical15m.timeRemainingSec;
+  const isStale = (Date.now() - (canonical15m.updatedAt ? new Date(canonical15m.updatedAt).getTime() : Date.now())) > 25000;
   
-  // Real-time local countdown calculation
-  const cycleEndMs = canonical15m.cycleEnd || (Date.now() + canonical15m.timeRemainingSec * 1000);
-  const localRemainingSec = Math.max(0, Math.floor((cycleEndMs - now) / 1000));
-  const localMins = Math.floor(localRemainingSec / 60);
-  const localSecs = localRemainingSec % 60;
-
-  // Normalized Probabilities
-  let rawUp = canonical15m.gemini?.upProbability || 0;
-  let rawDown = canonical15m.gemini?.downProbability || 0;
-  let rawNoTrade = canonical15m.gemini?.noTradeProbability || 0;
-  const sum = rawUp + rawDown + rawNoTrade;
-  if (sum > 0) {
-    rawUp /= sum;
-    rawDown /= sum;
-    rawNoTrade /= sum;
-  } else {
-    rawNoTrade = 1;
-  }
-  
-  const pUpPct = Math.round(rawUp * 100);
-  const pDownPct = Math.round(rawDown * 100);
-  const pNoTradePct = Math.round(rawNoTrade * 100);
-
-  // VIXY LIVE State Machine
   let authoritativeState: AuthoritativeState = 'CALIBRATING';
+  
+  const pUp = canonical15m.gemini?.upProbability || 0;
+  const pDown = canonical15m.gemini?.downProbability || 0;
   
   if (canonical15m.currentState === 'SETTLED') {
     authoritativeState = 'RESOLVED';
@@ -77,30 +47,24 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
     authoritativeState = 'LOCKED DOWN';
   } else if (canonical15m.protection.protectionStatus === 'VETOED' || canonical15m.reversalRisk > 45) {
     authoritativeState = 'REASSESSING';
-  } else if ((900 - localRemainingSec) < 15) {
+  } else if (elapsedSec < 15) {
     authoritativeState = 'CALIBRATING';
   } else {
-    if (canonical15m.direction === 'UP' || rawUp > rawDown + 0.05) {
+    if (canonical15m.direction === 'UP' || pUp > pDown + 0.05) {
       authoritativeState = 'BUILDING UP';
-    } else if (canonical15m.direction === 'DOWN' || rawDown > rawUp + 0.05) {
+    } else if (canonical15m.direction === 'DOWN' || pDown > pUp + 0.05) {
       authoritativeState = 'BUILDING DOWN';
     } else {
       authoritativeState = 'CALIBRATING';
     }
   }
 
-  // Update thought stream on major state changes and data updates
+  // Update thought stream on major state changes
   useEffect(() => {
-    if (!canonical15m.contractId) return;
-
-    if (canonical15m.contractId !== prevContractIdRef.current) {
+    if (canonical15m.contractId && canonical15m.contractId !== prevContractIdRef.current) {
       prevContractIdRef.current = canonical15m.contractId;
-      prevSpotRef.current = canonical15m.currentSpot || 0;
-      prevReversalRiskRef.current = canonical15m.reversalRisk || 0;
-      prevConfidenceRef.current = canonical15m.confidence || 0;
-      
       setThoughtStream([
-        { id: Date.now().toString() + '-1', text: `NEW 15M CONTRACT INITIALIZED: ${canonical15m.contractId}`, type: 'alert' },
+        { id: Date.now().toString() + '-1', text: `NEW 15M CONTRACT DETECTED: ${canonical15m.contractId}`, type: 'alert' },
         { id: Date.now().toString() + '-2', text: `REBUILDING MARKET BASELINE`, type: 'info' }
       ]);
       return;
@@ -115,32 +79,19 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
         }
       };
 
-      // State transitions
       if (authoritativeState === 'LOCKED UP') addIfNew(`UP THESIS CLEARED VIXY LIVE AUTHORIZATION THRESHOLD`, 'success');
       if (authoritativeState === 'LOCKED DOWN') addIfNew(`DOWN THESIS CLEARED VIXY LIVE AUTHORIZATION THRESHOLD`, 'success');
       if (authoritativeState === 'BUILDING UP') addIfNew(`UP EVIDENCE ACCUMULATING`, 'info');
       if (authoritativeState === 'BUILDING DOWN') addIfNew(`DOWN EVIDENCE ACCUMULATING`, 'info');
       if (authoritativeState === 'REASSESSING') addIfNew(`MARKET STRUCTURE CHANGED — REASSESSING ACTIVE THESIS`, 'warning');
       
-      // Dynamic Data triggers
-      if (canonical15m.currentSpot && Math.abs(canonical15m.currentSpot - prevSpotRef.current) > 25) {
-        addIfNew(`SPOT VOLATILITY: BTC MOVED TO $${canonical15m.currentSpot.toLocaleString()}`, 'info');
-        prevSpotRef.current = canonical15m.currentSpot;
-      }
-      if (Math.abs(canonical15m.reversalRisk - prevReversalRiskRef.current) > 5) {
-        if (canonical15m.reversalRisk > 30) addIfNew(`REVERSAL RISK ELEVATED: ${canonical15m.reversalRisk}%`, 'warning');
-        else if (canonical15m.reversalRisk < 15 && prevReversalRiskRef.current >= 15) addIfNew(`REVERSAL RISK SUBSIDED: ${canonical15m.reversalRisk}%`, 'success');
-        prevReversalRiskRef.current = canonical15m.reversalRisk;
-      }
-      if (Math.abs(canonical15m.confidence - prevConfidenceRef.current) > 4) {
-        addIfNew(`THESIS CONFIDENCE RECALIBRATED: ${canonical15m.confidence}%`, 'info');
-        prevConfidenceRef.current = canonical15m.confidence;
-      }
+      if (canonical15m.reversalRisk > 30) addIfNew(`REVERSAL RISK ELEVATED: ${canonical15m.reversalRisk}%`, 'warning');
+      if (canonical15m.lockScore > 80) addIfNew(`LOCK SCORE STRONG: ${canonical15m.lockScore}/100`, 'success');
 
       // Keep last 8 thoughts
       return newStream.slice(-8);
     });
-  }, [authoritativeState, canonical15m.contractId, canonical15m.reversalRisk, canonical15m.confidence, canonical15m.currentSpot]);
+  }, [authoritativeState, canonical15m.contractId, canonical15m.reversalRisk, canonical15m.lockScore]);
 
   // Derived display values
   const isUp = authoritativeState === 'LOCKED UP' || authoritativeState === 'BUILDING UP';
@@ -168,14 +119,9 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
           <span className="text-purple-300 hidden sm:block">BTC Spot: <span className="text-white font-bold">${canonical15m.currentSpot?.toLocaleString() || '---'}</span></span>
         </div>
         <div className="flex items-center gap-4 text-[10px]">
-          <span className="text-purple-400 flex items-center gap-1.5">
-            DATA HEALTH: 
-            {dataAgeMs < 3000 ? <span className="text-emerald-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> LIVE ({(dataAgeMs / 1000).toFixed(1)}s)</span> :
-             dataAgeMs < 10000 ? <span className="text-amber-400 font-bold flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" /> SYNCING...</span> :
-             <span className="text-rose-400 font-bold flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> DATA STALE</span>}
-          </span>
+          <span className="text-purple-400">DATA HEALTH: {isStale ? <span className="text-rose-400 font-bold">STALE</span> : <span className="text-emerald-400 font-bold">OPTIMAL</span>}</span>
           <span className="text-purple-400">LATENCY: <span className="text-cyan-400 font-bold">{canonical15m.gemini?.latencyMs || 0}ms</span></span>
-          <span className="text-purple-400">T-{localMins}:{localSecs.toString().padStart(2, '0')}</span>
+          <span className="text-purple-400">T-{canonical15m.minutesRemaining}:{canonical15m.secondsRemaining.toString().padStart(2, '0')}</span>
         </div>
       </div>
 
@@ -222,7 +168,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               </div>
               <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-900/40">
                 <div className="text-[10px] text-purple-400 uppercase font-mono mb-1">Market Edge</div>
-                <div className="text-xl font-black text-emerald-400">+{canonical15m.protection?.scoreComponents?.directionalEdge || 0}%</div>
+                <div className="text-xl font-black text-emerald-400">+{canonical15m.protection.scoreComponents?.directionalEdge || 0}%</div>
               </div>
               <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-900/40">
                 <div className="text-[10px] text-purple-400 uppercase font-mono mb-1">Reversal Risk</div>
@@ -236,7 +182,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60 flex items-center justify-between">
                   <span className="text-xs text-purple-300 font-mono">Market Structure</span>
-                  <span className="text-xs font-bold text-emerald-400">{canonical15m.regime?.replace('_', ' ') || 'UNKNOWN'}</span>
+                  <span className="text-xs font-bold text-emerald-400">{canonical15m.regime.replace('_', ' ')}</span>
                 </div>
                 <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60 flex items-center justify-between">
                   <span className="text-xs text-purple-300 font-mono">Order Flow Delta</span>
@@ -244,11 +190,11 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
                 </div>
                 <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60 flex items-center justify-between">
                   <span className="text-xs text-purple-300 font-mono">MTF Alignment</span>
-                  <span className="text-xs font-bold text-emerald-400">{canonical15m.evidenceAlignment || 0}/10 ALIGNED</span>
+                  <span className="text-xs font-bold text-emerald-400">{canonical15m.evidenceAlignment}/10 BULLISH</span>
                 </div>
                 <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60 flex items-center justify-between">
                   <span className="text-xs text-purple-300 font-mono">Temporal Stability</span>
-                  <span className="text-xs font-bold text-cyan-400">{canonical15m.temporalStability || 0}% OPTIMAL</span>
+                  <span className="text-xs font-bold text-cyan-400">{canonical15m.temporalStability}% OPTIMAL</span>
                 </div>
               </div>
             </div>
@@ -263,8 +209,8 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               <Terminal className="w-5 h-5 text-cyan-400" />
               <h3 className="text-sm font-black text-white uppercase tracking-widest">VIXY BRAIN TERMINAL</h3>
               <div className="ml-auto flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${isStale ? 'bg-rose-400' : 'bg-cyan-400 animate-pulse'}`}></span>
-                <span className={`text-[9px] font-bold tracking-widest ${isStale ? 'text-rose-400' : 'text-cyan-400'}`}>LIVE</span>
+                <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                <span className="text-[9px] text-cyan-400 font-bold tracking-widest">LIVE</span>
               </div>
             </div>
             
@@ -290,7 +236,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
           <div className="bg-gradient-to-br from-[#12072B] to-[#0B051A] border-2 border-purple-500/30 rounded-3xl p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
-                <Shield className={`w-5 h-5 ${canonical15m.protection?.protectionStatus === 'CLEAR' ? 'text-emerald-400' : 'text-amber-400'}`} />
+                <Shield className={`w-5 h-5 ${canonical15m.protection.protectionStatus === 'CLEAR' ? 'text-emerald-400' : 'text-amber-400'}`} />
                 <h3 className="text-sm font-black text-white uppercase tracking-widest">GUARDIAN & COUNTER-THESIS</h3>
               </div>
             </div>
@@ -304,11 +250,11 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               <div className="grid grid-cols-2 gap-2">
                 <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/40 flex justify-between items-center">
                   <span className="text-purple-400">Contradiction</span>
-                  <span className="text-emerald-400 font-bold">{canonical15m.contradictionScore || 0}/100</span>
+                  <span className="text-emerald-400 font-bold">{canonical15m.contradictionScore}/100</span>
                 </div>
                 <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/40 flex justify-between items-center">
                   <span className="text-purple-400">Guardian</span>
-                  <span className={`${canonical15m.protection?.protectionStatus === 'CLEAR' ? 'text-emerald-400' : 'text-amber-400'} font-bold`}>{canonical15m.protection?.protectionStatus || 'WATCH'}</span>
+                  <span className={`${canonical15m.protection.protectionStatus === 'CLEAR' ? 'text-emerald-400' : 'text-amber-400'} font-bold`}>{canonical15m.protection.protectionStatus}</span>
                 </div>
               </div>
             </div>
@@ -320,37 +266,37 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
       <div className="bg-[#12072B] border border-purple-900/60 rounded-3xl p-6 font-mono">
         <h3 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2 mb-4">
           <Database className="w-4 h-4 text-cyan-400" />
-          <span>NEURAL PROBABILITY DISTRIBUTION (NORMALIZED)</span>
+          <span>NEURAL PROBABILITY DISTRIBUTION</span>
         </h3>
         
         <div className="grid grid-cols-3 gap-4">
           <div className="bg-[#0A0518] p-4 rounded-2xl border border-purple-900/40">
             <div className="flex justify-between items-end mb-2">
               <span className="text-emerald-400 font-bold">UP</span>
-              <span className="text-xl font-black text-white">{pUpPct}%</span>
+              <span className="text-xl font-black text-white">{Math.round(pUp * 100)}%</span>
             </div>
             <div className="w-full bg-purple-950 rounded-full h-1.5">
-              <div className="bg-emerald-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${pUpPct}%` }}></div>
+              <div className="bg-emerald-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${pUp * 100}%` }}></div>
             </div>
           </div>
           
           <div className="bg-[#0A0518] p-4 rounded-2xl border border-purple-900/40">
             <div className="flex justify-between items-end mb-2">
               <span className="text-amber-400 font-bold">NO TRADE</span>
-              <span className="text-xl font-black text-white">{pNoTradePct}%</span>
+              <span className="text-xl font-black text-white">{Math.round((canonical15m.gemini?.noTradeProbability || 0) * 100)}%</span>
             </div>
             <div className="w-full bg-purple-950 rounded-full h-1.5">
-              <div className="bg-amber-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${pNoTradePct}%` }}></div>
+              <div className="bg-amber-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${(canonical15m.gemini?.noTradeProbability || 0) * 100}%` }}></div>
             </div>
           </div>
 
           <div className="bg-[#0A0518] p-4 rounded-2xl border border-purple-900/40">
             <div className="flex justify-between items-end mb-2">
               <span className="text-rose-400 font-bold">DOWN</span>
-              <span className="text-xl font-black text-white">{pDownPct}%</span>
+              <span className="text-xl font-black text-white">{Math.round(pDown * 100)}%</span>
             </div>
             <div className="w-full bg-purple-950 rounded-full h-1.5">
-              <div className="bg-rose-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${pDownPct}%` }}></div>
+              <div className="bg-rose-400 h-1.5 rounded-full transition-all duration-1000" style={{ width: `${pDown * 100}%` }}></div>
             </div>
           </div>
         </div>
@@ -358,3 +304,9 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
     </div>
   );
 };
+"""
+
+with open("src/components/VixyLiveView.tsx", "w") as f:
+    f.write(new_content)
+
+print("VixyLiveView rewritten successfully!")

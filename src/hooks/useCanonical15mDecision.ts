@@ -12,15 +12,21 @@ export function useCanonical15mDecision(): {
   badgeColor: string;
   isLocked: boolean;
   refreshDecision: () => Promise<void>;
+  localUpdatedAt: number;
 } {
   const [decision, setDecision] = useState<Canonical15mDecision>(() => createInitial15mDecision());
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [localUpdatedAt, setLocalUpdatedAt] = useState<number>(Date.now());
   const currentVersionRef = useRef<number>(0);
   const currentDecisionIdRef = useRef<string>('');
 
   // Apply state update only if monotonic version check passes
   const applySafeUpdate = (incoming: Canonical15mDecision, source: string = 'FIRESTORE') => {
     if (!incoming || !incoming.decisionId) return;
+    
+    // Always update heartbeat if we receive a valid payload
+    setLocalUpdatedAt(Date.now());
+
 
     // If new cycle / decisionId, accept unconditionally and reset version counter
     if (incoming.decisionId !== currentDecisionIdRef.current) {
@@ -130,6 +136,7 @@ export function useCanonical15mDecision(): {
     displayName,
     badgeColor,
     isLocked,
-    refreshDecision: fetchFromServer
+    refreshDecision: fetchFromServer,
+    localUpdatedAt
   };
 }
