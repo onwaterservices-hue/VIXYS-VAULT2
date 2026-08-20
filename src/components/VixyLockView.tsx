@@ -1143,7 +1143,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // Canonical Dominant Decision Title
   const primaryDecisionTitle = isCalibrating
-    ? 'VIXY CALIBRATING'
+    ? ((continuousInference?.gemini?.upProbability ?? 0) > (continuousInference?.gemini?.downProbability ?? 0) ? 'VIXY CALIBRATING — UP' : 'VIXY CALIBRATING — DOWN')
     : isUp
     ? 'VIXY LOCKED — UP'
     : isDown

@@ -277,7 +277,7 @@
       "status": "ACTIVE",
       "joined": "2026-08-17",
       "verificationStatus": "UNVERIFIED",
-      "passwordHash": "vixy$3c02f75ea9bb646ec16eb4d3420ec9bf:b6306c2efcd1fbcdd5f5923fdb3e7687d8bd4fb71d94412e646f9554ec92d24dfa9cf4e0af06bc6fae60432845739bd151fba014d16b1e7efdcad32b1b223b6f",
+      "passwordHash": "vixy$d7aaa9973b4fc39f53ea9d78bbef3f38:9f61f7d390483aa3171e51294948e41e1d65b30165ad3a5d53335eafb624d68dc132737180a43444280113672b6ee3d8b0b3577161ad7f789a2496850152bf51",
       "stripeCustomerId": "cus_venmo_luisvelascop",
       "onlineStatus": "OFFLINE"
     },
@@ -291,7 +291,7 @@
       "status": "ACTIVE",
       "joined": "2026-08-18",
       "verificationStatus": "UNVERIFIED",
-      "passwordHash": "vixy$ae338fb68e64692fa7d2b369ab0a74f0:17a58bb8e91a68103ae52b34554107adf76ab97c5576c16863fa9230d415d2c03b7dcc14db17405fe0902881bf507873648d96d78cfd1a74c7f152d73fbc7c4c",
+      "passwordHash": "vixy$8d91abf40bedb63ff57ca72755659c9a:f4201d014934e7800af9ecd24ae0e916cb61f5a0df4c2367a6d5b9da6b12619985308c198a704f705b54a1a4c97c5b9a2439a75462aaf6b42207b6e6d65f9dab",
       "stripeCustomerId": "cus_venmo_ogacount85",
       "onlineStatus": "OFFLINE"
     },
@@ -481,7 +481,7 @@
       "status": "ACTIVE",
       "joined": "2026-08-17",
       "verificationStatus": "VERIFIED",
-      "passwordHash": "vixy$9b190230f8d0f42a648bfdb1b1869aac:cd23874b079739ad9238093aa3c743314f7992d8ec19a283134a4e63df045da888131c8f6075a423272bb741c07f0b07132d2e1ab127991ac62fb28f0b03d824",
+      "passwordHash": "vixy$04aa2badb15c7c97ae7ea02a366509db:f21aad5100acb15a465995396bbda7a04b0abe0b1035fee6422ef63e7691df30b66462d17853072119fdb7f22d79bc689a604fd77f58dadf22ec63e3d3a9b8fb",
       "stripeCustomerId": "cus_starter_max1011",
       "onlineStatus": "OFFLINE"
     },
@@ -495,7 +495,7 @@
       "status": "ACTIVE",
       "joined": "2026-08-17",
       "verificationStatus": "VERIFIED",
-      "passwordHash": "vixy$b71c5f389a3a02746f766af2d4f8f946:ff70ba6b732a954775b0ddd1a8b1670c3dc6206eec66a88913d11acc764268474223ae51bb701dcf098d8d769b9a9339911492a5f450bd859645ae996767ba5e",
+      "passwordHash": "vixy$03de347db04ce29cd8c150ca56072f59:ef8a70520df4b2e060eda79647cbd932ba06f4444a351a7cca15c550c99b26a6162b53ecd84ee2043edc10716b476cea863388f8e3e7b113fc634e4be2ecf160",
       "stripeCustomerId": "cus_venmo_adrian",
       "onlineStatus": "OFFLINE"
     },
@@ -509,7 +509,7 @@
       "status": "ACTIVE",
       "joined": "2026-08-17",
       "verificationStatus": "UNVERIFIED",
-      "passwordHash": "vixy$3c02f75ea9bb646ec16eb4d3420ec9bf:b6306c2efcd1fbcdd5f5923fdb3e7687d8bd4fb71d94412e646f9554ec92d24dfa9cf4e0af06bc6fae60432845739bd151fba014d16b1e7efdcad32b1b223b6f",
+      "passwordHash": "vixy$d7aaa9973b4fc39f53ea9d78bbef3f38:9f61f7d390483aa3171e51294948e41e1d65b30165ad3a5d53335eafb624d68dc132737180a43444280113672b6ee3d8b0b3577161ad7f789a2496850152bf51",
       "stripeCustomerId": "cus_venmo_uisvelascop",
       "onlineStatus": "OFFLINE"
     },
@@ -552,7 +552,7 @@
         "discordRoleAssigned": false,
         "troubleshootingGraceApplied": true,
         "createdAt": "2026-08-17T02:38:34.000Z",
-        "updatedAt": "2026-08-20T00:35:44.770Z"
+        "updatedAt": "2026-08-20T00:42:56.122Z"
       }
     },
     {
@@ -567,7 +567,7 @@
       "joined": "2026-08-16",
       "status": "ACTIVE",
       "volumeTrades": 0,
-      "passwordHash": "vixy$8e222dbf4db8102225dae2c6573fe2e6:5e5a8e1cc754dcdd9e77d32ef071310d0cd2e8bc04270b0d297a804dd59c4b8ff3d43842ecead4148704ee60ebb1e99abcc93ede3186e131a3f125045b606eea",
+      "passwordHash": "vixy$b57b72f9eaf0d2cef19a9450f26ec365:1d20aa020167d89c5dc8ce86afeef002ff45754df3001e4c6b01cdc9df258ec79723a30820545533c538b065b7761d7440daada40ed0117d6ce81579bb090647",
       "discordLinked": true,
       "stripeCustomerId": "cus_wasan_venmo_48",
       "stripeSubscriptionId": "sub_wasan_starter_2months",
@@ -1610,11 +1610,11 @@
       "discordId": "123456789012345678",
       "discordLinked": true,
       "onlineStatus": "ACTIVE",
-      "lastSeenAt": 1787186348271,
+      "lastSeenAt": 1787186664569,
       "discordGlobalName": "VIXY Vault Owner",
       "guildVerified": true,
       "discord_connected_at": "2026-08-08T14:28:15.943Z",
-      "lastActiveAt": 1787186138890,
+      "lastActiveAt": 1787186575509,
       "stripeCustomerId": "cus_V2HiJIfSTpc5Aj"
     },
     {
@@ -1851,11 +1851,11 @@
         "ELITE",
         "MEMBER"
       ],
-      "lastSync": "12:39:16 AM",
+      "lastSync": "12:44:34 AM",
       "subscriptionTier": "ELITE",
       "verificationStatus": "VERIFIED",
       "connectedAt": "2017-05-20T00:00:00.000Z",
-      "linkedAt": "2026-08-20T00:39:16.100Z",
+      "linkedAt": "2026-08-20T00:44:34.737Z",
       "roleAssigned": "ELITE"
     },
     "315284910382911234": {
@@ -2097,14 +2097,14 @@
       "role": "OWNER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:39:16.078Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "onwaterservices@gmail.com": {
       "email": "onwaterservices@gmail.com",
       "role": "OWNER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:39:16.078Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "test_new_user_123@vixy.test": {
       "updatedAt": "2026-08-11T05:16:07.754Z",
@@ -2120,7 +2120,7 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_allan_yahir_active",
       "stripeSubscriptionId": "sub_allan_yahir_elite",
-      "updatedAt": "2026-08-20T00:39:16.078Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "trader.alex@gmail.com": {
       "email": "trader.alex@gmail.com",
@@ -2129,7 +2129,7 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_alex_trader_pro",
       "stripeSubscriptionId": "sub_alex_trader_pro",
-      "updatedAt": "2026-08-20T00:39:16.100Z"
+      "updatedAt": "2026-08-20T00:44:34.737Z"
     },
     "quant.sarah@optionstrade.io": {
       "email": "quant.sarah@optionstrade.io",
@@ -2138,7 +2138,7 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_sarah_quant_elite",
       "stripeSubscriptionId": "sub_sarah_quant_elite",
-      "updatedAt": "2026-08-20T00:39:16.100Z"
+      "updatedAt": "2026-08-20T00:44:34.737Z"
     },
     "audit_test_user@vixyvault.io": {
       "email": "audit_test_user@vixyvault.io",
@@ -2204,7 +2204,7 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_ogershey_test",
       "stripeSubscriptionId": "sub_ogershey_pro",
-      "updatedAt": "2026-08-20T00:39:16.078Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "dhdh@gmail.com": {
       "email": "dhdh@gmail.com",
@@ -2370,14 +2370,14 @@
       "role": "USER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:39:16.077Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "nghle749@gmail.com": {
       "email": "nghle749@gmail.com",
       "role": "USER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:39:16.077Z"
+      "updatedAt": "2026-08-20T00:44:34.719Z"
     },
     "sergioaddiaz@icloud.com": {
       "email": "sergioaddiaz@icloud.com",
@@ -2391,7 +2391,7 @@
       "role": "PRO",
       "plan": "PRO_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:39:16.100Z"
+      "updatedAt": "2026-08-20T00:44:34.737Z"
     },
     "ludinvelasquez47@gmail.com": {
       "email": "ludinvelasquez47@gmail.com",
@@ -2400,7 +2400,7 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_V4zGkWKshUnahT",
       "stripeSubscriptionId": "sub_ludin_starter_2months",
-      "updatedAt": "2026-08-20T00:39:16.100Z"
+      "updatedAt": "2026-08-20T00:44:34.738Z"
     },
     "wasan@cartwrightrn.com": {
       "email": "wasan@cartwrightrn.com",
@@ -2409,35 +2409,35 @@
       "status": "ACTIVE",
       "stripeCustomerId": "cus_wasan_venmo_48",
       "stripeSubscriptionId": "sub_wasan_starter_2months",
-      "updatedAt": "2026-08-20T00:39:16.100Z"
+      "updatedAt": "2026-08-20T00:44:34.738Z"
     },
     "sergioaddiaz1711@icloud.com": {
       "email": "sergioaddiaz1711@icloud.com",
       "role": "USER",
       "plan": "ELITE_QUANT",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.770Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "uisvelascop@icloud.com": {
       "email": "uisvelascop@icloud.com",
       "role": "USER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.769Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "adriiiansf27@gmail.com": {
       "email": "Adriiiansf27@gmail.com",
       "role": "PRO",
       "plan": "PRO_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.769Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "maxo1011@outlook.com": {
       "email": "maxo1011@outlook.com",
       "role": "PRO",
       "plan": "PRO_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.769Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "test_audit_user_01@vixy.internal": {
       "email": "test_audit_user_01@vixy.internal",
@@ -2575,14 +2575,14 @@
       "role": "PRO",
       "plan": "PRO_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.769Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "luisvelascop@icloud.com": {
       "email": "luisvelascop@icloud.com",
       "role": "USER",
       "plan": "ELITE_PASS",
       "status": "ACTIVE",
-      "updatedAt": "2026-08-20T00:35:44.769Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "test_stack_dp@vixy.internal": {
       "email": "test_stack_dp@vixy.internal",
@@ -3019,7 +3019,7 @@
       "startedAt": "2026-08-17T04:09:35.274Z",
       "discordRoleId": "1538094678870593547",
       "entitlementType": "DAY_PASS",
-      "expiresAt": "2026-08-22T00:35:44.770Z",
+      "expiresAt": "2026-08-22T00:42:56.122Z",
       "updatedAt": "2026-08-19T16:30:17.339Z",
       "status": "ACTIVE",
       "duration": "Stacked $24 Day Pass Access (48 Hours - 2x Purchases)",
@@ -3534,7 +3534,7 @@
       "discordRoleAssigned": false,
       "troubleshootingGraceApplied": true,
       "createdAt": "2026-08-17T02:38:34.000Z",
-      "updatedAt": "2026-08-20T00:35:44.770Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "usr_sergioaddiaz1711_icloud_com": {
       "entitlementId": "dp_venmo_grant_1786934314000",
@@ -3558,7 +3558,7 @@
       "discordRoleAssigned": false,
       "troubleshootingGraceApplied": true,
       "createdAt": "2026-08-17T02:38:34.000Z",
-      "updatedAt": "2026-08-20T00:35:44.770Z"
+      "updatedAt": "2026-08-20T00:42:56.122Z"
     },
     "test_stack_dp@vixy.internal": {
       "email": "test_stack_dp@vixy.internal",
@@ -22979,21 +22979,230 @@
   ],
   "telemetryObservations": [
     {
-      "id": "obs_1787186340000",
-      "timestamp": "2026-08-20T00:39:18.623Z",
-      "timestampMs": 1787186358623,
+      "id": "obs_1787186670000",
+      "timestamp": "2026-08-20T00:44:49.411Z",
+      "timestampMs": 1787186689411,
       "asset": "BTC",
       "market": "BTC_KALSHI_15M",
-      "btcPrice": 69585.765,
-      "ethPrice": 2268.97,
-      "solPrice": 85.455,
+      "btcPrice": 69516.085,
+      "ethPrice": 2266.545,
+      "solPrice": 85.475,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.05,
+      "modelProb": 0.554,
+      "edgePct": 50.4,
+      "confidence": 70,
+      "direction": "UP",
+      "persistenceSeconds": 33,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186640000",
+      "timestamp": "2026-08-20T00:44:27.157Z",
+      "timestampMs": 1787186667157,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69532.795,
+      "ethPrice": 2267.155,
+      "solPrice": 85.485,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.05,
+      "modelProb": 0.469,
+      "edgePct": 41.9,
+      "confidence": 47,
+      "direction": "DOWN",
+      "persistenceSeconds": 0,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186610000",
+      "timestamp": "2026-08-20T00:43:57.095Z",
+      "timestampMs": 1787186637095,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69525.785,
+      "ethPrice": 2267.27,
+      "solPrice": 85.505,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.058,
+      "modelProb": 0.393,
+      "edgePct": -33.5,
+      "confidence": 48,
+      "direction": "DOWN",
+      "persistenceSeconds": 12,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186580000",
+      "timestamp": "2026-08-20T00:43:27.086Z",
+      "timestampMs": 1787186607086,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69534.055,
+      "ethPrice": 2267.215,
+      "solPrice": 85.5,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.22,
+      "modelProb": 0.469,
+      "edgePct": 24.9,
+      "confidence": 51,
+      "direction": "DOWN",
+      "persistenceSeconds": 0,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186550000",
+      "timestamp": "2026-08-20T00:42:57.082Z",
+      "timestampMs": 1787186577082,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69551.305,
+      "ethPrice": 2267.585,
+      "solPrice": 85.545,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.21,
+      "modelProb": 0.597,
+      "edgePct": 38.7,
+      "confidence": 76,
+      "direction": "UP",
+      "persistenceSeconds": 27,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186520000",
+      "timestamp": "2026-08-20T00:42:29.168Z",
+      "timestampMs": 1787186549168,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69503.695,
+      "ethPrice": 2265.295,
+      "solPrice": 85.51,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.21,
+      "modelProb": 0.554,
+      "edgePct": 34.4,
+      "confidence": 52,
+      "direction": "UP",
+      "persistenceSeconds": 3,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186490000",
+      "timestamp": "2026-08-20T00:41:59.121Z",
+      "timestampMs": 1787186519121,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69463.155,
+      "ethPrice": 2263.505,
+      "solPrice": 85.4,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.051,
+      "modelProb": 0.308,
+      "edgePct": -25.7,
+      "confidence": 56,
+      "direction": "DOWN",
+      "persistenceSeconds": 84,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186460000",
+      "timestamp": "2026-08-20T00:41:29.115Z",
+      "timestampMs": 1787186489115,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69510.045,
+      "ethPrice": 2265.775,
+      "solPrice": 85.44,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.15,
+      "modelProb": 0.308,
+      "edgePct": -15.8,
+      "confidence": 56,
+      "direction": "DOWN",
+      "persistenceSeconds": 54,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186430000",
+      "timestamp": "2026-08-20T00:40:59.111Z",
+      "timestampMs": 1787186459111,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69563.625,
+      "ethPrice": 2267.165,
+      "solPrice": 85.475,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.34,
+      "modelProb": 0.35,
+      "edgePct": -1,
+      "confidence": 52,
+      "direction": "DOWN",
+      "persistenceSeconds": 24,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186400000",
+      "timestamp": "2026-08-20T00:40:29.103Z",
+      "timestampMs": 1787186429103,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69613.185,
+      "ethPrice": 2269.73,
+      "solPrice": 85.575,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.57,
+      "modelProb": 0.563,
+      "edgePct": -0.7,
+      "confidence": 53,
+      "direction": "UP",
+      "persistenceSeconds": 75,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186370000",
+      "timestamp": "2026-08-20T00:39:59.094Z",
+      "timestampMs": 1787186399094,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69652.275,
+      "ethPrice": 2271.725,
+      "solPrice": 85.66,
+      "kalshiStrike": 69596.98,
+      "kalshiImpliedProb": 0.72,
+      "modelProb": 0.733,
+      "edgePct": 1.3,
+      "confidence": 91,
+      "direction": "UP",
+      "persistenceSeconds": 45,
+      "isEarlyLock": false,
+      "engineState": "AWAITING_LOCK"
+    },
+    {
+      "id": "obs_1787186340000",
+      "timestamp": "2026-08-20T00:39:27.623Z",
+      "timestampMs": 1787186367623,
+      "asset": "BTC",
+      "market": "BTC_KALSHI_15M",
+      "btcPrice": 69593.855,
+      "ethPrice": 2268.98,
+      "solPrice": 85.515,
       "kalshiStrike": 69596.98,
       "kalshiImpliedProb": 0.51,
-      "modelProb": 0.639,
-      "edgePct": 12.9,
+      "modelProb": 0.605,
+      "edgePct": 9.5,
       "confidence": 81,
       "direction": "UP",
-      "persistenceSeconds": 21,
+      "persistenceSeconds": 30,
       "isEarlyLock": false,
       "engineState": "AWAITING_LOCK"
     },
@@ -28468,220 +28677,11 @@
       "persistenceSeconds": 147,
       "isEarlyLock": false,
       "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156820000",
-      "timestamp": "2026-08-19T16:27:28.465Z",
-      "timestampMs": 1787156848465,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68842.195,
-      "ethPrice": 2098.145,
-      "solPrice": 82.005,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.95,
-      "modelProb": 0.685,
-      "edgePct": -26.5,
-      "confidence": 86,
-      "direction": "UP",
-      "persistenceSeconds": 117,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156790000",
-      "timestamp": "2026-08-19T16:26:58.462Z",
-      "timestampMs": 1787156818462,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68814.985,
-      "ethPrice": 2098.755,
-      "solPrice": 82.025,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.95,
-      "modelProb": 0.685,
-      "edgePct": -26.5,
-      "confidence": 86,
-      "direction": "UP",
-      "persistenceSeconds": 87,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156760000",
-      "timestamp": "2026-08-19T16:26:28.459Z",
-      "timestampMs": 1787156788459,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68785.685,
-      "ethPrice": 2098.435,
-      "solPrice": 81.98,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.95,
-      "modelProb": 0.643,
-      "edgePct": -30.7,
-      "confidence": 54,
-      "direction": "UP",
-      "persistenceSeconds": 57,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156730000",
-      "timestamp": "2026-08-19T16:25:58.454Z",
-      "timestampMs": 1787156758454,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68780.735,
-      "ethPrice": 2098.265,
-      "solPrice": 81.925,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.95,
-      "modelProb": 0.6,
-      "edgePct": -35,
-      "confidence": 52,
-      "direction": "UP",
-      "persistenceSeconds": 27,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156700000",
-      "timestamp": "2026-08-19T16:25:28.448Z",
-      "timestampMs": 1787156728448,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68769.565,
-      "ethPrice": 2098.535,
-      "solPrice": 81.905,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.948,
-      "modelProb": 0.728,
-      "edgePct": -22,
-      "confidence": 91,
-      "direction": "DOWN",
-      "persistenceSeconds": 15,
-      "isEarlyLock": false,
-      "engineState": "LOCKED_DOWN"
-    },
-    {
-      "id": "obs_1787156670000",
-      "timestamp": "2026-08-19T16:24:58.440Z",
-      "timestampMs": 1787156698440,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68734.305,
-      "ethPrice": 2097.955,
-      "solPrice": 81.895,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.928,
-      "modelProb": 0.728,
-      "edgePct": -20,
-      "confidence": 91,
-      "direction": "DOWN",
-      "persistenceSeconds": 12,
-      "isEarlyLock": false,
-      "engineState": "LOCKED_DOWN"
-    },
-    {
-      "id": "obs_1787156640000",
-      "timestamp": "2026-08-19T16:24:28.435Z",
-      "timestampMs": 1787156668435,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68716.015,
-      "ethPrice": 2094.915,
-      "solPrice": 81.855,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.88,
-      "modelProb": 0.728,
-      "edgePct": -15.2,
-      "confidence": 91,
-      "direction": "DOWN",
-      "persistenceSeconds": 0,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156610000",
-      "timestamp": "2026-08-19T16:23:58.427Z",
-      "timestampMs": 1787156638427,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68685.235,
-      "ethPrice": 2094.34,
-      "solPrice": 81.855,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.86,
-      "modelProb": 0.685,
-      "edgePct": -17.5,
-      "confidence": 56,
-      "direction": "UP",
-      "persistenceSeconds": 0,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156580000",
-      "timestamp": "2026-08-19T16:23:28.420Z",
-      "timestampMs": 1787156608420,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68672.985,
-      "ethPrice": 2093.705,
-      "solPrice": 81.815,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.77,
-      "modelProb": 0.728,
-      "edgePct": -4.2,
-      "confidence": 91,
-      "direction": "DOWN",
-      "persistenceSeconds": 0,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156550000",
-      "timestamp": "2026-08-19T16:22:58.412Z",
-      "timestampMs": 1787156578412,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68661.46,
-      "ethPrice": 2094.715,
-      "solPrice": 81.84,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.61,
-      "modelProb": 0.685,
-      "edgePct": 7.5,
-      "confidence": 56,
-      "direction": "UP",
-      "persistenceSeconds": 9,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
-    },
-    {
-      "id": "obs_1787156520000",
-      "timestamp": "2026-08-19T16:22:28.404Z",
-      "timestampMs": 1787156548404,
-      "asset": "BTC",
-      "market": "BTC_KALSHI_15M",
-      "btcPrice": 68602.085,
-      "ethPrice": 2095.945,
-      "solPrice": 81.835,
-      "kalshiStrike": 68552.4,
-      "kalshiImpliedProb": 0.61,
-      "modelProb": 0.464,
-      "edgePct": 14.6,
-      "confidence": 51,
-      "direction": "DOWN",
-      "persistenceSeconds": 0,
-      "isEarlyLock": false,
-      "engineState": "AWAITING_LOCK"
     }
   ],
   "calibrationState": {
-    "rawModelProbability": 0.639,
-    "calibratedModelProbability": 0.81,
+    "rawModelProbability": 0.554,
+    "calibratedModelProbability": 0.7,
     "calibrationStatus": "ACTIVE",
     "calibrationSampleSize": 266,
     "calibrationMinimumSamples": 50,

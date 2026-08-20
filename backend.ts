@@ -133,7 +133,7 @@ const serverJournalEntries = [
   },
 ];
 const app = express();
-const PORT = 3e3;
+const PORT = process.env.PORT || 3000;
 app.use((req, res, next) => {
   if (
     req.originalUrl === "/api/stripe/webhook" ||
