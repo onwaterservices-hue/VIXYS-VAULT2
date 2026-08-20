@@ -740,7 +740,9 @@ export function evaluateVixyProtectionLock(params: {
   } = params;
 
   const minutesRemaining = timeRemainingSec / 60;
-  const isLateCycle = minutesRemaining < 5; // Hard 5-Minute Time Gate
+  const timeElapsedSec = Math.max(0, 900 - timeRemainingSec);
+  const minLockDelayPassed = timeElapsedSec >= 360; // Hard 6-Minute Floor (Minute 0:00 - 5:59 is strictly BUILDING)
+  const isLateCycle = timeRemainingSec <= 30; // Last 30 seconds before settlement
   const activeWeightingProfile = getAdaptiveWeightingProfile(gemini.regime);
 
   // 1. Calculate Component Breakdown
@@ -776,7 +778,7 @@ export function evaluateVixyProtectionLock(params: {
     modelConsensus * 0.10;
 
   const lockScore = Math.min(99, Math.max(10, Math.round(rawLockScore)));
-  const lockProgressPct = Math.min(100, Math.max(0, Math.round((lockScore / 72) * 100)));
+  const lockProgressPct = Math.min(100, Math.max(0, Math.round((lockScore / 80) * 100)));
 
   // Capital Preservation Score: Higher score = stronger justification to stay out / SKIP
   let capitalPreservationScore = 15;
@@ -787,15 +789,16 @@ export function evaluateVixyProtectionLock(params: {
   if (gemini.alignedEvidenceCount < 6) capitalPreservationScore += 20;
   capitalPreservationScore = Math.min(100, Math.max(5, capitalPreservationScore));
 
-  // 2. Strict Checklist Validation
+  // 2. Strict Checklist Validation (Evaluated on every tick)
   const isRegimeTradeable = gemini.regime !== 'CHOPPY' && gemini.regime !== 'TRANSITION' && gemini.regime !== 'UNKNOWN';
   
   const checklist = {
     cycleActive: timeRemainingSec > 0,
-    timeWindowPassed: !isLateCycle, // >= 5 minutes remaining
+    minLockDelayPassed, // STRICT HARD FLOOR: timeElapsedSec >= 360 (Minute 6:00 mark)
+    timeWindowPassed: !isLateCycle,
     regimePassed: isRegimeTradeable,
-    directionalScorePassed: lockScore >= 72,
-    confidencePassed: gemini.confidence >= 70,
+    directionalScorePassed: lockScore >= 80, // High conviction lock score threshold
+    confidencePassed: gemini.confidence >= 78, // High conviction Bayesian confidence threshold
     temporalStabilityPassed: temporalStability >= 65,
     crossVenuePassed: crossVenueAgreement >= 50,
     reversalRiskPassed: gemini.reversalRisk <= 25,
@@ -808,6 +811,7 @@ export function evaluateVixyProtectionLock(params: {
 
   checklist.allPassed = 
     checklist.cycleActive &&
+    checklist.minLockDelayPassed &&
     checklist.timeWindowPassed &&
     checklist.regimePassed &&
     checklist.directionalScorePassed &&
@@ -828,7 +832,7 @@ export function evaluateVixyProtectionLock(params: {
   let capitalPreserved = false;
 
   // HYSTERESIS:
-  // If an existing valid lock was authorized BEFORE the 5-minute cutoff, maintain it!
+  // If an existing valid lock was authorized, maintain it unless emergency reversal veto occurs
   if (currentLockedState && currentLockDirection === gemini.signalDirection) {
     const isEmergencyVeto = 
       gemini.contradictionScore > 50 || 
@@ -848,20 +852,20 @@ export function evaluateVixyProtectionLock(params: {
   } else {
     // Evaluating NEW lock entry
     if (isLateCycle) {
-      // 5-MINUTE TIME GATE: NEVER create a new lock inside 5 minutes
       finalState = 'SKIP';
       capitalPreserved = true;
       skipReasonCode = 'LATE_CYCLE_PROTECTION';
-      skipReasonTitle = 'LATE-CYCLE PROTECTION ACTIVE';
-      skipReasonDescription = `Contract expires in ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s. New entry locks blocked inside 5:00.`;
+      skipReasonTitle = 'CYCLE SETTLEMENT PENDING';
+      skipReasonDescription = `Contract expires in ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s. New entry locks closed before settlement.`;
     } else if (checklist.allPassed) {
+      // Immediate lock authorized as soon as gates are met past minute 6:00
       finalState = 'LOCKED';
     } else if (!isRegimeTradeable) {
       finalState = 'SKIP';
       capitalPreserved = true;
       skipReasonCode = gemini.regime === 'CHOPPY' ? 'CHOPPY_REGIME_PROTECTION' : 'REGIME_TRANSITION';
       skipReasonTitle = `${gemini.regime.replace('_', ' ')} REGIME`;
-      skipReasonDescription = 'Market structure is unstable or in choppy equilibrium. Trade filtered to preserve capital.';
+      skipReasonDescription = 'Market structure is unstable or in choppy equilibrium. Capital preserved.';
     } else if (gemini.reversalRisk > 25) {
       finalState = 'SKIP';
       capitalPreserved = true;
@@ -874,7 +878,10 @@ export function evaluateVixyProtectionLock(params: {
       skipReasonCode = 'CONTRADICTORY_EVIDENCE';
       skipReasonTitle = 'CONTRADICTORY TELEMETRY';
       skipReasonDescription = `Contradiction score ${gemini.contradictionScore}% exceeds threshold. High-weight factors in conflict.`;
-    } else if (lockProgressPct >= 65 || (gemini.alignedEvidenceCount >= 5 && topProb >= 0.60)) {
+    } else if (!minLockDelayPassed) {
+      // In the 0:00 - 5:59 window: actively BUILDING confluence
+      finalState = 'CONFIRMING';
+    } else if (lockProgressPct >= 60 || (gemini.alignedEvidenceCount >= 5 && topProb >= 0.58)) {
       finalState = 'CONFIRMING';
     } else {
       finalState = 'WATCH';

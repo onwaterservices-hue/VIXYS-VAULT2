@@ -220,6 +220,35 @@ export interface ApiKey {
   permissions: string[];
 }
 
+export interface KalshiAutoTradeConfig {
+  enabled: boolean;
+  confidenceThreshold: number; // 0 - 100
+  maxStakePerTradeUSD: number;
+  maxDailyExposureUSD: number;
+  supportedMarkets: string[];
+  environment: 'live' | 'paper';
+  consecutiveFailures: number;
+  autoDisabledReason: string | null;
+  updatedAt?: string;
+}
+
+export interface AutoTradeAuditLog {
+  id: string;
+  userId: string;
+  userEmail?: string;
+  signalId: string;
+  timestamp: string;
+  asset: string;
+  direction: 'UP' | 'DOWN';
+  confidence: number;
+  threshold: number;
+  stakeUSD: number;
+  action: 'ORDER_PLACED' | 'BLOCKED_BY_CAP' | 'FAILED' | 'KILL_SWITCH_TRIGGERED' | 'SKIPPED_THRESHOLD' | 'HANDSHAKE_TEST';
+  status: 'SUCCESS' | 'BLOCKED' | 'FAILED' | 'SKIPPED';
+  rawResponse: any;
+  details: string;
+}
+
 export interface ExchangeCredential {
   connected: boolean;
   apiKey: string;
@@ -229,6 +258,7 @@ export interface ExchangeCredential {
   status: 'CONNECTED' | 'DISCONNECTED' | 'TESTING';
   latencyMs: number;
   lastPing: string;
+  autoTradeConfig?: KalshiAutoTradeConfig;
 }
 
 export interface ExchangeApiKeys {

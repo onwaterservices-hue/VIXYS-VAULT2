@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Key, Shield, Bell, Copy, Check, Terminal, ExternalLink, RefreshCw, Zap, Lock, Activity, CheckCircle, Wifi, AlertTriangle } from 'lucide-react';
 import { UserSubscription, AuthState, AlertSettings, ExchangeApiKeys, ExchangeCredential } from '../types';
+import { KalshiAutoTradePanel } from './KalshiAutoTradePanel';
 
 interface SettingsViewProps {
   authState: AuthState;
@@ -145,41 +146,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
-      {/* DIRECT EXCHANGE API CONNECTIONS (KALSHI, POLYMARKET, DRAFTKINGS) - ELITE PASS FEATURE */}
-      <div className="bg-[#120B28] border border-amber-500/40 rounded-2xl p-6 space-y-6 shadow-2xl relative overflow-hidden">
-        {/* Decorative Ambient Background Glow */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+      {/* KALSHI DIRECT API & AUTO-TRADING ENGINE (ELITE PASS & CFTC REGULATED DCM) */}
+      <KalshiAutoTradePanel
+        isEliteOrAdmin={isElite}
+        userEmail={authState.user?.email}
+        userId={authState.user?.id}
+        onOpenPricing={onOpenPricing}
+      />
 
+      {/* SECONDARY EXCHANGE CONNECTIONS (POLYMARKET & DRAFTKINGS) */}
+      <div className="bg-[#120B28] border border-purple-900/60 rounded-2xl p-6 space-y-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
-                <Wifi className="w-4 h-4 text-amber-400" />
-                <span>Direct Exchange API Keys (Kalshi, Polymarket & DraftKings)</span>
+                <Wifi className="w-4 h-4 text-purple-400" />
+                <span>Secondary Market Feeds (Polymarket L2 & DraftKings Micro)</span>
               </h2>
-              <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                ELITE PASS
-              </span>
             </div>
             <p className="text-xs text-purple-300/70 font-mono mt-1">
-              Connect private API keys for low-latency WebSocket orderbook streaming, direct automated order submission, and sub-second execution feeds.
+              Connect external L2 orderbooks for multi-venue arbitrage monitoring and cross-platform spread analysis.
             </p>
           </div>
-
-          {!isElite ? (
-            <button
-              onClick={onOpenPricing}
-              className="px-4 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 shrink-0"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span>Unlock with Elite Pass</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/40 px-3 py-1 rounded-xl text-emerald-300 text-xs font-bold shrink-0">
-              <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <span>Elite API Active</span>
-            </div>
-          )}
         </div>
 
         {testSuccessMessage && (
@@ -189,127 +177,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
 
-        {/* Lock Overlay for Non-Elite users */}
-        {!isElite && (
-          <div className="p-5 rounded-2xl bg-[#0D061F]/90 border border-amber-500/30 text-amber-200 text-xs font-mono space-y-3 shadow-inner">
-            <div className="flex items-center gap-2 text-amber-300 font-bold text-sm">
-              <Lock className="w-4 h-4 text-amber-400" />
-              <span>Elite Pass Required for Direct Exchange API Integrations</span>
-            </div>
-            <p className="text-purple-200/80 text-xs leading-relaxed">
-              Standard and Pro tiers connect through shared live exchange feeds. Upgrade to <strong className="text-amber-300 font-bold">Elite Pass ($199/mo)</strong> to input your private API keys for Kalshi DCM, Polymarket L2 USDC proxy, and DraftKings Micro-odds for zero-latency direct execution.
-            </p>
-            <div className="pt-1 flex items-center gap-3">
-              <button
-                onClick={onOpenPricing}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs transition-all shadow-md shadow-amber-500/30"
-              >
-                Get Elite Pass Now
-              </button>
-              <span className="text-[11px] text-purple-300/60">Instant access • Cancel anytime</span>
-            </div>
-          </div>
-        )}
-
         {/* Exchange Key Cards Container */}
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 ${!isElite ? 'opacity-60 pointer-events-none' : ''}`}>
-          {/* 1. KALSHI API CARD */}
-          <div className="bg-[#0B061A] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400 shadow-sm shadow-cyan-400" />
-                  <span className="font-bold text-white text-xs">Kalshi DCM API</span>
-                </div>
-                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                  exchangeKeys.kalshi.connected
-                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                    : 'bg-rose-500/20 text-rose-300 border-rose-500/30'
-                }`}>
-                  {exchangeKeys.kalshi.connected ? `${exchangeKeys.kalshi.latencyMs}ms` : 'Disconnected'}
-                </span>
-              </div>
-
-              <div className="space-y-2 text-[11px]">
-                <div>
-                  <label className="text-purple-300/60 text-[10px] block mb-1">API Key ID</label>
-                  <input
-                    type="text"
-                    value={exchangeKeys.kalshi.apiKey}
-                    onChange={(e) =>
-                      setExchangeKeys((prev) => ({
-                        ...prev,
-                        kalshi: { ...prev.kalshi, apiKey: e.target.value },
-                      }))
-                    }
-                    placeholder="kalshi_sec_key_..."
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-purple-300/60 text-[10px] block mb-1">Private RSA Key / Secret</label>
-                  <input
-                    type="password"
-                    value={exchangeKeys.kalshi.apiSecret || '••••••••••••••••'}
-                    onChange={(e) =>
-                      setExchangeKeys((prev) => ({
-                        ...prev,
-                        kalshi: { ...prev.kalshi, apiSecret: e.target.value },
-                      }))
-                    }
-                    placeholder="••••••••••••••••"
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-cyan-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-purple-300/60 text-[10px] block mb-1">Environment</label>
-                  <select
-                    value={exchangeKeys.kalshi.environment}
-                    onChange={(e) =>
-                      setExchangeKeys((prev) => ({
-                        ...prev,
-                        kalshi: { ...prev.kalshi, environment: e.target.value as any },
-                      }))
-                    }
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2 py-1.5 text-purple-200 focus:outline-none"
-                  >
-                    <option value="live">Live DCM Production</option>
-                    <option value="paper">Demo Sandbox</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-purple-900/40 flex items-center justify-between gap-2">
-              <button
-                onClick={() => handleTestConnection('kalshi')}
-                disabled={testingVenue === 'kalshi'}
-                className="flex-1 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
-              >
-                {testingVenue === 'kalshi' ? (
-                  <RefreshCw className="w-3 h-3 animate-spin text-cyan-400" />
-                ) : (
-                  <Activity className="w-3 h-3" />
-                )}
-                <span>Test API Handshake</span>
-              </button>
-
-              <button
-                onClick={() => handleToggleConnect('kalshi')}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
-                  exchangeKeys.kalshi.connected
-                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
-                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
-                }`}
-              >
-                {exchangeKeys.kalshi.connected ? 'Disable' : 'Enable'}
-              </button>
-            </div>
-          </div>
-
-          {/* 2. POLYMARKET API CARD */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* 1. POLYMARKET API CARD */}
           <div className="bg-[#0B061A] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
@@ -405,7 +275,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          {/* 3. DRAFTKINGS API CARD */}
+          {/* 2. DRAFTKINGS API CARD */}
           <div className="bg-[#0B061A] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">

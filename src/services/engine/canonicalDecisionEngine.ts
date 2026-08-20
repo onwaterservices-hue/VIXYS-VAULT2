@@ -133,6 +133,7 @@ export function createInitial15mDecision(params?: {
       protectionStatus: 'WATCH',
       checklist: {
         cycleActive: true,
+        minLockDelayPassed: false,
         timeWindowPassed: true,
         regimePassed: true,
         directionalScorePassed: false,

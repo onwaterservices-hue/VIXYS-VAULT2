@@ -83,10 +83,11 @@ export interface CanonicalProtectionData {
   protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
   checklist: {
     cycleActive: boolean;
+    minLockDelayPassed?: boolean;    // timeElapsedSec >= 360 (Hard 6-minute floor)
     timeWindowPassed: boolean;       // minutesRemaining >= 5
     regimePassed: boolean;           // regime is acceptable (not CHOPPY / UNKNOWN)
-    directionalScorePassed: boolean; // >= 72
-    confidencePassed: boolean;       // >= 70
+    directionalScorePassed: boolean; // >= 80
+    confidencePassed: boolean;       // >= 78
     temporalStabilityPassed: boolean;// >= 65
     crossVenuePassed: boolean;       // agreement within 8%
     reversalRiskPassed: boolean;     // reversalRisk <= 25

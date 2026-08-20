@@ -234,9 +234,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [liveTicker, setLiveTicker] = useState<BTCTicker | null>(null);
 
   // Calibration & Cycle State Machine — Stable Decoupled Lifecycle
-  const [cyclePhase, setCyclePhase] = useState<'CALIBRATING' | 'BUILDING' | 'LOCKED' | 'SETTLEMENT_PENDING'>('LOCKED');
+  const [cyclePhase, setCyclePhase] = useState<'CALIBRATING' | 'BUILDING' | 'LOCKED' | 'SETTLEMENT_PENDING'>('BUILDING');
   const [buildingDirection, setBuildingDirection] = useState<'UP' | 'DOWN'>('UP');
-  const [buildingConfidence, setBuildingConfidence] = useState<number>(76);
+  const [buildingConfidence, setBuildingConfidence] = useState<number>(72);
+  const [buildingLockScore, setBuildingLockScore] = useState<number>(68);
   const [lockedDecision, setLockedDecision] = useState<{
     direction: 'UP' | 'DOWN';
     confidence: number;
@@ -244,18 +245,11 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     strikeOffset: number;
     lockScore: number;
     lockedAt: number;
-  } | null>({
-    direction: 'UP',
-    confidence: 86,
-    strikePrice: 64070.78,
-    strikeOffset: -104.05,
-    lockScore: 84,
-    lockedAt: Date.now() - 120000
-  });
+  } | null>(null);
   const [calibratingProgress, setCalibratingProgress] = useState<number>(0);
   const [calibrationScanStep, setCalibrationScanStep] = useState<string>('Initializing Bayesian Synapse...');
   const [lastSettledEpoch, setLastSettledEpoch] = useState<number>(() => Math.floor(Date.now() / (15 * 60 * 1000)));
-  const [activeConfidence, setActiveConfidence] = useState<number>(86);
+  const [activeConfidence, setActiveConfidence] = useState<number>(72);
   const [activeStrikeOffset, setActiveStrikeOffset] = useState<number>(-104.05);
 
   // Adaptive Feedback Loop & Regime Profile State
@@ -735,31 +729,14 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             clearInterval(progressInterval);
             
             // Step 3: Transition smoothly from CALIBRATING to BUILDING
+            // The model now actively streams and builds confluence across 10 factor groups
             const chosenDir: 'UP' | 'DOWN' = Math.random() > 0.45 ? 'UP' : 'DOWN';
             setBuildingDirection(chosenDir);
-            setBuildingConfidence(74);
+            setBuildingConfidence(72);
+            setBuildingLockScore(66);
+            setLockedDecision(null);
+            setLastSettledEpoch(currentEpochIndex);
             setCyclePhase('BUILDING');
-
-            // Step 4: After 2.5s of building confluence, authorize and lock the decision
-            setTimeout(() => {
-              const finalConfidence = Math.floor(Math.random() * 10 + 82);
-              const finalOffset = (Math.random() * 60 + 40) * (chosenDir === 'UP' ? -1 : 1);
-              const finalStrike = spotPrice + finalOffset;
-              const finalScore = Math.floor(Math.random() * 10 + 82);
-
-              setLockedDecision({
-                direction: chosenDir,
-                confidence: finalConfidence,
-                strikePrice: finalStrike,
-                strikeOffset: finalOffset,
-                lockScore: finalScore,
-                lockedAt: Date.now()
-              });
-              setActiveConfidence(finalConfidence);
-              setActiveStrikeOffset(finalOffset);
-              setLastSettledEpoch(currentEpochIndex);
-              setCyclePhase('LOCKED');
-            }, 2500);
 
             return 100;
           }
@@ -941,6 +918,109 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       protectionDecision
     };
   }, [spotPrice, strikePrice, rawKalshiProb, rawPolyProb, orderFlowVal, cvdVal, technicalIndicators, isTrendBullish, activeRegimeProfile, timeRemainingSec, temporalHistory, isLockedState, effectiveDirection, cycleId]);
+
+  // Strict 100% Sum-Normalized Probabilities dynamically reactive to live market telemetry
+  const normalizedProbabilities = useMemo(() => {
+    const g = continuousInference?.gemini;
+    let rawUp = g?.upProbability ?? 0.65;
+    let rawDown = g?.downProbability ?? 0.22;
+    let rawNoTrade = g?.noTradeProbability ?? 0.13;
+
+    // Modulate probabilities dynamically based on live spot vs strike delta during active contract evaluation
+    const delta = spotPrice - strikePrice;
+    if (!isLockedState) {
+      if (buildingDirection === 'UP') {
+        const deltaInfluence = Math.max(-0.12, Math.min(0.12, (delta / 250) * 0.15));
+        rawUp = Math.min(0.85, Math.max(0.42, rawUp + deltaInfluence));
+        rawDown = Math.max(0.08, (1 - rawUp) * 0.65);
+        rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
+      } else {
+        const deltaInfluence = Math.max(-0.12, Math.min(0.12, (-delta / 250) * 0.15));
+        rawDown = Math.min(0.85, Math.max(0.42, rawDown + deltaInfluence));
+        rawUp = Math.max(0.08, (1 - rawDown) * 0.65);
+        rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
+      }
+    }
+
+    // Exact sum normalization: guaranteed to sum to 100%
+    const totalSum = rawUp + rawDown + rawNoTrade;
+    const nUp = rawUp / totalSum;
+    const nDown = rawDown / totalSum;
+    const nNoTrade = rawNoTrade / totalSum;
+
+    let upPct = Math.round(nUp * 100);
+    let downPct = Math.round(nDown * 100);
+    let noTradePct = 100 - (upPct + downPct);
+    if (noTradePct < 0) {
+      noTradePct = 0;
+      if (upPct > downPct) upPct = 100 - downPct;
+      else downPct = 100 - upPct;
+    }
+
+    return {
+      upPct,
+      downPct,
+      noTradePct,
+      rawUp: nUp,
+      rawDown: nDown,
+      rawNoTrade: nNoTrade
+    };
+  }, [continuousInference, spotPrice, strikePrice, isLockedState, buildingDirection]);
+
+  // Live Building Confluence Evaluator & Genuine Bayesian Lock Gate
+  useEffect(() => {
+    if (cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING') return;
+
+    const prot = continuousInference.protectionDecision;
+    const gem = continuousInference.gemini;
+
+    // Determine current live directional bias from multi-factor evidence
+    const liveDir: 'UP' | 'DOWN' = (gem.signalDirection === 'DOWN' || gem.downProbability > gem.upProbability) ? 'DOWN' : 'UP';
+    
+    // Exact cycle timing metrics
+    const timeElapsedSec = Math.max(0, 900 - timeRemainingSec);
+    const minLockDelayPassed = timeElapsedSec >= 360; // Hard 6-Minute Floor: Evaluated every tick
+
+    if (cyclePhase === 'BUILDING') {
+      setBuildingDirection(liveDir);
+      setBuildingConfidence(Math.round(gem.confidence));
+      setBuildingLockScore(prot.lockScore);
+
+      // Bayesian Hard Lock Authorization Criteria:
+      // 1. Hard 6-minute floor met (timeElapsedSec >= 360)
+      // 2. Lock score >= 80 (Genuine institutional edge)
+      // 3. Confidence >= 78% (Bayesian model certainty)
+      // 4. Checklist all passed & not within 30s settlement threshold
+      // 5. Reversal risk <= 25%
+      // 6. Regime is tradeable (not CHOPPY or TRANSITION)
+      const isGenuineLockAuthorized = 
+        minLockDelayPassed &&
+        prot.checklist.allPassed &&
+        prot.lockScore >= 80 &&
+        gem.confidence >= 78 &&
+        timeRemainingSec > 30 &&
+        gem.reversalRisk <= 25 &&
+        (gem.regime !== 'CHOPPY' && gem.regime !== 'TRANSITION');
+
+      if (isGenuineLockAuthorized && !lockedDecision) {
+        const finalOffset = (Math.random() * 40 + 60) * (liveDir === 'UP' ? -1 : 1);
+        const finalStrike = spotPrice + finalOffset;
+        
+        console.log(`[VIXY:LOCK_AUTHORIZED] Genuine lock authorized on tick! Direction=${liveDir} LockScore=${prot.lockScore}/100 Conviction=${gem.confidence}% TimeElapsed=${Math.floor(timeElapsedSec / 60)}m ${timeElapsedSec % 60}s`);
+        setLockedDecision({
+          direction: liveDir,
+          confidence: gem.confidence,
+          strikePrice: finalStrike,
+          strikeOffset: finalOffset,
+          lockScore: prot.lockScore,
+          lockedAt: Date.now()
+        });
+        setActiveConfidence(gem.confidence);
+        setActiveStrikeOffset(finalOffset);
+        setCyclePhase('LOCKED');
+      }
+    }
+  }, [continuousInference, cyclePhase, timeRemainingSec, spotPrice, lockedDecision]);
 
   // Rolling update to Temporal Memory
   useEffect(() => {
@@ -1232,7 +1312,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const displayLockScore = isLockedState
     ? (lockedDecision?.lockScore || continuousInference.protectionDecision.lockScore || 84)
     : isBuilding
-    ? Math.min(74, Math.max(58, continuousInference.protectionDecision.lockScore))
+    ? (buildingLockScore || continuousInference.protectionDecision.lockScore || 68)
     : Math.min(50, continuousInference.protectionDecision.lockScore);
 
   return (
@@ -1484,42 +1564,56 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </div>
 
               {/* 3-WAY NORMALIZED PROBABILITY DISTRIBUTION STRIP */}
-              <div className="space-y-2 mb-4">
+              <div className="space-y-2.5 my-4">
                 <div className="flex items-center justify-between text-[9.5px]">
-                  <span className="text-gray-400 uppercase font-bold tracking-tight">3-WAY NORMALIZED PROBABILITY DISTRIBUTION</span>
-                  <span className="text-purple-300 font-mono font-bold">100% SUM NORMALIZED</span>
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-gray-300 uppercase font-black tracking-wider">3-WAY NORMALIZED PROBABILITY DISTRIBUTION</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-[9px] font-mono">
+                    <span className="text-[#00FF88] font-bold">UP: {normalizedProbabilities.upPct}%</span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-[#FF3B30] font-bold">DOWN: {normalizedProbabilities.downPct}%</span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-purple-300 font-bold">NO TRADE: {normalizedProbabilities.noTradePct}%</span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/50 text-[8px] text-purple-300 font-bold ml-1 shadow-sm">
+                      100% SUM NORMALIZED
+                    </span>
+                  </div>
                 </div>
 
-                <div className="w-full h-3 bg-[#080511] rounded-full overflow-hidden flex border border-purple-900/30 p-0.5">
+                {/* Multi-segment Animated Distribution Bar */}
+                <div className="w-full h-3.5 bg-[#080511] rounded-full overflow-hidden flex border border-purple-900/60 p-0.5 shadow-inner">
                   <div
-                    className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-500 shadow-[0_0_10px_rgba(0,255,136,0.6)]"
-                    style={{ width: `${(continuousInference?.gemini?.upProbability ?? 0.65) * 100}%` }}
-                    title={`P(UP): ${((continuousInference?.gemini?.upProbability ?? 0.65) * 100).toFixed(1)}%`}
+                    className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(0,255,136,0.6)]"
+                    style={{ width: `${normalizedProbabilities.upPct}%` }}
+                    title={`P(UP): ${normalizedProbabilities.upPct}%`}
                   />
                   <div
-                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] transition-all duration-500 shadow-[0_0_10px_rgba(255,59,48,0.6)]"
-                    style={{ width: `${(continuousInference?.gemini?.downProbability ?? 0.22) * 100}%` }}
-                    title={`P(DOWN): ${((continuousInference?.gemini?.downProbability ?? 0.22) * 100).toFixed(1)}%`}
+                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,59,48,0.6)]"
+                    style={{ width: `${normalizedProbabilities.downPct}%` }}
+                    title={`P(DOWN): ${normalizedProbabilities.downPct}%`}
                   />
                   <div
-                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-r-full transition-all duration-500 shadow-[0_0_10px_rgba(168,85,247,0.6)]"
-                    style={{ width: `${(continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100}%` }}
-                    title={`P(NO TRADE): ${((continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100).toFixed(1)}%`}
+                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-r-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(168,85,247,0.6)]"
+                    style={{ width: `${normalizedProbabilities.noTradePct}%` }}
+                    title={`P(NO TRADE): ${normalizedProbabilities.noTradePct}%`}
                   />
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-emerald-500/30">
-                    <span className="text-[8.5px] text-gray-400 block font-sans">P(UP)</span>
-                    <span className="text-sm sm:text-base font-black text-[#00FF88]">{((continuousInference?.gemini?.upProbability ?? 0.65) * 100).toFixed(0)}%</span>
+                {/* 3 Metric Value Boxes */}
+                <div className="grid grid-cols-3 gap-2.5 text-center pt-1">
+                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(UP)</span>
+                    <span className="text-base sm:text-lg font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
                   </div>
-                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-rose-500/30">
-                    <span className="text-[8.5px] text-gray-400 block font-sans">P(DOWN)</span>
-                    <span className="text-sm sm:text-base font-black text-[#FF3B30]">{((continuousInference?.gemini?.downProbability ?? 0.22) * 100).toFixed(0)}%</span>
+                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(DOWN)</span>
+                    <span className="text-base sm:text-lg font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
                   </div>
-                  <div className="bg-[#080414] py-1.5 px-2 rounded-xl border border-purple-500/30">
-                    <span className="text-[8.5px] text-gray-400 block font-sans">P(NO TRADE)</span>
-                    <span className="text-sm sm:text-base font-black text-purple-300">{((continuousInference?.gemini?.noTradeProbability ?? 0.13) * 100).toFixed(0)}%</span>
+                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 35 ? 'border-purple-500/60 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/30' : 'border-purple-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(NO TRADE)</span>
+                    <span className="text-base sm:text-lg font-black text-purple-300 font-mono tracking-tight">{normalizedProbabilities.noTradePct}%</span>
                   </div>
                 </div>
               </div>
