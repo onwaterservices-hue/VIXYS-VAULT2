@@ -221,8 +221,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       }
       return;
     }
-    setSelectedPlanToBuy(planKey);
-    handleInitiateRealStripeCheckout();
+    handleInitiateRealStripeCheckout(planKey);
   };
 
   const handleDirectStripeCheckout = (planKey: 'STARTER' | 'PRO' | 'ELITE') => {
@@ -232,11 +231,10 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       }
       return;
     }
-    setSelectedPlanToBuy(planKey);
-    handleInitiateRealStripeCheckout();
+    handleInitiateRealStripeCheckout(planKey);
   };
 
-  const handleInitiateRealStripeCheckout = async () => {
+  const handleInitiateRealStripeCheckout = async (targetPlan?: 'STARTER' | 'PRO' | 'ELITE') => {
     if (!authState?.isAuthenticated) {
       if (onOpenAuth) {
         onOpenAuth('register');
@@ -244,12 +242,14 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       return;
     }
 
+    const planToCheckout = targetPlan || selectedPlanToBuy || 'PRO';
+    setSelectedPlanToBuy(planToCheckout);
     setIsProcessingStripe(true);
     setStripeError('');
 
     const currentUserEmail = authState?.user?.email || '';
     const currentUid = authState?.user?.id || '';
-    const directFallbackUrl = getStripePaymentUrl(selectedPlanToBuy, billingInterval, {
+    const directFallbackUrl = getStripePaymentUrl(planToCheckout, billingInterval, {
       email: currentUserEmail,
       uid: currentUid,
       promoCode: appliedPromo?.code || (promoCodeInput !== 'PROMOTER20' ? promoCodeInput : undefined),
@@ -269,7 +269,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           'x-user-uid': currentUid,
         },
         body: JSON.stringify({
-          plan: selectedPlanToBuy,
+          plan: planToCheckout,
           interval: billingInterval,
           promoCode: appliedPromo?.code || promoCodeInput,
           referralCode: appliedPromo?.code || promoCodeInput,
@@ -614,7 +614,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href="#"
+              href={getDirectStripeUrl('STARTER')}
               onClick={(e) => handlePlanClick(e, 'STARTER')}
               className="w-full py-3 rounded-xl bg-purple-900/50 hover:bg-purple-900/80 text-white font-bold text-xs transition-all border border-purple-600/40 flex items-center justify-center gap-1.5 shadow-md cursor-pointer"
             >
@@ -650,7 +650,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href="#"
+              href={getDirectStripeUrl('PRO')}
               onClick={(e) => handlePlanClick(e, 'PRO')}
               className="w-full py-3.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
@@ -683,7 +683,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           <div className="space-y-2 pt-2">
             <a
-              href="#"
+              href={getDirectStripeUrl('ELITE')}
               onClick={(e) => handlePlanClick(e, 'ELITE')}
               className="w-full py-3.5 rounded-xl bg-violet-700 hover:bg-violet-600 text-white font-bold text-xs shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
