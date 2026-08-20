@@ -51,6 +51,8 @@ import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
 import { TermsView } from './components/TermsView';
 import { PrivacyView } from './components/PrivacyView';
 import { DiscordBotHubView } from './components/DiscordBotHubView';
+import { VixyLearningCenter } from './components/VixyLearningCenter';
+
 import { DiscordOnboardingModal } from './components/DiscordOnboardingModal';
 import { RiskDisclosureView } from './components/RiskDisclosureView';
 import { RefundPolicyView } from './components/RefundPolicyView';
@@ -1358,6 +1360,14 @@ export default function App() {
                   {activeTab === 'discord-bot' && (
                     userRole === 'ADMIN' ? (
                       <DiscordBotHubView />
+                    ) : (
+                      <NotFoundView onReturnToTerminal={() => setActiveTab('terminal')} />
+                    )
+                  )}
+
+                  {activeTab === 'vixy-learning' && (
+                    userRole === 'ADMIN' ? (
+                      <VixyLearningCenter />
                     ) : (
                       <NotFoundView onReturnToTerminal={() => setActiveTab('terminal')} />
                     )

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   LayoutDashboard,
   TrendingUp,
@@ -34,7 +34,7 @@ import {
   Lock,
   Flame,
   Clock,
-} from 'lucide-react';
+} from "lucide-react";
 
 interface SidebarProps {
   activeTab: string;
@@ -42,10 +42,10 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSearch: () => void;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole?: "UNPAID" | "PRO" | "ADMIN";
   hasActiveAccess?: boolean;
   isAuthenticated?: boolean;
-  onOpenAuth?: (mode: 'login' | 'register') => void;
+  onOpenAuth?: (mode: "login" | "register") => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -54,83 +54,138 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile,
   onOpenSearch,
-  userRole = 'ADMIN',
+  userRole = "ADMIN",
   hasActiveAccess = false,
   isAuthenticated = false,
   onOpenAuth,
 }) => {
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    return localStorage.getItem('vixy_sidebar_collapsed') === 'true';
+    return localStorage.getItem("vixy_sidebar_collapsed") === "true";
   });
 
   const [isSearchHidden, setIsSearchHidden] = useState<boolean>(() => {
-    return localStorage.getItem('vixy_hide_search') === 'true';
+    return localStorage.getItem("vixy_hide_search") === "true";
   });
 
   const toggleCollapse = () => {
     const nextState = !isCollapsed;
     setIsCollapsed(nextState);
-    localStorage.setItem('vixy_sidebar_collapsed', String(nextState));
+    localStorage.setItem("vixy_sidebar_collapsed", String(nextState));
   };
 
   const toggleHideSearch = (e: React.MouseEvent) => {
     e.stopPropagation();
     const nextState = !isSearchHidden;
     setIsSearchHidden(nextState);
-    localStorage.setItem('vixy_hide_search', String(nextState));
+    localStorage.setItem("vixy_hide_search", String(nextState));
   };
 
   const navSections = [
     {
-      title: 'VIXY VAULT',
+      title: "VIXY VAULT",
       items: [
-        { id: 'terminal', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'vixylive', label: 'VIXY LIVE', icon: Flame, badge: 'FLAGSHIP', isFlagship: true },
-        { id: 'compare', label: 'Asset Compare', icon: Sliders, badge: 'VS' },
-        { id: 'scalping', label: 'Scalping Desk', icon: Zap, badge: '15S', isDesk: true },
-        { id: 'onehour', label: '1-Hour Desk', icon: Clock, badge: '1H', isDesk: true },
+        { id: "terminal", label: "Dashboard", icon: LayoutDashboard },
+        {
+          id: "vixylive",
+          label: "VIXY LIVE",
+          icon: Flame,
+          badge: "FLAGSHIP",
+          isFlagship: true,
+        },
+        { id: "compare", label: "Asset Compare", icon: Sliders, badge: "VS" },
+        {
+          id: "scalping",
+          label: "Scalping Desk",
+          icon: Zap,
+          badge: "15S",
+          isDesk: true,
+        },
+        {
+          id: "onehour",
+          label: "1-Hour Desk",
+          icon: Clock,
+          badge: "1H",
+          isDesk: true,
+        },
       ],
     },
     {
-      title: 'INTELLIGENCE',
+      title: "INTELLIGENCE",
       items: [
-        { id: 'history', label: 'VIXY LOCKS', icon: BarChart2, badge: 'RESULTS', isLockLayer: true },
-        { id: 'scanner', label: 'Edge Scanner', icon: Target, badge: '+EV' },
-        { id: 'markets', label: 'Markets', icon: TrendingUp },
-        { id: 'patterns', label: 'Pattern Engine', icon: Sparkles },
-        { id: 'whales', label: 'Whale Tracker', icon: Layers },
+        {
+          id: "history",
+          label: "VIXY LOCKS",
+          icon: BarChart2,
+          badge: "RESULTS",
+          isLockLayer: true,
+        },
+        { id: "scanner", label: "Edge Scanner", icon: Target, badge: "+EV" },
+        { id: "markets", label: "Markets", icon: TrendingUp },
+        { id: "patterns", label: "Pattern Engine", icon: Sparkles },
+        { id: "whales", label: "Whale Tracker", icon: Layers },
       ],
     },
     {
-      title: 'RESEARCH',
+      title: "RESEARCH",
       items: [
-        { id: 'explainability', label: 'Explainability Vault', icon: BrainCircuit, badge: 'CORE' },
-        { id: 'perflab', label: 'Performance War Room', icon: Award, badge: 'V1.0' },
-        { id: 'replay', label: 'Replay Center', icon: History },
-        { id: 'journal', label: 'Trade Journal', icon: BookOpen },
+        {
+          id: "explainability",
+          label: "Explainability Vault",
+          icon: BrainCircuit,
+          badge: "CORE",
+        },
+        {
+          id: "perflab",
+          label: "Performance War Room",
+          icon: Award,
+          badge: "V1.0",
+        },
+        { id: "replay", label: "Replay Center", icon: History },
+        { id: "journal", label: "Trade Journal", icon: BookOpen },
       ],
     },
     {
-      title: 'SYSTEM',
+      title: "SYSTEM",
       items: [
-        { id: 'alerts', label: 'Alerts', icon: Bell },
-        { id: 'pricing', label: 'Pricing', icon: CreditCard, badge: 'PRO' },
-        { id: 'settings', label: 'Settings', icon: Settings },
-        { id: 'discord-bot', label: 'Discord Bot Service', icon: Bot, badge: 'ADMIN' },
-        { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, badge: 'TOP' },
-        { id: 'changelog', label: 'System Status', icon: Activity, badge: 'LIVE' },
-        { id: 'landing', label: 'Landing', icon: Globe },
+        { id: "alerts", label: "Alerts", icon: Bell },
+        { id: "pricing", label: "Pricing", icon: CreditCard, badge: "PRO" },
+        { id: "settings", label: "Settings", icon: Settings },
+        {
+          id: "discord-bot",
+          label: "Discord Bot Service",
+          icon: Bot,
+          badge: "ADMIN",
+        },
+        {
+          id: "vixy-learning",
+          label: "VIXY Learning Center",
+          icon: BrainCircuit,
+          badge: "ADMIN",
+        },
+        { id: "leaderboard", label: "Leaderboard", icon: Trophy, badge: "TOP" },
+        {
+          id: "changelog",
+          label: "System Status",
+          icon: Activity,
+          badge: "LIVE",
+        },
+        { id: "landing", label: "Landing", icon: Globe },
       ],
     },
     {
-      title: 'LEGAL & SUPPORT',
+      title: "LEGAL & SUPPORT",
       items: [
-        { id: 'contact', label: 'Contact & Support', icon: LifeBuoy },
-        { id: 'about', label: 'About Vixy Vault', icon: Info },
-        { id: 'terms', label: 'Terms of Service', icon: FileText },
-        { id: 'privacy', label: 'Privacy Policy', icon: ShieldCheck },
-        { id: 'risk', label: 'Risk Notice', icon: AlertTriangle, badge: 'NOTICE' },
-        { id: 'refunds', label: 'Refund Policy', icon: CreditCard },
+        { id: "contact", label: "Contact & Support", icon: LifeBuoy },
+        { id: "about", label: "About Vixy Vault", icon: Info },
+        { id: "terms", label: "Terms of Service", icon: FileText },
+        { id: "privacy", label: "Privacy Policy", icon: ShieldCheck },
+        {
+          id: "risk",
+          label: "Risk Notice",
+          icon: AlertTriangle,
+          badge: "NOTICE",
+        },
+        { id: "refunds", label: "Refund Policy", icon: CreditCard },
       ],
     },
   ];
@@ -140,13 +195,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Desktop Fixed Left Sidebar */}
       <aside
         className={`hidden lg:flex flex-col bg-[#0a0518]/95 border-r border-purple-900/40 shrink-0 font-sans transition-all duration-300 ${
-          isCollapsed ? 'w-20 p-2.5 space-y-4 items-center' : 'w-64 p-4 space-y-5'
+          isCollapsed
+            ? "w-20 p-2.5 space-y-4 items-center"
+            : "w-64 p-4 space-y-5"
         }`}
       >
         {/* Fold / Collapse Toggle Header */}
         <div
           className={`flex items-center w-full ${
-            isCollapsed ? 'justify-center py-1' : 'justify-between pb-1 border-b border-purple-900/30'
+            isCollapsed
+              ? "justify-center py-1"
+              : "justify-between pb-1 border-b border-purple-900/30"
           }`}
         >
           {!isCollapsed && (
@@ -156,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           )}
           <button
             onClick={toggleCollapse}
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse / Fold Sidebar'}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse / Fold Sidebar"}
             className="p-1.5 rounded-xl bg-[#120826] hover:bg-purple-800/50 border border-purple-800/40 text-purple-300 hover:text-white transition-all shadow-sm active:scale-95"
           >
             {isCollapsed ? (
@@ -209,7 +268,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <Search className="w-3.5 h-3.5 text-purple-400" />
               <span>Search</span>
-              <kbd className="px-1 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] border border-purple-800/40">⌘K</kbd>
+              <kbd className="px-1 py-0.2 rounded bg-purple-950 text-purple-300 text-[9px] border border-purple-800/40">
+                ⌘K
+              </kbd>
             </button>
             <button
               onClick={toggleHideSearch}
@@ -232,18 +293,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               )}
               <div className="space-y-1">
                 {sec.items
-                  .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
+                  .filter(
+                    (item) => item.id !== "discord-bot" || userRole === "ADMIN",
+                  )
                   .map((item) => {
                     const IconComponent = item.icon;
                     const isActive = activeTab === item.id;
-                    const isGated = (item.id === 'vixylive' || item.id === 'terminal') && !hasActiveAccess;
+                    const isGated =
+                      (item.id === "vixylive" || item.id === "terminal") &&
+                      !hasActiveAccess;
 
                     const handleItemClick = () => {
                       if (isGated) {
                         if (!isAuthenticated) {
-                          if (onOpenAuth) onOpenAuth('register');
+                          if (onOpenAuth) onOpenAuth("register");
                         } else {
-                          setActiveTab('pricing');
+                          setActiveTab("pricing");
                         }
                       } else {
                         setActiveTab(item.id);
@@ -255,28 +320,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <button
                           key={item.id}
                           onClick={handleItemClick}
-                          title={`${item.label} ${item.badge ? `(${item.badge})` : ''} ${isGated ? '(Subscription Required)' : ''}`}
+                          title={`${item.label} ${item.badge ? `(${item.badge})` : ""} ${isGated ? "(Subscription Required)" : ""}`}
                           className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group cursor-pointer ${
                             isActive
                               ? (item as any).isFlagship
-                                ? 'bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 shadow-[0_0_20px_rgba(251,191,36,0.5)] border border-amber-300 ring-2 ring-amber-400/30'
-                                : 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                                ? "bg-gradient-to-r from-amber-500 to-purple-600 text-slate-950 shadow-[0_0_20px_rgba(251,191,36,0.5)] border border-amber-300 ring-2 ring-amber-400/30"
+                                : "bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40"
                               : (item as any).isFlagship
-                              ? 'bg-amber-950/40 text-amber-300 border border-amber-500/40 hover:bg-amber-900/50 hover:text-white shadow-[0_0_12px_rgba(251,191,36,0.2)]'
-                              : 'text-purple-300/80 hover:text-white hover:bg-purple-900/30'
+                                ? "bg-amber-950/40 text-amber-300 border border-amber-500/40 hover:bg-amber-900/50 hover:text-white shadow-[0_0_12px_rgba(251,191,36,0.2)]"
+                                : "text-purple-300/80 hover:text-white hover:bg-purple-900/30"
                           }`}
                         >
-                          <IconComponent className={`w-5 h-5 ${(item as any).isFlagship ? 'text-amber-400 animate-pulse' : ''}`} />
+                          <IconComponent
+                            className={`w-5 h-5 ${(item as any).isFlagship ? "text-amber-400 animate-pulse" : ""}`}
+                          />
                           {isGated ? (
                             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 border border-[#0a0518]" />
                           ) : (item as any).isFlagship ? (
                             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 animate-ping border border-[#0a0518]" />
-                          ) : item.badge && (
-                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
+                          ) : (
+                            item.badge && (
+                              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400 border border-[#0a0518]" />
+                            )
                           )}
                           {/* Hover Tooltip Popup */}
                           <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#130A2A] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                            {item.label} {isGated ? <span className="text-amber-400 font-mono text-[10px]">[LOCKED]</span> : item.badge && <span className="text-amber-300 font-mono text-[10px]">[{item.badge}]</span>}
+                            {item.label}{" "}
+                            {isGated ? (
+                              <span className="text-amber-400 font-mono text-[10px]">
+                                [LOCKED]
+                              </span>
+                            ) : (
+                              item.badge && (
+                                <span className="text-amber-300 font-mono text-[10px]">
+                                  [{item.badge}]
+                                </span>
+                              )
+                            )}
                           </div>
                         </button>
                       );
@@ -292,13 +372,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group cursor-pointer ${
                           isActive
                             ? isFlagship
-                              ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] border border-amber-300 ring-2 ring-amber-400/30'
-                              : 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40'
+                              ? "bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_25px_rgba(251,191,36,0.4)] border border-amber-300 ring-2 ring-amber-400/30"
+                              : "bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/40"
                             : isFlagship
-                            ? 'bg-gradient-to-r from-amber-500/15 via-purple-900/30 to-transparent border border-amber-500/40 text-amber-200 hover:text-white hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.25)]'
-                            : isDesk
-                            ? 'text-purple-200/90 hover:text-white hover:bg-purple-900/30 border border-purple-900/30 hover:border-purple-600/40'
-                            : 'text-purple-200/80 hover:text-white hover:bg-purple-900/30'
+                              ? "bg-gradient-to-r from-amber-500/15 via-purple-900/30 to-transparent border border-amber-500/40 text-amber-200 hover:text-white hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.25)]"
+                              : isDesk
+                                ? "text-purple-200/90 hover:text-white hover:bg-purple-900/30 border border-purple-900/30 hover:border-purple-600/40"
+                                : "text-purple-200/80 hover:text-white hover:bg-purple-900/30"
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -306,16 +386,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             className={`w-4 h-4 ${
                               isActive
                                 ? isFlagship
-                                  ? 'text-slate-950'
-                                  : 'text-white'
+                                  ? "text-slate-950"
+                                  : "text-white"
                                 : isFlagship
-                                ? 'text-amber-400 animate-pulse'
-                                : isDesk
-                                ? 'text-amber-300 group-hover:text-amber-200'
-                                : 'text-purple-400 group-hover:text-purple-300'
+                                  ? "text-amber-400 animate-pulse"
+                                  : isDesk
+                                    ? "text-amber-300 group-hover:text-amber-200"
+                                    : "text-purple-400 group-hover:text-purple-300"
                             }`}
                           />
-                          <span className={isFlagship ? 'font-black tracking-wider uppercase' : ''}>
+                          <span
+                            className={
+                              isFlagship
+                                ? "font-black tracking-wider uppercase"
+                                : ""
+                            }
+                          >
                             {item.label}
                           </span>
                         </div>
@@ -326,26 +412,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <span>LOCK</span>
                           </span>
                         ) : isFlagship ? (
-                          <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
-                            isActive
-                              ? 'bg-slate-950 text-amber-300 border-amber-400/60 shadow-sm'
-                              : 'bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-[0_0_8px_rgba(251,191,36,0.3)]'
-                          }`}>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
+                              isActive
+                                ? "bg-slate-950 text-amber-300 border-amber-400/60 shadow-sm"
+                                : "bg-amber-500/25 text-amber-300 border-amber-400/50 shadow-[0_0_8px_rgba(251,191,36,0.3)]"
+                            }`}
+                          >
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                             <span>LIVE</span>
                           </span>
-                        ) : item.badge && (
-                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
-                            item.badge === '15S'
-                              ? 'bg-amber-950/70 text-amber-300 border-amber-500/40'
-                              : item.badge === '1H'
-                              ? 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40'
-                              : item.badge === 'RESULTS'
-                              ? 'bg-purple-950 text-purple-300 border-purple-500/40'
-                              : 'bg-purple-950 text-purple-300 border-purple-500/30'
-                          }`}>
-                            {item.badge}
-                          </span>
+                        ) : (
+                          item.badge && (
+                            <span
+                              className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
+                                item.badge === "15S"
+                                  ? "bg-amber-950/70 text-amber-300 border-amber-500/40"
+                                  : item.badge === "1H"
+                                    ? "bg-cyan-950/70 text-cyan-300 border-cyan-500/40"
+                                    : item.badge === "RESULTS"
+                                      ? "bg-purple-950 text-purple-300 border-purple-500/40"
+                                      : "bg-purple-950 text-purple-300 border-purple-500/30"
+                              }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )
                         )}
                       </button>
                     );
@@ -357,14 +449,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Institutional Badge & Sales Funnel Conversion Card */}
           {!isCollapsed ? (
             <div className="pt-3 border-t border-purple-900/40 mt-3 space-y-2">
-              {userRole === 'ADMIN' || userRole === 'PRO' ? (
+              {userRole === "ADMIN" || userRole === "PRO" ? (
                 <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-950/80 via-[#14082e] to-[#0a0319] border border-emerald-500/40 space-y-1.5 shadow-lg shadow-purple-950/50">
                   <div className="flex items-center justify-between text-xs font-mono font-black text-emerald-300">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      {userRole === 'ADMIN' ? 'MASTER ADMIN' : 'VIXY ELITE PRO'}
+                      {userRole === "ADMIN" ? "MASTER ADMIN" : "VIXY ELITE PRO"}
                     </span>
-                    <span className="text-[9px] bg-emerald-500/20 px-1.5 py-0.2 rounded text-emerald-300 border border-emerald-500/30">ALL UNLOCKED</span>
+                    <span className="text-[9px] bg-emerald-500/20 px-1.5 py-0.2 rounded text-emerald-300 border border-emerald-500/30">
+                      ALL UNLOCKED
+                    </span>
                   </div>
                   <p className="text-[11px] text-purple-200/90 leading-snug font-sans font-bold flex items-center gap-1">
                     ⚡ Complete Terminal, Models & Bot Access Active
@@ -377,13 +471,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                       VIXY ELITE AI
                     </span>
-                    <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.2 rounded text-amber-200 border border-amber-500/30">PRO</span>
+                    <span className="text-[9px] bg-amber-500/20 px-1.5 py-0.2 rounded text-amber-200 border border-amber-500/30">
+                      PRO
+                    </span>
                   </div>
                   <p className="text-[11px] text-purple-200/90 leading-snug font-sans">
-                    Unlock complete entry prices, stop-loss targets, profit levels & AI heatmaps.
+                    Unlock complete entry prices, stop-loss targets, profit
+                    levels & AI heatmaps.
                   </p>
                   <button
-                    onClick={() => setActiveTab('pricing')}
+                    onClick={() => setActiveTab("pricing")}
                     className="w-full py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-[11px] font-mono uppercase tracking-wider shadow-md transition-transform active:scale-95 cursor-pointer"
                   >
                     Upgrade to Elite →
@@ -393,11 +490,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <div className="px-1 flex items-center justify-between text-[10px] text-purple-400/60 font-mono">
                 <span>VIXY AI v3.4</span>
-                <span className="text-emerald-400 font-bold">24 Models Active</span>
+                <span className="text-emerald-400 font-bold">
+                  24 Models Active
+                </span>
               </div>
             </div>
           ) : (
-            <div className="pt-3 border-t border-purple-900/40 mt-3 flex justify-center" title="VIXY QUANT v3.4 Active">
+            <div
+              className="pt-3 border-t border-purple-900/40 mt-3 flex justify-center"
+              title="VIXY QUANT v3.4 Active"
+            >
               <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-950 to-[#12082a] border border-purple-500/40 flex items-center justify-center">
                 <span className="relative flex h-2.5 w-2.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
@@ -414,8 +516,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="lg:hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex">
           <div className="w-72 bg-[#0a0518] border-r border-purple-900/40 p-4 space-y-6 flex flex-col font-sans">
             <div className="flex items-center justify-between pb-3 border-b border-purple-900/40">
-              <span className="font-extrabold text-white text-sm">Navigation Menu</span>
-              <button onClick={onCloseMobile} className="p-1 text-purple-400 hover:text-white">
+              <span className="font-extrabold text-white text-sm">
+                Navigation Menu
+              </span>
+              <button
+                onClick={onCloseMobile}
+                className="p-1 text-purple-400 hover:text-white"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -445,7 +552,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </div>
                   <div className="space-y-1">
                     {sec.items
-                      .filter((item) => item.id !== 'discord-bot' || userRole === 'ADMIN')
+                      .filter(
+                        (item) =>
+                          item.id !== "discord-bot" || userRole === "ADMIN",
+                      )
                       .map((item) => {
                         const IconComponent = item.icon;
                         const isActive = activeTab === item.id;
@@ -462,13 +572,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all cursor-pointer ${
                               isActive
                                 ? isFlagship
-                                  ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.4)] border border-amber-300'
-                                  : 'bg-purple-600 text-white shadow-lg'
+                                  ? "bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 font-black shadow-[0_0_20px_rgba(251,191,36,0.4)] border border-amber-300"
+                                  : "bg-purple-600 text-white shadow-lg"
                                 : isFlagship
-                                ? 'bg-amber-950/30 text-amber-200 border border-amber-500/40 shadow-sm'
-                                : isDesk
-                                ? 'text-purple-200 hover:bg-purple-900/30 border border-purple-900/30'
-                                : 'text-purple-200 hover:bg-purple-900/30'
+                                  ? "bg-amber-950/30 text-amber-200 border border-amber-500/40 shadow-sm"
+                                  : isDesk
+                                    ? "text-purple-200 hover:bg-purple-900/30 border border-purple-900/30"
+                                    : "text-purple-200 hover:bg-purple-900/30"
                             }`}
                           >
                             <div className="flex items-center gap-3">
@@ -476,39 +586,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 className={`w-4 h-4 ${
                                   isActive
                                     ? isFlagship
-                                      ? 'text-slate-950'
-                                      : 'text-white'
+                                      ? "text-slate-950"
+                                      : "text-white"
                                     : isFlagship
-                                    ? 'text-amber-400 animate-pulse'
-                                    : isDesk
-                                    ? 'text-amber-300'
-                                    : 'text-purple-400'
+                                      ? "text-amber-400 animate-pulse"
+                                      : isDesk
+                                        ? "text-amber-300"
+                                        : "text-purple-400"
                                 }`}
                               />
-                              <span className={isFlagship ? 'font-black tracking-wider uppercase' : ''}>
+                              <span
+                                className={
+                                  isFlagship
+                                    ? "font-black tracking-wider uppercase"
+                                    : ""
+                                }
+                              >
                                 {item.label}
                               </span>
                             </div>
 
                             {isFlagship ? (
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
-                                isActive
-                                  ? 'bg-slate-950 text-amber-300 border-amber-400/60'
-                                  : 'bg-amber-500/25 text-amber-300 border-amber-400/50'
-                              }`}>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[9px] font-mono font-black border flex items-center gap-1 ${
+                                  isActive
+                                    ? "bg-slate-950 text-amber-300 border-amber-400/60"
+                                    : "bg-amber-500/25 text-amber-300 border-amber-400/50"
+                                }`}
+                              >
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
                                 <span>LIVE</span>
                               </span>
-                            ) : item.badge && (
-                              <span className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
-                                item.badge === '15S'
-                                  ? 'bg-amber-950/70 text-amber-300 border-amber-500/40'
-                                  : item.badge === '1H'
-                                  ? 'bg-cyan-950/70 text-cyan-300 border-cyan-500/40'
-                                  : 'bg-purple-950 text-purple-300 border-purple-500/30'
-                              }`}>
-                                {item.badge}
-                              </span>
+                            ) : (
+                              item.badge && (
+                                <span
+                                  className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
+                                    item.badge === "15S"
+                                      ? "bg-amber-950/70 text-amber-300 border-amber-500/40"
+                                      : item.badge === "1H"
+                                        ? "bg-cyan-950/70 text-cyan-300 border-cyan-500/40"
+                                        : "bg-purple-950 text-purple-300 border-purple-500/30"
+                                  }`}
+                                >
+                                  {item.badge}
+                                </span>
+                              )
                             )}
                           </button>
                         );
@@ -524,7 +646,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                     </span>
-                    <span className="tracking-wide uppercase">VIXY QUANT v3.4</span>
+                    <span className="tracking-wide uppercase">
+                      VIXY QUANT v3.4
+                    </span>
                   </div>
                   <p className="text-[11px] text-purple-300/80 leading-snug font-sans">
                     AI Probability Engine connected to 12 top liquidity bridges.

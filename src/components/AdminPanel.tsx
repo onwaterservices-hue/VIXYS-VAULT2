@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -49,9 +55,9 @@ import {
   User,
   ShieldOff,
   LifeBuoy,
-} from 'lucide-react';
-import { SupportTicket } from '../types';
-import { DiscordBotHubView } from './DiscordBotHubView';
+} from "lucide-react";
+import { SupportTicket } from "../types";
+import { DiscordBotHubView } from "./DiscordBotHubView";
 import {
   fetchAdminDiagnostics,
   fetchAdminUsers,
@@ -81,21 +87,21 @@ import {
   fetchAcceptanceMatrixApi,
   runAcceptanceMatrixApi,
   AcceptanceMatrixResponse,
-} from '../services/api';
+} from "../services/api";
 
 export interface UserItem {
   id: string;
   uid?: string;
   email: string;
   name: string;
-  role: 'OWNER' | 'ADMIN' | 'SUPPORT' | 'PRO' | 'FREE' | 'USER' | 'ELITE';
-  subscription: 'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS' | 'FREE';
+  role: "OWNER" | "ADMIN" | "SUPPORT" | "PRO" | "FREE" | "USER" | "ELITE";
+  subscription: "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS" | "FREE";
   passwordHash?: string;
-  verificationStatus?: 'VERIFIED' | 'SUSPECTED_DUPLICATE' | 'UNVERIFIED';
+  verificationStatus?: "VERIFIED" | "SUSPECTED_DUPLICATE" | "UNVERIFIED";
   hardwareFingerprint?: string;
   ipHash?: string;
   joined: string;
-  status: 'ACTIVE' | 'TRIALING' | 'SUSPENDED';
+  status: "ACTIVE" | "TRIALING" | "SUSPENDED";
   volumeTrades?: number;
   referralCodeUsed?: string;
   stripeCustomerId?: string;
@@ -111,7 +117,7 @@ export interface UserItem {
   lastActiveAt?: number;
   dayPass?: {
     entitlementId?: string;
-    status: 'ACTIVE' | 'EXPIRED';
+    status: "ACTIVE" | "EXPIRED";
     startedAt?: string;
     expiresAt?: string;
     discordRoleAssigned?: boolean;
@@ -126,7 +132,14 @@ export interface TransactionItem {
   plan: string;
   amount: number;
   method: string;
-  status: 'Succeeded' | 'Pending' | 'Processing' | 'Failed' | 'Refunded' | 'Canceled' | 'Chargeback';
+  status:
+    | "Succeeded"
+    | "Pending"
+    | "Processing"
+    | "Failed"
+    | "Refunded"
+    | "Canceled"
+    | "Chargeback";
   timestamp: string;
   rawTime?: number;
   currency?: string;
@@ -140,34 +153,34 @@ export interface AuditLogItem {
   actor: string;
   action: string;
   details: string;
-  level: 'INFO' | 'WARN' | 'ERROR';
+  level: "INFO" | "WARN" | "ERROR";
 }
 
 export type AdminSection =
-  | 'overview'
-  | 'users'
-  | 'billing'
-  | 'trials'
-  | 'acceptance_test'
-  | 'discord'
-  | 'referrals'
-  | 'audit_log'
-  | 'system_health'
-  | 'support'
-  | 'quant_controls';
+  | "overview"
+  | "users"
+  | "billing"
+  | "trials"
+  | "acceptance_test"
+  | "discord"
+  | "referrals"
+  | "audit_log"
+  | "system_health"
+  | "support"
+  | "quant_controls";
 
 export type UserFilterOption =
-  | 'ALL'
-  | 'FREE'
-  | 'TRIAL'
-  | 'DAY PASS ACTIVE'
-  | 'PRO'
-  | 'ELITE'
-  | 'DISCORD LINKED'
-  | 'STRIPE ACTIVE'
-  | 'PAYMENT ISSUE'
-  | 'UNVERIFIED'
-  | 'DUPLICATE RISK';
+  | "ALL"
+  | "FREE"
+  | "TRIAL"
+  | "DAY PASS ACTIVE"
+  | "PRO"
+  | "ELITE"
+  | "DISCORD LINKED"
+  | "STRIPE ACTIVE"
+  | "PAYMENT ISSUE"
+  | "UNVERIFIED"
+  | "DUPLICATE RISK";
 
 interface AdminPanelProps {
   onClose?: () => void;
@@ -177,9 +190,12 @@ interface AdminPanelProps {
   setTickets?: React.Dispatch<React.SetStateAction<SupportTicket[]>>;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({
+  onClose,
+  currentUserId,
+}) => {
   // Navigation Section State
-  const [activeSection, setActiveSection] = useState<AdminSection>('overview');
+  const [activeSection, setActiveSection] = useState<AdminSection>("overview");
 
   // Loading & Global Status
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -191,7 +207,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
   // Core Data Stores (Populated exclusively from real backend APIs)
   const [stats, setStats] = useState<any>(null);
-  const [diagnosticsData, setDiagnosticsData] = useState<AdminDiagnosticsResponse | null>(null);
+  const [diagnosticsData, setDiagnosticsData] =
+    useState<AdminDiagnosticsResponse | null>(null);
   const [users, setUsers] = useState<UserItem[]>([]);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [referrals, setReferrals] = useState<any[]>([]);
@@ -202,8 +219,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   const [signalLogsState, setSignalLogsState] = useState<any[]>([]);
   const [discordDiag, setDiscordDiag] = useState<any>(null);
   const [dayPassRecords, setDayPassRecords] = useState<any[]>([]);
-  const [acceptanceMatrixData, setAcceptanceMatrixData] = useState<AcceptanceMatrixResponse | null>(null);
-  const [isRunningAcceptanceMatrix, setIsRunningAcceptanceMatrix] = useState(false);
+  const [acceptanceMatrixData, setAcceptanceMatrixData] =
+    useState<AcceptanceMatrixResponse | null>(null);
+  const [isRunningAcceptanceMatrix, setIsRunningAcceptanceMatrix] =
+    useState(false);
 
   const handleRunAcceptanceMatrix = async () => {
     setIsRunningAcceptanceMatrix(true);
@@ -211,7 +230,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       const data = await runAcceptanceMatrixApi();
       if (data) {
         setAcceptanceMatrixData(data);
-        setActionSuccessMsg(`Acceptance Test Matrix Completed: ${data.allPassed ? 'ALL 4 PLANS PASSED' : 'TESTS FAILED'}`);
+        setActionSuccessMsg(
+          `Acceptance Test Matrix Completed: ${data.allPassed ? "ALL 4 PLANS PASSED" : "TESTS FAILED"}`,
+        );
       }
     } catch (err: any) {
       setGlobalError(`Acceptance Test Runner Error: ${err.message}`);
@@ -221,8 +242,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   };
 
   // User Intelligence State & Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [userFilter, setUserFilter] = useState<UserFilterOption>('ALL');
+  const [searchTerm, setSearchTerm] = useState("");
+  const [userFilter, setUserFilter] = useState<UserFilterOption>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
   const usersPerPage = 12;
 
@@ -232,33 +253,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
   // Edit User Modal State
   const [editingUser, setEditingUser] = useState<UserItem | null>(null);
-  const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editPassword, setEditPassword] = useState('');
-  const [editRole, setEditRole] = useState('USER');
-  const [editTier, setEditTier] = useState('PRO_PASS');
-  const [editStatus, setEditStatus] = useState('ACTIVE');
-  const [editDiscordTag, setEditDiscordTag] = useState('');
-  const [editDiscordGlobalName, setEditDiscordGlobalName] = useState('');
-  const [editDiscordId, setEditDiscordId] = useState('');
-  const [editVerificationStatus, setEditVerificationStatus] = useState('VERIFIED');
-  const [editStripeCustomerId, setEditStripeCustomerId] = useState('');
-  const [editStripeSubscriptionId, setEditStripeSubscriptionId] = useState('');
+  const [editName, setEditName] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editPassword, setEditPassword] = useState("");
+  const [editRole, setEditRole] = useState("USER");
+  const [editTier, setEditTier] = useState("PRO_PASS");
+  const [editStatus, setEditStatus] = useState("ACTIVE");
+  const [editDiscordTag, setEditDiscordTag] = useState("");
+  const [editDiscordGlobalName, setEditDiscordGlobalName] = useState("");
+  const [editDiscordId, setEditDiscordId] = useState("");
+  const [editVerificationStatus, setEditVerificationStatus] =
+    useState("VERIFIED");
+  const [editStripeCustomerId, setEditStripeCustomerId] = useState("");
+  const [editStripeSubscriptionId, setEditStripeSubscriptionId] = useState("");
 
   const openEditUserModal = (user: UserItem) => {
     setEditingUser(user);
-    setEditName(user.name || '');
-    setEditEmail(user.email || '');
-    setEditPassword('');
-    setEditRole(user.role || 'USER');
-    setEditTier(user.subscription || 'FREE_TRIAL');
-    setEditStatus(user.status || 'ACTIVE');
-    setEditDiscordTag(user.discordTag || '');
-    setEditDiscordGlobalName((user as any).discordGlobalName || '');
-    setEditDiscordId(user.discordId || '');
-    setEditVerificationStatus(user.verificationStatus || ((user.discordLinked || user.discordId) ? 'VERIFIED' : 'UNVERIFIED'));
-    setEditStripeCustomerId(user.stripeCustomerId || '');
-    setEditStripeSubscriptionId(user.stripeSubscriptionId || '');
+    setEditName(user.name || "");
+    setEditEmail(user.email || "");
+    setEditPassword("");
+    setEditRole(user.role || "USER");
+    setEditTier(user.subscription || "FREE_TRIAL");
+    setEditStatus(user.status || "ACTIVE");
+    setEditDiscordTag(user.discordTag || "");
+    setEditDiscordGlobalName((user as any).discordGlobalName || "");
+    setEditDiscordId(user.discordId || "");
+    setEditVerificationStatus(
+      user.verificationStatus ||
+        (user.discordLinked || user.discordId ? "VERIFIED" : "UNVERIFIED"),
+    );
+    setEditStripeCustomerId(user.stripeCustomerId || "");
+    setEditStripeSubscriptionId(user.stripeSubscriptionId || "");
   };
 
   const handleSaveUserEditSubmit = async (e: React.FormEvent) => {
@@ -282,52 +307,66 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     });
 
     if (res?.success) {
-      setActionSuccessMsg(`Successfully updated user record for ${editEmail || editName}`);
+      setActionSuccessMsg(
+        `Successfully updated user record for ${editEmail || editName}`,
+      );
       setTimeout(() => setActionSuccessMsg(null), 4000);
       setEditingUser(null);
       loadAdminData();
     } else {
-      setGlobalError(res?.message || 'Failed to update user record.');
+      setGlobalError(res?.message || "Failed to update user record.");
     }
   };
 
   // Add User Modal State
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [newUserTier, setNewUserTier] = useState<'FREE_TRIAL' | 'PRO_PASS' | 'ELITE_PASS'>('PRO_PASS');
-  const [newUserRole, setNewUserRole] = useState<'USER' | 'ADMIN' | 'SUPPORT'>('USER');
-  const [newUserReferralCode, setNewUserReferralCode] = useState('DIRECT');
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUserName, setNewUserName] = useState("");
+  const [newUserPassword, setNewUserPassword] = useState("");
+  const [newUserTier, setNewUserTier] = useState<
+    "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS"
+  >("PRO_PASS");
+  const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT">(
+    "USER",
+  );
+  const [newUserReferralCode, setNewUserReferralCode] = useState("DIRECT");
 
   // Password Modal State
-  const [passwordModalUser, setPasswordModalUser] = useState<UserItem | null>(null);
-  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [passwordModalUser, setPasswordModalUser] = useState<UserItem | null>(
+    null,
+  );
+  const [newPasswordInput, setNewPasswordInput] = useState("");
 
   // Referral Modal State
   const [isAddReferralOpen, setIsAddReferralOpen] = useState(false);
   const [editingReferral, setEditingReferral] = useState<any | null>(null);
-  const [refCodeInput, setRefCodeInput] = useState('');
-  const [refNameInput, setRefNameInput] = useState('');
-  const [refEmailInput, setRefEmailInput] = useState('');
-  const [refDiscountInput, setRefDiscountInput] = useState('20% Off');
-  const [refRateInput, setRefRateInput] = useState('20%');
+  const [refCodeInput, setRefCodeInput] = useState("");
+  const [refNameInput, setRefNameInput] = useState("");
+  const [refEmailInput, setRefEmailInput] = useState("");
+  const [refDiscountInput, setRefDiscountInput] = useState("20% Off");
+  const [refRateInput, setRefRateInput] = useState("20%");
 
   // Billing Tab Filter State
-  const [txStatusFilter, setTxStatusFilter] = useState<string>('ALL');
+  const [txStatusFilter, setTxStatusFilter] = useState<string>("ALL");
 
   // Audit Log Filter State
-  const [auditSearchTerm, setAuditSearchTerm] = useState('');
-  const [auditLevelFilter, setAuditLevelFilter] = useState<'ALL' | 'INFO' | 'WARN' | 'ERROR'>('ALL');
+  const [auditSearchTerm, setAuditSearchTerm] = useState("");
+  const [auditLevelFilter, setAuditLevelFilter] = useState<
+    "ALL" | "INFO" | "WARN" | "ERROR"
+  >("ALL");
 
   // Support Tickets State (Populated exclusively from real backend API)
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
-  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(null);
-  const [replyText, setReplyText] = useState('');
+  const [selectedTicket, setSelectedTicket] = useState<SupportTicket | null>(
+    null,
+  );
+  const [replyText, setReplyText] = useState("");
 
   // Admin Real-Time Events & Resync State
   const [adminEvents, setAdminEvents] = useState<any[]>([]);
-  const [resyncIdentifier, setResyncIdentifier] = useState('vixyvault0@gmail.com');
+  const [resyncIdentifier, setResyncIdentifier] = useState(
+    "vixyvault0@gmail.com",
+  );
   const [isResyncing, setIsResyncing] = useState(false);
   const [resyncMessage, setResyncMessage] = useState<string | null>(null);
 
@@ -366,14 +405,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       ]);
 
       if (
-        (fetchedUsers && (fetchedUsers as any).error === 'ADMIN_REQUIRED') ||
-        (fetchedStats && (fetchedStats as any).error === 'ADMIN_REQUIRED')
+        (fetchedUsers && (fetchedUsers as any).error === "ADMIN_REQUIRED") ||
+        (fetchedStats && (fetchedStats as any).error === "ADMIN_REQUIRED")
       ) {
         setIsAccessDenied(true);
         setAccessDeniedMsg(
           (fetchedUsers as any)?.message ||
-          (fetchedStats as any)?.message ||
-          'Administrator authorization failed. Your account does not have administrative privileges.'
+            (fetchedStats as any)?.message ||
+            "Administrator authorization failed. Your account does not have administrative privileges.",
         );
         return;
       }
@@ -384,8 +423,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       const userList = Array.isArray(fetchedUsers)
         ? fetchedUsers
         : fetchedUsers && Array.isArray((fetchedUsers as any).users)
-        ? (fetchedUsers as any).users
-        : null;
+          ? (fetchedUsers as any).users
+          : null;
       if (userList) setUsers(userList);
       if (fetchedStats) setStats(fetchedStats);
       if (Array.isArray(fetchedTx)) setTransactions(fetchedTx);
@@ -396,23 +435,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       if (fetchedDiscHealth) setDiscordHealth(fetchedDiscHealth);
       if (fetchedStripeHealth) setStripeHealth(fetchedStripeHealth);
       if (Array.isArray(fetchedTickets)) setTickets(fetchedTickets);
-      if (fetchedDayPasses && Array.isArray(fetchedDayPasses.records)) setDayPassRecords(fetchedDayPasses.records);
+      if (fetchedDayPasses && Array.isArray(fetchedDayPasses.records))
+        setDayPassRecords(fetchedDayPasses.records);
 
       const events = await fetchAdminEventsApi().catch(() => null);
       if (Array.isArray(events)) setAdminEvents(events);
 
-      const sigLogRes = await fetch('/api/signal/resolved-log').then((r) => r.json()).catch(() => null);
+      const sigLogRes = await fetch("/api/signal/resolved-log")
+        .then((r) => r.json())
+        .catch(() => null);
       if (sigLogRes && Array.isArray(sigLogRes.recentResolved)) {
         setSignalLogsState(sigLogRes.recentResolved);
       }
 
-      const fetchedDiscordDiag = await fetch('/api/discord/diagnostics').then((r) => r.json()).catch(() => null);
+      const fetchedDiscordDiag = await fetch("/api/discord/diagnostics")
+        .then((r) => r.json())
+        .catch(() => null);
       if (fetchedDiscordDiag && fetchedDiscordDiag.success) {
         setDiscordDiag(fetchedDiscordDiag);
       }
     } catch (err: any) {
-      console.warn('Error loading admin data:', err);
-      setGlobalError('Failed to synchronize backend admin telemetry. Some services may be unavailable.');
+      console.warn("Error loading admin data:", err);
+      setGlobalError(
+        "Failed to synchronize backend admin telemetry. Some services may be unavailable.",
+      );
     } finally {
       isFetchingDataRef.current = false;
       if (isManualRefresh) setIsRefreshing(false);
@@ -466,57 +512,89 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         (u.id && u.id.toLowerCase().includes(query)) ||
         (u.discordTag && u.discordTag.toLowerCase().includes(query)) ||
         (u.discordId && u.discordId.toLowerCase().includes(query)) ||
-        (u.discordGlobalName && u.discordGlobalName.toLowerCase().includes(query)) ||
-        (u.stripeCustomerId && u.stripeCustomerId.toLowerCase().includes(query)) ||
-        (u.stripeSubscriptionId && u.stripeSubscriptionId.toLowerCase().includes(query));
+        (u.discordGlobalName &&
+          u.discordGlobalName.toLowerCase().includes(query)) ||
+        (u.stripeCustomerId &&
+          u.stripeCustomerId.toLowerCase().includes(query)) ||
+        (u.stripeSubscriptionId &&
+          u.stripeSubscriptionId.toLowerCase().includes(query));
 
       if (!matchesSearch) return false;
 
       switch (userFilter) {
-        case 'FREE':
-          return u.subscription === 'FREE' || u.role === 'FREE' || u.role === 'USER';
-        case 'TRIAL':
-          return u.subscription === 'FREE_TRIAL' || u.status === 'TRIALING';
-        case 'DAY PASS ACTIVE':
-          return Boolean(u.dayPass && u.dayPass.status === 'ACTIVE' && new Date(u.dayPass.expiresAt || 0).getTime() > Date.now());
-        case 'PRO':
-          return u.subscription === 'PRO_PASS' || u.role === 'PRO';
-        case 'ELITE':
-          return u.subscription === 'ELITE_PASS' || u.role === 'ELITE';
-        case 'DISCORD LINKED':
+        case "FREE":
+          return (
+            u.subscription === "FREE" || u.role === "FREE" || u.role === "USER"
+          );
+        case "TRIAL":
+          return u.subscription === "FREE_TRIAL" || u.status === "TRIALING";
+        case "DAY PASS ACTIVE":
+          return Boolean(
+            u.dayPass &&
+            u.dayPass.status === "ACTIVE" &&
+            new Date(u.dayPass.expiresAt || 0).getTime() > Date.now(),
+          );
+        case "PRO":
+          return u.subscription === "PRO_PASS" || u.role === "PRO";
+        case "ELITE":
+          return u.subscription === "ELITE_PASS" || u.role === "ELITE";
+        case "DISCORD LINKED":
           return u.discordLinked === true || Boolean(u.discordId);
-        case 'STRIPE ACTIVE':
+        case "STRIPE ACTIVE":
           return Boolean(u.stripeCustomerId) || Boolean(u.stripeSubscriptionId);
-        case 'PAYMENT ISSUE':
-          return u.status === 'SUSPENDED';
-        case 'UNVERIFIED':
-          return u.verificationStatus === 'UNVERIFIED';
-        case 'DUPLICATE RISK':
-          return duplicateRiskUserIds.has(u.id) || u.verificationStatus === 'SUSPECTED_DUPLICATE';
+        case "PAYMENT ISSUE":
+          return u.status === "SUSPENDED";
+        case "UNVERIFIED":
+          return u.verificationStatus === "UNVERIFIED";
+        case "DUPLICATE RISK":
+          return (
+            duplicateRiskUserIds.has(u.id) ||
+            u.verificationStatus === "SUSPECTED_DUPLICATE"
+          );
         default:
           return true;
       }
     });
   }, [users, searchTerm, userFilter, duplicateRiskUserIds]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / usersPerPage));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredUsers.length / usersPerPage),
+  );
   const paginatedUsers = useMemo(() => {
     const start = (currentPage - 1) * usersPerPage;
     return filteredUsers.slice(start, start + usersPerPage);
   }, [filteredUsers, currentPage, usersPerPage]);
 
   // Trigger Backend User Actions with Audit Logging
-  const handleUserAction = async (user: UserItem, action: string, payload: Record<string, any> = {}) => {
-    const confirmActions = ['delete', 'suspend', 'freeze_access', 'revoke_premium', 'revoke_trial', 'revoke_plan'];
+  const handleUserAction = async (
+    user: UserItem,
+    action: string,
+    payload: Record<string, any> = {},
+  ) => {
+    const confirmActions = [
+      "delete",
+      "suspend",
+      "freeze_access",
+      "revoke_premium",
+      "revoke_trial",
+      "revoke_plan",
+    ];
     if (confirmActions.includes(action)) {
-      if (!window.confirm(`Are you sure you want to perform "${action.toUpperCase()}" on user ${user.email || user.discordTag}?`)) {
+      if (
+        !window.confirm(
+          `Are you sure you want to perform "${action.toUpperCase()}" on user ${user.email || user.discordTag}?`,
+        )
+      ) {
         return;
       }
     }
 
     const res = await performUserAction(user.id, action, payload);
     if (res?.success) {
-      setActionSuccessMsg(`Action "${action.toUpperCase()}" completed successfully for ${user.email || user.discordTag}`);
+      setActionSuccessMsg(
+        `Action "${action.toUpperCase()}" completed successfully for ${user.email || user.discordTag}`,
+      );
       setTimeout(() => setActionSuccessMsg(null), 4000);
       loadAdminData();
     } else {
@@ -533,7 +611,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       if (res?.success) {
         setResyncMessage(`Entitlements successfully resynced for ${emailOrId}`);
       } else {
-        setResyncMessage(`Resync notice: ${res?.message || 'Operation completed with warnings'}`);
+        setResyncMessage(
+          `Resync notice: ${res?.message || "Operation completed with warnings"}`,
+        );
       }
       loadAdminData();
     } catch (err: any) {
@@ -551,7 +631,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
     const res = await createAdminUser({
       email: newUserEmail.trim(),
-      name: newUserName.trim() || newUserEmail.split('@')[0],
+      name: newUserName.trim() || newUserEmail.split("@")[0],
       password: newUserPassword.trim() || undefined,
       tier: newUserTier,
       role: newUserRole,
@@ -561,12 +641,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     if (res?.success) {
       setActionSuccessMsg(`User ${newUserEmail} created successfully.`);
       setIsAddUserOpen(false);
-      setNewUserEmail('');
-      setNewUserName('');
-      setNewUserPassword('');
+      setNewUserEmail("");
+      setNewUserName("");
+      setNewUserPassword("");
       loadAdminData();
     } else {
-      setGlobalError(res?.message || 'Failed to create user account');
+      setGlobalError(res?.message || "Failed to create user account");
     }
   };
 
@@ -575,13 +655,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
     e.preventDefault();
     if (!passwordModalUser || !newPasswordInput.trim()) return;
 
-    const res = await updateUserPassword(passwordModalUser.id, newPasswordInput.trim());
+    const res = await updateUserPassword(
+      passwordModalUser.id,
+      newPasswordInput.trim(),
+    );
     if (res?.success) {
       setActionSuccessMsg(`Password updated for ${passwordModalUser.email}`);
       setPasswordModalUser(null);
-      setNewPasswordInput('');
+      setNewPasswordInput("");
     } else {
-      setGlobalError(res?.message || 'Failed to update user password');
+      setGlobalError(res?.message || "Failed to update user password");
     }
   };
 
@@ -592,8 +675,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
     const res = await saveAdminReferral({
       code: refCodeInput.trim().toUpperCase(),
-      name: refNameInput.trim() || 'Partner Promoter',
-      email: refEmailInput.trim() || 'promoter@vixyvault.com',
+      name: refNameInput.trim() || "Partner Promoter",
+      email: refEmailInput.trim() || "promoter@vixyvault.com",
       discountGiven: refDiscountInput,
       commissionRate: refRateInput,
     });
@@ -602,12 +685,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       setActionSuccessMsg(`Referral code ${refCodeInput.toUpperCase()} saved.`);
       setIsAddReferralOpen(false);
       setEditingReferral(null);
-      setRefCodeInput('');
-      setRefNameInput('');
-      setRefEmailInput('');
+      setRefCodeInput("");
+      setRefNameInput("");
+      setRefEmailInput("");
       loadAdminData();
     } else {
-      setGlobalError(res?.message || 'Failed to save referral code');
+      setGlobalError(res?.message || "Failed to save referral code");
     }
   };
 
@@ -619,7 +702,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       setActionSuccessMsg(`Referral code ${code} deleted.`);
       loadAdminData();
     } else {
-      setGlobalError(res?.message || 'Failed to delete referral code');
+      setGlobalError(res?.message || "Failed to delete referral code");
     }
   };
 
@@ -627,69 +710,90 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   const [isWipingUsers, setIsWipingUsers] = useState(false);
   const handleWipeBetaUsers = async () => {
     // 1. Filter out users that would be wiped (i.e. those without Stripe IDs and not Master Admins)
-    const vulnerableUsers = filteredUsers.filter(u => {
-      const isMasterAdmin = u.email === 'vixyvault0@gmail.com';
+    const vulnerableUsers = filteredUsers.filter((u) => {
+      const isMasterAdmin = u.email === "vixyvault0@gmail.com";
       const hasStripe = Boolean(u.stripeCustomerId || u.stripeSubscriptionId);
       return !isMasterAdmin && !hasStripe;
     });
 
     if (vulnerableUsers.length === 0) {
-      alert("No vulnerable test accounts found. (Active Stripe customers are protected).");
+      alert(
+        "No vulnerable test accounts found. (Active Stripe customers are protected).",
+      );
       return;
     }
 
     const confirmPhrase = `wipe ${vulnerableUsers.length}`;
-    const userInput = window.prompt(`WARNING: You are about to permanently delete ${vulnerableUsers.length} beta/test user accounts.\n\nActive Stripe customers (e.g. Sarah Quant, Alex Trader, Allan Yahir) are PROTECTED and will not be deleted.\n\nType "${confirmPhrase}" to proceed:`);
-    
+    const userInput = window.prompt(
+      `WARNING: You are about to permanently delete ${vulnerableUsers.length} beta/test user accounts.\n\nActive Stripe customers (e.g. Sarah Quant, Alex Trader, Allan Yahir) are PROTECTED and will not be deleted.\n\nType "${confirmPhrase}" to proceed:`,
+    );
+
     if (userInput !== confirmPhrase) {
       alert("Confirmation phrase did not match. Aborting wipe.");
       return;
     }
 
     setIsWipingUsers(true);
-    
+
     // Pass the target IDs to the backend just in case, but our backend also verifies Stripe protections natively
-    const targetUserIds = vulnerableUsers.map(u => u.id);
-    
+    const targetUserIds = vulnerableUsers.map((u) => u.id);
+
     try {
-      const res = await fetch('/api/admin/users/wipe', {
-        method: 'POST',
+      const res = await fetch("/api/admin/users/wipe", {
+        method: "POST",
         headers: getAdminHeaders(),
-        body: JSON.stringify({ targetUserIds })
+        body: JSON.stringify({ targetUserIds }),
       });
       const data = await res.json();
-      
+
       if (data?.success) {
-        setActionSuccessMsg(data.message || 'Wiped old/beta users successfully!');
+        setActionSuccessMsg(
+          data.message || "Wiped old/beta users successfully!",
+        );
         loadAdminData();
       } else {
-        setGlobalError(data?.message || 'Failed to wipe beta users');
+        setGlobalError(data?.message || "Failed to wipe beta users");
       }
     } catch (e) {
-      setGlobalError('Network error while wiping users');
+      setGlobalError("Network error while wiping users");
     }
-    
+
     setIsWipingUsers(false);
   };
 
   // Compute Real Overview Metrics from Backend State
   const paidUsersCount = useMemo(() => {
-    return users.filter((u) => u.subscription === 'PRO_PASS' || u.subscription === 'ELITE_PASS' || u.role === 'PRO' || u.role === 'ELITE').length;
+    return users.filter(
+      (u) =>
+        u.subscription === "PRO_PASS" ||
+        u.subscription === "ELITE_PASS" ||
+        u.role === "PRO" ||
+        u.role === "ELITE",
+    ).length;
   }, [users]);
 
   const activeTrialsCount = useMemo(() => {
-    return users.filter((u) => u.subscription === 'FREE_TRIAL' || u.status === 'TRIALING').length;
+    return users.filter(
+      (u) => u.subscription === "FREE_TRIAL" || u.status === "TRIALING",
+    ).length;
   }, [users]);
 
   const totalRevenue = useMemo(() => {
-    return transactions.reduce((sum, tx) => (tx.status === 'Succeeded' ? sum + (tx.amount || 0) : sum), 0);
+    return transactions.reduce(
+      (sum, tx) => (tx.status === "Succeeded" ? sum + (tx.amount || 0) : sum),
+      0,
+    );
   }, [transactions]);
 
   const todayRevenue = useMemo(() => {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
     return transactions.reduce((sum, tx) => {
-      if (tx.status === 'Succeeded' && tx.rawTime && tx.rawTime >= todayStart.getTime()) {
+      if (
+        tx.status === "Succeeded" &&
+        tx.rawTime &&
+        tx.rawTime >= todayStart.getTime()
+      ) {
         return sum + (tx.amount || 0);
       }
       return sum;
@@ -697,27 +801,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
   }, [transactions]);
 
   const activeDiscordMembersCount = useMemo(() => {
-    return users.filter((u) => u.discordLinked || u.guildVerified || u.discordId).length;
+    return users.filter(
+      (u) => u.discordLinked || u.guildVerified || u.discordId,
+    ).length;
   }, [users]);
 
   const usersActiveLast5Min = useMemo(() => {
     const now = Date.now();
-    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 5 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 5 * 60 * 1000)).length;
+    return users.filter(
+      (u) =>
+        (u.lastActiveAt && now - u.lastActiveAt <= 5 * 60 * 1000) ||
+        (u.lastSeenAt && now - u.lastSeenAt <= 5 * 60 * 1000),
+    ).length;
   }, [users]);
 
   const usersActiveLast15Min = useMemo(() => {
     const now = Date.now();
-    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 15 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 15 * 60 * 1000)).length;
+    return users.filter(
+      (u) =>
+        (u.lastActiveAt && now - u.lastActiveAt <= 15 * 60 * 1000) ||
+        (u.lastSeenAt && now - u.lastSeenAt <= 15 * 60 * 1000),
+    ).length;
   }, [users]);
 
   const usersActiveToday = useMemo(() => {
     const now = Date.now();
-    return users.filter(u => (u.lastActiveAt && now - u.lastActiveAt <= 24 * 60 * 60 * 1000) || (u.lastSeenAt && now - u.lastSeenAt <= 24 * 60 * 60 * 1000)).length;
+    return users.filter(
+      (u) =>
+        (u.lastActiveAt && now - u.lastActiveAt <= 24 * 60 * 60 * 1000) ||
+        (u.lastSeenAt && now - u.lastSeenAt <= 24 * 60 * 60 * 1000),
+    ).length;
   }, [users]);
 
   const newlyRegisteredUsers = useMemo(() => {
     const now = Date.now();
-    return users.filter(u => {
+    return users.filter((u) => {
       const joinDate = new Date(u.joined).getTime();
       return !isNaN(joinDate) && now - joinDate <= 24 * 60 * 60 * 1000;
     }).length;
@@ -730,15 +848,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       <div className="fixed inset-0 z-50 bg-slate-950 flex items-center justify-center p-6 text-center">
         <div className="max-w-md w-full bg-slate-900 border border-rose-500/40 rounded-2xl p-8 space-y-4 shadow-2xl">
           <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto animate-pulse" />
-          <h2 className="text-xl font-bold text-white tracking-wide">ADMIN ACCESS DENIED</h2>
+          <h2 className="text-xl font-bold text-white tracking-wide">
+            ADMIN ACCESS DENIED
+          </h2>
           <p className="text-sm text-slate-300 leading-relaxed">
-            {accessDeniedMsg || 'Your current account does not have administrative privileges to access the VIXY Vault Executive Command Center.'}
+            {accessDeniedMsg ||
+              "Your current account does not have administrative privileges to access the VIXY Vault Executive Command Center."}
           </p>
           <div className="pt-2 text-xs text-slate-400 font-mono">
             Required Clearance Level: Master Admin (OWNER)
           </div>
           <button
-            onClick={() => window.location.hash = ''}
+            onClick={() => (window.location.hash = "")}
             className="mt-4 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition"
           >
             Return to Dashboard
@@ -759,7 +880,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
           <div>
             <div className="flex items-center space-x-2">
               <h1 className="text-lg font-black tracking-wider uppercase text-purple-200">
-                VIXY VAULT <span className="text-purple-400 font-normal">| Master Control Panel</span>
+                VIXY VAULT{" "}
+                <span className="text-purple-400 font-normal">
+                  | Master Control Panel
+                </span>
               </h1>
               <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
                 Live Telemetry
@@ -789,8 +913,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             className="flex items-center space-x-2 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700/60 transition"
             title="Force refresh backend state"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-purple-400' : ''}`} />
-            <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Sync Telemetry'}</span>
+            <RefreshCw
+              className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-purple-400" : ""}`}
+            />
+            <span className="hidden sm:inline">
+              {isRefreshing ? "Refreshing..." : "Sync Telemetry"}
+            </span>
           </button>
 
           {onClose && (
@@ -833,17 +961,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
       {/* Master Control Navigation Bar */}
       <nav className="bg-slate-900/60 border-b border-slate-800 px-6 py-2 overflow-x-auto scrollbar-none flex items-center space-x-1">
         {[
-          { id: 'overview', label: 'OVERVIEW', icon: Activity },
-          { id: 'users', label: 'USERS', icon: Users, badge: users.length },
-          { id: 'billing', label: 'BILLING', icon: CreditCard },
-          { id: 'trials', label: 'DAY PASSES & ACCESS', icon: Zap, badge: dayPassRecords.filter((dp) => dp.status === 'ACTIVE').length + activeTrialsCount },
-          { id: 'acceptance_test', label: 'ACCEPTANCE TESTS', icon: ShieldCheck, badge: acceptanceMatrixData?.allPassed ? undefined : 4 },
-          { id: 'discord', label: 'DISCORD', icon: Bot },
-          { id: 'referrals', label: 'REFERRALS', icon: Link, badge: referrals.length },
-          { id: 'audit_log', label: 'AUDIT LOG', icon: FileText },
-          { id: 'system_health', label: 'SYSTEM HEALTH', icon: Server },
-          { id: 'support', label: 'SUPPORT', icon: LifeBuoy, badge: tickets.filter((t) => t.status === 'OPEN').length },
-          { id: 'quant_controls', label: 'QUANT CONTROLS', icon: Sliders },
+          { id: "overview", label: "OVERVIEW", icon: Activity },
+          { id: "users", label: "USERS", icon: Users, badge: users.length },
+          { id: "billing", label: "BILLING", icon: CreditCard },
+          {
+            id: "trials",
+            label: "DAY PASSES & ACCESS",
+            icon: Zap,
+            badge:
+              dayPassRecords.filter((dp) => dp.status === "ACTIVE").length +
+              activeTrialsCount,
+          },
+          {
+            id: "acceptance_test",
+            label: "ACCEPTANCE TESTS",
+            icon: ShieldCheck,
+            badge: acceptanceMatrixData?.allPassed ? undefined : 4,
+          },
+          { id: "discord", label: "DISCORD", icon: Bot },
+          {
+            id: "referrals",
+            label: "REFERRALS",
+            icon: Link,
+            badge: referrals.length,
+          },
+          { id: "audit_log", label: "AUDIT LOG", icon: FileText },
+          { id: "system_health", label: "SYSTEM HEALTH", icon: Server },
+          {
+            id: "support",
+            label: "SUPPORT",
+            icon: LifeBuoy,
+            badge: tickets.filter((t) => t.status === "OPEN").length,
+          },
+          { id: "quant_controls", label: "QUANT CONTROLS", icon: Sliders },
         ].map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.id;
@@ -853,16 +1003,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               onClick={() => setActiveSection(item.id as AdminSection)}
               className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-xs font-bold tracking-wider transition whitespace-nowrap ${
                 isActive
-                  ? 'bg-purple-600/20 text-purple-300 border border-purple-500/50 shadow-lg shadow-purple-950/50'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  ? "bg-purple-600/20 text-purple-300 border border-purple-500/50 shadow-lg shadow-purple-950/50"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-purple-400' : 'text-slate-500'}`} />
+              <Icon
+                className={`w-4 h-4 ${isActive ? "text-purple-400" : "text-slate-500"}`}
+              />
               <span>{item.label}</span>
               {item.badge !== undefined && item.badge > 0 && (
                 <span
                   className={`ml-1.5 px-1.5 py-0.2 text-[10px] font-mono rounded-full ${
-                    isActive ? 'bg-purple-500/30 text-purple-200' : 'bg-slate-800 text-slate-400'
+                    isActive
+                      ? "bg-purple-500/30 text-purple-200"
+                      : "bg-slate-800 text-slate-400"
                   }`}
                 >
                   {item.badge}
@@ -878,73 +1032,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 1. OVERVIEW SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'overview' && (
+        {activeSection === "overview" && (
           <div className="space-y-6">
             {/* Top 8 KPI Cards Row */}
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {[
                 {
-                  title: 'TOTAL REG USERS',
+                  title: "TOTAL REG USERS",
                   value: users.length.toString(),
                   icon: Users,
-                  color: 'text-purple-400',
-                  targetTab: 'users',
+                  color: "text-purple-400",
+                  targetTab: "users",
                 },
                 {
-                  title: 'ACTIVE (5 MIN)',
+                  title: "ACTIVE (5 MIN)",
                   value: usersActiveLast5Min.toString(),
                   icon: Activity,
-                  color: 'text-emerald-400',
-                  targetTab: 'users',
+                  color: "text-emerald-400",
+                  targetTab: "users",
                 },
                 {
-                  title: 'ACTIVE (15 MIN)',
+                  title: "ACTIVE (15 MIN)",
                   value: usersActiveLast15Min.toString(),
                   icon: Clock,
-                  color: 'text-amber-400',
-                  targetTab: 'users',
+                  color: "text-amber-400",
+                  targetTab: "users",
                 },
                 {
-                  title: 'ACTIVE TODAY',
+                  title: "ACTIVE TODAY",
                   value: usersActiveToday.toString(),
                   icon: UserCheck,
-                  color: 'text-indigo-400',
-                  targetTab: 'users',
+                  color: "text-indigo-400",
+                  targetTab: "users",
                 },
                 {
-                  title: 'NEW REG (24H)',
+                  title: "NEW REG (24H)",
                   value: newlyRegisteredUsers.toString(),
                   icon: Sparkles,
-                  color: 'text-violet-400',
-                  targetTab: 'users',
+                  color: "text-violet-400",
+                  targetTab: "users",
                 },
                 {
-                  title: 'CONNECTED SESSIONS',
+                  title: "CONNECTED SESSIONS",
                   value: currentlyConnectedSessions.toString(),
                   icon: Radio,
-                  color: 'text-cyan-400',
-                  targetTab: 'system_health',
+                  color: "text-cyan-400",
+                  targetTab: "system_health",
                 },
                 {
-                  title: 'MRR / ARR',
+                  title: "MRR / ARR",
                   value: `$${totalRevenue.toLocaleString()}`,
                   icon: DollarSign,
-                  color: 'text-emerald-400',
-                  targetTab: 'billing',
+                  color: "text-emerald-400",
+                  targetTab: "billing",
                 },
               ].map((kpi, idx) => {
                 const Icon = kpi.icon;
                 return (
                   <button
                     key={idx}
-                    onClick={() => setActiveSection(kpi.targetTab as AdminSection)}
+                    onClick={() =>
+                      setActiveSection(kpi.targetTab as AdminSection)
+                    }
                     className="p-3 bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 rounded-xl text-left transition transform hover:-translate-y-0.5 cursor-pointer shadow-lg"
                   >
                     <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold tracking-wider uppercase mb-1">
                       <span>{kpi.title}</span>
                       <Icon className={`w-3.5 h-3.5 ${kpi.color}`} />
                     </div>
-                    <div className={`text-base font-black font-mono tracking-tight ${kpi.color}`}>
+                    <div
+                      className={`text-base font-black font-mono tracking-tight ${kpi.color}`}
+                    >
                       {kpi.value}
                     </div>
                   </button>
@@ -954,7 +1112,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
             {/* STARK INSTITUTIONAL COMMAND CENTER */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
               {/* PANEL 1: SYSTEM CONNECTIVITY MATRIX */}
               <div className="bg-[#0b061d]/90 border border-cyan-500/30 rounded-2xl p-5 space-y-4 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none" />
@@ -972,52 +1129,77 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
                 <div className="space-y-2.5">
                   {[
-                    { 
-                      name: 'API HEALTH', 
-                      status: systemHealth?.status === 'ok' || systemHealth?.status === 'ONLINE' ? 'ONLINE' : 'DEGRADED',
-                      desc: 'Full-stack Express backend routes',
+                    {
+                      name: "API HEALTH",
+                      status:
+                        systemHealth?.status === "ok" ||
+                        systemHealth?.status === "ONLINE"
+                          ? "ONLINE"
+                          : "DEGRADED",
+                      desc: "Full-stack Express backend routes",
                     },
-                    { 
-                      name: 'BINANCE DATA FEED', 
-                      status: diagnosticsData?.marketFeed?.status || 'ONLINE',
-                      desc: 'Websocket & REST price feed',
+                    {
+                      name: "BINANCE DATA FEED",
+                      status: diagnosticsData?.marketFeed?.status || "ONLINE",
+                      desc: "Websocket & REST price feed",
                     },
-                    { 
-                      name: 'KALSHI EXCHANGE', 
-                      status: diagnosticsData?.activeContract ? 'ONLINE' : 'DEGRADED',
-                      desc: 'Target Strike binary settlement',
+                    {
+                      name: "KALSHI EXCHANGE",
+                      status: diagnosticsData?.activeContract
+                        ? "ONLINE"
+                        : "DEGRADED",
+                      desc: "Target Strike binary settlement",
                     },
-                    { 
-                      name: 'FIRESTORE DB', 
-                      status: diagnosticsData?.database?.status === 'Connected' || diagnosticsData?.database?.status === 'ONLINE' ? 'ONLINE' : 'DEGRADED',
-                      desc: 'Persistent Cloud state engine',
+                    {
+                      name: "FIRESTORE DB",
+                      status:
+                        diagnosticsData?.database?.status === "Connected" ||
+                        diagnosticsData?.database?.status === "ONLINE"
+                          ? "ONLINE"
+                          : "DEGRADED",
+                      desc: "Persistent Cloud state engine",
                     },
-                    { 
-                      name: 'PREDICTION ENGINE', 
-                      status: diagnosticsData?.predictionEngine?.status || 'ONLINE',
-                      desc: '15M binary direction pipeline',
+                    {
+                      name: "PREDICTION ENGINE",
+                      status:
+                        diagnosticsData?.predictionEngine?.status || "ONLINE",
+                      desc: "15M binary direction pipeline",
                     },
-                    { 
-                      name: 'DISCORD BOT SERVICE', 
-                      status: discordDiag?.BOT_CONNECTED ? 'ONLINE' : 'DEGRADED',
-                      desc: 'discord.js active bot gateway',
+                    {
+                      name: "DISCORD BOT SERVICE",
+                      status: discordDiag?.BOT_CONNECTED
+                        ? "ONLINE"
+                        : "DEGRADED",
+                      desc: "discord.js active bot gateway",
                     },
-                    { 
-                      name: 'STRIPE PAYMENTS', 
-                      status: stripeHealth?.status === 'OPERATIONAL' ? 'ONLINE' : 'DEGRADED',
-                      desc: 'Billing & entitlement pass checks',
-                    }
+                    {
+                      name: "STRIPE PAYMENTS",
+                      status:
+                        stripeHealth?.status === "OPERATIONAL"
+                          ? "ONLINE"
+                          : "DEGRADED",
+                      desc: "Billing & entitlement pass checks",
+                    },
                   ].map((sys, idx) => (
-                    <div key={idx} className="p-2.5 bg-[#06030e] border border-purple-950/40 rounded-xl flex items-center justify-between text-xs font-mono">
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-[#06030e] border border-purple-950/40 rounded-xl flex items-center justify-between text-xs font-mono"
+                    >
                       <div className="space-y-0.5">
-                        <span className="text-white font-black block text-[11px]">{sys.name}</span>
-                        <span className="text-[9px] text-purple-400/60 block">{sys.desc}</span>
+                        <span className="text-white font-black block text-[11px]">
+                          {sys.name}
+                        </span>
+                        <span className="text-[9px] text-purple-400/60 block">
+                          {sys.desc}
+                        </span>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                        sys.status === 'ONLINE' 
-                          ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800/40' 
-                          : 'bg-rose-950/80 text-rose-400 border-rose-800/40'
-                      }`}>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          sys.status === "ONLINE"
+                            ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/40"
+                            : "bg-rose-950/80 text-rose-400 border-rose-800/40"
+                        }`}
+                      >
                         {sys.status}
                       </span>
                     </div>
@@ -1041,75 +1223,140 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 {(() => {
-                  const calibratedProb = diagnosticsData?.calibration?.calibratedModelProbability ?? 0.5;
+                  const calibratedProb =
+                    diagnosticsData?.calibration?.calibratedModelProbability ??
+                    0.5;
                   const dir = diagnosticsData?.predictionEngine?.direction;
-                  const upProbability = dir === 'UP' ? calibratedProb * 100 : (dir === 'DOWN' ? (1 - calibratedProb) * 100 : 50);
-                  const downProbability = dir === 'DOWN' ? calibratedProb * 100 : (dir === 'UP' ? (1 - calibratedProb) * 100 : 50);
+                  const upProbability =
+                    dir === "UP"
+                      ? calibratedProb * 100
+                      : dir === "DOWN"
+                        ? (1 - calibratedProb) * 100
+                        : 50;
+                  const downProbability =
+                    dir === "DOWN"
+                      ? calibratedProb * 100
+                      : dir === "UP"
+                        ? (1 - calibratedProb) * 100
+                        : 50;
                   const isLocked = diagnosticsData?.lockStatus?.qualified;
 
                   return (
                     <div className="space-y-2 text-xs font-mono">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="p-2.5 bg-[#06030e] border border-purple-950 rounded-xl text-center">
-                          <span className="text-[9px] text-purple-400/60 block mb-0.5 uppercase">UP PROBABILITY</span>
-                          <span className="text-base font-black text-emerald-400">{upProbability.toFixed(1)}%</span>
+                          <span className="text-[9px] text-purple-400/60 block mb-0.5 uppercase">
+                            UP PROBABILITY
+                          </span>
+                          <span className="text-base font-black text-emerald-400">
+                            {upProbability.toFixed(1)}%
+                          </span>
                         </div>
                         <div className="p-2.5 bg-[#06030e] border border-purple-950 rounded-xl text-center">
-                          <span className="text-[9px] text-purple-400/60 block mb-0.5 uppercase">DOWN PROBABILITY</span>
-                          <span className="text-base font-black text-rose-400">{downProbability.toFixed(1)}%</span>
+                          <span className="text-[9px] text-purple-400/60 block mb-0.5 uppercase">
+                            DOWN PROBABILITY
+                          </span>
+                          <span className="text-base font-black text-rose-400">
+                            {downProbability.toFixed(1)}%
+                          </span>
                         </div>
                       </div>
 
                       <div className="space-y-1.5 pt-1.5">
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">CURRENT DIRECTION</span>
-                          <span className={`font-black ${dir === 'UP' ? 'text-emerald-400' : dir === 'DOWN' ? 'text-rose-400' : 'text-slate-400'}`}>
-                            {dir || 'NEUTRAL'}
+                          <span className="text-purple-400/70">
+                            CURRENT DIRECTION
+                          </span>
+                          <span
+                            className={`font-black ${dir === "UP" ? "text-emerald-400" : dir === "DOWN" ? "text-rose-400" : "text-slate-400"}`}
+                          >
+                            {dir || "NEUTRAL"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">CALIBRATION STATUS</span>
-                          <span className="text-white font-bold">{diagnosticsData?.calibration?.calibrationStatus || 'ACTIVE'}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">SAMPLE COUNT / 50</span>
-                          <span className="text-cyan-400 font-bold">
-                            {diagnosticsData?.calibration?.calibrationSampleSize || 0} / {diagnosticsData?.calibration?.calibrationMinimumSamples || 50}
+                          <span className="text-purple-400/70">
+                            CALIBRATION STATUS
                           </span>
-                        </div>
-                        <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">ROLLING BRIER SCORE</span>
                           <span className="text-white font-bold">
-                            {diagnosticsData?.calibration?.brierScore != null ? Number(diagnosticsData.calibration.brierScore).toFixed(3) : 'N/A'}
+                            {diagnosticsData?.calibration?.calibrationStatus ||
+                              "ACTIVE"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">TOTAL HISTORIC EVIDENCE</span>
+                          <span className="text-purple-400/70">
+                            SAMPLE COUNT / 50
+                          </span>
+                          <span className="text-cyan-400 font-bold">
+                            {diagnosticsData?.calibration
+                              ?.calibrationSampleSize || 0}{" "}
+                            /{" "}
+                            {diagnosticsData?.calibration
+                              ?.calibrationMinimumSamples || 50}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
+                          <span className="text-purple-400/70">
+                            ROLLING BRIER SCORE
+                          </span>
+                          <span className="text-white font-bold">
+                            {diagnosticsData?.calibration?.brierScore != null
+                              ? Number(
+                                  diagnosticsData.calibration.brierScore,
+                                ).toFixed(3)
+                              : "N/A"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
+                          <span className="text-purple-400/70">
+                            TOTAL HISTORIC EVIDENCE
+                          </span>
                           <span className="text-purple-300 font-bold">
-                            {diagnosticsData?.calibration?.lifetimeObservations != null ? `${diagnosticsData.calibration.lifetimeObservations} SNAPSHOTS` : 'N/A'}
+                            {diagnosticsData?.calibration
+                              ?.lifetimeObservations != null
+                              ? `${diagnosticsData.calibration.lifetimeObservations} SNAPSHOTS`
+                              : "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">CURRENT SIGNAL EDGE</span>
+                          <span className="text-purple-400/70">
+                            CURRENT SIGNAL EDGE
+                          </span>
                           <span className="text-emerald-400 font-bold">
-                            {diagnosticsData?.predictionEngine?.edgePct != null ? `+${(Number(diagnosticsData.predictionEngine.edgePct) * 100).toFixed(1)}%` : 'N/A'}
+                            {diagnosticsData?.predictionEngine?.edgePct != null
+                              ? `+${(Number(diagnosticsData.predictionEngine.edgePct) * 100).toFixed(1)}%`
+                              : "N/A"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">QUALIFICATION STATE</span>
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isLocked ? 'bg-emerald-950 text-emerald-400' : 'bg-amber-950 text-amber-400'}`}>
-                            {isLocked ? 'QUALIFIED' : 'PASS'}
+                          <span className="text-purple-400/70">
+                            QUALIFICATION STATE
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${isLocked ? "bg-emerald-950 text-emerald-400" : "bg-amber-950 text-amber-400"}`}
+                          >
+                            {isLocked ? "QUALIFIED" : "PASS"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">LOCK REASON CODE</span>
-                          <span className="text-white font-bold truncate max-w-[55%]" title={diagnosticsData?.lockStatus?.reason}>
-                            {diagnosticsData?.lockStatus?.reason || 'AWAITING_EDGE'}
+                          <span className="text-purple-400/70">
+                            LOCK REASON CODE
+                          </span>
+                          <span
+                            className="text-white font-bold truncate max-w-[55%]"
+                            title={diagnosticsData?.lockStatus?.reason}
+                          >
+                            {diagnosticsData?.lockStatus?.reason ||
+                              "AWAITING_EDGE"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
-                          <span className="text-purple-400/70">FEED FRESHNESS</span>
-                          <span className="text-emerald-400 font-bold">{diagnosticsData?.marketFeed?.lastUpdateSecAgo || 0}s AGO</span>
+                          <span className="text-purple-400/70">
+                            FEED FRESHNESS
+                          </span>
+                          <span className="text-emerald-400 font-bold">
+                            {diagnosticsData?.marketFeed?.lastUpdateSecAgo || 0}
+                            s AGO
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1135,49 +1382,73 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">CONNECTED:</span>
-                      <span className={`font-black ${discordDiag?.BOT_CONNECTED ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {discordDiag?.BOT_CONNECTED ? 'YES' : 'NO'}
+                      <span
+                        className={`font-black ${discordDiag?.BOT_CONNECTED ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        {discordDiag?.BOT_CONNECTED ? "YES" : "NO"}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">GUILD FOUND:</span>
-                      <span className={`font-black ${discordDiag?.GUILD_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {discordDiag?.GUILD_FOUND ? 'YES' : 'NO'}
+                      <span
+                        className={`font-black ${discordDiag?.GUILD_FOUND ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        {discordDiag?.GUILD_FOUND ? "YES" : "NO"}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">ROLE FOUND:</span>
-                      <span className={`font-black ${discordDiag?.ROLE_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {discordDiag?.ROLE_FOUND ? 'YES' : 'NO'}
+                      <span
+                        className={`font-black ${discordDiag?.ROLE_FOUND ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        {discordDiag?.ROLE_FOUND ? "YES" : "NO"}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">HIERARCHY:</span>
-                      <span className={`font-black ${discordDiag?.ROLE_MANAGEABLE ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {discordDiag?.ROLE_MANAGEABLE ? 'YES' : 'NO'}
+                      <span
+                        className={`font-black ${discordDiag?.ROLE_MANAGEABLE ? "text-emerald-400" : "text-rose-400"}`}
+                      >
+                        {discordDiag?.ROLE_MANAGEABLE ? "YES" : "NO"}
                       </span>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-1">
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
-                      <span className="text-[9px] text-purple-400/50 block uppercase">QUEUE</span>
-                      <span className="text-base font-black text-cyan-300">{discordDiag?.PENDING_COUNT ?? 0}</span>
+                      <span className="text-[9px] text-purple-400/50 block uppercase">
+                        QUEUE
+                      </span>
+                      <span className="text-base font-black text-cyan-300">
+                        {discordDiag?.PENDING_COUNT ?? 0}
+                      </span>
                     </div>
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
-                      <span className="text-[9px] text-purple-400/50 block uppercase">SUCCESS</span>
-                      <span className="text-base font-black text-emerald-400">{discordDiag?.SUCCESS_COUNT ?? 0}</span>
+                      <span className="text-[9px] text-purple-400/50 block uppercase">
+                        SUCCESS
+                      </span>
+                      <span className="text-base font-black text-emerald-400">
+                        {discordDiag?.SUCCESS_COUNT ?? 0}
+                      </span>
                     </div>
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
-                      <span className="text-[9px] text-purple-400/50 block uppercase">FAILED</span>
-                      <span className="text-base font-black text-rose-400">{discordDiag?.FAILED_COUNT ?? 0}</span>
+                      <span className="text-[9px] text-purple-400/50 block uppercase">
+                        FAILED
+                      </span>
+                      <span className="text-base font-black text-rose-400">
+                        {discordDiag?.FAILED_COUNT ?? 0}
+                      </span>
                     </div>
                   </div>
 
                   {discordDiag?.LAST_ERROR ? (
                     <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-800/40 text-[10px] font-mono text-rose-300">
-                      <span className="font-black block uppercase text-[9px] text-rose-400">LAST SYNC ERROR:</span>
-                      <span className="break-all text-xs font-bold">{discordDiag.LAST_ERROR}</span>
+                      <span className="font-black block uppercase text-[9px] text-rose-400">
+                        LAST SYNC ERROR:
+                      </span>
+                      <span className="break-all text-xs font-bold">
+                        {discordDiag.LAST_ERROR}
+                      </span>
                     </div>
                   ) : (
                     <div className="p-2 rounded-lg bg-emerald-950/35 border border-emerald-900/30 text-[10px] font-mono text-emerald-300 text-center">
@@ -1195,7 +1466,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </button>
                 </div>
               </div>
-
             </div>
 
             {/* Service Health Quick Matrix & Resync Bar */}
@@ -1206,38 +1476,47 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <Server className="w-4 h-4 text-purple-400" />
                     <span>Integrations Status</span>
                   </h3>
-                  <span className="text-[10px] font-mono text-slate-400">Real-Time</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Real-Time
+                  </span>
                 </div>
 
                 <div className="space-y-2 text-xs">
                   <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800/60">
-                    <span className="text-slate-300 font-semibold">Stripe Payment Gateway</span>
+                    <span className="text-slate-300 font-semibold">
+                      Stripe Payment Gateway
+                    </span>
                     <span
                       className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                        stripeHealth?.status === 'OPERATIONAL'
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                        stripeHealth?.status === "OPERATIONAL"
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                          : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
                       }`}
                     >
-                      {stripeHealth?.status || 'CONFIGURED'} ({stripeHealth?.stripe_secret_key_mode || 'LIVE'})
+                      {stripeHealth?.status || "CONFIGURED"} (
+                      {stripeHealth?.stripe_secret_key_mode || "LIVE"})
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800/60">
-                    <span className="text-slate-300 font-semibold">Discord Bot Infrastructure</span>
+                    <span className="text-slate-300 font-semibold">
+                      Discord Bot Infrastructure
+                    </span>
                     <span
                       className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
                         discordHealth?.botConnected
-                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                          : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                          : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
                       }`}
                     >
-                      {discordHealth?.botConnected ? 'CONNECTED' : 'STANDBY'}
+                      {discordHealth?.botConnected ? "CONNECTED" : "STANDBY"}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between p-2 rounded-lg bg-slate-950/60 border border-slate-800/60">
-                    <span className="text-slate-300 font-semibold">Kalshi & Crypto Feed</span>
+                    <span className="text-slate-300 font-semibold">
+                      Kalshi & Crypto Feed
+                    </span>
                     <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                       OPERATIONAL
                     </span>
@@ -1252,7 +1531,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <Zap className="w-4 h-4 text-purple-400" />
                     <span>Emergency Manual Entitlement Resync</span>
                   </h3>
-                  <span className="text-[10px] font-mono text-slate-400">Server Authorization</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    Server Authorization
+                  </span>
                 </div>
 
                 <div className="flex items-center space-x-2">
@@ -1268,8 +1549,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     disabled={isResyncing}
                     className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center space-x-1.5 shadow-lg shadow-purple-950/60"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isResyncing ? 'animate-spin' : ''}`} />
-                    <span>{isResyncing ? 'Resyncing...' : 'Force Resync Entitlement'}</span>
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${isResyncing ? "animate-spin" : ""}`}
+                    />
+                    <span>
+                      {isResyncing
+                        ? "Resyncing..."
+                        : "Force Resync Entitlement"}
+                    </span>
                   </button>
                 </div>
 
@@ -1279,7 +1566,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </div>
                 )}
                 <p className="text-[11px] text-slate-400">
-                  Force-queries Stripe customer subscriptions and Discord guild member roles, reconciles local user state, and re-assigns roles within &lt;200ms.
+                  Force-queries Stripe customer subscriptions and Discord guild
+                  member roles, reconciles local user state, and re-assigns
+                  roles within &lt;200ms.
                 </p>
               </div>
             </div>
@@ -1292,7 +1581,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <span>Recent Backend System & Audit Logs</span>
                 </h3>
                 <button
-                  onClick={() => setActiveSection('audit_log')}
+                  onClick={() => setActiveSection("audit_log")}
                   className="text-xs text-purple-400 hover:underline font-semibold"
                 >
                   View All Audit Logs &rarr;
@@ -1308,19 +1597,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <div className="flex items-center space-x-3 overflow-hidden">
                       <span
                         className={`px-1.5 py-0.5 text-[9px] font-bold uppercase rounded ${
-                          log.level === 'ERROR'
-                            ? 'bg-red-500/20 text-red-400 border border-red-500/30'
-                            : log.level === 'WARN'
-                            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                            : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                          log.level === "ERROR"
+                            ? "bg-red-500/20 text-red-400 border border-red-500/30"
+                            : log.level === "WARN"
+                              ? "bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                              : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
                         }`}
                       >
                         {log.level}
                       </span>
-                      <span className="text-purple-400 font-bold text-[11px]">{log.action}</span>
-                      <span className="text-slate-300 truncate text-[11px]">{log.details}</span>
+                      <span className="text-purple-400 font-bold text-[11px]">
+                        {log.action}
+                      </span>
+                      <span className="text-slate-300 truncate text-[11px]">
+                        {log.details}
+                      </span>
                     </div>
-                    <span className="text-[10px] text-slate-500 shrink-0">{log.timestamp}</span>
+                    <span className="text-[10px] text-slate-500 shrink-0">
+                      {log.timestamp}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -1331,7 +1626,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 2. USER CONTROL CENTER (USERS SECTION) */}
         {/* ========================================================================= */}
-        {activeSection === 'users' && (
+        {activeSection === "users" && (
           <div className="space-y-4">
             {/* Control Bar & Actions */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-xl">
@@ -1359,7 +1654,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   title="Wipe old test accounts so only Master Admin remains"
                 >
                   <Trash2 className="w-4 h-4 text-rose-400" />
-                  <span>{isWipingUsers ? 'Wiping Users...' : 'Wipe Beta Users'}</span>
+                  <span>
+                    {isWipingUsers ? "Wiping Users..." : "Wipe Beta Users"}
+                  </span>
                 </button>
                 <button
                   onClick={() => setIsAddUserOpen(true)}
@@ -1374,17 +1671,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             {/* User Intelligence Filters */}
             <div className="flex items-center space-x-1.5 overflow-x-auto scrollbar-none py-1">
               {[
-                'ALL',
-                'FREE',
-                'TRIAL',
-                'DAY PASS ACTIVE',
-                'PRO',
-                'ELITE',
-                'DISCORD LINKED',
-                'STRIPE ACTIVE',
-                'PAYMENT ISSUE',
-                'UNVERIFIED',
-                'DUPLICATE RISK',
+                "ALL",
+                "FREE",
+                "TRIAL",
+                "DAY PASS ACTIVE",
+                "PRO",
+                "ELITE",
+                "DISCORD LINKED",
+                "STRIPE ACTIVE",
+                "PAYMENT ISSUE",
+                "UNVERIFIED",
+                "DUPLICATE RISK",
               ].map((filterKey) => (
                 <button
                   key={filterKey}
@@ -1394,8 +1691,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
                     userFilter === filterKey
-                      ? 'bg-purple-600 text-white border border-purple-400 shadow-md'
-                      : 'bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      ? "bg-purple-600 text-white border border-purple-400 shadow-md"
+                      : "bg-slate-900/80 text-slate-400 hover:text-slate-200 border border-slate-800"
                   }`}
                 >
                   {filterKey}
@@ -1423,62 +1720,93 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <tbody className="divide-y divide-slate-800/60">
                     {paginatedUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={9} className="p-8 text-center text-slate-500 font-sans">
-                          No users matched the requested search or filter criteria.
+                        <td
+                          colSpan={9}
+                          className="p-8 text-center text-slate-500 font-sans"
+                        >
+                          No users matched the requested search or filter
+                          criteria.
                         </td>
                       </tr>
                     ) : (
                       paginatedUsers.map((user) => {
-                        const isDupRisk = duplicateRiskUserIds.has(user.id) || user.verificationStatus === 'SUSPECTED_DUPLICATE';
+                        const isDupRisk =
+                          duplicateRiskUserIds.has(user.id) ||
+                          user.verificationStatus === "SUSPECTED_DUPLICATE";
                         return (
-                          <tr key={user.id} className="hover:bg-slate-800/40 transition">
+                          <tr
+                            key={user.id}
+                            className="hover:bg-slate-800/40 transition"
+                          >
                             <td className="p-3">
                               <div className="flex items-center space-x-2.5">
                                 <div className="w-7 h-7 rounded-lg bg-purple-900/40 border border-purple-500/30 flex items-center justify-center font-bold text-purple-300 text-xs shrink-0">
-                                  {user.name ? user.name[0].toUpperCase() : (user.email ? user.email[0].toUpperCase() : (user.discordTag ? user.discordTag[0].toUpperCase() : '?'))}
+                                  {user.name
+                                    ? user.name[0].toUpperCase()
+                                    : user.email
+                                      ? user.email[0].toUpperCase()
+                                      : user.discordTag
+                                        ? user.discordTag[0].toUpperCase()
+                                        : "?"}
                                 </div>
                                 <div>
                                   <div className="font-bold text-slate-200 flex items-center space-x-1.5">
-                                    <span>{user.name || (user.email ? user.email.split('@')[0] : user.discordGlobalName || user.discordTag)}</span>
-                                    {user.role === 'OWNER' && (
+                                    <span>
+                                      {user.name ||
+                                        (user.email
+                                          ? user.email.split("@")[0]
+                                          : user.discordGlobalName ||
+                                            user.discordTag)}
+                                    </span>
+                                    {user.role === "OWNER" && (
                                       <span className="px-1.5 py-0.2 text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
                                         OWNER
                                       </span>
                                     )}
                                   </div>
-                                  <div className="text-[11px] text-slate-400">{user.email || 'unavailable/not connected'}</div>
+                                  <div className="text-[11px] text-slate-400">
+                                    {user.email || "unavailable/not connected"}
+                                  </div>
                                 </div>
                               </div>
                             </td>
 
                             <td className="p-3">
                               <span className="text-[10px] font-mono text-slate-400">
-                                {user.uid ? user.uid.slice(0, 8) + '...' : 'LOCAL'}
+                                {user.uid
+                                  ? user.uid.slice(0, 8) + "..."
+                                  : "LOCAL"}
                               </span>
                             </td>
 
                             <td className="p-3">
-                              {user.dayPass && user.dayPass.status === 'ACTIVE' && new Date(user.dayPass.expiresAt || 0).getTime() > Date.now() ? (
+                              {user.dayPass &&
+                              user.dayPass.status === "ACTIVE" &&
+                              new Date(user.dayPass.expiresAt || 0).getTime() >
+                                Date.now() ? (
                                 <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm shadow-amber-950">
                                   ⚡ 24H_DAY_PASS
                                 </span>
-                              ) : user.dayPass && user.dayPass.status === 'EXPIRED' ? (
+                              ) : user.dayPass &&
+                                user.dayPass.status === "EXPIRED" ? (
                                 <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-slate-800 text-slate-400 border border-slate-700">
                                   ⚡ PASS_EXPIRED
                                 </span>
                               ) : (
                                 <span
                                   className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                                    user.subscription === 'ELITE_PASS' || user.role === 'ELITE'
-                                      ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40'
-                                      : user.subscription === 'PRO_PASS' || user.role === 'PRO'
-                                      ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
-                                      : user.subscription === 'FREE_TRIAL'
-                                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                                      : 'bg-slate-800 text-slate-400'
+                                    user.subscription === "ELITE_PASS" ||
+                                    user.role === "ELITE"
+                                      ? "bg-violet-500/20 text-violet-300 border border-violet-500/40"
+                                      : user.subscription === "PRO_PASS" ||
+                                          user.role === "PRO"
+                                        ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
+                                        : user.subscription === "FREE_TRIAL"
+                                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                          : "bg-slate-800 text-slate-400"
                                   }`}
                                 >
-                                  {user.subscription || user.role || 'NONE'}
+                                  {user.subscription || user.role || "NONE"}
                                 </span>
                               )}
                             </td>
@@ -1487,38 +1815,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                               {user.stripeCustomerId ? (
                                 <span className="text-emerald-400 text-[11px] font-mono flex items-center space-x-1">
                                   <Check className="w-3 h-3" />
-                                  <span>{user.stripeCustomerId.slice(0, 10)}...</span>
+                                  <span>
+                                    {user.stripeCustomerId.slice(0, 10)}...
+                                  </span>
                                 </span>
                               ) : (
-                                <span className="text-slate-500 text-[11px]">UNLINKED</span>
+                                <span className="text-slate-500 text-[11px]">
+                                  UNLINKED
+                                </span>
                               )}
                             </td>
 
                             <td className="p-3">
                               {user.discordTag || user.discordId ? (
                                 <span className="text-indigo-300 text-[11px] font-mono">
-                                  @{user.discordTag || user.discordId?.slice(0, 8)}
+                                  @
+                                  {user.discordTag ||
+                                    user.discordId?.slice(0, 8)}
                                 </span>
                               ) : (
-                                <span className="text-slate-500 text-[11px] font-mono">DISCORD_PENDING</span>
+                                <span className="text-slate-500 text-[11px] font-mono">
+                                  DISCORD_PENDING
+                                </span>
                               )}
                             </td>
 
                             <td className="p-3">
                               <span
                                 className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                                  user.status === 'ACTIVE'
-                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                    : user.status === 'TRIALING'
-                                    ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                                    : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                                  user.status === "ACTIVE"
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                                    : user.status === "TRIALING"
+                                      ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                                      : "bg-red-500/10 text-red-400 border border-red-500/30"
                                 }`}
                               >
                                 {user.status}
                               </span>
                             </td>
 
-                            <td className="p-3 text-slate-400 text-[11px]">{user.joined}</td>
+                            <td className="p-3 text-slate-400 text-[11px]">
+                              {user.joined}
+                            </td>
 
                             <td className="p-3">
                               {isDupRisk ? (
@@ -1526,11 +1864,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                   <AlertTriangle className="w-3 h-3 text-red-400" />
                                   <span>DUPLICATE RISK</span>
                                 </span>
-                              ) : user.verificationStatus === 'UNVERIFIED' || (!user.discordLinked && !user.discordId) ? (
+                              ) : user.verificationStatus === "UNVERIFIED" ||
+                                (!user.discordLinked && !user.discordId) ? (
                                 <span className="px-2 py-0.5 text-[9px] font-bold bg-slate-700/50 text-slate-400 border border-slate-700 rounded">
                                   UNVERIFIED
                                 </span>
-                              ) : (user.verificationStatus as string) === 'NEEDS_GUILD' ? (
+                              ) : (user.verificationStatus as string) ===
+                                "NEEDS_GUILD" ? (
                                 <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/10 text-amber-400 rounded">
                                   NEEDS GUILD
                                 </span>
@@ -1558,7 +1898,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                   Inspect
                                 </button>
                                 <button
-                                  onClick={() => handleUserAction(user, 'sync_user')}
+                                  onClick={() =>
+                                    handleUserAction(user, "sync_user")
+                                  }
                                   className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-purple-400 border border-slate-700 transition"
                                   title="Sync User Data"
                                 >
@@ -1577,7 +1919,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               {/* Pagination Controls */}
               <div className="p-3 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
                 <span>
-                  Showing {paginatedUsers.length} of {filteredUsers.length} Users
+                  Showing {paginatedUsers.length} of {filteredUsers.length}{" "}
+                  Users
                 </span>
 
                 <div className="flex items-center space-x-2">
@@ -1592,7 +1935,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     Page {currentPage} of {totalPages}
                   </span>
                   <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
                     disabled={currentPage === totalPages}
                     className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-40"
                   >
@@ -1607,7 +1952,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 3. BILLING CENTER (BILLING SECTION) */}
         {/* ========================================================================= */}
-        {activeSection === 'billing' && (
+        {activeSection === "billing" && (
           <div className="space-y-6">
             {/* Connection Status & Summary Metrics */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
@@ -1618,13 +1963,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <span>Stripe Billing & Subscription Operations</span>
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Authoritative Stripe Checkout, Subscriptions, and Customer Entitlement Directory
+                    Authoritative Stripe Checkout, Subscriptions, and Customer
+                    Entitlement Directory
                   </p>
                 </div>
 
                 <div className="flex items-center space-x-3">
                   <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                    Stripe Mode: {stripeHealth?.stripe_secret_key_mode?.toUpperCase() || 'LIVE'}
+                    Stripe Mode:{" "}
+                    {stripeHealth?.stripe_secret_key_mode?.toUpperCase() ||
+                      "LIVE"}
                   </span>
                   <button
                     onClick={() => loadAdminData(true)}
@@ -1638,19 +1986,33 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2">
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">TOTAL REVENUE</div>
-                  <div className="text-lg font-black font-mono text-emerald-400">${totalRevenue.toLocaleString()}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">
+                    TOTAL REVENUE
+                  </div>
+                  <div className="text-lg font-black font-mono text-emerald-400">
+                    ${totalRevenue.toLocaleString()}
+                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">ACTIVE SUBSCRIPTIONS</div>
-                  <div className="text-lg font-black font-mono text-purple-300">{paidUsersCount}</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">
+                    ACTIVE SUBSCRIPTIONS
+                  </div>
+                  <div className="text-lg font-black font-mono text-purple-300">
+                    {paidUsersCount}
+                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">FAILED / PAST DUE</div>
-                  <div className="text-lg font-black font-mono text-amber-400">0</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">
+                    FAILED / PAST DUE
+                  </div>
+                  <div className="text-lg font-black font-mono text-amber-400">
+                    0
+                  </div>
                 </div>
                 <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase font-bold">STRIPE CUSTOMERS</div>
+                  <div className="text-[10px] text-slate-400 uppercase font-bold">
+                    STRIPE CUSTOMERS
+                  </div>
                   <div className="text-lg font-black font-mono text-slate-200">
                     {users.filter((u) => u.stripeCustomerId).length}
                   </div>
@@ -1665,12 +2027,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   Recent Stripe Checkout & Renewal Transactions
                 </h3>
                 <div className="flex items-center space-x-2">
-                  {['ALL', 'Succeeded', 'Failed', 'Pending'].map((st) => (
+                  {["ALL", "Succeeded", "Failed", "Pending"].map((st) => (
                     <button
                       key={st}
                       onClick={() => setTxStatusFilter(st)}
                       className={`px-2.5 py-1 rounded text-[11px] font-bold ${
-                        txStatusFilter === st ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400'
+                        txStatusFilter === st
+                          ? "bg-purple-600 text-white"
+                          : "bg-slate-800 text-slate-400"
                       }`}
                     >
                       {st}
@@ -1694,20 +2058,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {transactions
-                      .filter((tx) => txStatusFilter === 'ALL' || tx.status === txStatusFilter)
+                      .filter(
+                        (tx) =>
+                          txStatusFilter === "ALL" ||
+                          tx.status === txStatusFilter,
+                      )
                       .map((tx) => (
                         <tr key={tx.id} className="hover:bg-slate-800/40">
-                          <td className="p-3 text-purple-300 font-bold">{tx.id}</td>
+                          <td className="p-3 text-purple-300 font-bold">
+                            {tx.id}
+                          </td>
                           <td className="p-3 text-slate-200">{tx.email}</td>
                           <td className="p-3 text-slate-300">{tx.plan}</td>
-                          <td className="p-3 text-emerald-400 font-bold">${tx.amount.toFixed(2)}</td>
+                          <td className="p-3 text-emerald-400 font-bold">
+                            ${tx.amount.toFixed(2)}
+                          </td>
                           <td className="p-3 text-slate-400">{tx.method}</td>
                           <td className="p-3">
                             <span
                               className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                                tx.status === 'Succeeded'
-                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                                  : 'bg-red-500/10 text-red-400 border border-red-500/30'
+                                tx.status === "Succeeded"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                                  : "bg-red-500/10 text-red-400 border border-red-500/30"
                               }`}
                             >
                               {tx.status}
@@ -1726,7 +2098,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 4. DAY PASSES, CONNECTED ACCOUNTS & ACCESS STORE */}
         {/* ========================================================================= */}
-        {activeSection === 'trials' && (
+        {activeSection === "trials" && (
           <div className="space-y-6">
             {/* Top Stat Cards */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -1736,7 +2108,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                 </div>
                 <div className="text-xl font-black font-mono text-amber-400 mt-1">
-                  {dayPassRecords.filter((dp) => dp.status === 'ACTIVE').length}
+                  {dayPassRecords.filter((dp) => dp.status === "ACTIVE").length}
                 </div>
               </div>
 
@@ -1746,7 +2118,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
                 </div>
                 <div className="text-xl font-black font-mono text-slate-400 mt-1">
-                  {dayPassRecords.filter((dp) => dp.status === 'EXPIRED').length}
+                  {
+                    dayPassRecords.filter((dp) => dp.status === "EXPIRED")
+                      .length
+                  }
                 </div>
               </div>
 
@@ -1776,7 +2151,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div className="text-xl font-black font-mono text-emerald-400 mt-1">
-                  {users.filter((u) => u.stripeCustomerId || u.stripeSubscriptionId).length}
+                  {
+                    users.filter(
+                      (u) => u.stripeCustomerId || u.stripeSubscriptionId,
+                    ).length
+                  }
                 </div>
               </div>
             </div>
@@ -1790,7 +2169,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <span>24-Hour Day Passes Store & Active Grants</span>
                   </h2>
                   <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                    Real-time status of all $9.99 24-Hour Day Passes purchased via Stripe Checkout or granted by admins.
+                    Real-time status of all $9.99 24-Hour Day Passes purchased
+                    via Stripe Checkout or granted by admins.
                   </p>
                 </div>
               </div>
@@ -1812,22 +2192,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <tbody className="divide-y divide-slate-800/60">
                     {dayPassRecords.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="p-6 text-center text-slate-500 font-sans">
+                        <td
+                          colSpan={8}
+                          className="p-6 text-center text-slate-500 font-sans"
+                        >
                           No 24-Hour Day Pass records currently found.
                         </td>
                       </tr>
                     ) : (
                       dayPassRecords.map((dp) => {
-                        const isPassActive = dp.status === 'ACTIVE' && new Date(dp.expiresAt || 0).getTime() > Date.now();
-                        const matchingUser = users.find((u) => u.email?.toLowerCase() === dp.email?.toLowerCase() || u.id === dp.userId);
+                        const isPassActive =
+                          dp.status === "ACTIVE" &&
+                          new Date(dp.expiresAt || 0).getTime() > Date.now();
+                        const matchingUser = users.find(
+                          (u) =>
+                            u.email?.toLowerCase() ===
+                              dp.email?.toLowerCase() || u.id === dp.userId,
+                        );
                         return (
-                          <tr key={dp.entitlementId || dp.email} className="hover:bg-slate-800/40 transition">
+                          <tr
+                            key={dp.entitlementId || dp.email}
+                            className="hover:bg-slate-800/40 transition"
+                          >
                             <td className="p-3">
-                              <div className="font-bold text-slate-200">{dp.email}</div>
-                              <div className="text-[10px] text-slate-500">ID: {dp.userId}</div>
+                              <div className="font-bold text-slate-200">
+                                {dp.email}
+                              </div>
+                              <div className="text-[10px] text-slate-500">
+                                ID: {dp.userId}
+                              </div>
                             </td>
                             <td className="p-3 font-mono text-[11px] text-slate-400">
-                              {dp.entitlementId || 'dp_vixy'}
+                              {dp.entitlementId || "dp_vixy"}
                             </td>
                             <td className="p-3">
                               <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
@@ -1847,10 +2243,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                               )}
                             </td>
                             <td className="p-3 text-slate-400 text-[11px]">
-                              {dp.activatedAt ? new Date(dp.activatedAt).toLocaleString() : 'N/A'}
+                              {dp.activatedAt
+                                ? new Date(dp.activatedAt).toLocaleString()
+                                : "N/A"}
                             </td>
                             <td className="p-3 text-slate-300 font-mono text-[11px]">
-                              {dp.expiresAt ? new Date(dp.expiresAt).toLocaleString() : 'N/A'}
+                              {dp.expiresAt
+                                ? new Date(dp.expiresAt).toLocaleString()
+                                : "N/A"}
                             </td>
                             <td className="p-3">
                               {dp.discordRoleAssigned ? (
@@ -1859,7 +2259,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                   <span>ASSIGNED</span>
                                 </span>
                               ) : (
-                                <span className="text-slate-500 text-[10px]">UNASSIGNED</span>
+                                <span className="text-slate-500 text-[10px]">
+                                  UNASSIGNED
+                                </span>
                               )}
                             </td>
                             <td className="p-3 text-right space-x-1.5">
@@ -1867,14 +2269,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                                 <>
                                   {isPassActive ? (
                                     <button
-                                      onClick={() => handleUserAction(matchingUser, 'revoke_day_pass')}
+                                      onClick={() =>
+                                        handleUserAction(
+                                          matchingUser,
+                                          "revoke_day_pass",
+                                        )
+                                      }
                                       className="px-2 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded text-[11px] font-bold"
                                     >
                                       Revoke Pass
                                     </button>
                                   ) : (
                                     <button
-                                      onClick={() => handleUserAction(matchingUser, 'grant_day_pass')}
+                                      onClick={() =>
+                                        handleUserAction(
+                                          matchingUser,
+                                          "grant_day_pass",
+                                        )
+                                      }
                                       className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded text-[11px] font-bold"
                                     >
                                       Grant 24H Pass
@@ -1913,12 +2325,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </thead>
                   <tbody className="divide-y divide-slate-800/60">
                     {users
-                      .filter((u) => u.subscription === 'FREE_TRIAL' || u.status === 'TRIALING')
+                      .filter(
+                        (u) =>
+                          u.subscription === "FREE_TRIAL" ||
+                          u.status === "TRIALING",
+                      )
                       .map((u) => (
                         <tr key={u.id} className="hover:bg-slate-800/40">
-                          <td className="p-3 text-slate-200 font-bold">{u.email}</td>
+                          <td className="p-3 text-slate-200 font-bold">
+                            {u.email}
+                          </td>
                           <td className="p-3 text-slate-400">{u.joined}</td>
-                          <td className="p-3 text-slate-500">{u.hardwareFingerprint || 'UNAVAILABLE'}</td>
+                          <td className="p-3 text-slate-500">
+                            {u.hardwareFingerprint || "UNAVAILABLE"}
+                          </td>
                           <td className="p-3">
                             <span className="px-2 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">
                               TRIALING
@@ -1935,19 +2355,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                           </td>
                           <td className="p-3 text-right space-x-1.5">
                             <button
-                              onClick={() => handleUserAction(u, 'extend_trial')}
+                              onClick={() =>
+                                handleUserAction(u, "extend_trial")
+                              }
                               className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-purple-300 rounded text-[11px]"
                             >
                               Extend 7 Days
                             </button>
                             <button
-                              onClick={() => handleUserAction(u, 'grant_day_pass')}
+                              onClick={() =>
+                                handleUserAction(u, "grant_day_pass")
+                              }
                               className="px-2 py-1 bg-amber-600/30 hover:bg-amber-600/50 text-amber-200 border border-amber-500/40 rounded text-[11px] font-bold"
                             >
                               Grant 24H Pass
                             </button>
                             <button
-                              onClick={() => handleUserAction(u, 'revoke_trial')}
+                              onClick={() =>
+                                handleUserAction(u, "revoke_trial")
+                              }
                               className="px-2 py-1 bg-red-950 hover:bg-red-900 text-red-300 rounded text-[11px]"
                             >
                               Revoke Trial
@@ -1965,14 +2391,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 5. DISCORD BOT HUB SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'discord' && (
+        {activeSection === "discord" && (
           <DiscordBotHubView currentUserId={currentUserId} />
         )}
 
         {/* ========================================================================= */}
         {/* 6. REFERRALS SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'referrals' && (
+        {activeSection === "referrals" && (
           <div className="space-y-4">
             <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 p-4 rounded-2xl">
               <div>
@@ -1980,15 +2406,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   Referral & Promo Code Engine
                 </h2>
                 <p className="text-xs text-slate-400">
-                  Manage promoter discount codes, commission payouts, and referral attribution
+                  Manage promoter discount codes, commission payouts, and
+                  referral attribution
                 </p>
               </div>
               <button
                 onClick={() => {
                   setEditingReferral(null);
-                  setRefCodeInput('');
-                  setRefNameInput('');
-                  setRefEmailInput('');
+                  setRefCodeInput("");
+                  setRefNameInput("");
+                  setRefEmailInput("");
                   setIsAddReferralOpen(true);
                 }}
                 className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center space-x-2"
@@ -2013,13 +2440,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 <tbody className="divide-y divide-slate-800/60">
                   {referrals.map((ref) => (
                     <tr key={ref.code} className="hover:bg-slate-800/40">
-                      <td className="p-3 font-bold text-purple-300">{ref.code}</td>
+                      <td className="p-3 font-bold text-purple-300">
+                        {ref.code}
+                      </td>
                       <td className="p-3 text-slate-200">
                         {ref.promoterName} ({ref.promoterEmail})
                       </td>
-                      <td className="p-3 text-emerald-400 font-bold">{ref.discountOff || '20% Off'}</td>
-                      <td className="p-3 text-purple-400 font-bold">{ref.commissionRate || '20%'}</td>
-                      <td className="p-3 text-slate-300 font-mono">{ref.uses || 0}</td>
+                      <td className="p-3 text-emerald-400 font-bold">
+                        {ref.discountOff || "20% Off"}
+                      </td>
+                      <td className="p-3 text-purple-400 font-bold">
+                        {ref.commissionRate || "20%"}
+                      </td>
+                      <td className="p-3 text-slate-300 font-mono">
+                        {ref.uses || 0}
+                      </td>
                       <td className="p-3 text-right">
                         <button
                           onClick={() => handleDeleteReferral(ref.code)}
@@ -2039,7 +2474,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 7. AUDIT LOG SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'audit_log' && (
+        {activeSection === "audit_log" && (
           <div className="space-y-4">
             <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
@@ -2048,12 +2483,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </h2>
 
               <div className="flex items-center space-x-2">
-                {['ALL', 'INFO', 'WARN', 'ERROR'].map((lvl) => (
+                {["ALL", "INFO", "WARN", "ERROR"].map((lvl) => (
                   <button
                     key={lvl}
                     onClick={() => setAuditLevelFilter(lvl as any)}
                     className={`px-2.5 py-1 rounded text-[11px] font-bold ${
-                      auditLevelFilter === lvl ? 'bg-purple-600 text-white' : 'bg-slate-800 text-slate-400'
+                      auditLevelFilter === lvl
+                        ? "bg-purple-600 text-white"
+                        : "bg-slate-800 text-slate-400"
                     }`}
                   >
                     {lvl}
@@ -2065,26 +2502,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
               <div className="divide-y divide-slate-800/60 font-mono text-xs">
                 {auditLogs
-                  .filter((log) => auditLevelFilter === 'ALL' || log.level === auditLevelFilter)
+                  .filter(
+                    (log) =>
+                      auditLevelFilter === "ALL" ||
+                      log.level === auditLevelFilter,
+                  )
                   .map((log) => (
-                    <div key={log.id} className="p-3 flex items-center justify-between space-x-4 hover:bg-slate-800/30">
+                    <div
+                      key={log.id}
+                      className="p-3 flex items-center justify-between space-x-4 hover:bg-slate-800/30"
+                    >
                       <div className="flex items-center space-x-3 overflow-hidden">
                         <span
                           className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                            log.level === 'ERROR'
-                              ? 'bg-red-500/20 text-red-400'
-                              : log.level === 'WARN'
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : 'bg-emerald-500/20 text-emerald-400'
+                            log.level === "ERROR"
+                              ? "bg-red-500/20 text-red-400"
+                              : log.level === "WARN"
+                                ? "bg-amber-500/20 text-amber-400"
+                                : "bg-emerald-500/20 text-emerald-400"
                           }`}
                         >
                           {log.level}
                         </span>
-                        <span className="text-purple-300 font-bold">{log.actor}</span>
-                        <span className="text-slate-200 font-semibold">{log.action}:</span>
-                        <span className="text-slate-400 truncate">{log.details}</span>
+                        <span className="text-purple-300 font-bold">
+                          {log.actor}
+                        </span>
+                        <span className="text-slate-200 font-semibold">
+                          {log.action}:
+                        </span>
+                        <span className="text-slate-400 truncate">
+                          {log.details}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-slate-500 shrink-0">{log.timestamp}</span>
+                      <span className="text-[10px] text-slate-500 shrink-0">
+                        {log.timestamp}
+                      </span>
                     </div>
                   ))}
               </div>
@@ -2095,7 +2547,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 8. SYSTEM HEALTH SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'system_health' && (
+        {activeSection === "system_health" && (
           <div className="space-y-6">
             <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
@@ -2105,29 +2557,67 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {[
-                  { name: 'AUTH', status: 'ONLINE', latency: '4ms' },
-                  { name: 'DATABASE / PERSISTENCE', status: 'ONLINE', latency: '2ms' },
-                  { name: 'STRIPE GATEWAY', status: stripeHealth?.status === 'OPERATIONAL' ? 'ONLINE' : 'DEGRADED', latency: '24ms' },
-                  { name: 'STRIPE WEBHOOKS', status: 'ONLINE', latency: '12ms' },
-                  { name: 'DISCORD INFRASTRUCTURE', status: discordHealth?.botConnected ? 'ONLINE' : 'DEGRADED', latency: '18ms' },
-                  { name: 'MARKET DATA FEED', status: 'ONLINE', latency: '14ms' },
-                  { name: 'VIXY AI PREDICTION ENGINE', status: 'ONLINE', latency: '16ms' },
-                  { name: 'AUTOMATION SCHEDULER', status: 'ONLINE', latency: '1ms' },
-                  { name: 'BOT CLUSTER', status: 'ONLINE', latency: '8ms' },
+                  { name: "AUTH", status: "ONLINE", latency: "4ms" },
+                  {
+                    name: "DATABASE / PERSISTENCE",
+                    status: "ONLINE",
+                    latency: "2ms",
+                  },
+                  {
+                    name: "STRIPE GATEWAY",
+                    status:
+                      stripeHealth?.status === "OPERATIONAL"
+                        ? "ONLINE"
+                        : "DEGRADED",
+                    latency: "24ms",
+                  },
+                  {
+                    name: "STRIPE WEBHOOKS",
+                    status: "ONLINE",
+                    latency: "12ms",
+                  },
+                  {
+                    name: "DISCORD INFRASTRUCTURE",
+                    status: discordHealth?.botConnected ? "ONLINE" : "DEGRADED",
+                    latency: "18ms",
+                  },
+                  {
+                    name: "MARKET DATA FEED",
+                    status: "ONLINE",
+                    latency: "14ms",
+                  },
+                  {
+                    name: "VIXY AI PREDICTION ENGINE",
+                    status: "ONLINE",
+                    latency: "16ms",
+                  },
+                  {
+                    name: "AUTOMATION SCHEDULER",
+                    status: "ONLINE",
+                    latency: "1ms",
+                  },
+                  { name: "BOT CLUSTER", status: "ONLINE", latency: "8ms" },
                 ].map((svc, i) => (
-                  <div key={i} className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
-                    <div className="text-[10px] text-slate-400 font-bold uppercase">{svc.name}</div>
+                  <div
+                    key={i}
+                    className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1"
+                  >
+                    <div className="text-[10px] text-slate-400 font-bold uppercase">
+                      {svc.name}
+                    </div>
                     <div className="flex items-center justify-between pt-1">
                       <span
                         className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                          svc.status === 'ONLINE'
-                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
-                            : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                          svc.status === "ONLINE"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+                            : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
                         }`}
                       >
                         {svc.status}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">{svc.latency}</span>
+                      <span className="text-xs font-mono text-slate-400">
+                        {svc.latency}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -2143,7 +2633,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     RESOLVED SIGNAL OUTCOME AUDIT LOG (PROVABLE MEMORY STORE)
                   </h3>
                   <p className="text-[11px] text-purple-300/70">
-                    Raw 15-minute walk-forward model prediction outcomes, target strikes, close prices, and Brier scoring calibration history.
+                    Raw 15-minute walk-forward model prediction outcomes, target
+                    strikes, close prices, and Brier scoring calibration
+                    history.
                   </p>
                 </div>
                 <span className="px-2.5 py-1 rounded bg-cyan-950 border border-cyan-800 text-cyan-300 text-[10px] font-mono font-bold">
@@ -2167,29 +2659,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-slate-200">
                     {signalLogsState.map((log: any) => (
-                      <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
-                        <td className="py-2 px-2 text-[10px] text-purple-300 font-bold">{log.id}</td>
-                        <td className="py-2 px-2 font-bold">{log.market || 'BTC_KALSHI_15M'}</td>
+                      <tr
+                        key={log.id}
+                        className="hover:bg-slate-800/40 transition-colors"
+                      >
+                        <td className="py-2 px-2 text-[10px] text-purple-300 font-bold">
+                          {log.id}
+                        </td>
+                        <td className="py-2 px-2 font-bold">
+                          {log.market || "BTC_KALSHI_15M"}
+                        </td>
                         <td className="py-2 px-2">
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                            log.direction === 'UP' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-rose-950 text-rose-400 border border-rose-800'
-                          }`}>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              log.direction === "UP"
+                                ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                                : "bg-rose-950 text-rose-400 border border-rose-800"
+                            }`}
+                          >
                             BUY {log.direction}
                           </span>
                         </td>
-                        <td className="py-2 px-2 font-bold text-cyan-300">{log.confidence}%</td>
-                        <td className="py-2 px-2">${log.targetStrike?.toLocaleString()}</td>
-                        <td className="py-2 px-2 font-bold">${log.settlementPrice?.toLocaleString()}</td>
+                        <td className="py-2 px-2 font-bold text-cyan-300">
+                          {log.confidence}%
+                        </td>
                         <td className="py-2 px-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            log.wasCorrect
-                              ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                              : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
-                          }`}>
-                            {log.wasCorrect ? 'WIN (CORRECT)' : 'LOSS'}
+                          ${log.targetStrike?.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-2 font-bold">
+                          ${log.settlementPrice?.toLocaleString()}
+                        </td>
+                        <td className="py-2 px-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              log.wasCorrect
+                                ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                                : "bg-rose-500/20 text-rose-400 border border-rose-500/40"
+                            }`}
+                          >
+                            {log.wasCorrect ? "WIN (CORRECT)" : "LOSS"}
                           </span>
                         </td>
-                        <td className="py-2 px-2 text-purple-300 font-bold">{log.brierScore != null ? Number(log.brierScore).toFixed(4) : 'N/A'}</td>
+                        <td className="py-2 px-2 text-purple-300 font-bold">
+                          {log.brierScore != null
+                            ? Number(log.brierScore).toFixed(4)
+                            : "N/A"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -2202,7 +2717,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 9. SUPPORT TICKETS SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'support' && (
+        {activeSection === "support" && (
           <div className="space-y-4">
             <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200">
@@ -2217,15 +2732,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     key={t.id}
                     onClick={() => setSelectedTicket(t)}
                     className={`p-3 cursor-pointer hover:bg-slate-800/50 transition ${
-                      selectedTicket?.id === t.id ? 'bg-purple-950/40 border-l-2 border-purple-500' : ''
+                      selectedTicket?.id === t.id
+                        ? "bg-purple-950/40 border-l-2 border-purple-500"
+                        : ""
                     }`}
                   >
                     <div className="flex items-center justify-between text-[11px] mb-1">
                       <span className="font-bold text-purple-300">{t.id}</span>
                       <span className="text-slate-500">{t.date}</span>
                     </div>
-                    <div className="text-xs font-bold text-slate-200 truncate">{t.subject}</div>
-                    <div className="text-[11px] text-slate-400">{t.userEmail}</div>
+                    <div className="text-xs font-bold text-slate-200 truncate">
+                      {t.subject}
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      {t.userEmail}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2235,9 +2756,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <div className="space-y-4">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                       <div>
-                        <h3 className="text-sm font-bold text-slate-100">{selectedTicket.subject}</h3>
+                        <h3 className="text-sm font-bold text-slate-100">
+                          {selectedTicket.subject}
+                        </h3>
                         <p className="text-xs text-slate-400">
-                          {selectedTicket.userEmail} • Category: {selectedTicket.category}
+                          {selectedTicket.userEmail} • Category:{" "}
+                          {selectedTicket.category}
                         </p>
                       </div>
                       <span className="px-2 py-1 text-xs font-bold bg-amber-500/20 text-amber-300 rounded">
@@ -2246,7 +2770,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     </div>
 
                     <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300">
-                      {selectedTicket.message || (selectedTicket as any).description || selectedTicket.subject || 'No inquiry description recorded.'}
+                      {selectedTicket.message ||
+                        (selectedTicket as any).description ||
+                        selectedTicket.subject ||
+                        "No inquiry description recorded."}
                     </div>
 
                     <div className="space-y-2">
@@ -2258,8 +2785,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                       />
                       <button
                         onClick={() => {
-                          setActionSuccessMsg(`Response sent to ticket ${selectedTicket.id}`);
-                          setReplyText('');
+                          setActionSuccessMsg(
+                            `Response sent to ticket ${selectedTicket.id}`,
+                          );
+                          setReplyText("");
                         }}
                         className="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl"
                       >
@@ -2269,7 +2798,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </div>
                 ) : (
                   <div className="p-8 text-center text-slate-500 text-xs">
-                    Select a support ticket to inspect details and send responses.
+                    Select a support ticket to inspect details and send
+                    responses.
                   </div>
                 )}
               </div>
@@ -2280,7 +2810,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 5. PRODUCTION ACCEPTANCE TEST MATRIX (ALL 4 PLANS) */}
         {/* ========================================================================= */}
-        {activeSection === 'acceptance_test' && (
+        {activeSection === "acceptance_test" && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl">
               <div>
@@ -2294,7 +2824,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                  Automated end-to-end verification across Day Pass, Starter, Pro Quant, and Elite Quant. Validates registration, Stripe checkout binding, exact plan identification, immutable userId matching, session refreshes, sign-out locking, password re-authentication, and instant terminal unlocking.
+                  Automated end-to-end verification across Day Pass, Starter,
+                  Pro Quant, and Elite Quant. Validates registration, Stripe
+                  checkout binding, exact plan identification, immutable userId
+                  matching, session refreshes, sign-out locking, password
+                  re-authentication, and instant terminal unlocking.
                 </p>
               </div>
 
@@ -2303,8 +2837,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 disabled={isRunningAcceptanceMatrix}
                 className="px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-black transition flex items-center space-x-2 shadow-lg shadow-purple-950/60 disabled:opacity-50 cursor-pointer shrink-0"
               >
-                <RefreshCw className={`w-4 h-4 ${isRunningAcceptanceMatrix ? 'animate-spin' : ''}`} />
-                <span>{isRunningAcceptanceMatrix ? 'EXECUTING TEST MATRIX...' : 'RUN FULL ACCEPTANCE MATRIX'}</span>
+                <RefreshCw
+                  className={`w-4 h-4 ${isRunningAcceptanceMatrix ? "animate-spin" : ""}`}
+                />
+                <span>
+                  {isRunningAcceptanceMatrix
+                    ? "EXECUTING TEST MATRIX..."
+                    : "RUN FULL ACCEPTANCE MATRIX"}
+                </span>
               </button>
             </div>
 
@@ -2314,69 +2854,128 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 VERIFIED LIFECYCLE PIPELINE (STRICT ZERO-FLAPPING & PERSISTENCE)
               </div>
               <div className="flex flex-wrap items-center gap-1 text-[11px] text-slate-300">
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">1. Create Account</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">
+                  1. Create Account
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">2. Stripe Checkout</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">
+                  2. Stripe Checkout
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">3. Payment Confirmed</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-purple-300 font-bold">
+                  3. Payment Confirmed
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-400 font-bold">4. Same userId Found</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-400 font-bold">
+                  4. Same userId Found
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-400 font-bold">5. Entitlement Active</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-emerald-400 font-bold">
+                  5. Entitlement Active
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-amber-300 font-bold">6. Refresh Browser</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-amber-300 font-bold">
+                  6. Refresh Browser
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-rose-300 font-bold">7. Sign Out</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-rose-300 font-bold">
+                  7. Sign Out
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-indigo-300 font-bold">8. Sign In (Email+Pass)</span>
+                <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-indigo-300 font-bold">
+                  8. Sign In (Email+Pass)
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-emerald-950/80 border border-emerald-500/50 rounded text-emerald-200 font-black">9. Entitlement Intact</span>
+                <span className="px-2 py-1 bg-emerald-950/80 border border-emerald-500/50 rounded text-emerald-200 font-black">
+                  9. Entitlement Intact
+                </span>
                 <span>→</span>
-                <span className="px-2 py-1 bg-purple-950/80 border border-purple-500/50 rounded text-purple-200 font-black">10. TERMINAL UNLOCKED</span>
+                <span className="px-2 py-1 bg-purple-950/80 border border-purple-500/50 rounded text-purple-200 font-black">
+                  10. TERMINAL UNLOCKED
+                </span>
               </div>
             </div>
 
             {/* Results Grid */}
             {acceptanceMatrixData ? (
               <div className="space-y-4">
-                <div className={`p-4 rounded-2xl border ${acceptanceMatrixData.allPassed ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300' : 'bg-rose-950/40 border-rose-500/40 text-rose-300'} flex items-center justify-between`}>
+                <div
+                  className={`p-4 rounded-2xl border ${acceptanceMatrixData.allPassed ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-300" : "bg-rose-950/40 border-rose-500/40 text-rose-300"} flex items-center justify-between`}
+                >
                   <div className="flex items-center space-x-3">
                     <CheckCircle2 className="w-5 h-5" />
                     <div>
-                      <div className="font-bold text-xs">{acceptanceMatrixData.summary}</div>
-                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">Timestamp: {new Date(acceptanceMatrixData.timestamp).toLocaleString()} • {acceptanceMatrixData.totalPlansTested} Plans Verified</div>
+                      <div className="font-bold text-xs">
+                        {acceptanceMatrixData.summary}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        Timestamp:{" "}
+                        {new Date(
+                          acceptanceMatrixData.timestamp,
+                        ).toLocaleString()}{" "}
+                        • {acceptanceMatrixData.totalPlansTested} Plans Verified
+                      </div>
                     </div>
                   </div>
                   <span className="px-3 py-1 text-xs font-black rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                    {acceptanceMatrixData.allPassed ? 'ALL PASSED (100%)' : 'SOME FAILED'}
+                    {acceptanceMatrixData.allPassed
+                      ? "ALL PASSED (100%)"
+                      : "SOME FAILED"}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {acceptanceMatrixData.results.map((planRes) => (
-                    <div key={planRes.planType} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3 font-mono text-xs">
+                    <div
+                      key={planRes.planType}
+                      className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3 font-mono text-xs"
+                    >
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div>
-                          <span className="font-black text-slate-100 text-sm">{planRes.planName}</span>
-                          <div className="text-[10px] text-slate-400">Target Plan: <span className="text-purple-400 font-bold">{planRes.planType}</span></div>
+                          <span className="font-black text-slate-100 text-sm">
+                            {planRes.planName}
+                          </span>
+                          <div className="text-[10px] text-slate-400">
+                            Target Plan:{" "}
+                            <span className="text-purple-400 font-bold">
+                              {planRes.planType}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded ${planRes.overallStatus === 'PASSED' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'}`}>
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded ${planRes.overallStatus === "PASSED" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40" : "bg-rose-500/20 text-rose-300 border border-rose-500/40"}`}
+                        >
                           {planRes.overallStatus} ({planRes.durationMs}ms)
                         </span>
                       </div>
 
                       <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
                         {planRes.steps.map((st) => (
-                          <div key={st.step} className="p-2 bg-slate-950/60 border border-slate-800/80 rounded-lg flex items-start space-x-2">
-                            <span className={`px-1.5 py-0.2 text-[9px] font-bold rounded mt-0.5 ${st.status === 'PASSED' ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/40' : 'bg-rose-950 text-rose-300 border border-rose-600/40'}`}>
+                          <div
+                            key={st.step}
+                            className="p-2 bg-slate-950/60 border border-slate-800/80 rounded-lg flex items-start space-x-2"
+                          >
+                            <span
+                              className={`px-1.5 py-0.2 text-[9px] font-bold rounded mt-0.5 ${st.status === "PASSED" ? "bg-emerald-950 text-emerald-300 border border-emerald-600/40" : "bg-rose-950 text-rose-300 border border-rose-600/40"}`}
+                            >
                               STEP {st.step}
                             </span>
                             <div className="flex-1 min-w-0">
                               <div className="font-bold text-slate-200 text-[11px] flex items-center justify-between">
                                 <span>{st.name}</span>
-                                <span className={st.status === 'PASSED' ? 'text-emerald-400 text-[10px]' : 'text-rose-400 text-[10px]'}>{st.status}</span>
+                                <span
+                                  className={
+                                    st.status === "PASSED"
+                                      ? "text-emerald-400 text-[10px]"
+                                      : "text-rose-400 text-[10px]"
+                                  }
+                                >
+                                  {st.status}
+                                </span>
                               </div>
-                              <div className="text-[10px] text-slate-400 break-words mt-0.5">{st.details}</div>
+                              <div className="text-[10px] text-slate-400 break-words mt-0.5">
+                                {st.details}
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -2388,17 +2987,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             ) : (
               <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-12 text-center space-y-3">
                 <ShieldCheck className="w-12 h-12 text-purple-400/60 mx-auto animate-pulse" />
-                <h3 className="text-sm font-bold text-slate-200">Production Acceptance Test Suite Ready</h3>
+                <h3 className="text-sm font-bold text-slate-200">
+                  Production Acceptance Test Suite Ready
+                </h3>
                 <p className="text-xs text-slate-400 max-w-md mx-auto">
-                  Click the button above to execute the live 10-step lifecycle test for Day Pass, Starter, Pro Quant, and Elite Quant.
+                  Click the button above to execute the live 10-step lifecycle
+                  test for Day Pass, Starter, Pro Quant, and Elite Quant.
                 </p>
                 <button
                   onClick={handleRunAcceptanceMatrix}
                   disabled={isRunningAcceptanceMatrix}
                   className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition shadow-lg inline-flex items-center space-x-2"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isRunningAcceptanceMatrix ? 'animate-spin' : ''}`} />
-                  <span>{isRunningAcceptanceMatrix ? 'Running...' : 'Execute Test Suite Now'}</span>
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${isRunningAcceptanceMatrix ? "animate-spin" : ""}`}
+                  />
+                  <span>
+                    {isRunningAcceptanceMatrix
+                      ? "Running..."
+                      : "Execute Test Suite Now"}
+                  </span>
                 </button>
               </div>
             )}
@@ -2408,7 +3016,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         {/* ========================================================================= */}
         {/* 10. QUANT CONTROLS SECTION */}
         {/* ========================================================================= */}
-        {activeSection === 'quant_controls' && (
+        {activeSection === "quant_controls" && (
           <div className="space-y-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
             <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
               <Sliders className="w-5 h-5 text-purple-400" />
@@ -2417,18 +3025,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
               <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-                <div className="font-bold text-slate-300">MINIMUM CONFIDENCE THRESHOLD</div>
+                <div className="font-bold text-slate-300">
+                  MINIMUM CONFIDENCE THRESHOLD
+                </div>
                 <div className="text-lg font-black text-purple-400">70.0%</div>
                 <p className="text-[11px] text-slate-400">
-                  Signals below 70.0% confidence remain in NEUTRAL advisory state and are withheld from auto-execution.
+                  Signals below 70.0% confidence remain in NEUTRAL advisory
+                  state and are withheld from auto-execution.
                 </p>
               </div>
 
               <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-                <div className="font-bold text-slate-300">15M PERSISTENCE WINDOW</div>
-                <div className="text-lg font-black text-emerald-400">12 SECONDS (3s for 50/50 Pull)</div>
+                <div className="font-bold text-slate-300">
+                  15M PERSISTENCE WINDOW
+                </div>
+                <div className="text-lg font-black text-emerald-400">
+                  12 SECONDS (3s for 50/50 Pull)
+                </div>
                 <p className="text-[11px] text-slate-400">
-                  Requires 12 consecutive seconds of edge persistence prior to candle close before triggering lock.
+                  Requires 12 consecutive seconds of edge persistence prior to
+                  candle close before triggering lock.
                 </p>
               </div>
             </div>
@@ -2443,11 +3059,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-900/40 border border-purple-500/40 flex items-center justify-center font-bold text-purple-300 text-base">
-                  {inspectorUser.name ? inspectorUser.name[0].toUpperCase() : inspectorUser.email[0].toUpperCase()}
+                  {inspectorUser.name
+                    ? inspectorUser.name[0].toUpperCase()
+                    : inspectorUser.email[0].toUpperCase()}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-100">{inspectorUser.name || inspectorUser.email}</h3>
-                  <p className="text-slate-400 text-[11px]">{inspectorUser.email}</p>
+                  <h3 className="text-sm font-bold text-slate-100">
+                    {inspectorUser.name || inspectorUser.email}
+                  </h3>
+                  <p className="text-slate-400 text-[11px]">
+                    {inspectorUser.email}
+                  </p>
                 </div>
               </div>
               <button
@@ -2462,18 +3084,50 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             <div className="space-y-4">
               {/* Identity */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
-                <div className="text-[10px] text-purple-400 font-bold uppercase">IDENTITY RECORD</div>
-                <div><span className="text-slate-500">Firebase UID:</span> <span className="text-slate-200">{inspectorUser.uid || 'UNAVAILABLE'}</span></div>
-                <div><span className="text-slate-500">User Email:</span> <span className="text-slate-200">{inspectorUser.email}</span></div>
-                <div><span className="text-slate-500">Account Joined:</span> <span className="text-slate-200">{inspectorUser.joined || 'UNAVAILABLE'}</span></div>
+                <div className="text-[10px] text-purple-400 font-bold uppercase">
+                  IDENTITY RECORD
+                </div>
+                <div>
+                  <span className="text-slate-500">Firebase UID:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.uid || "UNAVAILABLE"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">User Email:</span>{" "}
+                  <span className="text-slate-200">{inspectorUser.email}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Account Joined:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.joined || "UNAVAILABLE"}
+                  </span>
+                </div>
               </div>
 
               {/* Billing */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
-                <div className="text-[10px] text-purple-400 font-bold uppercase">BILLING & STRIPE RECORD</div>
-                <div><span className="text-slate-500">Stripe Customer ID:</span> <span className="text-emerald-400">{inspectorUser.stripeCustomerId || 'UNAVAILABLE'}</span></div>
-                <div><span className="text-slate-500">Subscription ID:</span> <span className="text-purple-300">{inspectorUser.stripeSubscriptionId || 'UNAVAILABLE'}</span></div>
-                <div><span className="text-slate-500">Active Tier:</span> <span className="text-slate-200">{inspectorUser.subscription || inspectorUser.role}</span></div>
+                <div className="text-[10px] text-purple-400 font-bold uppercase">
+                  BILLING & STRIPE RECORD
+                </div>
+                <div>
+                  <span className="text-slate-500">Stripe Customer ID:</span>{" "}
+                  <span className="text-emerald-400">
+                    {inspectorUser.stripeCustomerId || "UNAVAILABLE"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Subscription ID:</span>{" "}
+                  <span className="text-purple-300">
+                    {inspectorUser.stripeSubscriptionId || "UNAVAILABLE"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Active Tier:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.subscription || inspectorUser.role}
+                  </span>
+                </div>
               </div>
 
               {/* Day Pass Record */}
@@ -2484,26 +3138,72 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
                 {inspectorUser.dayPass ? (
                   <>
-                    <div><span className="text-slate-500">Status:</span> <span className={inspectorUser.dayPass.status === 'ACTIVE' ? 'text-emerald-400 font-bold' : 'text-slate-400'}>{inspectorUser.dayPass.status}</span></div>
-                    <div><span className="text-slate-500">Entitlement ID:</span> <span className="text-slate-300 font-mono text-[11px]">{inspectorUser.dayPass.entitlementId || 'N/A'}</span></div>
-                    <div><span className="text-slate-500">Expires At:</span> <span className="text-amber-300 font-mono text-[11px]">{inspectorUser.dayPass.expiresAt ? new Date(inspectorUser.dayPass.expiresAt).toLocaleString() : 'N/A'}</span></div>
+                    <div>
+                      <span className="text-slate-500">Status:</span>{" "}
+                      <span
+                        className={
+                          inspectorUser.dayPass.status === "ACTIVE"
+                            ? "text-emerald-400 font-bold"
+                            : "text-slate-400"
+                        }
+                      >
+                        {inspectorUser.dayPass.status}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Entitlement ID:</span>{" "}
+                      <span className="text-slate-300 font-mono text-[11px]">
+                        {inspectorUser.dayPass.entitlementId || "N/A"}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-500">Expires At:</span>{" "}
+                      <span className="text-amber-300 font-mono text-[11px]">
+                        {inspectorUser.dayPass.expiresAt
+                          ? new Date(
+                              inspectorUser.dayPass.expiresAt,
+                            ).toLocaleString()
+                          : "N/A"}
+                      </span>
+                    </div>
                   </>
                 ) : (
-                  <div className="text-slate-500 italic text-[11px]">No active or previous Day Pass record found for this user.</div>
+                  <div className="text-slate-500 italic text-[11px]">
+                    No active or previous Day Pass record found for this user.
+                  </div>
                 )}
               </div>
 
               {/* Discord */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
-                <div className="text-[10px] text-purple-400 font-bold uppercase">DISCORD INTEGRATION</div>
-                <div><span className="text-slate-500">Discord ID:</span> <span className="text-slate-200">{inspectorUser.discordId || 'UNAVAILABLE'}</span></div>
-                <div><span className="text-slate-500">Discord Tag:</span> <span className="text-slate-200">{inspectorUser.discordTag || 'UNAVAILABLE'}</span></div>
-                <div><span className="text-slate-500">Guild Verified:</span> <span className="text-slate-200">{inspectorUser.guildVerified ? 'YES' : 'NO'}</span></div>
+                <div className="text-[10px] text-purple-400 font-bold uppercase">
+                  DISCORD INTEGRATION
+                </div>
+                <div>
+                  <span className="text-slate-500">Discord ID:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.discordId || "UNAVAILABLE"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Discord Tag:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.discordTag || "UNAVAILABLE"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Guild Verified:</span>{" "}
+                  <span className="text-slate-200">
+                    {inspectorUser.guildVerified ? "YES" : "NO"}
+                  </span>
+                </div>
               </div>
 
               {/* Recorded Event History */}
               <div className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
-                <div className="text-[10px] text-purple-400 font-bold uppercase">RECORDED EVENT TIMELINE</div>
+                <div className="text-[10px] text-purple-400 font-bold uppercase">
+                  RECORDED EVENT TIMELINE
+                </div>
                 <div className="text-slate-400 italic">NO EVENT RECORDED</div>
               </div>
             </div>
@@ -2521,16 +3221,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 <Edit3 className="w-3.5 h-3.5 text-purple-300" />
                 <span>EDIT USER RECORD</span>
               </button>
-              {inspectorUser.dayPass?.status === 'ACTIVE' ? (
+              {inspectorUser.dayPass?.status === "ACTIVE" ? (
                 <button
-                  onClick={() => handleUserAction(inspectorUser, 'revoke_day_pass')}
+                  onClick={() =>
+                    handleUserAction(inspectorUser, "revoke_day_pass")
+                  }
                   className="px-3 py-1.5 rounded bg-red-950 text-red-300 border border-red-500/40 font-bold text-xs"
                 >
                   REVOKE DAY PASS
                 </button>
               ) : (
                 <button
-                  onClick={() => handleUserAction(inspectorUser, 'grant_day_pass')}
+                  onClick={() =>
+                    handleUserAction(inspectorUser, "grant_day_pass")
+                  }
                   className="px-3 py-1.5 rounded bg-amber-600/30 text-amber-200 border border-amber-500/40 font-bold text-xs flex items-center gap-1"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-300" />
@@ -2538,13 +3242,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </button>
               )}
               <button
-                onClick={() => handleUserAction(inspectorUser, 'grant_premium', { tier: 'ELITE_PASS' })}
+                onClick={() =>
+                  handleUserAction(inspectorUser, "grant_premium", {
+                    tier: "ELITE_PASS",
+                  })
+                }
                 className="px-3 py-1.5 rounded bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
               >
                 GRANT ELITE
               </button>
               <button
-                onClick={() => handleUserAction(inspectorUser, 'suspend')}
+                onClick={() => handleUserAction(inspectorUser, "suspend")}
                 className="px-3 py-1.5 rounded bg-red-950 text-red-300 border border-red-500/40 font-bold text-xs"
               >
                 FREEZE ACCESS
@@ -2559,13 +3267,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-purple-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 text-xs font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100 text-sm">Create New Member Account</h3>
-              <button onClick={() => setIsAddUserOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
+              <h3 className="font-bold text-slate-100 text-sm">
+                Create New Member Account
+              </h3>
+              <button onClick={() => setIsAddUserOpen(false)}>
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
             </div>
 
             <form onSubmit={handleAddUserSubmit} className="space-y-3">
               <div>
-                <label className="text-slate-400 block mb-1">User Email *</label>
+                <label className="text-slate-400 block mb-1">
+                  User Email *
+                </label>
                 <input
                   type="email"
                   required
@@ -2577,7 +3291,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Display Name</label>
+                <label className="text-slate-400 block mb-1">
+                  Display Name
+                </label>
                 <input
                   type="text"
                   value={newUserName}
@@ -2588,7 +3304,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Initial Subscription Tier</label>
+                <label className="text-slate-400 block mb-1">
+                  Initial Subscription Tier
+                </label>
                 <select
                   value={newUserTier}
                   onChange={(e) => setNewUserTier(e.target.value as any)}
@@ -2601,10 +3319,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">
-                <button type="button" onClick={() => setIsAddUserOpen(false)} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded">
+                <button
+                  type="button"
+                  onClick={() => setIsAddUserOpen(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-1.5 bg-purple-600 text-white font-bold rounded">
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-purple-600 text-white font-bold rounded"
+                >
                   Create User
                 </button>
               </div>
@@ -2618,25 +3343,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-purple-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 text-xs font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-slate-100 text-sm">Create Promo / Referral Code</h3>
-              <button onClick={() => setIsAddReferralOpen(false)}><X className="w-4 h-4 text-slate-400" /></button>
+              <h3 className="font-bold text-slate-100 text-sm">
+                Create Promo / Referral Code
+              </h3>
+              <button onClick={() => setIsAddReferralOpen(false)}>
+                <X className="w-4 h-4 text-slate-400" />
+              </button>
             </div>
 
             <form onSubmit={handleSaveReferral} className="space-y-3">
               <div>
-                <label className="text-slate-400 block mb-1">Referral Code *</label>
+                <label className="text-slate-400 block mb-1">
+                  Referral Code *
+                </label>
                 <input
                   type="text"
                   required
                   value={refCodeInput}
-                  onChange={(e) => setRefCodeInput(e.target.value.toUpperCase())}
+                  onChange={(e) =>
+                    setRefCodeInput(e.target.value.toUpperCase())
+                  }
                   placeholder="VIP2026"
                   className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none uppercase font-bold text-purple-300"
                 />
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Promoter Name</label>
+                <label className="text-slate-400 block mb-1">
+                  Promoter Name
+                </label>
                 <input
                   type="text"
                   value={refNameInput}
@@ -2647,7 +3382,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div>
-                <label className="text-slate-400 block mb-1">Discount Rate</label>
+                <label className="text-slate-400 block mb-1">
+                  Discount Rate
+                </label>
                 <input
                   type="text"
                   value={refDiscountInput}
@@ -2658,10 +3395,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
               </div>
 
               <div className="flex justify-end space-x-2 pt-2">
-                <button type="button" onClick={() => setIsAddReferralOpen(false)} className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded">
+                <button
+                  type="button"
+                  onClick={() => setIsAddReferralOpen(false)}
+                  className="px-3 py-1.5 bg-slate-800 text-slate-300 rounded"
+                >
                   Cancel
                 </button>
-                <button type="submit" className="px-4 py-1.5 bg-purple-600 text-white font-bold rounded">
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 bg-purple-600 text-white font-bold rounded"
+                >
                   Save Code
                 </button>
               </div>
@@ -2680,9 +3424,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                   <Edit3 className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-white text-base">EDIT USER RECORD</h3>
+                  <h3 className="font-extrabold text-white text-base">
+                    EDIT USER RECORD
+                  </h3>
                   <p className="text-[11px] text-purple-300/70 font-sans">
-                    Master Admin override for <strong className="text-white">{editingUser.email}</strong> ({editingUser.id})
+                    Master Admin override for{" "}
+                    <strong className="text-white">{editingUser.email}</strong>{" "}
+                    ({editingUser.id})
                   </p>
                 </div>
               </div>
@@ -2697,7 +3445,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
             <form onSubmit={handleSaveUserEditSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">User Full Name</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    User Full Name
+                  </label>
                   <input
                     type="text"
                     required
@@ -2708,7 +3458,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">User Email Address</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    User Email Address
+                  </label>
                   <input
                     type="email"
                     required
@@ -2719,7 +3471,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Password (Leave blank to keep)</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Password (Leave blank to keep)
+                  </label>
                   <input
                     type="password"
                     placeholder="••••••••••••"
@@ -2730,20 +3484,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Subscription Tier</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Subscription Tier
+                  </label>
                   <select
                     value={editTier}
                     onChange={(e) => setEditTier(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
-                    <option value="ELITE_PASS">ELITE_PASS ($99/mo - Full Bot & Signal Access)</option>
-                    <option value="PRO_PASS">PRO_PASS ($49/mo - Standard Access)</option>
-                    <option value="DAY_PASS">DAY_PASS ($9.99 - 24-Hour Access Pass)</option>
+                    <option value="ELITE_PASS">
+                      ELITE_PASS ($99/mo - Full Bot & Signal Access)
+                    </option>
+                    <option value="PRO_PASS">
+                      PRO_PASS ($49/mo - Standard Access)
+                    </option>
+                    <option value="DAY_PASS">
+                      DAY_PASS ($9.99 - 24-Hour Access Pass)
+                    </option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">System Role</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    System Role
+                  </label>
                   <select
                     value={editRole}
                     onChange={(e) => setEditRole(e.target.value)}
@@ -2752,27 +3516,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                     <option value="USER">USER (Regular Trader)</option>
                     <option value="PRO">PRO (Premium Member)</option>
                     <option value="ELITE">ELITE (High Frequency Trader)</option>
-                    <option value="SUPPORT">SUPPORT (Help Desk Operator)</option>
+                    <option value="SUPPORT">
+                      SUPPORT (Help Desk Operator)
+                    </option>
                     <option value="ADMIN">ADMIN (System Administrator)</option>
                     <option value="OWNER">OWNER (Master Vault Owner)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Account Status</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Account Status
+                  </label>
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
-                    <option value="ACTIVE">ACTIVE (Full Platform Privileges)</option>
-                    <option value="INACTIVE">INACTIVE (Requires Day Pass / Subscription)</option>
-                    <option value="SUSPENDED">SUSPENDED / FROZEN (Blocked)</option>
+                    <option value="ACTIVE">
+                      ACTIVE (Full Platform Privileges)
+                    </option>
+                    <option value="INACTIVE">
+                      INACTIVE (Requires Day Pass / Subscription)
+                    </option>
+                    <option value="SUSPENDED">
+                      SUSPENDED / FROZEN (Blocked)
+                    </option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Discord Tag / Username</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Discord Tag / Username
+                  </label>
                   <input
                     type="text"
                     placeholder="Discord username"
@@ -2783,7 +3559,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Discord Display / Global Name</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Discord Display / Global Name
+                  </label>
                   <input
                     type="text"
                     placeholder="Display name"
@@ -2794,7 +3572,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Discord User ID</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Discord User ID
+                  </label>
                   <input
                     type="text"
                     placeholder="Discord User ID"
@@ -2805,20 +3585,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Guild Verification Status</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Guild Verification Status
+                  </label>
                   <select
                     value={editVerificationStatus}
                     onChange={(e) => setEditVerificationStatus(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
-                    <option value="VERIFIED">VERIFIED (Guild Member - Unlocked)</option>
-                    <option value="NEEDS_GUILD">NEEDS_GUILD (Joined Discord required)</option>
+                    <option value="VERIFIED">
+                      VERIFIED (Guild Member - Unlocked)
+                    </option>
+                    <option value="NEEDS_GUILD">
+                      NEEDS_GUILD (Joined Discord required)
+                    </option>
                     <option value="UNVERIFIED">UNVERIFIED (Pending)</option>
                   </select>
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Stripe Customer ID</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Stripe Customer ID
+                  </label>
                   <input
                     type="text"
                     placeholder="cus_live_..."
@@ -2829,12 +3617,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onClose, currentUserId }
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-purple-300/80 font-bold block">Stripe Subscription ID</label>
+                  <label className="text-purple-300/80 font-bold block">
+                    Stripe Subscription ID
+                  </label>
                   <input
                     type="text"
                     placeholder="sub_live_..."
                     value={editStripeSubscriptionId}
-                    onChange={(e) => setEditStripeSubscriptionId(e.target.value)}
+                    onChange={(e) =>
+                      setEditStripeSubscriptionId(e.target.value)
+                    }
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   />
                 </div>
