@@ -178,27 +178,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err) {
       setLoading(false);
-      // Graceful fallback for seamless terminal access
-      const fallbackRole = isAdminEmail ? 'ADMIN' : 'PRO';
-      setAuthState({
-        isAuthenticated: true,
-        user: {
-          id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-          email: userEmail,
-          name: fullName.trim() || userEmail.split('@')[0],
-          role: fallbackRole,
-          joinedDate: new Date().toISOString().split('T')[0],
-          discordLinked: false
-        }
-      });
-      if (typeof setUserRole === 'function') {
-        setUserRole(fallbackRole);
-      }
-      const handleSuccessCB = onSuccess || onSuccessRole;
-      if (typeof handleSuccessCB === 'function') {
-        handleSuccessCB(fallbackRole);
-      }
-      onClose();
+      setErrorMsg('Network error. Please try again.');
     }
   };
 

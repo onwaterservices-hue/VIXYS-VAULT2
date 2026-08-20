@@ -147,22 +147,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       }
     } catch (err) {
       setLoading(false);
-      const fallbackRole = isAdminEmail ? 'ADMIN' : 'PRO';
-      setAuthState({
-        isAuthenticated: true,
-        user: {
-          id: `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`,
-          email: userEmail,
-          name: fullName.trim() || userEmail.split('@')[0],
-          role: fallbackRole,
-          joinedDate: new Date().toISOString().split('T')[0],
-          discordLinked: false
-        }
-      });
-      setUserRole(fallbackRole);
-      if (typeof onSuccessNavigate === 'function') {
-        onSuccessNavigate(fallbackRole);
-      }
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
