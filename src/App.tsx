@@ -93,7 +93,7 @@ export default function App() {
     };
   });
 
-  const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ADMIN'>(() => {
+  const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER'>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
       if (saved) {

@@ -19,8 +19,8 @@ import { AuthState } from '../types';
 interface AuthViewProps {
   authState: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
-  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
-  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
+  setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER') => void;
+  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER') => void;
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({

@@ -7,7 +7,7 @@ import { IntelligenceLockGate } from './IntelligenceLockGate';
 interface CompareViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
   onOpenDiscordModal?: () => void;
 }
 

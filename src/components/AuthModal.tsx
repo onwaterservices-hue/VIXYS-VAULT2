@@ -9,9 +9,9 @@ interface AuthModalProps {
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
   initialEmail?: string;
-  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
+  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER') => void;
   setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
-  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
+  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER') => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({

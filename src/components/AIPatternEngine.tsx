@@ -23,7 +23,7 @@ interface AIPatternEngineProps {
   ticker?: BTCTicker;
   timeframe?: '15M' | '1H';
   appMode?: 'SIMPLE' | 'PRO';
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
 }
