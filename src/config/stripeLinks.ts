@@ -15,7 +15,7 @@ export const STRIPE_PAYMENT_LINKS: Record<'STARTER' | 'PRO' | 'ELITE', StripePla
     annual: 'https://buy.stripe.com/5kQdR8cKLgQibh2ffP1oI04',
   },
   ELITE: {
-    monthly: 'https://buy.stripe.com/cNifZg267gQibh2gjT1oI0',
+    monthly: 'https://buy.stripe.com/cNifZg267gQibh2gjT1oI00',
     annual: 'https://buy.stripe.com/eVqdR8bGH9nQ70M3x71oI01',
   },
 };

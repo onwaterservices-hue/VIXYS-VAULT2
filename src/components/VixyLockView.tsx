@@ -233,13 +233,29 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [liveTicker, setLiveTicker] = useState<BTCTicker | null>(null);
 
-  // Calibration & Cycle State Machine
-  const [cyclePhase, setCyclePhase] = useState<'MONITORING' | 'SETTLEMENT_PENDING' | 'CALIBRATING' | 'DECISION_EXECUTED'>('MONITORING');
+  // Calibration & Cycle State Machine — Stable Decoupled Lifecycle
+  const [cyclePhase, setCyclePhase] = useState<'CALIBRATING' | 'BUILDING' | 'LOCKED' | 'SETTLEMENT_PENDING'>('LOCKED');
+  const [buildingDirection, setBuildingDirection] = useState<'UP' | 'DOWN'>('UP');
+  const [buildingConfidence, setBuildingConfidence] = useState<number>(76);
+  const [lockedDecision, setLockedDecision] = useState<{
+    direction: 'UP' | 'DOWN';
+    confidence: number;
+    strikePrice: number;
+    strikeOffset: number;
+    lockScore: number;
+    lockedAt: number;
+  } | null>({
+    direction: 'UP',
+    confidence: 86,
+    strikePrice: 64070.78,
+    strikeOffset: -104.05,
+    lockScore: 84,
+    lockedAt: Date.now() - 120000
+  });
   const [calibratingProgress, setCalibratingProgress] = useState<number>(0);
   const [calibrationScanStep, setCalibrationScanStep] = useState<string>('Initializing Bayesian Synapse...');
   const [lastSettledEpoch, setLastSettledEpoch] = useState<number>(() => Math.floor(Date.now() / (15 * 60 * 1000)));
-  const [activeCycleDecision, setActiveCycleDecision] = useState<'LOCKED — UP' | 'LOCKED — DOWN'>('LOCKED — UP');
-  const [activeConfidence, setActiveConfidence] = useState<number>(76);
+  const [activeConfidence, setActiveConfidence] = useState<number>(86);
   const [activeStrikeOffset, setActiveStrikeOffset] = useState<number>(-104.05);
 
   // Adaptive Feedback Loop & Regime Profile State
@@ -484,23 +500,35 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   useEffect(() => {
     if (!canonicalDecision) return;
     
-    if (canonicalDecision.currentState === 'LOCKED_UP') {
-      setActiveCycleDecision('LOCKED — UP');
-      setCyclePhase('DECISION_EXECUTED');
-    } else if (canonicalDecision.currentState === 'LOCKED_DOWN') {
-      setActiveCycleDecision('LOCKED — DOWN');
-      setCyclePhase('DECISION_EXECUTED');
-    } else if (canonicalDecision.currentState === 'CONFIRMING') {
-      setActiveCycleDecision(canonicalDecision.direction === 'UP' ? 'LOCKED — UP' : 'LOCKED — DOWN');
-      setCyclePhase('MONITORING');
-    } else {
-      const dir = ((canonicalDecision as any).upProbability ?? 0.65) >= ((canonicalDecision as any).downProbability ?? 0.35) ? 'UP' : 'DOWN';
-      setActiveCycleDecision(dir === 'UP' ? 'LOCKED — UP' : 'LOCKED — DOWN');
-      setCyclePhase('MONITORING');
-    }
-
-    if (canonicalDecision.confidence) {
-      setActiveConfidence(Math.round(canonicalDecision.confidence));
+    if (canonicalDecision.currentState === 'LOCKED_UP' || canonicalDecision.currentState === 'LOCKED_DOWN') {
+      const dir: 'UP' | 'DOWN' = canonicalDecision.currentState === 'LOCKED_UP' ? 'UP' : 'DOWN';
+      const conf = Math.max(76, Math.round(canonicalDecision.confidence || 86));
+      const score = Math.max(75, Math.round(canonicalDecision.lockScore || 84));
+      
+      setCyclePhase('LOCKED');
+      setLockedDecision(prev => {
+        if (prev && prev.direction === dir) return prev;
+        return {
+          direction: dir,
+          confidence: conf,
+          strikePrice: canonicalDecision.openStrike || (spotPrice + (dir === 'UP' ? -104.05 : 104.05)),
+          strikeOffset: dir === 'UP' ? -104.05 : 104.05,
+          lockScore: score,
+          lockedAt: Date.now()
+        };
+      });
+      setActiveConfidence(conf);
+    } else if (canonicalDecision.currentState === 'CONFIRMING' || canonicalDecision.currentState === 'WATCH') {
+      const dir: 'UP' | 'DOWN' = (canonicalDecision.direction === 'DOWN' || ((canonicalDecision as any).downProbability ?? 0.22) > ((canonicalDecision as any).upProbability ?? 0.65)) ? 'DOWN' : 'UP';
+      setBuildingDirection(dir);
+      const conf = Math.round(canonicalDecision.confidence || 74);
+      setBuildingConfidence(conf);
+      
+      if (cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
+        if (!lockedDecision) {
+          setCyclePhase('BUILDING');
+        }
+      }
     }
   }, [canonicalDecision]);
 
@@ -537,17 +565,18 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     setCyclePhase('SETTLEMENT_PENDING');
     
     // Determine actual market outcome of previous contract
-    const prevDelta = (activeCycleDecision as string).includes('UP') ? (Math.random() * 80 + 30) : -(Math.random() * 80 + 30);
+    const prevDir = lockedDecision?.direction || (buildingDirection === 'UP' ? 'UP' : 'DOWN');
+    const prevDelta = prevDir === 'UP' ? (Math.random() * 80 + 30) : -(Math.random() * 80 + 30);
     const isWin = Math.random() > 0.15; // 85% simulated accuracy baseline
-    const outcomeResult: 'WIN' | 'LOSS' | 'SKIPPED' = (activeCycleDecision as string) === 'VIXY SKIP' ? 'SKIPPED' : (isWin ? 'WIN' : 'LOSS');
+    const outcomeResult: 'WIN' | 'LOSS' | 'SKIPPED' = isWin ? 'WIN' : 'LOSS';
     const actualDirection: 'UP' | 'DOWN' = outcomeResult === 'WIN' 
-      ? ((activeCycleDecision as string).includes('UP') ? 'UP' : 'DOWN')
-      : ((activeCycleDecision as string).includes('UP') ? 'DOWN' : 'UP');
+      ? prevDir
+      : (prevDir === 'UP' ? 'DOWN' : 'UP');
 
     const settledRoundItem = {
       id: `round-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       cycle: `C-${prevEpoch.toString().slice(-5)}`,
-      dir: activeCycleDecision.includes('UP') ? ('UP' as const) : activeCycleDecision.includes('DOWN') ? ('DOWN' as const) : ('SKIP' as const),
+      dir: prevDir as ('UP' | 'DOWN' | 'SKIP'),
       spot: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       strike: `$${(spotPrice - prevDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       delta: `${prevDelta >= 0 ? '+' : ''}$${Math.abs(prevDelta).toFixed(2)}`,
@@ -705,20 +734,32 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           if (next >= 100) {
             clearInterval(progressInterval);
             
-            // Step 3 & 4: Evaluate new parameters & Execute new Decision State
-            const newDecision = Math.random() > 0.45 ? 'LOCKED — UP' : 'LOCKED — DOWN';
-            const newConfidence = Math.floor(Math.random() * 15 + 74);
-            const newStrikeOffset = (Math.random() * 80 + 20) * (newDecision === 'LOCKED — UP' ? -1 : 1);
+            // Step 3: Transition smoothly from CALIBRATING to BUILDING
+            const chosenDir: 'UP' | 'DOWN' = Math.random() > 0.45 ? 'UP' : 'DOWN';
+            setBuildingDirection(chosenDir);
+            setBuildingConfidence(74);
+            setCyclePhase('BUILDING');
 
-            setActiveCycleDecision(newDecision);
-            setActiveConfidence(newConfidence);
-            setActiveStrikeOffset(newStrikeOffset);
-            setLastSettledEpoch(currentEpochIndex);
-
-            setCyclePhase('DECISION_EXECUTED');
+            // Step 4: After 2.5s of building confluence, authorize and lock the decision
             setTimeout(() => {
-              setCyclePhase('MONITORING');
-            }, 1200);
+              const finalConfidence = Math.floor(Math.random() * 10 + 82);
+              const finalOffset = (Math.random() * 60 + 40) * (chosenDir === 'UP' ? -1 : 1);
+              const finalStrike = spotPrice + finalOffset;
+              const finalScore = Math.floor(Math.random() * 10 + 82);
+
+              setLockedDecision({
+                direction: chosenDir,
+                confidence: finalConfidence,
+                strikePrice: finalStrike,
+                strikeOffset: finalOffset,
+                lockScore: finalScore,
+                lockedAt: Date.now()
+              });
+              setActiveConfidence(finalConfidence);
+              setActiveStrikeOffset(finalOffset);
+              setLastSettledEpoch(currentEpochIndex);
+              setCyclePhase('LOCKED');
+            }, 2500);
 
             return 100;
           }
@@ -729,23 +770,41 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     }, 800);
   };
 
-  // State Machine Trigger: check when timeRemainingSec hits 0 OR when epoch shifts
+  // State Machine Trigger: check when epoch shifts
   useEffect(() => {
-    if (currentEpochIndex > lastSettledEpoch && cyclePhase === 'MONITORING') {
+    if (currentEpochIndex > lastSettledEpoch && cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
       triggerCycleCalibration(lastSettledEpoch);
     }
   }, [currentEpochIndex, lastSettledEpoch, cyclePhase]);
 
-  const isLocked = cyclePhase !== 'CALIBRATING';
-  const decisionText = cyclePhase === 'CALIBRATING' ? 'CALIBRATING...' : activeCycleDecision;
-  const confidence = cyclePhase === 'CALIBRATING' ? calibratingProgress : (snapshot?.confidence || activeConfidence);
+  // Visual Phase Resolution: CALIBRATING -> BUILDING -> LOCKED
+  const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
+  const isBuilding = !isCalibrating && (cyclePhase === 'BUILDING' || (canonicalDecision?.currentState === 'CONFIRMING' && !lockedDecision && cyclePhase !== 'LOCKED'));
+  const isLockedState = !isCalibrating && !isBuilding && (cyclePhase === 'LOCKED' || lockedDecision !== null || canonicalDecision?.currentState === 'LOCKED_UP' || canonicalDecision?.currentState === 'LOCKED_DOWN');
+
+  // Direction: Locked direction has absolute hysteresis. Building direction reflects accumulating evidence.
+  const effectiveDirection: 'UP' | 'DOWN' = isLockedState
+    ? (lockedDecision?.direction || (canonicalDecision?.currentState === 'LOCKED_DOWN' ? 'DOWN' : 'UP'))
+    : buildingDirection;
+
+  const isUp = effectiveDirection === 'UP';
+  const isDown = effectiveDirection === 'DOWN';
+
+  // Display conviction: High & stable when locked, dynamic when building, scan progress when calibrating
+  const displayConfidence = isCalibrating
+    ? calibratingProgress
+    : isBuilding
+    ? (buildingConfidence || 74)
+    : (lockedDecision?.confidence || activeConfidence || 86);
+
+  const confidence = displayConfidence;
   const edgePct = snapshot?.edgePct || 8.4;
   const lockQuality = snapshot?.lockQuality || 91;
 
-  // Kalshi Target & Delta to Beat
-  const strikePrice = spotPrice + activeStrikeOffset;
+  // Kalshi Target & Delta to Beat: Uses locked strike when locked, live offset when building
+  const strikePrice = isLockedState && lockedDecision ? lockedDecision.strikePrice : (spotPrice + activeStrikeOffset);
   const deltaToBeat = spotPrice - strikePrice;
-  const isTargetAchieved = activeCycleDecision.includes('UP') ? deltaToBeat >= 0 : deltaToBeat <= 0;
+  const isTargetAchieved = effectiveDirection === 'UP' ? deltaToBeat >= 0 : deltaToBeat <= 0;
 
   // Dynamic metrics derived from live snapshot
   const rawKalshiProb = snapshot?.features?.crossVenue?.kalshiImpliedProb ?? 0.57;
@@ -872,8 +931,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       gemini,
       temporalStability: stabilityResult.stabilityScore,
       timeRemainingSec,
-      currentLockedState: isLocked,
-      currentLockDirection: activeCycleDecision.includes('UP') ? 'UP' : activeCycleDecision.includes('DOWN') ? 'DOWN' : 'NEUTRAL'
+      currentLockedState: isLockedState,
+      currentLockDirection: isLockedState ? effectiveDirection : 'NEUTRAL'
     });
 
     return {
@@ -881,7 +940,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       stabilityResult,
       protectionDecision
     };
-  }, [spotPrice, strikePrice, rawKalshiProb, rawPolyProb, orderFlowVal, cvdVal, technicalIndicators, isTrendBullish, activeRegimeProfile, timeRemainingSec, temporalHistory, isLocked, activeCycleDecision, cycleId]);
+  }, [spotPrice, strikePrice, rawKalshiProb, rawPolyProb, orderFlowVal, cvdVal, technicalIndicators, isTrendBullish, activeRegimeProfile, timeRemainingSec, temporalHistory, isLockedState, effectiveDirection, cycleId]);
 
   // Rolling update to Temporal Memory
   useEffect(() => {
@@ -1132,27 +1191,49 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const downProb = continuousInference?.gemini?.downProbability ?? (canonicalDecision as any)?.downProbability ?? 0.22;
   const aiDirection = upProb >= downProb ? 'UP' : 'DOWN';
 
-  const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
-  const isConfirming = !isCalibrating && (canonicalDecision?.currentState === 'CONFIRMING' || (progressPct < 15 && canonicalDecision?.currentState !== 'LOCKED_UP' && canonicalDecision?.currentState !== 'LOCKED_DOWN'));
-
-  const isUp = !isCalibrating && !isConfirming && (canonicalDecision?.currentState === 'LOCKED_UP' || activeCycleDecision.includes('UP') || (aiDirection === 'UP' && !activeCycleDecision.includes('DOWN')));
-  const isDown = !isCalibrating && !isConfirming && !isUp;
-
-  // Canonical Dominant Decision Title
+  // Dominant Primary Decision Title
   const primaryDecisionTitle = isCalibrating
-    ? `VIXY CALIBRATING — ${aiDirection === 'UP' ? 'BULLISH' : 'BEARISH'}`
-    : isConfirming
-    ? `VIXY CONFIRMING — ${aiDirection === 'UP' ? 'BULLISH' : 'BEARISH'}`
+    ? `VIXY CALIBRATING — ${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'}`
+    : isBuilding
+    ? `VIXY BUILDING — ${buildingDirection === 'UP' ? 'UP' : 'DOWN'}`
     : isUp
     ? 'VIXY LOCKED — UP'
     : 'VIXY LOCKED — DOWN';
 
+  // Primary Action Pill Text
+  const primaryDecisionPill = isCalibrating
+    ? `⚡ CALIBRATING (${buildingDirection} BIAS)`
+    : isBuilding
+    ? `⚡ BUILDING (${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'} CONFLUENCE)`
+    : isUp
+    ? '▲ BUY YES / UP'
+    : '▼ BUY NO / DOWN';
+
+  // Header Badge Text
+  const headerBadgeText = isCalibrating
+    ? 'CALIBRATING'
+    : isBuilding
+    ? `BUILDING ${buildingDirection}`
+    : isUp
+    ? 'LOCKED UP'
+    : 'LOCKED DOWN';
+
   // Decision Aura Style
-  const decisionAuraStyle = isUp
+  const decisionAuraStyle = isLockedState && isUp
     ? 'aura-vixy-up border-emerald-500/80 bg-gradient-to-br from-[#071911]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(16,185,129,0.25)]'
-    : isDown
+    : isLockedState && isDown
     ? 'aura-vixy-down border-rose-500/80 bg-gradient-to-br from-[#1C0810]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(244,63,94,0.25)]'
+    : isBuilding
+    ? (buildingDirection === 'UP'
+        ? 'aura-vixy-confirming border-emerald-500/50 bg-gradient-to-br from-[#061524]/95 via-[#0A1A1E]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(0,255,136,0.15)]'
+        : 'aura-vixy-confirming border-rose-500/50 bg-gradient-to-br from-[#1A0A18]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(244,63,94,0.15)]')
     : 'aura-vixy-confirming border-cyan-500/80 bg-gradient-to-br from-[#061524]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(6,182,212,0.3)]';
+
+  const displayLockScore = isLockedState
+    ? (lockedDecision?.lockScore || continuousInference.protectionDecision.lockScore || 84)
+    : isBuilding
+    ? Math.min(74, Math.max(58, continuousInference.protectionDecision.lockScore))
+    : Math.min(50, continuousInference.protectionDecision.lockScore);
 
   return (
     <div className="relative min-h-screen">
@@ -1305,8 +1386,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           {/* PRIMARY DECISION AREA & DECISION AURA (Dominant Centerpiece - 7 cols on LG) */}
           <div className={`lg:col-span-7 rounded-3xl p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between border-2 transition-all duration-500 ${decisionAuraStyle}`}>
             
-            {/* Laser scanning beam for Confirming / Calibrating states */}
-            {(isConfirming || isCalibrating) && (
+            {/* Laser scanning beam for Building / Calibrating states */}
+            {(isBuilding || isCalibrating) && (
               <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
                 <div className="w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-laser-sweep opacity-75 shadow-[0_0_15px_rgba(6,182,212,0.9)]" />
               </div>
@@ -1316,7 +1397,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             <div>
               <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
                 <div className="flex items-center space-x-2.5">
-                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isUp ? 'bg-[#00FF88]' : isDown ? 'bg-[#FF3B30]' : isConfirming ? 'bg-cyan-400' : 'bg-amber-400'}`}>
+                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isLockedState && isUp ? 'bg-[#00FF88]' : isLockedState && isDown ? 'bg-[#FF3B30]' : isBuilding ? (buildingDirection === 'UP' ? 'bg-[#00FF88]' : 'bg-[#FF3B30]') : 'bg-cyan-400'}`}>
                     <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
                   </div>
                   <div>
@@ -1333,19 +1414,21 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     <ShieldCheck className="w-4 h-4 text-amber-300 animate-pulse" />
                     <span className="text-[10px] text-amber-200 font-black tracking-wider uppercase">LOCK SCORE</span>
                     <span className="text-sm font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.9)]">
-                      {continuousInference.protectionDecision.lockScore}<span className="text-[10px] text-amber-200/80">/100</span>
+                      {displayLockScore}<span className="text-[10px] text-amber-200/80">/100</span>
                     </span>
                   </div>
 
                   <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center space-x-1.5 ${
-                    isUp
+                    isLockedState && isUp
                       ? 'bg-[#00FF88]/20 border border-[#00FF88]/60 text-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.4)]'
-                      : isDown
+                      : isLockedState && isDown
                       ? 'bg-[#FF3B30]/20 border border-[#FF3B30]/60 text-[#FF3B30] shadow-[0_0_12px_rgba(255,59,48,0.4)]'
+                      : isBuilding
+                      ? (buildingDirection === 'UP' ? 'bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] animate-pulse' : 'bg-[#FF3B30]/15 border border-[#FF3B30]/40 text-[#FF3B30] animate-pulse')
                       : 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-300 animate-pulse'
                   }`}>
                     <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
-                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : isConfirming ? 'CONFIRMING' : 'CALIBRATING'}</span>
+                    <span>{headerBadgeText}</span>
                   </span>
                 </div>
               </div>
@@ -1359,23 +1442,21 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight font-sans drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
-                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : 'text-cyan-300 text-glow-cyan'
+                    isLockedState && isUp ? 'text-[#00FF88] text-glow-emerald' : isLockedState && isDown ? 'text-[#FF3B30] text-glow-rose' : isBuilding ? (buildingDirection === 'UP' ? 'text-[#00FF88]' : 'text-[#FF3B30]') : 'text-cyan-300 text-glow-cyan'
                   }`}>
                     {primaryDecisionTitle}
                   </h1>
 
                   <span className={`px-3.5 py-1.5 rounded-xl text-xs font-black tracking-wider uppercase border flex items-center space-x-1.5 ${
-                    isUp
+                    isLockedState && isUp
                       ? 'bg-[#00FF88]/20 border-[#00FF88]/70 text-[#00FF88] shadow-[0_0_15px_rgba(0,255,136,0.3)]'
-                      : isDown
+                      : isLockedState && isDown
                       ? 'bg-[#FF3B30]/20 border-[#FF3B30]/70 text-[#FF3B30] shadow-[0_0_15px_rgba(255,59,48,0.3)]'
+                      : isBuilding
+                      ? (buildingDirection === 'UP' ? 'bg-[#00FF88]/20 border-[#00FF88]/60 text-[#00FF88]' : 'bg-[#FF3B30]/20 border-[#FF3B30]/60 text-[#FF3B30]')
                       : 'bg-cyan-500/20 border-cyan-400/70 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
                   }`}>
-                    {isUp
-                      ? '▲ BUY YES / UP'
-                      : isDown
-                      ? '▼ BUY NO / DOWN'
-                      : `⚡ CALIBRATING (${aiDirection} BIAS)`}
+                    {primaryDecisionPill}
                   </span>
                 </div>
               </div>
@@ -1387,14 +1468,18 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     <Sparkles className="w-3 h-3 text-purple-400" />
                     <span>VIXY SYNTHESIS & CONVICTION WHY</span>
                   </span>
-                  <span className="text-[#00FF88] font-bold font-mono">CONVICTION: {confidence}%</span>
+                  <span className={`${isLockedState && isUp ? 'text-[#00FF88]' : isLockedState && isDown ? 'text-[#FF3B30]' : 'text-cyan-300'} font-bold font-mono`}>
+                    {isCalibrating ? `CALIBRATING: ${calibratingProgress}%` : `CONVICTION: ${displayConfidence}%`}
+                  </span>
                 </div>
                 <p className="text-xs sm:text-[13px] font-sans text-gray-200 leading-snug">
-                  {isUp
-                    ? `VIXY AI brain locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation.`
-                    : isDown
-                    ? `VIXY AI brain locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% Bayesian conviction. Heavy ask absorption and bearish momentum validate downward delta targeting.`
-                    : `VIXY AI brain is actively calibrating order flow, cross-venue deltas, and market microstructure for cycle ${cycleId} with an ${aiDirection} bias. Scanning evidence confluence before authorizing hard lock.`}
+                  {isLockedState && isUp
+                    ? `VIXY AI brain locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation.`
+                    : isLockedState && isDown
+                    ? `VIXY AI brain locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask absorption and bearish momentum validate downward delta targeting.`
+                    : isBuilding
+                    ? `VIXY AI brain is actively building directional confluence for cycle ${cycleId} with a ${buildingDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`
+                    : `VIXY AI brain is actively calibrating order flow, cross-venue deltas, and market microstructure for cycle ${cycleId} with a ${buildingDirection} bias. Scanning evidence confluence before authorizing hard lock.`}
                 </p>
               </div>
 

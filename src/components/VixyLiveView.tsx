@@ -120,22 +120,24 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
   const MIN_EVIDENCE_ALIGNMENT = 6;
 
   const meetsUpGate = 
-    canonical15m.direction === 'UP' &&
+    (canonical15m.currentState === 'LOCKED_UP' && !isStale) ||
+    (canonical15m.direction === 'UP' &&
     canonical15m.confidence >= MIN_CONFIDENCE &&
     canonical15m.reversalRisk < MAX_REVERSAL_RISK &&
     canonical15m.lockScore >= MIN_LOCK_QUALITY &&
     canonical15m.temporalStability >= MIN_TEMPORAL_STABILITY &&
     canonical15m.evidenceAlignment >= MIN_EVIDENCE_ALIGNMENT &&
-    !isStale;
+    !isStale);
 
   const meetsDownGate = 
-    canonical15m.direction === 'DOWN' &&
+    (canonical15m.currentState === 'LOCKED_DOWN' && !isStale) ||
+    (canonical15m.direction === 'DOWN' &&
     canonical15m.confidence >= MIN_CONFIDENCE &&
     canonical15m.reversalRisk < MAX_REVERSAL_RISK &&
     canonical15m.lockScore >= MIN_LOCK_QUALITY &&
     canonical15m.temporalStability >= MIN_TEMPORAL_STABILITY &&
     canonical15m.evidenceAlignment >= MIN_EVIDENCE_ALIGNMENT &&
-    !isStale;
+    !isStale);
 
   const getMissingGateReason = (c: typeof canonical15m) => {
     if (c.confidence < MIN_CONFIDENCE) return `Confidence at ${c.confidence}%, awaiting ≥${MIN_CONFIDENCE}%`;
