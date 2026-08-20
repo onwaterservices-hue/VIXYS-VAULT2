@@ -22,7 +22,7 @@ import {
 
 interface VixyAiStatusCardProps {
   onOpenPricing?: () => void;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER' | string;
   className?: string;
 }
 

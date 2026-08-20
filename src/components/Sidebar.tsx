@@ -42,7 +42,7 @@ interface SidebarProps {
   isOpenMobile: boolean;
   onCloseMobile: () => void;
   onOpenSearch: () => void;
-  userRole?: "UNPAID" | "PRO" | "ADMIN";
+  userRole?: "UNPAID" | "PRO" | "ELITE" | "ADMIN" | "OWNER" | string;
   hasActiveAccess?: boolean;
   isAuthenticated?: boolean;
   onOpenAuth?: (mode: "login" | "register") => void;

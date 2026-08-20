@@ -54,7 +54,7 @@ interface OneHourDeskViewProps {
   ticker: BTCTicker;
   spotPrices?: Record<string, { price: number; change24h: number }>;
   selectedAsset?: string;
-  userRole: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole: 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER' | string;
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
 }

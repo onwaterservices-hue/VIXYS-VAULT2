@@ -94,7 +94,7 @@ export default function App() {
     };
   });
 
-  const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ADMIN'>(() => {
+  const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER'>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
       if (saved) {
@@ -261,7 +261,7 @@ export default function App() {
             setDayPassInfo(ent.dayPass);
           }
 
-          const resolvedPlan = ent.plan === 'ELITE_QUANT' ? 'ELITE' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
+          const resolvedPlan = ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' ? 'VIXY VAULT ELITE QUANT' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
           setSubscription({
             plan: resolvedPlan as any,
             status: (ent.status === 'active' || ent.dayPass?.active ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,
@@ -279,7 +279,9 @@ export default function App() {
 
           if (ent.entitlements.canAccessAdminPanel) {
             setUserRole('ADMIN');
-          } else if (ent.entitlements.proQuant || ent.entitlements.eliteQuant || ent.dayPass?.active) {
+          } else if (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' || ent.entitlements.eliteQuant) {
+            setUserRole('ELITE');
+          } else if (ent.entitlements.proQuant || ent.dayPass?.active) {
             setUserRole('PRO');
           } else if (ent.status === 'active') {
             setUserRole('PRO');
@@ -311,7 +313,7 @@ export default function App() {
             setAuthState((prev) => {
               if (!prev.isAuthenticated || !prev.user) return prev;
               
-              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'PRO' || res.user.role === 'ELITE' ? 'PRO' : 'UNPAID')) as 'PRO' | 'OWNER' | 'ADMIN' | 'UNPAID';
+              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'ELITE' || res.user.role === 'ELITE_PASS' || res.user.subscription === 'ELITE_PASS' ? 'ELITE' : (res.user.role === 'PRO' ? 'PRO' : 'UNPAID'))) as any;
               const isLinked = !!(res.user.discordLinked || res.discord?.linked);
               const dId = res.user.discordId || res.discord?.discordUserId;
               const dTag = res.user.discordTag || res.discord?.discordUsername;

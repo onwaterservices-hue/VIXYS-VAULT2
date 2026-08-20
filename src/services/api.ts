@@ -540,7 +540,7 @@ export interface EntitlementsResponse {
   userId: string;
   email: string;
   stripeVerified: boolean;
-  plan: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'NONE';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'ELITE' | 'ELITE_PASS' | 'NONE';
   logicalPlan: 'DAY_PASS_24H' | 'STARTER_MONTHLY' | 'STARTER_YEARLY' | 'PRO_QUANT_MONTHLY' | 'PRO_QUANT_YEARLY' | 'ELITE_QUANT_MONTHLY' | 'ELITE_QUANT_YEARLY' | 'NONE';
   billing: 'ONE_TIME' | 'MONTHLY' | 'YEARLY' | 'NONE';
   status: 'active' | 'past_due' | 'canceled' | 'inactive' | 'discord_unverified';

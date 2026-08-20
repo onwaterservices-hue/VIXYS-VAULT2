@@ -163,8 +163,8 @@ export interface AlertSettings {
 }
 
 export interface UserSubscription {
-  plan: 'DAY_PASS' | 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS';
-  status: 'active' | 'canceling' | 'expired';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS' | 'ELITE_QUANT' | 'VIXY VAULT ELITE QUANT';
+  status: 'active' | 'canceling' | 'expired' | 'past_due' | 'inactive';
   renewalDate: string;
   paymentMethod: string;
   billingInterval: 'one_time' | 'monthly' | 'annual';

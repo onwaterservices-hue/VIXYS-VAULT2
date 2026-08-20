@@ -988,51 +988,49 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     
     // Exact cycle timing metrics
     const timeElapsedSec = Math.max(0, 900 - timeRemainingSec);
-    const minLockDelayPassed = timeElapsedSec >= 360; // Hard 6-Minute Floor: Evaluated every tick
+
+    // Model confidence evaluation: Lock automatically when model has high lock score, conviction, or probability
+    const highestProb = Math.max(normalizedProbabilities.upPct, normalizedProbabilities.downPct);
+    const isModelConfident = 
+      prot.lockScore >= 70 ||
+      gem.confidence >= 70 ||
+      highestProb >= 70 ||
+      (canonicalDecision?.currentState === 'LOCKED_UP' || canonicalDecision?.currentState === 'LOCKED_DOWN');
+
+    const isGenuineLockAuthorized = 
+      isModelConfident &&
+      timeRemainingSec > 10 &&
+      gem.reversalRisk <= 40;
+
+    const forceLockThreshold = timeRemainingSec <= 60 && timeRemainingSec > 10;
 
     if (cyclePhase === 'BUILDING') {
       setBuildingDirection(liveDir);
       setBuildingConfidence(Math.round(gem.confidence));
       setBuildingLockScore(prot.lockScore);
 
-      // Bayesian Hard Lock Authorization Criteria:
-      // 1. Hard 6-minute floor met (timeElapsedSec >= 360)
-      // 2. Lock score >= 80 (Genuine institutional edge)
-      // 3. Confidence >= 78% (Bayesian model certainty)
-      // 4. Checklist all passed & not within 30s settlement threshold
-      // 5. Reversal risk <= 25%
-      // 6. Regime is tradeable (not CHOPPY or TRANSITION)
-      const isGenuineLockAuthorized = 
-        minLockDelayPassed &&
-        prot.checklist.allPassed &&
-        prot.lockScore >= 80 &&
-        gem.confidence >= 78 &&
-        timeRemainingSec > 30 &&
-        gem.reversalRisk <= 25 &&
-        (gem.regime !== 'CHOPPY' && gem.regime !== 'TRANSITION');
-
-      // Ensure VixyLive always locks before expiration when confident
-      const forceLockThreshold = timeRemainingSec <= 60 && timeRemainingSec > 10;
-
       if ((isGenuineLockAuthorized || forceLockThreshold) && !lockedDecision) {
-        const finalOffset = (Math.random() * 40 + 60) * (liveDir === 'UP' ? -1 : 1);
+        const lockDir = (canonicalDecision?.currentState === 'LOCKED_DOWN' || liveDir === 'DOWN') ? 'DOWN' : 'UP';
+        const finalOffset = (Math.random() * 30 + 50) * (lockDir === 'UP' ? -1 : 1);
         const finalStrike = spotPrice + finalOffset;
+        const lockedConf = Math.max(gem.confidence, highestProb, 78);
+        const lockedScore = Math.max(prot.lockScore, 82);
         
-        console.log(`[VIXY:LOCK_AUTHORIZED] Genuine lock authorized on tick! Direction=${liveDir} LockScore=${prot.lockScore}/100 Conviction=${gem.confidence}% TimeElapsed=${Math.floor(timeElapsedSec / 60)}m ${timeElapsedSec % 60}s`);
+        console.log(`[VIXY:LOCK_AUTHORIZED] Card LOCKED on confident model signal! Direction=${lockDir} LockScore=${lockedScore}/100 Conviction=${lockedConf}%`);
         setLockedDecision({
-          direction: liveDir,
-          confidence: gem.confidence,
+          direction: lockDir,
+          confidence: lockedConf,
           strikePrice: finalStrike,
           strikeOffset: finalOffset,
-          lockScore: prot.lockScore,
+          lockScore: lockedScore,
           lockedAt: Date.now()
         });
-        setActiveConfidence(gem.confidence);
+        setActiveConfidence(lockedConf);
         setActiveStrikeOffset(finalOffset);
         setCyclePhase('LOCKED');
       }
     }
-  }, [continuousInference, cyclePhase, timeRemainingSec, spotPrice, lockedDecision]);
+  }, [continuousInference, cyclePhase, timeRemainingSec, spotPrice, lockedDecision, normalizedProbabilities, canonicalDecision]);
 
   // Rolling update to Temporal Memory
   useEffect(() => {

@@ -32,7 +32,7 @@ interface ExplainabilityVaultViewProps {
   currentSymbol?: string;
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN';
+  userRole?: 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER' | string;
   onOpenDiscordModal?: () => void;
 }
 
