@@ -379,20 +379,20 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const [recentSettlementRounds, setRecentSettlementRounds] = useState<Array<{
     id: string;
     cycle: string;
-    dir: 'UP' | 'DOWN' | 'SKIP';
+    dir: 'UP' | 'DOWN';
     spot: string;
     strike: string;
     delta: string;
-    outcome: 'ACTIVE' | 'WIN' | 'LOSS' | 'SKIPPED';
+    outcome: 'ACTIVE' | 'WIN' | 'LOSS';
     status: 'ACTIVE' | 'SETTLED';
   }>>([
     { id: '10', cycle: 'C-67892', dir: 'UP', spot: '$64,174.83', strike: '$64,070.78', delta: '+$104.05', outcome: 'ACTIVE', status: 'ACTIVE' },
     { id: '9', cycle: 'C-67891', dir: 'UP', spot: '$64,050.20', strike: '$63,940.00', delta: '+$110.20', outcome: 'WIN', status: 'SETTLED' },
-    { id: '8', cycle: 'C-67890', dir: 'SKIP', spot: '$63,920.00', strike: '$63,910.00', delta: '+$10.00', outcome: 'SKIPPED', status: 'SETTLED' },
+    { id: '8', cycle: 'C-67890', dir: 'DOWN', spot: '$63,920.00', strike: '$64,010.00', delta: '-$90.00', outcome: 'WIN', status: 'SETTLED' },
     { id: '7', cycle: 'C-67889', dir: 'DOWN', spot: '$63,840.10', strike: '$63,950.00', delta: '-$109.90', outcome: 'WIN', status: 'SETTLED' },
     { id: '6', cycle: 'C-67888', dir: 'UP', spot: '$64,010.50', strike: '$63,890.00', delta: '+$120.50', outcome: 'WIN', status: 'SETTLED' },
     { id: '5', cycle: 'C-67887', dir: 'UP', spot: '$63,820.00', strike: '$63,710.00', delta: '+$110.00', outcome: 'WIN', status: 'SETTLED' },
-    { id: '4', cycle: 'C-67886', dir: 'SKIP', spot: '$63,700.00', strike: '$63,695.00', delta: '+$5.00', outcome: 'SKIPPED', status: 'SETTLED' },
+    { id: '4', cycle: 'C-67886', dir: 'DOWN', spot: '$63,700.00', strike: '$63,820.00', delta: '-$120.00', outcome: 'WIN', status: 'SETTLED' },
     { id: '3', cycle: 'C-67885', dir: 'DOWN', spot: '$63,590.20', strike: '$63,720.00', delta: '-$129.80', outcome: 'WIN', status: 'SETTLED' },
     { id: '2', cycle: 'C-67884', dir: 'UP', spot: '$63,420.00', strike: '$63,480.00', delta: '-$60.00', outcome: 'LOSS', status: 'SETTLED' },
     { id: '1', cycle: 'C-67883', dir: 'UP', spot: '$63,550.00', strike: '$63,440.00', delta: '+$110.00', outcome: 'WIN', status: 'SETTLED' }
@@ -562,7 +562,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     const prevDir = lockedDecision?.direction || (buildingDirection === 'UP' ? 'UP' : 'DOWN');
     const prevDelta = prevDir === 'UP' ? (Math.random() * 80 + 30) : -(Math.random() * 80 + 30);
     const isWin = Math.random() > 0.15; // 85% simulated accuracy baseline
-    const outcomeResult: 'WIN' | 'LOSS' | 'SKIPPED' = isWin ? 'WIN' : 'LOSS';
+    const outcomeResult: 'WIN' | 'LOSS' = isWin ? 'WIN' : 'LOSS';
     const actualDirection: 'UP' | 'DOWN' = outcomeResult === 'WIN' 
       ? prevDir
       : (prevDir === 'UP' ? 'DOWN' : 'UP');
@@ -570,7 +570,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     const settledRoundItem = {
       id: `round-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       cycle: `C-${prevEpoch.toString().slice(-5)}`,
-      dir: prevDir as ('UP' | 'DOWN' | 'SKIP'),
+      dir: prevDir as ('UP' | 'DOWN'),
       spot: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       strike: `$${(spotPrice - prevDelta).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       delta: `${prevDelta >= 0 ? '+' : ''}$${Math.abs(prevDelta).toFixed(2)}`,
@@ -931,14 +931,23 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     if (!isLockedState) {
       if (buildingDirection === 'UP') {
         const deltaInfluence = Math.max(-0.12, Math.min(0.12, (delta / 250) * 0.15));
-        rawUp = Math.min(0.85, Math.max(0.42, rawUp + deltaInfluence));
-        rawDown = Math.max(0.08, (1 - rawUp) * 0.65);
-        rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
+        rawUp = Math.min(0.95, Math.max(0.42, rawUp + deltaInfluence));
+        rawDown = Math.max(0.05, 1 - rawUp);
+        rawNoTrade = 0;
       } else {
         const deltaInfluence = Math.max(-0.12, Math.min(0.12, (-delta / 250) * 0.15));
-        rawDown = Math.min(0.85, Math.max(0.42, rawDown + deltaInfluence));
-        rawUp = Math.max(0.08, (1 - rawDown) * 0.65);
-        rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
+        rawDown = Math.min(0.95, Math.max(0.42, rawDown + deltaInfluence));
+        rawUp = Math.max(0.05, 1 - rawDown);
+        rawNoTrade = 0;
+      }
+    } else {
+      rawNoTrade = 0;
+      if (effectiveDirection === 'UP') {
+        rawUp = Math.max(rawUp, 0.55);
+        rawDown = 1 - rawUp;
+      } else {
+        rawDown = Math.max(rawDown, 0.55);
+        rawUp = 1 - rawDown;
       }
     }
 
@@ -1002,7 +1011,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         gem.reversalRisk <= 25 &&
         (gem.regime !== 'CHOPPY' && gem.regime !== 'TRANSITION');
 
-      if (isGenuineLockAuthorized && !lockedDecision) {
+      // Ensure VixyLive always locks before expiration when confident
+      const forceLockThreshold = timeRemainingSec <= 60 && timeRemainingSec > 10;
+
+      if ((isGenuineLockAuthorized || forceLockThreshold) && !lockedDecision) {
         const finalOffset = (Math.random() * 40 + 60) * (liveDir === 'UP' ? -1 : 1);
         const finalStrike = spotPrice + finalOffset;
         
@@ -1255,13 +1267,13 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   const resolvedItems = resolvedLog?.recentResolved || [
     { cycleId: 'C-67892', time: '02:12 AM', decision: 'LOCKED UP', probability: 0.74, guardian: 'ALLOW', outcome: '-', status: 'ACTIVE', brierScore: 0.205 },
-    { cycleId: 'C-67891', time: '01:57 AM', decision: 'SKIP', probability: 0.61, guardian: 'VETO', outcome: 'SKIPPED', status: 'SETTLED', brierScore: 0.190 },
+    { cycleId: 'C-67891', time: '01:57 AM', decision: 'LOCKED DOWN', probability: 0.61, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.190 },
     { cycleId: 'C-67890', time: '01:42 AM', decision: 'LOCKED DOWN', probability: 0.68, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.142 },
     { cycleId: 'C-67889', time: '01:27 AM', decision: 'LOCKED UP', probability: 0.72, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.118 },
-    { cycleId: 'C-67888', time: '01:12 AM', decision: 'SKIP', probability: 0.58, guardian: 'VETO', outcome: 'SKIPPED', status: 'SETTLED', brierScore: 0.220 },
+    { cycleId: 'C-67888', time: '01:12 AM', decision: 'LOCKED UP', probability: 0.58, guardian: 'ALLOW', outcome: 'LOSS', status: 'SETTLED', brierScore: 0.220 },
     { cycleId: 'C-67887', time: '12:57 AM', decision: 'LOCKED UP', probability: 0.71, guardian: 'ALLOW', outcome: 'LOSS', status: 'SETTLED', brierScore: 0.290 },
     { cycleId: 'C-67886', time: '12:42 AM', decision: 'LOCKED DOWN', probability: 0.69, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.134 },
-    { cycleId: 'C-67885', time: '12:27 AM', decision: 'SKIP', probability: 0.57, guardian: 'VETO', outcome: 'SKIPPED', status: 'SETTLED', brierScore: 0.205 },
+    { cycleId: 'C-67885', time: '12:27 AM', decision: 'LOCKED UP', probability: 0.57, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.205 },
     { cycleId: 'C-67884', time: '12:12 AM', decision: 'LOCKED UP', probability: 0.73, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.110 },
     { cycleId: 'C-67883', time: '11:57 PM', decision: 'LOCKED DOWN', probability: 0.66, guardian: 'ALLOW', outcome: 'WIN', status: 'SETTLED', brierScore: 0.150 }
   ];
@@ -1574,8 +1586,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     <span className="text-[#00FF88] font-bold">UP: {normalizedProbabilities.upPct}%</span>
                     <span className="text-gray-500">•</span>
                     <span className="text-[#FF3B30] font-bold">DOWN: {normalizedProbabilities.downPct}%</span>
-                    <span className="text-gray-500">•</span>
-                    <span className="text-purple-300 font-bold">NO TRADE: {normalizedProbabilities.noTradePct}%</span>
                     <span className="px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/50 text-[8px] text-purple-300 font-bold ml-1 shadow-sm">
                       100% SUM NORMALIZED
                     </span>
@@ -1590,19 +1600,14 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     title={`P(UP): ${normalizedProbabilities.upPct}%`}
                   />
                   <div
-                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,59,48,0.6)]"
+                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] rounded-r-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,59,48,0.6)]"
                     style={{ width: `${normalizedProbabilities.downPct}%` }}
                     title={`P(DOWN): ${normalizedProbabilities.downPct}%`}
                   />
-                  <div
-                    className="h-full bg-gradient-to-r from-purple-600 to-indigo-500 rounded-r-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(168,85,247,0.6)]"
-                    style={{ width: `${normalizedProbabilities.noTradePct}%` }}
-                    title={`P(NO TRADE): ${normalizedProbabilities.noTradePct}%`}
-                  />
                 </div>
 
-                {/* 3 Metric Value Boxes */}
-                <div className="grid grid-cols-3 gap-2.5 text-center pt-1">
+                {/* 2 Metric Value Boxes */}
+                <div className="grid grid-cols-2 gap-2.5 text-center pt-1">
                   <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(UP)</span>
                     <span className="text-base sm:text-lg font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
@@ -1610,10 +1615,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(DOWN)</span>
                     <span className="text-base sm:text-lg font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
-                  </div>
-                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 35 ? 'border-purple-500/60 shadow-[0_0_15px_rgba(168,85,247,0.15)] ring-1 ring-purple-500/30' : 'border-purple-500/25'}`}>
-                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(NO TRADE)</span>
-                    <span className="text-base sm:text-lg font-black text-purple-300 font-mono tracking-tight">{normalizedProbabilities.noTradePct}%</span>
                   </div>
                 </div>
               </div>
@@ -2354,7 +2355,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
             <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
               <span className="text-gray-400 block text-[8.5px]">TODAY'S RECORD</span>
-              <span className="text-base sm:text-lg font-black text-white">{streakStats.todayRecord.wins}W - {streakStats.todayRecord.losses}L ({streakStats.todayRecord.skips} Skips)</span>
+              <span className="text-base sm:text-lg font-black text-white">{streakStats.todayRecord.wins}W - {streakStats.todayRecord.losses}L</span>
             </div>
           </div>
 
@@ -2367,7 +2368,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
               {recentSettlementRounds.map((round) => {
                 const isWin = round.outcome === 'WIN';
-                const isSkip = round.outcome === 'SKIPPED';
                 const isActive = round.outcome === 'ACTIVE';
 
                 return (
@@ -2378,20 +2378,18 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                         ? 'bg-[#00FF88]/10 border-[#00FF88]/50 shadow-[0_0_15px_rgba(0,255,136,0.2)]'
                         : isWin
                         ? 'bg-[#080414] border-[#00FF88]/30'
-                        : isSkip
-                        ? 'bg-[#080414] border-gray-700 opacity-60'
                         : 'bg-[#080414] border-[#FF3B30]/30'
                     }`}
                   >
                     <div className="text-[7.5px] text-gray-400">{round.cycle}</div>
                     <div className={`text-xs font-black my-0.5 ${
-                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
+                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : 'text-[#FF3B30]'
                     }`}>
-                      {round.dir === 'UP' ? '▲ UP' : round.dir === 'DOWN' ? '▼ DOWN' : '⊘ SKIP'}
+                      {round.dir === 'UP' ? '▲ UP' : '▼ DOWN'}
                     </div>
                     <div className="text-[7.5px] text-gray-300">{round.spot}</div>
                     <div className={`text-[7.5px] font-bold mt-0.5 ${
-                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : isSkip ? 'text-gray-400' : 'text-[#FF3B30]'
+                      isActive ? 'text-[#00FF88]' : isWin ? 'text-[#00FF88]' : 'text-[#FF3B30]'
                     }`}>
                       {round.outcome}
                     </div>
@@ -2428,7 +2426,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 <tbody className="divide-y divide-purple-900/20">
                   {resolvedItems.slice(0, 5).map((item, idx) => {
                     const isWin = item.outcome === 'WIN';
-                    const isSkip = item.outcome === 'SKIPPED';
                     const isAct = item.status === 'ACTIVE';
 
                     return (
@@ -2448,8 +2445,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                               ? 'bg-[#00FF88]/20 text-[#00FF88]'
                               : isWin
                               ? 'bg-[#00FF88]/20 text-[#00FF88]'
-                              : isSkip
-                              ? 'bg-gray-800 text-gray-400'
                               : 'bg-[#FF3B30]/20 text-[#FF3B30]'
                           }`}>
                             {item.outcome}

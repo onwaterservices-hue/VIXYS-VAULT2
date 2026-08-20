@@ -107,15 +107,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
 
-  const rawDirection = isServerLocked 
-    ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() 
-    : (rawApiData?.direction || rawApiData?.candidateDirection || 'NONE').toUpperCase();
-  const isUp = isServerLocked 
-    ? (rawDirection.includes('UP') || rawDirection.includes('YES'))
-    : (!isNoTrade && (rawDirection.includes('UP') || rawDirection.includes('YES')));
-  const isDown = isServerLocked
-    ? (rawDirection.includes('DOWN') || rawDirection.includes('NO'))
-    : (!isNoTrade && (rawDirection.includes('DOWN') || rawDirection.includes('NO')) && !rawDirection.includes('NO_TRADE'));
+  const rawDirection = isServerLocked ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() : 'NONE';
+  const isUp = isServerLocked && (rawDirection.includes('UP') || rawDirection.includes('YES'));
+  const isDown = isServerLocked && (rawDirection.includes('DOWN') || rawDirection.includes('NO'));
 
   // Primary Headline Text (NO DANCING UI DURING PRE-LOCK)
   const primaryDecisionHeadline = isServerLocked
@@ -133,9 +127,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
     ? 'SIGNAL CONFLICT'
     : signalUnstable
     ? 'SIGNAL UNSTABLE'
-    : provisionalBias === 'UP_BIAS' || (isUp && !isDown)
+    : provisionalBias === 'UP_BIAS'
     ? 'UP BIAS (PROVISIONAL)'
-    : provisionalBias === 'DOWN_BIAS' || (isDown && !isUp)
+    : provisionalBias === 'DOWN_BIAS'
     ? 'DOWN BIAS (PROVISIONAL)'
     : isCalibrating
     ? 'CALIBRATING ENGINE'
@@ -148,10 +142,6 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const authoritativeRawConf = Number(
     isServerLocked && rawApiData?.lockedConfidence !== undefined
       ? rawApiData.lockedConfidence
-      : isNoTrade
-      ? (rawApiData?.provisionalConfidence !== undefined ? Math.min(rawApiData.provisionalConfidence, 56) : 50)
-      : (isCalibrating || isObserving)
-      ? (rawApiData?.provisionalConfidence ?? (rawApiData?.confidence ? Math.min(rawApiData.confidence, 64) : 52))
       : rawApiData?.calibratedModelProbability !== undefined
       ? (rawApiData.calibratedModelProbability <= 1 ? rawApiData.calibratedModelProbability * 100 : rawApiData.calibratedModelProbability)
       : rawApiData?.confidence !== undefined
@@ -160,23 +150,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   );
 
   const exactConfidencePct = Math.min(99, Math.max(50, Math.round(authoritativeRawConf)));
-  const confBand = isNoTrade
-    ? {
-        tierLabel: 'PROTECTED',
-        fullLabel: 'NO DIRECTIONAL CONVICTION',
-        badgeClass: 'bg-purple-950/60 border-purple-800/60 text-purple-300',
-        accentClass: 'text-purple-400',
-        meterPct: exactConfidencePct,
-      }
-    : (isCalibrating || isObserving)
-    ? {
-        tierLabel: 'CALIBRATING',
-        fullLabel: `SAMPLING MATRIX (${exactConfidencePct}%)`,
-        badgeClass: 'bg-cyan-950/40 border-cyan-800/50 text-cyan-300',
-        accentClass: 'text-cyan-400',
-        meterPct: exactConfidencePct,
-      }
-    : formatConfidenceLabel(exactConfidencePct, isUp ? 'UP' : isDown ? 'DOWN' : 'NEUTRAL');
+  const confBand = formatConfidenceLabel(exactConfidencePct, isUp ? 'UP' : isDown ? 'DOWN' : 'NEUTRAL');
 
   // Authoritative Institutional Edge & Lock Quality calculation
   const rawEdge = Number(
