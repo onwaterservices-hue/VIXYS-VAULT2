@@ -76,25 +76,52 @@ export const AuthView: React.FC<AuthViewProps> = ({
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
-      let res;
+      let fetchRes;
       if (mode === 'register') {
-        const fetchRes = await fetch('/api/auth/register', {
+        fetchRes = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: userEmail, password, name: userName }),
           signal: controller.signal
         });
-        res = await fetchRes.json();
       } else {
-        const fetchRes = await fetch('/api/auth/login', {
+        fetchRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: userEmail, password }),
           signal: controller.signal
         });
-        res = await fetchRes.json();
       }
       clearTimeout(timeoutId);
+
+      if (!fetchRes.ok) {
+        setLoading(false);
+        if (fetchRes.status === 401) {
+          setErrorMsg('Invalid email or password.');
+          return;
+        } else if (fetchRes.status === 403) {
+          setErrorMsg('Account access is currently restricted.');
+          return;
+        } else if (fetchRes.status === 404) {
+          setErrorMsg('Account not found.');
+          return;
+        } else if (fetchRes.status === 429) {
+          setErrorMsg('Too many attempts. Please wait and try again.');
+          return;
+        } else if (fetchRes.status >= 500) {
+          setErrorMsg('VIXY authentication service is temporarily unavailable.');
+          return;
+        }
+      }
+
+      let res;
+      try {
+        res = await fetchRes.json();
+      } catch (jsonErr) {
+        setLoading(false);
+        setErrorMsg('Invalid response from server.');
+        return;
+      }
 
       if (!res?.success) {
         setLoading(false);
@@ -145,9 +172,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
       if (typeof onSuccessNavigate === 'function') {
         setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
       }
-    } catch (err) {
+    } catch (err: any) {
       setLoading(false);
-      setErrorMsg('Network error. Please try again.');
+      const errString = String(err?.message || err).toLowerCase();
+      if (errString.includes('abort') || errString.includes('timeout')) {
+        setErrorMsg('Request timed out. VIXY authentication service is temporarily unavailable.');
+      } else if (errString.includes('failed to fetch') || errString.includes('network error') || errString.includes('failed to connect')) {
+        setErrorMsg('Unable to reach VIXY authentication service.');
+      } else {
+        setErrorMsg('Unable to reach VIXY authentication service.');
+      }
     }
   };
 

@@ -4076,11 +4076,11 @@ app.post("/api/auth/login", async (req, res) => {
       `[AUTH LOGIN FAILURE] email=${cleanEmail} reason=USER_NOT_FOUND`,
     );
     return res
-      .status(401)
+      .status(404)
       .json({
         success: false,
-        error: "INVALID_CREDENTIALS",
-        message: "Invalid email or password.",
+        error: "USER_NOT_FOUND",
+        message: "Account not found.",
       });
   }
   let hasPasswordHash = !!(

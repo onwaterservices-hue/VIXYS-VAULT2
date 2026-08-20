@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight } from 'lucide-react';
+import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight, Radio } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
 import {
@@ -58,8 +58,7 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
-import { TikTokLiveView } from './components/TikTokLiveView';
-import { AdminTikTokLiveView } from './components/AdminTikTokLiveView';
+// TikTok views disabled for emergency lockdown
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 export default function App() {
@@ -1028,21 +1027,33 @@ export default function App() {
           )}
 
           {activeTab === 'tiktok' && (
-            <TikTokLiveView
-              ticker={ticker}
-              onOpenTerminal={() => setActiveTab('terminal')}
-              onOpenPricing={() => setActiveTab('pricing')}
-            />
+            <div className="min-h-[500px] flex items-center justify-center p-8">
+              <div className="bg-[#0F0826] border-2 border-rose-500/40 rounded-3xl p-10 shadow-2xl text-center max-w-xl">
+                <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center mx-auto mb-6">
+                  <Radio className="w-8 h-8 text-rose-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-4">VIXY BROADCAST CONTROL TEMPORARILY OFFLINE</h2>
+                <p className="text-purple-300 mb-8 font-mono text-sm">TikTok Live Broadcast Module is undergoing emergency maintenance and stabilization. Normal service will resume shortly.</p>
+                <button onClick={() => setActiveTab('terminal')} className="px-8 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition-all">
+                  RETURN TO VIXY
+                </button>
+              </div>
+            </div>
           )}
 
           {(activeTab === 'admin-tiktok-live' || activeTab === 'admin/tiktok-live') && (
-            <AdminTikTokLiveView
-              ticker={ticker}
-              userEmail={authState.user?.email || undefined}
-              userId={authState.user?.id || undefined}
-              onOpenTerminal={() => setActiveTab('terminal')}
-              onOpenAdminPanel={() => setActiveTab('admin')}
-            />
+            <div className="min-h-[500px] flex items-center justify-center p-8">
+              <div className="bg-[#0F0826] border-2 border-rose-500/40 rounded-3xl p-10 shadow-2xl text-center max-w-xl">
+                <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center mx-auto mb-6">
+                  <Radio className="w-8 h-8 text-rose-400" />
+                </div>
+                <h2 className="text-2xl font-black text-white mb-4">VIXY BROADCAST CONTROL TEMPORARILY OFFLINE</h2>
+                <p className="text-purple-300 mb-8 font-mono text-sm">TikTok Live Broadcast Module is undergoing emergency maintenance and stabilization. Normal service will resume shortly.</p>
+                <button onClick={() => setActiveTab('terminal')} className="px-8 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition-all">
+                  RETURN TO VIXY
+                </button>
+              </div>
+            </div>
           )}
 
           {activeTab === 'history' && (
