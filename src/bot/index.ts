@@ -317,8 +317,12 @@ export async function broadcastSignalToDiscord(signalData: {
         botState.totalAlertsDispatched += 1;
         return { success: true, method: 'BOT', message: 'Signal posted to VIP Discord Channel!' };
       }
-    } catch (err) {
-      console.warn('[DiscordBot] Bot channel dispatch error:', err);
+    } catch (err: any) {
+      if (err?.code === 50001 || err?.message === 'Missing Access') {
+        console.debug('[DiscordBot] Bot channel dispatch skipped: Missing Access (50001)');
+      } else {
+        console.warn('[DiscordBot] Bot channel dispatch error:', err?.message || err);
+      }
     }
   }
 

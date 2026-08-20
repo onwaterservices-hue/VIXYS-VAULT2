@@ -22,6 +22,7 @@ import { BTCTicker, UserSubscription, AuthState, ExchangeApiKeys, AlertSettings 
 import { Logo } from './Logo';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { useLiveSignal } from '../hooks/useLiveSignal';
+import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
 import { useAuthSubscription } from '../hooks/useAuthSubscription';
 import { DiscordCompactBadge } from './DiscordCompactBadge';
 
@@ -96,6 +97,7 @@ export const Header: React.FC<HeaderProps> = ({
   const { tzName: userTzName, abbr: userTzAbbr } = getLocalTimezone();
 
   const { signal: apiSignal, status: modelStatus } = useLiveSignal(selectedAsset || 'BTC', selectedTimeframe || '15M');
+  const { decision: canonical15mDecision } = useCanonical15mDecision();
 
   const {
     isAuthenticated,
@@ -315,30 +317,49 @@ export const Header: React.FC<HeaderProps> = ({
           })()}
 
           {/* VIXY Signal & Confidence Pill */}
-          <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10.5px] text-purple-200 shrink-0">
-            <span className="text-purple-400 font-bold">VIXY:</span>
-            {((apiSignal as any)?.execution?.state === 'LOCK_UP' || apiSignal?.action === 'BUY_YES') ? (
-              <span className="px-1.5 py-0.2 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
-                ▲ BUY UP
-              </span>
-            ) : ((apiSignal as any)?.execution?.state === 'LOCK_DOWN' || apiSignal?.action === 'BUY_NO') ? (
-              <span className="px-1.5 py-0.2 rounded bg-rose-500/25 text-rose-300 border border-rose-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
-                ▼ BUY DOWN
-              </span>
-            ) : (
-              <span className="px-1.5 py-0.2 rounded bg-purple-900/40 text-purple-300 border border-purple-700/50 font-black text-[10px] tracking-wide flex items-center gap-1">
-                ▬ PASS
-              </span>
-            )}
+          {(() => {
+            const is15mLocked = canonical15mDecision?.currentState === 'LOCKED_UP' || canonical15mDecision?.currentState === 'LOCKED_DOWN';
+            const is15mUp = canonical15mDecision?.currentState === 'LOCKED_UP' || (canonical15mDecision?.direction === 'UP' && canonical15mDecision?.currentState !== 'LOCKED_DOWN');
+            const is15mDown = canonical15mDecision?.currentState === 'LOCKED_DOWN' || (canonical15mDecision?.direction === 'DOWN' && canonical15mDecision?.currentState !== 'LOCKED_UP');
+            const is15mSkip = canonical15mDecision?.currentState === 'SKIP' || canonical15mDecision?.currentState === 'PROTECTED';
             
-            <span className="text-purple-800">•</span>
-            <span className="text-purple-300">
-              CONF{' '}
-              <strong className="text-white font-black font-mono tabular-nums px-1 py-0.2 rounded bg-purple-950/80 border border-purple-700/40">
-                {Math.round(apiSignal?.confidence || 92)}%
-              </strong>
-            </span>
-          </div>
+            const effConfidence = Math.round(canonical15mDecision?.confidence || apiSignal?.confidence || 84);
+
+            return (
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10.5px] text-purple-200 shrink-0">
+                <span className="text-purple-400 font-bold">VIXY:</span>
+                {is15mLocked && is15mUp ? (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
+                    ▲ BUY UP (LOCKED)
+                  </span>
+                ) : is15mLocked && is15mDown ? (
+                  <span className="px-1.5 py-0.2 rounded bg-rose-500/25 text-rose-300 border border-rose-500/40 font-black text-[10px] tracking-wide flex items-center gap-1">
+                    ▼ BUY DOWN (LOCKED)
+                  </span>
+                ) : is15mUp && !is15mSkip ? (
+                  <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-black text-[10px] tracking-wide flex items-center gap-1">
+                    ▲ BUY UP
+                  </span>
+                ) : is15mDown && !is15mSkip ? (
+                  <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 font-black text-[10px] tracking-wide flex items-center gap-1">
+                    ▼ BUY DOWN
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.2 rounded bg-purple-900/40 text-purple-300 border border-purple-700/50 font-black text-[10px] tracking-wide flex items-center gap-1">
+                    ▬ PASS
+                  </span>
+                )}
+                
+                <span className="text-purple-800">•</span>
+                <span className="text-purple-300">
+                  CONF{' '}
+                  <strong className="text-white font-black font-mono tabular-nums px-1 py-0.2 rounded bg-purple-950/80 border border-purple-700/40">
+                    {effConfidence}%
+                  </strong>
+                </span>
+              </div>
+            );
+          })()}
 
           {/* Latency & Connectivity Pill - CONNECTED / HEALTHY */}
           <div className="hidden md:flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10px] font-mono shrink-0">

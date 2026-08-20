@@ -3,9 +3,9 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist/server.cjs",
+  "main": "server.ts",
   "scripts": {
-    "dev": "tsx backend.ts",
+    "dev": "concurrently \"PORT=3001 tsx backend.ts\" \"vite\"",
     "prebuild": "mkdir -p dist",
     "build": "vite build && esbuild backend.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node server.ts",
@@ -46,5 +46,8 @@
     "vite": "^6.2.3",
     "ws": "^8.21.3",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
   }
 }

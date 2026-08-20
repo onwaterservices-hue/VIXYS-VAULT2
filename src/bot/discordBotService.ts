@@ -282,8 +282,12 @@ export async function broadcastSignalToDiscord(signalData: {
       botState.lastBroadcastAt = new Date().toISOString();
       botState.totalAlertsDispatched += 1;
       return { success: true, method: 'DISCORD_BOT', message: 'Signal dispatched to Discord channels via VIXY AI Bot!' };
-    } catch (err) {
-      console.error('[DiscordBot] Client broadcast error:', err);
+    } catch (err: any) {
+      if (err?.code === 50001 || err?.message === 'Missing Access') {
+        console.debug('[DiscordBot] Client broadcast skipped: Missing Access (50001)');
+      } else {
+        console.error('[DiscordBot] Client broadcast error:', err?.message || err);
+      }
     }
   }
 
@@ -486,7 +490,11 @@ export async function assignDiscordRoleToUser(
           };
         }
       } catch (err: any) {
-        console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err);
+        if (err?.code === 50001 || err?.message === 'Missing Access') {
+           console.debug(`[Discord Role Sync] ❌ discord.js role assignment skipped: Missing Access (50001)`);
+        } else {
+           console.error(`[Discord Role Sync] ❌ Exception during discord.js role assignment:`, err?.message || err);
+        }
         // Fallback to REST API if discord.js fetch errored
       }
     }

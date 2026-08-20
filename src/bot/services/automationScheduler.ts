@@ -51,59 +51,59 @@ export class AutomationScheduler {
 
       // 1. Every 15-Minute Signal & Protection Lock (:00, :15, :30, :45)
       if (minute % 15 === 0) {
-        this.publish15mSignalScan().catch(console.error);
-        this.publishProtectionSentinel().catch(console.error);
+        this.publish15mSignalScan().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
+        this.publishProtectionSentinel().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 2. Real-Time AI Pulse Update (:02, :09)
       if (minute % 15 === 2 || minute % 15 === 9) {
-        this.publishAiPulse().catch(console.error);
+        this.publishAiPulse().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 3. Bearish / Bullish Intelligence Alert (:05)
       if (minute % 15 === 5) {
-        this.publishBearishOrBullishAlert().catch(console.error);
+        this.publishBearishOrBullishAlert().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 4. Whale Intercept Alert (:08)
       if (minute % 15 === 8) {
-        this.publishWhaleAlert().catch(console.error);
+        this.publishWhaleAlert().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 5. Strike Countdown - 5m Remaining (:10)
       if (minute % 15 === 10) {
-        this.publishStrikeCountdown(5).catch(console.error);
+        this.publishStrikeCountdown(5).catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 6. AI Engine System Heartbeat (:12)
       if (minute % 15 === 12) {
-        this.publishAiHeartbeat().catch(console.error);
+        this.publishAiHeartbeat().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 7. Strike Countdown - 2m Remaining (:13)
       if (minute % 15 === 13) {
-        this.publishStrikeCountdown(2).catch(console.error);
+        this.publishStrikeCountdown(2).catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 8. Hourly Market Intelligence & Flow Forge (:00)
       if (minute === 0 && env.AI_MARKET_INTEL_ENABLED) {
-        this.publishHourlyMarketPulse().catch(console.error);
-        this.publishFlowForgeIntel().catch(console.error);
+        this.publishHourlyMarketPulse().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
+        this.publishFlowForgeIntel().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 9. Periodic Social Proof & Performance Summary (Every 2h at :30)
       if (hour % 2 === 0 && minute === 30) {
-        this.publishPerformanceRecap().catch(console.error);
+        this.publishPerformanceRecap().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 10. Breaking News Radar (Every 3h at :45)
       if (hour % 3 === 0 && minute === 45) {
-        this.publishBreakingNews().catch(console.error);
+        this.publishBreakingNews().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
 
       // 11. Daily Analytics Recap at midnight
       if (hour === 0 && minute === 0) {
-        this.publishDailyRecap().catch(console.error);
+        this.publishDailyRecap().catch((err) => console.warn("[Automation] Task error:", err?.message || err));
       }
     }, 60000);
   }
