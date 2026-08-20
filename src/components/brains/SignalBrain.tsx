@@ -111,13 +111,15 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   const rawDirectionStr = String(
     isActuallyLocked
-      ? (rawApiData?.lockedDirection || rawApiData?.lockedDecision || rawApiData?.decision || rawApiData?.direction || 'NONE')
-      : (rawApiData?.decision || rawApiData?.direction || rawApiData?.candidateDirection || rawApiData?.livePrediction?.direction || rawApiData?.provisionalBias || (signal?.direction === 'YES' ? 'UP' : signal?.direction === 'NO' ? 'DOWN' : 'NONE'))
+      ? (rawApiData?.lockedDirection || rawApiData?.decision || rawApiData?.direction || 'NONE')
+      : (rawApiData?.decision || rawApiData?.candidateDirection || rawApiData?.direction || (signal?.direction === 'YES' ? 'UP' : signal?.direction === 'NO' ? 'DOWN' : 'NONE'))
   ).toUpperCase();
 
-  const isSkipExplicit = rawDirectionStr.includes('SKIP') || rawDirectionStr.includes('NO_TRADE') || rawDirectionStr === 'PASS' || rawApiData?.action === 'SKIP' || rawApiData?.decision === 'PASS' || rawApiData?.decision === 'SKIP';
+  const isUp = (rawDirectionStr.includes('UP') || rawDirectionStr.includes('YES') || rawDirectionStr === 'BUY_YES');
+  const isDown = (rawDirectionStr.includes('DOWN') || rawDirectionStr.includes('NO') && !rawDirectionStr.includes('NO_TRADE') && !rawDirectionStr.includes('NO_EXECUTION'));
+  const isSkipExplicit = rawDirectionStr.includes('SKIP') || rawDirectionStr.includes('NO_TRADE') || rawDirectionStr === 'PASS';
 
-  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'QUALIFYING').toUpperCase();
+  const rawStage = rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'QUALIFYING';
   const isBackendObserving = !isActuallyLocked && rawStage === 'OBSERVING';
   const isBackendCalibrating = !isActuallyLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
   const isBackendAnalyzing = !isActuallyLocked && rawStage === 'ANALYZING';
@@ -127,58 +129,32 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isBackendNoTrade = isSkipExplicit || (!isActuallyLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED'));
   const isPassExplicit = rawApiData?.lockedDirection === 'PASS' || isBackendNoTrade;
 
-  const rawIsUp = !isBackendNoTrade && (
-    rawDirectionStr.includes('UP') || 
-    rawDirectionStr.includes('YES') || 
-    rawDirectionStr === 'BUY_YES' ||
-    rawDirectionStr === 'BUY UP' ||
-    rawApiData?.provisionalBias === 'UP_BIAS' ||
-    rawApiData?.livePrediction?.direction === 'UP' ||
-    (signal?.direction === 'YES' && !signal?.direction?.includes('NO'))
-  );
-
-  const rawIsDown = !isBackendNoTrade && !rawIsUp && (
-    rawDirectionStr.includes('DOWN') || 
-    (rawDirectionStr.includes('NO') && !rawDirectionStr.includes('NO_TRADE')) || 
-    rawDirectionStr === 'BUY_NO' ||
-    rawDirectionStr === 'BUY DOWN' ||
-    rawApiData?.provisionalBias === 'DOWN_BIAS' ||
-    rawApiData?.livePrediction?.direction === 'DOWN' ||
-    signal?.direction === 'NO'
-  );
-
-  const sigAny = signal as any;
-  const rawEffectiveProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
-    ? rawApiData.lockedProbability
-    : (sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
-
-  const effectiveProbability = rawEffectiveProb <= 1 ? rawEffectiveProb * 100 : rawEffectiveProb;
-  const upProbability = Number(effectiveProbability);
-  const downProbability = Number(isActuallyLocked && rawApiData?.lockedProbability !== undefined ? 100 - upProbability : (sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability)));
-
-  const isUp = isBackendNoTrade ? false : rawIsUp ? true : rawIsDown ? false : (upProbability >= downProbability);
-  const isDown = isBackendNoTrade ? false : rawIsDown ? true : rawIsUp ? false : (downProbability > upProbability);
-
-  const isConfirmedUp = !isBackendNoTrade && isUp;
-  const isConfirmedDown = !isBackendNoTrade && isDown;
-  const isPassState = isBackendNoTrade || isPassExplicit;
+  const isConfirmedUp = (isActuallyLocked && isUp) || (!isBackendNoTrade && !isBackendCalibrating && !isBackendObserving && isUp);
+  const isConfirmedDown = (isActuallyLocked && isDown) || (!isBackendNoTrade && !isBackendCalibrating && !isBackendObserving && isDown);
+  const isPassState = isBackendNoTrade || (isActuallyLocked && isPassExplicit);
 
   const execution = {
     state: isActuallyLocked
       ? (isUp ? 'LOCK_UP' : isDown ? 'LOCK_DOWN' : 'PASS')
       : isBackendNoTrade
       ? 'NO_TRADE'
+      : isBackendCalibrating || isBackendObserving
+      ? 'CALIBRATING'
       : isConfirmedUp
       ? 'CONFIRMED_UP'
       : isConfirmedDown
       ? 'CONFIRMED_DOWN'
+      : isBackendAnalyzing
+      ? 'ANALYZING'
       : 'QUALIFYING',
     direction: isUp ? 'UP' : isDown ? 'DOWN' : 'NONE',
-    authorized: (isActuallyLocked || isConfirmedUp || isConfirmedDown) && !isBackendNoTrade,
+    authorized: (isActuallyLocked || isBackendQualifying || isBackendReady) && (isUp || isDown),
     actionLabel: isActuallyLocked
       ? (isUp ? 'LOCKED BUY UP → READY' : isDown ? 'LOCKED BUY DOWN → READY' : 'ENTRY NOT QUALIFIED')
       : isBackendNoTrade
       ? 'CYCLE SKIPPED (NO QUALIFIED ENTRY)'
+      : isBackendCalibrating || isBackendObserving
+      ? 'CALIBRATING 15M CYCLE'
       : isConfirmedUp
       ? 'BUY UP → QUALIFIED'
       : isConfirmedDown
@@ -188,6 +164,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       ? (rawApiData?.lockReason || 'IMMUTABLE LOCK')
       : isBackendNoTrade
       ? (rawApiData?.qualificationReason || 'Protection / Choppy market filter')
+      : isBackendCalibrating || isBackendObserving
+      ? 'Sampling order flow matrix'
       : isUp
       ? 'Independent P(UP) dominance verified'
       : isDown
@@ -195,6 +173,15 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       : `Current Phase: ${rawStage}`,
     qualified: isActuallyLocked || isConfirmedUp || isConfirmedDown
   };
+
+  const sigAny = signal as any;
+  const rawEffectiveProb = isActuallyLocked && rawApiData?.lockedProbability !== undefined
+    ? rawApiData.lockedProbability
+    : (sigAny?.upProbability ?? rawApiData?.upProbability ?? signal?.confidence ?? 50);
+
+  const effectiveProbability = rawEffectiveProb <= 1 ? rawEffectiveProb * 100 : rawEffectiveProb;
+  const upProbability = Number(effectiveProbability);
+  const downProbability = Number(isActuallyLocked && rawApiData?.lockedProbability !== undefined ? 100 - upProbability : (sigAny?.downProbability ?? rawApiData?.downProbability ?? (100 - upProbability)));
   
   const evidenceQuality = Number(sigAny?.evidenceQuality ?? rawApiData?.evidenceQuality ?? 78);
   const edgePct = Number(sigAny?.edgePct ?? rawApiData?.edgePct ?? 0);
@@ -285,17 +272,21 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || liveAgeSeconds > 60;
   const isOfflineOrStale = isActualOffline && !hasValidRawData;
 
-  let displayDecisionText = 'BUY UP';
+  let displayDecisionText = 'ANALYZING';
   if (isOfflineOrStale) {
     displayDecisionText = 'DATA STALE';
-  } else if (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE' || isBackendNoTrade) {
-    displayDecisionText = 'SKIP';
   } else if (isConfirmedUp) {
     displayDecisionText = isActuallyLocked ? 'LOCKED BUY UP' : 'BUY UP';
   } else if (isConfirmedDown) {
     displayDecisionText = isActuallyLocked ? 'LOCKED BUY DOWN' : 'BUY DOWN';
+  } else if (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE') {
+    displayDecisionText = 'VIXY CALIBRATING';
+  } else if (isBackendObserving) {
+    displayDecisionText = 'OBSERVING';
+  } else if (isBackendCalibrating) {
+    displayDecisionText = 'CALIBRATING';
   } else {
-    displayDecisionText = 'BUY UP';
+    displayDecisionText = 'QUALIFYING';
   }
 
   const displayCalibratedProb = (rawCalibProb !== null && rawCalibProb !== undefined)
@@ -303,20 +294,21 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
     : (authoritativeConfidenceNum ? `${Math.round(authoritativeConfidenceNum)}%` : '');
 
   // Compute execution dispatch panel state (STRICTLY INDEPENDENT FROM ACCESS GATE)
-  type ExecutionPanelStateType = 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING';
-  let executionPanelState: ExecutionPanelStateType = 'CONFIRMED_UP';
+  let executionPanelState: 'STALE' | 'PROTECT' | 'CONFIRMED_UP' | 'CONFIRMED_DOWN' | 'CALIBRATING' | 'PASS' | 'ANALYZING' = 'CALIBRATING';
   if (isOfflineOrStale) {
     executionPanelState = 'STALE';
   } else if (isProtectState) {
     executionPanelState = 'PROTECT';
-  } else if (isPassState || isBackendNoTrade) {
+  } else if (isPassState) {
     executionPanelState = 'PASS';
+  } else if (isBackendCalibrating || isBackendObserving) {
+    executionPanelState = 'CALIBRATING';
   } else if (isConfirmedUp) {
     executionPanelState = 'CONFIRMED_UP';
   } else if (isConfirmedDown) {
     executionPanelState = 'CONFIRMED_DOWN';
   } else {
-    executionPanelState = 'CONFIRMED_UP';
+    executionPanelState = 'ANALYZING';
   }
 
   const showBuyUp = executionPanelState === 'CONFIRMED_UP' && !isOfflineOrStale;
@@ -490,18 +482,18 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
             </div>
           </div>
           <div className={`px-3 py-1.5 rounded-full border ${
-            displayDecisionText.includes('BUY UP') ? 'bg-[#041510] border-emerald-500/60 text-emerald-300 shadow-[0_0_15px_rgba(0,255,157,0.25)]' :
-            displayDecisionText.includes('BUY DOWN') ? 'bg-[#1a050a] border-rose-500/60 text-rose-300 shadow-[0_0_15px_rgba(255,51,102,0.25)]' :
+            displayDecisionText === 'BUY UP' ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' :
+            displayDecisionText === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/60 text-rose-400' :
             displayDecisionText === 'DATA STALE' ? 'bg-[#1a050a] border-rose-950 text-rose-500' :
-            'bg-amber-950/40 border-amber-500/50 text-amber-300 shadow-[0_0_15px_rgba(245,158,11,0.25)]'
+            'bg-purple-950/30 border-purple-900/60 text-purple-300'
           } flex items-center gap-2 font-black shadow-lg`}>
             <span className={`w-2 h-2 rounded-full ${
-              displayDecisionText.includes('BUY UP') ? 'bg-emerald-400 animate-pulse' :
-              displayDecisionText.includes('BUY DOWN') ? 'bg-rose-500 animate-pulse' :
+              displayDecisionText === 'BUY UP' ? 'bg-emerald-400' :
+              displayDecisionText === 'BUY DOWN' ? 'bg-rose-500' :
               displayDecisionText === 'DATA STALE' ? 'bg-rose-600' :
-              'bg-amber-400'
+              'bg-purple-400'
             } shadow-sm`} />
-            {displayDecisionText} {displayCalibratedProb && displayDecisionText !== 'DATA STALE' ? displayCalibratedProb : ''} 
+            {displayDecisionText} {displayCalibratedProb !== 'CALIBRATING' && displayDecisionText !== 'CALIBRATING' && displayDecisionText !== 'DATA STALE' ? displayCalibratedProb : ''} 
             <span className="text-[8px] opacity-70 ml-1 font-normal">{calibrationStatus}</span>
           </div>
         </div>

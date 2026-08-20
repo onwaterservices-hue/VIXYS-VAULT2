@@ -1,0 +1,49 @@
+--- src/components/AuthModal.tsx
++++ src/components/AuthModal.tsx
+@@ -50,7 +50,7 @@
+ 
+   if (!isOpen) return null;
+ 
+-  const handleSubmit = (e: React.FormEvent) => {
++  const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+     setLoading(true);
+     setErrorMsg('');
+@@ -86,13 +86,28 @@
+     const assignedRole: 'ADMIN' | 'UNPAID' | 'PRO' = isAdminEmail ? 'ADMIN' : 'UNPAID';
+     const userName = fullName.trim() || (isAdminEmail ? `Master Admin (${userEmail.split('@')[0]})` : email ? email.split('@')[0] : 'VIXY Trader');
+ 
+-    // Live sync user to server backend persistent database
+-    syncAuthUserApi({
+-      email: userEmail,
+-      name: userName,
+-      role: isAdminEmail ? 'OWNER' : 'USER',
+-      subscription: isAdminEmail ? 'ELITE_PASS' : 'NONE',
+-    })
+-      .then(async (syncRes: any) => {
+-        const canonicalUser = syncRes?.user || {};
++    try {
++      let syncRes;
++      if (mode === 'register') {
++        const fetchRes = await fetch('/api/auth/register', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ email: userEmail, password, name: userName })
++        });
++        syncRes = await fetchRes.json();
++      } else {
++        const fetchRes = await fetch('/api/auth/login', {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({ email: userEmail, password })
++        });
++        syncRes = await fetchRes.json();
++      }
++
++      if (!syncRes?.success) {
++        setLoading(false);
++        setErrorMsg(syncRes?.message || 'Authentication failed. Please check your credentials.');
++        return;
++      }
++
++      const canonicalUser = syncRes?.user || {};

@@ -85,22 +85,14 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
      rawApiData?.vixyLockState === 'LOCKED')
   );
 
-  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'QUALIFYING').toUpperCase();
+  const rawStage = String(rawApiData?.stage || rawApiData?.cycleStage || rawApiData?.status || 'OBSERVING').toUpperCase();
   const isObserving = !isServerLocked && (rawStage === 'OBSERVING');
   const isCalibrating = !isServerLocked && (rawStage === 'CALIBRATING' || rawStage === 'INGESTING' || rawStage === 'BOOTSTRAPPING');
   const isAnalyzing = !isServerLocked && rawStage === 'ANALYZING';
   const isQualifying = !isServerLocked && rawStage === 'QUALIFYING';
   const isValidating = !isServerLocked && (rawStage === 'VALIDATING' || rawStage === 'LOCKING');
   const isReadyToLock = !isServerLocked && rawStage === 'READY_TO_LOCK';
-  const isNoTrade = !isServerLocked && (
-    rawStage === 'NO_TRADE' ||
-    rawStage === 'SKIPPED' ||
-    rawApiData?.action === 'SKIP' ||
-    rawApiData?.decision === 'PASS' ||
-    rawApiData?.decision === 'SKIP' ||
-    rawApiData?.lockedDirection === 'PASS' ||
-    (rawApiData?.lockQualityTier === 'SKIP' && !rawApiData?.direction)
-  );
+  const isNoTrade = !isServerLocked && (rawStage === 'NO_TRADE' || rawStage === 'SKIPPED');
   const isCriticallyInvalidated = rawApiData?.status === 'CRITICALLY_INVALIDATED' || rawApiData?.isCriticallyInvalidated;
 
   // 1.1 EVIDENCE AGREEMENT & CONFLICT DATA FROM SERVER
@@ -116,30 +108,41 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
 
   const rawDirection = isServerLocked 
-    ? (rawApiData?.lockedDirection || rawApiData?.lockedDecision || rawApiData?.direction || 'NONE').toUpperCase() 
-    : (rawApiData?.decision || rawApiData?.direction || rawApiData?.candidateDirection || rawApiData?.livePrediction?.direction || rawApiData?.provisionalBias || 'NONE').toUpperCase();
+    ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() 
+    : (rawApiData?.direction || rawApiData?.candidateDirection || 'NONE').toUpperCase();
+  const isUp = isServerLocked 
+    ? (rawDirection.includes('UP') || rawDirection.includes('YES'))
+    : (!isNoTrade && (rawDirection.includes('UP') || rawDirection.includes('YES')));
+  const isDown = isServerLocked
+    ? (rawDirection.includes('DOWN') || rawDirection.includes('NO'))
+    : (!isNoTrade && (rawDirection.includes('DOWN') || rawDirection.includes('NO')) && !rawDirection.includes('NO_TRADE'));
 
-  const isExplicitSkip = isNoTrade || rawDirection.includes('SKIP') || rawDirection.includes('PASS') || rawDirection.includes('NO_TRADE');
+  // Primary Headline Text (NO DANCING UI DURING PRE-LOCK)
+  const primaryDecisionHeadline = isServerLocked
+    ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
+    : isNoTrade
+    ? 'VIXY CALIBRATING'
+    : 'VIXY ANALYZING';
 
-  const rawIsUp = !isExplicitSkip && (
-    rawDirection.includes('UP') ||
-    rawDirection.includes('YES') ||
-    rawDirection === 'BUY_YES' ||
-    rawDirection === 'BUY UP' ||
-    rawApiData?.provisionalBias === 'UP_BIAS' ||
-    rawApiData?.livePrediction?.direction === 'UP' ||
-    rawApiData?.features?.direction === 'UP'
-  );
+  // Sub-badge / Provisional Status Badge for Pre-Lock Analysis
+  const provisionalSubStatus = isServerLocked
+    ? (isUp ? 'CALL DIRECTION LOCKED' : isDown ? 'PUT DIRECTION LOCKED' : 'NEUTRAL RANGE')
+    : isNoTrade
+    ? 'NO HIGH-CONVICTION SETUP'
+    : hasConflict
+    ? 'SIGNAL CONFLICT'
+    : signalUnstable
+    ? 'SIGNAL UNSTABLE'
+    : provisionalBias === 'UP_BIAS' || (isUp && !isDown)
+    ? 'UP BIAS (PROVISIONAL)'
+    : provisionalBias === 'DOWN_BIAS' || (isDown && !isUp)
+    ? 'DOWN BIAS (PROVISIONAL)'
+    : isCalibrating
+    ? 'CALIBRATING ENGINE'
+    : 'EVIDENCE BUILDING';
 
-  const rawIsDown = !isExplicitSkip && !rawIsUp && (
-    rawDirection.includes('DOWN') ||
-    (rawDirection.includes('NO') && !rawDirection.includes('NO_TRADE')) ||
-    rawDirection === 'BUY_NO' ||
-    rawDirection === 'BUY DOWN' ||
-    rawApiData?.provisionalBias === 'DOWN_BIAS' ||
-    rawApiData?.livePrediction?.direction === 'DOWN' ||
-    rawApiData?.features?.direction === 'DOWN'
-  );
+  const lockedStrike = Number(rawApiData?.lockedStrike || rawApiData?.strike || targetPrice || 64100);
+  const lockedSpot = Number(rawApiData?.lockedSpot || rawApiData?.spotAtLock || currentPrice || 64100);
 
   // Exact Authoritative Confidence Value
   const authoritativeRawConf = Number(
@@ -155,38 +158,6 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       ? rawApiData.confidence
       : 74
   );
-
-  const isUp = isExplicitSkip ? false : rawIsUp ? true : rawIsDown ? false : (authoritativeRawConf >= 50);
-  const isDown = isExplicitSkip ? false : rawIsDown ? true : rawIsUp ? false : (authoritativeRawConf < 50 && authoritativeRawConf > 0);
-
-  // Primary Headline Text — Always displays the prominent UP / DOWN / SKIP Call
-  const primaryDecisionHeadline = isServerLocked
-    ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
-    : isExplicitSkip
-    ? 'SKIP'
-    : isUp
-    ? 'BUY UP'
-    : isDown
-    ? 'BUY DOWN'
-    : 'SKIP';
-
-  // Sub-badge / Provisional Status Badge for Live Call
-  const provisionalSubStatus = isServerLocked
-    ? (isUp ? 'CALL DIRECTION LOCKED' : isDown ? 'PUT DIRECTION LOCKED' : 'CYCLE LOCKED — PASS')
-    : isExplicitSkip
-    ? 'PROTECTION GATE // SKIP CYCLE'
-    : hasConflict
-    ? 'SIGNAL CONFLICT // CAUTION'
-    : signalUnstable
-    ? 'SIGNAL UNSTABLE // CAUTION'
-    : isUp
-    ? 'LIVE CALL: BUY UP (HIGH CONVICTION)'
-    : isDown
-    ? 'LIVE CALL: BUY DOWN (HIGH CONVICTION)'
-    : 'LIVE 15M SIGNAL ACTIVE';
-
-  const lockedStrike = Number(rawApiData?.lockedStrike || rawApiData?.strike || targetPrice || 64100);
-  const lockedSpot = Number(rawApiData?.lockedSpot || rawApiData?.spotAtLock || currentPrice || 64100);
 
   const exactConfidencePct = Math.min(99, Math.max(50, Math.round(authoritativeRawConf)));
   const confBand = isNoTrade
@@ -427,30 +398,50 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
                 <span>STATE: CRITICALLY INVALIDATED</span>
               </>
-            ) : isExplicitSkip ? (
+            ) : isNoTrade ? (
               <>
                 <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
-                <span>STATE: SKIP // PROTECTED</span>
+                <span>STATE: VIXY CALIBRATING (PROTECTED)</span>
               </>
             ) : isServerLocked ? (
               <>
                 <Lock className="w-3.5 h-3.5 animate-pulse" />
                 <span>STATE 04: LOCKED — {primaryDecisionHeadline}</span>
               </>
-            ) : isUp ? (
+            ) : isObserving ? (
               <>
-                <TrendingUp className="w-3.5 h-3.5 text-[#00FF9D] animate-pulse" />
-                <span>LIVE CALL: BUY UP ({exactConfidencePct}%)</span>
+                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                <span>STATE 01: OBSERVING 15M CYCLE</span>
               </>
-            ) : isDown ? (
+            ) : isCalibrating ? (
               <>
-                <TrendingDown className="w-3.5 h-3.5 text-[#FF3366] animate-pulse" />
-                <span>LIVE CALL: BUY DOWN ({exactConfidencePct}%)</span>
+                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
+                <span>STATE 02: CALIBRATING ENGINE</span>
+              </>
+            ) : isAnalyzing ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
+                <span>STATE 03: ANALYZING MARKET</span>
+              </>
+            ) : isQualifying ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-pulse text-indigo-300" />
+                <span>STATE 04: QUALIFYING ENTRY</span>
+              </>
+            ) : isValidating ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                <span>STATE 04: VALIDATING EVIDENCE</span>
+              </>
+            ) : isReadyToLock ? (
+              <>
+                <Activity className="w-3.5 h-3.5 animate-pulse text-amber-400" />
+                <span>STATE 04: FINALIZING LOCK</span>
               </>
             ) : (
               <>
                 <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
-                <span>LIVE CALL: SKIP / EVALUATING</span>
+                <span>STATE 01: OBSERVING 15M CYCLE</span>
               </>
             )}
           </span>
@@ -556,54 +547,36 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                     INVALIDATED
                   </span>
                 </>
-              ) : isExplicitSkip ? (
+              ) : isNoTrade ? (
                 <>
                   <ShieldCheck className="w-7 h-7 text-purple-300 animate-pulse" />
                   <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">
-                    SKIP
+                    VIXY CALIBRATING
                   </span>
                 </>
-              ) : isUp ? (
+              ) : isServerLocked ? (
                 <>
                   <div
                     className="text-2xl sm:text-3xl font-black leading-none animate-bounce"
                     style={{
-                      color: '#00FF9D',
-                      textShadow: '0 0 15px rgba(0,255,157,0.8)',
+                      color: themeNeon,
+                      textShadow: `0 0 15px ${themeGlow}`,
                     }}
                   >
-                    ▲
+                    {isUp ? '▲' : isDown ? '▼' : '●'}
                   </div>
                   <span
-                    className="text-[8.5px] font-black tracking-widest uppercase mt-1 flex items-center gap-1 text-[#00FF9D]"
+                    className="text-[8.5px] font-black tracking-widest uppercase mt-1 flex items-center gap-1"
+                    style={{ color: themeNeon }}
                   >
-                    {isServerLocked ? <Lock className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />}
-                    {isServerLocked ? 'LOCKED UP' : 'BUY UP'}
-                  </span>
-                </>
-              ) : isDown ? (
-                <>
-                  <div
-                    className="text-2xl sm:text-3xl font-black leading-none animate-bounce"
-                    style={{
-                      color: '#FF3366',
-                      textShadow: '0 0 15px rgba(255,51,102,0.8)',
-                    }}
-                  >
-                    ▼
-                  </div>
-                  <span
-                    className="text-[8.5px] font-black tracking-widest uppercase mt-1 flex items-center gap-1 text-[#FF3366]"
-                  >
-                    {isServerLocked ? <Lock className="w-2.5 h-2.5" /> : <Zap className="w-2.5 h-2.5" />}
-                    {isServerLocked ? 'LOCKED DOWN' : 'BUY DOWN'}
+                    <Lock className="w-2.5 h-2.5" /> LOCKED
                   </span>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="w-7 h-7 text-amber-400 animate-pulse" />
-                  <span className="text-[8px] font-black text-amber-300 tracking-widest uppercase mt-1">
-                    SKIP
+                  <Activity className="w-7 h-7 text-cyan-300 animate-pulse" />
+                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">
+                    {isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}
                   </span>
                 </>
               )}
@@ -616,15 +589,21 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 ? 'FEED OFFLINE'
                 : isCriticallyInvalidated
                 ? 'CRITICAL REVERSAL DETECTED'
-                : isExplicitSkip
-                ? 'CYCLE SKIPPED // PROTECTION'
+                : isNoTrade
+                ? 'PROTECTION / CHOP VETO'
                 : isServerLocked
                 ? `FINALIZED @ ${lockedAtFormatted}`
-                : isUp
-                ? 'LIVE SIGNAL: BUY UP'
-                : isDown
-                ? 'LIVE SIGNAL: BUY DOWN'
-                : 'SIGNAL: SKIP / PASS'}
+                : isObserving
+                ? 'OBSERVING ORDER FLOW'
+                : isCalibrating
+                ? 'CALIBRATING ENGINE'
+                : isQualifying
+                ? 'QUALIFYING CONFLUENCE'
+                : isValidating
+                ? 'VALIDATING EVIDENCE'
+                : isReadyToLock
+                ? 'COMMITTING LOCK'
+                : 'SAMPLING 15M MATRIX'}
             </span>
           </div>
         </div>
@@ -643,15 +622,21 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 ? 'DATA LINK INTERRUPTED'
                 : isCriticallyInvalidated
                 ? 'CRITICAL INVALIDATION TRIGGERED'
-                : isExplicitSkip
+                : isNoTrade
                 ? 'CYCLE FILTERED BY PROTECTION / CHOP GATE'
                 : isServerLocked
-                ? `AUTHORITATIVE 15M CYCLE LOCK — ${primaryDecisionHeadline}`
-                : isUp
-                ? `LIVE 15M CALL — BUY UP (${exactConfidencePct}% CONVICTION)`
-                : isDown
-                ? `LIVE 15M CALL — BUY DOWN (${exactConfidencePct}% CONVICTION)`
-                : 'LIVE 15M CALL — EVALUATING MARKET STRUCTURE'}
+                ? 'AUTHORITATIVE 15M CYCLE LOCK'
+                : isObserving
+                ? 'OBSERVING MARKET ORDER FLOW'
+                : isCalibrating
+                ? 'PREPARING CURRENT-CYCLE INTELLIGENCE'
+                : isQualifying
+                ? 'EVALUATING QUALIFICATION & GUARDIAN RISK'
+                : isValidating
+                ? 'CHECKING EVIDENCE AGREEMENT'
+                : isReadyToLock
+                ? 'FINALIZING NEURAL LOCK'
+                : 'EVALUATING CURRENT MARKET STRUCTURE'}
             </span>
             <span className="text-purple-600">|</span>
             <span className="text-[9px] font-mono text-purple-400/70">
@@ -670,10 +655,6 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                     : 'border-rose-500/40 bg-[#0e0205]' 
                   : isYellowPulseActive
                     ? 'border-yellow-500/80 bg-yellow-950/20 vixy-animate-pulse-yellow'
-                    : isUp
-                    ? 'border-emerald-500/50 bg-[#020d08]/90'
-                    : isDown
-                    ? 'border-rose-500/50 bg-[#0e0205]/90'
                     : 'border-purple-900/40 bg-[#06020e]/60'
             }`}
             style={{
@@ -681,27 +662,19 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 ? '0 0 25px rgba(239, 68, 68, 0.45)' 
                 : isYellowPulseActive
                 ? '0 0 20px rgba(234, 179, 8, 0.4)'
-                : isUp
-                ? '0 0 25px rgba(0, 255, 157, 0.2)'
-                : isDown
-                ? '0 0 25px rgba(255, 51, 102, 0.2)'
                 : 'none',
             }}
           >
             <div className="space-y-3.5">
               <div className="flex items-center justify-between">
                 <span className="text-[9.5px] font-bold tracking-[0.2em] text-purple-400/80 uppercase font-mono">
-                  {isServerLocked ? 'LOCKED DECISION' : isExplicitSkip ? 'CYCLE STATUS' : 'LIVE 15M CALL'}
+                  {isServerLocked ? 'LOCKED DECISION' : isNoTrade ? 'CYCLE STATUS' : 'LIVE ANALYSIS'}
                 </span>
                 <span className={`text-[8.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
                   reversalDetected
                     ? 'bg-red-950/60 text-red-400 border-red-500/40'
                     : isYellowPulseActive
                     ? 'bg-yellow-950/60 text-yellow-300 border-yellow-500/40 animate-pulse'
-                    : isUp
-                    ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
-                    : isDown
-                    ? 'bg-rose-950/60 text-rose-300 border-rose-500/40'
                     : 'bg-purple-950/40 text-purple-300 border-purple-800/40'
                 }`}>
                   {reversalDetected ? 'REVERSAL RISK ACTIVE' : isYellowPulseActive ? provisionalSubStatus : isServerLocked ? 'SECURE HARDWARE ENCLAVE' : provisionalSubStatus}
@@ -711,7 +684,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-3">
                 <div className="space-y-1">
                   <div
-                    className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-3"
+                    className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2"
                     style={{
                       color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : isYellowPulseActive ? '#FACC15' : themeNeon,
                       textShadow: reversalDetected 
@@ -722,15 +695,17 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                     }}
                   >
                     <span>{primaryDecisionHeadline}</span>
-                    <span 
-                      className={`text-3xl sm:text-4xl md:text-5xl ${reversalDetected ? 'animate-pulse text-red-500' : 'animate-pulse'}`}
-                      style={{ 
-                        color: reversalDetected ? '#EF4444' : themeNeon,
-                        filter: reversalDetected ? 'drop-shadow(0 0 12px #EF4444)' : `drop-shadow(0 0 10px ${themeGlow})`
-                      }}
-                    >
-                      {isUp ? '▲' : isDown ? '▼' : '⊘'}
-                    </span>
+                    {isServerLocked && (
+                      <span 
+                        className={`text-3xl sm:text-4xl md:text-5xl ${reversalDetected ? 'animate-pulse text-red-500' : ''}`}
+                        style={{ 
+                          color: reversalDetected ? '#EF4444' : themeNeon,
+                          filter: reversalDetected ? 'drop-shadow(0 0 12px #EF4444)' : 'none'
+                        }}
+                      >
+                        {isUp ? '▲' : '▼'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="text-[10px] font-extrabold tracking-[0.15em] text-slate-300 uppercase font-mono">
@@ -931,7 +906,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       <div className="pt-3.5 relative z-10">
         <button
           onClick={() => {
-            if (onExecute) onExecute(isUp ? 'BUY_UP' : isDown ? 'BUY_DOWN' : 'SKIP');
+            if (onExecute) onExecute(isUp ? 'BUY_UP' : 'BUY_DOWN');
           }}
           disabled={isOfflineOrStale}
           className={`w-full py-3.5 sm:py-4 px-6 rounded-xl font-black text-sm sm:text-base tracking-[0.2em] uppercase transition-all duration-300 flex items-center justify-center gap-3 relative overflow-hidden group shadow-2xl cursor-pointer ${
@@ -941,11 +916,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               ? isUp
                 ? 'bg-[#041d13] border-2 border-[#00FF9D] text-[#00FF9D] shadow-[0_0_35px_rgba(0,255,157,0.45)] active:scale-[0.99]'
                 : 'bg-[#1d040a] border-2 border-[#FF3366] text-[#FF3366] shadow-[0_0_35px_rgba(255,51,102,0.45)] active:scale-[0.99]'
-              : isUp
-              ? 'bg-[#041d13] border-2 border-[#00FF9D] text-[#00FF9D] shadow-[0_0_30px_rgba(0,255,157,0.35)] hover:border-emerald-400 active:scale-[0.99]'
-              : isDown
-              ? 'bg-[#1d040a] border-2 border-[#FF3366] text-[#FF3366] shadow-[0_0_30px_rgba(255,51,102,0.35)] hover:border-rose-400 active:scale-[0.99]'
-              : 'bg-[#12081f] border border-amber-500/60 text-amber-300 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:border-amber-400'
+              : 'bg-[#0a0316] border border-cyan-500/60 text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:border-cyan-400'
           }`}
           style={{
             textShadow: isOfflineOrStale ? 'none' : `0 0 15px ${themeGlow}`,
@@ -964,15 +935,11 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           <span>
             {isOfflineOrStale
               ? 'EXECUTION PAUSED'
-              : isExplicitSkip
+              : isNoTrade
               ? '⚡ CYCLE SKIPPED — NO TRADE'
               : isServerLocked
               ? `⚡ LOCKED — ${primaryDecisionHeadline}`
-              : isUp
-              ? '⚡ EXECUTE SIGNAL — BUY UP'
-              : isDown
-              ? '⚡ EXECUTE SIGNAL — BUY DOWN'
-              : '⚡ CYCLE PASS / SKIP'}
+              : '⚡ VIXY ANALYZING CYCLE...'}
           </span>
           <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
         </button>
