@@ -1135,22 +1135,20 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   // Canonical decision resolution
-  const isUp = canonicalDecision?.currentState === 'LOCKED_UP' || (activeCycleDecision.includes('UP') && cyclePhase !== 'CALIBRATING');
-  const isDown = canonicalDecision?.currentState === 'LOCKED_DOWN' || (activeCycleDecision.includes('DOWN') && cyclePhase !== 'CALIBRATING');
-  const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
-  const isConfirming = !isCalibrating && (canonicalDecision?.currentState === 'CONFIRMING' || continuousInference.protectionDecision.state === 'CONFIRMING');
-  const isSkip = !isCalibrating && (canonicalDecision?.currentState === 'SKIP' || activeCycleDecision === 'VIXY SKIP' || (!isUp && !isDown && !isConfirming));
+  const isUp = canonicalDecision?.currentState === 'LOCKED_UP' || (resolvedLog?.decision === 'BUY UP');
+  const isDown = canonicalDecision?.currentState === 'LOCKED_DOWN' || (resolvedLog?.decision === 'BUY DOWN');
+  const isCalibrating = !isUp && !isDown;
+  const isConfirming = false;
+  const isSkip = false;
 
   // Canonical Dominant Decision Title
   const primaryDecisionTitle = isCalibrating
-    ? 'VIXY CONFIRMING'
+    ? 'VIXY CALIBRATING'
     : isUp
     ? 'VIXY LOCKED — UP'
     : isDown
     ? 'VIXY LOCKED — DOWN'
-    : isConfirming
-    ? 'VIXY CONFIRMING'
-    : 'VIXY SKIP';
+    : 'VIXY CALIBRATING';
 
   // Decision Aura Style
   const decisionAuraStyle = isUp
@@ -1345,7 +1343,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       : 'bg-slate-800 border border-slate-600 text-slate-300'
                   }`}>
                     <span className="w-1.5 h-1.5 rounded-full bg-current" />
-                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : isConfirming ? 'CONFIRMING' : 'SKIPPED'}</span>
+                    <span>{isUp ? 'LOCKED UP' : isDown ? 'LOCKED DOWN' : (isConfirming || isCalibrating) ? 'OBSERVING' : 'SKIPPED'}</span>
                   </span>
                 </div>
               </div>
@@ -1359,7 +1357,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 
                 <div className="flex flex-wrap items-center gap-3">
                   <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight font-sans drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
-                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : isConfirming ? 'text-cyan-300 text-glow-cyan' : 'text-slate-200'
+                    isUp ? 'text-[#00FF88] text-glow-emerald' : isDown ? 'text-[#FF3B30] text-glow-rose' : (isConfirming || isCalibrating) ? 'text-cyan-300 text-glow-cyan' : 'text-slate-200'
                   }`}>
                     {primaryDecisionTitle}
                   </h1>
@@ -1369,7 +1367,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       ? 'bg-[#00FF88]/15 border-[#00FF88]/50 text-[#00FF88]'
                       : isDown
                       ? 'bg-[#FF3B30]/15 border-[#FF3B30]/50 text-[#FF3B30]'
-                      : isConfirming
+                      : (isConfirming || isCalibrating)
                       ? 'bg-cyan-500/15 border-cyan-400/50 text-cyan-300'
                       : continuousInference.protectionDecision.lateCycleProtectionActive
                       ? 'bg-amber-500/20 border-amber-400/60 text-amber-300 animate-pulse'
@@ -1379,11 +1377,11 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       ? '▲ BUY YES / UP'
                       : isDown
                       ? '▼ BUY NO / DOWN'
-                      : isConfirming
+                      : (isConfirming || isCalibrating)
                       ? '⚡ SCANNING CONFLUENCE'
                       : continuousInference.protectionDecision.lateCycleProtectionActive
                       ? '🛡️ LATE-CYCLE PROTECTION (≤ 5:00)'
-                      : '🛡️ CAPITAL PRESERVED — INSUFFICIENT EDGE'}
+                      : (isCalibrating ? '⚡ AWAITING SIGNAL' : '🛡️ CAPITAL PRESERVED — INSUFFICIENT EDGE')}
                   </span>
                 </div>
               </div>
@@ -1402,8 +1400,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     ? `VIXY locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation while Guardian risk remains clear (${continuousInference.gemini.contradictionScore}% conflict).`
                     : isDown
                     ? `VIXY locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${confidence}% conviction. Heavy ask absorption and bearish supertrend resistance trigger high-probability downward delta targeting.`
-                    : isConfirming
-                    ? `VIXY is actively evaluating market microstructure for cycle ${cycleId}. Scanning 10-factor evidence confluence and order book imbalance before authorizing hard lock.`
+                    : isCalibrating
+                    ? `VIXY is continuously observing live market conditions for cycle ${cycleId}. Awaiting a high-conviction setup. Scanning multi-factor evidence confluence and order book imbalance before authorizing hard lock.`
                     : continuousInference.protectionDecision.lateCycleProtectionActive
                     ? `VIXY hard 5-minute time gate active (${Math.floor(timeRemainingSec / 60)}m ${timeRemainingSec % 60}s remaining). Late entries are blocked to prevent theta decay and execution slippage. Capital preserved.`
                     : `VIXY capital preservation engine elected to SKIP this 15M cycle. ${continuousInference.protectionDecision.skipReasonTitle || 'Insufficient directional confluence'} (${continuousInference.gemini.contradictionScore}% conflict, ${continuousInference.gemini.reversalRisk}% reversal risk). Capital preserved.`}

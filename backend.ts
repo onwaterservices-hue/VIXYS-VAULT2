@@ -16034,6 +16034,12 @@ async function startServer() {
     updateDiscordDiagnosticsMetrics().catch(console.error);
   }, 6e4);
   AutomationScheduler.startScheduler();
+
+  // SELF-PING TO PREVENT CLOUD RUN FROM SLEEPING
+  setInterval(() => {
+    fetch(`http://localhost:${PORT}/api/live-engine/health`).catch(()=>{});
+    fetch(`https://ais-pre-jaykgbpizhmicd5s6v3kng-703042285146.us-east1.run.app/api/live-engine/health`).catch(()=>{});
+  }, 45000);
   app.all("/api/*", (req, res) => {
     res
       .status(404)
