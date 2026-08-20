@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Search, X, TrendingUp, Sparkles, Sliders, Shield, Zap, ArrowRight } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
+import { resolveCanonicalAsset } from '../services/market/cryptoUniverseRegistry';
 
 interface SmartSearchModalProps {
   isOpen: boolean;
@@ -42,11 +43,16 @@ export const SmartSearchModal: React.FC<SmartSearchModalProps> = ({
   if (!isOpen) return null;
 
   const assets = Object.values(ASSET_DATABASE);
-  const filteredAssets = assets.filter(
-    (a) =>
-      a.symbol.toLowerCase().includes(query.toLowerCase()) ||
-      a.name.toLowerCase().includes(query.toLowerCase())
-  );
+  const qLower = query.toLowerCase().trim();
+  const filteredAssets = assets.filter((a) => {
+    if (!qLower) return true;
+    if (a.symbol.toLowerCase().includes(qLower)) return true;
+    if (a.name.toLowerCase().includes(qLower)) return true;
+    const canonical = resolveCanonicalAsset(a.symbol);
+    if (canonical.assetId.includes(qLower)) return true;
+    if (canonical.exchangeSymbols.some(s => s.toLowerCase().includes(qLower))) return true;
+    return false;
+  });
 
   const navigationItems = [
     { label: 'Live Dashboard', tab: 'terminal', icon: Zap },
