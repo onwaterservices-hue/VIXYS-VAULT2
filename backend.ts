@@ -35,7 +35,7 @@ webhookSecretPresent: ${Boolean(webhookSecret)}`)}__name(logStripeDiagnosticMode
              
              // Persist to Vixy Vault Learning Storage in Firestore
              if (db) {
-                const { doc, setDoc } = require("firebase/firestore");
+                /* using top-level doc, setDoc */
                 setDoc(doc(db, "decision_outcomes", outcomePayload.cycleId), outcomePayload, { merge: true }).catch(err => console.warn("[VIXY_VAULT] Failed to save outcome to Firestore:", err?.message));
              }
              console.log(`[VIXY_VAULT_LEARNING] Settled cycle ${outcomePayload.cycleId} recorded to cloud learning engine. Outcome: ${outcomePayload.settlementOutcome}`);
@@ -332,7 +332,7 @@ app.get("/api/signal/learning-metrics", async (req, res) => {
   let heartbeatData = null;
   if (db) {
     try {
-      const { doc, getDoc } = require("firebase/firestore");
+      /* using top-level doc, getDoc */
       const hbSnap = await getDoc(doc(db, "vixy_engine_heartbeat", "current"));
       if (hbSnap.exists()) heartbeatData = hbSnap.data();
     } catch(e) {}

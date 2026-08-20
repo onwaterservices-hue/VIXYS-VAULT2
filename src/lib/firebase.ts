@@ -5,11 +5,11 @@ import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
-// Configure Firestore with robust long-polling auto-detection to prevent idle gRPC stream cancellation warnings
+// Configure Firestore with robust long-polling to prevent idle gRPC stream cancellation warnings and RST_STREAM resets
 let firestoreDb;
 try {
   firestoreDb = initializeFirestore(app, {
-    experimentalAutoDetectLongPolling: true,
+    experimentalForceLongPolling: true,
   }, firebaseConfig.firestoreDatabaseId);
 } catch {
   firestoreDb = getFirestore(app, firebaseConfig.firestoreDatabaseId);
