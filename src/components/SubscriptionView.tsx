@@ -46,7 +46,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   authState,
   onOpenAuth,
 }) => {
-  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('annual');
+  const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
   const [selectedPlanToBuy, setSelectedPlanToBuy] = useState<'STARTER' | 'PRO' | 'ELITE'>('PRO');
   const [cardNumber, setCardNumber] = useState<string>('4242 •••• •••• 4242');
   const [expiry, setExpiry] = useState<string>('12/28');
@@ -496,27 +496,31 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
       {/* Header Banner & Monthly / Annual Toggle */}
       <div className="text-center space-y-4 max-w-3xl mx-auto font-mono">
-        <div className="inline-flex items-center gap-2 p-2 bg-[#120B28] border border-purple-500/40 rounded-2xl text-xs shadow-xl">
+        <div className="inline-flex items-center gap-3 p-2 bg-gradient-to-r from-[#0d0421] to-[#150a30] border-2 border-purple-500/30 rounded-3xl text-xs shadow-[0_0_35px_rgba(139,92,246,0.15)] shadow-purple-950/80 backdrop-blur-md relative overflow-hidden">
           <button
             onClick={() => setBillingInterval('monthly')}
-            className={`px-6 py-2.5 rounded-xl font-bold transition-all ${
+            className={`relative px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all duration-300 cursor-pointer active:scale-95 ${
               billingInterval === 'monthly'
-                ? 'bg-purple-950 text-white shadow border border-purple-500/50 font-black'
-                : 'text-purple-300/60 hover:text-white'
+                ? 'bg-gradient-to-r from-[#21074a] to-[#360875] text-white border-2 border-white ring-2 ring-blue-500 ring-offset-1 ring-offset-[#0d0421] shadow-[0_0_15px_rgba(59,130,246,0.6)] font-black'
+                : 'text-purple-300/50 hover:text-purple-100 font-bold'
             }`}
           >
             Monthly Billing
           </button>
           <button
             onClick={() => setBillingInterval('annual')}
-            className={`px-6 py-2.5 rounded-xl font-bold transition-all flex items-center gap-2.5 ${
+            className={`relative px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all duration-300 cursor-pointer active:scale-95 flex items-center gap-2.5 ${
               billingInterval === 'annual'
-                ? 'bg-purple-600 text-white shadow shadow-purple-600/40 font-black border border-purple-400/50'
-                : 'text-purple-300/60 hover:text-white'
+                ? 'bg-gradient-to-r from-[#21074a] to-[#360875] text-white border-2 border-white ring-2 ring-blue-500 ring-offset-1 ring-offset-[#0d0421] shadow-[0_0_15px_rgba(59,130,246,0.6)] font-black'
+                : 'text-purple-300/50 hover:text-purple-100 font-bold'
             }`}
           >
             <span>Annual Billing</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#0B061A] text-purple-300 font-extrabold border border-purple-400/30">
+            <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black border transition-all ${
+              billingInterval === 'annual'
+                ? 'bg-[#0B061A] text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+                : 'bg-[#0B061A]/40 text-purple-400/60 border-purple-500/20'
+            }`}>
               SAVE 20%
             </span>
           </button>
