@@ -14013,6 +14013,28 @@ function seedInitialUsers() {
       verificationStatus: "VERIFIED",
       passwordHash: hashPassword("Kol061931193"),
     },
+    {
+      id: "usr_beebeebets_yahoo_com",
+      email: "beebeebets@yahoo.com",
+      name: "beebeebets",
+      role: "USER",
+      subscription: "NONE",
+      status: "ACTIVE",
+      joined: "2026-08-19",
+      verificationStatus: "VERIFIED",
+      passwordHash: hashPassword("Harper108#"),
+    },
+    {
+      id: "usr_beebeebets_yahoo",
+      email: "beebeebets@yahoo",
+      name: "beebeebets",
+      role: "USER",
+      subscription: "NONE",
+      status: "ACTIVE",
+      joined: "2026-08-19",
+      verificationStatus: "VERIFIED",
+      passwordHash: hashPassword("Harper108#"),
+    },
   ];
   seedUsers.forEach((seed) => {
     if (!seed.email) return;
@@ -14132,6 +14154,19 @@ function seedInitialUsers() {
       });
     }
   });
+  const beeDayPass = {
+    entitlementId: `dp_beebeebets_${Date.now()}`,
+    userId: "usr_beebeebets_yahoo_com",
+    email: "beebeebets@yahoo.com",
+    status: "ACTIVE",
+    startedAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 72 * 3600 * 1000).toISOString(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  userDayPasses.set("beebeebets@yahoo.com", beeDayPass);
+  userDayPasses.set("beebeebets@yahoo", beeDayPass);
+  userDayPasses.set("usr_beebeebets_yahoo_com", beeDayPass);
   savePersistentStore();
 }
 __name(seedInitialUsers, "seedInitialUsers");
