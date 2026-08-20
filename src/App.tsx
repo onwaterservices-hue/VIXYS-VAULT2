@@ -169,10 +169,22 @@ export default function App() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stripeStatus = params.get('stripe_status');
+    const sessionId = params.get('session_id');
     
-    if (stripeStatus === 'success') {
+    if (stripeStatus === 'success' || sessionId) {
       setIsVerifyingPayment(true);
       
+      const userEmail = authState.user?.email || localStorage.getItem('vixy_user_email') || '';
+      const userId = authState.user?.id || '';
+
+      if (sessionId && userEmail) {
+        fetch('/api/auth/restore-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-user-email': userEmail, 'x-user-uid': userId },
+          body: JSON.stringify({ email: userEmail, uid: userId, stripeSessionId: sessionId }),
+        }).catch(() => {});
+      }
+
       let attempts = 0;
       const pollInterval = setInterval(async () => {
         attempts++;
@@ -186,18 +198,18 @@ export default function App() {
         }
         
         try {
-          // Use the entitlements API since it accurately returns dayPass
-          const userId = authState.user.id || '';
-          const res = await fetch(`/api/entitlements?email=${encodeURIComponent(authState.user.email)}&userId=${encodeURIComponent(userId)}`);
+          // Use the entitlements API since it accurately returns dayPass and all subscription tiers
+          const curUserId = authState.user.id || '';
+          const res = await fetch(`/api/entitlements?email=${encodeURIComponent(authState.user.email)}&userId=${encodeURIComponent(curUserId)}`);
           if (res.ok) {
             const ent = await res.json();
-            if (ent.dayPass?.active || ent.status === 'active' || ent.plan === 'ELITE_QUANT' || ent.plan === 'PRO_QUANT' || ent.plan === 'DAY_PASS') {
+            if (ent.dayPass?.active || ent.status === 'active' || ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'PRO_QUANT' || ent.plan === 'PRO' || ent.plan === 'STARTER' || ent.plan === 'DAY_PASS') {
               clearInterval(pollInterval);
               setPaymentVerificationText('PAYMENT VERIFIED');
               
               // Also eagerly update the UI state
               setDayPassInfo(ent.dayPass || { active: true, secondsRemaining: 86400 });
-              setUserRole('PRO');
+              setUserRole(ent.entitlements?.canAccessAdminPanel ? 'ADMIN' : 'PRO');
               setTerminalAccessGranted(true);
               
               setTimeout(() => {

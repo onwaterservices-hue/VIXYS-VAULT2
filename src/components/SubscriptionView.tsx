@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
-import { getEntitlementsApi, createDayPassCheckoutApi } from '../services/api';
+import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi } from '../services/api';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -170,27 +170,37 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       setIsVerifyingWebhook(true);
       setWebhookVerificationStatus('Connecting to Stripe & verifying webhook signature with Firestore...');
 
+      const userEmail = authState?.user?.email;
+      const userId = authState?.user?.id;
+
+      // Eagerly trigger reconciliation if sessionId is present
+      if (sessionId || userEmail) {
+        restoreAccessApi({
+          email: userEmail,
+          uid: userId,
+          stripeSessionId: sessionId || undefined,
+        }).catch(() => {});
+      }
+
       let attempts = 0;
       const pollInterval = setInterval(async () => {
         attempts++;
         try {
-          const userEmail = authState?.user?.email;
-          const userId = authState?.user?.id;
           const ent = await getEntitlementsApi(userEmail, userId);
           
-          if (ent && (ent.stripeVerified || ent.status === 'active')) {
+          if (ent && (ent.stripeVerified || ent.status === 'active' || ent.plan !== 'NONE' || ent.dayPass?.active)) {
             clearInterval(pollInterval);
             setIsVerifyingWebhook(false);
-            const planKey = ent.plan === 'ELITE_QUANT' ? 'ELITE' : (ent.plan === 'PRO_QUANT' ? 'PRO' : 'STARTER');
+            const planKey = (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE') ? 'ELITE' : ((ent.plan === 'PRO_QUANT' || ent.plan === 'PRO') ? 'PRO' : 'STARTER');
             setSubscription({
               plan: planKey,
               status: 'active',
-              renewalDate: '30 days from today',
+              renewalDate: ent.dayPass?.active ? '24 Hours Pass' : (ent.billing === 'YEARLY' ? '1 year from today' : '30 days from today'),
               paymentMethod: 'Stripe Credit Card',
               billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
             });
-            setUserRole(ent.entitlements.canAccessAdminPanel ? 'ADMIN' : 'PRO');
-            setSuccessMessage(`Stripe Payment Verified! Entitlements unlocked for ${ent.plan.replace('_', ' ')}.`);
+            setUserRole(ent.entitlements?.canAccessAdminPanel ? 'ADMIN' : 'PRO');
+            setSuccessMessage(`Stripe Payment Verified! Entitlements unlocked for ${planKey === 'ELITE' ? 'VIXY VAULT ELITE QUANT' : planKey}.`);
             setWebhookVerificationStatus('');
             window.history.replaceState({}, document.title, window.location.pathname);
           } else if (attempts >= 8) {
