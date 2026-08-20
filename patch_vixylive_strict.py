@@ -1,4 +1,9 @@
-import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
+import os
+
+with open("src/components/VixyLiveView.tsx", "r") as f:
+    original_content = f.read()
+
+new_content = """import React, { useState, useEffect, useRef, Component, ErrorInfo, ReactNode } from 'react';
 import {
   Activity, Zap, ShieldCheck, TrendingUp, TrendingDown, ArrowRight,
   CheckCircle2, Radio, Layers, BarChart3, Info, RefreshCw, Compass,
@@ -52,23 +57,19 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Refs for change detection & absolute reset
+  // Refs for change detection & hysteresis
   const prevContractIdRef = useRef<string>('');
   const lastLockUpTime = useRef<number>(0);
   const lastLockDownTime = useRef<number>(0);
-  const lastStateRef = useRef<AuthoritativeState>('CALIBRATING');
-  const prevValidityRef = useRef<number>(0);
 
-  // Hard Reset on Contract Rollover
+  // Clear tracking on new contract
   if (canonical15m.contractId && canonical15m.contractId !== prevContractIdRef.current) {
     prevContractIdRef.current = canonical15m.contractId;
     lastLockUpTime.current = 0;
     lastLockDownTime.current = 0;
-    lastStateRef.current = 'CALIBRATING';
-    prevValidityRef.current = 0;
   }
 
-  const dataAgeMs = Math.max(0, now - localUpdatedAt);
+  const dataAgeMs = now - localUpdatedAt;
   const isStale = dataAgeMs >= 10000;
   const isSyncing = dataAgeMs >= 3000 && dataAgeMs < 10000;
   
@@ -112,7 +113,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
   const pUpPct = Math.round(rawUp * 100);
   const pDownPct = Math.round(rawDown * 100);
 
-  // GATES - strictly preserved
+  // VIXY LIVE State Machine & Composite Lock Gates
   const MIN_CONFIDENCE = 70;
   const MAX_REVERSAL_RISK = 35;
   const MIN_LOCK_QUALITY = 75;
@@ -137,100 +138,47 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
     canonical15m.evidenceAlignment >= MIN_EVIDENCE_ALIGNMENT &&
     !isStale;
 
-  const getMissingGateReason = (c: typeof canonical15m) => {
-    if (c.confidence < MIN_CONFIDENCE) return `Confidence at ${c.confidence}%, awaiting ≥${MIN_CONFIDENCE}%`;
-    if (c.lockScore < MIN_LOCK_QUALITY) return `Lock quality at ${c.lockScore}, awaiting ≥${MIN_LOCK_QUALITY}`;
-    if (c.temporalStability < MIN_TEMPORAL_STABILITY) return `Temporal stability at ${c.temporalStability}%, awaiting ≥${MIN_TEMPORAL_STABILITY}%`;
-    if (c.evidenceAlignment < MIN_EVIDENCE_ALIGNMENT) return `Evidence confluence at ${c.evidenceAlignment}/10, awaiting ≥${MIN_EVIDENCE_ALIGNMENT}`;
-    if (c.reversalRisk >= MAX_REVERSAL_RISK) return `Reversal risk elevated at ${c.reversalRisk}% (limit <${MAX_REVERSAL_RISK}%)`;
-    return `Gathering final directional confirmation...`;
-  };
-
   let authoritativeState: AuthoritativeState = 'CALIBRATING';
-  let stateReason = 'Monitoring raw telemetry...';
   
-  const wasLockedUp = lastStateRef.current === 'LOCKED UP';
-  const wasLockedDown = lastStateRef.current === 'LOCKED DOWN';
-
-  if (isStale) {
-    authoritativeState = 'REASSESSING';
-    stateReason = 'DATA STALE - Telemetry stream interrupted.';
-  } else if (canonical15m.currentState === 'SETTLED') {
+  if (canonical15m.currentState === 'SETTLED') {
     authoritativeState = 'RESOLVED';
-    stateReason = 'Contract cycle settled.';
-  } else if (canonical15m.protection?.protectionStatus === 'VETOED') {
+  } else if (isStale) {
     authoritativeState = 'REASSESSING';
-    stateReason = 'Protection engine vetoed current directional thesis.';
-  } else if ((900 - localRemainingSec) < 15) { 
+  } else if (canonical15m.protection?.protectionStatus === 'VETOED' || canonical15m.reversalRisk > 45) {
+    authoritativeState = 'REASSESSING';
+  } else if ((900 - localRemainingSec) < 15) { // First 15 seconds of a cycle
     authoritativeState = 'CALIBRATING';
-    stateReason = 'New contract cycle initialized. Calibrating baseline...';
   } else {
     if (meetsUpGate) {
+      // Hysteresis: Prevent instant whipsaw lock (must wait at least 5s after losing opposite lock)
       if (Date.now() - lastLockDownTime.current < 5000) {
         authoritativeState = 'REASSESSING';
-        stateReason = 'Debouncing previous DOWN lock reversal...';
       } else {
         authoritativeState = 'LOCKED UP';
-        stateReason = 'All composite lock conditions met. Live monitoring active.';
       }
     } else if (meetsDownGate) {
       if (Date.now() - lastLockUpTime.current < 5000) {
         authoritativeState = 'REASSESSING';
-        stateReason = 'Debouncing previous UP lock reversal...';
       } else {
         authoritativeState = 'LOCKED DOWN';
-        stateReason = 'All composite lock conditions met. Live monitoring active.';
       }
     } else {
-      // Not fully locked. Were we just locked? Drop to reassessing before full flip.
-      if (wasLockedUp && canonical15m.direction === 'UP') {
-        authoritativeState = 'REASSESSING';
-        stateReason = getMissingGateReason(canonical15m);
-      } else if (wasLockedDown && canonical15m.direction === 'DOWN') {
-        authoritativeState = 'REASSESSING';
-        stateReason = getMissingGateReason(canonical15m);
+      // Fallbacks if not fully locked
+      if (canonical15m.direction === 'UP' || rawUp > rawDown + 0.05) {
+        authoritativeState = 'BUILDING UP';
+      } else if (canonical15m.direction === 'DOWN' || rawDown > rawUp + 0.05) {
+        authoritativeState = 'BUILDING DOWN';
       } else {
-        if (canonical15m.direction === 'UP' || rawUp > rawDown + 0.05) {
-          authoritativeState = 'BUILDING UP';
-          stateReason = getMissingGateReason(canonical15m);
-        } else if (canonical15m.direction === 'DOWN' || rawDown > rawUp + 0.05) {
-          authoritativeState = 'BUILDING DOWN';
-          stateReason = getMissingGateReason(canonical15m);
-        } else {
-          authoritativeState = 'CALIBRATING';
-          stateReason = 'Evaluating mixed or neutral market signals...';
-        }
+        authoritativeState = 'CALIBRATING';
       }
     }
   }
 
-  // Lock Validity calculation
-  let lockValidity = 0;
-  if (authoritativeState.includes('LOCKED')) {
-    const confScore = Math.min(100, (canonical15m.confidence / 100) * 100);
-    const qualScore = Math.min(100, (canonical15m.lockScore / 100) * 100);
-    const tempScore = Math.min(100, (canonical15m.temporalStability / 100) * 100);
-    const evScore = Math.min(100, (canonical15m.evidenceAlignment / 10) * 100);
-    const revScore = Math.max(0, 100 - canonical15m.reversalRisk);
-    lockValidity = Math.round((confScore + qualScore + tempScore + evScore + revScore) / 5);
-  }
-
-  const [trend, setTrend] = useState<'STABLE' | 'STRENGTHENING' | 'WEAKENING'>('STABLE');
-  
+  // Update tracking refs on successful lock
   useEffect(() => {
     if (authoritativeState === 'LOCKED UP') lastLockUpTime.current = Date.now();
     if (authoritativeState === 'LOCKED DOWN') lastLockDownTime.current = Date.now();
-    lastStateRef.current = authoritativeState;
   }, [authoritativeState]);
-
-  useEffect(() => {
-    if (authoritativeState.includes('LOCKED')) {
-      if (lockValidity > prevValidityRef.current && prevValidityRef.current > 0) setTrend('STRENGTHENING');
-      else if (lockValidity < prevValidityRef.current) setTrend('WEAKENING');
-      else setTrend('STABLE');
-      prevValidityRef.current = lockValidity;
-    }
-  }, [lockValidity, authoritativeState]);
 
   const isUp = authoritativeState === 'LOCKED UP' || authoritativeState === 'BUILDING UP';
   const isDown = authoritativeState === 'LOCKED DOWN' || authoritativeState === 'BUILDING DOWN';
@@ -243,6 +191,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
 
   const strikeDistance = canonical15m.openStrike && canonical15m.currentSpot ? (canonical15m.currentSpot - canonical15m.openStrike).toFixed(2) : '---';
   
+  // Synthesize evidence factors for display safely
   const evidenceList = (canonical15m.gemini?.evidenceFactors && canonical15m.gemini.evidenceFactors.length > 0)
     ? canonical15m.gemini.evidenceFactors.slice(0, 5)
     : [
@@ -270,9 +219,9 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
         <div className="flex items-center gap-4 text-[10px]">
           <span className="text-purple-400 flex items-center gap-1.5">
             ENGINE HEARTBEAT: 
-            {isStale ? <span className="text-rose-400 font-bold flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> STALE</span> :
+            {isStale ? <span className="text-rose-400 font-bold flex items-center gap-1"><ShieldAlert className="w-3 h-3" /> STALE DATA</span> :
              isSyncing ? <span className="text-amber-400 font-bold flex items-center gap-1"><RefreshCw className="w-3 h-3 animate-spin" /> SYNCING</span> :
-             <span className="text-emerald-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> LIVE</span>}
+             <span className="text-emerald-400 font-bold flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> HEALTHY</span>}
           </span>
           <span className="text-purple-400">LAST UPDATE: <span className="text-white font-bold">{(dataAgeMs / 1000).toFixed(1)}s AGO</span></span>
           <span className={`font-bold px-2 py-0.5 rounded ${isFinal5 ? 'bg-amber-500/20 text-amber-400' : 'bg-purple-500/20 text-purple-300'}`}>T-{localMins}:{localSecs.toString().padStart(2, '0')}</span>
@@ -301,49 +250,19 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
                   {authoritativeState === 'REASSESSING' && <><AlertTriangle className="w-10 h-10 animate-pulse text-amber-400" /> REASSESSING</>}
                   {authoritativeState === 'RESOLVED' && <><CheckCircle2 className="w-10 h-10" /> SETTLED</>}
                 </div>
-                
                 {authoritativeState.includes('LOCKED') && (
-                  <div className="mt-2 flex items-center gap-2 text-xs text-purple-300 font-mono font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    LIVE MONITORING
+                  <div className={`mt-5 bg-[#080414] p-4 rounded-xl border font-mono text-xs space-y-2.5 ${isUp ? 'border-emerald-500/40 text-emerald-400' : 'border-rose-500/40 text-rose-400'}`}>
+                    <div className="font-bold mb-3 text-white text-[10px] tracking-widest uppercase">LOCK AUTHORIZATION LOG:</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Confidence threshold passed (≥70%)</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Lock Quality verified (≥75)</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Evidence confluence passed</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Temporal stability confirmed (≥65%)</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Reversal risk acceptable (&lt;35%)</div>
+                    <div className="flex items-center gap-3"><CheckCircle2 className="w-3.5 h-3.5" /> Market data fresh</div>
                   </div>
                 )}
-
-                {/* DYNAMIC LOCK VALIDITY / SYSTEM REASON */}
-                {authoritativeState.includes('LOCKED') ? (
-                  <div className={`mt-5 bg-[#080414] p-5 rounded-xl border font-mono text-xs space-y-4 ${isUp ? 'border-emerald-500/40' : 'border-rose-500/40'}`}>
-                    <div>
-                      <div className="flex justify-between items-end mb-2">
-                        <span className={`font-bold tracking-widest uppercase ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          LOCK {trend}
-                        </span>
-                        <span className="text-xl font-black text-white">{lockValidity}% VALIDITY</span>
-                      </div>
-                      <div className="w-full bg-[#12072B] rounded-sm h-2.5 flex overflow-hidden border border-purple-900/50">
-                        <div className={`${isUp ? 'bg-emerald-400' : 'bg-rose-400'} h-full transition-all duration-700`} style={{ width: `${lockValidity}%` }}></div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-y-2 gap-x-6 text-[10px]">
-                      <div className="flex justify-between border-b border-purple-900/40 pb-1"><span className="text-purple-400">Confidence</span><span className="text-white font-bold">{canonical15m.confidence}%</span></div>
-                      <div className="flex justify-between border-b border-purple-900/40 pb-1"><span className="text-purple-400">Lock Quality</span><span className="text-white font-bold">{canonical15m.lockScore}</span></div>
-                      <div className="flex justify-between border-b border-purple-900/40 pb-1"><span className="text-purple-400">Temporal</span><span className="text-white font-bold">{canonical15m.temporalStability}%</span></div>
-                      <div className="flex justify-between border-b border-purple-900/40 pb-1"><span className="text-purple-400">Evidence</span><span className="text-white font-bold">{canonical15m.evidenceAlignment}/10</span></div>
-                      <div className="flex justify-between col-span-2 pt-0.5"><span className="text-purple-400">Reversal Risk</span><span className={`${canonical15m.reversalRisk < 35 ? 'text-emerald-400' : 'text-rose-400'} font-bold`}>{canonical15m.reversalRisk}%</span></div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mt-4 bg-[#080414] border border-purple-900/50 p-3 rounded-xl font-mono text-xs text-purple-300 flex items-start gap-2 shadow-inner">
-                    <Info className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="text-cyan-400 font-bold uppercase mr-2 tracking-widest">SYSTEM REASON:</span>
-                      {stateReason}
-                    </div>
-                  </div>
-                )}
-
                 {isFinal5 && (
-                  <div className="text-xs text-amber-400 font-mono mt-4 flex items-center gap-2 font-bold bg-amber-500/10 p-2.5 rounded-lg border border-amber-500/20 w-fit">
+                  <div className="text-xs text-amber-400 font-mono mt-4 flex items-center gap-2 font-bold bg-amber-500/10 p-2 rounded-lg border border-amber-500/20 w-fit">
                     <AlertTriangle className="w-4 h-4" /> FINAL 5:00 — ENHANCED MONITORING
                   </div>
                 )}
@@ -377,7 +296,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
               </h3>
               <div className="space-y-2">
                 {evidenceList.map((item, idx) => (
-                  <div key={item.id} className="bg-[#080414] p-3 rounded-xl border border-purple-900/40 flex items-start gap-4 transition-colors hover:border-purple-500/40">
+                  <div key={item.id} className="bg-[#080414] p-3 rounded-xl border border-purple-900/40 flex items-start gap-4">
                     <div className="text-purple-500 font-black font-mono text-xs w-6 mt-0.5">{(idx + 1).toString().padStart(2, '0')}</div>
                     <div className="flex-1 font-mono">
                       <div className="text-xs text-purple-300 mb-0.5">{item.name}</div>
@@ -395,7 +314,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
           </div>
         </div>
 
-        {/* 3. RIGHT PANEL (Thesis & Matrices) */}
+        {/* 3. RIGHT PANEL (Thesis & Matrices) (Right 5 Cols) */}
         <div className="lg:col-span-5 space-y-6">
           
           {/* VIXY THESIS METER */}
@@ -474,7 +393,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
                 { label: 'STRIKE DISTANCE', val: `${Number(strikeDistance) > 0 ? '+' : ''}$${strikeDistance}`, color: 'text-white' },
                 { label: 'LIQUIDITY', val: 'HEALTHY', color: 'text-emerald-400' },
               ].map((row, i) => (
-                <div key={i} className="flex justify-between items-center py-1.5 border-b border-purple-900/30 last:border-0 hover:bg-purple-900/10 transition-colors">
+                <div key={i} className="flex justify-between items-center py-1.5 border-b border-purple-900/30 last:border-0">
                   <span className="text-purple-400 w-32">{row.label}</span>
                   <span className={`font-bold ${row.color} text-right`}>{row.val}</span>
                 </div>
@@ -495,3 +414,9 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = (props) => {
     </VixyLiveErrorBoundary>
   );
 };
+"""
+
+with open("src/components/VixyLiveView.tsx", "w") as f:
+    f.write(new_content)
+
+print("VixyLiveView strictly patched with Composite Authorization!")
