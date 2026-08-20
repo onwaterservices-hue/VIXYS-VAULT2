@@ -330,7 +330,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               let stageName = 'BUILDING LOCK';
               if (isSkip) {
-                stageName = 'VIXY SKIP';
+                stageName = 'CALIBRATING';
               } else if (isLocked) {
                 stageName = 'LOCKED';
               } else if (liveState?.stage || liveState?.status) {
@@ -432,7 +432,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
                         {isSkip ? (
                           <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]">
-                            <Shield className="w-7 h-7 text-purple-300 animate-pulse" /> VIXY SKIP
+                            <Shield className="w-7 h-7 text-purple-300 animate-pulse" /> CALIBRATING
                           </span>
                         ) : isLocked ? (
                           isUpDir ? (
@@ -597,7 +597,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     <div className="font-black text-2xl tracking-tight">
                       {isNoTrade ? (
                         <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(168,85,247,0.8)]">
-                          <Shield className="w-6 h-6 text-purple-300" /> VIXY SKIP
+                          <Shield className="w-6 h-6 text-purple-300" /> CALIBRATING
                         </span>
                       ) : isUpDir ? (
                         <span className="text-emerald-400 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]">
@@ -814,7 +814,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">RECORDED DECISION</div>
                 <div className="text-2xl font-black flex items-center gap-2 font-mono">
                   {activeProvenance.status === 'SKIPPED' || activeProvenance.status === 'NO_TRADE' || activeProvenance.status === 'CRITICALLY_INVALIDATED' ? (
-                    <><Shield className="w-6 h-6 text-purple-400"/> VIXY SKIP</>
+                    <><Shield className="w-6 h-6 text-purple-400"/> CALIBRATING</>
                   ) : activeProvenance.direction === 'UP' ? (
                     <><ArrowUpRight className="w-7 h-7 text-emerald-400"/> BUY UP</>
                   ) : (

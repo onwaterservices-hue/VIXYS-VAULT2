@@ -490,7 +490,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white mt-1 flex items-center gap-3">
                 {authoritativeState === 'LOCKED — UP' && <span className="text-emerald-400 flex items-center gap-2"><CheckCircle2 className="w-8 h-8" /> LOCKED — UP</span>}
                 {authoritativeState === 'LOCKED — DOWN' && <span className="text-rose-400 flex items-center gap-2"><CheckCircle2 className="w-8 h-8" /> LOCKED — DOWN</span>}
-                {authoritativeState === 'SKIP — NO TRADE' && <span className="text-amber-400 flex items-center gap-2"><AlertTriangle className="w-8 h-8" /> SKIP — NO TRADE</span>}
+                {authoritativeState === 'SKIP — NO TRADE' && <span className="text-amber-400 flex items-center gap-2"><Activity className="w-8 h-8 animate-pulse" /> CALIBRATING...</span>}
                 {authoritativeState === 'PROTECTED' && <span className="text-cyan-400 flex items-center gap-2"><ShieldCheck className="w-8 h-8" /> PROTECTED (WATCH)</span>}
                 {authoritativeState === 'ANALYZING' && <span className="text-cyan-300 flex items-center gap-2"><Activity className="w-8 h-8 animate-pulse" /> OBSERVING...</span>}
               </div>
@@ -537,8 +537,8 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
               <div className="space-y-4">
                 <div className="bg-amber-950/30 border border-amber-500/40 p-4 rounded-2xl text-xs space-y-2 text-amber-200">
                   <div className="font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4" />
-                    <span>HARD SKIP ACTIVE — REASON FOR NO TRADE</span>
+                    <Activity className="w-4 h-4 animate-pulse" />
+                    <span>CALIBRATING ACTIVE — REASON FOR PROTECTION</span>
                   </div>
                   <p>• Cross-venue disagreement: Kalshi {kalshiProb}% vs Polymarket {polyProb}% UP</p>
                   <p>• Predictability score {predictabilityScore}/100 is below the required lock threshold.</p>
@@ -552,7 +552,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
                   </div>
                   <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60">
                     <div className="text-[10px] text-purple-400">Step 2 Guardian</div>
-                    <div className="text-rose-400 font-bold mt-1">FORCE SKIP (VETO)</div>
+                    <div className="text-rose-400 font-bold mt-1">FORCE CALIBRATION</div>
                   </div>
                   <div className="bg-[#080414] p-3 rounded-xl border border-purple-900/60">
                     <div className="text-[10px] text-purple-400">Agreement Score</div>
@@ -1074,7 +1074,7 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = ({
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">WIN RATE: {winRatePct}%</span>
-            <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">LOCKS: {totalWins} | SKIPS: {totalSkips}</span>
+            <span className="px-2.5 py-1 rounded-lg bg-cyan-500/20 text-cyan-300 border border-cyan-400/40">LOCKS: {totalWins} | CALIBRATIONS: {totalSkips}</span>
           </div>
         </div>
 

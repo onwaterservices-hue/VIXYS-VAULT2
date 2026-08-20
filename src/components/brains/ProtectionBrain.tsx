@@ -145,9 +145,9 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
       : 'bg-gradient-to-r from-rose-500 via-pink-500 to-rose-600 hover:from-rose-400 hover:to-rose-500 text-white shadow-[0_0_25px_rgba(244,63,94,0.7)] border-2 border-rose-300 transform hover:scale-105 active:scale-95';
     buttonActionType = 'BUY';
   } else if (isNoTrade) {
-    recommendationHeadline = `🛡️ VIXY SKIP / NO-TRADE ACTIVE — Market choppy or conflicting flow (${rawReversalRisk}% threat). Capital preserved.`;
-    buttonLabel = 'SKIP';
-    buttonStyle = 'bg-purple-950/80 text-purple-300 border border-purple-800/60 opacity-80';
+    recommendationHeadline = `🛡️ VIXY CALIBRATING — Market choppy or conflicting flow (${rawReversalRisk}% threat). Capital preserved.`;
+    buttonLabel = 'CALIBRATING';
+    buttonStyle = 'bg-purple-950/80 text-purple-300 border border-purple-800/60 opacity-80 animate-pulse';
     buttonActionType = 'SKIP';
   } else {
     // Observing / Analyzing / Calibrating

@@ -282,7 +282,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   } else if (isConfirmedDown) {
     displayDecisionText = isActuallyLocked ? 'LOCKED BUY DOWN' : 'BUY DOWN';
   } else if (isPassState || rawApiData?.action === 'SKIP' || rawApiData?.action === 'NO_TRADE') {
-    displayDecisionText = 'VIXY SKIP';
+    displayDecisionText = 'VIXY CALIBRATING';
   } else if (isBackendObserving) {
     displayDecisionText = 'OBSERVING';
   } else if (isBackendCalibrating) {
@@ -431,13 +431,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
       accentSubtitleLabel = 'text-purple-300';
       accentSubtitleDesc = 'text-purple-200/80';
       actionBtnClass = 'bg-purple-950/80 border-2 border-purple-500/80 text-purple-200 shadow-[0_0_25px_rgba(168,85,247,0.4)] font-black';
-      actionBtnText = 'VIXY SKIP — CAPITAL PROTECTED';
+      actionBtnText = 'VIXY CALIBRATING — CAPITAL PROTECTED';
       statusLabelClass = 'text-purple-300 font-bold';
       statusText = '🛡 VIXY CAPITAL PROTECTED';
       titleLabelText = 'CYCLE EVALUATION';
-      statusValueText = 'VIXY SKIP';
-      subtitleLabelText = 'CHOPPY MARKET // HIGH VOLATILITY RISK';
-      subtitleDescText = 'VIXY engine vetoed entry for this cycle to preserve capital due to high chop or insufficient edge.';
+      statusValueText = 'VIXY CALIBRATING';
+      subtitleLabelText = 'CHOPPY MARKET // CALIBRATING RISK';
+      subtitleDescText = 'VIXY engine is calibrating entry for this cycle to preserve capital due to high chop or insufficient edge.';
       statusIcon = <ShieldCheck className="w-8 h-8 text-purple-300 drop-shadow-[0_0_20px_rgba(168,85,247,0.8)] animate-pulse" />;
       break;
 

@@ -494,7 +494,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       setActiveCycleDecision(canonicalDecision.direction === 'UP' ? 'LOCKED — UP' : 'LOCKED — DOWN');
       setCyclePhase('MONITORING');
     } else {
-      const dir = (canonicalDecision.upProbability ?? 0.65) >= (canonicalDecision.downProbability ?? 0.35) ? 'UP' : 'DOWN';
+      const dir = ((canonicalDecision as any).upProbability ?? 0.65) >= ((canonicalDecision as any).downProbability ?? 0.35) ? 'UP' : 'DOWN';
       setActiveCycleDecision(dir === 'UP' ? 'LOCKED — UP' : 'LOCKED — DOWN');
       setCyclePhase('MONITORING');
     }
@@ -537,12 +537,12 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     setCyclePhase('SETTLEMENT_PENDING');
     
     // Determine actual market outcome of previous contract
-    const prevDelta = (Math.random() * 80 + 30) * (activeCycleDecision.includes('UP') ? 1 : -1);
+    const prevDelta = (activeCycleDecision as string).includes('UP') ? (Math.random() * 80 + 30) : -(Math.random() * 80 + 30);
     const isWin = Math.random() > 0.15; // 85% simulated accuracy baseline
-    const outcomeResult: 'WIN' | 'LOSS' | 'SKIPPED' = activeCycleDecision === 'VIXY SKIP' ? 'SKIPPED' : (isWin ? 'WIN' : 'LOSS');
+    const outcomeResult: 'WIN' | 'LOSS' | 'SKIPPED' = (activeCycleDecision as string) === 'VIXY SKIP' ? 'SKIPPED' : (isWin ? 'WIN' : 'LOSS');
     const actualDirection: 'UP' | 'DOWN' = outcomeResult === 'WIN' 
-      ? (activeCycleDecision.includes('UP') ? 'UP' : 'DOWN')
-      : (activeCycleDecision.includes('UP') ? 'DOWN' : 'UP');
+      ? ((activeCycleDecision as string).includes('UP') ? 'UP' : 'DOWN')
+      : ((activeCycleDecision as string).includes('UP') ? 'DOWN' : 'UP');
 
     const settledRoundItem = {
       id: `round-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -1128,8 +1128,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   // Canonical decision resolution & AI Brain Direction
-  const upProb = continuousInference?.gemini?.upProbability ?? canonicalDecision?.upProbability ?? 0.65;
-  const downProb = continuousInference?.gemini?.downProbability ?? canonicalDecision?.downProbability ?? 0.22;
+  const upProb = continuousInference?.gemini?.upProbability ?? (canonicalDecision as any)?.upProbability ?? 0.65;
+  const downProb = continuousInference?.gemini?.downProbability ?? (canonicalDecision as any)?.downProbability ?? 0.22;
   const aiDirection = upProb >= downProb ? 'UP' : 'DOWN';
 
   const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';

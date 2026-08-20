@@ -115,7 +115,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const primaryDecisionHeadline = isServerLocked
     ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
     : isNoTrade
-    ? 'VIXY SKIP'
+    ? 'VIXY CALIBRATING'
     : 'VIXY ANALYZING';
 
   // Sub-badge / Provisional Status Badge for Pre-Lock Analysis
@@ -353,7 +353,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             <div className="flex items-center gap-2 text-[8.5px] font-bold tracking-[0.15em] uppercase">
               <span className={`flex items-center gap-1 ${visualConfig.textClass}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${visualConfig.bgClass.replace('/10', '')} ${isServerLocked ? '' : 'animate-pulse'}`} style={{ backgroundColor: themeNeon }} />
-                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isNoTrade ? '● VIXY SKIP // CHOP GATE' : isObserving ? '● OBSERVING 15M CYCLE' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isQualifying ? '● QUALIFYING CONFLUENCE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
+                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isNoTrade ? '● VIXY CALIBRATING // CHOP DETECTION' : isObserving ? '● OBSERVING 15M CYCLE' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isQualifying ? '● QUALIFYING CONFLUENCE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
               </span>
               <span className="text-purple-700">|</span>
               <span className="text-slate-300">EXPIRY IN {timeRemainingFormatted}</span>
@@ -375,7 +375,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             ) : isNoTrade ? (
               <>
                 <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
-                <span>STATE: VIXY SKIP (PROTECTED)</span>
+                <span>STATE: VIXY CALIBRATING (PROTECTED)</span>
               </>
             ) : isServerLocked ? (
               <>
@@ -525,7 +525,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                 <>
                   <ShieldCheck className="w-7 h-7 text-purple-300 animate-pulse" />
                   <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">
-                    VIXY SKIP
+                    VIXY CALIBRATING
                   </span>
                 </>
               ) : isServerLocked ? (
@@ -717,20 +717,14 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
-                  <div className="text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">LOCK QUALITY</div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs font-black tracking-tight ${rawLockQuality >= 90 ? 'text-[#00FF9D]' : rawLockQuality >= 80 ? 'text-amber-300' : 'text-rose-400'}`}>
+                <div className="bg-gradient-to-b from-[#1c0c01]/90 to-[#03010a]/95 rounded-lg p-2 border-2 border-orange-500/80 shadow-[0_0_15px_rgba(249,115,22,0.4)] animate-pulse">
+                  <div className="text-orange-400 font-black uppercase text-[8px] tracking-widest">LOCK QUALITY</div>
+                  <div className="flex items-center justify-between mt-0.5">
+                    <span className="text-xs font-black tracking-tight text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]">
                       {rawLockQuality}/100
                     </span>
-                    <span className={`text-[7.5px] px-1 py-0.2 rounded font-bold uppercase border ${
-                      lockQualityTier === 'HIGH_CONVICTION' 
-                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50' 
-                        : lockQualityTier === 'QUALIFIED' 
-                        ? 'bg-amber-950/80 text-amber-300 border-amber-500/50' 
-                        : 'bg-purple-950/80 text-purple-300 border-purple-800/50'
-                    }`}>
-                      {lockQualityTier === 'HIGH_CONVICTION' ? 'HIGH' : lockQualityTier === 'QUALIFIED' ? 'QUAL' : 'SKIP'}
+                    <span className="text-[7.5px] px-1 py-0.2 rounded font-black uppercase border bg-orange-950/80 text-orange-300 border-orange-500/50">
+                      {lockQualityTier === 'HIGH_CONVICTION' ? 'HIGH' : lockQualityTier === 'QUALIFIED' ? 'QUAL' : 'CALIB'}
                     </span>
                   </div>
                 </div>
