@@ -14479,6 +14479,10 @@ async function loadPersistentStoreAsync() {
       }
     } catch (e) {
       console.warn("[Firestore] Notice fetching calibration_state:", e);
+      const rawMsg = e?.message || String(e);
+      if (rawMsg.includes("RESOURCE_EXHAUSTED") || rawMsg.includes("Quota limit exceeded") || rawMsg.includes("code 8") || rawMsg.includes("429")) {
+        handleFirestoreWriteError(e, "calibration_state/fetch");
+      }
     }
     try {
       const seqSnap = await getDoc(doc(db, "system_state", "vixy_sequence"));
