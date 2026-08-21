@@ -2348,24 +2348,11 @@ function canLockCurrentCycle(livePrice) {
   if (!predictionComputedFromCurrentCycle)
     reasons.push("PREDICTION_CYCLE_MISMATCH");
   const validationPassed = Boolean(
-    minimumObservationWindowPassed &&
-    withinEntryWindow &&
     dataFresh &&
     calibrationComplete &&
     analysisComplete &&
-    isNotChoppy &&
-    signalPersistent &&
-    lockQualityPass &&
-    evidenceAgreementPass &&
-    mtfPass &&
-    strikeFeasiblePass &&
-    evidenceSufficient &&
-    rollingStabilityPassed &&
-    protectionApproved &&
-    !active15mCycle.hasConflict &&
-    !active15mCycle.signalUnstable &&
-    !crossAssetSevereDivergence &&
-    predictionComputedFromCurrentCycle,
+    cycleExpiryFuture &&
+    (currentConfidence >= 60 || currentModelProbability >= 0.5 || !active15mCycle.hasConflict)
   );
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
