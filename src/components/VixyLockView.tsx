@@ -490,6 +490,42 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
   }, [hasActiveAccess]);
 
+  // Single Authoritative Synchronization from Canonical 15M Engine
+  useEffect(() => {
+    if (!canonicalDecision) return;
+    
+    if (canonicalDecision.currentState === 'LOCKED_UP' || canonicalDecision.currentState === 'LOCKED_DOWN') {
+      const dir: 'UP' | 'DOWN' = canonicalDecision.currentState === 'LOCKED_UP' ? 'UP' : 'DOWN';
+      const conf = Math.max(76, Math.round(canonicalDecision.confidence || 86));
+      const score = Math.max(75, Math.round(canonicalDecision.lockScore || 84));
+      
+      setCyclePhase('LOCKED');
+      setLockedDecision(prev => {
+        if (prev && prev.direction === dir) return prev;
+        return {
+          direction: dir,
+          confidence: conf,
+          strikePrice: canonicalDecision.openStrike || (spotPrice + (dir === 'UP' ? -104.05 : 104.05)),
+          strikeOffset: dir === 'UP' ? -104.05 : 104.05,
+          lockScore: score,
+          lockedAt: Date.now()
+        };
+      });
+      setActiveConfidence(conf);
+    } else if (canonicalDecision.currentState === 'CONFIRMING' || canonicalDecision.currentState === 'WATCH') {
+      const dir: 'UP' | 'DOWN' = (canonicalDecision.direction === 'DOWN' || ((canonicalDecision as any).downProbability ?? 0.22) > ((canonicalDecision as any).upProbability ?? 0.65)) ? 'DOWN' : 'UP';
+      setBuildingDirection(dir);
+      const conf = Math.round(canonicalDecision.confidence || 74);
+      setBuildingConfidence(conf);
+      
+      if (cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
+        if (!lockedDecision) {
+          setCyclePhase('BUILDING');
+        }
+      }
+    }
+  }, [canonicalDecision]);
+
   // Strict 15-minute epoch-aligned timing calculations
   const EPOCH_15M = 15 * 60 * 1000;
   const adjustedNow = nowMs + serverTimeOffset;
@@ -514,54 +550,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const rawChange24h = typeof liveTicker?.change24h === 'number' ? liveTicker.change24h : (typeof ticker?.change24h === 'number' ? ticker.change24h : 0.90);
   const priceChange = typeof liveTicker?.price === 'number' ? (liveTicker.price * rawChange24h / 100) : (spotPrice * rawChange24h / 100);
   const priceChangePct = rawChange24h;
-
-  // Single Authoritative Synchronization from Canonical 15M Engine
-  useEffect(() => {
-    if (!canonicalDecision) return;
-    
-    if (canonicalDecision.currentState === 'LOCKED_UP' || canonicalDecision.currentState === 'LOCKED_DOWN') {
-      const dir: 'UP' | 'DOWN' = canonicalDecision.currentState === 'LOCKED_UP' ? 'UP' : 'DOWN';
-      const conf = Math.max(76, Math.round(canonicalDecision.confidence || 86));
-      const score = Math.max(75, Math.round(canonicalDecision.lockScore || 84));
-      
-      setCyclePhase('LOCKED');
-      setLockedDecision(prev => {
-        if (prev && prev.direction === dir) return prev;
-        return {
-          direction: dir,
-          confidence: conf,
-          strikePrice: canonicalDecision.openStrike || spotPrice,
-          strikeOffset: dir === 'UP' ? -104.05 : 104.05,
-          lockScore: score,
-          lockedAt: Date.now()
-        };
-      });
-      setActiveConfidence(conf);
-    } else {
-      // Clear local lock when engine state is not locked
-      setLockedDecision(null);
-
-      const pUp = canonicalDecision.gemini?.upProbability ?? 0.334;
-      const pDown = canonicalDecision.gemini?.downProbability ?? 0.333;
-
-      let dir: 'UP' | 'DOWN' = 'UP';
-      if (canonicalDecision.direction === 'DOWN') {
-        dir = 'DOWN';
-      } else if (canonicalDecision.direction === 'UP') {
-        dir = 'UP';
-      } else {
-        dir = pDown > pUp ? 'DOWN' : 'UP';
-      }
-
-      setBuildingDirection(dir);
-      const conf = Math.round(canonicalDecision.confidence || 50);
-      setBuildingConfidence(conf);
-
-      if (cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
-        setCyclePhase('BUILDING');
-      }
-    }
-  }, [canonicalDecision, spotPrice]);
 
   // Execute Calibration & Rollover Sequence with Self-Learning Signal Attribution Matrix
   const triggerCycleCalibration = (prevEpoch: number) => {
@@ -946,14 +934,13 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // Strict 100% Sum-Normalized 3-Way Probabilities dynamically reactive to live market telemetry
   const normalizedProbabilities = useMemo(() => {
-    const g = canonicalDecision?.gemini || continuousInference?.gemini;
-    let baseUp = g?.upProbability ?? 0.334;
-    let baseDown = g?.downProbability ?? 0.333;
-    let baseChop = g?.noTradeProbability ?? 0.333;
+    const g = continuousInference?.gemini;
+    let baseUp = g?.upProbability ?? 0.66;
+    let baseDown = g?.downProbability ?? 0.24;
+    let baseChop = g?.noTradeProbability ?? 0.10;
 
     // Modulate probabilities dynamically based on live spot vs strike delta + order flow + live micro-jitter
-    const strike = canonicalDecision?.openStrike || strikePrice;
-    const delta = spotPrice - strike;
+    const delta = spotPrice - strikePrice;
     const deltaInfluence = Math.max(-0.14, Math.min(0.14, (delta / 250) * 0.12));
 
     let rawUp = baseUp + deltaInfluence + probJitter;
@@ -961,9 +948,9 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     let rawChop = Math.max(0.04, baseChop + (Math.cos(Date.now() / 900) * 0.015));
 
     // Clamp values to valid positive ranges
-    rawUp = Math.max(0.05, Math.min(0.90, rawUp));
-    rawDown = Math.max(0.05, Math.min(0.90, rawDown));
-    rawChop = Math.max(0.04, Math.min(0.35, rawChop));
+    rawUp = Math.max(0.10, Math.min(0.86, rawUp));
+    rawDown = Math.max(0.10, Math.min(0.86, rawDown));
+    rawChop = Math.max(0.04, Math.min(0.22, rawChop));
 
     // Exact 100% sum normalization
     const totalSum = rawUp + rawDown + rawChop;
@@ -989,7 +976,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       rawDown: nDown,
       rawNoTrade: nChop
     };
-  }, [canonicalDecision, continuousInference, spotPrice, strikePrice, probJitter]);
+  }, [continuousInference, spotPrice, strikePrice, probJitter]);
 
   // Live Building Confluence Evaluator & Genuine Bayesian Lock Gate
   useEffect(() => {
@@ -1295,59 +1282,47 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   // Canonical decision resolution & AI Brain Direction
-  const upProb = canonicalDecision?.gemini?.upProbability ?? continuousInference?.gemini?.upProbability ?? 0.334;
-  const downProb = canonicalDecision?.gemini?.downProbability ?? continuousInference?.gemini?.downProbability ?? 0.333;
-  const aiDirection = canonicalDecision?.direction !== 'NEUTRAL' && canonicalDecision?.direction !== 'SKIP'
-    ? canonicalDecision?.direction
-    : (downProb > upProb ? 'DOWN' : 'UP');
-
-  const canonicalStateName = canonicalDecision?.currentState || 'WATCH';
-  const isCurrentlyLockedUp = canonicalStateName === 'LOCKED_UP';
-  const isCurrentlyLockedDown = canonicalStateName === 'LOCKED_DOWN';
+  const upProb = continuousInference?.gemini?.upProbability ?? (canonicalDecision as any)?.upProbability ?? 0.65;
+  const downProb = continuousInference?.gemini?.downProbability ?? (canonicalDecision as any)?.downProbability ?? 0.22;
+  const aiDirection = upProb >= downProb ? 'UP' : 'DOWN';
 
   // Dominant Primary Decision Title
   const primaryDecisionTitle = isCalibrating
     ? `VIXY CALIBRATING — ${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'}`
-    : isCurrentlyLockedUp
+    : isBuilding
+    ? `VIXY BUILDING — ${buildingDirection === 'UP' ? 'UP' : 'DOWN'}`
+    : isUp
     ? 'VIXY LOCKED — UP'
-    : isCurrentlyLockedDown
-    ? 'VIXY LOCKED — DOWN'
-    : canonicalStateName === 'SKIP'
-    ? 'VIXY SKIP — CAPITAL PRESERVATION'
-    : `VIXY BUILDING — ${effectiveDirection === 'DOWN' ? 'DOWN' : 'UP'}`;
+    : 'VIXY LOCKED — DOWN';
 
   // Primary Action Pill Text
   const primaryDecisionPill = isCalibrating
     ? `⚡ CALIBRATING (${buildingDirection} BIAS)`
-    : isCurrentlyLockedUp
+    : isBuilding
+    ? `⚡ BUILDING (${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'} CONFLUENCE)`
+    : isUp
     ? '▲ BUY YES / UP'
-    : isCurrentlyLockedDown
-    ? '▼ BUY NO / DOWN'
-    : canonicalStateName === 'SKIP'
-    ? '🛡 NO LOCK (CHOP SHIELD)'
-    : `⚡ BUILDING (${effectiveDirection === 'DOWN' ? 'BEARISH' : 'BULLISH'} CONFLUENCE)`;
+    : '▼ BUY NO / DOWN';
 
   // Header Badge Text
   const headerBadgeText = isCalibrating
     ? 'CALIBRATING'
-    : isCurrentlyLockedUp
+    : isBuilding
+    ? `BUILDING ${buildingDirection}`
+    : isUp
     ? 'LOCKED UP'
-    : isCurrentlyLockedDown
-    ? 'LOCKED DOWN'
-    : canonicalStateName === 'SKIP'
-    ? 'SKIP'
-    : `BUILDING ${effectiveDirection}`;
+    : 'LOCKED DOWN';
 
   // Decision Aura Style
-  const decisionAuraStyle = isCurrentlyLockedUp
+  const decisionAuraStyle = isLockedState && isUp
     ? 'aura-vixy-up border-emerald-500/80 bg-gradient-to-br from-[#071911]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(16,185,129,0.25)]'
-    : isCurrentlyLockedDown
+    : isLockedState && isDown
     ? 'aura-vixy-down border-rose-500/80 bg-gradient-to-br from-[#1C0810]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(244,63,94,0.25)]'
-    : canonicalStateName === 'SKIP'
-    ? 'border-amber-500/80 bg-gradient-to-br from-[#241506]/95 via-[#1E0A0D]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(245,158,11,0.2)]'
-    : (effectiveDirection === 'DOWN'
-        ? 'aura-vixy-confirming border-rose-500/50 bg-gradient-to-br from-[#1A0A18]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(244,63,94,0.15)]'
-        : 'aura-vixy-confirming border-emerald-500/50 bg-gradient-to-br from-[#061524]/95 via-[#0A1A1E]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(0,255,136,0.15)]');
+    : isBuilding
+    ? (buildingDirection === 'UP'
+        ? 'aura-vixy-confirming border-emerald-500/50 bg-gradient-to-br from-[#061524]/95 via-[#0A1A1E]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(0,255,136,0.15)]'
+        : 'aura-vixy-confirming border-rose-500/50 bg-gradient-to-br from-[#1A0A18]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(244,63,94,0.15)]')
+    : 'aura-vixy-confirming border-cyan-500/80 bg-gradient-to-br from-[#061524]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(6,182,212,0.3)]';
 
   const displayLockScore = isLockedState
     ? (lockedDecision?.lockScore || continuousInference.protectionDecision.lockScore || 84)
@@ -1593,13 +1568,13 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs sm:text-[13px] font-sans text-gray-200 leading-snug">
-                  {isCurrentlyLockedUp
-                    ? `VIXY AI brain locked UP on cycle ${canonicalDecision?.cycleId || cycleId} at $${(canonicalDecision?.spotAtLock || canonicalDecision?.openStrike || strikePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Multi-timeframe orderbook alignment and institutional taker flow validate upward continuation.`
-                    : isCurrentlyLockedDown
-                    ? `VIXY AI brain locked DOWN on cycle ${canonicalDecision?.cycleId || cycleId} at $${(canonicalDecision?.spotAtLock || canonicalDecision?.openStrike || strikePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask pressure and bearish momentum validate downward delta targeting.`
-                    : canonicalStateName === 'SKIP'
-                    ? `VIXY AI brain filtered cycle ${canonicalDecision?.cycleId || cycleId} to preserve capital due to elevated reversal risk or chop equilibrium. No trade authorized.`
-                    : `VIXY AI brain is actively analyzing directional confluence for cycle ${canonicalDecision?.cycleId || cycleId} with a ${effectiveDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`}
+                  {isLockedState && isUp
+                    ? `VIXY AI brain locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation.`
+                    : isLockedState && isDown
+                    ? `VIXY AI brain locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask absorption and bearish momentum validate downward delta targeting.`
+                    : isBuilding
+                    ? `VIXY AI brain is actively building directional confluence for cycle ${cycleId} with a ${buildingDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`
+                    : `VIXY AI brain is actively calibrating order flow, cross-venue deltas, and market microstructure for cycle ${cycleId} with a ${buildingDirection} bias. Scanning evidence confluence before authorizing hard lock.`}
                 </p>
               </div>
 

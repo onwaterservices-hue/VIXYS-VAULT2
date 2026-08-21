@@ -100,16 +100,11 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const [strikePrice, setStrikePrice] = useState<number>(selectedStrike || (is1Hour ? 64200.0 : 64150.0));
   const [strikeCrossed, setStrikeCrossed] = useState<boolean>(false);
 
-  // Keep strike price aligned and bounded to current price
   useEffect(() => {
-    if (selectedStrike && Number.isFinite(selectedStrike) && currentPrice > 100) {
-      if (Math.abs(selectedStrike - currentPrice) / currentPrice < 0.05) {
-        setStrikePrice(selectedStrike);
-      } else {
-        setStrikePrice(Math.round((currentPrice - 10) * 10) / 10);
-      }
+    if (selectedStrike && Number.isFinite(selectedStrike)) {
+      setStrikePrice(selectedStrike);
     }
-  }, [selectedStrike, currentPrice]);
+  }, [selectedStrike]);
 
   // AI Probability Dynamics & Neural Timeline State
   const [momentumDelta, setMomentumDelta] = useState<string>(is1Hour ? '▲ +6.8% (15m)' : '▲ +3.4% (2m)');
@@ -382,26 +377,20 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         rawMinP = Math.min(rawMinP, currentPrice);
         rawMaxP = Math.max(rawMaxP, currentPrice);
       }
-
-      // Only include strike price in scale bounds if it is within 2.5% of current price
-      if (strikePrice > 100 && currentPrice > 100) {
-        const diffRatio = Math.abs(strikePrice - currentPrice) / currentPrice;
-        if (diffRatio <= 0.025) {
-          rawMinP = Math.min(rawMinP, strikePrice);
-          rawMaxP = Math.max(rawMaxP, strikePrice);
-        }
+      if (strikePrice > 100) {
+        rawMinP = Math.min(rawMinP, strikePrice);
+        rawMaxP = Math.max(rawMaxP, strikePrice);
       }
 
       let priceSpan = rawMaxP - rawMinP;
-      const minSpan = is1Hour ? 60 : 20;
-      if (priceSpan < minSpan) {
+      if (priceSpan < 16) {
         const mid = (rawMaxP + rawMinP) / 2;
-        rawMinP = mid - minSpan / 2;
-        rawMaxP = mid + minSpan / 2;
-        priceSpan = minSpan;
+        rawMinP = mid - 8;
+        rawMaxP = mid + 8;
+        priceSpan = 16;
       }
 
-      const pad = priceSpan * 0.15;
+      const pad = priceSpan * 0.14;
       const minP = rawMinP - pad;
       const maxP = rawMaxP + pad;
       const totalRange = maxP - minP || 10;
@@ -410,8 +399,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const candleWidth = chartWidth / validCandles.length;
 
       const getY = (price: number) => {
-        const clampedPrice = Math.max(minP, Math.min(maxP, price));
-        return height - 32 - ((clampedPrice - minP) / totalRange) * (height - 65);
+        return height - 32 - ((price - minP) / totalRange) * (height - 65);
       };
 
       // 2. Volume Bars at Bottom (Taker Buy vs Taker Sell alpha)
@@ -469,8 +457,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
       const lastY = getY(lastCandle.close);
       const coneWidth = 72;
-      const upperY = getY(lastCandle.close + (upProbability / 100) * (is1Hour ? 45 : 18));
-      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * (is1Hour ? 45 : 18));
+      const upperY = getY(lastCandle.close + (upProbability / 100) * 18);
+      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * 18);
       const midY = (upperY + lowerY) / 2;
 
       ctx.beginPath();
@@ -525,7 +513,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.font = 'bold 9px "JetBrains Mono", monospace';
       ctx.fillText(`${upProbability}% CONE`, lastX + coneWidth, midY + 3);
 
-      // 5. Render High-Definition OHLC Candlesticks with Vivid Radiant Glow
+      // 5. Render High-Definition OHLC Candlesticks
       validCandles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const openY = getY(c.open);
@@ -535,28 +523,22 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         const isUp = c.close >= c.open;
         const color = isUp ? '#00FF88' : '#FF3B30';
-        const glowColor = isUp ? 'rgba(0, 255, 136, 0.9)' : 'rgba(255, 59, 48, 0.9)';
 
-        // High-Low Wick with Neon Glow
-        ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 8;
+        // High-Low Wick
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 1.3;
         ctx.beginPath();
         ctx.moveTo(x, highY);
         ctx.lineTo(x, lowY);
         ctx.stroke();
 
-        // Candle Body with Radiant Neon Aura
+        // Candle Body
         const bodyTop = Math.min(openY, closeY);
-        const bodyHeight = Math.max(2.5, Math.abs(openY - closeY));
-        const bodyW = Math.max(4, candleWidth * 0.68);
+        const bodyHeight = Math.max(2, Math.abs(openY - closeY));
+        const bodyW = Math.max(3.5, candleWidth * 0.65);
 
-        ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 12;
         ctx.fillStyle = color;
         ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
-        ctx.shadowBlur = 0; // reset shadow for next elements
 
         // Entry Marker on Breakthrough Bars
         const isBreakout = isUp && i >= 5 && c.close > Math.max(...validCandles.slice(i - 5, i).map((x) => x.high));

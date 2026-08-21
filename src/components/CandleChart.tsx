@@ -952,18 +952,17 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               />
             )}
 
-            {/* Wick with Glowing Aura */}
+            {/* Wick */}
             <line
               x1={cx}
               y1={y(c.high)}
               x2={cx}
               y2={y(c.low)}
               stroke={color}
-              strokeWidth={isHoveredCandle ? "2.2" : "1.2"}
+              strokeWidth={isHoveredCandle ? "2" : "1"}
               strokeOpacity="0.9"
-              filter={isBull ? 'url(#glow-green)' : 'url(#glow-red)'}
             />
-            {/* Body with Glowing Aura */}
+            {/* Body */}
             <rect
               x={cx - candleWidth / 2}
               y={topY}
@@ -973,7 +972,6 @@ export const CandleChart: React.FC<CandleChartProps> = ({
               stroke={color}
               strokeWidth="1.2"
               rx="1.5"
-              filter={isBull ? 'url(#glow-green)' : 'url(#glow-red)'}
               className="transition-all duration-100"
             />
 
