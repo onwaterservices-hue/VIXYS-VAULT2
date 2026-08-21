@@ -28,7 +28,7 @@ import {
   recordLiveProductionLock,
   recordLiveDecisionJournalEntry
 } from '../intelligence/learningAndCalibrationStore';
-import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, addDoc, getDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
 // --- EPOCH UTILITIES ---
@@ -218,18 +218,49 @@ export function createInitial15mDecision(params?: {
 }
 
 /**
- * Returns the current active Canonical Decision object
+ * Returns the current active Canonical Decision object, reading from Firestore if possible to support serverless persistence
  */
-export function getCanonical15mDecision(): Canonical15mDecision {
+export async function getCanonical15mDecision(): Promise<Canonical15mDecision> {
   const now = Date.now();
   const { cycleId } = get15mEpochBoundaries(now);
 
+  // 1. Try to load the active cycle state from Firestore first (for multi-process and serverless sync)
+  try {
+    if (db) {
+      const snap = await getDoc(doc(db, 'active_cycle_lock', 'current_15m'));
+      if (snap.exists()) {
+        const docData = snap.data() as Canonical15mDecision;
+        if (docData && docData.cycleId === cycleId) {
+          // Document exists and is for the current cycle
+          const timeRemainingSec = Math.max(0, Math.floor((docData.cycleEnd - now) / 1000));
+          docData.timeRemainingSec = timeRemainingSec;
+          docData.minutesRemaining = timeRemainingSec / 60;
+          docData.secondsRemaining = timeRemainingSec;
+          canonicalState = docData;
+          return canonicalState;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[CanonicalEngine] Firestore read error in getCanonical15mDecision, falling back to memory/init:', err);
+  }
+
+  // 2. Fallback to memory or create initial decision
   if (!canonicalState || canonicalState.cycleId !== cycleId) {
     if (canonicalState && canonicalState.cycleId !== cycleId && canonicalState.settlementStatus === 'PENDING') {
-      settleCanonical15mCycle(canonicalState.currentSpot, now);
+      await settleCanonical15mCycle(canonicalState.currentSpot, now);
     }
     canonicalState = createInitial15mDecision({ nowMs: now });
     console.log(`[C15M:ROLLOVER] Initialized new cycle ${cycleId} at ${new Date(now).toISOString()}`);
+
+    // Persist newly initialized cycle to Firestore so all nodes agree
+    try {
+      if (db) {
+        await setDoc(doc(db, 'active_cycle_lock', 'current_15m'), JSON.parse(JSON.stringify(canonicalState)), { merge: true });
+      }
+    } catch (err) {
+      console.warn('[CanonicalEngine] Firestore write error in getCanonical15mDecision init:', err);
+    }
   }
 
   const timeRemainingSec = Math.max(0, Math.floor((canonicalState.cycleEnd - now) / 1000));

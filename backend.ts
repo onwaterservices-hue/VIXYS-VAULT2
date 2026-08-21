@@ -12901,9 +12901,9 @@ app.all("/api/cron/engine-tick", async (req, res) => {
       });
   }
 });
-app.get("/api/vixy/15m/current", (req, res) => {
+app.get("/api/vixy/15m/current", async (req, res) => {
   try {
-    const decision = getCanonical15mDecision();
+    const decision = await getCanonical15mDecision();
     res.json(decision);
   } catch (err) {
     res
