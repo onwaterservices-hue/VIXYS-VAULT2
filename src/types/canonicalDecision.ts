@@ -202,6 +202,17 @@ export interface Canonical15mDecision {
   stateVersion: number;       // Monotonically increasing version counter
   updatedAt: string;          // ISO timestamp
   serverSource: string;       // "VIXY_CANONICAL_ENGINE_v6"
+
+  // 8. Optional Extensions for Explainer & Telemetry
+  learning?: {
+    calibrationActive?: boolean;
+    note?: string;
+  };
+  telemetry?: {
+    klines?: string;
+    orderflow?: string;
+    trades?: string;
+  };
 }
 
 /**

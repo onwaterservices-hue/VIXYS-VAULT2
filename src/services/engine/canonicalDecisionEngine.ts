@@ -217,32 +217,44 @@ export function createInitial15mDecision(params?: {
   };
 }
 
+let firestoreQuotaExceededUntil = 0;
+
 /**
- * Returns the current active Canonical Decision object, reading from Firestore if possible to support serverless persistence
+ * Returns the current active Canonical Decision object, reading from Firestore if possible, falling back gracefully to in-memory state on quota exhaustion
  */
 export async function getCanonical15mDecision(): Promise<Canonical15mDecision> {
   const now = Date.now();
   const { cycleId } = get15mEpochBoundaries(now);
 
-  // 1. Try to load the active cycle state from Firestore first (for multi-process and serverless sync)
-  try {
-    if (db) {
-      const snap = await getDoc(doc(db, 'active_cycle_lock', 'current_15m'));
-      if (snap.exists()) {
-        const docData = snap.data() as Canonical15mDecision;
-        if (docData && docData.cycleId === cycleId) {
-          // Document exists and is for the current cycle
-          const timeRemainingSec = Math.max(0, Math.floor((docData.cycleEnd - now) / 1000));
-          docData.timeRemainingSec = timeRemainingSec;
-          docData.minutesRemaining = timeRemainingSec / 60;
-          docData.secondsRemaining = timeRemainingSec;
-          canonicalState = docData;
-          return canonicalState;
+  // If we recently hit quota limits, bypass Firestore reads temporarily (5 minutes cooldown)
+  const isQuotaLocked = Date.now() < firestoreQuotaExceededUntil;
+
+  // 1. Try to load the active cycle state from Firestore first (unless quota locked)
+  if (!isQuotaLocked) {
+    try {
+      if (db) {
+        const snap = await getDoc(doc(db, 'active_cycle_lock', 'current_15m'));
+        if (snap.exists()) {
+          const docData = snap.data() as Canonical15mDecision;
+          if (docData && docData.cycleId === cycleId) {
+            const timeRemainingSec = Math.max(0, Math.floor((docData.cycleEnd - now) / 1000));
+            docData.timeRemainingSec = timeRemainingSec;
+            docData.minutesRemaining = timeRemainingSec / 60;
+            docData.secondsRemaining = timeRemainingSec;
+            canonicalState = docData;
+            return canonicalState;
+          }
         }
       }
+    } catch (err: any) {
+      const errStr = String(err?.message || err);
+      if (errStr.includes('Quota') || errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED')) {
+        firestoreQuotaExceededUntil = Date.now() + 5 * 60 * 1000; // 5 min backoff
+        console.warn('[CanonicalEngine] Firestore quota exceeded. Disabling Firestore cycle sync for 5 minutes, using fast in-memory engine.');
+      } else {
+        console.warn('[CanonicalEngine] Firestore read warning in getCanonical15mDecision:', errStr);
+      }
     }
-  } catch (err) {
-    console.warn('[CanonicalEngine] Firestore read error in getCanonical15mDecision, falling back to memory/init:', err);
   }
 
   // 2. Fallback to memory or create initial decision
@@ -253,13 +265,18 @@ export async function getCanonical15mDecision(): Promise<Canonical15mDecision> {
     canonicalState = createInitial15mDecision({ nowMs: now });
     console.log(`[C15M:ROLLOVER] Initialized new cycle ${cycleId} at ${new Date(now).toISOString()}`);
 
-    // Persist newly initialized cycle to Firestore so all nodes agree
-    try {
-      if (db) {
-        await setDoc(doc(db, 'active_cycle_lock', 'current_15m'), JSON.parse(JSON.stringify(canonicalState)), { merge: true });
+    // Persist newly initialized cycle to Firestore so all nodes agree (only if quota not locked)
+    if (!isQuotaLocked) {
+      try {
+        if (db) {
+          await setDoc(doc(db, 'active_cycle_lock', 'current_15m'), JSON.parse(JSON.stringify(canonicalState)), { merge: true });
+        }
+      } catch (err: any) {
+        const errStr = String(err?.message || err);
+        if (errStr.includes('Quota') || errStr.includes('quota') || errStr.includes('RESOURCE_EXHAUSTED')) {
+          firestoreQuotaExceededUntil = Date.now() + 5 * 60 * 1000;
+        }
       }
-    } catch (err) {
-      console.warn('[CanonicalEngine] Firestore write error in getCanonical15mDecision init:', err);
     }
   }
 

@@ -5033,17 +5033,89 @@ app.post(
           message:
             "Free trials are permanently disabled and removed on VIXY Vault.",
         });
-    } else if (action === "grant_plan" || action === "grant_premium") {
-      const nextTier =
-        tier === "ELITE_PASS" || tier === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
-      user.subscription = nextTier;
-      user.status = "ACTIVE";
-      user.grantSource = "MANUAL_GRANT";
-      addServerAuditLog(
-        "ADMIN",
-        "GRANT_PREMIUM",
-        `Granted ${nextTier} to ${user.email}`,
+function grantUserPlan(user, tierInput) {
+  const nextTier =
+    tierInput === "ELITE_PASS" || tierInput === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
+  user.subscription = nextTier;
+  user.status = "ACTIVE";
+  user.grantSource = "MANUAL_GRANT";
+  if (user.email) {
+    const cleanEmail = user.email.toLowerCase();
+    const subRecord = userSubscriptions.get(cleanEmail) || {
+      email: cleanEmail,
+      role: user.role,
+      plan: nextTier,
+      status: "ACTIVE",
+      updatedAt: new Date().toISOString(),
+    };
+    subRecord.plan = nextTier;
+    subRecord.status = "ACTIVE";
+    subRecord.role = user.role;
+    subRecord.updatedAt = new Date().toISOString();
+    userSubscriptions.set(cleanEmail, subRecord);
+  }
+  savePersistentStore();
+  persistSingleUser(user).catch(() => {});
+  addServerAuditLog(
+    "ADMIN",
+    "GRANT_PREMIUM",
+    `Granted ${nextTier} to ${user.email}`,
+  );
+  return nextTier;
+}
+__name(grantUserPlan, "grantUserPlan");
+
+// One-time batch manual grant route
+app.post(
+  "/api/admin/users/batch-manual-grant",
+  requireRole(["OWNER"]),
+  (req, res) => {
+    const MANUAL_GRANTS = [
+      { email: "allanyahirpi@gmail.com", tier: "ELITE_PASS" },
+      { email: "vksminhkaka@gmail.com", tier: "PRO_PASS" },
+      { email: "ogershey@gmail.com", tier: "PRO_PASS" },
+      { email: "onwaterservices@gmail.com", tier: "ELITE_PASS" },
+      { email: "zar45157@gmail.com", tier: "ELITE_PASS" },
+      { email: "luisvelascop@icloud.com", tier: "ELITE_PASS" },
+      { email: "maxo1011@outlook.com", tier: "PRO_PASS" },
+      { email: "adriiiansf27@gmail.com", tier: "PRO_PASS" },
+      { email: "uisvelascop@icloud.com", tier: "PRO_PASS" },
+      { email: "quant.sarah@optionstrade.io", tier: "ELITE_PASS" },
+      { email: "trader.alex@gmail.com", tier: "PRO_PASS" },
+      { email: "ashtreyboa@gmail.com", tier: "PRO_PASS" },
+      { email: "loyal2none956@gmail.com", tier: "PRO_PASS" },
+      { email: "azar45157@gmail.com", tier: "ELITE_PASS" },
+    ];
+
+    const updated = [];
+    const skipped = [];
+
+    for (const grant of MANUAL_GRANTS) {
+      const cleanTargetEmail = grant.email.toLowerCase();
+      const user = serverUsers.find(
+        (u) => u.email && u.email.toLowerCase() === cleanTargetEmail
       );
+      if (user) {
+        const grantedTier = grantUserPlan(user, grant.tier);
+        updated.push({ email: grant.email, tier: grantedTier });
+      } else {
+        skipped.push({ email: grant.email, reason: "USER_NOT_FOUND" });
+      }
+    }
+
+    res.json({
+      success: true,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      updated,
+      skipped,
+      timestamp: new Date().toISOString(),
+    });
+  },
+);
+
+    } else if (action === "grant_plan" || action === "grant_premium") {
+      const nextTier = grantUserPlan(user, tier);
       return res.json({
         success: true,
         message: `Granted ${nextTier} to ${user.email}`,
@@ -10817,7 +10889,7 @@ app.get(
     let signalState = active15mCycle.stage;
     let signalConfirmed = false;
     if (isLocked && !active15mCycle.isCriticallyInvalidated) {
-      effectiveDirection = lockedDirection === "DOWN" ? "DOWN" : "UP";
+      effectiveDirection = lockedDirection === "DOWN" ? "DOWN" : lockedDirection === "UP" ? "UP" : "NEUTRAL";
       decision = `LOCKED \u2014 ${lockedDecision || (effectiveDirection === "UP" ? "BUY UP" : "BUY DOWN")}`;
       displayConf = lockedConfidence || currentConfidence;
       displayProb = lockedProbability || currentModelProbability;
