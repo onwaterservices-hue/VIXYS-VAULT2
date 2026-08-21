@@ -110,8 +110,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   // ELITE / PRO / Active subscription -> UNLOCKED
   // Discord-linked + Guild member -> UNLOCKED
   const apiUserAccess = (liveApiData as any)?.userAccess;
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin) || apiUserAccess?.role === 'ADMIN' || apiUserAccess?.accessState === 'ADMIN';
-  const isPaidUser = isUserAdmin || userRole === 'PRO' || apiUserAccess?.accessState === 'SUBSCRIBED' || apiUserAccess?.accessState === 'AUTHORIZED';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin) || apiUserAccess?.role === 'ADMIN' || apiUserAccess?.accessState === 'ADMIN';
+  const isPaidUser = isUserAdmin || ['PRO', 'ELITE', 'OWNER', 'STARTER', 'DAY_PASS'].includes(userRole) || apiUserAccess?.accessState === 'SUBSCRIBED' || apiUserAccess?.accessState === 'AUTHORIZED';
   const isDiscordVerified = Boolean(alertSettings?.discordLinked) && Boolean(alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified || (apiUserAccess && !apiUserAccess.locked);
   const [isRefreshingAi, setIsRefreshingAi] = useState<boolean>(false);

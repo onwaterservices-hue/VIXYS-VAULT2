@@ -24,8 +24,8 @@ export const CompareView: React.FC<CompareViewProps> = ({
   const configB = ASSET_DATABASE[assetB] || ASSET_DATABASE.ETH;
 
   const allAssets = Object.keys(ASSET_DATABASE);
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(userRole);
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 

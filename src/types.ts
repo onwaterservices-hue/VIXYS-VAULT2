@@ -162,8 +162,37 @@ export interface AlertSettings {
   emailAddress: string;
 }
 
+export type CanonicalPlanType = 'DAY_PASS' | 'STARTER' | 'PRO_QUANT' | 'ELITE_QUANT' | 'NONE';
+export type CanonicalRoleType = 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER';
+export type CanonicalAccessSource = 'NONE' | 'DAY_PASS' | 'SUBSCRIPTION' | 'ADMIN' | 'OWNER';
+
+export interface CanonicalEntitlementFlags {
+  terminal: boolean;
+  starter: boolean;
+  proQuant: boolean;
+  eliteQuant: boolean;
+  scalping15s: boolean;
+  canAccessProDesks: boolean;
+  canAccessAdminPanel: boolean;
+}
+
+export interface CanonicalAccess {
+  authenticated: boolean;
+  role: CanonicalRoleType;
+  access: boolean;
+  product: CanonicalPlanType;
+  plan?: string;
+  accessSource: CanonicalAccessSource;
+  source?: string;
+  expiresAt: string | null;
+  entitlements: CanonicalEntitlementFlags;
+  entitlement?: {
+    terminal: boolean;
+  };
+}
+
 export interface UserSubscription {
-  plan: 'DAY_PASS' | 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS' | 'ELITE_QUANT' | 'VIXY VAULT ELITE QUANT';
+  plan: 'DAY_PASS' | 'STARTER' | 'PRO' | 'ELITE' | 'ELITE_PASS' | 'ELITE_QUANT' | 'VIXY VAULT ELITE QUANT' | 'PRO_QUANT' | 'NONE';
   status: 'active' | 'canceling' | 'expired' | 'past_due' | 'inactive';
   renewalDate: string;
   paymentMethod: string;
@@ -199,15 +228,18 @@ export interface AuthState {
   isAuthenticated: boolean;
   user: {
     id: string;
+    uid?: string;
     email: string;
     name: string;
-    role: 'UNPAID' | 'PRO' | 'ADMIN' | 'OWNER';
+    role: CanonicalRoleType | string;
+    product?: CanonicalPlanType | string;
     apiKey?: string;
     joinedDate: string;
     discordId?: string;
     discordTag?: string;
     discordLinked?: boolean;
     subscription?: string;
+    canonicalAccess?: CanonicalAccess;
   } | null;
 }
 

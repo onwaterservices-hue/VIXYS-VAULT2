@@ -86,8 +86,8 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const [timeRemainingMin, setTimeRemainingMin] = useState<number>(24);
   const [timeRemainingSec, setTimeRemainingSec] = useState<number>(18);
 
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
@@ -112,6 +112,73 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
   // Live Spot Price
   const spotPrice = Number(spotPrices?.[selectedAsset]?.price) || Number(spotPrices?.['BTC']?.price) || Number(ticker?.price) || 64174.83;
+
+  const step = useMemo(() => {
+    if (selectedAsset === 'ETH') return 10;
+    if (selectedAsset === 'SOL') return 1;
+    if (selectedAsset === 'XRP') return 0.02;
+    return 100; // BTC
+  }, [selectedAsset]);
+
+  // Strike matrix configurations dynamically calculated from live spot price
+  const strikeOptions: StrikeOption[] = useMemo(() => {
+    const p = spotPrice > 0 ? spotPrice : (selectedAsset === 'ETH' ? 3480 : selectedAsset === 'SOL' ? 185 : 64200);
+    const lowStrike = Math.max(step, Math.floor((p * 0.996) / step) * step);
+    const midStrike = Math.max(step, Math.round((p * 1.001) / step) * step);
+    const highStrike = Math.max(step, Math.ceil((p * 1.006) / step) * step);
+
+    return [
+      {
+        strike: lowStrike,
+        category: 'HIGH_PROBABILITY',
+        categoryLabel: 'HIGH PROBABILITY',
+        badgeColor: 'bg-emerald-500/20 text-[#00FF88] border-emerald-400/40 shadow-[0_0_12px_rgba(0,255,136,0.3)]',
+        yesOdds: 88,
+        noOdds: 12,
+        winProb: 94,
+        edge: 18.2,
+        description: 'Deep In-The-Money Anchor • Conservative Systematic Yield',
+        payoutMultiplier: '1.14x',
+        riskReward: 'Low Vol Drag',
+      },
+      {
+        strike: midStrike,
+        category: 'OPTIMAL_ENTRY',
+        categoryLabel: 'OPTIMAL ENTRY',
+        badgeColor: 'bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.6)] font-black tracking-wide',
+        yesOdds: 72,
+        noOdds: 28,
+        winProb: 88,
+        edge: 14.2,
+        description: 'At-The-Money Sweet Spot • Highest Risk-Adjusted Kelly Edge',
+        payoutMultiplier: '1.39x',
+        riskReward: 'Max Alpha Ratio',
+      },
+      {
+        strike: highStrike,
+        category: 'STRETCH_TARGET',
+        categoryLabel: 'STRETCH TARGET',
+        badgeColor: 'bg-purple-600/30 text-purple-200 border border-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]',
+        yesOdds: 34,
+        noOdds: 66,
+        winProb: 42,
+        edge: 8.5,
+        description: 'Out-Of-The-Money Asymmetric • High Payout Momentum Target',
+        payoutMultiplier: '2.94x',
+        riskReward: 'Asymmetric 3:1',
+      },
+    ];
+  }, [spotPrice, selectedAsset, step]);
+
+  // Sync selected strike when asset or strikes change
+  useEffect(() => {
+    if (strikeOptions.length > 1) {
+      const match = strikeOptions.find((s) => s.strike === selectedStrike);
+      if (!match) {
+        setSelectedStrike(strikeOptions[1].strike);
+      }
+    }
+  }, [strikeOptions, selectedStrike]);
 
   useEffect(() => {
     let active = true;
@@ -195,49 +262,6 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const isBuyUp = action.includes('YES') || action.includes('BUY');
   const edgePctFormatted = apiSignal?.edge ? (apiSignal.edge * 100).toFixed(1) : modelEdge.toFixed(1);
   const confidenceFormatted = (apiSignal?.confidence ?? confidenceScore).toFixed(1);
-
-  // Strike matrix configurations
-  const strikeOptions: StrikeOption[] = useMemo(() => [
-    {
-      strike: 64000,
-      category: 'HIGH_PROBABILITY',
-      categoryLabel: 'HIGH PROBABILITY',
-      badgeColor: 'bg-emerald-500/20 text-[#00FF88] border-emerald-400/40 shadow-[0_0_12px_rgba(0,255,136,0.3)]',
-      yesOdds: 88,
-      noOdds: 12,
-      winProb: 94,
-      edge: 18.2,
-      description: 'Deep In-The-Money Anchor • Conservative Systematic Yield',
-      payoutMultiplier: '1.14x',
-      riskReward: 'Low Vol Drag',
-    },
-    {
-      strike: 64200,
-      category: 'OPTIMAL_ENTRY',
-      categoryLabel: 'OPTIMAL ENTRY',
-      badgeColor: 'bg-amber-400 text-slate-950 shadow-[0_0_15px_rgba(251,191,36,0.6)] font-black tracking-wide',
-      yesOdds: 72,
-      noOdds: 28,
-      winProb: 88,
-      edge: 14.2,
-      description: 'At-The-Money Sweet Spot • Highest Risk-Adjusted Kelly Edge',
-      payoutMultiplier: '1.39x',
-      riskReward: 'Max Alpha Ratio',
-    },
-    {
-      strike: 64500,
-      category: 'STRETCH_TARGET',
-      categoryLabel: 'STRETCH TARGET',
-      badgeColor: 'bg-purple-600/30 text-purple-200 border border-purple-400/50 shadow-[0_0_12px_rgba(168,85,247,0.3)]',
-      yesOdds: 34,
-      noOdds: 66,
-      winProb: 42,
-      edge: 8.5,
-      description: 'Out-Of-The-Money Asymmetric • High Payout Momentum Target',
-      payoutMultiplier: '2.94x',
-      riskReward: 'Asymmetric 3:1',
-    },
-  ], []);
 
   const handleSelectStrike = (item: StrikeOption) => {
     setSelectedStrike(item.strike);

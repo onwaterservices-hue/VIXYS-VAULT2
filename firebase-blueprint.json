@@ -169,12 +169,91 @@
         "recordedAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["cycleId", "direction", "settlementOutcome"]
+    },
+    "userSubscription": {
+      "title": "User Subscription Entitlement",
+      "description": "Authoritative subscription record",
+      "type": "object",
+      "properties": {
+        "subscriptionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "enum": ["DAY_PASS", "STARTER", "PRO_QUANT", "ELITE_QUANT", "NONE"] },
+        "plan": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED", "INACTIVE"] },
+        "stripeCustomerId": { "type": "string", "maxLength": 128 },
+        "stripeSubscriptionId": { "type": "string", "maxLength": 128 },
+        "stripePriceId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "product", "status"]
+    },
+    "dayPass": {
+      "title": "24-Hour Day Pass Record",
+      "description": "Authoritative 24-hour day pass access window",
+      "type": "object",
+      "properties": {
+        "entitlementId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "EXPIRED"] },
+        "startedAt": { "type": "string", "maxLength": 100 },
+        "expiresAt": { "type": "string", "maxLength": 100 },
+        "stripeCheckoutSessionId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "startedAt", "expiresAt", "status"]
+    },
+    "stripeEvent": {
+      "title": "Stripe Webhook Event Record",
+      "description": "Processed Stripe webhook event for idempotency",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "maxLength": 100 },
+        "customerEmail": { "type": "string", "maxLength": 128 },
+        "processedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["eventId", "eventType", "processedAt"]
+    },
+    "pendingEntitlement": {
+      "title": "Pending Pre-Registration Entitlement",
+      "description": "Purchased entitlement awaiting user registration",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "enum": ["DAY_PASS", "STARTER", "PRO_QUANT", "ELITE_QUANT"] },
+        "accessSource": { "type": "string", "maxLength": 50 },
+        "stripeCustomerId": { "type": "string", "maxLength": 128 },
+        "stripeSubscriptionId": { "type": "string", "maxLength": 128 },
+        "claimed": { "type": "boolean" },
+        "claimedAt": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "product", "claimed"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/userProfile" },
       "description": "User account document"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/userSubscription" },
+      "description": "Authoritative subscription record"
+    },
+    "/day_passes/{passId}": {
+      "schema": { "$ref": "#/entities/dayPass" },
+      "description": "24-Hour Day Pass records"
+    },
+    "/stripe_events/{eventId}": {
+      "schema": { "$ref": "#/entities/stripeEvent" },
+      "description": "Processed Stripe events for idempotency"
+    },
+    "/pending_entitlements/{email}": {
+      "schema": { "$ref": "#/entities/pendingEntitlement" },
+      "description": "Pending entitlements for users who paid before registration"
     },
     "/users/{userId}/journalEntries/{entryId}": {
       "schema": { "$ref": "#/entities/journalEntry" },

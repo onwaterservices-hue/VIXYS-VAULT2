@@ -121,11 +121,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = res.access?.role || serverUser.role || assignedRole;
-      if (res.entitlement) {
-         if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
-         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.entitlements?.starter || res.entitlement.dayPass?.active || res.entitlement.access) && finalRole === 'UNPAID') finalRole = 'PRO';
-      }
+      const canonicalAccess = res.access || res.user?.canonicalAccess;
+      const finalRole = canonicalAccess?.role || serverUser.role || assignedRole || 'UNPAID';
+      const finalProduct = canonicalAccess?.product || canonicalAccess?.plan || serverUser.subscription || 'NONE';
 
       setAuthState({
         isAuthenticated: true,
@@ -134,17 +132,18 @@ export const AuthView: React.FC<AuthViewProps> = ({
           email: userEmail,
           name: serverUser.name || userEmail.split('@')[0],
           role: finalRole as any,
+          product: finalProduct as any,
           joinedDate: serverUser.joined || new Date().toISOString().split('T')[0],
           discordLinked: serverUser.discordLinked || false,
           discordId: serverUser.discordId,
-          discordTag: serverUser.discordTag
+          discordTag: serverUser.discordTag,
+          canonicalAccess: canonicalAccess || undefined
         }
       });
       setUserRole(finalRole as any);
 
-      const planDetermined = res.access?.plan || res.entitlement?.plan || serverUser.subscription;
       if (typeof onSuccessNavigate === 'function') {
-        setTimeout(() => onSuccessNavigate(finalRole as any, userEmail, planDetermined, mode === 'register'), 500);
+        setTimeout(() => onSuccessNavigate(finalRole as any, userEmail, finalProduct, mode === 'register'), 500);
       }
     } catch (err) {
       setLoading(false);

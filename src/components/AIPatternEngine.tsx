@@ -60,7 +60,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
   const [lastScanTime, setLastScanTime] = useState<string>('Just now');
   const [scanCount, setScanCount] = useState<number>(1420);
 
-  const isUnlocked = userRole === 'ADMIN' || userRole === 'PRO' || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
+  const isUnlocked = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase()) || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
 
 
   const handleManualScan = () => {

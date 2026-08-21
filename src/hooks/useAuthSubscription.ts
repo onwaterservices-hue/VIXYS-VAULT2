@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { AuthState, UserSubscription } from '../types';
+import { AuthState, UserSubscription, CanonicalRoleType, CanonicalPlanType } from '../types';
 
 export interface UseAuthSubscriptionProps {
   authState: AuthState;
   subscription?: UserSubscription;
-  userRole?: 'UNPAID' | 'PRO' | 'ADMIN' | string;
+  userRole?: CanonicalRoleType | string;
   dayPassInfo?: {
     active: boolean;
     startedAt?: string | null;
@@ -19,6 +19,7 @@ export interface UseAuthSubscriptionReturn {
   isProOrAdmin: boolean;
   isDayPassActive: boolean;
   userRole: string;
+  userProduct: CanonicalPlanType | string;
   passCountdownFormatted: string;
   secondsRemaining: number;
   userEmail?: string;
@@ -34,7 +35,8 @@ export function useAuthSubscription({
   const isAuthenticated = Boolean(authState?.isAuthenticated && authState?.user);
   
   const roleStr = String(userRole || authState?.user?.role || 'UNPAID').toUpperCase();
-  const isProOrAdmin = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'STARTER'].includes(roleStr) || subscription?.status === 'active';
+  const canonicalAccess = authState?.user?.canonicalAccess;
+  const userProduct = canonicalAccess?.product || (authState?.user as any)?.product || subscription?.plan || 'NONE';
   
   // Calculate day pass validity
   const [now, setNow] = useState<number>(Date.now());
@@ -53,8 +55,15 @@ export function useAuthSubscription({
 
   const isDayPassActive = Boolean(
     (dayPassInfo?.active && (dayPassInfo.secondsRemaining > 0 || (expiryTimestamp > 0 && expiryTimestamp > now))) ||
-    roleStr === 'DAY_PASS'
+    roleStr === 'DAY_PASS' ||
+    userProduct === 'DAY_PASS'
   );
+
+  const isProOrAdmin = 
+    ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'STARTER'].includes(roleStr) || 
+    ['DAY_PASS', 'STARTER', 'PRO_QUANT', 'ELITE_QUANT'].includes(String(userProduct).toUpperCase()) ||
+    subscription?.status === 'active' ||
+    canonicalAccess?.access === true;
 
   const hasActiveAccess = isAuthenticated && (isProOrAdmin || isDayPassActive);
 
@@ -83,6 +92,7 @@ export function useAuthSubscription({
     isProOrAdmin,
     isDayPassActive,
     userRole: roleStr,
+    userProduct,
     passCountdownFormatted,
     secondsRemaining,
     userEmail: authState?.user?.email,

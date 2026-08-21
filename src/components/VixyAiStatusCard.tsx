@@ -31,7 +31,7 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
   userRole = 'UNPAID',
   className = '',
 }) => {
-  const isPro = userRole === 'PRO' || userRole === 'ADMIN';
+  const isPro = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const [activeTab, setActiveTab] = useState<'STATUS' | 'PULSE' | 'BREAKING' | 'WHALE' | 'LESSON' | 'RECAP'>('STATUS');
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [secondsToScan, setSecondsToScan] = useState(842); // 14 mins 02s

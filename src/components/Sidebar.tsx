@@ -43,6 +43,7 @@ interface SidebarProps {
   onCloseMobile: () => void;
   onOpenSearch: () => void;
   userRole?: "UNPAID" | "PRO" | "ELITE" | "ADMIN" | "OWNER" | string;
+  userProduct?: string;
   hasActiveAccess?: boolean;
   isAuthenticated?: boolean;
   onOpenAuth?: (mode: "login" | "register") => void;
@@ -55,6 +56,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onOpenSearch,
   userRole = "ADMIN",
+  userProduct = "NONE",
   hasActiveAccess = false,
   isAuthenticated = false,
   onOpenAuth,
@@ -299,12 +301,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   .map((item) => {
                     const IconComponent = item.icon;
                     const isActive = activeTab === item.id;
+                    const isStarterUser = userProduct === "STARTER";
+                    const isProOnlyFeature = isStarterUser && [
+                      "vixylive",
+                      "scalping",
+                      "onehour",
+                      "scanner",
+                      "whales",
+                      "perflab"
+                    ].includes(item.id);
+                    
                     const isGated =
-                      (item.id === "vixylive" || item.id === "terminal") &&
-                      !hasActiveAccess;
+                      ((item.id === "vixylive" || item.id === "terminal") && !hasActiveAccess) ||
+                      isProOnlyFeature;
+
+                    let displayLabel = item.label;
+                    let displayBadge = item.badge;
+
+                    if (isStarterUser && item.id === "terminal") {
+                      displayLabel = "Starter Desk";
+                      displayBadge = "15M";
+                    }
 
                     const handleItemClick = () => {
-                      if (isGated) {
+                      if (isProOnlyFeature) {
+                        setActiveTab("pricing");
+                      } else if (isGated) {
                         if (!isAuthenticated) {
                           if (onOpenAuth) onOpenAuth("register");
                         } else {
@@ -449,12 +471,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Institutional Badge & Sales Funnel Conversion Card */}
           {!isCollapsed ? (
             <div className="pt-3 border-t border-purple-900/40 mt-3 space-y-2">
-              {userRole === "ADMIN" || userRole === "PRO" ? (
+              {['ADMIN', 'OWNER', 'ELITE', 'PRO', 'STARTER', 'DAY_PASS'].includes(userRole) ? (
                 <div className="p-3.5 rounded-2xl bg-gradient-to-br from-purple-950/80 via-[#14082e] to-[#0a0319] border border-emerald-500/40 space-y-1.5 shadow-lg shadow-purple-950/50">
                   <div className="flex items-center justify-between text-xs font-mono font-black text-emerald-300">
                     <span className="flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                      {userRole === "ADMIN" ? "MASTER ADMIN" : "VIXY ELITE PRO"}
+                      {userRole === "ADMIN" || userRole === "OWNER" ? "MASTER ADMIN" : userRole === "ELITE" ? "VIXY VAULT ELITE" : "VIXY QUANT PRO"}
                     </span>
                     <span className="text-[9px] bg-emerald-500/20 px-1.5 py-0.2 rounded text-emerald-300 border border-emerald-500/30">
                       ALL UNLOCKED

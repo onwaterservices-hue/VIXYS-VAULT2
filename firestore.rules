@@ -53,6 +53,14 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /stripe_events/{eventId} {
+      allow read, write: if true;
+    }
+
+    match /pending_entitlements/{email} {
+      allow read, write: if true;
+    }
+
     match /discordProfiles/{profileId} {
       allow read, write: if true;
     }

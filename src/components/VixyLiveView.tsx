@@ -16,7 +16,7 @@ interface VixyLiveViewProps {
   onOpenPricing: () => void;
 }
 
-export type AuthoritativeState = 'CALIBRATING' | 'BUILDING UP' | 'BUILDING DOWN' | 'LOCKED UP' | 'LOCKED DOWN' | 'REASSESSING' | 'RESOLVED';
+export type AuthoritativeState = 'CALIBRATING' | 'BUILDING UP' | 'BUILDING DOWN' | 'VIXY DECISION UP' | 'VIXY DECISION DOWN' | 'RESOLVED';
 
 class VixyLiveErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -124,42 +124,42 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
   const lockReadiness = canonical15m.lockEvaluation?.lockReadiness ?? canonical15m.protection?.lockProgressPct ?? 45;
   const blockerReason = canonical15m.lockEvaluation?.blockerReason || 'Calibrating multi-factor orderbook confluence...';
 
-  // State Machine Mapping to Backend Authoritative State
+  // Two-sided VIXY LIVE Directional Intelligence Evaluation (Strictly symmetric: no UP default)
+  const effectiveUpProb = canonical15m.gemini?.upProbability ?? 0.5;
+  const effectiveDownProb = canonical15m.gemini?.downProbability ?? 0.5;
+  const bullScore = canonical15m.gemini?.bullScore ?? 50;
+  const bearScore = canonical15m.gemini?.bearScore ?? 50;
+
+  const isBullishEdge = effectiveUpProb > effectiveDownProb || (effectiveUpProb === effectiveDownProb && bullScore >= bearScore);
+  const liveDirection: 'UP' | 'DOWN' = isBullishEdge ? 'UP' : 'DOWN';
+
+  // State Machine Mapping for VIXY LIVE (Two-sided directional intelligence, NO SKIP)
   let authoritativeState: AuthoritativeState = 'CALIBRATING';
   let stateReason = blockerReason;
 
   if (isStale) {
-    authoritativeState = 'REASSESSING';
-    stateReason = 'DATA STALE — Telemetry stream interrupted.';
+    authoritativeState = 'CALIBRATING';
+    stateReason = 'TELEMETRY STALE — Re-calibrating directional edge...';
   } else if (canonical15m.currentState === 'SETTLED') {
     authoritativeState = 'RESOLVED';
     stateReason = 'Contract cycle settled.';
-  } else if (canonical15m.currentState === 'LOCKED_UP') {
-    authoritativeState = 'LOCKED UP';
-    stateReason = canonical15m.lockEvaluation?.lockReason || `Authorized ${activeLockTier} lock for UP thesis.`;
-  } else if (canonical15m.currentState === 'LOCKED_DOWN') {
-    authoritativeState = 'LOCKED DOWN';
-    stateReason = canonical15m.lockEvaluation?.lockReason || `Authorized ${activeLockTier} lock for DOWN thesis.`;
-  } else if (canonical15m.currentState === 'CONFIRMING') {
-    authoritativeState = canonical15m.direction === 'DOWN' ? 'BUILDING DOWN' : 'BUILDING UP';
+  } else if (canonical15m.currentState === 'LOCKED_UP' || (liveDirection === 'UP' && (canonical15m.lockScore >= 70 || canonical15m.confidence >= 75))) {
+    authoritativeState = 'VIXY DECISION UP';
+    stateReason = canonical15m.lockEvaluation?.lockReason || 'VIXY directional intelligence locked BULLISH/UP edge.';
+  } else if (canonical15m.currentState === 'LOCKED_DOWN' || (liveDirection === 'DOWN' && (canonical15m.lockScore >= 70 || canonical15m.confidence >= 75))) {
+    authoritativeState = 'VIXY DECISION DOWN';
+    stateReason = canonical15m.lockEvaluation?.lockReason || 'VIXY directional intelligence locked BEARISH/DOWN edge.';
+  } else if (canonical15m.currentState === 'CONFIRMING' || (canonical15m.protection?.lockProgressPct ?? 0) >= 40 || lockReadiness >= 40) {
+    authoritativeState = liveDirection === 'UP' ? 'BUILDING UP' : 'BUILDING DOWN';
     stateReason = blockerReason;
-  } else if (canonical15m.currentState === 'SKIP') {
-    authoritativeState = 'REASSESSING';
-    stateReason = blockerReason || 'Market in choppy equilibrium. Capital preserved.';
   } else {
-    if (canonical15m.direction === 'UP') {
-      authoritativeState = 'BUILDING UP';
-    } else if (canonical15m.direction === 'DOWN') {
-      authoritativeState = 'BUILDING DOWN';
-    } else {
-      authoritativeState = 'CALIBRATING';
-      stateReason = 'Evaluating multi-factor market confluence...';
-    }
+    authoritativeState = 'CALIBRATING';
+    stateReason = liveDirection === 'UP' ? 'CALIBRATING — Bullish directional bias strengthening...' : 'CALIBRATING — Bearish directional bias strengthening...';
   }
 
   // Dynamic Lock Validity score
   let lockValidity = 0;
-  if (authoritativeState.includes('LOCKED')) {
+  if (authoritativeState.includes('DECISION') || authoritativeState.includes('UP') || authoritativeState.includes('DOWN')) {
     const confScore = Math.min(100, ((canonical15m.confidence || 75) / 100) * 100);
     const qualScore = Math.min(100, ((canonical15m.lockScore || 80) / 100) * 100);
     const tempScore = Math.min(100, ((canonical15m.temporalStability || 70) / 100) * 100);
@@ -171,13 +171,13 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
   const [trend, setTrend] = useState<'STABLE' | 'STRENGTHENING' | 'WEAKENING'>('STABLE');
   
   useEffect(() => {
-    if (authoritativeState === 'LOCKED UP') lastLockUpTime.current = Date.now();
-    if (authoritativeState === 'LOCKED DOWN') lastLockDownTime.current = Date.now();
+    if (authoritativeState === 'VIXY DECISION UP') lastLockUpTime.current = Date.now();
+    if (authoritativeState === 'VIXY DECISION DOWN') lastLockDownTime.current = Date.now();
     lastStateRef.current = authoritativeState;
   }, [authoritativeState]);
 
   useEffect(() => {
-    if (authoritativeState.includes('LOCKED')) {
+    if (authoritativeState.includes('DECISION')) {
       if (lockValidity > prevValidityRef.current && prevValidityRef.current > 0) setTrend('STRENGTHENING');
       else if (lockValidity < prevValidityRef.current) setTrend('WEAKENING');
       else setTrend('STABLE');
@@ -185,14 +185,13 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
     }
   }, [lockValidity, authoritativeState]);
 
-  const isUp = authoritativeState === 'LOCKED UP' || authoritativeState === 'BUILDING UP';
-  const isDown = authoritativeState === 'LOCKED DOWN' || authoritativeState === 'BUILDING DOWN';
-  const isReassessing = authoritativeState === 'REASSESSING';
+  const isUp = authoritativeState === 'VIXY DECISION UP' || authoritativeState === 'BUILDING UP';
+  const isDown = authoritativeState === 'VIXY DECISION DOWN' || authoritativeState === 'BUILDING DOWN';
   
-  const mainColor = isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : isReassessing ? 'text-amber-400' : 'text-cyan-400';
-  const mainBorder = isUp ? 'border-emerald-500/40' : isDown ? 'border-rose-500/40' : isReassessing ? 'border-amber-500/40' : 'border-cyan-500/40';
-  const mainBg = isUp ? 'bg-emerald-500/10' : isDown ? 'bg-rose-500/10' : isReassessing ? 'bg-amber-500/10' : 'bg-cyan-500/10';
-  const glowShadow = isUp ? 'shadow-[0_0_30px_rgba(52,211,153,0.15)]' : isDown ? 'shadow-[0_0_30px_rgba(244,63,94,0.15)]' : 'shadow-none';
+  const mainColor = isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-cyan-400';
+  const mainBorder = isUp ? 'border-emerald-500/40' : isDown ? 'border-rose-500/40' : 'border-cyan-500/40';
+  const mainBg = isUp ? 'bg-emerald-500/10' : isDown ? 'bg-rose-500/10' : 'bg-cyan-500/10';
+  const glowShadow = isUp ? 'shadow-[0_0_30px_rgba(52,211,153,0.15)]' : isDown ? 'shadow-[0_0_30px_rgba(244,63,94,0.15)]' : 'shadow-[0_0_30px_rgba(6,182,212,0.15)]';
 
   const strikeDistance = canonical15m.openStrike && canonical15m.currentSpot ? (canonical15m.currentSpot - canonical15m.openStrike).toFixed(2) : '---';
   
@@ -276,25 +275,33 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
                 <div className="text-xs font-mono text-purple-400 uppercase tracking-widest flex items-center gap-2 mb-2">
                   <Activity className="w-4 h-4 text-cyan-400" /> WHAT DOES VIXY THINK?
                 </div>
-                <div className={`text-4xl sm:text-5xl font-black font-mono tracking-tight ${mainColor} flex items-center gap-3 transition-colors duration-500`}>
-                  {authoritativeState === 'LOCKED UP' && <><CheckCircle2 className="w-10 h-10" /> VIXY LOCKED — UP</>}
-                  {authoritativeState === 'LOCKED DOWN' && <><CheckCircle2 className="w-10 h-10" /> VIXY LOCKED — DOWN</>}
-                  {authoritativeState === 'CALIBRATING' && <><RefreshCw className="w-10 h-10 animate-spin-slow" /> CALIBRATING</>}
-                  {authoritativeState === 'BUILDING UP' && <><TrendingUp className="w-10 h-10 animate-pulse" /> VIXY BUILDING UP</>}
-                  {authoritativeState === 'BUILDING DOWN' && <><TrendingDown className="w-10 h-10 animate-pulse" /> VIXY BUILDING DOWN</>}
-                  {authoritativeState === 'REASSESSING' && <><AlertTriangle className="w-10 h-10 animate-pulse text-amber-400" /> REASSESSING</>}
+                <div className={`text-3xl sm:text-4xl font-black font-mono tracking-tight ${mainColor} flex items-center gap-3 transition-colors duration-500`}>
+                  {authoritativeState === 'VIXY DECISION UP' && <><CheckCircle2 className="w-10 h-10" /> VIXY DECISION • UP</>}
+                  {authoritativeState === 'VIXY DECISION DOWN' && <><CheckCircle2 className="w-10 h-10" /> VIXY DECISION • DOWN</>}
+                  {authoritativeState === 'CALIBRATING' && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className="w-8 h-8 animate-spin-slow text-cyan-400" /> CALIBRATING
+                      </div>
+                      <div className="text-sm font-bold text-purple-300 font-mono tracking-widest uppercase">
+                        {liveDirection === 'UP' ? '📈 BULLISH BIAS' : '📉 BEARISH BIAS'}
+                      </div>
+                    </div>
+                  )}
+                  {authoritativeState === 'BUILDING UP' && <><TrendingUp className="w-10 h-10 animate-pulse" /> BUILDING • BULLISH</>}
+                  {authoritativeState === 'BUILDING DOWN' && <><TrendingDown className="w-10 h-10 animate-pulse" /> BUILDING • BEARISH</>}
                   {authoritativeState === 'RESOLVED' && <><CheckCircle2 className="w-10 h-10" /> SETTLED</>}
                 </div>
                 
-                {authoritativeState.includes('LOCKED') && (
+                {authoritativeState.includes('DECISION') && (
                   <div className="mt-2 flex items-center gap-2 text-xs text-purple-300 font-mono font-bold">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    LIVE MONITORING
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    ACTIVE DIRECTIONAL INTELLIGENCE
                   </div>
                 )}
 
                 {/* DYNAMIC LOCK VALIDITY / SYSTEM REASON */}
-                {authoritativeState.includes('LOCKED') ? (
+                {authoritativeState.includes('DECISION') ? (
                   <div className={`mt-5 bg-[#080414] p-5 rounded-xl border font-mono text-xs space-y-4 ${isUp ? 'border-emerald-500/40' : 'border-rose-500/40'}`}>
                     <div>
                       <div className="flex justify-between items-end mb-2">

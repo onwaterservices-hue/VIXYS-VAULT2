@@ -60,6 +60,7 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
+import { StarterDeskView } from './components/StarterDeskView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
@@ -257,7 +258,8 @@ export default function App() {
               
               // Also eagerly update the UI state
               setDayPassInfo(ent.dayPass || { active: true, secondsRemaining: 86400 });
-              setUserRole(ent.entitlements?.canAccessAdminPanel ? 'ADMIN' : 'PRO');
+              const resolvedRole = ent.entitlements?.canAccessAdminPanel ? 'ADMIN' : (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.entitlements?.eliteQuant ? 'ELITE' : 'PRO');
+              setUserRole(resolvedRole);
               setTerminalAccessGranted(true);
               
               setTimeout(() => {
@@ -338,18 +340,20 @@ export default function App() {
             setDayPassInfo(mergedEnt.dayPass);
           }
 
-          const rawPlanStr = String(mergedEnt.plan || canonicalAccess?.plan || '').toUpperCase();
+          const rawPlanStr = String(canonicalAccess?.product || canonicalAccess?.plan || mergedEnt.plan || '').toUpperCase();
           const resolvedPlan =
             rawPlanStr.includes('ELITE')
               ? 'VIXY VAULT ELITE QUANT'
               : rawPlanStr.includes('STARTER')
               ? 'STARTER'
-              : 'PRO';
+              : rawPlanStr.includes('DAY_PASS')
+              ? 'DAY_PASS'
+              : 'PRO_QUANT';
 
           const isSubActive =
+            canonicalAccess?.access === true ||
             mergedEnt.status === 'active' ||
-            mergedEnt.dayPass?.active ||
-            canonicalAccess?.access === true;
+            mergedEnt.dayPass?.active;
 
           setSubscription({
             plan: resolvedPlan as any,
@@ -360,35 +364,43 @@ export default function App() {
           });
         }
 
-        // Determine computed access role and instant terminal access unlock
-        const rawRole = String(canonicalAccess?.role || sessionData?.user?.role || authState.user?.role || '').toUpperCase();
-        const rawSub = String(canonicalAccess?.plan || mergedEnt?.plan || sessionData?.user?.subscription || '').toUpperCase();
+        // Determine computed access role and instant terminal access unlock from canonical server contract
+        const canonicalRole = canonicalAccess?.role;
+        const rawRole = String(canonicalRole || sessionData?.user?.role || authState.user?.role || '').toUpperCase();
+        const rawPlan = String(canonicalAccess?.product || canonicalAccess?.plan || mergedEnt?.plan || sessionData?.user?.subscription || '').toUpperCase();
 
         const isDayPassActive = Boolean(
           mergedEnt?.dayPass?.active ||
           (mergedEnt?.dayPass?.expiresAt && new Date(mergedEnt.dayPass.expiresAt).getTime() > Date.now()) ||
+          canonicalAccess?.product === 'DAY_PASS' ||
           canonicalAccess?.plan === 'DAY_PASS'
         );
 
-        const computedRole = (
-          rawRole === 'OWNER' ? 'OWNER' :
-          ['ADMIN', 'SUPPORT'].includes(rawRole) || mergedEnt?.entitlements?.canAccessAdminPanel ? 'ADMIN' :
-          (rawRole === 'ELITE' || rawSub.includes('ELITE') || mergedEnt?.entitlements?.eliteQuant) ? 'ELITE' :
-          (rawRole === 'PRO' || rawRole === 'STARTER' || rawSub.includes('PRO') || rawSub.includes('STARTER') || canonicalAccess?.access === true || mergedEnt?.entitlements?.proQuant || isDayPassActive || mergedEnt?.status === 'active') ? 'PRO' :
-          'UNPAID'
-        ) as any;
+        let computedRole: 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER' = 'UNPAID';
+        if (canonicalRole) {
+          computedRole = canonicalRole;
+        } else if (rawRole === 'OWNER') {
+          computedRole = 'OWNER';
+        } else if (['ADMIN', 'SUPPORT'].includes(rawRole) || mergedEnt?.entitlements?.canAccessAdminPanel) {
+          computedRole = 'ADMIN';
+        } else if (rawRole === 'ELITE' || rawPlan.includes('ELITE') || mergedEnt?.entitlements?.eliteQuant) {
+          computedRole = 'ELITE';
+        } else if (
+          rawRole === 'PRO' || rawRole === 'STARTER' || rawPlan.includes('PRO') || rawPlan.includes('STARTER') ||
+          canonicalAccess?.access === true || mergedEnt?.entitlements?.proQuant || mergedEnt?.entitlements?.starter ||
+          isDayPassActive || mergedEnt?.status === 'active'
+        ) {
+          computedRole = 'PRO';
+        } else {
+          computedRole = 'UNPAID';
+        }
 
         const hasAccess =
-          computedRole === 'OWNER' ||
-          computedRole === 'ADMIN' ||
-          computedRole === 'ELITE' ||
-          computedRole === 'PRO' ||
           canonicalAccess?.access === true ||
-          mergedEnt?.status === 'active' ||
-          isDayPassActive;
+          (computedRole !== 'UNPAID' && (mergedEnt?.status === 'active' || isDayPassActive || ['OWNER', 'ADMIN', 'ELITE', 'PRO'].includes(computedRole)));
 
         setUserRole(computedRole);
-        setTerminalAccessGranted(hasAccess);
+        setTerminalAccessGranted(Boolean(hasAccess));
 
         // Synchronize live user session state
         if (sessionData && sessionData.authenticated && sessionData.user) {
@@ -551,7 +563,7 @@ export default function App() {
         ) {
           setUserRole('ADMIN');
         } else if (authState.user.role) {
-          setUserRole(authState.user.role);
+          setUserRole(authState.user.role as any);
         }
         localStorage.setItem('vixy_auth', JSON.stringify(authState));
 
@@ -964,6 +976,7 @@ export default function App() {
   const {
     isAuthenticated,
     hasActiveAccess,
+    userProduct,
     passCountdownFormatted
   } = useAuthSubscription({
     authState,
@@ -1119,6 +1132,7 @@ export default function App() {
             onCloseMobile={() => setIsMobileSidebarOpen(false)}
             onOpenSearch={() => setIsSearchOpen(true)}
             userRole={userRole}
+            userProduct={userProduct}
             hasActiveAccess={hasActiveAccess}
             isAuthenticated={isAuthenticated}
             onOpenAuth={handleOpenAuth}
@@ -1341,7 +1355,18 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === 'terminal' && (
+                  {(activeTab === 'starter' || (activeTab === 'terminal' && userProduct === 'STARTER')) ? (
+                    <StarterDeskView
+                      ticker={ticker}
+                      candles={candles}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                      onOpenAlerts={() => setActiveTab('alerts')}
+                      onOpenSettings={() => setActiveTab('settings')}
+                      userEmail={authState.user?.email}
+                      selectedAsset={selectedAsset}
+                      onSelectAsset={(sym) => setSelectedAsset(sym)}
+                    />
+                  ) : activeTab === 'terminal' ? (
                     <LiveDashboard
                       ticker={ticker}
                       candles={candles}
@@ -1359,7 +1384,7 @@ export default function App() {
                       alertSettings={alertSettings}
                       setAlertSettings={setAlertSettings}
                     />
-                  )}
+                  ) : null}
 
                   {activeTab === 'markets' && (
                     <MarketCardsView

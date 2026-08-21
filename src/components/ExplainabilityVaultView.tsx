@@ -67,8 +67,8 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
   const [activeTab, setActiveTab] = useState<'evidence' | 'timeline' | 'historical' | 'ranking'>('evidence');
   const [showRawVsCalibrated, setShowRawVsCalibrated] = useState<boolean>(true);
 
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(userRole);
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 

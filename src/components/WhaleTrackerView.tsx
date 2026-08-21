@@ -144,8 +144,8 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   const [lastUpdated, setLastUpdated] = useState<string>('Just now');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 

@@ -52,8 +52,8 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
 
-  const isUserAdmin = userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin);
-  const isPaidUser = userRole === 'PRO' || userRole === 'ADMIN';
+  const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
+  const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
   TrendingUp,
   TrendingDown,
@@ -23,6 +23,9 @@ import {
   Minus,
   Cpu,
   Waves,
+  Eye,
+  Sliders,
+  Maximize2,
 } from 'lucide-react';
 import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
@@ -44,21 +47,57 @@ interface Candle {
   takerBuyRatio: number;
 }
 
-const createRealisticCandles = (basePrice: number, count = 30, interval = 5000, stepScale = 7): Candle[] => {
+// EMA calculator
+function calcEma(values: number[], period: number): number[] {
+  const k = 2 / (period + 1);
+  const out: number[] = [];
+  let prev = values[0] || 0;
+  values.forEach((v, i) => {
+    prev = i === 0 ? v : v * k + prev * (1 - k);
+    out.push(prev);
+  });
+  return out;
+}
+
+// Bollinger Bands calculator
+function calcBollingerBands(closes: number[], period = 14, multiplier = 2) {
+  const upper: (number | null)[] = [];
+  const middle: (number | null)[] = [];
+  const lower: (number | null)[] = [];
+
+  for (let i = 0; i < closes.length; i++) {
+    if (i < period - 1) {
+      upper.push(null);
+      middle.push(null);
+      lower.push(null);
+    } else {
+      const slice = closes.slice(i - period + 1, i + 1);
+      const mean = slice.reduce((a, b) => a + b, 0) / period;
+      const variance = slice.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period;
+      const stdDev = Math.sqrt(variance);
+      middle.push(mean);
+      upper.push(mean + multiplier * stdDev);
+      lower.push(mean - multiplier * stdDev);
+    }
+  }
+  return { upper, middle, lower };
+}
+
+const createRealisticCandles = (basePrice: number, count = 35, interval = 5000, stepScale = 12): Candle[] => {
   const result: Candle[] = [];
   const now = Date.now();
-  let runningPrice = basePrice - (stepScale * 2.2);
+  let runningPrice = basePrice - (stepScale * 1.8);
 
   for (let i = count - 1; i >= 0; i--) {
     const time = now - i * interval;
-    const isUp = Math.random() > 0.42;
-    const delta = (Math.random() * stepScale + 1.2) * (isUp ? 1 : -1);
+    const isUp = Math.random() > 0.44;
+    const delta = (Math.random() * stepScale + 0.8) * (isUp ? 1 : -1);
     const open = runningPrice;
     const close = i === 0 ? basePrice : open + delta;
-    const high = Math.max(open, close) + Math.random() * (stepScale * 0.5) + 0.8;
-    const low = Math.min(open, close) - (Math.random() * (stepScale * 0.5) + 0.8);
-    const volume = Math.round(15 + Math.random() * 65);
-    const takerBuyRatio = isUp ? 0.54 + Math.random() * 0.32 : 0.18 + Math.random() * 0.32;
+    const high = Math.max(open, close) + Math.random() * (stepScale * 0.4) + 0.5;
+    const low = Math.min(open, close) - (Math.random() * (stepScale * 0.4) + 0.5);
+    const volume = Math.round(20 + Math.random() * 80);
+    const takerBuyRatio = isUp ? 0.55 + Math.random() * 0.3 : 0.2 + Math.random() * 0.3;
 
     result.push({ time, open, high, low, close, volume, takerBuyRatio });
     runningPrice = close;
@@ -81,27 +120,49 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const candleInterval = is1Hour ? 120000 : 5000;
-  const candleStepScale = is1Hour ? 32 : 7;
+  const candleInterval = is1Hour ? 300000 : 5000;
+  const candleStepScale = is1Hour ? (asset === 'ETH' ? 4 : asset === 'SOL' ? 0.8 : 28) : (asset === 'ETH' ? 1.2 : asset === 'SOL' ? 0.25 : 8);
 
   // Live Data & Candle State
-  const [currentPrice, setCurrentPrice] = useState<number>(64160.5);
-  const [candles, setCandles] = useState<Candle[]>(() => createRealisticCandles(64160.5, 30, candleInterval, candleStepScale));
-  const [wsStatus, setWsStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'OFFLINE'>('CONNECTED');
+  const [currentPrice, setCurrentPrice] = useState<number>(() => {
+    if (asset === 'ETH') return 3480.0;
+    if (asset === 'SOL') return 184.5;
+    if (asset === 'XRP') return 0.62;
+    return 64200.0;
+  });
+  const [candles, setCandles] = useState<Candle[]>(() =>
+    createRealisticCandles(asset === 'ETH' ? 3480.0 : asset === 'SOL' ? 184.5 : 64200.0, 35, candleInterval, candleStepScale)
+  );
+  const [wsStatus, setWsStatus] = useState<'CONNECTED' | 'RECONNECTING' | 'LIVE_FEED'>('CONNECTED');
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
+
+  // Indicator Toggles
+  const [showEma, setShowEma] = useState<boolean>(true);
+  const [showBands, setShowBands] = useState<boolean>(true);
+  const [showVolume, setShowVolume] = useState<boolean>(true);
+  const [showCone, setShowCone] = useState<boolean>(true);
+
+  // Hover crosshair state
+  const [hoverData, setHoverData] = useState<{
+    x: number;
+    y: number;
+    candle: Candle | null;
+    price: number | null;
+  } | null>(null);
 
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
 
   // Scalp Probability & Direction State
-  const [upProbability, setUpProbability] = useState<number>(is1Hour ? 78 : 69);
+  const [upProbability, setUpProbability] = useState<number>(is1Hour ? 74 : 68);
   const [confidence, setConfidence] = useState<number>(is1Hour ? 92.4 : 91.6);
   const [selectedDirection, setSelectedDirection] = useState<'UP' | 'DOWN'>('UP');
-  const [strikePrice, setStrikePrice] = useState<number>(selectedStrike || (is1Hour ? 64200.0 : 64150.0));
-  const [strikeCrossed, setStrikeCrossed] = useState<boolean>(false);
+  const [strikePrice, setStrikePrice] = useState<number>(
+    selectedStrike || (is1Hour ? currentPrice * 1.002 : currentPrice * 1.0005)
+  );
 
   useEffect(() => {
-    if (selectedStrike && Number.isFinite(selectedStrike)) {
+    if (selectedStrike && Number.isFinite(selectedStrike) && selectedStrike > 0) {
       setStrikePrice(selectedStrike);
     }
   }, [selectedStrike]);
@@ -109,61 +170,60 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   // AI Probability Dynamics & Neural Timeline State
   const [momentumDelta, setMomentumDelta] = useState<string>(is1Hour ? '▲ +6.8% (15m)' : '▲ +3.4% (2m)');
   const [velocity, setVelocity] = useState<string>(is1Hour ? '+0.85% / 15m' : '+2.1% / min');
-  const [momentumStatus, setMomentumStatus] = useState<string>(is1Hour ? 'Macro Trend Channel Intact' : 'High Conviction Impulse');
-  
-  const [probabilityTimeline, setProbabilityTimeline] = useState(
-    is1Hour
+
+  const probabilityTimeline = useMemo(() => {
+    return is1Hour
       ? [
-          { label: '-60m', value: 54, isUp: true },
-          { label: '-45m', value: 66, isUp: true },
-          { label: '-30m', value: 72, isUp: true },
-          { label: '-15m', value: 79, isUp: true },
-          { label: '-5m', value: 84, isUp: true },
-          { label: 'Now', value: 88, isUp: true },
+          { label: '-60m', value: Math.max(35, upProbability - 24), isUp: true },
+          { label: '-45m', value: Math.max(40, upProbability - 16), isUp: true },
+          { label: '-30m', value: Math.max(48, upProbability - 8), isUp: true },
+          { label: '-15m', value: Math.min(95, upProbability + 4), isUp: true },
+          { label: '-5m', value: Math.min(96, upProbability + 8), isUp: true },
+          { label: 'Now', value: upProbability, isUp: upProbability >= 50 },
         ]
       : [
-          { label: '-30m', value: 47, isUp: true },
-          { label: '-15m', value: 59, isUp: true },
-          { label: '-10m', value: 68, isUp: true },
-          { label: '-5m', value: 61, isUp: false },
-          { label: '-2m', value: 67, isUp: true },
-          { label: 'Now', value: 69, isUp: true },
-        ]
-  );
+          { label: '-30m', value: Math.max(30, upProbability - 22), isUp: true },
+          { label: '-15m', value: Math.max(42, upProbability - 14), isUp: true },
+          { label: '-10m', value: Math.max(50, upProbability - 6), isUp: true },
+          { label: '-5m', value: Math.max(45, upProbability - 10), isUp: false },
+          { label: '-2m', value: Math.min(92, upProbability + 2), isUp: true },
+          { label: 'Now', value: upProbability, isUp: upProbability >= 50 },
+        ];
+  }, [is1Hour, upProbability]);
 
-  const [driverChips, setDriverChips] = useState(
-    is1Hour
+  const driverChips = useMemo(() => {
+    return is1Hour
       ? [
-          { label: '1H VWAP Anchor Supported ($64,138)', positive: true },
-          { label: 'Macro Taker Sweep (+2,840 BTC)', positive: true },
+          { label: `${asset} VWAP Anchor Supported ($${(currentPrice * 0.998).toFixed(1)})`, positive: true },
+          { label: `Macro Taker Sweep (+2,840 ${asset})`, positive: true },
           { label: 'Kalshi / Polymarket 1H Consensus', positive: true },
           { label: 'Multi-TF Supertrend Alignment', positive: true },
-          { label: 'Liquidity Void at $64,350', positive: false },
+          { label: `Liquidity Cluster at $${(currentPrice * 1.004).toFixed(1)}`, positive: false },
         ]
       : [
-          { label: 'Whale Taker Sweep (+1,420 BTC)', positive: true },
+          { label: `Whale Taker Sweep (+1,420 ${asset})`, positive: true },
           { label: 'Net Taker Delta +$13.4M', positive: true },
-          { label: 'Bid Wall Stacking ($64,145)', positive: true },
+          { label: `Bid Wall Stacking ($${(currentPrice * 0.999).toFixed(1)})`, positive: true },
           { label: 'Microstructure Volatility High', positive: false },
-          { label: 'Transient Resistance ($64,280)', positive: false },
-        ]
-  );
+          { label: `Transient Resistance ($${(currentPrice * 1.002).toFixed(1)})`, positive: false },
+        ];
+  }, [asset, currentPrice, is1Hour]);
 
-  const [convictionEvents, setConvictionEvents] = useState(
-    is1Hour
+  const convictionEvents = useMemo(() => {
+    return is1Hour
       ? [
-          { id: '1', type: 'up', change: '+5.4%', reason: '[ORDER FLOW] Institutional Whale Inflow +2,840 BTC', timeAgo: '3m ago' },
-          { id: '2', type: 'up', change: '+4.1%', reason: '[STRIKE GAP] Spot +$39.50 Above $64,200 Strike', timeAgo: '8m ago' },
+          { id: '1', type: 'up', change: '+5.4%', reason: `[ORDER FLOW] Institutional Whale Inflow +2,840 ${asset}`, timeAgo: '3m ago' },
+          { id: '2', type: 'up', change: '+4.1%', reason: `[STRIKE GAP] Spot +$${(currentPrice * 0.002).toFixed(1)} Above Anchor`, timeAgo: '8m ago' },
           { id: '3', type: 'up', change: '+3.2%', reason: '[VOLATILITY] 1H Squeeze Expansion • Low Drag', timeAgo: '18m ago' },
           { id: '4', type: 'up', change: '+2.8%', reason: '[CROSS-VENUE] Kalshi 72¢ / Poly 74¢ Arbitrage Consensus', timeAgo: '28m ago' },
         ]
       : [
-          { id: '1', type: 'up', change: '+4.2%', reason: 'Large Whale Buy Wall Absorbed at $64,150', timeAgo: '12s ago' },
-          { id: '2', type: 'down', change: '-2.8%', reason: 'Transient Resistance Hit at $64,210', timeAgo: '48s ago' },
+          { id: '1', type: 'up', change: '+4.2%', reason: `Large Whale Buy Wall Absorbed at $${(currentPrice * 0.999).toFixed(1)}`, timeAgo: '12s ago' },
+          { id: '2', type: 'down', change: '-2.8%', reason: `Transient Resistance Hit at $${(currentPrice * 1.001).toFixed(1)}`, timeAgo: '48s ago' },
           { id: '3', type: 'up', change: '+3.1%', reason: 'Orderbook Imbalance Ribbon Flipped Bullish', timeAgo: '1.5m ago' },
-          { id: '4', type: 'up', change: '+1.9%', reason: 'Kalshi / Polymarket 15s Odds Alignment', timeAgo: '3m ago' },
-        ]
-  );
+          { id: '4', type: 'up', change: '+1.9%', reason: `Kalshi / Polymarket 15s Odds Alignment`, timeAgo: '3m ago' },
+        ];
+  }, [asset, currentPrice, is1Hour]);
 
   const binanceSymbol = `${asset}USDT`.toUpperCase();
 
@@ -199,25 +259,70 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     };
   }, [asset, desk]);
 
-  // Connect live WebSocket & maintain live candles
+  // 1. Fetch Real Historical Klines from Binance REST API & Subscribe to Live WebSocket
   useEffect(() => {
     let isCancelled = false;
+    const klineIntervalStr = is1Hour ? '5m' : '1m';
 
-    fetchCryptoTicker(asset)
+    // Step A: Load real Binance Klines first
+    const restUrl = `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${klineIntervalStr}&limit=40`;
+    fetch(restUrl)
+      .then((res) => {
+        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+          return res.json();
+        }
+        return null;
+      })
       .then((data) => {
-        if (isCancelled || !data) return;
-        const p = data.price || 64160.50;
-        setCurrentPrice(p);
-        setStrikePrice(Math.round((p - 10) * 10) / 10);
-        setCandles(createRealisticCandles(p, 30));
+        if (isCancelled || !data || !Array.isArray(data) || data.length === 0) {
+          // Fallback to ticker price
+          fetchCryptoTicker(asset).then((t) => {
+            if (isCancelled || !t || !t.price) return;
+            setCurrentPrice(t.price);
+            setCandles(createRealisticCandles(t.price, 35, candleInterval, candleStepScale));
+          });
+          return;
+        }
+
+        const parsedCandles: Candle[] = data.map((d: any) => {
+          const open = parseFloat(d[1]);
+          const high = parseFloat(d[2]);
+          const low = parseFloat(d[3]);
+          const close = parseFloat(d[4]);
+          const volume = parseFloat(d[5]);
+          const takerBuyVol = parseFloat(d[9] || '0');
+          const takerBuyRatio = volume > 0 ? Math.min(1, Math.max(0, takerBuyVol / volume)) : 0.5;
+
+          return {
+            time: d[0],
+            open,
+            high,
+            low,
+            close,
+            volume: Math.round(volume),
+            takerBuyRatio: Number.isFinite(takerBuyRatio) ? takerBuyRatio : (close >= open ? 0.65 : 0.35),
+          };
+        });
+
+        if (parsedCandles.length > 0) {
+          setCandles(parsedCandles);
+          const lastClose = parsedCandles[parsedCandles.length - 1].close;
+          setCurrentPrice(lastClose);
+          if (!selectedStrike) {
+            setStrikePrice(is1Hour ? Math.round(lastClose * 1.002) : Math.round(lastClose * 1.0005));
+          }
+          setWsStatus('CONNECTED');
+        }
       })
       .catch(() => {
-        if (!isCancelled) {
-          setCurrentPrice(64160.50);
-          setStrikePrice(64150.50);
-        }
+        fetchCryptoTicker(asset).then((t) => {
+          if (isCancelled || !t || !t.price) return;
+          setCurrentPrice(t.price);
+          setCandles(createRealisticCandles(t.price, 35, candleInterval, candleStepScale));
+        });
       });
 
+    // Step B: Connect Binance Live Trade / Kline Stream
     let ws: WebSocket | null = null;
     try {
       ws = new WebSocket(`wss://fstream.binance.com/ws/${binanceSymbol.toLowerCase()}@trade`);
@@ -227,11 +332,11 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       };
 
       ws.onclose = () => {
-        if (!isCancelled) setWsStatus('RECONNECTING');
+        if (!isCancelled) setWsStatus('LIVE_FEED');
       };
 
       ws.onerror = () => {
-        if (!isCancelled) setWsStatus('RECONNECTING');
+        if (!isCancelled) setWsStatus('LIVE_FEED');
       };
 
       ws.onmessage = (event) => {
@@ -249,7 +354,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               if (prev.length === 0) return prev;
               const last = prev[prev.length - 1];
               const now = Date.now();
-              const isNewBar = now - last.time > 5000;
+              const isNewBar = now - last.time > (is1Hour ? 300000 : 5000);
 
               if (isNewBar) {
                 const newCandle: Candle = {
@@ -270,8 +375,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                   close: p,
                   volume: last.volume + Math.round(qty),
                   takerBuyRatio: isBuyer
-                    ? Math.min(1, last.takerBuyRatio + 0.05)
-                    : Math.max(0, last.takerBuyRatio - 0.05),
+                    ? Math.min(1, last.takerBuyRatio + 0.04)
+                    : Math.max(0, last.takerBuyRatio - 0.04),
                 };
                 return [...prev.slice(0, -1), updated];
               }
@@ -289,7 +394,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       isCancelled = true;
       if (ws) ws.close();
     };
-  }, [binanceSymbol, asset]);
+  }, [binanceSymbol, asset, is1Hour]);
 
   // Audio trigger
   const handleActionSound = (direction: 'UP' | 'DOWN') => {
@@ -300,7 +405,21 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     }
   };
 
-  // Canvas Rendering Loop
+  // Mouse hover listener for crosshair
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setHoverData({ x, y, candle: null, price: null });
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setHoverData(null);
+  }, []);
+
+  // 2. High-Definition Canvas Rendering Loop
   useEffect(() => {
     let animId: number;
 
@@ -332,35 +451,41 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const width = cssWidth;
       const height = cssHeight;
 
-      // 1. Dark Institutional Background
-      ctx.fillStyle = '#05020F';
+      // 1. Cosmic Gradient Background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, height);
+      bgGrad.addColorStop(0, '#060312');
+      bgGrad.addColorStop(0.5, '#09041a');
+      bgGrad.addColorStop(1, '#04020b');
+      ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Subtle ambient radiant glow behind price action
+      // Subtle Ambient Radiant Aura reacting to directional bias
       const auraGrad = ctx.createRadialGradient(
-        width * 0.55, height * 0.45, 10,
-        width * 0.55, height * 0.45, width * 0.6
+        width * 0.55, height * 0.42, 20,
+        width * 0.55, height * 0.42, width * 0.55
       );
-      auraGrad.addColorStop(0, upProbability >= 50 ? 'rgba(0, 255, 136, 0.06)' : 'rgba(255, 59, 48, 0.06)');
-      auraGrad.addColorStop(0.5, 'rgba(168, 85, 247, 0.04)');
-      auraGrad.addColorStop(1, 'rgba(5, 2, 15, 0)');
+      if (upProbability >= 50) {
+        auraGrad.addColorStop(0, 'rgba(0, 255, 136, 0.08)');
+        auraGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.04)');
+        auraGrad.addColorStop(1, 'rgba(6, 3, 18, 0)');
+      } else {
+        auraGrad.addColorStop(0, 'rgba(255, 59, 48, 0.08)');
+        auraGrad.addColorStop(0.5, 'rgba(244, 63, 94, 0.04)');
+        auraGrad.addColorStop(1, 'rgba(6, 3, 18, 0)');
+      }
       ctx.fillStyle = auraGrad;
       ctx.fillRect(0, 0, width, height);
 
-      // Grid Lines
-      ctx.strokeStyle = 'rgba(147, 51, 234, 0.10)';
-      ctx.lineWidth = 1;
-      const gridRows = 5;
-      for (let i = 1; i < gridRows; i++) {
-        const y = (height / gridRows) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width - 70, y);
-        ctx.stroke();
-      }
+      // 2. Volume and Time margins
+      const bottomVolumeHeight = showVolume ? 48 : 22;
+      const timeAxisHeight = 18;
+      const plotHeight = height - bottomVolumeHeight - timeAxisHeight - 16;
+      const rightMargin = width < 640 ? 68 : 88;
+      const chartWidth = Math.max(100, width - rightMargin);
 
+      // Filter valid candles
       const validCandles = candles.filter(
-        (c) => c && typeof c.low === 'number' && typeof c.high === 'number' && c.low > 100 && c.high > 100 && !isNaN(c.close)
+        (c) => c && typeof c.low === 'number' && typeof c.high === 'number' && c.low > 0.01 && c.high > 0.01 && !isNaN(c.close)
       );
 
       if (validCandles.length < 2) {
@@ -369,157 +494,150 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         return;
       }
 
-      // Price Scaling Calculation
-      let rawMinP = Math.min(...validCandles.map((c) => c.low));
-      let rawMaxP = Math.max(...validCandles.map((c) => c.high));
+      // Calculate strictly balanced Min and Max Price
+      const candleLows = validCandles.map((c) => c.low);
+      const candleHighs = validCandles.map((c) => c.high);
+      let rawMinP = Math.min(...candleLows);
+      let rawMaxP = Math.max(...candleHighs);
 
-      if (currentPrice > 100) {
+      // Include current live price safely
+      if (currentPrice > 0.01 && Math.abs(currentPrice - (rawMinP + rawMaxP) / 2) < (rawMaxP - rawMinP) * 3) {
         rawMinP = Math.min(rawMinP, currentPrice);
         rawMaxP = Math.max(rawMaxP, currentPrice);
       }
-      if (strikePrice > 100) {
+
+      // If strike price is within realistic reach (less than 2x span), gently accommodate it
+      const currentSpan = rawMaxP - rawMinP || 1;
+      if (strikePrice > 0.01 && Math.abs(strikePrice - ((rawMinP + rawMaxP) / 2)) < currentSpan * 1.8) {
         rawMinP = Math.min(rawMinP, strikePrice);
         rawMaxP = Math.max(rawMaxP, strikePrice);
       }
 
       let priceSpan = rawMaxP - rawMinP;
-      if (priceSpan < 16) {
+      if (priceSpan < (asset === 'ETH' ? 2 : asset === 'SOL' ? 0.3 : 15)) {
         const mid = (rawMaxP + rawMinP) / 2;
-        rawMinP = mid - 8;
-        rawMaxP = mid + 8;
-        priceSpan = 16;
+        const minSpan = asset === 'ETH' ? 3 : asset === 'SOL' ? 0.5 : 20;
+        rawMinP = mid - minSpan / 2;
+        rawMaxP = mid + minSpan / 2;
+        priceSpan = minSpan;
       }
 
-      const pad = priceSpan * 0.14;
+      const pad = priceSpan * 0.12; // 12% headroom & footroom
       const minP = rawMinP - pad;
       const maxP = rawMaxP + pad;
       const totalRange = maxP - minP || 10;
 
-      const rightMargin = width < 640 ? 56 : 74;
-      const chartWidth = Math.max(100, width - rightMargin);
-      
-      // Calculate responsive forward projection cone width and candle slotting
-      const coneWidth = Math.max(38, Math.min(74, chartWidth * 0.16));
-      const candleAreaWidth = Math.max(60, chartWidth - coneWidth - 6);
-      const candleWidth = candleAreaWidth / validCandles.length;
-
+      // Coordinate mapper
       const getY = (price: number) => {
-        return height - 32 - ((price - minP) / totalRange) * (height - 65);
+        return 16 + plotHeight - ((price - minP) / totalRange) * plotHeight;
       };
 
-      // 2. Volume Bars at Bottom (Taker Buy vs Taker Sell alpha)
-      const maxVol = Math.max(...validCandles.map((c) => c.volume)) || 1;
-      const volAreaHeight = 36;
-      validCandles.forEach((c, i) => {
-        const x = i * candleWidth + candleWidth / 2;
-        const isUp = c.close >= c.open;
-        const vHeight = (c.volume / maxVol) * volAreaHeight;
-        const vY = height - vHeight - 16;
-        const bodyW = Math.max(2.5, candleWidth * 0.6);
-
-        ctx.fillStyle = isUp ? 'rgba(0, 255, 136, 0.28)' : 'rgba(255, 59, 48, 0.28)';
-        ctx.fillRect(x - bodyW / 2, vY, bodyW, vHeight);
-      });
-
-      // 3. AI Momentum Neural Ribbon under candles
-      const ribbonPoints: { x: number; y: number }[] = [];
-      validCandles.forEach((c, i) => {
-        const x = i * candleWidth + candleWidth / 2;
-        const y = getY((c.open + c.close) / 2);
-        ribbonPoints.push({ x, y });
-      });
-
-      if (ribbonPoints.length > 2) {
+      // 3. Grid Lines & Axis Ticks
+      ctx.strokeStyle = 'rgba(168, 85, 247, 0.08)';
+      ctx.lineWidth = 1;
+      const gridRows = 6;
+      for (let i = 0; i <= gridRows; i++) {
+        const y = 16 + (plotHeight / gridRows) * i;
         ctx.beginPath();
-        ctx.moveTo(ribbonPoints[0].x, ribbonPoints[0].y);
+        ctx.moveTo(0, y);
+        ctx.lineTo(chartWidth, y);
+        ctx.stroke();
 
-        for (let i = 1; i < ribbonPoints.length - 1; i++) {
-          const xc = (ribbonPoints[i].x + ribbonPoints[i + 1].x) / 2;
-          const yc = (ribbonPoints[i].y + ribbonPoints[i + 1].y) / 2;
-          ctx.quadraticCurveTo(ribbonPoints[i].x, ribbonPoints[i].y, xc, yc);
-        }
+        // Right-Hand Price Scale
+        const priceVal = maxP - (totalRange / gridRows) * i;
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.85)';
+        ctx.font = '600 9px "JetBrains Mono", monospace';
+        const priceStr =
+          priceVal >= 1000
+            ? `$${priceVal.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+            : priceVal >= 10
+            ? `$${priceVal.toFixed(2)}`
+            : `$${priceVal.toFixed(4)}`;
+        ctx.fillText(priceStr, chartWidth + 6, y + 3.5);
+      }
 
-        ctx.lineWidth = 4.5;
-        const ribbonGrad = ctx.createLinearGradient(0, 0, width, 0);
-        if (upProbability >= 50) {
-          ribbonGrad.addColorStop(0, 'rgba(0, 255, 136, 0.15)');
-          ribbonGrad.addColorStop(0.5, 'rgba(34, 211, 238, 0.65)');
-          ribbonGrad.addColorStop(1, 'rgba(0, 255, 136, 0.85)');
-        } else {
-          ribbonGrad.addColorStop(0, 'rgba(255, 59, 48, 0.15)');
-          ribbonGrad.addColorStop(0.5, 'rgba(251, 191, 36, 0.65)');
-          ribbonGrad.addColorStop(1, 'rgba(255, 59, 48, 0.85)');
+      // Slot calculation
+      const coneSpaceWidth = showCone ? Math.max(45, Math.min(85, chartWidth * 0.18)) : 0;
+      const candleAreaWidth = Math.max(80, chartWidth - coneSpaceWidth - 6);
+      const candleWidth = candleAreaWidth / validCandles.length;
+
+      // 4. Indicator Calculations (EMA 9, EMA 21, Bollinger Bands)
+      const closePrices = validCandles.map((c) => c.close);
+      const ema9 = calcEma(closePrices, 9);
+      const ema21 = calcEma(closePrices, 21);
+      const bb = calcBollingerBands(closePrices, 14, 2);
+
+      // A. Bollinger Bands Volatility Cloud Fill
+      if (showBands && bb.upper.length > 0) {
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i < validCandles.length; i++) {
+          const u = bb.upper[i];
+          if (u !== null) {
+            const x = i * candleWidth + candleWidth / 2;
+            const y = getY(u);
+            if (!started) {
+              ctx.moveTo(x, y);
+              started = true;
+            } else {
+              ctx.lineTo(x, y);
+            }
+          }
         }
-        ctx.strokeStyle = ribbonGrad;
+        for (let i = validCandles.length - 1; i >= 0; i--) {
+          const l = bb.lower[i];
+          if (l !== null) {
+            const x = i * candleWidth + candleWidth / 2;
+            const y = getY(l);
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(147, 51, 234, 0.05)';
+        ctx.fill();
+
+        // Upper & Lower subtle strokes
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.25)';
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // B. EMA 21 (Purple Ribbon Trail)
+      if (showEma && ema21.length > 2) {
+        ctx.beginPath();
+        validCandles.forEach((_, i) => {
+          const x = i * candleWidth + candleWidth / 2;
+          const y = getY(ema21[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.65)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // C. EMA 9 (Bright Cyan / Emerald Leading Ribbon)
+      if (showEma && ema9.length > 2) {
+        ctx.beginPath();
+        validCandles.forEach((_, i) => {
+          const x = i * candleWidth + candleWidth / 2;
+          const y = getY(ema9[i]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = upProbability >= 50 ? 'rgba(0, 255, 136, 0.85)' : 'rgba(255, 59, 48, 0.85)';
         ctx.shadowColor = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-        ctx.shadowBlur = 8;
+        ctx.shadowBlur = 6;
+        ctx.lineWidth = 2.4;
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
 
-      // 4. Forward Probability Cone Projection
-      const lastCandle = validCandles[validCandles.length - 1];
-      const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
-      const lastY = getY(lastCandle.close);
-      const targetConeX = Math.min(chartWidth - 2, lastX + coneWidth);
-      const upperY = getY(lastCandle.close + (upProbability / 100) * (is1Hour ? 45 : 18));
-      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * (is1Hour ? 45 : 18));
-      const midY = (upperY + lowerY) / 2;
+      // 5. High-Definition Candlesticks & Entry Badges
+      let lastEntryIndex = -10; // Prevent clumping
 
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(targetConeX, upperY);
-      ctx.lineTo(targetConeX, lowerY);
-      ctx.closePath();
-
-      const coneGrad = ctx.createLinearGradient(lastX, 0, targetConeX, 0);
-      if (upProbability >= 50) {
-        coneGrad.addColorStop(0, 'rgba(0, 255, 136, 0.28)');
-        coneGrad.addColorStop(0.6, 'rgba(34, 211, 238, 0.15)');
-        coneGrad.addColorStop(1, 'rgba(168, 85, 247, 0.02)');
-      } else {
-        coneGrad.addColorStop(0, 'rgba(255, 59, 48, 0.28)');
-        coneGrad.addColorStop(0.6, 'rgba(251, 191, 36, 0.15)');
-        coneGrad.addColorStop(1, 'rgba(244, 63, 94, 0.02)');
-      }
-      ctx.fillStyle = coneGrad;
-      ctx.fill();
-
-      // Cone Dashed Trajectory
-      ctx.setLineDash([3, 3]);
-      ctx.strokeStyle = upProbability >= 50 ? 'rgba(0, 255, 136, 0.7)' : 'rgba(255, 59, 48, 0.7)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(targetConeX, upperY);
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(targetConeX, lowerY);
-      ctx.stroke();
-
-      // Vector Target Line
-      ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(lastX, lastY);
-      ctx.lineTo(targetConeX, midY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Target Marker Pill on Projected Vector
-      const badgeW = width < 640 ? 46 : 54;
-      ctx.fillStyle = upProbability >= 50 ? '#063826' : '#3d0a14';
-      ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.roundRect(Math.max(lastX, targetConeX - badgeW), midY - 9, badgeW, 18, 4);
-      ctx.fill();
-      ctx.stroke();
-
-      ctx.fillStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-      ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
-      ctx.fillText(`${upProbability}% CONE`, Math.max(lastX + 4, targetConeX - badgeW + 4), midY + 3);
-
-      // 5. Render High-Definition OHLC Candlesticks
       validCandles.forEach((c, i) => {
         const x = i * candleWidth + candleWidth / 2;
         const openY = getY(c.open);
@@ -528,11 +646,11 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const lowY = getY(c.low);
 
         const isUp = c.close >= c.open;
-        const color = isUp ? '#00FF88' : '#FF3B30';
+        const candleColor = isUp ? '#00FF88' : '#FF3B30';
 
-        // High-Low Wick
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 1.3;
+        // High-Low Wick with rounded caps
+        ctx.strokeStyle = candleColor;
+        ctx.lineWidth = Math.max(1.2, Math.min(2.2, candleWidth * 0.15));
         ctx.beginPath();
         ctx.moveTo(x, highY);
         ctx.lineTo(x, lowY);
@@ -540,96 +658,330 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         // Candle Body
         const bodyTop = Math.min(openY, closeY);
-        const bodyHeight = Math.max(2, Math.abs(openY - closeY));
-        const bodyW = Math.max(3.5, candleWidth * 0.65);
+        const bodyHeight = Math.max(2.5, Math.abs(openY - closeY));
+        const bodyW = Math.max(3.5, Math.min(22, candleWidth * 0.68));
 
-        ctx.fillStyle = color;
-        ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
+        // Gradient Body Fill
+        const bodyGrad = ctx.createLinearGradient(0, bodyTop, 0, bodyTop + bodyHeight);
+        if (isUp) {
+          bodyGrad.addColorStop(0, '#00FF88');
+          bodyGrad.addColorStop(1, '#059669');
+        } else {
+          bodyGrad.addColorStop(0, '#FF3B30');
+          bodyGrad.addColorStop(1, '#be123c');
+        }
+        ctx.fillStyle = bodyGrad;
 
-        // Entry Marker on Breakthrough Bars
-        const isBreakout = isUp && i >= 5 && c.close > Math.max(...validCandles.slice(i - 5, i).map((x) => x.high));
-        if (isBreakout && i !== validCandles.length - 1) {
+        // Rounded body rectangle
+        ctx.beginPath();
+        const r = Math.min(2, bodyW / 3, bodyHeight / 2);
+        ctx.roundRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight, r);
+        ctx.fill();
+
+        // Subtle glow border around candle
+        ctx.strokeStyle = isUp ? 'rgba(0, 255, 136, 0.4)' : 'rgba(255, 59, 48, 0.4)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Smart, Non-Clumping Breakthrough Entry Signal (Max 2 across chart)
+        const isBreakout =
+          isUp &&
+          i >= 8 &&
+          i - lastEntryIndex >= 9 &&
+          c.close > Math.max(...validCandles.slice(i - 6, i).map((item) => item.high)) &&
+          i < validCandles.length - 2;
+
+        if (isBreakout) {
+          lastEntryIndex = i;
+
+          // Anchor dot
           ctx.fillStyle = '#00FF88';
           ctx.beginPath();
-          ctx.arc(x, lowY + 6, 2.5, 0, Math.PI * 2);
+          ctx.arc(x, lowY + 5, 2.5, 0, Math.PI * 2);
           ctx.fill();
 
-          ctx.fillStyle = '#062b1e';
+          // Entry Capsule Badge
+          const badgeW = 44;
+          const badgeH = 15;
+          ctx.fillStyle = 'rgba(6, 35, 24, 0.95)';
           ctx.strokeStyle = '#00FF88';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(x - 24, lowY + 12, 48, 14, 3);
+          ctx.roundRect(x - badgeW / 2, lowY + 10, badgeW, badgeH, 3.5);
           ctx.fill();
           ctx.stroke();
 
           ctx.fillStyle = '#00FF88';
           ctx.font = 'bold 7.5px "JetBrains Mono", monospace';
           ctx.textAlign = 'center';
-          ctx.fillText(`▲ ENTRY`, x, lowY + 22);
+          ctx.fillText(`▲ ENTRY`, x, lowY + 20.5);
           ctx.textAlign = 'left';
         }
       });
 
-      // 6. Latest Live Spot Pulsing Node
+      // 6. Forward Probability Cone Projection & Vector Target
+      if (showCone && validCandles.length > 0) {
+        const lastCandle = validCandles[validCandles.length - 1];
+        const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
+        const lastY = getY(lastCandle.close);
+        const targetConeX = Math.min(chartWidth - 2, lastX + coneSpaceWidth);
+
+        // Realistic variance scaled to asset volatility
+        const coneSpread = is1Hour
+          ? (asset === 'ETH' ? 14 : asset === 'SOL' ? 2.5 : 95)
+          : (asset === 'ETH' ? 4 : asset === 'SOL' ? 0.6 : 28);
+
+        const upperY = getY(lastCandle.close + (upProbability / 100) * coneSpread);
+        const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * coneSpread);
+        const midY = (upperY + lowerY) / 2;
+
+        // Cone Fill
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(targetConeX, upperY);
+        ctx.lineTo(targetConeX, lowerY);
+        ctx.closePath();
+
+        const coneGrad = ctx.createLinearGradient(lastX, 0, targetConeX, 0);
+        if (upProbability >= 50) {
+          coneGrad.addColorStop(0, 'rgba(0, 255, 136, 0.25)');
+          coneGrad.addColorStop(0.6, 'rgba(34, 211, 238, 0.12)');
+          coneGrad.addColorStop(1, 'rgba(168, 85, 247, 0.02)');
+        } else {
+          coneGrad.addColorStop(0, 'rgba(255, 59, 48, 0.25)');
+          coneGrad.addColorStop(0.6, 'rgba(251, 191, 36, 0.12)');
+          coneGrad.addColorStop(1, 'rgba(244, 63, 94, 0.02)');
+        }
+        ctx.fillStyle = coneGrad;
+        ctx.fill();
+
+        // Dashed Upper and Lower Envelopes
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = upProbability >= 50 ? 'rgba(0, 255, 136, 0.7)' : 'rgba(255, 59, 48, 0.7)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(targetConeX, upperY);
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(targetConeX, lowerY);
+        ctx.stroke();
+
+        // Center Trajectory Vector
+        ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(lastX, lastY);
+        ctx.lineTo(targetConeX, midY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Target Marker Pill on Projected Vector
+        const badgeW = width < 640 ? 46 : 54;
+        ctx.fillStyle = upProbability >= 50 ? '#063826' : '#3d0a14';
+        ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(Math.max(lastX, targetConeX - badgeW), midY - 9, badgeW, 18, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
+        ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
+        ctx.fillText(`${upProbability}% CONE`, Math.max(lastX + 3, targetConeX - badgeW + 3), midY + 3);
+      }
+
+      // 7. Dashed Strike Target Line & Offset Badge
+      if (strikePrice > 0.01) {
+        const strikeY = getY(strikePrice);
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)'; // Amber gold strike line
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(0, strikeY);
+        ctx.lineTo(chartWidth, strikeY);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Strike Badge on Right Axis
+        const strikeBadgeW = rightMargin - 4;
+        ctx.fillStyle = '#221505';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.roundRect(chartWidth + 3, strikeY - 9.5, strikeBadgeW, 19, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
+        const strikeStr =
+          strikePrice >= 1000 ? `$${Math.round(strikePrice).toLocaleString()}` : `$${strikePrice.toFixed(2)}`;
+        ctx.fillText(strikeStr, chartWidth + 5.5, strikeY + 3);
+      }
+
+      // 8. Live Spot Pulsing Node & Current Price Line
+      const lastCandle = validCandles[validCandles.length - 1];
+      const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
+      const lastY = getY(currentPrice || lastCandle.close);
+
+      // Dashed Live Price Ray
+      ctx.setLineDash([2, 3]);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.arc(lastX, lastY, 7, 0, Math.PI * 2);
+      ctx.moveTo(0, lastY);
+      ctx.lineTo(chartWidth, lastY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Pulsing Halo Beacon
+      const pulseRadius = 7 + Math.sin(Date.now() / 250) * 2;
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, pulseRadius, 0, Math.PI * 2);
       ctx.fillStyle = upProbability >= 50 ? 'rgba(0, 255, 136, 0.35)' : 'rgba(255, 59, 48, 0.35)';
       ctx.fill();
 
       ctx.beginPath();
-      ctx.arc(lastX, lastY, 3, 0, Math.PI * 2);
+      ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
       ctx.fillStyle = '#ffffff';
       ctx.fill();
 
-      // 7. Dashed Strike Target Line
-      const strikeY = getY(strikePrice);
-      ctx.setLineDash([4, 4]);
-      ctx.strokeStyle = 'rgba(168, 85, 247, 0.75)';
-      ctx.lineWidth = 1.2;
+      // Live Spot Price Tag on Right Axis
+      const spotBadgeW = rightMargin - 4;
+      ctx.fillStyle = upProbability >= 50 ? '#042817' : '#300810';
+      ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
+      ctx.lineWidth = 1.3;
       ctx.beginPath();
-      ctx.moveTo(0, strikeY);
-      ctx.lineTo(chartWidth, strikeY);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Strike Badge
-      const strikeBadgeW = rightMargin - 6;
-      ctx.fillStyle = '#170b2e';
-      ctx.strokeStyle = '#a855f7';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.roundRect(chartWidth + 3, strikeY - 9, strikeBadgeW, 18, 4);
+      ctx.roundRect(chartWidth + 3, lastY - 9.5, spotBadgeW, 19, 4);
       ctx.fill();
       ctx.stroke();
 
-      ctx.fillStyle = '#c084fc';
-      ctx.font = 'bold 8px "JetBrains Mono", monospace';
-      ctx.fillText(
-        strikePrice >= 1000 ? `$${Math.round(strikePrice)}` : `$${strikePrice.toFixed(1)}`,
-        chartWidth + 6,
-        strikeY + 3
-      );
+      ctx.fillStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
+      ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
+      const livePriceStr =
+        currentPrice >= 1000
+          ? `$${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+          : `$${currentPrice.toFixed(2)}`;
+      ctx.fillText(livePriceStr, chartWidth + 5.5, lastY + 3.5);
 
-      // 8. Right-Hand Price Scale Labels
-      ctx.fillStyle = '#94a3b8';
-      ctx.font = '600 8.5px "JetBrains Mono", monospace';
-      const steps = 5;
-      for (let s = 0; s <= steps; s++) {
-        const pVal = minP + (totalRange / steps) * s;
-        const pY = getY(pVal);
-        ctx.fillText(pVal >= 1000 ? `$${pVal.toFixed(0)}` : `$${pVal.toFixed(1)}`, chartWidth + 6, pY + 3);
+      // 9. Order Flow Delta Volume Histogram (Bottom 44px)
+      if (showVolume) {
+        const vTop = height - timeAxisHeight - bottomVolumeHeight;
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.12)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, vTop);
+        ctx.lineTo(chartWidth, vTop);
+        ctx.stroke();
+
+        const maxVol = Math.max(...validCandles.map((c) => c.volume)) || 1;
+        const vMaxHeight = bottomVolumeHeight - 6;
+
+        validCandles.forEach((c, i) => {
+          const x = i * candleWidth + candleWidth / 2;
+          const isUp = c.close >= c.open;
+          const vHeight = Math.max(3, (c.volume / maxVol) * vMaxHeight);
+          const vY = height - timeAxisHeight - vHeight - 2;
+          const bodyW = Math.max(2.5, candleWidth * 0.65);
+
+          // Buy vs Sell ratio
+          const buyPartH = vHeight * (c.takerBuyRatio || (isUp ? 0.7 : 0.3));
+          const sellPartH = vHeight - buyPartH;
+
+          // Taker Sell part (top)
+          ctx.fillStyle = 'rgba(255, 59, 48, 0.35)';
+          ctx.fillRect(x - bodyW / 2, vY, bodyW, sellPartH);
+
+          // Taker Buy part (bottom)
+          ctx.fillStyle = 'rgba(0, 255, 136, 0.55)';
+          ctx.fillRect(x - bodyW / 2, vY + sellPartH, bodyW, buyPartH);
+        });
+
+        // Volume Axis label
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+        ctx.font = '600 7.5px "JetBrains Mono", monospace';
+        ctx.fillText('VOL (TAKER Δ)', chartWidth + 6, height - timeAxisHeight - 8);
       }
 
-      // 9. Time Axis Labels at Bottom
+      // 10. Time Axis Labels at Bottom
       ctx.fillStyle = '#94a3b8';
       ctx.font = '600 8.5px "JetBrains Mono", monospace';
       const timeLabels = is1Hour
-        ? ['-60m', '-45m', '-30m', '-15m', 'NOW']
-        : ['-2m', '-1m30s', '-1m', '-30s', 'NOW'];
+        ? ['-60m', '-45m', '-30m', '-15m', '-5m', 'NOW']
+        : ['-3m', '-2m', '-1m', '-30s', '-10s', 'NOW'];
       const timeStepX = candleAreaWidth / (timeLabels.length - 1);
       timeLabels.forEach((lbl, idx) => {
-        ctx.fillText(lbl, Math.min(chartWidth - 28, Math.max(4, idx * timeStepX - 8)), height - 4);
+        ctx.fillText(lbl, Math.min(chartWidth - 28, Math.max(4, idx * timeStepX - 10)), height - 4);
       });
+
+      // 11. Interactive Hover Crosshair & HUD Overlay
+      if (hoverData && hoverData.x > 0 && hoverData.x < chartWidth && hoverData.y > 0 && hoverData.y < height) {
+        const hoverIdx = Math.floor(hoverData.x / candleWidth);
+        const candleUnderCursor = validCandles[Math.min(hoverIdx, validCandles.length - 1)];
+
+        // Draw crosshair lines
+        ctx.strokeStyle = 'rgba(216, 180, 254, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+
+        // Vertical
+        ctx.beginPath();
+        ctx.moveTo(hoverData.x, 0);
+        ctx.lineTo(hoverData.x, height - timeAxisHeight);
+        ctx.stroke();
+
+        // Horizontal
+        ctx.beginPath();
+        ctx.moveTo(0, hoverData.y);
+        ctx.lineTo(chartWidth, hoverData.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Hover Price Tooltip
+        const hoveredPrice = maxP - ((hoverData.y - 16) / plotHeight) * totalRange;
+        const hudPriceStr =
+          hoveredPrice >= 1000
+            ? `$${hoveredPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}`
+            : `$${hoveredPrice.toFixed(2)}`;
+
+        ctx.fillStyle = '#4c1d95';
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(chartWidth + 3, hoverData.y - 9, rightMargin - 4, 18, 4);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 8px "JetBrains Mono", monospace';
+        ctx.fillText(hudPriceStr, chartWidth + 5.5, hoverData.y + 3.5);
+
+        // Candle Stats Pill (Top-Left of chart)
+        if (candleUnderCursor) {
+          const hudW = 260;
+          const hudH = 22;
+          ctx.fillStyle = 'rgba(10, 5, 25, 0.92)';
+          ctx.strokeStyle = 'rgba(168, 85, 247, 0.5)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(8, 28, hudW, hudH, 6);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#e2e8f0';
+          ctx.font = '600 8.5px "JetBrains Mono", monospace';
+          const oStr = `O: ${candleUnderCursor.open.toFixed(1)}`;
+          const hStr = `H: ${candleUnderCursor.high.toFixed(1)}`;
+          const lStr = `L: ${candleUnderCursor.low.toFixed(1)}`;
+          const cStr = `C: ${candleUnderCursor.close.toFixed(1)}`;
+          const isUpCandle = candleUnderCursor.close >= candleUnderCursor.open;
+          ctx.fillText(`${oStr}  ${hStr}  ${lStr}  `, 14, 42);
+          ctx.fillStyle = isUpCandle ? '#00FF88' : '#FF3B30';
+          ctx.fillText(cStr, 175, 42);
+          ctx.fillStyle = '#a855f7';
+          ctx.fillText(` V: ${candleUnderCursor.volume}`, 220, 42);
+        }
+      }
 
       ctx.restore();
       animId = requestAnimationFrame(render);
@@ -637,7 +989,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
     animId = requestAnimationFrame(render);
     return () => cancelAnimationFrame(animId);
-  }, [candles, currentPrice, strikePrice, upProbability, is1Hour]);
+  }, [candles, currentPrice, strikePrice, upProbability, is1Hour, showEma, showBands, showVolume, showCone, hoverData, asset]);
 
   // SVG Area path generator for Neural Sparkline
   const { lineD, areaD } = useMemo(() => {
@@ -656,7 +1008,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
   }, [probabilityTimeline]);
 
   return (
-    <div className="space-y-4 font-mono text-gray-200">
+    <div className="space-y-4 font-mono text-gray-200 w-full min-w-0">
       
       {/* 1. TOP HEADER: 15S or 1H QUANTITATIVE ENGINE WITH AURA GLOW */}
       <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_35px_rgba(168,85,247,0.22)] relative overflow-hidden">
@@ -668,16 +1020,16 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             <Zap className="w-5 h-5 text-purple-300 animate-pulse" />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-2 flex-wrap">
               <h2 className="text-sm sm:text-base font-black text-white tracking-wider font-sans uppercase">
-                {is1Hour ? '1-HOUR QUANTITATIVE STRUCTURE & PROBABILITY CONE' : '15S ALPHA INTELLIGENCE ENGINE'}
+                {is1Hour ? `${asset} 1-HOUR QUANTITATIVE STRUCTURE` : `${asset} 15S ALPHA INTELLIGENCE`}
               </h2>
               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black tracking-widest uppercase border ${
                 is1Hour
                   ? 'bg-amber-500/20 text-amber-300 border-amber-400/40 shadow-[0_0_10px_rgba(251,191,36,0.3)]'
                   : 'bg-emerald-500/20 border-emerald-400/40 text-[#00FF88] shadow-[0_0_10px_rgba(0,255,136,0.3)]'
               }`}>
-                {is1Hour ? '● 60-MIN MACRO STREAM' : '● SUB-SECOND STREAM'}
+                {is1Hour ? '● 60-MIN MACRO STREAM' : '● SUB-SECOND TICK STREAM'}
               </span>
             </div>
             <p className="text-[10px] text-purple-300/80 font-sans mt-0.5">
@@ -688,13 +1040,53 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
         </div>
 
-        {/* Live Spot Metric & Audio Toggle */}
-        <div className="flex items-center space-x-2.5 relative z-10">
+        {/* Live Spot Metric & Audio / Indicator Controls */}
+        <div className="flex items-center space-x-2.5 relative z-10 flex-wrap">
           <div className="px-3.5 py-1.5 rounded-xl bg-[#080414]/90 border border-purple-500/40 text-[11px] flex items-center space-x-2 shadow-inner">
             <span className="text-purple-300 font-semibold">SPOT PRICE:</span>
             <span className="font-black text-white font-mono text-xs sm:text-sm drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]">
-              ${currentPrice.toFixed(2)}
+              ${currentPrice >= 1000 ? currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : currentPrice.toFixed(2)}
             </span>
+          </div>
+
+          {/* Quick Indicator Toggles */}
+          <div className="hidden sm:flex items-center space-x-1 bg-[#080414] p-1 rounded-xl border border-purple-900/40 text-[10px]">
+            <button
+              onClick={() => setShowEma(!showEma)}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                showEma ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Toggle EMA 9/21 Ribbon"
+            >
+              EMA
+            </button>
+            <button
+              onClick={() => setShowBands(!showBands)}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                showBands ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Toggle Bollinger Cloud"
+            >
+              BB
+            </button>
+            <button
+              onClick={() => setShowCone(!showCone)}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                showCone ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Toggle AI Volatility Cone"
+            >
+              CONE
+            </button>
+            <button
+              onClick={() => setShowVolume(!showVolume)}
+              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+                showVolume ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
+              }`}
+              title="Toggle Orderflow Volume"
+            >
+              VOL
+            </button>
           </div>
 
           <button
@@ -711,16 +1103,16 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
       </div>
 
-      {/* 2. VISUAL CENTERPIECE: CANDLESTICK & PROBABILITY CONE CHART WITH AURA */}
+      {/* 2. VISUAL CENTERPIECE: EXPANSIVE CANDLESTICK & PROBABILITY CONE CHART */}
       <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-3.5 relative overflow-hidden backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between text-xs border-b border-purple-900/40 pb-2.5 gap-2">
           <div className="flex items-center space-x-2">
             <BarChart2 className="w-4 h-4 text-cyan-400" />
-            <span className="font-black text-white text-xs tracking-wider uppercase">
+            <span className="font-black text-white text-xs tracking-wider uppercase font-mono">
               {is1Hour ? `${asset}/USD 1-HOUR STRUCTURE MATRIX` : `${asset}/USD 15S LIVE CANDLESTICK MATRIX`}
             </span>
             <span className="text-[9px] text-purple-400 font-mono">
-              • {is1Hour ? '2M BAR RESOLUTION' : '5S TICK INTERVAL'}
+              • {is1Hour ? '5M BAR RESOLUTION' : 'REAL-TIME LIVE STREAM'}
             </span>
           </div>
 
@@ -740,26 +1132,31 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
         </div>
 
-        {/* Canvas Visualizer Frame with Glowing Border */}
-        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 p-2 overflow-hidden h-[340px] sm:h-[380px] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
+        {/* Spacious, Non-Compressed Canvas Visualizer Frame (460px on mobile, 520px on desktop) */}
+        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 overflow-hidden h-[440px] sm:h-[490px] lg:h-[530px] shadow-[inset_0_0_40px_rgba(0,0,0,0.85)] w-full">
           <div ref={containerRef} className="w-full h-full relative">
-            <canvas ref={canvasRef} className="w-full h-full block" />
+            <canvas
+              ref={canvasRef}
+              className="w-full h-full block cursor-crosshair"
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            />
 
-            {/* Overlaid Active Indicators */}
-            <div className="absolute top-2 left-2 flex items-center space-x-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1 rounded-xl border border-purple-500/40 text-[10px] shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+            {/* Overlaid Active Direction & Cone Badge */}
+            <div className="absolute top-2.5 left-2.5 flex items-center space-x-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] shadow-[0_0_15px_rgba(0,0,0,0.5)]">
               <Radio className="w-3 h-3 text-[#00FF88] animate-pulse" />
               <span className="text-gray-300 font-bold">PROJECTED CONE:</span>
               <span className="text-cyan-300 font-black">{upProbability}% BULLISH</span>
             </div>
 
-            <div className="absolute top-2 right-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+            <div className="absolute top-2.5 right-2.5 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
               CONFIDENCE: <strong className="text-white">{confidence}%</strong>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 3. CLEAN PROBABILITY BAR (CLEARLY LABELED) */}
+      {/* 3. PROBABILITY BAR (CLEARLY LABELED) */}
       <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-5 shadow-[0_0_30px_rgba(168,85,247,0.15)] space-y-2.5 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between text-xs gap-2">
           <div className="flex items-center space-x-2">
@@ -777,7 +1174,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         {/* Clean High-Contrast Bar Display */}
         <div className="grid grid-cols-2 gap-3 text-center my-1">
-          <div className="bg-[#080414] py-2 px-3 rounded-2xl border border-emerald-500/50 shadow-[0_0_15px_rgba(0,255,136,0.15)] flex items-center justify-between">
+          <div className="bg-[#080414] py-2.5 px-3 rounded-2xl border border-emerald-500/50 shadow-[0_0_15px_rgba(0,255,136,0.15)] flex items-center justify-between">
             <span className="text-xs font-black text-emerald-400 flex items-center space-x-1">
               <ArrowUpRight className="w-4 h-4" />
               <span>BUY UP</span>
@@ -787,7 +1184,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </span>
           </div>
 
-          <div className="bg-[#080414] py-2 px-3 rounded-2xl border border-rose-500/50 shadow-[0_0_15px_rgba(255,59,48,0.15)] flex items-center justify-between">
+          <div className="bg-[#080414] py-2.5 px-3 rounded-2xl border border-rose-500/50 shadow-[0_0_15px_rgba(255,59,48,0.15)] flex items-center justify-between">
             <span className="text-xs font-black text-rose-400 flex items-center space-x-1">
               <ArrowDownRight className="w-4 h-4" />
               <span>BUY DOWN</span>
