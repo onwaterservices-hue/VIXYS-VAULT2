@@ -4,5 +4,5 @@ coverage/
 *.log
 .env*
 !.env.example
-data/
-data/vixy_store.json
+/data/
+/data/vixy_store.json
