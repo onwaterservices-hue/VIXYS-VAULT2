@@ -188,9 +188,16 @@ function isMasterAdminEmail(email) {
 }
 __name(isMasterAdminEmail, "isMasterAdminEmail");
 
+function getMasterAdminBootstrapPasswordHash() {
+  return process.env.MASTER_ADMIN_BOOTSTRAP_PASSWORD
+    ? hashPassword(process.env.MASTER_ADMIN_BOOTSTRAP_PASSWORD)
+    : undefined;
+}
+__name(getMasterAdminBootstrapPasswordHash, "getMasterAdminBootstrapPasswordHash");
+
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === "undefined") return;
-  const defaultPasswordHash = hashPassword("Seattle007");
+  const defaultPasswordHash = getMasterAdminBootstrapPasswordHash();
 
   let masterAdmin = serverUsers.find(
     (u) => normalizeEmail(u.email) === "vixyvault0@gmail.com"
@@ -2348,11 +2355,24 @@ function canLockCurrentCycle(livePrice) {
   if (!predictionComputedFromCurrentCycle)
     reasons.push("PREDICTION_CYCLE_MISMATCH");
   const validationPassed = Boolean(
+    minimumObservationWindowPassed &&
+    withinEntryWindow &&
     dataFresh &&
     calibrationComplete &&
     analysisComplete &&
-    cycleExpiryFuture &&
-    (currentConfidence >= 60 || currentModelProbability >= 0.5 || !active15mCycle.hasConflict)
+    isNotChoppy &&
+    signalPersistent &&
+    lockQualityPass &&
+    evidenceAgreementPass &&
+    mtfPass &&
+    strikeFeasiblePass &&
+    evidenceSufficient &&
+    rollingStabilityPassed &&
+    protectionApproved &&
+    !active15mCycle.hasConflict &&
+    !active15mCycle.signalUnstable &&
+    !crossAssetSevereDivergence &&
+    predictionComputedFromCurrentCycle
   );
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
@@ -13833,7 +13853,7 @@ function ensureUserExists(input, options) {
       volumeTrades: 0,
       stripeCustomerId: sub?.stripeCustomerId,
       passwordHash: isMasterAdminEmail(cleanEmail)
-        ? hashPassword("Seattle007")
+        ? getMasterAdminBootstrapPasswordHash()
         : void 0,
     };
     serverUsers.unshift(user);
@@ -14464,7 +14484,7 @@ async function loadPersistentStoreAsync() {
 __name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
 loadPersistentStore();
 function seedInitialUsers() {
-  const defaultPass = hashPassword("Seattle007");
+  const defaultPass = getMasterAdminBootstrapPasswordHash();
   const masterAdmin = {
     id: "usr_owner_01",
     uid: "usr_owner_01",
