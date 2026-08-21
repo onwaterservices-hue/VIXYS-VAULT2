@@ -272,14 +272,12 @@ export default function App() {
     getEntitlementsApi(userEmail, userId)
       .then((ent) => {
         if (ent) {
-          if (ent.entitlements) {
-            setEntitlements(ent.entitlements);
-          }
+          setEntitlements(ent.entitlements);
           if (ent.dayPass) {
             setDayPassInfo(ent.dayPass);
           }
 
-          const resolvedPlan = ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' ? 'VIXY VAULT ELITE QUANT' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : (ent.plan || 'NONE')));
+          const resolvedPlan = ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' ? 'VIXY VAULT ELITE QUANT' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
           setSubscription({
             plan: resolvedPlan as any,
             status: (ent.status === 'active' || ent.dayPass?.active ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,

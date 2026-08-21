@@ -19,25 +19,6 @@ function getFallbackDataForUrl(url: string): any {
   if (url.includes('/status') || url.includes('/health')) {
     return { status: 'ONLINE', maintenance: false, emergencyLock: false, modelActive: true };
   }
-  if (url.includes('/entitlements')) {
-    return {
-      authenticated: false,
-      entitled: false,
-      access: false,
-      plan: 'NONE',
-      logicalPlan: 'NONE',
-      status: 'inactive',
-      entitlements: {
-        starter: false, proQuant: false, eliteQuant: false, scalping15s: false, canAccessProDesks: false,
-        canAccessAdminPanel: false, livePredictions: false, modelProbability: false, confidenceFilter80: false,
-        vixyLocks: false, webTerminal: false, l2NetTakerVolume: false, historicalPatternMatcher: false,
-        webhookAlerts: false, highConfidenceFilter: false, executionLogJournal: false, apiKeysAccess: false,
-        orderbookImbalance: false, unlimitedWebhooks: false, prioritySupport: false, sha256Exporting: false,
-        discordSignals: false, telegramSignals: false
-      },
-      dayPass: { active: false, secondsRemaining: 0 }
-    };
-  }
   return { success: true, timestamp: Date.now() };
 }
 

@@ -1028,11 +1028,15 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       setBuildingLockScore(prot.lockScore);
 
       if ((isGenuineLockAuthorized || forceLockThreshold) && !lockedDecision) {
-        const lockDir = (canonicalDecision?.currentState === 'LOCKED_DOWN' || liveDir === 'DOWN') ? 'DOWN' : 'UP';
-        const finalOffset = (Math.random() * 30 + 50) * (lockDir === 'UP' ? -1 : 1);
-        const finalStrike = spotPrice + finalOffset;
-        const lockedConf = Math.max(gem.confidence, highestProb, 78);
-        const lockedScore = Math.max(prot.lockScore, 82);
+        const lockDir = canonicalDecision?.direction !== 'NEUTRAL' && canonicalDecision?.direction !== 'SKIP'
+          ? (canonicalDecision?.direction as 'UP' | 'DOWN')
+          : ((canonicalDecision?.currentState === 'LOCKED_DOWN' || liveDir === 'DOWN') ? 'DOWN' : 'UP');
+        
+        const finalStrike = canonicalDecision?.openStrike || canonicalDecision?.spotAtLock || (spotPrice + (lockDir === 'UP' ? -104.05 : 104.05));
+        const finalOffset = finalStrike - spotPrice;
+        
+        const lockedConf = canonicalDecision?.confidence || Math.max(gem.confidence, highestProb, 78);
+        const lockedScore = canonicalDecision?.lockScore || Math.max(prot.lockScore, 82);
         
         console.log(`[VIXY:LOCK_AUTHORIZED] Card LOCKED on confident model signal after 5M observation window! Direction=${lockDir} LockScore=${lockedScore}/100 Conviction=${lockedConf}%`);
         setLockedDecision({

@@ -178,7 +178,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       onClose();
     } catch (err) {
       setLoading(false);
-      setErrorMsg(err.message === 'Failed to fetch' ? 'Network error: Cannot reach backend API. If on Vercel, deploy to Render/Railway instead.' : 'Network error. Please try again.');
+      setErrorMsg('Network error. Please try again.');
     }
   };
 
