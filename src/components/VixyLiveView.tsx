@@ -264,7 +264,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* CENTER HERO (Left 7 Cols) */}
-        <div className={`lg:col-span-7 bg-gradient-to-br from-[#1B0A38] via-[#100626] to-[#0B051A] border ${mainBorder} rounded-3xl p-6 sm:p-8 space-y-8 relative overflow-hidden transition-all duration-700 ${glowShadow}`}>
+        <div id="vixy-command-hero" className={`lg:col-span-7 bg-gradient-to-br from-[#1F0C42] via-[#12072B] to-[#0A0417] border-2 ${mainBorder} rounded-3xl p-6 sm:p-8 space-y-8 relative overflow-hidden transition-all duration-700 ${glowShadow} shadow-[0_0_50px_rgba(168,85,247,0.25)] ring-1 ring-purple-500/30`}>
           <div className="absolute top-0 right-0 p-8 opacity-5">
             <Cpu className="w-48 h-48 text-cyan-400" />
           </div>
