@@ -8900,7 +8900,7 @@ async function updateSubscriptionInFirestore(email, updateData) {
     };
     serverUsers.unshift(newUsr);
   }
-  if (cleanEmail.includes(".internal") || cleanEmail.includes("vixy_internal")) return;
+  if (cleanEmail.endsWith("@vixy.internal")) return;
   savePersistentStore();
   if (db) {
     try {
@@ -13680,7 +13680,7 @@ async function resolveCanonicalUserByEmail(email) {
 }
 __name(resolveCanonicalUserByEmail, "resolveCanonicalUserByEmail");
 async function persistSingleUser(user) {
-  if (user.email && (user.email.includes(".internal") || user.email.includes("vixy_internal"))) {
+  if (user.email && user.email.endsWith("@vixy.internal")) {
     return;
   }
   savePersistentStore();
@@ -13871,7 +13871,7 @@ function ensureUserExists(input, options) {
         updatedAt: new Date().toISOString(),
       });
     }
-    if (!cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
+    if (!cleanEmail.endsWith("@vixy.internal")) {
       savePersistentStore();
       persistSingleUser(user).catch((err) =>
         console.warn("[FIRESTORE USER] Async save error:", err?.message),
@@ -13906,7 +13906,7 @@ function ensureUserExists(input, options) {
       updated = true;
     }
     if (updated) {
-      if (!cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
+      if (!cleanEmail.endsWith("@vixy.internal")) {
         savePersistentStore();
         persistSingleUser(user).catch((err) =>
           console.warn("[FIRESTORE USER] Async update error:", err?.message),
@@ -13914,7 +13914,7 @@ function ensureUserExists(input, options) {
       }
     }
   }
-  if (created && !cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
+  if (created && !cleanEmail.endsWith("@vixy.internal")) {
     console.log(
       `[AUTH SYNC] Processed user: ${user.email} (Created: ${created})`,
     );
