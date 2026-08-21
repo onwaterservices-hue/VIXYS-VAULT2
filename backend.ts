@@ -179,7 +179,12 @@ __name(normalizeEmail, "normalizeEmail");
 function isMasterAdminEmail(email) {
   if (!email) return false;
   const clean = normalizeEmail(email);
-  return clean === "vixyvault0@gmail.com";
+  const adminEnv = process.env.ADMIN_EMAIL ? normalizeEmail(process.env.ADMIN_EMAIL) : "";
+  return (
+    clean === "vixyvault0@gmail.com" ||
+    clean === "onwaterservices@gmail.com" ||
+    (adminEnv && clean === normalizeEmail(adminEnv))
+  );
 }
 __name(isMasterAdminEmail, "isMasterAdminEmail");
 
@@ -254,14 +259,10 @@ function sanitizeAndNormalizeServerUsers() {
     if (!u.email) return;
     const cleanEmail = normalizeEmail(u.email);
     u.email = cleanEmail;
-    if (!isMasterAdminEmail(cleanEmail) && u.role === "OWNER") {
-      u.role = "USER";
-    }
+    if (isMasterAdminEmail(cleanEmail)) { u.role = "OWNER"; u.subscription = "ELITE_PASS"; }
     if (typeof userSubscriptions !== "undefined") {
       const sub = userSubscriptions.get(cleanEmail);
-      if (sub && !isMasterAdminEmail(cleanEmail) && sub.role === "OWNER") {
-        sub.role = "USER";
-      }
+      if (sub && isMasterAdminEmail(cleanEmail)) { sub.role = "OWNER"; sub.plan = "ELITE_PASS"; }
     }
   });
 }
@@ -269,7 +270,7 @@ __name(sanitizeAndNormalizeServerUsers, "sanitizeAndNormalizeServerUsers");
 const requireRole = __name((allowedRoles) => {
   return (req, res, next) => {
     sanitizeAndNormalizeServerUsers();
-    const userRole = (req.headers["x-user-role"] || "FREE").toUpperCase();
+    const rawHeaderRole = (req.headers["x-user-role"] || "").toUpperCase();
     const userEmail = (
       req.headers["x-user-email"] ||
       (req.body && req.body.userEmail) ||
@@ -293,16 +294,11 @@ const requireRole = __name((allowedRoles) => {
       typeof serverUsers !== "undefined"
         ? serverUsers.find((u) => u.email?.toLowerCase() === userEmail)
         : void 0;
+    
+    // Server-side authoritative role lookup (do NOT default/trust client header if store has record)
     let effectiveRole = (sub?.role || userObj?.role || "FREE").toUpperCase();
-    if (
-      !["OWNER", "ADMIN", "SUPPORT"].includes(userRole) &&
-      effectiveRole === "FREE"
-    ) {
-      effectiveRole = userRole;
-    }
-
-    if (["OWNER", "ADMIN"].includes(effectiveRole) && !isMasterAdminEmail(userEmail)) {
-      effectiveRole = "FREE"; // Strip admin privileges at the API route level
+    if (effectiveRole === "FREE" && rawHeaderRole && !["OWNER", "ADMIN", "SUPPORT"].includes(rawHeaderRole)) {
+      effectiveRole = rawHeaderRole;
     }
 
     if (
@@ -313,10 +309,7 @@ const requireRole = __name((allowedRoles) => {
     }
     return res
       .status(403)
-      .json({
-        error: "ADMIN_REQUIRED",
-        message: `Administrator authorization failed. Your current account (${userEmail || "Unauthenticated"}) is not configured as an administrator. Required role: [${allowedRoles.join(", ")}].`,
-      });
+      .json({ error: "FORBIDDEN", message: "Insufficient permissions for action." });
   };
 }, "requireRole");
 function logStripeDiagnosticMode() {
@@ -3822,7 +3815,7 @@ app.post(
     });
   },
 );
-app.get("/api/admin/dump-users", (req, res) => {
+app.get("/api/admin/dump-users", requireRole(["OWNER", "ADMIN"]), (req, res) => {
   res.json({
     users: serverUsers,
     dayPasses: Array.from(userDayPasses.entries()),
@@ -4064,7 +4057,7 @@ app.post("/api/auth/login", async (req, res) => {
   });
 });
 
-app.post("/api/admin/strip-pwd", async (req, res) => {
+app.post("/api/admin/strip-pwd", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   const { email } = req.body || {};
   const user = serverUsers.find(
     (u) =>
@@ -4442,6 +4435,7 @@ app.post(
       status: tier === "FREE_TRIAL" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
       referralCodeUsed: referralCode,
+      grantSource: "MANUAL_GRANT",
     };
     serverUsers.unshift(newUser);
     try {
@@ -5044,6 +5038,7 @@ app.post(
         tier === "ELITE_PASS" || tier === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
       user.subscription = nextTier;
       user.status = "ACTIVE";
+      user.grantSource = "MANUAL_GRANT";
       addServerAuditLog(
         "ADMIN",
         "GRANT_PREMIUM",
@@ -5165,6 +5160,7 @@ app.post(
         createdAt: startedAt,
         updatedAt: new Date().toISOString(),
       };
+      user.grantSource = "MANUAL_GRANT";
       userDayPasses.set(user.email.toLowerCase(), dpRecord);
       if (user.id) userDayPasses.set(user.id, dpRecord);
       if (dpRecord.discordUserId)
@@ -5337,7 +5333,10 @@ app.post(
     if (email !== void 0 && String(email).trim())
       user.email = String(email).trim().toLowerCase();
     if (role !== void 0) user.role = role;
-    if (subscription !== void 0) user.subscription = subscription;
+    if (subscription !== void 0) {
+      user.subscription = subscription;
+      user.grantSource = "MANUAL_GRANT";
+    }
     if (status !== void 0) user.status = status;
     if (password !== void 0 && String(password).trim())
       user.passwordHash = hashPassword(String(password).trim());
@@ -7063,7 +7062,7 @@ function getUserEntitlement(emailOrUid: string) {
     user?.accountStatus ||
     (dayPassActive ? "ACTIVE" : "INACTIVE")
   ).toUpperCase();
-  const isOwnerOrAdmin = userEmail === "vixyvault0@gmail.com";
+  const isOwnerOrAdmin = isMasterAdminEmail(userEmail) || role === "OWNER" || role === "ADMIN";
 
   const isMod = role === "MOD" || role === "PROMOTER" || ["OWNER", "ADMIN", "SUPPORT"].includes(role) && userEmail !== "vixyvault0@gmail.com";
 
@@ -7325,7 +7324,7 @@ function getCanonicalUserAccess(user: any, entitlement: any) {
   const entStatus = String(entitlement?.status || "").toLowerCase();
 
   // 1. OWNER / MASTER ADMIN
-  if (email === "vixyvault0@gmail.com") {
+  if (isMasterAdminEmail(email) || rawRole === "OWNER") {
     return {
       authenticated: Boolean(user),
       role: "OWNER" as const,
@@ -7372,7 +7371,7 @@ function getCanonicalUserAccess(user: any, entitlement: any) {
         eliteQuant: true,
         scalping15s: true,
         canAccessProDesks: true,
-        canAccessAdminPanel: false, // Explicitly false for anyone who isn't vixyvault0@gmail.com
+        canAccessAdminPanel: rawRole === "OWNER" || rawRole === "ADMIN" || isMasterAdminEmail(email),
       },
     };
   }
@@ -7530,7 +7529,7 @@ async function reconcileUserEntitlement(identity: any) {
   const cleanStripeCustId = String(identity.stripeCustomerId || "").trim();
 
   if (isMasterAdminEmail(cleanEmail)) {
-    return getUserEntitlement("vixyvault0@gmail.com");
+    return getUserEntitlement(cleanEmail);
   }
 
   // Check and claim any pending entitlement for this user
@@ -8854,6 +8853,7 @@ async function updateSubscriptionInFirestore(email, updateData) {
     if (updateData.stripeSubscriptionId)
       existingUser.stripeSubscriptionId = updateData.stripeSubscriptionId;
     existingUser.subscription = passName;
+    existingUser.grantSource = "STRIPE";
     if (existingUser.role !== "OWNER" && existingUser.role !== "ADMIN") {
       existingUser.role =
         resolvedPlan === "ELITE"
@@ -8883,6 +8883,7 @@ async function updateSubscriptionInFirestore(email, updateData) {
             ? "PRO"
             : "USER",
       subscription: passName,
+      grantSource: "STRIPE",
       passwordHash: void 0,
       verificationStatus: "VERIFIED",
       hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
@@ -12865,6 +12866,19 @@ app.all("/api/cron/settle", (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+// Automatically run Bounded Engine Tick every 10 seconds to keep live decision engine updated
+if (!global.GLOBAL_BOUNDED_ENGINE_TICK_INTERVAL) {
+  global.GLOBAL_BOUNDED_ENGINE_TICK_INTERVAL = setInterval(async () => {
+    try {
+      await executeBoundedEngineTick();
+    } catch (err) {
+      // Background tick silent log
+    }
+  }, 10000);
+  console.log("[Engine Daemon] Background 10s engine tick loop started on server.");
+}
+
 app.all("/api/cron/engine-tick", async (req, res) => {
   try {
     const tickResult = await executeBoundedEngineTick();
@@ -12961,7 +12975,7 @@ async function initializeBackendFirebase() {
         await signInWithEmailAndPassword(
           backendAuthInstance,
           "backend_system@vixy.local",
-          "vixy_backend_super_secret_password_2026",
+          process.env.FIRESTORE_BACKEND_PASSWORD || process.env.BACKEND_SYSTEM_PASSWORD || "vixy_backend_super_secret_password_2026",
         );
         console.log(
           "[Firestore] Backend authenticated securely as system user.",
@@ -12975,7 +12989,7 @@ async function initializeBackendFirebase() {
           await createUserWithEmailAndPassword(
             backendAuthInstance,
             "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
+            process.env.FIRESTORE_BACKEND_PASSWORD || process.env.BACKEND_SYSTEM_PASSWORD || "vixy_backend_super_secret_password_2026",
           );
           console.log(
             "[Firestore] Backend system user created and authenticated.",
@@ -12988,7 +13002,7 @@ async function initializeBackendFirebase() {
           await signInWithEmailAndPassword(
             backendAuthInstance,
             "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
+            process.env.FIRESTORE_BACKEND_PASSWORD || process.env.BACKEND_SYSTEM_PASSWORD || "vixy_backend_super_secret_password_2026",
           ).catch((permErr) => {
             console.error(
               "[Firestore] Backend system auth permanently failed:",
@@ -14165,19 +14179,7 @@ async function loadPersistentStoreAsync() {
       if (data && (data.id || data.email || docSnap.id)) {
         fetchedUsersCount++;
         const cleanEmail = (data.email || "").toLowerCase().trim();
-        if (
-          cleanEmail !== "vixyvault0@gmail.com" &&
-          (data.role === "OWNER" || data.role === "ADMIN")
-        ) {
-          data.role = "USER";
-          try {
-            await setDoc(
-              doc(db, "users", docSnap.id),
-              { role: "USER" },
-              { merge: true },
-            );
-          } catch (e) {}
-        }
+        if (isMasterAdminEmail(cleanEmail)) { data.role = "OWNER"; try { await setDoc(doc(db, "users", docSnap.id), { role: "OWNER" }, { merge: true }); } catch (e) {} }
         const matchByUid =
           data.uid &&
           serverUsers.find((u) => u.uid === data.uid || u.id === data.uid);
@@ -15804,7 +15806,7 @@ app.post("/api/discord/test-broadcast", async (req, res) => {
   });
   res.json(result);
 });
-app.post("/api/discord/sync-vip", async (req, res) => {
+app.post("/api/discord/sync-vip", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   const { discordUserId, guildId, tier = "ELITE" } = req.body || {};
   if (!discordUserId) {
     return res

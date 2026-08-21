@@ -130,7 +130,7 @@ const VixyLiveContent: React.FC<VixyLiveViewProps> = ({ ticker }) => {
   const bullScore = canonical15m.gemini?.bullScore ?? 50;
   const bearScore = canonical15m.gemini?.bearScore ?? 50;
 
-  const isBullishEdge = effectiveUpProb > effectiveDownProb || (effectiveUpProb === effectiveDownProb && bullScore >= bearScore);
+  const isBullishEdge = effectiveUpProb > effectiveDownProb || (effectiveUpProb === effectiveDownProb && bullScore > bearScore);
   const liveDirection: 'UP' | 'DOWN' = isBullishEdge ? 'UP' : 'DOWN';
 
   // State Machine Mapping for VIXY LIVE (Two-sided directional intelligence, NO SKIP)

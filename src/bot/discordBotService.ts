@@ -372,13 +372,12 @@ export async function assignDiscordRoleToUser(
     }
 
     if (!botToken || !creds.isValid) {
-      console.warn(`[Discord Role Sync] ⚠️ Notice: DISCORD_BOT_TOKEN is missing or unconfigured. Simulating role synchronization in development/preview mode.`);
+      console.warn(`[Discord Role Sync] ⚠️ Notice: DISCORD_BOT_TOKEN is missing or unconfigured.`);
       return {
-        success: true,
-        message: 'Simulated Discord role assignment (development/preview mode).',
-        code: 'ROLE_ASSIGNED',
-        roleId: targetRoleId,
-        status: 'simulated_success',
+        success: false,
+        message: 'DISCORD_BOT_TOKEN is missing or unconfigured on backend server.',
+        code: 'BOT_TOKEN_MISSING',
+        status: 'failed_unconfigured',
       };
     }
 
@@ -540,13 +539,12 @@ export async function assignDiscordRoleToUser(
             code: 'USER_NOT_IN_SERVER',
           };
         } else if (memberRes.status === 401) {
-          console.warn(`[Discord Role Sync] ⚠️ Notice: 401 Unauthorized from Discord API. Simulating success in preview/development mode.`);
+          console.warn(`[Discord Role Sync] ❌ 401 Unauthorized from Discord API. Token is invalid or expired.`);
           return {
-            success: true,
-            message: 'Simulated Discord role assignment (development/preview mode - 401 bypass).',
-            code: 'ROLE_ASSIGNED',
-            roleId: targetRoleId,
-            status: 'simulated_success',
+            success: false,
+            message: 'Discord Bot Token is invalid or unauthorized (401). Please verify server DISCORD_BOT_TOKEN credential.',
+            code: 'DISCORD_UNAUTHORIZED',
+            status: 'failed_unauthorized',
           };
         } else if (memberRes.status === 403) {
           return {
@@ -641,11 +639,10 @@ export async function assignDiscordRoleToUser(
     }
 
     return {
-      success: true,
-      message: 'Simulated Discord role assignment (development/preview mode fallback).',
-      code: 'ROLE_ASSIGNED',
-      roleId: targetRoleId,
-      status: 'simulated_success',
+      success: false,
+      message: 'Discord Bot Token not configured or ready on server.',
+      code: 'BOT_TOKEN_MISSING',
+      status: 'failed_unconfigured',
     };
   })();
 
