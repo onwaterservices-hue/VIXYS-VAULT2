@@ -259,19 +259,19 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const isStrikeAbove = strikeGapVal >= 0;
 
   return (
-    <div className="space-y-6 font-mono text-purple-100 animate-fadeIn relative">
+    <div className="space-y-6 font-mono text-purple-100 animate-fadeIn relative w-full max-w-7xl mx-auto min-w-0">
       {/* Radiant Glowing Ambient Aura Background */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-96 bg-gradient-to-b from-purple-600/15 via-indigo-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
 
       {/* ================================================== */}
       {/* 1. HEADER: 1-HOUR QUANTITATIVE DECISION DESK      */}
       {/* ================================================== */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#100624] to-[#080214] rounded-3xl p-5 sm:p-6 border border-purple-500/40 shadow-[0_0_45px_rgba(147,51,234,0.22)] relative overflow-hidden backdrop-blur-xl">
+      <div className="bg-gradient-to-r from-[#14082e] via-[#100624] to-[#080214] rounded-3xl p-4 sm:p-6 border border-purple-500/40 shadow-[0_0_45px_rgba(147,51,234,0.22)] relative overflow-hidden backdrop-blur-xl w-full min-w-0">
         <div className="absolute -right-12 -bottom-12 w-72 h-72 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-12 -top-12 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-5 relative z-10">
-          <div className="space-y-2">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-5 relative z-10 min-w-0">
+          <div className="space-y-2 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/40 text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
                 <Clock className="w-3.5 h-3.5 text-purple-400" />
@@ -287,7 +287,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
 
             <div>
-              <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-3 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+              <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white flex items-center gap-3 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
                 <span>1-HOUR QUANTITATIVE DECISION DESK</span>
               </h1>
               <p className="text-xs sm:text-sm text-purple-200/80 font-sans tracking-wide mt-1">
@@ -296,7 +296,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             {/* Live Spot Price Header Capsule */}
             <div className="px-4 py-2 rounded-2xl bg-[#080414]/90 border border-purple-500/40 text-xs flex items-center space-x-2 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
               <span className="text-purple-300 font-semibold">LIVE SPOT:</span>
@@ -329,7 +329,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         title="1-HOUR DESK INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live 1H macro trend probability, strike targets, and directional conviction."
       >
-        <div className="space-y-6">
+        <div className="space-y-6 w-full min-w-0">
           
           {/* ================================================== */}
           {/* 2. STRIKE MATRIX: MAIN DECISION SELECTION          */}

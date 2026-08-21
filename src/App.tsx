@@ -60,10 +60,12 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
+import { AuthToast, AuthToastData } from './components/AuthToast';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 export default function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [authToast, setAuthToast] = useState<AuthToastData | null>(null);
 
   // Multi-Asset State & Navigation
   const [selectedAsset, setSelectedAsset] = useState<string>('BTC');
@@ -119,10 +121,56 @@ export default function App() {
     secondsRemaining: number;
   }>({ active: false, secondsRemaining: 0 });
 
-  const [terminalAccessGranted, setTerminalAccessGranted] = useState<boolean>(false);
+  const [terminalAccessGranted, setTerminalAccessGranted] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const role = String(parsed?.user?.role || '').toUpperCase();
+        return ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'SUPPORT', 'STARTER'].includes(role);
+      }
+    } catch (e) {}
+    return false;
+  });
   const [isEntitlementLoading, setIsEntitlementLoading] = useState<boolean>(true);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [paymentVerificationText, setPaymentVerificationText] = useState<string>('VERIFYING PAYMENT...');
+
+  // Authoritative Subscription State
+  const [subscription, setSubscription] = useState<UserSubscription>(() => {
+    try {
+      const saved = localStorage.getItem('vixy_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const role = String(parsed?.user?.role || '').toUpperCase();
+        const sub = String(parsed?.user?.subscription || '').toUpperCase();
+        if (role === 'ELITE' || sub.includes('ELITE')) {
+          return {
+            plan: 'VIXY VAULT ELITE QUANT' as any,
+            status: 'active',
+            renewalDate: '30 days from now',
+            paymentMethod: 'Stripe Credit Card',
+            billingInterval: 'monthly',
+          };
+        } else if (role === 'PRO' || role === 'STARTER' || sub.includes('PRO') || sub.includes('STARTER')) {
+          return {
+            plan: (sub.includes('STARTER') ? 'STARTER' : 'PRO') as any,
+            status: 'active',
+            renewalDate: '30 days from now',
+            paymentMethod: 'Stripe Credit Card',
+            billingInterval: 'monthly',
+          };
+        }
+      }
+    } catch (e) {}
+    return {
+      plan: 'ELITE',
+      status: 'inactive',
+      renewalDate: 'August 27, 2026',
+      paymentMethod: 'Corporate Visa ending in 4242',
+      billingInterval: 'annual',
+    };
+  });
 
   const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
     starter: true,
@@ -253,104 +301,141 @@ export default function App() {
     }
 
     setIsEntitlementLoading(true);
-    getEntitlementsApi(userEmail, userId)
-      .then((ent) => {
-        if (ent) {
-          setEntitlements(ent.entitlements);
-          if (ent.dayPass) {
-            setDayPassInfo(ent.dayPass);
+
+    // Concurrently execute user session restoration (/api/auth/me) and entitlement resolution (/api/entitlements)
+    const sessionRestorePromise = (authState.isAuthenticated && userEmail)
+      ? safeFetchJson<{ authenticated: boolean; user: any; discord: any; access?: any; entitlement?: any }>(
+          `/api/auth/me?email=${encodeURIComponent(userEmail)}`
+        )
+      : Promise.resolve(null);
+
+    const entitlementPromise = getEntitlementsApi(userEmail, userId);
+
+    Promise.allSettled([sessionRestorePromise, entitlementPromise])
+      .then(([sessionResult, entitlementResult]) => {
+        const sessionData = sessionResult.status === 'fulfilled' ? sessionResult.value : null;
+        const entData = entitlementResult.status === 'fulfilled' ? entitlementResult.value : null;
+
+        // Invalidate expired/invalid session
+        if (sessionData && sessionData.authenticated === false) {
+          setAuthState({ isAuthenticated: false, user: null });
+          setUserRole('UNPAID');
+          setTerminalAccessGranted(false);
+          localStorage.removeItem('vixy_auth');
+          setActiveTab('landing');
+          return;
+        }
+
+        // Merge entitlement payload from concurrent endpoints for immediate authoritative resolution
+        const mergedEnt = entData || sessionData?.entitlement || null;
+        const canonicalAccess = sessionData?.access || null;
+
+        if (mergedEnt) {
+          if (mergedEnt.entitlements) {
+            setEntitlements(mergedEnt.entitlements);
+          }
+          if (mergedEnt.dayPass) {
+            setDayPassInfo(mergedEnt.dayPass);
           }
 
-          const resolvedPlan = ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' ? 'VIXY VAULT ELITE QUANT' : (ent.plan === 'PRO_QUANT' ? 'PRO' : (ent.plan === 'STARTER' ? 'STARTER' : 'PRO'));
+          const rawPlanStr = String(mergedEnt.plan || canonicalAccess?.plan || '').toUpperCase();
+          const resolvedPlan =
+            rawPlanStr.includes('ELITE')
+              ? 'VIXY VAULT ELITE QUANT'
+              : rawPlanStr.includes('STARTER')
+              ? 'STARTER'
+              : 'PRO';
+
+          const isSubActive =
+            mergedEnt.status === 'active' ||
+            mergedEnt.dayPass?.active ||
+            canonicalAccess?.access === true;
+
           setSubscription({
             plan: resolvedPlan as any,
-            status: (ent.status === 'active' || ent.dayPass?.active ? 'active' : (ent.status === 'past_due' ? 'past_due' : 'inactive')) as any,
-            renewalDate: ent.dayPass?.active ? '24 Hours Pass' : '30 days from now',
+            status: isSubActive ? 'active' : (mergedEnt.status === 'past_due' ? 'past_due' : 'inactive'),
+            renewalDate: mergedEnt.dayPass?.active ? '24 Hours Pass' : '30 days from now',
             paymentMethod: 'Stripe Credit Card',
-            billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
+            billingInterval: mergedEnt.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
+        }
 
-          const hasAccess = ent.status === 'active' || ent.dayPass?.active || ent.entitlements.proQuant || ent.entitlements.eliteQuant || ent.entitlements.canAccessAdminPanel;
-          if (hasAccess) {
-             setTerminalAccessGranted(true);
-          } else {
-             setTerminalAccessGranted(false);
-          }
+        // Determine computed access role and instant terminal access unlock
+        const rawRole = String(canonicalAccess?.role || sessionData?.user?.role || authState.user?.role || '').toUpperCase();
+        const rawSub = String(canonicalAccess?.plan || mergedEnt?.plan || sessionData?.user?.subscription || '').toUpperCase();
 
-          if (ent.entitlements.canAccessAdminPanel) {
-            setUserRole('ADMIN');
-          } else if (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'ELITE_PASS' || ent.entitlements.eliteQuant) {
-            setUserRole('ELITE');
-          } else if (ent.entitlements.proQuant || ent.dayPass?.active) {
-            setUserRole('PRO');
-          } else if (ent.status === 'active') {
-            setUserRole('PRO');
-          } else {
-            setUserRole('UNPAID');
-          }
+        const isDayPassActive = Boolean(
+          mergedEnt?.dayPass?.active ||
+          (mergedEnt?.dayPass?.expiresAt && new Date(mergedEnt.dayPass.expiresAt).getTime() > Date.now()) ||
+          canonicalAccess?.plan === 'DAY_PASS'
+        );
+
+        const computedRole = (
+          rawRole === 'OWNER' ? 'OWNER' :
+          ['ADMIN', 'SUPPORT'].includes(rawRole) || mergedEnt?.entitlements?.canAccessAdminPanel ? 'ADMIN' :
+          (rawRole === 'ELITE' || rawSub.includes('ELITE') || mergedEnt?.entitlements?.eliteQuant) ? 'ELITE' :
+          (rawRole === 'PRO' || rawRole === 'STARTER' || rawSub.includes('PRO') || rawSub.includes('STARTER') || canonicalAccess?.access === true || mergedEnt?.entitlements?.proQuant || isDayPassActive || mergedEnt?.status === 'active') ? 'PRO' :
+          'UNPAID'
+        ) as any;
+
+        const hasAccess =
+          computedRole === 'OWNER' ||
+          computedRole === 'ADMIN' ||
+          computedRole === 'ELITE' ||
+          computedRole === 'PRO' ||
+          canonicalAccess?.access === true ||
+          mergedEnt?.status === 'active' ||
+          isDayPassActive;
+
+        setUserRole(computedRole);
+        setTerminalAccessGranted(hasAccess);
+
+        // Synchronize live user session state
+        if (sessionData && sessionData.authenticated && sessionData.user) {
+          setAuthState((prev) => {
+            if (!prev.isAuthenticated || !prev.user) return prev;
+
+            const isLinked = !!(sessionData.user.discordLinked || sessionData.discord?.linked);
+            const dId = sessionData.user.discordId || sessionData.discord?.discordUserId;
+            const dTag = sessionData.user.discordTag || sessionData.discord?.discordUsername;
+
+            if (
+              prev.user.role === computedRole &&
+              (prev.user as any).discordLinked === isLinked &&
+              (prev.user as any).discordId === dId &&
+              (prev.user as any).discordTag === dTag
+            ) {
+              return prev;
+            }
+
+            const updatedUser: NonNullable<AuthState['user']> = {
+              ...prev.user,
+              // @ts-ignore
+              discordLinked: isLinked,
+              // @ts-ignore
+              discordId: dId,
+              // @ts-ignore
+              discordTag: dTag,
+              role: computedRole,
+              // @ts-ignore
+              subscription: sessionData.user.subscription,
+            };
+
+            localStorage.setItem('vixy_auth', JSON.stringify({ ...prev, user: updatedUser }));
+            if (sessionData.user.email) {
+              localStorage.setItem('vixy_user_email', sessionData.user.email.toLowerCase());
+            }
+            localStorage.setItem('vixy_user_role', computedRole);
+            return { ...prev, user: updatedUser };
+          });
         }
       })
-      .catch((err) => console.warn('Authoritative entitlements check warning:', err))
+      .catch((err) => {
+        console.warn('Concurrent auth verification notice:', err);
+      })
       .finally(() => {
         setIsEntitlementLoading(false);
       });
-
-    if (authState.isAuthenticated && authState.user?.email) {
-      safeFetchJson<{ authenticated: boolean; user: any; discord: any }>(`/api/auth/me?email=${encodeURIComponent(authState.user.email)}`)
-        .then((res) => {
-          if (res && res.authenticated === false) {
-            setAuthState({ isAuthenticated: false, user: null });
-            setUserRole('UNPAID');
-            localStorage.removeItem('vixy_auth');
-            setActiveTab('landing');
-            return;
-          }
-          if (res && res.authenticated && res.user) {
-            if (res.user.trialSecondsRemaining !== undefined) {
-              // Trial removed
-            }
-            
-            setAuthState((prev) => {
-              if (!prev.isAuthenticated || !prev.user) return prev;
-              
-              const computedRole = (['OWNER', 'ADMIN', 'SUPPORT'].includes(res.user.role) ? 'ADMIN' : (res.user.role === 'ELITE' || res.user.role === 'ELITE_PASS' || res.user.subscription === 'ELITE_PASS' ? 'ELITE' : (res.user.role === 'PRO' ? 'PRO' : 'UNPAID'))) as any;
-              const isLinked = !!(res.user.discordLinked || res.discord?.linked);
-              const dId = res.user.discordId || res.discord?.discordUserId;
-              const dTag = res.user.discordTag || res.discord?.discordUsername;
-
-              if (
-                prev.user.role === computedRole &&
-                (prev.user as any).discordLinked === isLinked &&
-                (prev.user as any).discordId === dId &&
-                (prev.user as any).discordTag === dTag
-              ) {
-                return prev;
-              }
-
-              const updatedUser: NonNullable<AuthState['user']> = {
-                ...prev.user,
-                // @ts-ignore
-                discordLinked: isLinked,
-                // @ts-ignore
-                discordId: dId,
-                // @ts-ignore
-                discordTag: dTag,
-                role: computedRole,
-                // @ts-ignore
-                subscription: res.user.subscription,
-              };
-              
-              localStorage.setItem('vixy_auth', JSON.stringify({ ...prev, user: updatedUser }));
-              if (res.user.email) {
-                localStorage.setItem('vixy_user_email', res.user.email.toLowerCase());
-              }
-              localStorage.setItem('vixy_user_role', computedRole);
-              return { ...prev, user: updatedUser };
-            });
-          }
-        })
-        .catch(console.error);
-    }
   }, [authState.isAuthenticated, authState.user?.email, authState.user?.id]);
 
 
@@ -586,15 +671,6 @@ export default function App() {
 
   // Live Candles State
   const [candles, setCandles] = useState<Candle[]>([]);
-
-  // Subscription State
-  const [subscription, setSubscription] = useState<UserSubscription>({
-    plan: 'ELITE',
-    status: 'active',
-    renewalDate: 'August 27, 2026',
-    paymentMethod: 'Corporate Visa ending in 4242',
-    billingInterval: 'annual',
-  });
 
   // Alert Settings State
   const [alertSettings, setAlertSettings] = useState<AlertSettings>(() => {
@@ -918,12 +994,41 @@ export default function App() {
     }
   };
 
-  const handleAuthSuccess = (role: 'PRO' | 'UNPAID' | 'ADMIN' | string) => {
+  const handleAuthSuccess = (
+    role: 'PRO' | 'UNPAID' | 'ADMIN' | string,
+    email?: string,
+    plan?: string,
+    isNewUser?: boolean
+  ) => {
     const roleStr = String(role || '').toUpperCase();
     const isPaid = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'DAY_PASS'].includes(roleStr) ||
                    ['PRO', 'ADMIN', 'OWNER', 'ELITE'].includes(userRole) ||
                    isSubscriptionActive ||
                    dayPassInfo.active;
+
+    if (isPaid) {
+      setTerminalAccessGranted(true);
+      const computedRole = roleStr === 'DAY_PASS' ? 'PRO' : (['OWNER', 'ADMIN', 'ELITE', 'PRO'].includes(roleStr) ? roleStr : 'PRO');
+      setUserRole(computedRole as any);
+      if (plan) {
+        setSubscription(prev => ({
+          ...prev,
+          status: 'active',
+          plan: plan.includes('ELITE') ? 'VIXY VAULT ELITE QUANT' as any : (plan.includes('STARTER') ? 'STARTER' as any : 'PRO' as any)
+        }));
+      }
+    }
+
+    // Trigger subtle toast notification confirming the user's role immediately
+    setAuthToast({
+      id: `auth_toast_${Date.now()}`,
+      role: roleStr,
+      plan: plan || (isPaid ? 'PRO' : 'NONE'),
+      email: email || authState.user?.email || (typeof localStorage !== 'undefined' ? localStorage.getItem('vixy_user_email') || undefined : undefined),
+      name: authState.user?.name,
+      isNewUser: Boolean(isNewUser),
+    });
+
     if (isPaid) {
       setActiveTab('terminal');
     } else {
@@ -935,6 +1040,7 @@ export default function App() {
 
   return (
     <>
+      <AuthToast toast={authToast} onClose={() => setAuthToast(null)} />
       {isVerifyingPayment && (
         <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-4 bg-[#05020F]/95 backdrop-blur-md animate-fadeIn font-mono text-center">
           <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(34,211,238,0.4)]" />

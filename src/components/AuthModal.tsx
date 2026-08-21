@@ -9,9 +9,9 @@ interface AuthModalProps {
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   initialMode?: 'login' | 'register';
   initialEmail?: string;
-  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
+  onSuccessRole?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | string, email?: string, plan?: string, isNewUser?: boolean) => void;
   setUserRole?: React.Dispatch<React.SetStateAction<'PRO' | 'UNPAID' | 'ADMIN' | 'OWNER'>>;
-  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN') => void;
+  onSuccess?: (role: 'PRO' | 'UNPAID' | 'ADMIN' | string, email?: string, plan?: string, isNewUser?: boolean) => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -146,10 +146,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = serverUser.role || assignedRole;
+      let finalRole: string = res.access?.role || serverUser.role || assignedRole;
       if (res.entitlement) {
          if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
-         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) && finalRole === 'UNPAID') finalRole = 'PRO';
+         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.entitlements?.starter || res.entitlement.dayPass?.active || res.entitlement.access) && finalRole === 'UNPAID') finalRole = 'PRO';
       }
 
       const handleSuccessCB = onSuccess || onSuccessRole;
@@ -171,8 +171,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setUserRole(finalRole as any);
       }
 
+      const planDetermined = res.access?.plan || res.entitlement?.plan || serverUser.subscription;
       if (typeof handleSuccessCB === 'function') {
-        setTimeout(() => handleSuccessCB(finalRole as any), 150);
+        setTimeout(() => handleSuccessCB(finalRole as any, userEmail, planDetermined, mode === 'register'), 150);
       }
       setLoading(false);
       onClose();

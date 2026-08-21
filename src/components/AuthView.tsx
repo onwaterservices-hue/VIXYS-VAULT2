@@ -20,7 +20,7 @@ interface AuthViewProps {
   authState: AuthState;
   setAuthState: React.Dispatch<React.SetStateAction<AuthState>>;
   setUserRole: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
-  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN') => void;
+  onSuccessNavigate?: (role: 'UNPAID' | 'PRO' | 'ADMIN' | string, email?: string, plan?: string, isNewUser?: boolean) => void;
 }
 
 export const AuthView: React.FC<AuthViewProps> = ({
@@ -121,10 +121,10 @@ export const AuthView: React.FC<AuthViewProps> = ({
       const serverUser = res.user || {};
       const canonicalUserId = serverUser.id || serverUser.uid || `usr_${userEmail.replace(/[^a-zA-Z0-9_]/g, '_')}`;
       
-      let finalRole: string = serverUser.role || assignedRole;
+      let finalRole: string = res.access?.role || serverUser.role || assignedRole;
       if (res.entitlement) {
          if (res.entitlement.entitlements?.canAccessAdminPanel && finalRole !== 'OWNER') finalRole = 'ADMIN';
-         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.dayPass?.active) && finalRole === 'UNPAID') finalRole = 'PRO';
+         else if ((res.entitlement.entitlements?.proQuant || res.entitlement.entitlements?.eliteQuant || res.entitlement.entitlements?.starter || res.entitlement.dayPass?.active || res.entitlement.access) && finalRole === 'UNPAID') finalRole = 'PRO';
       }
 
       setAuthState({
@@ -142,8 +142,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
       });
       setUserRole(finalRole as any);
 
+      const planDetermined = res.access?.plan || res.entitlement?.plan || serverUser.subscription;
       if (typeof onSuccessNavigate === 'function') {
-        setTimeout(() => onSuccessNavigate(finalRole as any), 1000);
+        setTimeout(() => onSuccessNavigate(finalRole as any, userEmail, planDetermined, mode === 'register'), 500);
       }
     } catch (err) {
       setLoading(false);

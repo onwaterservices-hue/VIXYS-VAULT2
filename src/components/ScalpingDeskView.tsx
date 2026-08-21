@@ -88,34 +88,34 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   const isBuyUp = action.includes('YES') || action.includes('BUY');
 
   return (
-    <div className="space-y-4 font-mono text-purple-100 max-w-7xl mx-auto relative">
+    <div className="space-y-5 font-mono text-purple-100 w-full max-w-7xl mx-auto min-w-0 relative">
       {/* Radiant Glowing Ambient Aura Background */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-96 bg-gradient-to-b from-purple-600/15 via-emerald-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
       
       {/* 1. TOP IDENTITY STRIP */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 p-4 sm:p-5 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.22)] flex flex-wrap items-center justify-between gap-3 relative overflow-hidden backdrop-blur-xl">
+      <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 p-4 sm:p-5 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.22)] flex flex-wrap items-center justify-between gap-3 relative overflow-hidden backdrop-blur-xl w-full min-w-0">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="flex items-center space-x-3 relative z-10">
-          <div className="p-2.5 rounded-2xl bg-purple-600/25 text-purple-300 border border-purple-400/50 shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+        <div className="flex items-center space-x-3 relative z-10 min-w-0">
+          <div className="p-2.5 rounded-2xl bg-purple-600/25 text-purple-300 border border-purple-400/50 shadow-[0_0_20px_rgba(168,85,247,0.4)] shrink-0">
             <Zap className="w-5 h-5 text-purple-300 animate-pulse" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-black text-white tracking-wider font-sans uppercase">
+              <h1 className="text-base sm:text-lg font-black text-white tracking-wider font-sans uppercase truncate">
                 15S ALPHA INTELLIGENCE ENGINE
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#00FF88] border border-emerald-400/40 text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(0,255,136,0.3)]">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#00FF88] border border-emerald-400/40 text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(0,255,136,0.3)] shrink-0">
                 ● ULTRA-FAST 15S
               </span>
             </div>
-            <p className="text-[10.5px] text-purple-300/80 font-sans mt-0.5">
+            <p className="text-[10.5px] text-purple-300/80 font-sans mt-0.5 truncate">
               HIGH-FREQUENCY SHORT-HORIZON PROBABILISTIC DECISION INTELLIGENCE
             </p>
           </div>
         </div>
 
         {/* Asset Switcher Pills */}
-        <div className="flex items-center space-x-1.5 bg-[#080414]/90 p-1.5 rounded-2xl border border-purple-500/40 relative z-10 shadow-inner">
+        <div className="flex items-center space-x-1.5 bg-[#080414]/90 p-1.5 rounded-2xl border border-purple-500/40 relative z-10 shadow-inner shrink-0">
           {['BTC', 'ETH', 'SOL', 'XRP'].map((symbol) => (
             <button
               key={symbol}
@@ -141,10 +141,10 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
         title="15S SCALPING INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live 15s probability cones, micro-delta sweeps, and AI conviction signals."
       >
-        <div className="space-y-4">
+        <div className="space-y-4 w-full min-w-0">
           
           {/* 2. VISUAL CENTERPIECE: FULL-WIDTH <ScalpDecisionChart> */}
-          <div className="relative">
+          <div className="relative w-full min-w-0">
             <ScalpDecisionChart
               asset={selectedAsset}
               desk="15s"
@@ -153,14 +153,14 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
           </div>
 
           {/* 3. ORDER FLOW & INSTITUTIONAL MICROSTRUCTURE TELEMETRY (COMPACT TERMINAL GRID) */}
-          <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl overflow-hidden p-5 space-y-4 shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+          <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl overflow-hidden p-4 sm:p-5 space-y-4 shadow-[0_0_25px_rgba(0,0,0,0.5)] w-full min-w-0">
             
             {/* Tab Controls Bar */}
             <div className="flex flex-wrap items-center justify-between border-b border-purple-900/40 pb-3 gap-2">
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={() => setDeskTab('SIGNAL')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'SIGNAL'
                       ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
@@ -170,7 +170,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 </button>
                 <button
                   onClick={() => setDeskTab('L2_SCANNER')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'L2_SCANNER'
                       ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
@@ -180,27 +180,27 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 </button>
                 <button
                   onClick={() => setDeskTab('PAPER_DESK')}
-                  className={`px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'PAPER_DESK'
                       ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Paper Execution Sandbox
+                  Paper Sandbox
                 </button>
               </div>
 
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2.5">
                 <button
                   onClick={() => setShowWhyDrawer(!showWhyDrawer)}
-                  className="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer"
+                  className="px-3 py-1.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 border border-purple-500/40 text-purple-200 text-xs font-bold flex items-center space-x-1.5 transition-all cursor-pointer shrink-0"
                 >
                   <Brain className="w-3.5 h-3.5 text-purple-300" />
                   <span>Why This Signal?</span>
                   {showWhyDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
 
-                <span className="text-[11px] text-gray-400 font-mono hidden sm:inline">
+                <span className="text-[11px] text-gray-400 font-mono hidden md:inline shrink-0">
                   Spot: <strong className="text-white">${spotPrice.toFixed(2)}</strong>
                 </span>
               </div>

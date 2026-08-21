@@ -395,8 +395,13 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const maxP = rawMaxP + pad;
       const totalRange = maxP - minP || 10;
 
-      const chartWidth = width - 75;
-      const candleWidth = chartWidth / validCandles.length;
+      const rightMargin = width < 640 ? 56 : 74;
+      const chartWidth = Math.max(100, width - rightMargin);
+      
+      // Calculate responsive forward projection cone width and candle slotting
+      const coneWidth = Math.max(38, Math.min(74, chartWidth * 0.16));
+      const candleAreaWidth = Math.max(60, chartWidth - coneWidth - 6);
+      const candleWidth = candleAreaWidth / validCandles.length;
 
       const getY = (price: number) => {
         return height - 32 - ((price - minP) / totalRange) * (height - 65);
@@ -456,18 +461,18 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const lastCandle = validCandles[validCandles.length - 1];
       const lastX = (validCandles.length - 1) * candleWidth + candleWidth / 2;
       const lastY = getY(lastCandle.close);
-      const coneWidth = 72;
-      const upperY = getY(lastCandle.close + (upProbability / 100) * 18);
-      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * 18);
+      const targetConeX = Math.min(chartWidth - 2, lastX + coneWidth);
+      const upperY = getY(lastCandle.close + (upProbability / 100) * (is1Hour ? 45 : 18));
+      const lowerY = getY(lastCandle.close - ((100 - upProbability) / 100) * (is1Hour ? 45 : 18));
       const midY = (upperY + lowerY) / 2;
 
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
-      ctx.lineTo(lastX + coneWidth, upperY);
-      ctx.lineTo(lastX + coneWidth, lowerY);
+      ctx.lineTo(targetConeX, upperY);
+      ctx.lineTo(targetConeX, lowerY);
       ctx.closePath();
 
-      const coneGrad = ctx.createLinearGradient(lastX, 0, lastX + coneWidth, 0);
+      const coneGrad = ctx.createLinearGradient(lastX, 0, targetConeX, 0);
       if (upProbability >= 50) {
         coneGrad.addColorStop(0, 'rgba(0, 255, 136, 0.28)');
         coneGrad.addColorStop(0.6, 'rgba(34, 211, 238, 0.15)');
@@ -486,9 +491,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
-      ctx.lineTo(lastX + coneWidth, upperY);
+      ctx.lineTo(targetConeX, upperY);
       ctx.moveTo(lastX, lastY);
-      ctx.lineTo(lastX + coneWidth, lowerY);
+      ctx.lineTo(targetConeX, lowerY);
       ctx.stroke();
 
       // Vector Target Line
@@ -496,22 +501,23 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(lastX, lastY);
-      ctx.lineTo(lastX + coneWidth, midY);
+      ctx.lineTo(targetConeX, midY);
       ctx.stroke();
       ctx.setLineDash([]);
 
       // Target Marker Pill on Projected Vector
+      const badgeW = width < 640 ? 46 : 54;
       ctx.fillStyle = upProbability >= 50 ? '#063826' : '#3d0a14';
       ctx.strokeStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.roundRect(lastX + coneWidth - 4, midY - 10, 56, 18, 4);
+      ctx.roundRect(Math.max(lastX, targetConeX - badgeW), midY - 9, badgeW, 18, 4);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-      ctx.font = 'bold 9px "JetBrains Mono", monospace';
-      ctx.fillText(`${upProbability}% CONE`, lastX + coneWidth, midY + 3);
+      ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
+      ctx.fillText(`${upProbability}% CONE`, Math.max(lastX + 4, targetConeX - badgeW + 4), midY + 3);
 
       // 5. Render High-Definition OHLC Candlesticks
       validCandles.forEach((c, i) => {
@@ -552,7 +558,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           ctx.strokeStyle = '#00FF88';
           ctx.lineWidth = 1;
           ctx.beginPath();
-          ctx.roundRect(x - 28, lowY + 12, 56, 14, 3);
+          ctx.roundRect(x - 24, lowY + 12, 48, 14, 3);
           ctx.fill();
           ctx.stroke();
 
@@ -587,26 +593,31 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.setLineDash([]);
 
       // Strike Badge
+      const strikeBadgeW = rightMargin - 6;
       ctx.fillStyle = '#170b2e';
       ctx.strokeStyle = '#a855f7';
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.roundRect(chartWidth + 3, strikeY - 9, 68, 18, 4);
+      ctx.roundRect(chartWidth + 3, strikeY - 9, strikeBadgeW, 18, 4);
       ctx.fill();
       ctx.stroke();
 
       ctx.fillStyle = '#c084fc';
-      ctx.font = 'bold 8.5px "JetBrains Mono", monospace';
-      ctx.fillText(`STRIKE`, chartWidth + 7, strikeY + 3);
+      ctx.font = 'bold 8px "JetBrains Mono", monospace';
+      ctx.fillText(
+        strikePrice >= 1000 ? `$${Math.round(strikePrice)}` : `$${strikePrice.toFixed(1)}`,
+        chartWidth + 6,
+        strikeY + 3
+      );
 
       // 8. Right-Hand Price Scale Labels
       ctx.fillStyle = '#94a3b8';
-      ctx.font = '600 9px "JetBrains Mono", monospace';
+      ctx.font = '600 8.5px "JetBrains Mono", monospace';
       const steps = 5;
       for (let s = 0; s <= steps; s++) {
         const pVal = minP + (totalRange / steps) * s;
         const pY = getY(pVal);
-        ctx.fillText(`$${pVal.toFixed(1)}`, chartWidth + 6, pY + 3);
+        ctx.fillText(pVal >= 1000 ? `$${pVal.toFixed(0)}` : `$${pVal.toFixed(1)}`, chartWidth + 6, pY + 3);
       }
 
       // 9. Time Axis Labels at Bottom
@@ -615,9 +626,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const timeLabels = is1Hour
         ? ['-60m', '-45m', '-30m', '-15m', 'NOW']
         : ['-2m', '-1m30s', '-1m', '-30s', 'NOW'];
-      const timeStepX = chartWidth / (timeLabels.length - 1);
+      const timeStepX = candleAreaWidth / (timeLabels.length - 1);
       timeLabels.forEach((lbl, idx) => {
-        ctx.fillText(lbl, idx * timeStepX + 4, height - 4);
+        ctx.fillText(lbl, Math.min(chartWidth - 28, Math.max(4, idx * timeStepX - 8)), height - 4);
       });
 
       ctx.restore();

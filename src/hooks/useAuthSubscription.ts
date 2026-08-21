@@ -34,7 +34,7 @@ export function useAuthSubscription({
   const isAuthenticated = Boolean(authState?.isAuthenticated && authState?.user);
   
   const roleStr = String(userRole || authState?.user?.role || 'UNPAID').toUpperCase();
-  const isProOrAdmin = ['PRO', 'ADMIN', 'OWNER', 'ELITE'].includes(roleStr) || subscription?.status === 'active';
+  const isProOrAdmin = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'STARTER'].includes(roleStr) || subscription?.status === 'active';
   
   // Calculate day pass validity
   const [now, setNow] = useState<number>(Date.now());
