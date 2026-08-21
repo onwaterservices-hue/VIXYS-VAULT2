@@ -5043,7 +5043,6 @@ app.post(
       const nextTier =
         tier === "ELITE_PASS" || tier === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
       user.subscription = nextTier;
-      user.role = nextTier === "ELITE_PASS" ? "ELITE" : "PRO";
       user.status = "ACTIVE";
       addServerAuditLog(
         "ADMIN",
@@ -5057,7 +5056,6 @@ app.post(
       });
     } else if (action === "revoke_plan" || action === "revoke_premium") {
       user.subscription = "NONE";
-      user.role = "USER";
       user.status = "INACTIVE";
       addServerAuditLog(
         "ADMIN",
