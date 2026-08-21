@@ -748,7 +748,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
 
         {/* Canvas Visualizer Frame with Glowing Border */}
-        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 p-2 overflow-hidden h-[340px] sm:h-[380px] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
+        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 p-2 overflow-hidden h-[500px] sm:h-[580px] lg:h-[660px] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
           <div ref={containerRef} className="w-full h-full relative">
             <canvas ref={canvasRef} className="w-full h-full block" />
 

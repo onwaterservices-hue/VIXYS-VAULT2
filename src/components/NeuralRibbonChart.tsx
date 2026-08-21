@@ -453,7 +453,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       </div>
 
       {/* Canvas Neural Flow Ribbon Chart */}
-      <div className={`relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] ${isFullscreen ? 'h-[75vh]' : 'h-80'} flex items-center justify-center`}>
+      <div className={`relative rounded-xl overflow-hidden border border-purple-500/30 bg-[#06030d] ${isFullscreen ? 'h-[75vh]' : 'h-[460px] sm:h-[540px] lg:h-[620px]'} flex items-center justify-center`}>
         <canvas ref={canvasRef} className="w-full h-full block" />
       </div>
     </div>
