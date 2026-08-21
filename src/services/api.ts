@@ -602,32 +602,12 @@ export interface EntitlementsResponse {
   discordUserId?: string;
   guildMember: boolean;
   entitlements: {
-    // legacy flags
     starter: boolean;
     proQuant: boolean;
     eliteQuant: boolean;
     scalping15s: boolean;
     canAccessProDesks: boolean;
     canAccessAdminPanel: boolean;
-
-    // Granular feature gating
-    livePredictions: boolean; // VIXY LIVE
-    modelProbability: boolean;
-    confidenceFilter80: boolean;
-    vixyLocks: boolean;
-    webTerminal: boolean; // Also applies to mobile layout
-
-    l2NetTakerVolume: boolean; // Pro
-    historicalPatternMatcher: boolean; // Pro
-    webhookAlerts: boolean; // Pro (Discord/Telegram)
-    highConfidenceFilter: boolean; // Pro (>=85%/>=90%)
-    executionLogJournal: boolean; // Pro
-
-    apiKeysAccess: boolean; // Elite (Kalshi panel)
-    orderbookImbalance: boolean; // Elite (Whale Tracker / Order Flow)
-    unlimitedWebhooks: boolean; // Elite
-    prioritySupport: boolean; // Elite
-    sha256Exporting: boolean; // Elite
   };
   dayPass: {
     active: boolean;

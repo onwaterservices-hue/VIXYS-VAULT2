@@ -339,7 +339,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       const height = cssHeight;
 
       // 1. Dark Institutional Background
-      ctx.fillStyle = '#080512';
+      ctx.fillStyle = '#05020F';
       ctx.fillRect(0, 0, width, height);
 
       // Subtle ambient radiant glow behind price action
@@ -354,8 +354,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       ctx.fillRect(0, 0, width, height);
 
       // Grid Lines
-      ctx.strokeStyle = '#1a1236';
-      ctx.lineWidth = 0.75;
+      ctx.strokeStyle = 'rgba(147, 51, 234, 0.10)';
+      ctx.lineWidth = 1;
       const gridRows = 5;
       for (let i = 1; i < gridRows; i++) {
         const y = (height / gridRows) * i;
@@ -463,7 +463,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         }
         ctx.strokeStyle = ribbonGrad;
         ctx.shadowColor = upProbability >= 50 ? '#00FF88' : '#FF3B30';
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = 8;
         ctx.stroke();
         ctx.shadowBlur = 0;
       }
@@ -538,12 +538,12 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const lowY = getY(c.low);
 
         const isUp = c.close >= c.open;
-        const color = isUp ? '#10b981' : '#f43f5e';
-        const glowColor = 'transparent';
+        const color = isUp ? '#00FF88' : '#FF3B30';
+        const glowColor = isUp ? 'rgba(0, 255, 136, 0.9)' : 'rgba(255, 59, 48, 0.9)';
 
         // High-Low Wick with Neon Glow
         ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = 8;
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -557,7 +557,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         const bodyW = Math.max(4, candleWidth * 0.68);
 
         ctx.shadowColor = glowColor;
-        ctx.shadowBlur = 0;
+        ctx.shadowBlur = 12;
         ctx.fillStyle = color;
         ctx.fillRect(x - bodyW / 2, bodyTop, bodyW, bodyHeight);
         ctx.shadowBlur = 0; // reset shadow for next elements
@@ -572,7 +572,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
           ctx.fillStyle = '#062b1e';
           ctx.strokeStyle = '#00FF88';
-          ctx.lineWidth = 0.75;
+          ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.roundRect(x - 28, lowY + 12, 56, 14, 3);
           ctx.fill();
@@ -611,7 +611,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       // Strike Badge
       ctx.fillStyle = '#170b2e';
       ctx.strokeStyle = '#a855f7';
-      ctx.lineWidth = 0.75;
+      ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.roundRect(chartWidth + 3, strikeY - 9, 68, 18, 4);
       ctx.fill();
@@ -723,8 +723,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       </div>
 
       {/* 2. VISUAL CENTERPIECE: CANDLESTICK & PROBABILITY CONE CHART WITH AURA */}
-      <div className="w-full flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-3 sm:p-4 text-[#e5e0f5] font-mono shadow-2xl overflow-hidden relative">
-        <div className="flex flex-wrap items-center justify-between text-xs pb-3 mb-3 gap-2 border-b border-[#2a2340]">
+      <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-3.5 relative overflow-hidden backdrop-blur-xl">
+        <div className="flex flex-wrap items-center justify-between text-xs border-b border-purple-900/40 pb-2.5 gap-2">
           <div className="flex items-center space-x-2">
             <BarChart2 className="w-4 h-4 text-cyan-400" />
             <span className="font-black text-white text-xs tracking-wider uppercase">
@@ -752,9 +752,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
 
         {/* Canvas Visualizer Frame with Glowing Border */}
-        <div className="w-full flex-1 min-h-[420px] sm:min-h-[480px] md:min-h-[540px] lg:min-h-[600px] flex flex-col overflow-hidden">
-        <div className="w-full flex-1 min-h-[380px] sm:min-h-[440px] md:min-h-[480px] lg:min-h-[540px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center">
-          <div ref={containerRef} className="absolute inset-0 w-full h-full">
+        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 p-2 overflow-hidden h-[500px] sm:h-[580px] lg:h-[660px] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">
+          <div ref={containerRef} className="w-full h-full relative">
             <canvas ref={canvasRef} className="w-full h-full block" />
 
             {/* Overlaid Active Indicators */}
@@ -769,7 +768,6 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </div>
           </div>
         </div>
-      </div>
       </div>
 
       {/* 3. CLEAN PROBABILITY BAR (CLEARLY LABELED) */}
