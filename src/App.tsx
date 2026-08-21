@@ -15,7 +15,7 @@ import {
   ApiKey,
   ExchangeApiKeys,
 } from './types';
-import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi, safeFetchJson, getEntitlementsApi, EntitlementsResponse, generateFallbackCandles } from './services/api';
+import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi, safeFetchJson, getEntitlementsApi, EntitlementsResponse } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
@@ -48,7 +48,6 @@ import { LoadingOverlay } from './components/LoadingOverlay';
 import { ChangelogView } from './components/ChangelogView';
 import { LeaderboardView } from './components/LeaderboardView';
 import { TrialExpiredOverlay } from './components/TrialExpiredOverlay';
-import { LockedFeature } from './components/LockedFeature';
 import { TermsView } from './components/TermsView';
 import { PrivacyView } from './components/PrivacyView';
 import { DiscordBotHubView } from './components/DiscordBotHubView';
@@ -125,28 +124,13 @@ export default function App() {
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [paymentVerificationText, setPaymentVerificationText] = useState<string>('VERIFYING PAYMENT...');
 
-    const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
-    starter: false,
-    proQuant: false,
-    eliteQuant: false,
-    scalping15s: false,
-    canAccessProDesks: false,
+  const [entitlements, setEntitlements] = useState<EntitlementsResponse['entitlements']>({
+    starter: true,
+    proQuant: true,
+    eliteQuant: true,
+    scalping15s: true,
+    canAccessProDesks: true,
     canAccessAdminPanel: false,
-    livePredictions: false,
-    modelProbability: false,
-    confidenceFilter80: false,
-    vixyLocks: false,
-    webTerminal: false,
-    l2NetTakerVolume: false,
-    historicalPatternMatcher: false,
-    webhookAlerts: false,
-    highConfidenceFilter: false,
-    executionLogJournal: false,
-    apiKeysAccess: false,
-    orderbookImbalance: false,
-    unlimitedWebhooks: false,
-    prioritySupport: false,
-    sha256Exporting: false,
   });
 
   const [maintenanceState, setMaintenanceState] = useState<{
@@ -601,7 +585,7 @@ export default function App() {
   }, [selectedAsset]);
 
   // Live Candles State
-  const [candles, setCandles] = useState<Candle[]>(() => generateFallbackCandles('BTC', 45));
+  const [candles, setCandles] = useState<Candle[]>([]);
 
   // Subscription State
   const [subscription, setSubscription] = useState<UserSubscription>({
@@ -1039,19 +1023,17 @@ export default function App() {
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
           {/* 1. Public Pages always accessible */}
           {(activeTab === 'vixylive' || activeTab === 'vixylocks') && (
-            <LockedFeature isAuthorized={activeTab === 'vixylocks' ? entitlements.vixyLocks : entitlements.livePredictions} featureName={activeTab === 'vixylive' ? 'VIXY LIVE' : 'VIXY LOCKS'} requiredPlanText={activeTab === "vixylocks" ? "Day Pass or Pro required" : "Starter or Day Pass required"}>
-              <VixyLockView
-                ticker={ticker}
-                userEmail={authState.user?.email || undefined}
-                onOpenTerminal={() => setActiveTab('terminal')}
-                onOpenReplay={() => setActiveTab('replay')}
-                onOpenPricing={() => setActiveTab('pricing')}
-                isAuthenticated={isAuthenticated}
-                hasActiveAccess={hasActiveAccess}
-                onOpenAuth={handleOpenAuth}
-                dayPassCountdown={passCountdownFormatted}
-              />
-            </LockedFeature>
+            <VixyLockView
+              ticker={ticker}
+              userEmail={authState.user?.email || undefined}
+              onOpenTerminal={() => setActiveTab('terminal')}
+              onOpenReplay={() => setActiveTab('replay')}
+              onOpenPricing={() => setActiveTab('pricing')}
+              isAuthenticated={isAuthenticated}
+              hasActiveAccess={hasActiveAccess}
+              onOpenAuth={handleOpenAuth}
+              dayPassCountdown={passCountdownFormatted}
+            />
           )}
 
           {activeTab === 'history' && (
@@ -1254,8 +1236,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'terminal' && (
-            <LockedFeature isAuthorized={entitlements.webTerminal} featureName="TERMINAL" requiredPlanText="Starter or higher required">
-              <LiveDashboard
+                    <LiveDashboard
                       ticker={ticker}
                       candles={candles}
                       onOpenAlerts={() => setActiveTab('alerts')}
@@ -1272,8 +1253,7 @@ export default function App() {
                       alertSettings={alertSettings}
                       setAlertSettings={setAlertSettings}
                     />
-            </LockedFeature>
-          )}
+                  )}
 
                   {activeTab === 'markets' && (
                     <MarketCardsView
@@ -1321,20 +1301,17 @@ export default function App() {
                   )}
 
                   {activeTab === 'patterns' && (
-            <LockedFeature isAuthorized={entitlements.historicalPatternMatcher} featureName="PATTERNS" requiredPlanText="Pro or higher required">
-              <AIPatternEngine
+                    <AIPatternEngine
                       ticker={ticker}
                       timeframe={selectedTimeframe as any}
                       alertSettings={alertSettings}
                       userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
-            </LockedFeature>
-          )}
+                  )}
 
                   {activeTab === 'whales' && (
-            <LockedFeature isAuthorized={entitlements.orderbookImbalance} featureName="WHALES" requiredPlanText="Day Pass or Pro required">
-              <WhaleTrackerView
+                    <WhaleTrackerView
                       onSelectAssetAndNavigate={(sym) => {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');
@@ -1343,8 +1320,7 @@ export default function App() {
                       userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
                     />
-            </LockedFeature>
-          )}
+                  )}
 
                   {activeTab === 'explainability' && (
                     <ExplainabilityVaultView
@@ -1388,16 +1364,12 @@ export default function App() {
                   )}
 
                   {activeTab === 'journal' && (
-            <LockedFeature isAuthorized={entitlements.executionLogJournal} featureName="JOURNAL" requiredPlanText="Pro or higher required">
-              <TradeJournalView entries={journalEntries} setEntries={setJournalEntries} />
-            </LockedFeature>
-          )}
+                    <TradeJournalView entries={journalEntries} setEntries={setJournalEntries} />
+                  )}
 
                   {activeTab === 'alerts' && (
-            <LockedFeature isAuthorized={entitlements.webhookAlerts} featureName="ALERTS" requiredPlanText="Pro or higher required">
-              <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
-            </LockedFeature>
-          )}
+                    <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
+                  )}
 
                   {activeTab === 'discord-bot' && (
                     userRole === 'ADMIN' ? (
@@ -1466,7 +1438,25 @@ export default function App() {
 
       
 
-      {/* Trial Expired Overlay removed in favor of granular feature gating */}
+      {/* Full-Screen Trial Expired Blurred Lockout Overlay */}
+      {!isEntitlementLoading && !terminalAccessGranted && !['vixylive', 'pricing', 'landing', 'terms', 'privacy', 'risk', 'refunds', 'about', 'contact'].includes(activeTab) && (
+        <TrialExpiredOverlay
+          isAuthenticated={authState.isAuthenticated}
+          userEmail={authState?.user?.email}
+          userId={authState?.user?.id}
+          discordUserId={authState?.user?.discordId}
+          onViewPricing={() => setActiveTab('pricing')}
+          onAccessGranted={() => {
+             setTerminalAccessGranted(true);
+             setIsEntitlementLoading(false);
+          }}
+          onOpenAuth={(mode, prefillEmail) => {
+            setAuthModalMode(mode === 'signup' ? 'register' : (mode || 'login'));
+            if (prefillEmail) setAuthModalEmail(prefillEmail);
+            setShowAuthModal(true);
+          }}
+        />
+      )}
 
       {/* Auth Modal */}
       <AuthModal

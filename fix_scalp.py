@@ -3,62 +3,30 @@ import re
 with open('src/components/ScalpDecisionChart.tsx', 'r') as f:
     content = f.read()
 
-# Fix the Visual Centerpiece wrapper
-content = content.replace(
-    '<div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-3.5 relative overflow-hidden backdrop-blur-xl">',
-    '<div className="w-full flex flex-col bg-[#0d0a1a] rounded-2xl border border-[#2a2340] p-3 sm:p-4 text-[#e5e0f5] font-mono shadow-2xl overflow-hidden relative">'
-)
+# Fix initial state
+pattern1 = r'  const generateInitialCandles = \(basePrice = 64160\.5\) => \{.*?\n  \};\n\n  const \[candles, setCandles\] = useState<Candle\[\]>\(\(\) => generateInitialCandles\(\)\);'
+replacement1 = r'''  const [candles, setCandles] = useState<Candle[]>([]);'''
+content = re.sub(pattern1, replacement1, content, flags=re.DOTALL)
 
-# Fix the header border inside it
-content = content.replace(
-    '<div className="flex flex-wrap items-center justify-between text-xs border-b border-purple-900/40 pb-2.5 gap-2">',
-    '<div className="flex flex-wrap items-center justify-between text-xs pb-3 mb-3 gap-2 border-b border-[#2a2340]">'
-)
+# Fix fetch fallback prefill
+pattern2 = r'        // Seed 35 candles.*?\n        setCandles\(initialCandles\);'
+replacement2 = r'''        setCandles([{ time: Date.now(), open: p, high: p, low: p, close: p, volume: 0, takerBuyRatio: 0.5 }]);'''
+content = re.sub(pattern2, replacement2, content, flags=re.DOTALL)
 
-# Fix the Canvas Visualizer Frame
-content = content.replace(
-    '<div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 p-2 overflow-hidden h-[500px] sm:h-[580px] lg:h-[660px] shadow-[inset_0_0_30px_rgba(0,0,0,0.8)]">',
-    '<div className="w-full flex-1 min-h-[420px] sm:min-h-[480px] md:min-h-[540px] lg:min-h-[600px] flex flex-col overflow-hidden">\n        <div className="w-full flex-1 min-h-[380px] sm:min-h-[440px] md:min-h-[480px] lg:min-h-[540px] relative overflow-hidden rounded-xl bg-[#080512] border border-[#1f1933] flex items-center justify-center">'
-)
+# Remove fake setUpProbability
+pattern3 = r'            // Smoothly drift probability\n            setUpProbability\(\(prev\) => \{\n              const shift = \(isBuyer \? 0\.3 : -0\.3\) \+ \(Math\.random\(\) - 0\.49\) \* 0\.4;\n              return Math\.min\(94, Math\.max\(22, Math\.round\(prev \+ shift\)\)\);\n            \}\);\n'
+replacement3 = r''
+content = re.sub(pattern3, replacement3, content, flags=re.DOTALL)
 
-# Close the new flex-1 wrapper (find the end of the canvas div)
-# The canvas frame ends with:
-#             </div>
-#           </div>
-#         </div>
-# We need to add one more </div> for the wrapper.
-content = content.replace(
-    '''            <div className="absolute top-2 right-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-              CONFIDENCE: <strong className="text-white">{confidence}%</strong>
-            </div>
-          </div>
-        </div>''',
-    '''            <div className="absolute top-2 right-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-              CONFIDENCE: <strong className="text-white">{confidence}%</strong>
-            </div>
-          </div>
-        </div>
-      </div>'''
-)
+# Remove liveTickTimer
+pattern4 = r'    // Live tick simulator interval to ensure continuous chart motion regardless of network\n    const liveTickTimer = setInterval\(\(\) => \{\n      if \(isCancelled\) return;\n      const delta = \(Math\.random\(\) - 0\.47\) \* 3\.8;\n      setCurrentPrice\(\(prevP\) => \{\n        const nextP = Math\.round\(\(prevP \+ delta\) \* 100\) / 100;\n        setCandles\(\(prev\) => \{\n          if \(prev\.length === 0\) return prev;\n          const updated = \[\.\.\.prev\];\n          const last = \{ \.\.\.updated\[updated\.length - 1\] \};\n          last\.close = nextP;\n          last\.high = Math\.max\(last\.high, nextP\);\n          last\.low = Math\.min\(last\.low, nextP\);\n          last\.volume \+= Math\.random\(\) \* 0\.4;\n          updated\[updated\.length - 1\] = last;\n          return updated;\n        \}\);\n        return nextP;\n      \}\);\n    \}, 1200\);\n'
+replacement4 = r''
+content = re.sub(pattern4, replacement4, content, flags=re.DOTALL)
 
-# Fix canvas wrapper classes (containerRef)
-content = content.replace(
-    '<div ref={containerRef} className="w-full h-full relative">',
-    '<div ref={containerRef} className="absolute inset-0 w-full h-full">'
-)
-
-# Fix grid lines
-content = content.replace("ctx.strokeStyle = 'rgba(147, 51, 234, 0.10)';", "ctx.strokeStyle = '#1a1236';")
-content = content.replace("ctx.lineWidth = 1;", "ctx.lineWidth = 0.75;")
-
-# Background color
-content = content.replace("ctx.fillStyle = '#05020F';", "ctx.fillStyle = '#080512';")
-
-# Candles styling
-content = content.replace("const color = isUp ? '#00FF88' : '#FF3B30';", "const color = isUp ? '#10b981' : '#f43f5e';")
-content = content.replace("const glowColor = isUp ? 'rgba(0, 255, 136, 0.9)' : 'rgba(255, 59, 48, 0.9)';", "const glowColor = 'transparent';")
-content = content.replace("ctx.shadowBlur = 8;", "ctx.shadowBlur = 0;")
-content = content.replace("ctx.shadowBlur = 12;", "ctx.shadowBlur = 0;")
+# Also remove clearInterval for liveTickTimer
+pattern5 = r'      clearInterval\(liveTickTimer\);\n'
+replacement5 = r''
+content = re.sub(pattern5, replacement5, content, flags=re.DOTALL)
 
 with open('src/components/ScalpDecisionChart.tsx', 'w') as f:
     f.write(content)

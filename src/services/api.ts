@@ -6,22 +6,6 @@ const cacheStore = new Map<string, { data: any; timestamp: number }>();
 let globalRateLimitExpiresAt = 0;
 let rateLimitBackoffMs = 1000;
 
-function getFallbackDataForUrl(url: string): any {
-  if (url.includes('/ticker') || url.includes('/all-tickers')) {
-    return { symbol: 'BTC', price: 64500.0, change24h: 2.14, high24h: 65200.0, low24h: 63100.0, volume24h: 24500.0, timestamp: Date.now() };
-  }
-  if (url.includes('/kline') || url.includes('/candles')) {
-    return [];
-  }
-  if (url.includes('/signal') || url.includes('/live-engine')) {
-    return { direction: 'UP', confidence: 88, status: 'LOCKED', stage: 'CONFIRMED', realEdgePct: 12.4, lockQuality: 92, targetStrike: 64200, spotAtLock: 64100, timestamp: Date.now() };
-  }
-  if (url.includes('/status') || url.includes('/health')) {
-    return { status: 'ONLINE', maintenance: false, emergencyLock: false, modelActive: true };
-  }
-  return { success: true, timestamp: Date.now() };
-}
-
 export async function safeFetchJson<T>(url: string, options?: RequestInit): Promise<T | null> {
   const cleanUrl = url.replace(/([?&])_t=\d+/g, '').replace(/\?$/, '').replace(/&$/, '');
   const cacheKey = `${options?.method || 'GET'}:${cleanUrl}:${options?.body ? String(options.body) : ''}`;
@@ -52,52 +36,48 @@ export async function safeFetchJson<T>(url: string, options?: RequestInit): Prom
 
   const promise = (async () => {
     try {
-      // If we are actively rate limited, return cache or smart mock data early
+      // If we are actively rate limited, wait or return cache early
       if (now < globalRateLimitExpiresAt) {
         const cached = cacheStore.get(cacheKey);
         if (cached) return cached.data as T;
-        return getFallbackDataForUrl(url) as T;
+        return null;
       }
 
       const res = await fetch(url, options);
       
-      if (res.status === 429 || !res.ok) {
-        console.warn(`[API Warning] Status ${res.status} on ${url}. Activating client-side fallback.`);
+      if (res.status === 429) {
+        console.warn(`[API 429] Rate limited on ${url}. Activating client-side backoff.`);
         globalRateLimitExpiresAt = Date.now() + rateLimitBackoffMs;
-        rateLimitBackoffMs = Math.min(rateLimitBackoffMs * 2, 60000);
+        rateLimitBackoffMs = Math.min(rateLimitBackoffMs * 2, 60000); // Exponential backoff up to 1 min
         
         const cached = cacheStore.get(cacheKey);
         if (cached) return cached.data as T;
-        return getFallbackDataForUrl(url) as T;
+        return null;
       }
 
-      const text = await res.text();
-      if (!text || text.includes('Rate exceeded') || text.includes('rate limit') || text.startsWith('<')) {
-        console.warn(`[API Warning] Rate limit or non-JSON text received on ${url}: "${text.substring(0, 50)}"`);
-        globalRateLimitExpiresAt = Date.now() + rateLimitBackoffMs;
-        rateLimitBackoffMs = Math.min(rateLimitBackoffMs * 2, 60000);
+      if (res.ok) {
+        rateLimitBackoffMs = 1000; // Reset on success
+      } else {
         const cached = cacheStore.get(cacheKey);
         if (cached) return cached.data as T;
-        return getFallbackDataForUrl(url) as T;
+        return null;
       }
 
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch (e) {
-        console.warn(`[API Warning] Failed to parse JSON from ${url}:`, e);
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
         const cached = cacheStore.get(cacheKey);
         if (cached) return cached.data as T;
-        return getFallbackDataForUrl(url) as T;
+        return null;
       }
 
+      const data = await res.json();
       cacheStore.set(cacheKey, { data, timestamp: Date.now() });
       return data as T;
     } catch (err) {
       console.warn(`[API Fetch Warning] Graceful handling for ${url}:`, err);
       const cached = cacheStore.get(cacheKey);
       if (cached) return cached.data as T;
-      return getFallbackDataForUrl(url) as T;
+      return null;
     } finally {
       inFlightRequests.delete(cacheKey);
     }
@@ -282,40 +262,11 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
   ];
 }
 
-export function generateFallbackCandles(symbol: string = 'BTC', count: number = 45): Candle[] {
-  const sym = symbol.toUpperCase();
-  let basePrice = 64161.4;
-  let stepScale = 120;
-  if (sym.includes('ETH')) { basePrice = 3482.5; stepScale = 15; }
-  else if (sym.includes('SOL')) { basePrice = 184.2; stepScale = 2.5; }
-  else if (sym.includes('XRP')) { basePrice = 0.624; stepScale = 0.01; }
-  else if (sym.includes('DOGE')) { basePrice = 0.142; stepScale = 0.003; }
-
-  const result: Candle[] = [];
-  const now = Date.now();
-  const intervalMs = 15 * 60 * 1000;
-  let runningPrice = basePrice - (stepScale * 2);
-
-  for (let i = count - 1; i >= 0; i--) {
-    const time = now - i * intervalMs;
-    const isUp = Math.random() > 0.45;
-    const delta = (Math.random() * stepScale + 0.5) * (isUp ? 1 : -1);
-    const open = runningPrice;
-    const close = i === 0 ? basePrice : open + delta;
-    const high = Math.max(open, close) + Math.random() * (stepScale * 0.4) + 0.2;
-    const low = Math.min(open, close) - (Math.random() * (stepScale * 0.4) + 0.2);
-    const volume = Math.round(100 + Math.random() * 900);
-
-    result.push({ time, open, high, low, close, volume });
-    runningPrice = close;
-  }
-  return result;
-}
-
 export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Promise<Candle[]> {
   return fetchCryptoKlines('BTC', interval);
 }
 
+// NEVER return synthetic/placeholder OHLC data. On failure, throw or return null — the UI layer is responsible for the empty/stale state, not this function.
 export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string = '15m'): Promise<Candle[]> {
   const canonical = resolveCanonicalAsset(symbol);
   try {
@@ -349,8 +300,9 @@ export async function fetchCryptoKlines(symbol: string = 'BTC', interval: string
     // Fallback
   }
 
-  // Fallback to robust generated candles so UI never shows CHART DATA UNAVAILABLE.
-  return generateFallbackCandles(symbol, 45);
+  // Return empty array when live market feed is unreachable.
+  // The UI layer will render CHART DATA UNAVAILABLE.
+  return [];
 }
 
 /**
@@ -602,32 +554,12 @@ export interface EntitlementsResponse {
   discordUserId?: string;
   guildMember: boolean;
   entitlements: {
-    // legacy flags
     starter: boolean;
     proQuant: boolean;
     eliteQuant: boolean;
     scalping15s: boolean;
     canAccessProDesks: boolean;
     canAccessAdminPanel: boolean;
-
-    // Granular feature gating
-    livePredictions: boolean; // VIXY LIVE
-    modelProbability: boolean;
-    confidenceFilter80: boolean;
-    vixyLocks: boolean;
-    webTerminal: boolean; // Also applies to mobile layout
-
-    l2NetTakerVolume: boolean; // Pro
-    historicalPatternMatcher: boolean; // Pro
-    webhookAlerts: boolean; // Pro (Discord/Telegram)
-    highConfidenceFilter: boolean; // Pro (>=85%/>=90%)
-    executionLogJournal: boolean; // Pro
-
-    apiKeysAccess: boolean; // Elite (Kalshi panel)
-    orderbookImbalance: boolean; // Elite (Whale Tracker / Order Flow)
-    unlimitedWebhooks: boolean; // Elite
-    prioritySupport: boolean; // Elite
-    sha256Exporting: boolean; // Elite
   };
   dayPass: {
     active: boolean;

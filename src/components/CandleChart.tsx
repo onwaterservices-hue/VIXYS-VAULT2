@@ -25,7 +25,6 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { Candle, SignalDirection } from '../types';
-import { generateFallbackCandles } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 
 export interface ModelSignalInfo {
@@ -418,7 +417,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   const isMobile = chartSvgWidth < 520;
   const isWide = measuredWidth >= WIDE_BREAKPOINT;
 
-  const safeCandles = candles && candles.length > 0 ? candles : generateFallbackCandles('BTC', 45);
+  const safeCandles = candles || [];
 
   const rawVisibleCount =
     safeCandles.length > 0 ? Math.max(6, Math.round(safeCandles.length / zoomLevel)) : 0;
@@ -501,8 +500,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   let priceMin = Math.min(...lowPrices);
   let priceMax = Math.max(...highPrices);
 
-  const lastClose = closes[closes.length - 1] || 100;
-  const refSpot = (currentPrice > 0 && Math.abs(currentPrice - lastClose) / lastClose < 0.05) ? currentPrice : lastClose;
+  const refSpot = currentPrice > 0 ? currentPrice : closes[closes.length - 1] || 100;
   if (activeSignal.targetPrice) {
     priceMin = Math.min(priceMin, activeSignal.targetPrice);
     priceMax = Math.max(priceMax, activeSignal.targetPrice);

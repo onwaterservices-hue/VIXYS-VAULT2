@@ -1903,7 +1903,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* SVG Price Action & Candlestick Visualization */}
-            <div className="relative h-[420px] sm:h-[480px] lg:h-[540px] w-full bg-[#080414] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
+            <div className="relative h-56 sm:h-64 w-full bg-[#080414] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 p-2">
                 <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,300.00</span></div>
                 <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,200.00</span></div>

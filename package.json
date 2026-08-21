@@ -12,7 +12,7 @@
     "daemon": "tsx src/services/daemon/continuousEngineDaemon.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
-    "lint": "echo 'Linting passed'"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
