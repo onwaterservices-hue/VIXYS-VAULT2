@@ -501,7 +501,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   let priceMin = Math.min(...lowPrices);
   let priceMax = Math.max(...highPrices);
 
-  const refSpot = currentPrice > 0 ? currentPrice : closes[closes.length - 1] || 100;
+  const lastClose = closes[closes.length - 1] || 100;
+  const refSpot = (currentPrice > 0 && Math.abs(currentPrice - lastClose) / lastClose < 0.05) ? currentPrice : lastClose;
   if (activeSignal.targetPrice) {
     priceMin = Math.min(priceMin, activeSignal.targetPrice);
     priceMax = Math.max(priceMax, activeSignal.targetPrice);
