@@ -326,7 +326,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newUserTier, setNewUserTier] = useState<
     "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS"
   >("PRO_PASS");
-  const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT">(
+  const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT" | "MOD">(
     "USER",
   );
   const [newUserReferralCode, setNewUserReferralCode] = useState("DIRECT");
@@ -3299,6 +3299,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   value={newUserName}
                   onChange={(e) => setNewUserName(e.target.value)}
                   placeholder="Trader Alex"
+                  className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">
+                  Temporary Password
+                </label>
+                <input
+                  type="text"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  placeholder=""
+                  className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  Leave blank to require a password reset before first login
+                </p>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">
+                  Role
+                </label>
+                <select
+                  value={newUserRole}
+                  onChange={(e) => setNewUserRole(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none"
+                >
+                  <option value="USER">USER</option>
+                  <option value="SUPPORT">SUPPORT</option>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="MOD">MOD</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-slate-400 block mb-1">
+                  Referral Code
+                </label>
+                <input
+                  type="text"
+                  value={newUserReferralCode}
+                  onChange={(e) => setNewUserReferralCode(e.target.value)}
+                  placeholder="DIRECT"
                   className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none"
                 />
               </div>

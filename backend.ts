@@ -3466,7 +3466,7 @@ __name(getKalshi15mMarketState, "getKalshi15mMarketState");
 const serverReferrals = [];
 app.get(
   "/api/admin/diagnostics",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     const now = Date.now();
     res.json({
@@ -3546,7 +3546,7 @@ app.use((req, res, next) => {
 });
 app.get(
   "/api/admin/users",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     userSubscriptions.forEach((sub, email) => {
       if (email && email !== "global_active_user") {
@@ -4452,7 +4452,7 @@ app.post(
     res.json({
       success: true,
       user: newUser,
-      message: `Account for ${cleanEmail} created successfully with assigned password and ${verificationStatus} badge.`,
+      message: `Account for ${cleanEmail} created successfully.${newUser.passwordHash ? "" : " No password set — user must reset before first login."}`,
     });
   },
 );
@@ -4630,7 +4630,7 @@ app.get("/api/admin/me", (req, res) => {
 });
 app.get(
   "/api/admin/referrals",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     res.json(serverReferrals);
   },
@@ -4908,7 +4908,7 @@ __name(addServerAuditLog, "addServerAuditLog");
 const serverTransactions = [];
 app.get(
   "/api/admin/stats",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     const totalUsers = serverUsers.length;
     const activeSubs = serverUsers.filter(
@@ -4963,7 +4963,7 @@ app.get(
 );
 app.get(
   "/api/admin/transactions",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     res.json(serverTransactions);
   },
@@ -5228,7 +5228,7 @@ app.post(
 );
 app.get(
   "/api/admin/day-passes",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     const records = [];
     const seenIds = new Set();
@@ -5259,6 +5259,7 @@ app.post(
     const validRoles = [
       "OWNER",
       "ADMIN",
+      "MOD",
       "SUPPORT",
       "PRO",
       "FREE",
@@ -5425,7 +5426,7 @@ app.post(
 );
 app.get(
   "/api/admin/audit-logs",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     res.json(serverAuditLogs);
   },
@@ -5446,14 +5447,14 @@ app.post(
 );
 app.get(
   "/api/admin/support-tickets",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     res.json(serverSupportTickets);
   },
 );
 app.post(
   "/api/admin/support-tickets/update",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     const { id, status, priority } = req.body || {};
     const ticket = serverSupportTickets.find((t) => t.id === id);
@@ -5470,7 +5471,7 @@ app.post(
 );
 app.get(
   ["/api/admin/health", "/api/admin/system-health"],
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   async (req, res) => {
     const now = Date.now();
     const memUsageMb = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
@@ -8899,6 +8900,7 @@ async function updateSubscriptionInFirestore(email, updateData) {
     };
     serverUsers.unshift(newUsr);
   }
+  if (cleanEmail.includes(".internal") || cleanEmail.includes("vixy_internal")) return;
   savePersistentStore();
   if (db) {
     try {
@@ -10538,7 +10540,7 @@ app.get("/api/telemetry/verification", (req, res) => {
 });
 app.get(
   "/api/admin/signal-log",
-  requireRole(["OWNER", "ADMIN", "SUPPORT"]),
+  requireRole(["OWNER", "ADMIN", "SUPPORT", "MOD"]),
   (req, res) => {
     res.json({
       totalLogged: persistentSignalLogs.length,
@@ -13678,6 +13680,9 @@ async function resolveCanonicalUserByEmail(email) {
 }
 __name(resolveCanonicalUserByEmail, "resolveCanonicalUserByEmail");
 async function persistSingleUser(user) {
+  if (user.email && (user.email.includes(".internal") || user.email.includes("vixy_internal"))) {
+    return;
+  }
   savePersistentStore();
   if (!db) return;
   const docId =
@@ -13866,13 +13871,15 @@ function ensureUserExists(input, options) {
         updatedAt: new Date().toISOString(),
       });
     }
-    savePersistentStore();
-    persistSingleUser(user).catch((err) =>
-      console.warn("[FIRESTORE USER] Async save error:", err?.message),
-    );
-    console.log(
-      `[USER_RECONCILED] Registered user ${cleanEmail || cleanUid} into server directory.`,
-    );
+    if (!cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
+      savePersistentStore();
+      persistSingleUser(user).catch((err) =>
+        console.warn("[FIRESTORE USER] Async save error:", err?.message),
+      );
+      console.log(
+        `[USER_RECONCILED] Registered user ${cleanEmail || cleanUid} into server directory.`,
+      );
+    }
   } else {
     let updated = false;
     if (isMasterAdminEmail(cleanEmail)) {
@@ -13899,13 +13906,15 @@ function ensureUserExists(input, options) {
       updated = true;
     }
     if (updated) {
-      savePersistentStore();
-      persistSingleUser(user).catch((err) =>
-        console.warn("[FIRESTORE USER] Async update error:", err?.message),
-      );
+      if (!cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
+        savePersistentStore();
+        persistSingleUser(user).catch((err) =>
+          console.warn("[FIRESTORE USER] Async update error:", err?.message),
+        );
+      }
     }
   }
-  if (created) {
+  if (created && !cleanEmail.includes(".internal") && !cleanEmail.includes("vixy_internal")) {
     console.log(
       `[AUTH SYNC] Processed user: ${user.email} (Created: ${created})`,
     );
