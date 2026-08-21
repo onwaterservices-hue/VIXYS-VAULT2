@@ -12835,12 +12835,10 @@ app.get("/api/signal-snapshots", (req, res) => {
   res.json({ snapshots: [], message: "Building confidence history..." });
 });
 app.all("/api/cron/settle", (req, res) => {
-  res.json({
-    success: true,
+  res.status(501).json({
+    success: false,
     job: "CONTRACT_SETTLEMENT_CHECK",
-    checked: 18,
-    settled: 4,
-    samplesLoggedTotal: 340,
+    message: "NOT_IMPLEMENTED: Settlement is strictly driven by the real-time websocket feed and checkAndSettle15mCycle. Calling this route manually is unsafe.",
     timestamp: new Date().toISOString(),
   });
 });
@@ -13568,22 +13566,7 @@ async function resolveCanonicalUserByEmail(email) {
       credentialDoc?.passwordHash &&
       credentialDoc.passwordHash !== "AuthManaged2026!"
         ? credentialDoc.passwordHash
-        : memUser?.passwordHash ||
-          (cleanEmail === "uisvelascop@icloud.com"
-            ? hashPassword("zownof-kukGiv-sekqo3")
-            : cleanEmail === "adriiiansf27@gmail.com"
-              ? hashPassword("Honduras25.@")
-              : cleanEmail === "maxo1011@outlook.com"
-                ? hashPassword("max1011")
-                : cleanEmail === "loyal2none956@gmail.com"
-                  ? hashPassword("hashdemon12!")
-                  : cleanEmail === "nghle749@gmmail.com" ||
-                      cleanEmail === "nghle749@gmail.com"
-                    ? hashPassword("123456")
-                    : isMasterAdminEmail(cleanEmail) ||
-                        cleanEmail === "ogershey@gmail.com"
-                      ? hashPassword("Seattle007")
-                      : void 0);
+        : memUser?.passwordHash;
     const subDoc =
       allDocs.find((d) => d.subscription && d.subscription !== "NONE") ||
       bestDoc;
@@ -13641,22 +13624,6 @@ async function resolveCanonicalUserByEmail(email) {
       discordTag: bestDoc.discordTag || memUser?.discordTag || void 0,
       guildVerified: bestDoc.guildVerified || memUser?.guildVerified || void 0,
     };
-    if (cleanEmail === "sergioaddiaz1711@icloud.com") {
-      resolvedUser.status = "ACTIVE";
-      resolvedUser.subscription = "STARTER";
-      resolvedUser.verificationStatus = "VERIFIED";
-      resolvedUser.discordLinked = false;
-      resolvedUser.passwordHash =
-        resolvedUser.passwordHash || hashPassword("Aldair22");
-    }
-    if (cleanEmail === "loyal2none956@gmail.com") {
-      resolvedUser.status = "ACTIVE";
-      resolvedUser.subscription = "STARTER";
-      resolvedUser.verificationStatus = "VERIFIED";
-      resolvedUser.discordLinked = false;
-      resolvedUser.passwordHash =
-        resolvedUser.passwordHash || hashPassword("hashdemon12!");
-    }
     const existingIdx = serverUsers.findIndex(
       (u) => u.email?.toLowerCase() === cleanEmail,
     );

@@ -65,7 +65,7 @@ async function fetchCurrentPrice(asset: string = 'BTC'): Promise<{ price: number
   } catch (err) {
     console.warn(`[DiscordBot] Price fetch failed for ${asset}:`, err);
   }
-  return { price: 64821.50, change24h: 1.25 };
+  return null;
 }
 
 // Register Slash Commands via Discord REST API
@@ -137,8 +137,14 @@ async function handleInteraction(interaction: Interaction) {
   } else if (commandName === 'price') {
     await interaction.deferReply();
     const asset = interaction.options.getString('asset')?.toUpperCase() || 'BTC';
-    const { price, change24h } = await fetchCurrentPrice(asset);
+    const priceData = await fetchCurrentPrice(asset);
     
+    if (!priceData) {
+      await interaction.editReply({ content: `Market data feed for ${asset} is currently unavailable. Please try again later.` });
+      return;
+    }
+    const { price, change24h } = priceData;
+
     const embed = new EmbedBuilder()
       .setTitle(`📊 Live Market Price: ${asset}/USDT`)
       .setColor(change24h >= 0 ? 0x10B981 : 0xF43F5E)
@@ -154,8 +160,14 @@ async function handleInteraction(interaction: Interaction) {
   } else if (commandName === 'predict') {
     await interaction.deferReply();
     const asset = interaction.options.getString('asset')?.toUpperCase() || 'BTC';
-    const { price, change24h } = await fetchCurrentPrice(asset);
+    const priceData = await fetchCurrentPrice(asset);
     
+    if (!priceData) {
+      await interaction.editReply({ content: `VIXY Engine requires live market data for ${asset} which is currently unavailable. Please try again later.` });
+      return;
+    }
+    const { price, change24h } = priceData;
+
     const isBullish = change24h >= 0;
     const direction = isBullish ? 'BUY UP (YES)' : 'BUY DOWN (NO)';
     const confidence = Math.round(75 + Math.abs(change24h) * 2);
