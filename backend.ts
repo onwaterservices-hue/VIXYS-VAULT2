@@ -3670,7 +3670,36 @@ async function getUserAccessState(email, uid) {
     }
   } catch (_) {}
 
-  const entitlement = getUserEntitlement(cleanEmail);
+  let entitlement = getUserEntitlement(cleanEmail);
+
+  // Cross-instance fallback: if the in-memory day-pass cache missed but this
+  // user has a valid day pass recorded in Firestore (e.g. a different serverless
+  // instance processed their Stripe webhook, or this instance cold-started after
+  // their purchase), pull it in before deciding access.
+  const hasNoAccess = entitlement.status !== "active" && entitlement.status !== "trialing";
+  if (hasNoAccess && cleanEmail && cleanEmail.includes("@") && db) {
+    try {
+      const dpSnap = await getDoc(doc(db, "day_passes", cleanEmail));
+      if (dpSnap.exists()) {
+        const dpData = dpSnap.data();
+        const expMs = dpData?.expiresAt ? new Date(dpData.expiresAt).getTime() : 0;
+        const isActive =
+          (dpData?.status === "ACTIVE" || dpData?.status === "active") &&
+          expMs > Date.now();
+        if (isActive) {
+          userDayPasses.set(cleanEmail, dpData);
+          if (dpData.userId) userDayPasses.set(dpData.userId, dpData);
+          entitlement = getUserEntitlement(cleanEmail);
+          console.log(
+            `[DAY PASS FALLBACK] Recovered day pass for ${cleanEmail} from Firestore (in-memory cache had missed it).`,
+          );
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("[DAY PASS FALLBACK] Firestore lookup failed:", fallbackErr);
+    }
+  }
+
   return {
     role: entitlement.entitlements.canAccessAdminPanel
       ? "ADMIN"
@@ -4962,77 +4991,6 @@ app.get(
     res.json(serverTransactions);
   },
 );
-app.post(
-  "/api/admin/users/action",
-  requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
-    const { userId, action, tier, role, password } = req.body || {};
-    if (!userId) {
-      return res
-        .status(400)
-        .json({ error: "USER_ID_REQUIRED", message: "userId is required" });
-    }
-    const userIndex = serverUsers.findIndex(
-      (u) =>
-        u.id === userId ||
-        u.email?.toLowerCase() === String(userId).toLowerCase(),
-    );
-    if (userIndex === -1 && action !== "delete") {
-      return res
-        .status(404)
-        .json({ error: "USER_NOT_FOUND", message: `User ${userId} not found` });
-    }
-    const user = serverUsers[userIndex];
-    if (
-      action === "suspend" ||
-      action === "freeze" ||
-      action === "freeze_access"
-    ) {
-      user.status = "SUSPENDED";
-      addServerAuditLog(
-        "ADMIN",
-        "USER_SUSPENDED",
-        `Suspended user ${user.email} (${user.id})`,
-        "WARN",
-      );
-      return res.json({
-        success: true,
-        message: `User ${user.email} suspended/frozen`,
-        user,
-      });
-    } else if (
-      action === "unsuspend" ||
-      action === "activate" ||
-      action === "unfreeze" ||
-      action === "unfreeze_access"
-    ) {
-      user.status = "ACTIVE";
-      addServerAuditLog(
-        "ADMIN",
-        "USER_ACTIVATED",
-        `Activated user ${user.email} (${user.id})`,
-      );
-      return res.json({
-        success: true,
-        message: `User ${user.email} activated/unfrozen`,
-        user,
-      });
-    } else if (action === "extend_trial") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            "Free trials are permanently disabled and removed on VIXY Vault.",
-        });
-    } else if (action === "revoke_trial") {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message:
-            "Free trials are permanently disabled and removed on VIXY Vault.",
-        });
 function grantUserPlan(user, tierInput) {
   const nextTier =
     tierInput === "ELITE_PASS" || tierInput === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
@@ -5113,6 +5071,79 @@ app.post(
     });
   },
 );
+
+app.post(
+  "/api/admin/users/action",
+  requireRole(["OWNER", "ADMIN"]),
+  (req, res) => {
+    const { userId, action, tier, role, password } = req.body || {};
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ error: "USER_ID_REQUIRED", message: "userId is required" });
+    }
+    const userIndex = serverUsers.findIndex(
+      (u) =>
+        u.id === userId ||
+        u.email?.toLowerCase() === String(userId).toLowerCase(),
+    );
+    if (userIndex === -1 && action !== "delete") {
+      return res
+        .status(404)
+        .json({ error: "USER_NOT_FOUND", message: `User ${userId} not found` });
+    }
+    const user = serverUsers[userIndex];
+    if (
+      action === "suspend" ||
+      action === "freeze" ||
+      action === "freeze_access"
+    ) {
+      user.status = "SUSPENDED";
+      addServerAuditLog(
+        "ADMIN",
+        "USER_SUSPENDED",
+        `Suspended user ${user.email} (${user.id})`,
+        "WARN",
+      );
+      return res.json({
+        success: true,
+        message: `User ${user.email} suspended/frozen`,
+        user,
+      });
+    } else if (
+      action === "unsuspend" ||
+      action === "activate" ||
+      action === "unfreeze" ||
+      action === "unfreeze_access"
+    ) {
+      user.status = "ACTIVE";
+      addServerAuditLog(
+        "ADMIN",
+        "USER_ACTIVATED",
+        `Activated user ${user.email} (${user.id})`,
+      );
+      return res.json({
+        success: true,
+        message: `User ${user.email} activated/unfrozen`,
+        user,
+      });
+    } else if (action === "extend_trial") {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message:
+            "Free trials are permanently disabled and removed on VIXY Vault.",
+        });
+    } else if (action === "revoke_trial") {
+      return res
+        .status(400)
+        .json({
+          success: false,
+          message:
+            "Free trials are permanently disabled and removed on VIXY Vault.",
+        });
+
 
     } else if (action === "grant_plan" || action === "grant_premium") {
       const nextTier = grantUserPlan(user, tier);
@@ -13766,17 +13797,14 @@ async function resolveCanonicalUserByEmail(email) {
   }
 }
 __name(resolveCanonicalUserByEmail, "resolveCanonicalUserByEmail");
-async function persistSingleUser(user) {
-  if (user.email && user.email.endsWith("@vixy.internal")) {
-    return;
-  }
-  savePersistentStore();
-  if (!db) return;
-  const docId =
+async function persistSingleUser(user) {  if (user.email && user.email.endsWith("@vixy.internal")) {    return;  }  savePersistentStore();  if (!db) return;  const docId =
     user.id ||
     user.uid ||
     (user.email ? `usr_${user.email.replace(/[^a-zA-Z0-9_]/g, "_")}` : null);
   if (!docId) return;
+  if (!canAttemptFirestoreWrite("users/" + docId)) {
+    return;
+  }
   try {
     const payload = sanitizeForFirestore(user);
     if (!payload.passwordHash || payload.passwordHash === "AuthManaged2026!") {
@@ -13810,18 +13838,19 @@ async function persistSingleUser(user) {
     lastSuccessfulFirestoreWrite = new Date().toISOString();
     lastFirestoreWriteSuccess = true;
     lastFirestoreWriteError = null;
+    firestoreRetryAtMs = 0;
+    firestoreRetryAt = null;
+    firestoreBackoffMs = 15 * 60 * 1e3;
+    firestoreWriteSuccessCount += 1;
+    firestoreWriteCountTotal += 1;
     persistenceState = "HEALTHY_FIRESTORE";
     console.log(
       `[FIRESTORE USER] Successfully persisted user ${user.email || user.id} (${docId}) to Firestore.`,
     );
   } catch (err) {
-    console.warn(
-      `[FIRESTORE USER] Error persisting user ${docId} to Firestore:`,
-      err?.message || err,
-    );
-  }
-}
-__name(persistSingleUser, "persistSingleUser");
+    handleFirestoreWriteError(err, "users/" + docId);
+  }}
+
 async function hydrateUserFromFirestore(email, uid) {
   const cleanEmail = (email || "").trim().toLowerCase();
   const cleanUid = (uid || "").trim();
