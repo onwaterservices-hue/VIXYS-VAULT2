@@ -1,0 +1,13 @@
+PROBLEM:
+Beginner (UNPAID) users are entirely blocked from the application workspace by a hard-coded paywall overlay in App.tsx. The system treats lack of payment as a complete lockout (hasActiveAccess: false) rather than routing them to a dedicated free tier / beginner experience.
+
+CURRENT BEGINNER FLOW:
+Login -> Backend assigns role="UNPAID", product="NONE", access=false -> Frontend useAuthSubscription computes hasActiveAccess=false -> App.tsx hits the `!isSubscriptionActive` condition -> Renders hard-coded lock screen ("ACTIVE 24-HOUR DAY PASS OR SUBSCRIPTION REQUIRED") instead of any actual application view.
+
+EXPECTED BEGINNER FLOW:
+Login -> Backend assigns base UNPAID/BEGINNER capabilities -> Frontend recognizes user is authenticated -> Renders the StarterDeskView (or equivalent Beginner workspace) -> User can navigate allowed sections while premium features are gracefully gated/upsold in the UI.
+
+FILES THAT NEED TO CHANGE:
+- src/App.tsx
+- src/hooks/useAuthSubscription.ts
+- backend.ts (optional, if we want to change "NONE" to "BEGINNER" or just pass `starter: true` capabilities to unpaid users, but we can also just route "NONE" to the Starter desk in the frontend).

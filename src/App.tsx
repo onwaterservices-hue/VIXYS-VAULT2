@@ -1286,41 +1286,8 @@ export default function App() {
                     </button>
                   </div>
                 </div>
-              ) : !isSubscriptionActive ? (
-                /* Logged in, BUT Subscription Inactive / Day Pass Expired -> Redirect to Pricing Page View */
-                <div className="space-y-6 animate-fadeIn">
-                  <div className="bg-gradient-to-r from-amber-950/80 via-[#180C04] to-amber-950/80 border-2 border-amber-500/60 rounded-2xl p-5 text-amber-200 font-mono text-xs flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
-                        <Lock className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="font-black text-sm text-white font-sans">
-                          ACTIVE 24-HOUR DAY PASS OR SUBSCRIPTION REQUIRED
-                        </div>
-                        <p className="text-amber-300/80 text-xs font-sans">
-                          Purchase a 24-Hour VIXY Elite Day Pass ($9.99) or subscribe below to unlock live predictions and trading desks.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setActiveTab('pricing')}
-                      className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs shrink-0 transition-all shadow-lg shadow-amber-500/20"
-                    >
-                      View Pro Plans ($29/mo)
-                    </button>
-                  </div>
-
-                  <SubscriptionView
-                    subscription={subscription}
-                    setSubscription={setSubscription}
-                    userRole={userRole}
-                    setUserRole={setUserRole}
-                    authState={authState}
-                  />
-                </div>
               ) : (
-                /* Logged in AND Active Subscription -> Access Dashboard / Terminal Desks! */
+                /* Logged in AND Active Subscription / Free Account -> Access Dashboard / Terminal Desks! */
                 <div className="relative">
                   {/* In-App Terminal Maintenance Lock (Trading Actions Locked, Terminal Read-Only) */}
                   {(maintenanceState.maintenance || maintenanceState.emergencyLock) && userRole !== 'ADMIN' && (
@@ -1355,7 +1322,7 @@ export default function App() {
                     />
                   )}
 
-                  {(activeTab === 'starter' || (activeTab === 'terminal' && userProduct === 'STARTER')) ? (
+                  {(activeTab === 'starter' || (activeTab === 'terminal' && (userProduct === 'STARTER' || userProduct === 'NONE' || userRole === 'UNPAID' || !hasActiveAccess))) ? (
                     <StarterDeskView
                       ticker={ticker}
                       candles={candles}

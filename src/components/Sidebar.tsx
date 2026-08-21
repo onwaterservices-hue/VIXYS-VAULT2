@@ -301,7 +301,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   .map((item) => {
                     const IconComponent = item.icon;
                     const isActive = activeTab === item.id;
-                    const isStarterUser = userProduct === "STARTER";
+                    const isStarterUser = userProduct === "STARTER" || userProduct === "NONE" || userRole === "UNPAID" || !hasActiveAccess;
                     const isProOnlyFeature = isStarterUser && [
                       "vixylive",
                       "scalping",
@@ -312,7 +312,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ].includes(item.id);
                     
                     const isGated =
-                      ((item.id === "vixylive" || item.id === "terminal") && !hasActiveAccess) ||
+                      (item.id === "vixylive" && !hasActiveAccess) ||
                       isProOnlyFeature;
 
                     let displayLabel = item.label;

@@ -94,8 +94,8 @@ export interface UserItem {
   uid?: string;
   email: string;
   name: string;
-  role: "OWNER" | "ADMIN" | "SUPPORT" | "PRO" | "FREE" | "USER" | "ELITE";
-  subscription: "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS" | "FREE";
+  role: "OWNER" | "ADMIN" | "SUPPORT" | "PRO" | "FREE" | "USER" | "ELITE" | "UNPAID";
+  subscription: "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS" | "FREE" | "DAY_PASS" | "STARTER" | "NONE";
   passwordHash?: string;
   verificationStatus?: "VERIFIED" | "SUSPECTED_DUPLICATE" | "UNVERIFIED";
   hardwareFingerprint?: string;
@@ -324,9 +324,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newUserName, setNewUserName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserTier, setNewUserTier] = useState<
-    "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS"
+    "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS" | "DAY_PASS" | "STARTER" | "NONE"
   >("PRO_PASS");
-  const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT" | "MOD">(
+  const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT" | "MOD" | "UNPAID">(
     "USER",
   );
   const [newUserReferralCode, setNewUserReferralCode] = useState("DIRECT");
@@ -3360,6 +3360,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <option value="FREE_TRIAL">FREE_TRIAL Pass</option>
                   <option value="PRO_PASS">PRO_PASS Tier</option>
                   <option value="ELITE_PASS">ELITE_PASS Tier</option>
+                  <option value="STARTER">STARTER Tier</option>
+                  <option value="NONE">NONE</option>
                 </select>
               </div>
 
@@ -3546,6 +3548,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <option value="DAY_PASS">
                       DAY_PASS ($9.99 - 24-Hour Access Pass)
                     </option>
+                    <option value="STARTER">
+                      STARTER ($29/mo - Beginner Access)
+                    </option>
+                    <option value="NONE">
+                      NONE (Unpaid / Beginner)
+                    </option>
                   </select>
                 </div>
 
@@ -3559,6 +3567,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
                     <option value="USER">USER (Regular Trader)</option>
+                    <option value="UNPAID">UNPAID (Beginner)</option>
                     <option value="PRO">PRO (Premium Member)</option>
                     <option value="ELITE">ELITE (High Frequency Trader)</option>
                     <option value="SUPPORT">
