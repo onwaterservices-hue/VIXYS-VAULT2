@@ -7066,7 +7066,7 @@ function getUserEntitlement(emailOrUid: string) {
     (dayPassActive ? "ACTIVE" : "INACTIVE")
   ).toUpperCase();
   const isOwnerOrAdmin =
-    ["OWNER", "ADMIN", "SUPPORT"].includes(role) ||
+    ["OWNER", "ADMIN", "SUPPORT", "MOD"].includes(role) ||
     isMasterAdminEmail(userEmail);
 
   const resolvedSub = getEntitlementsFromSubscription(
