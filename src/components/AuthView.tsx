@@ -147,7 +147,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
       }
     } catch (err) {
       setLoading(false);
-      setErrorMsg('Network error. Please try again.');
+      setErrorMsg(err.message === 'Failed to fetch' ? 'Network error: Cannot reach backend API. If on Vercel, deploy to Render/Railway instead.' : 'Network error. Please try again.');
     }
   };
 
