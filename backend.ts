@@ -179,12 +179,7 @@ __name(normalizeEmail, "normalizeEmail");
 function isMasterAdminEmail(email) {
   if (!email) return false;
   const clean = normalizeEmail(email);
-  const envAdmin = normalizeEmail(process.env.ADMIN_EMAIL);
-  return (
-    clean === "vixyvault0@gmail.com" ||
-    clean === "onwaterservices@gmail.com" ||
-    (Boolean(envAdmin) && clean === envAdmin)
-  );
+  return clean === "vixyvault0@gmail.com";
 }
 __name(isMasterAdminEmail, "isMasterAdminEmail");
 
@@ -305,6 +300,11 @@ const requireRole = __name((allowedRoles) => {
     ) {
       effectiveRole = userRole;
     }
+
+    if (["OWNER", "ADMIN"].includes(effectiveRole) && !isMasterAdminEmail(userEmail)) {
+      effectiveRole = "FREE"; // Strip admin privileges at the API route level
+    }
+
     if (
       allowedRoles.includes(effectiveRole) ||
       ["OWNER", "ADMIN"].includes(effectiveRole)
@@ -7063,11 +7063,9 @@ function getUserEntitlement(emailOrUid: string) {
     user?.accountStatus ||
     (dayPassActive ? "ACTIVE" : "INACTIVE")
   ).toUpperCase();
-  const isOwnerOrAdmin =
-    ["OWNER", "ADMIN", "SUPPORT"].includes(role) ||
-    isMasterAdminEmail(userEmail);
+  const isOwnerOrAdmin = userEmail === "vixyvault0@gmail.com";
 
-  const isMod = role === "MOD" || role === "PROMOTER";
+  const isMod = role === "MOD" || role === "PROMOTER" || ["OWNER", "ADMIN", "SUPPORT"].includes(role) && userEmail !== "vixyvault0@gmail.com";
 
   const resolvedSub = getEntitlementsFromSubscription(
     isMod ? "ELITE" : rawPlan,
@@ -7327,7 +7325,7 @@ function getCanonicalUserAccess(user: any, entitlement: any) {
   const entStatus = String(entitlement?.status || "").toLowerCase();
 
   // 1. OWNER / MASTER ADMIN
-  if (rawRole === "OWNER" || isMasterAdminEmail(email)) {
+  if (email === "vixyvault0@gmail.com") {
     return {
       authenticated: Boolean(user),
       role: "OWNER" as const,
@@ -7349,15 +7347,18 @@ function getCanonicalUserAccess(user: any, entitlement: any) {
     };
   }
 
-  // 2. ADMIN
+  // 2. MODS and Legacy Admin
   if (
+    rawRole === "OWNER" ||
     rawRole === "ADMIN" ||
     rawRole === "SUPPORT" ||
+    rawRole === "MOD" ||
+    rawRole === "PROMOTER" ||
     entitlement?.entitlements?.canAccessAdminPanel
   ) {
     return {
       authenticated: Boolean(user),
-      role: "ADMIN" as const,
+      role: rawRole as any,
       product: (entPlan && entPlan !== "NONE" ? entPlan : "ELITE_QUANT") as any,
       plan: (entPlan && entPlan !== "NONE" ? entPlan : "ELITE_QUANT"),
       access: true,
@@ -7371,7 +7372,7 @@ function getCanonicalUserAccess(user: any, entitlement: any) {
         eliteQuant: true,
         scalping15s: true,
         canAccessProDesks: true,
-        canAccessAdminPanel: true,
+        canAccessAdminPanel: false, // Explicitly false for anyone who isn't vixyvault0@gmail.com
       },
     };
   }
