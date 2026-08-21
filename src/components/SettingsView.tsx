@@ -38,7 +38,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     subscription.plan === 'ELITE_PASS' ||
     subscription.plan === 'ELITE_QUANT' ||
     subscription.plan === 'VIXY VAULT ELITE QUANT' ||
-    authState.user?.role === 'ELITE' ||
+    (authState.user?.role as string) === 'ELITE' ||
     authState.user?.role === 'ADMIN' ||
     authState.user?.role === 'OWNER' ||
     authState.user?.email?.toLowerCase() === 'vixyvault0@gmail.com';

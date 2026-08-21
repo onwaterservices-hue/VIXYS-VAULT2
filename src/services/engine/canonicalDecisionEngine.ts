@@ -23,6 +23,11 @@ import {
   evaluateVixyProtectionLock,
   TemporalObservation
 } from '../intelligence';
+import {
+  recordSettledContractOutcome,
+  recordLiveProductionLock,
+  recordLiveDecisionJournalEntry
+} from '../intelligence/learningAndCalibrationStore';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 
@@ -107,6 +112,9 @@ export function createInitial15mDecision(params?: {
       upProbability: 0.334,
       downProbability: 0.333,
       noTradeProbability: 0.333,
+      bullScore: 50,
+      bearScore: -50,
+      netDirectionalBias: 0,
       confidence: 50,
       regime: 'TRENDING_BULL',
       alignedEvidenceCount: 4,
@@ -131,6 +139,27 @@ export function createInitial15mDecision(params?: {
       capitalPreserved: false,
       lateCycleProtectionActive: false,
       protectionStatus: 'WATCH',
+      lockTier: 'NONE',
+      lockEvaluation: {
+        lockScore: 45,
+        conviction: 50,
+        reversalRisk: 12,
+        probabilityEdge: 25,
+        probabilityStability: 72,
+        modelAgreement: 40,
+        dataHealth: 98,
+        observationSeconds: 0,
+        lockEligible: false,
+        lockTier: 'NONE',
+        lockReadiness: 45,
+        blockerReason: 'Calibrating multi-venue orderbook telemetry across 10 factor groups.',
+        lockReason: 'Calibrating multi-venue orderbook telemetry across 10 factor groups.',
+        probVelocity: {
+          upVelocity: 0,
+          chopVelocity: 0,
+          downVelocity: 0
+        }
+      },
       checklist: {
         cycleActive: true,
         minLockDelayPassed: false,
@@ -239,6 +268,75 @@ export async function settleCanonical15mCycle(settlementSpot: number, nowMs: num
   canonicalState.updatedAt = new Date(nowMs).toISOString();
 
   console.log(`[C15M:SETTLEMENT] Cycle ${canonicalState.cycleId} Settled: Outcome=${outcome} Price=$${settlementSpot.toFixed(2)} Strike=$${strike.toFixed(2)}`);
+
+  // Record into continuous learning outcome store with LIVE_PRODUCTION tag
+  const actualOutcome: 'UP' | 'DOWN' | 'CHOP' = isUp ? 'UP' : (settlementSpot < strike - 5 ? 'DOWN' : 'CHOP');
+  recordSettledContractOutcome({
+    contractId: canonicalState.contractId,
+    cycleId: canonicalState.cycleId,
+    epochStart: canonicalState.cycleStart,
+    epochEnd: canonicalState.cycleEnd,
+    lockedDirection: canonicalState.direction === 'UP' ? 'UP' : canonicalState.direction === 'DOWN' ? 'DOWN' : 'SKIP',
+    lockedProbability: Math.round((canonicalState.confidence / 100) * 100) / 100,
+    lockedConfidence: canonicalState.confidence,
+    pUp: canonicalState.gemini?.upProbability ?? 0.334,
+    pChop: canonicalState.gemini?.noTradeProbability ?? 0.333,
+    pDown: canonicalState.gemini?.downProbability ?? 0.333,
+    lockScore: canonicalState.lockScore,
+    lockTier: canonicalState.lockTier || 'NONE',
+    finalMarketPrice: settlementSpot,
+    strikePrice: strike,
+    settlementOutcome: actualOutcome,
+    predictionCorrect: outcome === 'WIN',
+    featureSnapshot: {
+      regime: canonicalState.regime,
+      bullScore: canonicalState.gemini?.bullScore ?? 50,
+      bearScore: canonicalState.gemini?.bearScore ?? -50,
+      netDirectionalBias: canonicalState.gemini?.netDirectionalBias ?? 0,
+      momentum: 0,
+      orderFlowDelta: 0,
+      cvdDelta: 0,
+      vwapDisplacement: 0,
+      alignedEvidenceCount: canonicalState.evidenceAlignment,
+      contradictionScore: canonicalState.contradictionScore,
+      reversalRisk: canonicalState.reversalRisk
+    },
+    probabilityTrajectory: [
+      {
+        timestamp: new Date(nowMs).toISOString(),
+        pUp: canonicalState.gemini?.upProbability ?? 0.334,
+        pChop: canonicalState.gemini?.noTradeProbability ?? 0.333,
+        pDown: canonicalState.gemini?.downProbability ?? 0.333,
+        event: 'SETTLEMENT'
+      }
+    ],
+    calibrationVersion: 'v1.4',
+    datasetCategory: 'LIVE_PRODUCTION',
+    createdAt: new Date(nowMs).toISOString()
+  });
+
+  // Record Settlement Journal Entry
+  recordLiveDecisionJournalEntry({
+    contractId: canonicalState.contractId,
+    cycleId: canonicalState.cycleId,
+    timestamp: new Date(nowMs).toISOString(),
+    elapsedSec: 900,
+    timeRemainingSec: 0,
+    spotPrice: settlementSpot,
+    strikePrice: strike,
+    pUp: canonicalState.gemini?.upProbability ?? 0.334,
+    pChop: canonicalState.gemini?.noTradeProbability ?? 0.333,
+    pDown: canonicalState.gemini?.downProbability ?? 0.333,
+    bullScore: canonicalState.gemini?.bullScore ?? 50,
+    bearScore: canonicalState.gemini?.bearScore ?? -50,
+    netDirectionalBias: canonicalState.gemini?.netDirectionalBias ?? 0,
+    lockScore: canonicalState.lockScore,
+    conviction: canonicalState.confidence,
+    reversalRisk: canonicalState.reversalRisk,
+    regime: canonicalState.regime,
+    event: 'SETTLEMENT',
+    eventDetails: `Settled at $${settlementSpot.toFixed(2)} (Strike: $${strike.toFixed(2)}). Outcome: ${actualOutcome}. Result: ${outcome}`
+  });
 
   // Persist settlement record to Firestore signal_logs
   try {
@@ -377,10 +475,11 @@ export async function executeCanonical15mTick(params?: {
     timeRemainingSec,
     currentLockedState: isCurrentlyLocked,
     currentLockDirection: canonicalState.direction === 'UP' ? 'UP' : canonicalState.direction === 'DOWN' ? 'DOWN' : 'NEUTRAL',
-    currentLockHoldTimeMs: lockHoldTimeMs
+    currentLockHoldTimeMs: lockHoldTimeMs,
+    previousObservations: temporalObservations
   });
 
-  console.log(`[C15M:LOCK_EVALUATION] LockScore=${protection.lockScore}/100 CapitalPreservationScore=${protection.capitalPreservationScore}% Status=${protection.protectionStatus}`);
+  console.log(`[C15M:LOCK_EVALUATION] LockScore=${protection.lockScore}/100 Tier=${protection.lockTier} LockEligible=${protection.lockEvaluation.lockEligible} Blocker=${protection.lockEvaluation.blockerReason}`);
 
   if (protection.lateCycleProtectionActive && !isCurrentlyLocked) {
     console.log(`[C15M:LATE_CYCLE_BLOCK] Time remaining ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s < 5:00. New locks blocked. Capital preserved.`);
@@ -423,11 +522,11 @@ export async function executeCanonical15mTick(params?: {
     if (protection.lateCycleProtectionActive) {
       proposedState = 'SKIP';
       proposedDirection = 'SKIP';
-    } else if (protection.checklist.allPassed) {
+    } else if (protection.lockEvaluation.lockEligible || protection.checklist.allPassed) {
       // DUPLICATE LOCK PREVENTION: Exactly one lock per contract
-      proposedState = gemini.signalDirection === 'UP' ? 'LOCKED_UP' : 'LOCKED_DOWN';
+      proposedState = gemini.signalDirection === 'UP' ? 'LOCKED_UP' : gemini.signalDirection === 'DOWN' ? 'LOCKED_DOWN' : 'SKIP';
       proposedDirection = gemini.signalDirection;
-      console.log(`[C15M:LOCK_AUTHORIZED] Lock authorized for direction ${proposedDirection}. LockScore=${protection.lockScore}`);
+      console.log(`[C15M:LOCK_AUTHORIZED] Lock authorized for direction ${proposedDirection}. Tier=${protection.lockTier} LockScore=${protection.lockScore}`);
     } else if (protection.skipReasonCode !== null && (gemini.contradictionScore > 30 || gemini.reversalRisk > 25 || gemini.regime === 'CHOPPY')) {
       proposedState = 'SKIP';
       proposedDirection = 'SKIP';
@@ -452,9 +551,49 @@ export async function executeCanonical15mTick(params?: {
       if ((proposedState === 'LOCKED_UP' || proposedState === 'LOCKED_DOWN') && !canonicalState.lockedAt) {
         canonicalState.lockedAt = nowMs;
         canonicalState.spotAtLock = spot;
+
+        // Record real live production lock
+        recordLiveProductionLock({
+          contractId: canonicalState.contractId,
+          cycleId: canonicalState.cycleId,
+          timestamp: new Date(nowMs).toISOString(),
+          direction: proposedDirection === 'UP' ? 'UP' : proposedDirection === 'DOWN' ? 'DOWN' : 'SKIP',
+          pUp: gemini.upProbability,
+          pChop: gemini.noTradeProbability,
+          pDown: gemini.downProbability,
+          lockScore: protection.lockScore,
+          confidence: gemini.confidence,
+          lockTier: protection.lockTier || 'STANDARD',
+          lockReason: protection.lockEvaluation.lockReason || 'Symmetric Directional Confluence Met',
+          spotPriceAtLock: spot,
+          strikePrice: canonicalState.openStrike
+        });
       }
       canonicalState.currentState = proposedState;
       canonicalState.direction = proposedDirection;
+
+      // Journal transition event
+      recordLiveDecisionJournalEntry({
+        contractId: canonicalState.contractId,
+        cycleId: canonicalState.cycleId,
+        timestamp: new Date(nowMs).toISOString(),
+        elapsedSec: 900 - timeRemainingSec,
+        timeRemainingSec,
+        spotPrice: spot,
+        strikePrice: canonicalState.openStrike,
+        pUp: gemini.upProbability,
+        pChop: gemini.noTradeProbability,
+        pDown: gemini.downProbability,
+        bullScore: gemini.bullScore,
+        bearScore: gemini.bearScore,
+        netDirectionalBias: gemini.netDirectionalBias,
+        lockScore: protection.lockScore,
+        conviction: gemini.confidence,
+        reversalRisk: gemini.reversalRisk,
+        regime: gemini.regime,
+        event: proposedState.startsWith('LOCKED') ? 'LOCK_AUTHORIZED' : proposedState === 'CONFIRMING' ? 'BUILDING' : 'OBSERVATION',
+        eventDetails: `State transitioned from ${previousState} to ${proposedState}. Direction: ${proposedDirection}`
+      });
 
       console.log(`[C15M:STATE_TRANSITION]
   cycleId: ${canonicalState.cycleId}
@@ -485,6 +624,8 @@ export async function executeCanonical15mTick(params?: {
   canonicalState.temporalStability = protection.temporalStability;
   canonicalState.contradictionScore = gemini.contradictionScore;
   canonicalState.protectionStatus = protection.protectionStatus;
+  canonicalState.lockTier = protection.lockTier;
+  canonicalState.lockEvaluation = protection.lockEvaluation;
   canonicalState.gemini = gemini;
   canonicalState.protection = protection;
 

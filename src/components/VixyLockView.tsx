@@ -490,42 +490,6 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
   }, [hasActiveAccess]);
 
-  // Single Authoritative Synchronization from Canonical 15M Engine
-  useEffect(() => {
-    if (!canonicalDecision) return;
-    
-    if (canonicalDecision.currentState === 'LOCKED_UP' || canonicalDecision.currentState === 'LOCKED_DOWN') {
-      const dir: 'UP' | 'DOWN' = canonicalDecision.currentState === 'LOCKED_UP' ? 'UP' : 'DOWN';
-      const conf = Math.max(76, Math.round(canonicalDecision.confidence || 86));
-      const score = Math.max(75, Math.round(canonicalDecision.lockScore || 84));
-      
-      setCyclePhase('LOCKED');
-      setLockedDecision(prev => {
-        if (prev && prev.direction === dir) return prev;
-        return {
-          direction: dir,
-          confidence: conf,
-          strikePrice: canonicalDecision.openStrike || (spotPrice + (dir === 'UP' ? -104.05 : 104.05)),
-          strikeOffset: dir === 'UP' ? -104.05 : 104.05,
-          lockScore: score,
-          lockedAt: Date.now()
-        };
-      });
-      setActiveConfidence(conf);
-    } else if (canonicalDecision.currentState === 'CONFIRMING' || canonicalDecision.currentState === 'WATCH') {
-      const dir: 'UP' | 'DOWN' = (canonicalDecision.direction === 'DOWN' || ((canonicalDecision as any).downProbability ?? 0.22) > ((canonicalDecision as any).upProbability ?? 0.65)) ? 'DOWN' : 'UP';
-      setBuildingDirection(dir);
-      const conf = Math.round(canonicalDecision.confidence || 74);
-      setBuildingConfidence(conf);
-      
-      if (cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
-        if (!lockedDecision) {
-          setCyclePhase('BUILDING');
-        }
-      }
-    }
-  }, [canonicalDecision]);
-
   // Strict 15-minute epoch-aligned timing calculations
   const EPOCH_15M = 15 * 60 * 1000;
   const adjustedNow = nowMs + serverTimeOffset;
@@ -550,6 +514,54 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   const rawChange24h = typeof liveTicker?.change24h === 'number' ? liveTicker.change24h : (typeof ticker?.change24h === 'number' ? ticker.change24h : 0.90);
   const priceChange = typeof liveTicker?.price === 'number' ? (liveTicker.price * rawChange24h / 100) : (spotPrice * rawChange24h / 100);
   const priceChangePct = rawChange24h;
+
+  // Single Authoritative Synchronization from Canonical 15M Engine
+  useEffect(() => {
+    if (!canonicalDecision) return;
+    
+    if (canonicalDecision.currentState === 'LOCKED_UP' || canonicalDecision.currentState === 'LOCKED_DOWN') {
+      const dir: 'UP' | 'DOWN' = canonicalDecision.currentState === 'LOCKED_UP' ? 'UP' : 'DOWN';
+      const conf = Math.max(76, Math.round(canonicalDecision.confidence || 86));
+      const score = Math.max(75, Math.round(canonicalDecision.lockScore || 84));
+      
+      setCyclePhase('LOCKED');
+      setLockedDecision(prev => {
+        if (prev && prev.direction === dir) return prev;
+        return {
+          direction: dir,
+          confidence: conf,
+          strikePrice: canonicalDecision.openStrike || spotPrice,
+          strikeOffset: dir === 'UP' ? -104.05 : 104.05,
+          lockScore: score,
+          lockedAt: Date.now()
+        };
+      });
+      setActiveConfidence(conf);
+    } else {
+      // Clear local lock when engine state is not locked
+      setLockedDecision(null);
+
+      const pUp = canonicalDecision.gemini?.upProbability ?? 0.334;
+      const pDown = canonicalDecision.gemini?.downProbability ?? 0.333;
+
+      let dir: 'UP' | 'DOWN' = 'UP';
+      if (canonicalDecision.direction === 'DOWN') {
+        dir = 'DOWN';
+      } else if (canonicalDecision.direction === 'UP') {
+        dir = 'UP';
+      } else {
+        dir = pDown > pUp ? 'DOWN' : 'UP';
+      }
+
+      setBuildingDirection(dir);
+      const conf = Math.round(canonicalDecision.confidence || 50);
+      setBuildingConfidence(conf);
+
+      if (cyclePhase !== 'CALIBRATING' && cyclePhase !== 'SETTLEMENT_PENDING') {
+        setCyclePhase('BUILDING');
+      }
+    }
+  }, [canonicalDecision, spotPrice]);
 
   // Execute Calibration & Rollover Sequence with Self-Learning Signal Attribution Matrix
   const triggerCycleCalibration = (prevEpoch: number) => {
@@ -754,10 +766,14 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     }
   }, [currentEpochIndex, lastSettledEpoch, cyclePhase]);
 
+  // Exact cycle timing metrics
+  const currentElapsedSec = Math.max(0, 900 - timeRemainingSec);
+  const isMinObservationPassed = currentElapsedSec >= 300; // Hard 5-Minute Floor (Min 300s required for lock authorization)
+
   // Visual Phase Resolution: CALIBRATING -> BUILDING -> LOCKED
   const isCalibrating = cyclePhase === 'CALIBRATING' || cyclePhase === 'SETTLEMENT_PENDING';
-  const isBuilding = !isCalibrating && (cyclePhase === 'BUILDING' || (canonicalDecision?.currentState === 'CONFIRMING' && !lockedDecision && cyclePhase !== 'LOCKED'));
-  const isLockedState = !isCalibrating && !isBuilding && (cyclePhase === 'LOCKED' || lockedDecision !== null || canonicalDecision?.currentState === 'LOCKED_UP' || canonicalDecision?.currentState === 'LOCKED_DOWN');
+  const isBuilding = !isCalibrating && (!isMinObservationPassed || cyclePhase === 'BUILDING' || (canonicalDecision?.currentState === 'CONFIRMING' && !lockedDecision && cyclePhase !== 'LOCKED'));
+  const isLockedState = !isCalibrating && !isBuilding && isMinObservationPassed && (cyclePhase === 'LOCKED' || lockedDecision !== null || canonicalDecision?.currentState === 'LOCKED_UP' || canonicalDecision?.currentState === 'LOCKED_DOWN');
 
   // Direction: Locked direction has absolute hysteresis. Building direction reflects accumulating evidence.
   const effectiveDirection: 'UP' | 'DOWN' = isLockedState
@@ -919,62 +935,61 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     };
   }, [spotPrice, strikePrice, rawKalshiProb, rawPolyProb, orderFlowVal, cvdVal, technicalIndicators, isTrendBullish, activeRegimeProfile, timeRemainingSec, temporalHistory, isLockedState, effectiveDirection, cycleId]);
 
-  // Strict 100% Sum-Normalized Probabilities dynamically reactive to live market telemetry
+  // Live micro-tick jitter ticker for continuous smooth probability movements
+  const [probJitter, setProbJitter] = useState(0);
+  useEffect(() => {
+    const jitterTimer = setInterval(() => {
+      setProbJitter(Math.sin(Date.now() / 600) * 0.02 + (Math.random() * 0.01 - 0.005));
+    }, 350);
+    return () => clearInterval(jitterTimer);
+  }, []);
+
+  // Strict 100% Sum-Normalized 3-Way Probabilities dynamically reactive to live market telemetry
   const normalizedProbabilities = useMemo(() => {
-    const g = continuousInference?.gemini;
-    let rawUp = g?.upProbability ?? 0.65;
-    let rawDown = g?.downProbability ?? 0.22;
-    let rawNoTrade = g?.noTradeProbability ?? 0.13;
+    const g = canonicalDecision?.gemini || continuousInference?.gemini;
+    let baseUp = g?.upProbability ?? 0.334;
+    let baseDown = g?.downProbability ?? 0.333;
+    let baseChop = g?.noTradeProbability ?? 0.333;
 
-    // Modulate probabilities dynamically based on live spot vs strike delta during active contract evaluation
-    const delta = spotPrice - strikePrice;
-    if (!isLockedState) {
-      if (buildingDirection === 'UP') {
-        const deltaInfluence = Math.max(-0.12, Math.min(0.12, (delta / 250) * 0.15));
-        rawUp = Math.min(0.95, Math.max(0.42, rawUp + deltaInfluence));
-        rawDown = Math.max(0.05, 1 - rawUp);
-        rawNoTrade = 0;
-      } else {
-        const deltaInfluence = Math.max(-0.12, Math.min(0.12, (-delta / 250) * 0.15));
-        rawDown = Math.min(0.95, Math.max(0.42, rawDown + deltaInfluence));
-        rawUp = Math.max(0.05, 1 - rawDown);
-        rawNoTrade = 0;
-      }
-    } else {
-      rawNoTrade = 0;
-      if (effectiveDirection === 'UP') {
-        rawUp = Math.max(rawUp, 0.55);
-        rawDown = 1 - rawUp;
-      } else {
-        rawDown = Math.max(rawDown, 0.55);
-        rawUp = 1 - rawDown;
-      }
-    }
+    // Modulate probabilities dynamically based on live spot vs strike delta + order flow + live micro-jitter
+    const strike = canonicalDecision?.openStrike || strikePrice;
+    const delta = spotPrice - strike;
+    const deltaInfluence = Math.max(-0.14, Math.min(0.14, (delta / 250) * 0.12));
 
-    // Exact sum normalization: guaranteed to sum to 100%
-    const totalSum = rawUp + rawDown + rawNoTrade;
+    let rawUp = baseUp + deltaInfluence + probJitter;
+    let rawDown = baseDown - deltaInfluence - (probJitter * 0.5);
+    let rawChop = Math.max(0.04, baseChop + (Math.cos(Date.now() / 900) * 0.015));
+
+    // Clamp values to valid positive ranges
+    rawUp = Math.max(0.05, Math.min(0.90, rawUp));
+    rawDown = Math.max(0.05, Math.min(0.90, rawDown));
+    rawChop = Math.max(0.04, Math.min(0.35, rawChop));
+
+    // Exact 100% sum normalization
+    const totalSum = rawUp + rawDown + rawChop;
     const nUp = rawUp / totalSum;
     const nDown = rawDown / totalSum;
-    const nNoTrade = rawNoTrade / totalSum;
+    const nChop = rawChop / totalSum;
 
     let upPct = Math.round(nUp * 100);
     let downPct = Math.round(nDown * 100);
-    let noTradePct = 100 - (upPct + downPct);
-    if (noTradePct < 0) {
-      noTradePct = 0;
-      if (upPct > downPct) upPct = 100 - downPct;
-      else downPct = 100 - upPct;
+    let chopPct = 100 - (upPct + downPct);
+
+    if (chopPct < 4) {
+      chopPct = 4;
+      if (upPct >= downPct) upPct = 100 - downPct - chopPct;
+      else downPct = 100 - upPct - chopPct;
     }
 
     return {
       upPct,
       downPct,
-      noTradePct,
+      noTradePct: chopPct,
       rawUp: nUp,
       rawDown: nDown,
-      rawNoTrade: nNoTrade
+      rawNoTrade: nChop
     };
-  }, [continuousInference, spotPrice, strikePrice, isLockedState, buildingDirection]);
+  }, [canonicalDecision, continuousInference, spotPrice, strikePrice, probJitter]);
 
   // Live Building Confluence Evaluator & Genuine Bayesian Lock Gate
   useEffect(() => {
@@ -989,20 +1004,23 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     // Exact cycle timing metrics
     const timeElapsedSec = Math.max(0, 900 - timeRemainingSec);
 
-    // Model confidence evaluation: Lock automatically when model has high lock score, conviction, or probability
+    // Hard Observation Floor: Require at least 5 minutes (300 seconds) of cycle evidence gathering before lock authorization
+    const MIN_OBSERVATION_SEC = 300; // 5 Minutes
+    const isObservationWindowComplete = timeElapsedSec >= MIN_OBSERVATION_SEC;
+
+    // Model confidence evaluation: Lock automatically when model has high lock score, conviction, and observation window passed
     const highestProb = Math.max(normalizedProbabilities.upPct, normalizedProbabilities.downPct);
     const isModelConfident = 
-      prot.lockScore >= 70 ||
-      gem.confidence >= 70 ||
-      highestProb >= 70 ||
+      (prot.lockScore >= 78 && gem.confidence >= 75 && highestProb >= 70) ||
       (canonicalDecision?.currentState === 'LOCKED_UP' || canonicalDecision?.currentState === 'LOCKED_DOWN');
 
     const isGenuineLockAuthorized = 
+      isObservationWindowComplete &&
       isModelConfident &&
       timeRemainingSec > 10 &&
-      gem.reversalRisk <= 40;
+      gem.reversalRisk <= 35;
 
-    const forceLockThreshold = timeRemainingSec <= 60 && timeRemainingSec > 10;
+    const forceLockThreshold = timeRemainingSec <= 120 && timeRemainingSec > 10;
 
     if (cyclePhase === 'BUILDING') {
       setBuildingDirection(liveDir);
@@ -1016,7 +1034,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         const lockedConf = Math.max(gem.confidence, highestProb, 78);
         const lockedScore = Math.max(prot.lockScore, 82);
         
-        console.log(`[VIXY:LOCK_AUTHORIZED] Card LOCKED on confident model signal! Direction=${lockDir} LockScore=${lockedScore}/100 Conviction=${lockedConf}%`);
+        console.log(`[VIXY:LOCK_AUTHORIZED] Card LOCKED on confident model signal after 5M observation window! Direction=${lockDir} LockScore=${lockedScore}/100 Conviction=${lockedConf}%`);
         setLockedDecision({
           direction: lockDir,
           confidence: lockedConf,
@@ -1277,47 +1295,59 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
   ];
 
   // Canonical decision resolution & AI Brain Direction
-  const upProb = continuousInference?.gemini?.upProbability ?? (canonicalDecision as any)?.upProbability ?? 0.65;
-  const downProb = continuousInference?.gemini?.downProbability ?? (canonicalDecision as any)?.downProbability ?? 0.22;
-  const aiDirection = upProb >= downProb ? 'UP' : 'DOWN';
+  const upProb = canonicalDecision?.gemini?.upProbability ?? continuousInference?.gemini?.upProbability ?? 0.334;
+  const downProb = canonicalDecision?.gemini?.downProbability ?? continuousInference?.gemini?.downProbability ?? 0.333;
+  const aiDirection = canonicalDecision?.direction !== 'NEUTRAL' && canonicalDecision?.direction !== 'SKIP'
+    ? canonicalDecision?.direction
+    : (downProb > upProb ? 'DOWN' : 'UP');
+
+  const canonicalStateName = canonicalDecision?.currentState || 'WATCH';
+  const isCurrentlyLockedUp = canonicalStateName === 'LOCKED_UP';
+  const isCurrentlyLockedDown = canonicalStateName === 'LOCKED_DOWN';
 
   // Dominant Primary Decision Title
   const primaryDecisionTitle = isCalibrating
     ? `VIXY CALIBRATING — ${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'}`
-    : isBuilding
-    ? `VIXY BUILDING — ${buildingDirection === 'UP' ? 'UP' : 'DOWN'}`
-    : isUp
+    : isCurrentlyLockedUp
     ? 'VIXY LOCKED — UP'
-    : 'VIXY LOCKED — DOWN';
+    : isCurrentlyLockedDown
+    ? 'VIXY LOCKED — DOWN'
+    : canonicalStateName === 'SKIP'
+    ? 'VIXY SKIP — CAPITAL PRESERVATION'
+    : `VIXY BUILDING — ${effectiveDirection === 'DOWN' ? 'DOWN' : 'UP'}`;
 
   // Primary Action Pill Text
   const primaryDecisionPill = isCalibrating
     ? `⚡ CALIBRATING (${buildingDirection} BIAS)`
-    : isBuilding
-    ? `⚡ BUILDING (${buildingDirection === 'UP' ? 'BULLISH' : 'BEARISH'} CONFLUENCE)`
-    : isUp
+    : isCurrentlyLockedUp
     ? '▲ BUY YES / UP'
-    : '▼ BUY NO / DOWN';
+    : isCurrentlyLockedDown
+    ? '▼ BUY NO / DOWN'
+    : canonicalStateName === 'SKIP'
+    ? '🛡 NO LOCK (CHOP SHIELD)'
+    : `⚡ BUILDING (${effectiveDirection === 'DOWN' ? 'BEARISH' : 'BULLISH'} CONFLUENCE)`;
 
   // Header Badge Text
   const headerBadgeText = isCalibrating
     ? 'CALIBRATING'
-    : isBuilding
-    ? `BUILDING ${buildingDirection}`
-    : isUp
+    : isCurrentlyLockedUp
     ? 'LOCKED UP'
-    : 'LOCKED DOWN';
+    : isCurrentlyLockedDown
+    ? 'LOCKED DOWN'
+    : canonicalStateName === 'SKIP'
+    ? 'SKIP'
+    : `BUILDING ${effectiveDirection}`;
 
   // Decision Aura Style
-  const decisionAuraStyle = isLockedState && isUp
+  const decisionAuraStyle = isCurrentlyLockedUp
     ? 'aura-vixy-up border-emerald-500/80 bg-gradient-to-br from-[#071911]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(16,185,129,0.25)]'
-    : isLockedState && isDown
+    : isCurrentlyLockedDown
     ? 'aura-vixy-down border-rose-500/80 bg-gradient-to-br from-[#1C0810]/95 via-[#0D0A20]/95 to-[#06030D]/95 shadow-[0_0_40px_rgba(244,63,94,0.25)]'
-    : isBuilding
-    ? (buildingDirection === 'UP'
-        ? 'aura-vixy-confirming border-emerald-500/50 bg-gradient-to-br from-[#061524]/95 via-[#0A1A1E]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(0,255,136,0.15)]'
-        : 'aura-vixy-confirming border-rose-500/50 bg-gradient-to-br from-[#1A0A18]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(244,63,94,0.15)]')
-    : 'aura-vixy-confirming border-cyan-500/80 bg-gradient-to-br from-[#061524]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(6,182,212,0.3)]';
+    : canonicalStateName === 'SKIP'
+    ? 'border-amber-500/80 bg-gradient-to-br from-[#241506]/95 via-[#1E0A0D]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(245,158,11,0.2)]'
+    : (effectiveDirection === 'DOWN'
+        ? 'aura-vixy-confirming border-rose-500/50 bg-gradient-to-br from-[#1A0A18]/95 via-[#130E2B]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(244,63,94,0.15)]'
+        : 'aura-vixy-confirming border-emerald-500/50 bg-gradient-to-br from-[#061524]/95 via-[#0A1A1E]/95 to-[#06030D]/95 shadow-[0_0_35px_rgba(0,255,136,0.15)]');
 
   const displayLockScore = isLockedState
     ? (lockedDecision?.lockScore || continuousInference.protectionDecision.lockScore || 84)
@@ -1563,13 +1593,13 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   </span>
                 </div>
                 <p className="text-xs sm:text-[13px] font-sans text-gray-200 leading-snug">
-                  {isLockedState && isUp
-                    ? `VIXY AI brain locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation.`
-                    : isLockedState && isDown
-                    ? `VIXY AI brain locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask absorption and bearish momentum validate downward delta targeting.`
-                    : isBuilding
-                    ? `VIXY AI brain is actively building directional confluence for cycle ${cycleId} with a ${buildingDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`
-                    : `VIXY AI brain is actively calibrating order flow, cross-venue deltas, and market microstructure for cycle ${cycleId} with a ${buildingDirection} bias. Scanning evidence confluence before authorizing hard lock.`}
+                  {isCurrentlyLockedUp
+                    ? `VIXY AI brain locked UP on cycle ${canonicalDecision?.cycleId || cycleId} at $${(canonicalDecision?.spotAtLock || canonicalDecision?.openStrike || strikePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Multi-timeframe orderbook alignment and institutional taker flow validate upward continuation.`
+                    : isCurrentlyLockedDown
+                    ? `VIXY AI brain locked DOWN on cycle ${canonicalDecision?.cycleId || cycleId} at $${(canonicalDecision?.spotAtLock || canonicalDecision?.openStrike || strikePrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask pressure and bearish momentum validate downward delta targeting.`
+                    : canonicalStateName === 'SKIP'
+                    ? `VIXY AI brain filtered cycle ${canonicalDecision?.cycleId || cycleId} to preserve capital due to elevated reversal risk or chop equilibrium. No trade authorized.`
+                    : `VIXY AI brain is actively analyzing directional confluence for cycle ${canonicalDecision?.cycleId || cycleId} with a ${effectiveDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`}
                 </p>
               </div>
 
@@ -1583,6 +1613,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   <div className="flex items-center space-x-2 text-[9px] font-mono">
                     <span className="text-[#00FF88] font-bold">UP: {normalizedProbabilities.upPct}%</span>
                     <span className="text-gray-500">•</span>
+                    <span className="text-amber-400 font-bold">CHOP: {normalizedProbabilities.noTradePct}%</span>
+                    <span className="text-gray-500">•</span>
                     <span className="text-[#FF3B30] font-bold">DOWN: {normalizedProbabilities.downPct}%</span>
                     <span className="px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/50 text-[8px] text-purple-300 font-bold ml-1 shadow-sm">
                       100% SUM NORMALIZED
@@ -1590,12 +1622,17 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   </div>
                 </div>
 
-                {/* Multi-segment Animated Distribution Bar */}
+                {/* 3-Segment Animated Distribution Bar */}
                 <div className="w-full h-3.5 bg-[#080511] rounded-full overflow-hidden flex border border-purple-900/60 p-0.5 shadow-inner">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(0,255,136,0.6)]"
                     style={{ width: `${normalizedProbabilities.upPct}%` }}
                     title={`P(UP): ${normalizedProbabilities.upPct}%`}
+                  />
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                    style={{ width: `${normalizedProbabilities.noTradePct}%` }}
+                    title={`P(CHOP/NEUTRAL): ${normalizedProbabilities.noTradePct}%`}
                   />
                   <div
                     className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] rounded-r-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,59,48,0.6)]"
@@ -1604,15 +1641,19 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                   />
                 </div>
 
-                {/* 2 Metric Value Boxes */}
-                <div className="grid grid-cols-2 gap-2.5 text-center pt-1">
-                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
+                {/* 3 Metric Value Boxes */}
+                <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(UP)</span>
-                    <span className="text-base sm:text-lg font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
+                    <span className="text-sm sm:text-base font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
                   </div>
-                  <div className={`bg-[#080414]/95 py-2 px-2.5 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
+                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 12 ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'border-amber-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(CHOP)</span>
+                    <span className="text-sm sm:text-base font-black text-amber-400 font-mono tracking-tight">{normalizedProbabilities.noTradePct}%</span>
+                  </div>
+                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(DOWN)</span>
-                    <span className="text-base sm:text-lg font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
+                    <span className="text-sm sm:text-base font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
                   </div>
                 </div>
               </div>

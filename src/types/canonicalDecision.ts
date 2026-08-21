@@ -5,6 +5,44 @@
  * and frontend client visualizers (VIXY LIVE, Dashboard, VIXY LOCKS, Results Terminal).
  */
 
+export type LockTier = 'EARLY' | 'STANDARD' | 'LATE' | 'NONE';
+
+export interface LockPolicyTierConfig {
+  tierName: LockTier;
+  minObservationSeconds: number;
+  maxObservationSeconds: number;
+  minLockScore: number;
+  minConviction: number;
+  maxReversalRisk: number;
+  minStability: number;
+  minModelAgreement: number;
+  minEvidenceAlignment: number;
+  minDataHealth: number;
+}
+
+export interface ProbabilityVelocity {
+  upVelocity: number;    // % change over recent observations (e.g. +3.8 or -1.2)
+  chopVelocity: number;  // % change over recent observations
+  downVelocity: number;  // % change over recent observations
+}
+
+export interface LockEvaluationFields {
+  lockScore: number;                 // 0 to 100 composite score
+  conviction: number;                // 0 to 100% conviction/confidence
+  reversalRisk: number;              // 0 to 100%
+  probabilityEdge: number;           // e.g. P(UP) - P(DOWN)
+  probabilityStability: number;      // 0 to 100% stability of probabilities over time
+  modelAgreement: number;            // 0 to 100% factor alignment agreement
+  dataHealth: number;                // 0 to 100% data feed freshness & health
+  observationSeconds: number;        // seconds elapsed in active 15M cycle
+  lockEligible: boolean;             // true if all conditions passed for active tier
+  lockTier: LockTier;                // 'EARLY' | 'STANDARD' | 'LATE' | 'NONE'
+  lockReadiness: number;             // 0 to 100 score indicating proximity to tier requirement
+  blockerReason: string;             // Human-readable explicit blocker reason
+  lockReason: string;                // Reason for locking or current state
+  probVelocity: ProbabilityVelocity; // Velocity vector for probabilities
+}
+
 export type Canonical15mState = 
   | 'WATCH'
   | 'CONFIRMING'
@@ -46,6 +84,9 @@ export interface CanonicalGeminiShadowData {
   upProbability: number;      // 0.00 to 1.00 (e.g. 0.58)
   downProbability: number;    // 0.00 to 1.00 (e.g. 0.27)
   noTradeProbability: number; // 0.00 to 1.00 (e.g. 0.15)
+  bullScore: number;          // 0 to +100
+  bearScore: number;          // -100 to 0
+  netDirectionalBias: number; // -100 to +100
   confidence: number;         // 0 to 100
   regime: MarketRegimeType;
   alignedEvidenceCount: number; // 0 to 10
@@ -74,27 +115,29 @@ export interface LockScoreBreakdown {
 
 export interface CanonicalProtectionData {
   lockScore: number;                 // 0 to 100 composite score
-  lockProgressPct: number;           // 0 to 100% progress towards requirement (>= 72)
+  lockProgressPct: number;           // 0 to 100% progress towards requirement
   temporalStability: number;         // 0 to 100%
   reversalRisk: number;              // 0 to 100%
   capitalPreservationScore: number;  // 0 to 100% (higher = stronger reason to stay out)
   capitalPreserved: boolean;
-  lateCycleProtectionActive: boolean;// true when minutesRemaining < 5
+  lateCycleProtectionActive: boolean;
   protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
+  lockTier: LockTier;
+  lockEvaluation: LockEvaluationFields;
   checklist: {
     cycleActive: boolean;
-    minLockDelayPassed?: boolean;    // timeElapsedSec >= 360 (Hard 6-minute floor)
-    timeWindowPassed: boolean;       // minutesRemaining >= 5
-    regimePassed: boolean;           // regime is acceptable (not CHOPPY / UNKNOWN)
-    directionalScorePassed: boolean; // >= 80
-    confidencePassed: boolean;       // >= 78
-    temporalStabilityPassed: boolean;// >= 65
-    crossVenuePassed: boolean;       // agreement within 8%
-    reversalRiskPassed: boolean;     // reversalRisk <= 25
-    evidenceConfluencePassed: boolean;// >= 7/10 factors aligned
-    noContradictionPassed: boolean;  // contradictionScore <= 25
-    protectionEnginePassed: boolean; // AUTHORIZED
-    dataFreshnessPassed: boolean;    // no stale telemetry
+    minLockDelayPassed?: boolean;
+    timeWindowPassed: boolean;
+    regimePassed: boolean;
+    directionalScorePassed: boolean;
+    confidencePassed: boolean;
+    temporalStabilityPassed: boolean;
+    crossVenuePassed: boolean;
+    reversalRiskPassed: boolean;
+    evidenceConfluencePassed: boolean;
+    noContradictionPassed: boolean;
+    protectionEnginePassed: boolean;
+    dataFreshnessPassed: boolean;
     allPassed: boolean;
   };
   skipReasonCode: string | null;
@@ -136,6 +179,8 @@ export interface Canonical15mDecision {
   temporalStability: number;  // 0 to 100
   contradictionScore: number; // 0 to 100
   protectionStatus: string;   // 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED'
+  lockTier?: LockTier;
+  lockEvaluation?: LockEvaluationFields;
   
   // 4. Intelligence & Guardian Layers
   gemini: CanonicalGeminiShadowData;
@@ -176,7 +221,13 @@ export function isValid15mStateTransition(
   // Strict valid transition graph
   switch (currentState) {
     case 'WATCH':
-      return proposedState === 'CONFIRMING' || proposedState === 'SKIP' || proposedState === 'SETTLED';
+      return (
+        proposedState === 'CONFIRMING' ||
+        proposedState === 'LOCKED_UP' ||
+        proposedState === 'LOCKED_DOWN' ||
+        proposedState === 'SKIP' ||
+        proposedState === 'SETTLED'
+      );
 
     case 'CONFIRMING':
       return (

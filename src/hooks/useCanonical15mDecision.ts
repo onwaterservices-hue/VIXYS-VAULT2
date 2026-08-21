@@ -20,13 +20,12 @@ export function useCanonical15mDecision(): {
   const currentVersionRef = useRef<number>(0);
   const currentDecisionIdRef = useRef<string>('');
 
-  // Apply state update only if monotonic version check passes
+  // Apply state update safely to allow continuous live data updates
   const applySafeUpdate = (incoming: Canonical15mDecision, source: string = 'FIRESTORE') => {
     if (!incoming || !incoming.decisionId) return;
     
     // Always update heartbeat if we receive a valid payload
     setLocalUpdatedAt(Date.now());
-
 
     // If new cycle / decisionId, accept unconditionally and reset version counter
     if (incoming.decisionId !== currentDecisionIdRef.current) {
@@ -37,13 +36,10 @@ export function useCanonical15mDecision(): {
       return;
     }
 
-    // Monotonic Version Guard: Equal or older versions (<= currentVersion) are ignored/rejected
-    if (incoming.stateVersion > currentVersionRef.current) {
-      console.log(`[C15M] Version Advance [${source}]: ${incoming.decisionId} | State: ${incoming.currentState} | Ver: ${currentVersionRef.current} -> ${incoming.stateVersion}`);
+    // Accept updates if version advances OR if version is equal (enabling live probability, lock score, and spot updates)
+    if (incoming.stateVersion >= currentVersionRef.current) {
       currentVersionRef.current = incoming.stateVersion;
       setDecision(incoming);
-    } else {
-      // Ignored: incoming.stateVersion <= currentVersionRef.current
     }
   };
 

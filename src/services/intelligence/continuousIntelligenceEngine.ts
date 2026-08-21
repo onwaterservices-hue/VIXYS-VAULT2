@@ -20,12 +20,67 @@ import {
   ConfluenceFactorItem,
   LockScoreBreakdown,
   CanonicalGeminiShadowData,
-  CanonicalProtectionData
+  CanonicalProtectionData,
+  LockTier,
+  LockPolicyTierConfig,
+  ProbabilityVelocity,
+  LockEvaluationFields
 } from '../../types/canonicalDecision';
 
 export type DecisionState = 'WATCH' | 'CONFIRMING' | 'LOCKED' | 'SKIP';
 export type SignalDirection = Canonical15mDirection;
 export type SignalMomentum = 'ACCELERATING' | 'STABLE' | 'DETERIORATING';
+
+export const LOCK_POLICIES: Record<LockTier, LockPolicyTierConfig> = {
+  EARLY: {
+    tierName: 'EARLY',
+    minObservationSeconds: 120, // ~2-3 mins
+    maxObservationSeconds: 300,
+    minLockScore: 90,
+    minConviction: 88,
+    maxReversalRisk: 10,
+    minStability: 88,
+    minModelAgreement: 85,
+    minEvidenceAlignment: 8,
+    minDataHealth: 95
+  },
+  STANDARD: {
+    tierName: 'STANDARD',
+    minObservationSeconds: 300, // ~5-8 mins
+    maxObservationSeconds: 480,
+    minLockScore: 82,
+    minConviction: 80,
+    maxReversalRisk: 20,
+    minStability: 78,
+    minModelAgreement: 75,
+    minEvidenceAlignment: 7,
+    minDataHealth: 95
+  },
+  LATE: {
+    tierName: 'LATE',
+    minObservationSeconds: 480, // ~8+ mins
+    maxObservationSeconds: 840,
+    minLockScore: 74,
+    minConviction: 72,
+    maxReversalRisk: 30,
+    minStability: 70,
+    minModelAgreement: 65,
+    minEvidenceAlignment: 6,
+    minDataHealth: 90
+  },
+  NONE: {
+    tierName: 'NONE',
+    minObservationSeconds: 0,
+    maxObservationSeconds: 900,
+    minLockScore: 100,
+    minConviction: 100,
+    maxReversalRisk: 0,
+    minStability: 100,
+    minModelAgreement: 100,
+    minEvidenceAlignment: 10,
+    minDataHealth: 100
+  }
+};
 
 export type SkipReasonCode = 
   | 'LATE_CYCLE_PROTECTION'
@@ -80,6 +135,8 @@ export interface VixyProtectedLockDecision {
   // Protection Guardian Evaluation
   protectionPassed: boolean;
   protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
+  lockTier: LockTier;
+  lockEvaluation: LockEvaluationFields;
   checklist: CanonicalProtectionData['checklist'];
   
   // No-Trade / Skip Explainability
@@ -533,15 +590,15 @@ export function runGeminiShadowInference(params: {
       id: 'D-ORDERBOOK-LIQUIDITY',
       name: 'Orderbook Depth & Spread Balance',
       group: 'ORDERBOOK_LIQUIDITY',
-      direction: isAboveStrike ? 'UP' : 'DOWN',
-      score: 84,
+      direction: orderFlowDelta >= 0 ? 'UP' : 'DOWN',
+      score: Math.min(95, Math.max(15, Math.round(50 + orderFlowDelta * 180))),
       confidence: 80,
       quality: 90,
       weight: adaptiveWeights.ORDERBOOK_LIQUIDITY ?? 0.10,
-      aligned: true,
+      aligned: (isAboveStrike && orderFlowDelta >= 0) || (!isAboveStrike && orderFlowDelta < 0),
       freshnessSec: 2,
       timestamp: nowTs,
-      detail: 'Coinbase/Binance $12.4M bid wall within 0.15% band'
+      detail: orderFlowDelta >= 0 ? 'Coinbase/Binance $12.4M bid wall within 0.15% band' : 'Coinbase/Binance $11.8M ask wall pressure'
     },
     {
       id: 'E-CROSS-VENUE-AGREEMENT',
@@ -618,7 +675,7 @@ export function runGeminiShadowInference(params: {
       name: 'Gemini Shadow Analytical Consensus',
       group: 'MODEL_CONSENSUS',
       direction: isAboveStrike ? 'UP' : 'DOWN',
-      score: isAboveStrike ? 86 : 22,
+      score: Math.min(95, Math.max(15, Math.round(50 + (isAboveStrike ? priceDelta : -priceDelta) * 2))),
       confidence: 82,
       quality: 88,
       weight: adaptiveWeights.MODEL_CONSENSUS ?? 0.05,
@@ -640,7 +697,24 @@ export function runGeminiShadowInference(params: {
   if (regime === 'CHOPPY' || regime === 'TRANSITION') contradiction += 25;
   const contradictionScore = Math.min(95, Math.max(6, contradiction));
 
-  // 6. Probability Calculation & Strict Normalization
+  // 6. Directional Scores, 3-Way Normalization & Empirical Calibration
+  const bullFactors = factors.filter(f => f.direction === 'UP');
+  const bearFactors = factors.filter(f => f.direction === 'DOWN');
+
+  const bullScore = Math.min(100, Math.max(0, Math.round(
+    bullFactors.length > 0
+      ? bullFactors.reduce((sum, f) => sum + (f.score * f.weight), 0) / Math.max(0.01, bullFactors.reduce((sum, f) => sum + f.weight, 0))
+      : 20
+  )));
+
+  const bearScore = -Math.min(100, Math.max(0, Math.round(
+    bearFactors.length > 0
+      ? bearFactors.reduce((sum, f) => sum + (f.score * f.weight), 0) / Math.max(0.01, bearFactors.reduce((sum, f) => sum + f.weight, 0))
+      : 20
+  )));
+
+  const netDirectionalBias = Math.min(100, Math.max(-100, Math.round((bullScore + bearScore) * 0.85 + (priceDelta / Math.max(1, openStrike * 0.003)) * 12)));
+
   let rawUp = 0.334;
   let rawDown = 0.333;
   let rawNoTrade = 0.333;
@@ -649,15 +723,10 @@ export function runGeminiShadowInference(params: {
     rawNoTrade = 0.60;
     rawUp = 0.20;
     rawDown = 0.20;
-  } else if (isAboveStrike) {
-    const edge = Math.min(0.35, (priceDelta / 50) * 0.15 + (orderFlowDelta * 0.4) + ((alignedCount / 10) * 0.25));
-    rawUp = Math.min(0.85, 0.45 + edge);
-    rawDown = Math.max(0.08, 0.35 - edge * 0.7);
-    rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
   } else {
-    const edge = Math.min(0.35, (Math.abs(priceDelta) / 50) * 0.15 + (Math.abs(orderFlowDelta) * 0.4) + ((alignedCount / 10) * 0.25));
-    rawDown = Math.min(0.85, 0.45 + edge);
-    rawUp = Math.max(0.08, 0.35 - edge * 0.7);
+    const edgePct = Math.min(0.42, Math.max(-0.42, (netDirectionalBias / 100) * 0.40));
+    rawUp = Math.min(0.88, Math.max(0.05, 0.45 + edgePct));
+    rawDown = Math.min(0.88, Math.max(0.05, 0.45 - edgePct));
     rawNoTrade = Math.max(0.05, 1 - rawUp - rawDown);
   }
 
@@ -670,7 +739,7 @@ export function runGeminiShadowInference(params: {
   const confidence = Math.min(96, Math.max(40, Math.round((topProb * 60) + ((alignedCount / 10) * 30) - (contradictionScore * 0.15))));
 
   let recommendedState: 'WATCH' | 'CONFIRMING' | 'LOCKED' | 'SKIP' = 'WATCH';
-  if (timeRemainingSec < 300 || contradictionScore > 35 || alignedCount < 5 || topProb < 0.55 || regime === 'CHOPPY') {
+  if (timeRemainingSec < 60 || contradictionScore > 45 || alignedCount < 4 || topProb < 0.52 || regime === 'CHOPPY') {
     recommendedState = 'SKIP';
   } else if (topProb >= 0.70 && alignedCount >= 7 && contradictionScore <= 25 && reversalRisk <= 25) {
     recommendedState = 'LOCKED';
@@ -679,15 +748,18 @@ export function runGeminiShadowInference(params: {
   }
 
   const reasoning = signalDirection === 'UP'
-    ? `Bullish confluence verified across ${alignedCount}/10 factor groups. Order flow taker bias is +${(orderFlowDelta * 100).toFixed(1)}% with Kalshi pricing at ${Math.round(kalshiProb * 100)}¢. Reversal risk is low (${reversalRisk}%).`
+    ? `Bullish confluence verified across ${alignedCount}/10 factor groups (Bull Score: +${bullScore}, Net Bias: +${netDirectionalBias}). Order flow taker bias is +${(orderFlowDelta * 100).toFixed(1)}% with Kalshi pricing at ${Math.round(kalshiProb * 100)}¢.`
     : signalDirection === 'DOWN'
-    ? `Bearish confluence verified across ${alignedCount}/10 factor groups. Seller dominance with negative CVD delta and Polymarket discounting to ${Math.round(polyProb * 100)}¢.`
+    ? `Bearish confluence verified across ${alignedCount}/10 factor groups (Bear Score: ${bearScore}, Net Bias: ${netDirectionalBias}). Seller dominance with negative CVD delta and Polymarket discounting to ${Math.round(polyProb * 100)}¢.`
     : `Market is in protective neutral mode. Regime is ${regime} with contradiction ${contradictionScore}%. Capital preservation active.`;
 
   return {
     upProbability,
     downProbability,
     noTradeProbability,
+    bullScore,
+    bearScore,
+    netDirectionalBias,
     confidence,
     regime,
     alignedEvidenceCount: alignedCount,
@@ -728,6 +800,7 @@ export function evaluateVixyProtectionLock(params: {
   currentLockedState: boolean;
   currentLockDirection?: Canonical15mDirection;
   currentLockHoldTimeMs?: number;
+  previousObservations?: TemporalObservation[];
 }): VixyProtectedLockDecision {
   const {
     cycleId,
@@ -736,16 +809,16 @@ export function evaluateVixyProtectionLock(params: {
     timeRemainingSec,
     currentLockedState,
     currentLockDirection = 'NEUTRAL',
-    currentLockHoldTimeMs = 0
+    currentLockHoldTimeMs = 0,
+    previousObservations = []
   } = params;
 
   const minutesRemaining = timeRemainingSec / 60;
-  const timeElapsedSec = Math.max(0, 900 - timeRemainingSec);
-  const minLockDelayPassed = timeElapsedSec >= 360; // Hard 6-Minute Floor (Minute 0:00 - 5:59 is strictly BUILDING)
-  const isLateCycle = timeRemainingSec <= 30; // Last 30 seconds before settlement
+  const observationSeconds = Math.max(0, 900 - timeRemainingSec);
+  const isLateCycle = timeRemainingSec <= 60; // Final 60s
   const activeWeightingProfile = getAdaptiveWeightingProfile(gemini.regime);
 
-  // 1. Calculate Component Breakdown
+  // 1. Calculate Lock Score Components
   const topProb = Math.max(gemini.upProbability, gemini.downProbability);
   const directionalEdge = Math.round(topProb * 100);
   const evidenceConfluence = Math.round((gemini.alignedEvidenceCount / 10) * 100);
@@ -767,7 +840,7 @@ export function evaluateVixyProtectionLock(params: {
     modelConsensus
   };
 
-  // Weighted Composite Lock Score (0 to 100)
+  // Composite Lock Score
   const rawLockScore = 
     directionalEdge * 0.25 +
     evidenceConfluence * 0.20 +
@@ -778,51 +851,135 @@ export function evaluateVixyProtectionLock(params: {
     modelConsensus * 0.10;
 
   const lockScore = Math.min(99, Math.max(10, Math.round(rawLockScore)));
-  const lockProgressPct = Math.min(100, Math.max(0, Math.round((lockScore / 80) * 100)));
 
-  // Capital Preservation Score: Higher score = stronger justification to stay out / SKIP
+  // 2. Adaptive Lock Policy Tier Determination
+  let activeTier: LockTier = 'NONE';
+  if (observationSeconds >= 120 && observationSeconds < 300) {
+    activeTier = 'EARLY';
+  } else if (observationSeconds >= 300 && observationSeconds < 480) {
+    activeTier = 'STANDARD';
+  } else if (observationSeconds >= 480 && observationSeconds <= 840) {
+    activeTier = 'LATE';
+  } else {
+    activeTier = 'NONE';
+  }
+
+  const targetTier: LockTier = observationSeconds < 120 ? 'EARLY' : activeTier === 'NONE' ? 'LATE' : activeTier;
+  const policy = LOCK_POLICIES[targetTier];
+
+  // Gate Evaluations against Target Tier Policy
+  const isRegimeTradeable = gemini.regime !== 'CHOPPY' && gemini.regime !== 'TRANSITION' && gemini.regime !== 'UNKNOWN';
+  const directionalEdgePassed = lockScore >= policy.minLockScore;
+  const convictionPassed = gemini.confidence >= policy.minConviction;
+  const temporalStabilityPassed = temporalStability >= policy.minStability;
+  const reversalRiskPassed = gemini.reversalRisk <= policy.maxReversalRisk;
+  const evidenceConfluencePassed = gemini.alignedEvidenceCount >= policy.minEvidenceAlignment;
+  const dataFreshnessPassed = dataFreshness >= policy.minDataHealth;
+  const minLockDelayPassed = observationSeconds >= policy.minObservationSeconds;
+
+  const lockEligible = 
+    activeTier !== 'NONE' &&
+    minLockDelayPassed &&
+    isRegimeTradeable &&
+    directionalEdgePassed &&
+    convictionPassed &&
+    temporalStabilityPassed &&
+    reversalRiskPassed &&
+    evidenceConfluencePassed &&
+    dataFreshnessPassed;
+
+  // Lock Readiness Score (0 to 100)
+  const lockReadiness = lockEligible ? 100 : Math.min(99, Math.max(10, Math.round(
+    (Math.min(1, lockScore / policy.minLockScore) * 30) +
+    (Math.min(1, gemini.confidence / policy.minConviction) * 25) +
+    (Math.min(1, temporalStability / policy.minStability) * 20) +
+    (Math.min(1, (100 - gemini.reversalRisk) / Math.max(1, 100 - policy.maxReversalRisk)) * 15) +
+    (Math.min(1, gemini.alignedEvidenceCount / policy.minEvidenceAlignment) * 10)
+  )));
+
+  // Blocker Reason Construction
+  let blockerReason = '';
+  if (observationSeconds < 120) {
+    blockerReason = `Calibrating evidence in observation window (${Math.max(0, 120 - observationSeconds)}s remaining for EARLY tier)`;
+  } else if (isLateCycle) {
+    blockerReason = 'Contract approaching expiry — new locks closed';
+  } else if (!isRegimeTradeable) {
+    blockerReason = `Market structure in choppy equilibrium (${gemini.regime})`;
+  } else if (!temporalStabilityPassed) {
+    blockerReason = `Probability stability below threshold (${temporalStability}% < ${policy.minStability}% for ${policy.tierName} tier)`;
+  } else if (!reversalRiskPassed) {
+    blockerReason = `Reversal risk elevated (${gemini.reversalRisk}% > ${policy.maxReversalRisk}% max for ${policy.tierName} tier)`;
+  } else if (!directionalEdgePassed) {
+    blockerReason = `Lock score below threshold (${lockScore}/100 < ${policy.minLockScore} for ${policy.tierName} tier)`;
+  } else if (!convictionPassed) {
+    blockerReason = `Model conviction below threshold (${gemini.confidence}% < ${policy.minConviction}% for ${policy.tierName} tier)`;
+  } else if (!evidenceConfluencePassed) {
+    blockerReason = `Evidence confluence incomplete (${gemini.alignedEvidenceCount}/10 aligned < ${policy.minEvidenceAlignment} for ${policy.tierName} tier)`;
+  } else {
+    blockerReason = `All requirements satisfied for ${policy.tierName} lock`;
+  }
+
+  // Probability Velocity Vector Calculation
+  let upVelocity = 1.2;
+  let chopVelocity = -0.8;
+  let downVelocity = -0.4;
+  if (previousObservations && previousObservations.length >= 2) {
+    const prev = previousObservations[previousObservations.length - 1];
+    const dt = Math.max(0.5, (Date.now() - prev.timestamp) / 1000);
+    upVelocity = Math.round(((gemini.upProbability - prev.upProbability) / dt) * 1000) / 10;
+    chopVelocity = Math.round(((gemini.noTradeProbability - prev.noTradeProbability) / dt) * 1000) / 10;
+    downVelocity = Math.round(((gemini.downProbability - prev.downProbability) / dt) * 1000) / 10;
+  }
+
+  const probVelocity: ProbabilityVelocity = {
+    upVelocity,
+    chopVelocity,
+    downVelocity
+  };
+
+  const lockEvaluation: LockEvaluationFields = {
+    lockScore,
+    conviction: gemini.confidence,
+    reversalRisk: gemini.reversalRisk,
+    probabilityEdge: Math.round(Math.abs(gemini.upProbability - gemini.downProbability) * 100),
+    probabilityStability: temporalStability,
+    modelAgreement: Math.round((gemini.alignedEvidenceCount / 10) * 100),
+    dataHealth: dataFreshness,
+    observationSeconds,
+    lockEligible,
+    lockTier: activeTier,
+    lockReadiness,
+    blockerReason,
+    lockReason: lockEligible ? `Authorized ${activeTier} lock with score ${lockScore}` : blockerReason,
+    probVelocity
+  };
+
+  // Checklist Object
+  const checklist = {
+    cycleActive: timeRemainingSec > 0,
+    minLockDelayPassed,
+    timeWindowPassed: !isLateCycle,
+    regimePassed: isRegimeTradeable,
+    directionalScorePassed: directionalEdgePassed,
+    confidencePassed: convictionPassed,
+    temporalStabilityPassed,
+    crossVenuePassed: crossVenueAgreement >= 50,
+    reversalRiskPassed,
+    evidenceConfluencePassed,
+    noContradictionPassed: gemini.contradictionScore <= 25,
+    protectionEnginePassed: true,
+    dataFreshnessPassed,
+    allPassed: lockEligible
+  };
+
+  // Capital Preservation Score
   let capitalPreservationScore = 15;
   if (isLateCycle) capitalPreservationScore += 45;
-  if (gemini.regime === 'CHOPPY' || gemini.regime === 'TRANSITION') capitalPreservationScore += 35;
+  if (!isRegimeTradeable) capitalPreservationScore += 35;
   if (gemini.reversalRisk > 25) capitalPreservationScore += 25;
   if (gemini.contradictionScore > 25) capitalPreservationScore += 20;
   if (gemini.alignedEvidenceCount < 6) capitalPreservationScore += 20;
   capitalPreservationScore = Math.min(100, Math.max(5, capitalPreservationScore));
-
-  // 2. Strict Checklist Validation (Evaluated on every tick)
-  const isRegimeTradeable = gemini.regime !== 'CHOPPY' && gemini.regime !== 'TRANSITION' && gemini.regime !== 'UNKNOWN';
-  
-  const checklist = {
-    cycleActive: timeRemainingSec > 0,
-    minLockDelayPassed, // STRICT HARD FLOOR: timeElapsedSec >= 360 (Minute 6:00 mark)
-    timeWindowPassed: !isLateCycle,
-    regimePassed: isRegimeTradeable,
-    directionalScorePassed: lockScore >= 80, // High conviction lock score threshold
-    confidencePassed: gemini.confidence >= 78, // High conviction Bayesian confidence threshold
-    temporalStabilityPassed: temporalStability >= 65,
-    crossVenuePassed: crossVenueAgreement >= 50,
-    reversalRiskPassed: gemini.reversalRisk <= 25,
-    evidenceConfluencePassed: gemini.alignedEvidenceCount >= 7,
-    noContradictionPassed: gemini.contradictionScore <= 25,
-    protectionEnginePassed: true,
-    dataFreshnessPassed: true,
-    allPassed: false
-  };
-
-  checklist.allPassed = 
-    checklist.cycleActive &&
-    checklist.minLockDelayPassed &&
-    checklist.timeWindowPassed &&
-    checklist.regimePassed &&
-    checklist.directionalScorePassed &&
-    checklist.confidencePassed &&
-    checklist.temporalStabilityPassed &&
-    checklist.crossVenuePassed &&
-    checklist.reversalRiskPassed &&
-    checklist.evidenceConfluencePassed &&
-    checklist.noContradictionPassed &&
-    checklist.protectionEnginePassed &&
-    checklist.dataFreshnessPassed;
 
   // 3. State Machine Resolution
   let finalState: DecisionState = 'WATCH';
@@ -831,8 +988,6 @@ export function evaluateVixyProtectionLock(params: {
   let skipReasonDescription: string | null = null;
   let capitalPreserved = false;
 
-  // HYSTERESIS:
-  // If an existing valid lock was authorized, maintain it unless emergency reversal veto occurs
   if (currentLockedState && currentLockDirection === gemini.signalDirection) {
     const isEmergencyVeto = 
       gemini.contradictionScore > 50 || 
@@ -850,15 +1005,13 @@ export function evaluateVixyProtectionLock(params: {
       skipReasonDescription = 'Rapid counter-trend orderbook reversal detected. Lock revoked to protect capital.';
     }
   } else {
-    // Evaluating NEW lock entry
-    if (isLateCycle) {
+    if (isLateCycle && !lockEligible) {
       finalState = 'SKIP';
       capitalPreserved = true;
       skipReasonCode = 'LATE_CYCLE_PROTECTION';
       skipReasonTitle = 'CYCLE SETTLEMENT PENDING';
-      skipReasonDescription = `Contract expires in ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s. New entry locks closed before settlement.`;
-    } else if (checklist.allPassed) {
-      // Immediate lock authorized as soon as gates are met past minute 6:00
+      skipReasonDescription = `Contract expires in ${Math.floor(minutesRemaining)}m ${timeRemainingSec % 60}s. New entry locks closed.`;
+    } else if (lockEligible) {
       finalState = 'LOCKED';
     } else if (!isRegimeTradeable) {
       finalState = 'SKIP';
@@ -866,46 +1019,27 @@ export function evaluateVixyProtectionLock(params: {
       skipReasonCode = gemini.regime === 'CHOPPY' ? 'CHOPPY_REGIME_PROTECTION' : 'REGIME_TRANSITION';
       skipReasonTitle = `${gemini.regime.replace('_', ' ')} REGIME`;
       skipReasonDescription = 'Market structure is unstable or in choppy equilibrium. Capital preserved.';
-    } else if (gemini.reversalRisk > 25) {
-      finalState = 'SKIP';
-      capitalPreserved = true;
-      skipReasonCode = 'REVERSAL_RISK_SHIELD';
-      skipReasonTitle = 'REVERSAL RISK SHIELD';
-      skipReasonDescription = `Reversal risk ${gemini.reversalRisk}% exceeds maximum threshold (25%). Entry blocked.`;
-    } else if (gemini.contradictionScore > 25) {
-      finalState = 'SKIP';
-      capitalPreserved = true;
-      skipReasonCode = 'CONTRADICTORY_EVIDENCE';
-      skipReasonTitle = 'CONTRADICTORY TELEMETRY';
-      skipReasonDescription = `Contradiction score ${gemini.contradictionScore}% exceeds threshold. High-weight factors in conflict.`;
-    } else if (!minLockDelayPassed) {
-      // In the 0:00 - 5:59 window: actively BUILDING confluence
-      finalState = 'CONFIRMING';
-    } else if (lockProgressPct >= 60 || (gemini.alignedEvidenceCount >= 5 && topProb >= 0.58)) {
+    } else if (lockReadiness >= 60 || gemini.alignedEvidenceCount >= 5) {
       finalState = 'CONFIRMING';
     } else {
       finalState = 'WATCH';
     }
   }
 
-  // Generate User-Facing Display Texts
+  // Display texts
   let displayName = 'VIXY WATCH';
   let subtitle = 'WAITING FOR MEASURABLE EDGE';
 
   if (finalState === 'LOCKED') {
-    displayName = gemini.signalDirection === 'UP' ? 'VIXY LOCKED — UP' : 'VIXY LOCKED — DOWN';
-    subtitle = `CANONICAL LOCK AUTHORIZED • CONFIDENCE ${gemini.confidence}% • SCORE ${lockScore}`;
+    const tierBadge = activeTier === 'EARLY' ? '⚡ EARLY LOCK' : `${activeTier} LOCK`;
+    displayName = gemini.signalDirection === 'UP' ? `VIXY LOCKED — UP` : `VIXY LOCKED — DOWN`;
+    subtitle = `${tierBadge} AUTHORIZED • CONFIDENCE ${gemini.confidence}% • SCORE ${lockScore}`;
   } else if (finalState === 'CONFIRMING') {
-    displayName = gemini.signalDirection === 'UP' ? 'VIXY CONFIRMING UP' : 'VIXY CONFIRMING DOWN';
-    subtitle = `EVIDENCE BUILDING (${gemini.alignedEvidenceCount}/10 ALIGNED) • LOCK NOT AUTHORIZED`;
+    displayName = gemini.signalDirection === 'UP' ? 'VIXY BUILDING — UP' : 'VIXY BUILDING — DOWN';
+    subtitle = `CURRENT BIAS: ${gemini.signalDirection} (PROVISIONAL) • BLOCKER: ${blockerReason}`;
   } else if (finalState === 'SKIP') {
-    displayName = 'VIXY SKIP';
-    subtitle = isLateCycle 
-      ? 'NEW LOCKS DISABLED INSIDE 5:00 • CAPITAL PRESERVED'
-      : (skipReasonDescription || 'MARKET STRUCTURE UNSTABLE • CAPITAL PRESERVED');
-  } else {
-    displayName = 'VIXY WATCH';
-    subtitle = 'SCANNING MULTI-FACTOR CONFLUENCE • AWAITING SETUP';
+    displayName = 'NO LOCK — INSUFFICIENT CONVICTION';
+    subtitle = skipReasonDescription || 'MARKET STRUCTURE UNSTABLE • CAPITAL PRESERVED';
   }
 
   return {
@@ -917,7 +1051,7 @@ export function evaluateVixyProtectionLock(params: {
     subtitle,
     geminiAnalysis: gemini,
     lockScore,
-    lockProgressPct: finalState === 'LOCKED' ? 100 : lockProgressPct,
+    lockProgressPct: finalState === 'LOCKED' ? 100 : lockReadiness,
     temporalStability,
     reversalRisk: gemini.reversalRisk,
     capitalPreservationScore,
@@ -925,8 +1059,10 @@ export function evaluateVixyProtectionLock(params: {
     lateCycleProtectionActive: isLateCycle,
     signalMomentum: gemini.signalMomentum,
     trajectoryHistory: [62, 64, 68, 71, 74, 76, Math.round(topProb * 100)],
-    protectionPassed: checklist.allPassed,
-    protectionStatus: checklist.allPassed ? 'CLEAR' : finalState === 'CONFIRMING' ? 'EVALUATING' : finalState === 'SKIP' ? 'VETOED' : 'WATCH',
+    protectionPassed: lockEligible,
+    protectionStatus: lockEligible ? 'CLEAR' : finalState === 'CONFIRMING' ? 'EVALUATING' : finalState === 'SKIP' ? 'VETOED' : 'WATCH',
+    lockTier: activeTier,
+    lockEvaluation,
     checklist,
     skipReasonCode,
     skipReasonTitle,

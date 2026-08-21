@@ -350,7 +350,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               const lockedSpot = lockedPrediction?.spotAtLock || spot;
               const priceDiff = spot - lockedSpot;
               
-              const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'UP';
+              const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'NEUTRAL';
               const isUpDir = String(direction).toUpperCase().includes('UP');
               
               const conf = lockedPrediction?.confidence || liveState?.confidence || 72.8;
@@ -536,7 +536,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               const priceDeltaPct = entryPrice && settlementPrice ? ((settlementPrice - entryPrice) / entryPrice) * 100 : null;
               const durationStr = formatDuration(log.lockedAt, log.resolvedAt || log.expiresAt);
 
-              const direction = log.direction || 'UP';
+              const direction = log.direction || 'NEUTRAL';
               const isUpDir = direction === 'UP';
 
               return (

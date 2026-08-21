@@ -154,6 +154,21 @@
         "weightShiftSummary": { "type": "string", "maxLength": 500 }
       },
       "required": ["cycleId", "timestamp", "regime", "marketOutcome", "accuracyScore"]
+    },
+    "decisionOutcome": {
+      "title": "Decision Outcome Record",
+      "description": "Historical 15M cycle outcome and accuracy learning record",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "closePrice": { "type": "number" },
+        "direction": { "type": "string", "maxLength": 20 },
+        "confidence": { "type": "number" },
+        "settlementOutcome": { "type": "string", "maxLength": 20 },
+        "wasCorrect": { "type": "boolean" },
+        "recordedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["cycleId", "direction", "settlementOutcome"]
     }
   },
   "firestore": {
@@ -192,6 +207,10 @@
     "/algorithm_performance_history/{historyId}": {
       "schema": { "$ref": "#/entities/algorithmHistory" },
       "description": "Cycle-by-cycle self-learning attribution scores and grades"
+    },
+    "/decision_outcomes/{outcomeId}": {
+      "schema": { "$ref": "#/entities/decisionOutcome" },
+      "description": "Settled decision learning outcomes stored in Vixy Vault"
     }
   }
 }

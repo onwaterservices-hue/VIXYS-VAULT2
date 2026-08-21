@@ -340,24 +340,42 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
           </div>
 
-          {/* Latency & Connectivity Pill - CONNECTED / HEALTHY */}
+          {/* System Health Indicators Bar */}
           <div className="hidden md:flex items-center gap-2 px-2.5 py-0.5 rounded-lg bg-[#120826] border border-purple-800/50 text-[10px] font-mono shrink-0">
             <span className="flex items-center gap-1 text-cyan-300 font-bold">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
               <span>{apiSignal?.latencyMs || 12}ms</span>
             </span>
             <span className="text-purple-800">•</span>
-            <span className="text-purple-400 font-bold">API:</span>
-            <span className="flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.kalshi?.connected ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-              <span className={exchangeKeys?.kalshi?.connected ? 'text-cyan-300 font-bold' : 'text-slate-400'}>Kalshi</span>
+            <span className="px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 font-black border border-cyan-500/40">
+              CALIB v1.4
             </span>
-            <span className="flex items-center gap-1">
-              <span className={`w-1.5 h-1.5 rounded-full ${exchangeKeys?.polymarket?.connected ? 'bg-emerald-400' : 'bg-slate-500'}`} />
-              <span className={exchangeKeys?.polymarket?.connected ? 'text-indigo-300 font-bold' : 'text-slate-400'}>Poly</span>
+            <span className="text-purple-800">•</span>
+            <span className="text-purple-400 font-bold">SYS:</span>
+            <span className="flex items-center gap-1" title="System Connected">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              <span className="text-emerald-300 font-bold">CONN</span>
             </span>
-            <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[9px] font-black">
-              HEALTHY
+            <span className="flex items-center gap-1" title="Market Data Live">
+              <span className={`w-1.5 h-1.5 rounded-full ${(apiSignal as any)?.marketFeedLive !== false ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+              <span className={(apiSignal as any)?.marketFeedLive !== false ? 'text-emerald-300 font-bold' : 'text-rose-400'}>MKT</span>
+            </span>
+            <span className="flex items-center gap-1" title="Engine Pipeline Live">
+              <span className={`w-1.5 h-1.5 rounded-full ${(apiSignal as any)?.engineLive !== false ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+              <span className={(apiSignal as any)?.engineLive !== false ? 'text-emerald-300 font-bold' : 'text-rose-400'}>ENG</span>
+            </span>
+            <span className="flex items-center gap-1" title="Signal Integrity Live">
+              <span className={`w-1.5 h-1.5 rounded-full ${(apiSignal as any)?.signalLive !== false ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              <span className={(apiSignal as any)?.signalLive !== false ? 'text-emerald-300 font-bold' : 'text-amber-300 font-bold'}>SIG</span>
+            </span>
+            <span className={`px-1.5 py-0.2 rounded text-[9px] font-black ${
+              (apiSignal as any)?.isSignalFrozen
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 animate-pulse'
+                : (apiSignal as any)?.signalLive !== false
+                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+            }`}>
+              {(apiSignal as any)?.isSignalFrozen ? 'FROZEN' : (apiSignal as any)?.signalLive !== false ? 'HEALTHY' : 'DEGRADED'}
             </span>
           </div>
         </div>

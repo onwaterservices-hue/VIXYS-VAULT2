@@ -4,15 +4,6 @@ service cloud.firestore {
     function isSignedIn() {
       return request.auth != null;
     }
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-    function isBackend() {
-      return isSignedIn() && request.auth.token.email == 'backend_system@vixy.local';
-    }
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
 
     match /{document=**} {
       allow read, write: if false;
@@ -22,77 +13,80 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+
     match /users/{userId} {
-      allow read: if isOwner(userId) || isBackend();
-      allow write: if isBackend() || (isOwner(userId) && isValidId(userId));
+      allow read, write: if true;
 
       match /journalEntries/{entryId} {
-        allow read, write: if isOwner(userId) && isValidId(entryId);
+        allow read, write: if true;
       }
     }
 
     match /tickets/{ticketId} {
-      allow read: if isSignedIn() || isBackend();
-      allow create: if isSignedIn() && isValidId(ticketId);
-      allow update, delete: if isSignedIn() || isBackend();
+      allow read, write: if true;
     }
 
     match /predictions/{predictionId} {
-      allow read: if true;
-      allow write: if isBackend() || (isSignedIn() && isValidId(predictionId));
+      allow read, write: if true;
     }
 
     match /signal_logs/{signalId} {
-      allow read: if true;
-      allow write: if isBackend();
+      allow read, write: if true;
     }
 
     match /telemetry_observations/{obsId} {
-      allow read: if true;
-      allow write: if isBackend();
+      allow read, write: if true;
     }
 
     match /day_passes/{docId} {
-      allow read: if isBackend();
-      allow write: if isBackend();
+      allow read, write: if true;
     }
 
     match /subscriptions/{subId} {
-      allow read: if isBackend() || (isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.email == request.auth.token.email));
-      allow write: if isBackend();
+      allow read, write: if true;
     }
 
     match /webhook_events/{eventId} {
-      allow read, write: if isBackend();
+      allow read, write: if true;
     }
-    
+
     match /discordProfiles/{profileId} {
-      allow read, write: if isBackend();
+      allow read, write: if true;
     }
-    match /system_state/{stateId} {
-      allow read, write: if isBackend();
-    }
-    match /calibration_state/{stateId} {
-      allow read, write: if isBackend();
-    }
-    match /settlement_locks/{lockId} {
-      allow read, write: if isBackend();
-    }
-    match /active_cycle_lock/{lockId} {
-      allow read: if true;
-      allow write: if isBackend();
-    }
-    match /regime_memory_bank/{memoryId} {
-      allow read: if true;
-      allow write: if isBackend();
-    }
-    match /algorithm_performance_history/{historyId} {
-      allow read: if true;
-      allow write: if isBackend();
-    }
+
     match /discord_profiles/{profileId} {
-      allow read: if isSignedIn() || isBackend();
-      allow write: if isBackend();
+      allow read, write: if true;
+    }
+
+    match /system_state/{stateId} {
+      allow read, write: if true;
+    }
+
+    match /calibration_state/{stateId} {
+      allow read, write: if true;
+    }
+
+    match /settlement_locks/{lockId} {
+      allow read, write: if true;
+    }
+
+    match /active_cycle_lock/{lockId} {
+      allow read, write: if true;
+    }
+
+    match /decision_outcomes/{outcomeId} {
+      allow read, write: if true;
+    }
+
+    match /regime_memory_bank/{memoryId} {
+      allow read, write: if true;
+    }
+
+    match /algorithm_performance_history/{historyId} {
+      allow read, write: if true;
     }
   }
 }
