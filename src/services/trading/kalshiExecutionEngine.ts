@@ -1,9 +1,15 @@
 import crypto from 'crypto';
 import { KalshiAutoTradeConfig, AutoTradeAuditLog } from '../../types';
+import { collection, doc, getDoc, getDocs, query, where, setDoc, runTransaction } from 'firebase/firestore';
 
-// Encryption secret for stored RSA credentials
-const ENCRYPTION_SECRET = process.env.KALSHI_ENCRYPTION_KEY || process.env.STRIPE_SECRET_KEY || 'vixy_vault_kalshi_rsa_secret_aes256_2026_salt';
-const ENCRYPTION_KEY = crypto.createHash('sha256').update(ENCRYPTION_SECRET).digest();
+// Defer encryption key resolution to prevent crashes on startup when env var is missing in dev
+function getEncryptionKey(): Buffer {
+  const secret = process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY;
+  if (!secret) {
+    throw new Error('KALSHI_CREDENTIAL_ENCRYPTION_KEY environment variable is not set — refusing to start Kalshi credential encryption without it.');
+  }
+  return crypto.createHash('sha256').update(secret).digest();
+}
 
 export interface EncryptedCredentials {
   keyIdEncrypted: { iv: string; tag: string; encryptedData: string };
@@ -29,8 +35,9 @@ export const executedSignalIdSet = new Set<string>();
  * AES-256-GCM symmetric encryption for securing private keys at rest
  */
 export function encryptString(plaintext: string): { iv: string; tag: string; encryptedData: string } {
+  const key = getEncryptionKey();
   const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
   let encrypted = cipher.update(plaintext, 'utf8', 'hex');
   encrypted += cipher.final('hex');
   const tag = cipher.getAuthTag().toString('hex');
@@ -47,7 +54,8 @@ export function encryptString(plaintext: string): { iv: string; tag: string; enc
 export function decryptString(payload: { iv: string; tag: string; encryptedData: string }): string | null {
   if (!payload || !payload.encryptedData || !payload.iv || !payload.tag) return null;
   try {
-    const decipher = crypto.createDecipheriv('aes-256-gcm', ENCRYPTION_KEY, Buffer.from(payload.iv, 'hex'));
+    const key = getEncryptionKey();
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, Buffer.from(payload.iv, 'hex'));
     decipher.setAuthTag(Buffer.from(payload.tag, 'hex'));
     let decrypted = decipher.update(payload.encryptedData, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
@@ -162,7 +170,7 @@ export function createDefaultAutoTradeConfig(): KalshiAutoTradeConfig {
     maxStakePerTradeUSD: 25, // $25 per position
     maxDailyExposureUSD: 100, // $100 max daily cap
     supportedMarkets: ['BTC', 'ETH', 'SOL'],
-    environment: 'live',
+    environment: 'paper', // Changed from 'live' to 'paper' as per Fix 2, step 5
     consecutiveFailures: 0,
     autoDisabledReason: null,
     updatedAt: new Date().toISOString(),
@@ -271,13 +279,36 @@ export async function testKalshiHandshake(
 }
 
 /**
- * Computes today's total executed stake exposure for a user
+ * Computes today's total executed stake exposure for a user from Firestore
  */
-export function getDailyExposureForUser(userId: string): number {
+export async function getDailyExposureForUser(userId: string, firestoreDb?: any): Promise<number> {
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
   const startOfDayIso = startOfDay.toISOString();
 
+  if (firestoreDb) {
+    try {
+      const logsRef = collection(firestoreDb, 'auto_trade_logs');
+      const q = query(
+        logsRef,
+        where('userId', '==', userId),
+        where('timestamp', '>=', startOfDayIso)
+      );
+      const qSnap = await getDocs(q);
+      let sum = 0;
+      qSnap.forEach((doc) => {
+        const data = doc.data();
+        if (data.action === 'ORDER_PLACED' || data.status === 'SUCCESS') {
+          sum += (data.stakeUSD || 0);
+        }
+      });
+      return sum;
+    } catch (err) {
+      console.error(`[Kalshi] Error calculating daily exposure from Firestore for user ${userId}:`, err);
+    }
+  }
+
+  // Fallback to local cache in case Firestore is unavailable
   return autoTradeAuditLogHistory
     .filter((log) => log.userId === userId && log.timestamp >= startOfDayIso && (log.action === 'ORDER_PLACED' || log.status === 'SUCCESS'))
     .reduce((sum, log) => sum + (log.stakeUSD || 0), 0);
@@ -401,6 +432,12 @@ export function recordAuditLog(
     autoTradeAuditLogHistory.pop();
   }
 
+  if (firestoreDb) {
+    setDoc(doc(firestoreDb, 'auto_trade_logs', auditLog.id), auditLog).catch((err) => {
+      console.error('[Kalshi] Failed to write audit log to Firestore:', err);
+    });
+  }
+
   return auditLog;
 }
 
@@ -442,7 +479,40 @@ export async function executeAutoTradesForSignal(
   };
   const targetSeries = seriesTickerMap[asset] || 'KXBTC15M';
 
-  for (const [userId, userState] of userKalshiStateMap.entries()) {
+  // 1. Query Firestore directly for every enabled user configuration
+  let enabledUsers: StoredUserKalshiState[] = [];
+  if (firestoreDb) {
+    try {
+      const q = query(
+        collection(firestoreDb, "kalshi_credentials"),
+        where("autoTradeConfig.enabled", "==", true)
+      );
+      const qSnap = await getDocs(q);
+      qSnap.forEach((doc) => {
+        const data = doc.data() as StoredUserKalshiState;
+        if (data) {
+          enabledUsers.push(data);
+          userKalshiStateMap.set(doc.id, data); // Refresh cache
+        }
+      });
+    } catch (err) {
+      console.error("[Kalshi] Error querying enabled users from Firestore:", err);
+    }
+  }
+
+  // Fallback to local cache if Firestore returns nothing
+  if (enabledUsers.length === 0) {
+    for (const [userId, userState] of userKalshiStateMap.entries()) {
+      if (userState.autoTradeConfig?.enabled) {
+        enabledUsers.push(userState);
+      }
+    }
+  }
+
+  for (const userState of enabledUsers) {
+    const userId = userState.userId || userState.userEmail?.toLowerCase();
+    if (!userId) continue;
+
     const config = userState.autoTradeConfig;
     const creds = userState.credentials;
 
@@ -482,8 +552,37 @@ export async function executeAutoTradesForSignal(
       continue;
     }
 
-    const dedupeKey = `${signalId}_${userId}`;
-    if (executedSignalIdSet.has(dedupeKey)) {
+    // 2. Atomic Idempotency guard using Firestore runTransaction
+    let alreadyExecuted = false;
+    if (firestoreDb) {
+      const dedupeRef = doc(firestoreDb, "auto_trade_dedupe", `${signalId}_${userId}`);
+      try {
+        await runTransaction(firestoreDb, async (transaction) => {
+          const docSnap = await transaction.get(dedupeRef);
+          if (docSnap.exists()) {
+            alreadyExecuted = true;
+          } else {
+            transaction.set(dedupeRef, {
+              signalId,
+              userId,
+              executedAt: new Date().toISOString()
+            });
+          }
+        });
+      } catch (err) {
+        console.error(`[Kalshi] Transaction failed/deduplicated for key ${signalId}_${userId}:`, err);
+        alreadyExecuted = true; // Safe fallback: treat contention as executed to prevent double buying
+      }
+    } else {
+      const dedupeKey = `${signalId}_${userId}`;
+      if (executedSignalIdSet.has(dedupeKey)) {
+        alreadyExecuted = true;
+      } else {
+        executedSignalIdSet.add(dedupeKey);
+      }
+    }
+
+    if (alreadyExecuted) {
       continue;
     }
 
@@ -516,7 +615,7 @@ export async function executeAutoTradesForSignal(
 
     const stakeUSD = Math.max(1, config.maxStakePerTradeUSD || 25);
     const maxDailyExposureUSD = Math.max(stakeUSD, config.maxDailyExposureUSD || 100);
-    const currentDailyExposure = getDailyExposureForUser(userId);
+    const currentDailyExposure = await getDailyExposureForUser(userId, firestoreDb);
 
     if (currentDailyExposure + stakeUSD > maxDailyExposureUSD) {
       recordAuditLog(
@@ -543,8 +642,6 @@ export async function executeAutoTradesForSignal(
       summary.blocked++;
       continue;
     }
-
-    executedSignalIdSet.add(dedupeKey);
 
     const side = direction === 'UP' ? 'yes' : 'no';
     const estimatedContractPrice = 0.50;
@@ -629,6 +726,18 @@ export async function executeAutoTradesForSignal(
           },
           firestoreDb
         );
+      }
+    }
+
+    // Persist configuration update (consecutiveFailures, autoDisabledReason, enabled status) to Firestore
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, "kalshi_credentials", userId), {
+          autoTradeConfig: config,
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (err) {
+        console.error("[Kalshi] Error persisting autoTradeConfig updates to Firestore:", err);
       }
     }
   }
