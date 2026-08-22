@@ -273,7 +273,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setEditEmail(user.email || "");
     setEditPassword("");
     setEditRole(user.role || "USER");
-    setEditTier(user.subscription || "FREE_TRIAL");
+    setEditTier(user.subscription || "NONE");
     setEditStatus(user.status || "ACTIVE");
     setEditDiscordTag(user.discordTag || "");
     setEditDiscordGlobalName((user as any).discordGlobalName || "");
@@ -324,7 +324,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newUserName, setNewUserName] = useState("");
   const [newUserPassword, setNewUserPassword] = useState("");
   const [newUserTier, setNewUserTier] = useState<
-    "FREE_TRIAL" | "PRO_PASS" | "ELITE_PASS" | "DAY_PASS" | "STARTER" | "NONE"
+    "PRO_PASS" | "ELITE_PASS" | "DAY_PASS" | "STARTER" | "NONE"
   >("PRO_PASS");
   const [newUserRole, setNewUserRole] = useState<"USER" | "ADMIN" | "SUPPORT" | "MOD" | "UNPAID">(
     "USER",
@@ -1801,9 +1801,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                       : user.subscription === "PRO_PASS" ||
                                           user.role === "PRO"
                                         ? "bg-purple-500/20 text-purple-300 border border-purple-500/40"
-                                        : user.subscription === "FREE_TRIAL"
-                                          ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
-                                          : "bg-slate-800 text-slate-400"
+                                        : user.subscription === "STARTER"
+                                          ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                                          : user.subscription === "DAY_PASS"
+                                            ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/40"
+                                            : user.subscription === "FREE_TRIAL"
+                                              ? "bg-amber-500/20 text-amber-300 border border-amber-500/40"
+                                              : "bg-slate-800 text-slate-400"
                                   }`}
                                 >
                                   {user.subscription || user.role || "NONE"}
