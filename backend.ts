@@ -5133,12 +5133,7 @@ app.post(
       email: cleanEmail,
       name: name?.trim() || cleanEmail.split("@")[0],
       role: role === "ADMIN" || role === "OWNER" ? role : "USER",
-      subscription:
-        tier === "ELITE_PASS"
-          ? "ELITE_PASS"
-          : tier === "FREE_TRIAL"
-            ? "NONE"
-            : "PRO_PASS",
+      subscription: ["DAY_PASS", "STARTER", "ELITE_PASS", "PRO_PASS", "NONE"].includes(tier) ? tier : "NONE",
       passwordHash:
         password && String(password).trim()
           ? hashPassword(String(password).trim())
@@ -5147,7 +5142,7 @@ app.post(
       hardwareFingerprint: genHwFingerprint,
       ipHash: genIpHash,
       joined: new Date().toISOString().split("T")[0],
-      status: tier === "FREE_TRIAL" ? "INACTIVE" : "ACTIVE",
+      status: tier === "NONE" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
       referralCodeUsed: referralCode,
     };

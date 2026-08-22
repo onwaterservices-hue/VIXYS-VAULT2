@@ -3357,10 +3357,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   onChange={(e) => setNewUserTier(e.target.value as any)}
                   className="w-full px-3 py-2 rounded bg-slate-950 border border-slate-800 text-slate-100 outline-none"
                 >
-                  <option value="FREE_TRIAL">FREE_TRIAL Pass</option>
-                  <option value="PRO_PASS">PRO_PASS Tier</option>
+                  <option value="DAY_PASS">DAY_PASS (24-Hour Access)</option>
+                  <option value="STARTER">STARTER Tier (Beginner)</option>
                   <option value="ELITE_PASS">ELITE_PASS Tier</option>
-                  <option value="STARTER">STARTER Tier</option>
+                  <option value="PRO_PASS">PRO_PASS Tier</option>
                   <option value="NONE">NONE</option>
                 </select>
               </div>
