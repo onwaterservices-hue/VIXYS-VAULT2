@@ -121,6 +121,15 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
         return;
       }
 
+      if ((restoreRes as any).degraded || restoreRes.entitlement?.status?.toUpperCase() === 'UNKNOWN') {
+        setRestoreFeedback({
+          type: 'error',
+          showPlans: false,
+          message: restoreRes.message || "We couldn't verify your subscription right now, please try again in a minute or contact support.",
+        });
+        return;
+      }
+
       // Check entitlements API directly
       const entRes = await getEntitlementsApi(targetEmail || userEmail, userId);
       if (
@@ -137,6 +146,15 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
         if (onAccessGranted) {
           onAccessGranted();
         }
+        return;
+      }
+
+      if (entRes?.status?.toUpperCase() === 'UNKNOWN' || (entRes as any)?.degraded) {
+        setRestoreFeedback({
+          type: 'error',
+          showPlans: false,
+          message: "We couldn't verify your subscription right now, please try again in a minute or contact support.",
+        });
         return;
       }
 

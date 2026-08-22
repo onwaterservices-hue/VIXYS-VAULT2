@@ -57,6 +57,20 @@ function verifyPassword(password, storedHash) {
   }
 }
 __name(verifyPassword, "verifyPassword");
+async function fetchWithTimeout(
+  url: string | URL | Request,
+  options: RequestInit = {},
+  timeoutMs = 5000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchWithTimeout, "fetchWithTimeout");
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -139,7 +153,7 @@ const serverJournalEntries = [
   },
 ];
 const app = express();
-const PORT = 3e3;
+const PORT = Number(process.env.PORT) || 3000;
 app.use((req, res, next) => {
   if (
     req.originalUrl === "/api/stripe/webhook" ||
@@ -1410,7 +1424,7 @@ async function updateCrossAssetFeeds() {
   await Promise.all(
     alts.map(async (sym) => {
       try {
-        const cbRes = await fetch(
+        const cbRes = await fetchWithTimeout(
           `https://api.exchange.coinbase.com/products/${sym}-USD/stats`,
         );
         if (cbRes.ok) {
@@ -2444,7 +2458,7 @@ setInterval(async () => {
     currentEngineCycleId += 1;
     const now = Date.now();
     if (now - lastOpenFetchTs > 6e4) {
-      fetch("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")
+      fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")
         .then((r) => r.json())
         .then((d) => {
           if (d && d.openPrice) {
@@ -2458,7 +2472,7 @@ setInterval(async () => {
     let livePrice = currentBtcPrice;
     let fetchSuccess = false;
     try {
-      const cbRes = await fetch(
+      const cbRes = await fetchWithTimeout(
         "https://api.coinbase.com/v2/prices/BTC-USD/spot",
       );
       if (cbRes.ok) {
@@ -2472,7 +2486,7 @@ setInterval(async () => {
       }
     } catch (e) {}
     try {
-      const ethRes = await fetch(
+      const ethRes = await fetchWithTimeout(
         "https://api.coinbase.com/v2/prices/ETH-USD/spot",
       );
       if (ethRes.ok) {
@@ -2484,7 +2498,7 @@ setInterval(async () => {
       }
     } catch (e) {}
     try {
-      const solRes = await fetch(
+      const solRes = await fetchWithTimeout(
         "https://api.coinbase.com/v2/prices/SOL-USD/spot",
       );
       if (solRes.ok) {
@@ -2497,7 +2511,7 @@ setInterval(async () => {
     } catch (e) {}
     if (!fetchSuccess) {
       try {
-        const krRes = await fetch(
+        const krRes = await fetchWithTimeout(
           "https://api.kraken.com/0/public/Ticker?pair=XBTUSD",
         );
         if (krRes.ok) {
@@ -2513,7 +2527,7 @@ setInterval(async () => {
     }
     if (!fetchSuccess) {
       try {
-        const cgRes = await fetch(
+        const cgRes = await fetchWithTimeout(
           "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
         );
         if (cgRes.ok) {
@@ -2530,7 +2544,7 @@ setInterval(async () => {
     await checkAndSettle15mCycle(livePrice);
     if (!fetchSuccess) {
       try {
-        const bnRes = await fetch(
+        const bnRes = await fetchWithTimeout(
           "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
         );
         if (bnRes.ok) {
@@ -2558,7 +2572,7 @@ setInterval(async () => {
         const apiPath =
           "/trade-api/v2/markets?series_ticker=KXBTC15M&status=open";
         const headers = getKalshiAuthHeaders("GET", apiPath);
-        const kRes = await fetch(
+        const kRes = await fetchWithTimeout(
           `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${apiPath}`,
           { headers },
         );
@@ -5875,17 +5889,18 @@ app.post(
       if (dpRecord.discordUserId)
         userDayPasses.set(dpRecord.discordUserId, dpRecord);
       if (db) {
-        setDoc(doc(db, "day_passes", user.email.toLowerCase()), dpRecord, {
+        const cleanDp = sanitizeForFirestore(dpRecord);
+        setDoc(doc(db, "day_passes", user.email.toLowerCase()), cleanDp, {
           merge: true,
         }).catch(() => {});
         if (user.id)
-          setDoc(doc(db, "day_passes", user.id), dpRecord, {
+          setDoc(doc(db, "day_passes", user.id), cleanDp, {
             merge: true,
           }).catch(() => {});
         if (user.id)
           setDoc(
             doc(db, "users", user.id),
-            { dayPass: dpRecord },
+            sanitizeForFirestore({ dayPass: dpRecord }),
             { merge: true },
           ).catch(() => {});
       }
@@ -5909,7 +5924,7 @@ app.post(
           assignDiscordRoleToUser(dp.discordUserId, "NONE").catch(() => {});
         }
         if (db)
-          setDoc(doc(db, "day_passes", user.email.toLowerCase()), dp, {
+          setDoc(doc(db, "day_passes", user.email.toLowerCase()), sanitizeForFirestore(dp), {
             merge: true,
           }).catch(() => {});
       }
@@ -7986,15 +8001,16 @@ function getUserEntitlement(emailOrUid) {
         ensureFirestoreNetworkEnabled()
           .then(() => {
             if (db) {
+              const cleanDp = sanitizeForFirestore(dayPassRecord);
               setDoc(
                 doc(db, "day_passes", dayPassRecord.email.toLowerCase()),
-                dayPassRecord,
+                cleanDp,
                 { merge: true },
               ).catch(() => {});
               if (dayPassRecord.userId) {
                 setDoc(
                   doc(db, "day_passes", dayPassRecord.userId),
-                  dayPassRecord,
+                  cleanDp,
                   { merge: true },
                 ).catch(() => {});
               }
@@ -8034,14 +8050,15 @@ function getUserEntitlement(emailOrUid) {
           dayPassRecord.discordRoleAssigned = false;
         }
         if (db) {
+          const cleanDp = sanitizeForFirestore(dayPassRecord);
           if (dayPassRecord.email)
             setDoc(
               doc(db, "day_passes", dayPassRecord.email.toLowerCase()),
-              dayPassRecord,
+              cleanDp,
               { merge: true },
             ).catch(() => {});
           if (dayPassRecord.userId)
-            setDoc(doc(db, "day_passes", dayPassRecord.userId), dayPassRecord, {
+            setDoc(doc(db, "day_passes", dayPassRecord.userId), cleanDp, {
               merge: true,
             }).catch(() => {});
         }
@@ -8552,11 +8569,12 @@ async function reconcileUserEntitlement(identity) {
             if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
             if (dpRecord.userId) userDayPasses.set(dpRecord.userId, dpRecord);
             if (db) {
-              setDoc(doc(db, "day_passes", targetEmail), dpRecord, {
+              const cleanDp = sanitizeForFirestore(dpRecord);
+              setDoc(doc(db, "day_passes", targetEmail), cleanDp, {
                 merge: true,
               }).catch(() => {});
               if (cleanUid)
-                setDoc(doc(db, "day_passes", cleanUid), dpRecord, {
+                setDoc(doc(db, "day_passes", cleanUid), cleanDp, {
                   merge: true,
                 }).catch(() => {});
             }
@@ -8685,7 +8703,7 @@ async function reconcileUserEntitlement(identity) {
             userDayPasses.set(cleanEmail, dpRecord);
             if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
             if (db) {
-              setDoc(doc(db, "day_passes", cleanEmail), dpRecord, {
+              setDoc(doc(db, "day_passes", cleanEmail), sanitizeForFirestore(dpRecord), {
                 merge: true,
               }).catch(() => {});
             }
@@ -8773,7 +8791,7 @@ async function reconcileUserEntitlement(identity) {
               userDayPasses.set(cleanEmail, dpRecord);
               if (cleanUid) userDayPasses.set(cleanUid, dpRecord);
               if (db) {
-                setDoc(doc(db, "day_passes", cleanEmail), dpRecord, {
+                setDoc(doc(db, "day_passes", cleanEmail), sanitizeForFirestore(dpRecord), {
                   merge: true,
                 }).catch(() => {});
               }
@@ -8844,17 +8862,29 @@ app.get(
       ""
     ).trim();
     const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
+    let hydrationRes = null;
     if (reqEmail || reqUserId) {
-      await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => {});
+      hydrationRes = await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => null);
     }
     const entitlement = await reconcileUserEntitlement({
       email: reqEmail,
       userId: reqUserId,
     });
+    const isDegraded = Boolean(
+      (hydrationRes && (hydrationRes as any)._degraded) ||
+      (entitlement as any)?.degraded
+    );
+    if (isDegraded && entitlement.plan === "NONE" && !entitlement.dayPass?.active) {
+      entitlement.status = "UNKNOWN";
+      (entitlement as any).degraded = true;
+      if (entitlement.entitlementState) {
+        entitlement.entitlementState.status = "UNKNOWN";
+      }
+    }
     const entStatus =
       entitlement.plan !== "NONE" || entitlement.dayPass.active
         ? "ACTIVE"
-        : "INACTIVE";
+        : (entitlement.status === "UNKNOWN" || isDegraded ? "UNKNOWN" : "INACTIVE");
     if (entitlement.dayPass.active) {
       const dpRec =
         userDayPasses.get(reqEmail) ||
@@ -8912,12 +8942,24 @@ app.post(
             "Please provide an account email or Stripe checkout session ID to restore access.",
         });
     }
+    let hydrationRes = null;
+    if (cleanEmail || cleanUid) {
+      hydrationRes = await hydrateUserFromFirestore(cleanEmail, cleanUid).catch(() => null);
+    }
     const entitlement = await reconcileUserEntitlement({
       email: cleanEmail,
       userId: cleanUid,
       discordUserId,
       stripeSessionId: sessionId,
     });
+    const isDegraded = Boolean(
+      (hydrationRes && (hydrationRes as any)._degraded) ||
+      (entitlement as any)?.degraded
+    );
+    if (isDegraded && entitlement.plan === "NONE" && !entitlement.dayPass?.active) {
+      entitlement.status = "UNKNOWN";
+      (entitlement as any).degraded = true;
+    }
     const isNowActive =
       entitlement.plan !== "NONE" ||
       entitlement.dayPass.active ||
@@ -8930,6 +8972,15 @@ app.post(
         success: true,
         restored: true,
         message: `Active entitlement verified successfully (${tierName}). Terminal unlocked.`,
+        entitlement,
+      });
+    } else if (entitlement.status === "UNKNOWN" || isDegraded) {
+      return res.json({
+        success: false,
+        restored: false,
+        degraded: true,
+        message:
+          "We couldn't verify your subscription right now, please try again in a minute or contact support.",
         entitlement,
       });
     } else {
@@ -9862,11 +9913,11 @@ async function updateSubscriptionInFirestore(email, updateData) {
         payload.joined =
           finalUser.joined || new Date().toISOString().split("T")[0];
       }
-      await setDoc(doc(db, "users", docId), payload, { merge: true });
+      await setDoc(doc(db, "users", docId), sanitizeForFirestore(payload), { merge: true });
       const subDocId = updateData.stripeSubscriptionId || `sub_${docId}`;
       await setDoc(
         doc(db, "subscriptions", subDocId),
-        { ...payload, subscriptionId: subDocId },
+        sanitizeForFirestore({ ...payload, subscriptionId: subDocId }),
         { merge: true },
       );
       console.log(
@@ -10196,17 +10247,18 @@ timestamp: ${new Date().toISOString()}`);
             .catch((err) => console.warn("[DAY PASS DISCORD SYNC WARN]", err));
           if (db) {
             try {
+              const cleanDp = sanitizeForFirestore(dayPassRecord);
               await setDoc(
                 doc(db, "day_passes", customerEmail.toLowerCase()),
-                dayPassRecord,
+                cleanDp,
                 { merge: true },
               );
-              await setDoc(doc(db, "day_passes", vixyUserId2), dayPassRecord, {
+              await setDoc(doc(db, "day_passes", vixyUserId2), cleanDp, {
                 merge: true,
               });
               await setDoc(
                 doc(db, "users", vixyUserId2),
-                { dayPass: dayPassRecord },
+                sanitizeForFirestore({ dayPass: dayPassRecord }),
                 { merge: true },
               );
             } catch (dpSaveErr) {
@@ -10597,7 +10649,7 @@ timestamp: ${new Date().toISOString()}`);
 );
 app.get("/api/btc/ticker", async (req, res) => {
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       "https://api.exchange.coinbase.com/products/BTC-USD/stats",
     );
     if (cbRes.ok) {
@@ -10616,7 +10668,7 @@ app.get("/api/btc/ticker", async (req, res) => {
     }
   } catch (err) {}
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT",
     );
     if (response.ok) {
@@ -10707,7 +10759,7 @@ app.get("/api/crypto/ticker", async (req, res) => {
     .replace("USDT", "")
     .replace("-USD", "");
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/stats`,
     );
     if (cbRes.ok) {
@@ -10727,7 +10779,7 @@ app.get("/api/crypto/ticker", async (req, res) => {
     }
   } catch (err) {}
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://api.binance.com/api/v3/ticker/24hr?symbol=${rawSymbol}USDT`,
     );
     if (response.ok) {
@@ -10766,7 +10818,7 @@ app.get("/api/crypto/all-tickers", async (req, res) => {
     const results = await Promise.all(
       targetSymbols.map(async (sym) => {
         try {
-          const cbRes = await fetch(
+          const cbRes = await fetchWithTimeout(
             `https://api.exchange.coinbase.com/products/${sym}-USD/stats`,
           );
           if (cbRes.ok) {
@@ -10813,7 +10865,7 @@ app.get("/api/crypto/klines", async (req, res) => {
   };
   const granularity = granularityMap[interval.toLowerCase()] || 900;
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/candles?granularity=${granularity}`,
     );
     if (cbRes.ok) {
@@ -10837,7 +10889,7 @@ app.get("/api/crypto/klines", async (req, res) => {
   try {
     const binanceInterval =
       interval.toLowerCase() === "15s" ? "1m" : interval.toLowerCase();
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       `https://api.binance.com/api/v3/klines?symbol=${rawSymbol}USDT&interval=${binanceInterval}&limit=35`,
     );
     if (response.ok) {
@@ -10859,7 +10911,7 @@ app.get("/api/crypto/klines", async (req, res) => {
 });
 app.get("/api/btc/klines", async (req, res) => {
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       "https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=900",
     );
     if (cbRes.ok) {
@@ -12742,7 +12794,7 @@ app.get("/api/whales", async (req, res) => {
     .replace("USDT", "")
     .replace("-USD", "");
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=50`,
     );
     if (cbRes.ok) {
@@ -12854,7 +12906,7 @@ app.get("/api/orderflow", async (req, res) => {
     .replace("USDT", "")
     .replace("-USD", "");
   try {
-    const cbRes = await fetch(
+    const cbRes = await fetchWithTimeout(
       `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/book?level=2`,
     );
     if (cbRes.ok) {
@@ -13010,12 +13062,12 @@ app.get("/api/venues/kalshi", async (req, res) => {
   const fullUrl = `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${apiPath}`;
   try {
     const headers = getKalshiAuthHeaders("GET", apiPath);
-    let response = await fetch(fullUrl, { headers });
+    let response = await fetchWithTimeout(fullUrl, { headers });
     if (!response.ok) {
       const fallbackPath = "/trade-api/v2/markets?status=open&limit=20";
       const fallbackUrl = `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${fallbackPath}`;
       const fallbackHeaders = getKalshiAuthHeaders("GET", fallbackPath);
-      response = await fetch(fallbackUrl, { headers: fallbackHeaders });
+      response = await fetchWithTimeout(fallbackUrl, { headers: fallbackHeaders });
     }
     if (response.ok) {
       const data = await response.json();
@@ -13108,7 +13160,7 @@ app.get("/api/kalshi/markets", async (req, res) => {
   const fullUrl = `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${apiPath}`;
   try {
     const headers = getKalshiAuthHeaders("GET", apiPath);
-    const response = await fetch(fullUrl, { headers });
+    const response = await fetchWithTimeout(fullUrl, { headers });
     if (response.ok) {
       const data = await response.json();
       let rawMarkets = data.markets || [];
@@ -13196,7 +13248,7 @@ app.get("/api/kalshi/market/:ticker", async (req, res) => {
   const fullUrl = `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${apiPath}`;
   try {
     const headers = getKalshiAuthHeaders("GET", apiPath);
-    const response = await fetch(fullUrl, { headers });
+    const response = await fetchWithTimeout(fullUrl, { headers });
     if (response.ok) {
       const data = await response.json();
       const m = data.market || data;
@@ -13205,7 +13257,7 @@ app.get("/api/kalshi/market/:ticker", async (req, res) => {
         const obPath = `/trade-api/v2/markets/${ticker}/orderbook`;
         const obUrl = `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${obPath}`;
         const obHeaders = getKalshiAuthHeaders("GET", obPath);
-        const obRes = await fetch(obUrl, { headers: obHeaders });
+        const obRes = await fetchWithTimeout(obUrl, { headers: obHeaders });
         if (obRes.ok) {
           const obData = await obRes.json();
           orderbook = obData.orderbook || obData;
@@ -13251,7 +13303,7 @@ app.get("/api/kalshi/market/:ticker", async (req, res) => {
 });
 app.get("/api/venues/polymarket", async (req, res) => {
   try {
-    const response = await fetch(
+    const response = await fetchWithTimeout(
       "https://gamma-api.polymarket.com/markets?closed=false&limit=10",
     );
     if (response.ok) {
@@ -13621,7 +13673,12 @@ ensureFirebaseReady().catch((err) => {
     err?.message || err,
   );
 });
-const STORE_FILE_PATH = path.join(process.cwd(), "data", "vixy_store.json");
+const DEFAULT_STORE_DIR =
+  process.env.STORE_DIR ||
+  (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || !process.cwd().startsWith("/home")
+    ? (fs.existsSync("/tmp") ? "/tmp" : os.tmpdir())
+    : path.join(process.cwd(), "data"));
+const STORE_FILE_PATH = path.join(DEFAULT_STORE_DIR, "vixy_store.json");
 function sanitizeForFirestore(obj) {
   if (obj === null || obj === void 0) return null;
   if (typeof obj !== "object") return obj;
@@ -14022,6 +14079,124 @@ function scoreUserDoc(docData) {
   return score;
 }
 __name(scoreUserDoc, "scoreUserDoc");
+function buildResolvedUserFromDocs(cleanEmail, allDocs, memUser) {
+  if (!allDocs || allDocs.length === 0) return null;
+  const sortedDocs = [...allDocs].sort(
+    (a, b) => scoreUserDoc(b) - scoreUserDoc(a),
+  );
+  const bestDoc = sortedDocs[0];
+  const credentialDoc =
+    allDocs.find(
+      (d) =>
+        d.passwordHash &&
+        typeof d.passwordHash === "string" &&
+        d.passwordHash.startsWith("vixy$"),
+    ) ||
+    allDocs.find(
+      (d) =>
+        d.passwordHash &&
+        typeof d.passwordHash === "string" &&
+        d.passwordHash !== "AuthManaged2026!" &&
+        d.passwordHash.length > 0,
+    );
+  const effectivePasswordHash =
+    credentialDoc?.passwordHash &&
+    credentialDoc.passwordHash !== "AuthManaged2026!"
+      ? credentialDoc.passwordHash
+      : memUser?.passwordHash ||
+        (cleanEmail === "uisvelascop@icloud.com"
+          ? hashPassword("zownof-kukGiv-sekqo3")
+          : cleanEmail === "adriiiansf27@gmail.com"
+            ? hashPassword("Honduras25.@")
+            : cleanEmail === "azar45157@gmail.com"
+              ? hashPassword("azar45157_2026")
+              : cleanEmail === "luluomnu@gmail.com"
+                ? hashPassword("xopme5-Givkig-byvzaw")
+                : cleanEmail === "maxo1011@outlook.com"
+                  ? hashPassword("max1011")
+                  : cleanEmail === "nghle749@gmmail.com" ||
+                      cleanEmail === "nghle749@gmail.com"
+                    ? hashPassword("123456")
+                    : isMasterAdminEmail(cleanEmail) ||
+                        cleanEmail === "ogershey@gmail.com"
+                      ? hashPassword("Seattle007")
+                      : void 0);
+  const subDoc =
+    allDocs.find((d) => d.subscription && d.subscription !== "NONE") ||
+    bestDoc;
+  const resolvedUser = {
+    id: bestDoc.id || bestDoc._docId || memUser?.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
+    uid: bestDoc.uid || bestDoc._docId || memUser?.uid,
+    email: cleanEmail,
+    name:
+      bestDoc.name ||
+      credentialDoc?.name ||
+      memUser?.name ||
+      cleanEmail.split("@")[0],
+    role: isMasterAdminEmail(cleanEmail)
+      ? "OWNER"
+      : bestDoc.role || memUser?.role || "USER",
+    subscription: isMasterAdminEmail(cleanEmail)
+      ? "ELITE_PASS"
+      : subDoc.subscription ||
+        bestDoc.subscription ||
+        memUser?.subscription ||
+        "NONE",
+    passwordHash: effectivePasswordHash,
+    status:
+      bestDoc.status ||
+      (subDoc.subscription && subDoc.subscription !== "NONE"
+        ? "ACTIVE"
+        : memUser?.status || "INACTIVE"),
+    joined:
+      bestDoc.joined ||
+      bestDoc.createdAt ||
+      memUser?.joined ||
+      new Date().toISOString().split("T")[0],
+    stripeCustomerId:
+      bestDoc.stripeCustomerId ||
+      subDoc.stripeCustomerId ||
+      memUser?.stripeCustomerId ||
+      void 0,
+    stripeSubscriptionId:
+      bestDoc.stripeSubscriptionId ||
+      subDoc.stripeSubscriptionId ||
+      memUser?.stripeSubscriptionId ||
+      void 0,
+    discordLinked: Boolean(
+      bestDoc.discordLinked || bestDoc.discordId || memUser?.discordLinked,
+    ),
+    discordId: bestDoc.discordId || memUser?.discordId || void 0,
+    discordTag: bestDoc.discordTag || memUser?.discordTag || void 0,
+    guildVerified: bestDoc.guildVerified || memUser?.guildVerified || void 0,
+  };
+  if (cleanEmail === "sergioaddiaz1711@icloud.com") {
+    resolvedUser.status = "ACTIVE";
+    resolvedUser.subscription = "ELITE_PASS";
+    resolvedUser.verificationStatus = "UNVERIFIED";
+    resolvedUser.discordLinked = false;
+    if (memUser && memUser.dayPass) {
+      resolvedUser.dayPass = memUser.dayPass;
+    }
+  }
+  const existingIdx = serverUsers.findIndex(
+    (u) => u.email?.toLowerCase() === cleanEmail,
+  );
+  if (existingIdx !== -1) {
+    serverUsers[existingIdx] = {
+      ...serverUsers[existingIdx],
+      ...resolvedUser,
+    };
+  } else {
+    serverUsers.unshift(resolvedUser);
+  }
+  sanitizeAndNormalizeServerUsers();
+  return (
+    serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail) ||
+    resolvedUser
+  );
+}
+__name(buildResolvedUserFromDocs, "buildResolvedUserFromDocs");
 async function resolveCanonicalUserByEmail(email) {
   const cleanEmail = String(email || "")
     .trim()
@@ -14058,18 +14233,49 @@ async function resolveCanonicalUserByEmail(email) {
     console.log(`[VIXY_AUTH_SOURCE] source=DISK_STORE email=${cleanEmail}`);
     return { user: memUser, allDocs: [] };
   }
-  if (
+  const isCircuitBroken =
     !db ||
     isCircuitOpen() ||
     firestoreNetworkDisabled ||
     persistenceState === "DEGRADED_CACHE_ACTIVE" ||
-    persistenceState === "RESOURCE_EXHAUSTED"
-  ) {
+    persistenceState === "RESOURCE_EXHAUSTED";
+
+  if (isCircuitBroken) {
     console.log(
       `[VIXY_AUTH_SOURCE] source=CACHE_FALLBACK_CIRCUIT_OPEN email=${cleanEmail}`,
     );
-    return { user: memUser || null, allDocs: [] };
+    // 1. If memUser is found in memory, keep using it
+    if (memUser) {
+      return { user: memUser, allDocs: [] };
+    }
+    // 2. If memUser is NOT found in memory AND the circuit is open, attempt one direct best-effort Firestore read
+    if (db) {
+      try {
+        await ensureFirestoreNetworkEnabled().catch(() => {});
+        const q = query(collection(db, "users"), where("email", "==", cleanEmail));
+        const snap = await getDocs(q);
+        const allDocs = [];
+        snap.forEach((d) => {
+          allDocs.push({ _docId: d.id, ...d.data() });
+        });
+        if (allDocs.length > 0) {
+          const resolved = buildResolvedUserFromDocs(cleanEmail, allDocs, memUser);
+          console.log(`[VIXY_AUTH_SOURCE] source=FIRESTORE_RECOVERY email=${cleanEmail}`);
+          return { user: resolved, allDocs };
+        } else {
+          return { user: null, allDocs: [] };
+        }
+      } catch (readErr) {
+        console.warn(
+          "[AUTH_DEBUG] Best-effort Firestore recovery read failed:",
+          readErr?.message || readErr,
+        );
+      }
+    }
+    // 3. Fall through to distinguishable degraded state
+    return { user: null, allDocs: [], degraded: true };
   }
+
   try {
     await ensureFirebaseReady();
   } catch (initErr) {
@@ -14081,7 +14287,7 @@ async function resolveCanonicalUserByEmail(email) {
     const fallbackUser = serverUsers.find(
       (u) => u.email?.toLowerCase() === cleanEmail,
     );
-    return { user: fallbackUser || null, allDocs: [] };
+    return { user: fallbackUser || null, allDocs: [], degraded: !fallbackUser };
   }
   try {
     await ensureFirestoreNetworkEnabled().catch(() => {});
@@ -14098,121 +14304,10 @@ async function resolveCanonicalUserByEmail(email) {
       );
       return { user: fallbackUser || null, allDocs: [] };
     }
-    const sortedDocs = [...allDocs].sort(
-      (a, b) => scoreUserDoc(b) - scoreUserDoc(a),
-    );
-    const bestDoc = sortedDocs[0];
-    const credentialDoc =
-      allDocs.find(
-        (d) =>
-          d.passwordHash &&
-          typeof d.passwordHash === "string" &&
-          d.passwordHash.startsWith("vixy$"),
-      ) ||
-      allDocs.find(
-        (d) =>
-          d.passwordHash &&
-          typeof d.passwordHash === "string" &&
-          d.passwordHash !== "AuthManaged2026!" &&
-          d.passwordHash.length > 0,
-      );
-    const effectivePasswordHash =
-      credentialDoc?.passwordHash &&
-      credentialDoc.passwordHash !== "AuthManaged2026!"
-        ? credentialDoc.passwordHash
-        : memUser?.passwordHash ||
-          (cleanEmail === "uisvelascop@icloud.com"
-            ? hashPassword("zownof-kukGiv-sekqo3")
-            : cleanEmail === "adriiiansf27@gmail.com"
-              ? hashPassword("Honduras25.@")
-              : cleanEmail === "azar45157@gmail.com"
-                ? hashPassword("azar45157_2026")
-                : cleanEmail === "luluomnu@gmail.com"
-                  ? hashPassword("xopme5-Givkig-byvzaw")
-                  : cleanEmail === "maxo1011@outlook.com"
-                    ? hashPassword("max1011")
-                    : cleanEmail === "nghle749@gmmail.com" ||
-                        cleanEmail === "nghle749@gmail.com"
-                      ? hashPassword("123456")
-                      : isMasterAdminEmail(cleanEmail) ||
-                          cleanEmail === "ogershey@gmail.com"
-                        ? hashPassword("Seattle007")
-                        : void 0);
-    const subDoc =
-      allDocs.find((d) => d.subscription && d.subscription !== "NONE") ||
-      bestDoc;
-    const resolvedUser = {
-      id: bestDoc.id || bestDoc._docId || memUser?.id,
-      uid: bestDoc.uid || bestDoc._docId || memUser?.uid,
-      email: cleanEmail,
-      name:
-        bestDoc.name ||
-        credentialDoc?.name ||
-        memUser?.name ||
-        cleanEmail.split("@")[0],
-      role: isMasterAdminEmail(cleanEmail)
-        ? "OWNER"
-        : bestDoc.role || memUser?.role || "USER",
-      subscription: isMasterAdminEmail(cleanEmail)
-        ? "ELITE_PASS"
-        : subDoc.subscription ||
-          bestDoc.subscription ||
-          memUser?.subscription ||
-          "NONE",
-      passwordHash: effectivePasswordHash,
-      status:
-        bestDoc.status ||
-        (subDoc.subscription && subDoc.subscription !== "NONE"
-          ? "ACTIVE"
-          : memUser?.status || "INACTIVE"),
-      joined:
-        bestDoc.joined ||
-        bestDoc.createdAt ||
-        memUser?.joined ||
-        new Date().toISOString().split("T")[0],
-      stripeCustomerId:
-        bestDoc.stripeCustomerId ||
-        subDoc.stripeCustomerId ||
-        memUser?.stripeCustomerId ||
-        void 0,
-      stripeSubscriptionId:
-        bestDoc.stripeSubscriptionId ||
-        subDoc.stripeSubscriptionId ||
-        memUser?.stripeSubscriptionId ||
-        void 0,
-      discordLinked: Boolean(
-        bestDoc.discordLinked || bestDoc.discordId || memUser?.discordLinked,
-      ),
-      discordId: bestDoc.discordId || memUser?.discordId || void 0,
-      discordTag: bestDoc.discordTag || memUser?.discordTag || void 0,
-      guildVerified: bestDoc.guildVerified || memUser?.guildVerified || void 0,
-    };
-    if (cleanEmail === "sergioaddiaz1711@icloud.com") {
-      resolvedUser.status = "ACTIVE";
-      resolvedUser.subscription = "ELITE_PASS";
-      resolvedUser.verificationStatus = "UNVERIFIED";
-      resolvedUser.discordLinked = false;
-      if (memUser && memUser.dayPass) {
-        resolvedUser.dayPass = memUser.dayPass;
-      }
-    }
-    const existingIdx = serverUsers.findIndex(
-      (u) => u.email?.toLowerCase() === cleanEmail,
-    );
-    if (existingIdx !== -1) {
-      serverUsers[existingIdx] = {
-        ...serverUsers[existingIdx],
-        ...resolvedUser,
-      };
-    } else {
-      serverUsers.unshift(resolvedUser);
-    }
-    sanitizeAndNormalizeServerUsers();
+    const resolved = buildResolvedUserFromDocs(cleanEmail, allDocs, memUser);
     console.log(`[VIXY_AUTH_SOURCE] source=FIRESTORE email=${cleanEmail}`);
     return {
-      user:
-        serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail) ||
-        resolvedUser,
+      user: resolved,
       allDocs,
     };
   } catch (firestoreErr) {
@@ -14225,7 +14320,7 @@ async function resolveCanonicalUserByEmail(email) {
     const fallbackUser = serverUsers.find(
       (u) => u.email?.toLowerCase() === cleanEmail,
     );
-    return { user: fallbackUser || null, allDocs: [] };
+    return { user: fallbackUser || null, allDocs: [], degraded: !fallbackUser };
   }
 }
 __name(resolveCanonicalUserByEmail, "resolveCanonicalUserByEmail");
@@ -14290,6 +14385,7 @@ async function hydrateUserFromFirestore(email, uid) {
   if (cleanEmail) {
     const res = await resolveCanonicalUserByEmail(cleanEmail);
     if (res.user) return res.user;
+    if (res.degraded) return { _degraded: true, email: cleanEmail };
   }
   if (
     cleanUid &&
@@ -14878,14 +14974,15 @@ async function loadPersistentStoreAsync() {
             }
             if (db) {
               try {
+                const cleanDp = sanitizeForFirestore(dp);
                 if (dp.email)
                   await setDoc(
                     doc(db, "day_passes", dp.email.toLowerCase()),
-                    dp,
+                    cleanDp,
                     { merge: true },
                   );
                 if (dp.userId)
-                  await setDoc(doc(db, "day_passes", dp.userId), dp, {
+                  await setDoc(doc(db, "day_passes", dp.userId), cleanDp, {
                     merge: true,
                   });
               } catch (e) {
@@ -15766,13 +15863,14 @@ app.get(
             code_preview: String(code).substring(0, 10) + "...",
           },
         );
-        const tokenRes = await fetch(
+        const tokenRes = await fetchWithTimeout(
           "https://discord.com/api/v10/oauth2/token",
           {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
             body: tokenParams.toString(),
           },
+          8000,
         );
         console.log(
           "[Discord OAuth Callback Audit] Step 4: Token Response Status:",
@@ -15800,9 +15898,13 @@ app.get(
           console.log(
             "[Discord OAuth Callback Audit] Step 6: Fetching /users/@me with Bearer token...",
           );
-          const userRes = await fetch("https://discord.com/api/v10/users/@me", {
-            headers: { Authorization: `Bearer ${accessToken}` },
-          });
+          const userRes = await fetchWithTimeout(
+            "https://discord.com/api/v10/users/@me",
+            {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            },
+            8000,
+          );
           console.log(
             "[Discord OAuth Callback Audit] Step 6a: User Profile Response Status:",
             userRes.status,
@@ -15827,9 +15929,10 @@ app.get(
           console.log(
             "[Discord OAuth Callback Audit] Step 7: Fetching /users/@me/guilds...",
           );
-          const guildsRes = await fetch(
+          const guildsRes = await fetchWithTimeout(
             "https://discord.com/api/v10/users/@me/guilds",
             { headers: { Authorization: `Bearer ${accessToken}` } },
+            8000,
           );
           console.log(
             "[Discord OAuth Callback Audit] Step 7a: Guilds Response Status:",
@@ -15900,9 +16003,10 @@ app.get(
           discordUser.id,
         );
         try {
-          const memberRes = await fetch(
+          const memberRes = await fetchWithTimeout(
             `https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUser.id}`,
             { headers: { Authorization: creds.authHeader } },
+            8000,
           );
           if (memberRes.ok) {
             const memberData = await memberRes.json();
@@ -16733,10 +16837,12 @@ app.post("/api/alerts/send", async (req, res) => {
   };
   if (channel === "discord" && webhookUrl) {
     try {
-      await fetch(webhookUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await fetchWithTimeout(
+        webhookUrl,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
           username: "VIXY Terminal Intelligence",
           avatar_url:
             "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=100",

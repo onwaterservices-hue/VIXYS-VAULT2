@@ -2,11 +2,13 @@ import crypto from 'crypto';
 import { KalshiAutoTradeConfig, AutoTradeAuditLog } from '../../types';
 import { collection, doc, getDoc, getDocs, query, where, setDoc, runTransaction } from 'firebase/firestore';
 
-// Defer encryption key resolution to prevent crashes on startup when env var is missing in dev
+// Defer encryption key resolution; enforce explicit encryption key in production and throw if unconfigured
 function getEncryptionKey(): Buffer {
-  const secret = process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY;
+  const secret = process.env.KALSHI_CREDENTIAL_ENCRYPTION_KEY || process.env.ENCRYPTION_KEY;
   if (!secret) {
-    throw new Error('KALSHI_CREDENTIAL_ENCRYPTION_KEY environment variable is not set — refusing to start Kalshi credential encryption without it.');
+    throw new Error(
+      '[Kalshi Security Error] KALSHI_CREDENTIAL_ENCRYPTION_KEY (or ENCRYPTION_KEY) environment variable is required to securely encrypt/decrypt trading credentials.'
+    );
   }
   return crypto.createHash('sha256').update(secret).digest();
 }

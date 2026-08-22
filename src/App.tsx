@@ -395,9 +395,11 @@ export default function App() {
           computedRole = 'UNPAID';
         }
 
+        const isStaff = computedRole === 'OWNER' || computedRole === 'ADMIN';
         const hasAccess =
           canonicalAccess?.access === true ||
-          (computedRole !== 'UNPAID' && (mergedEnt?.status === 'active' || isDayPassActive || ['OWNER', 'ADMIN', 'ELITE', 'PRO'].includes(computedRole)));
+          isStaff ||
+          (computedRole !== 'UNPAID' && (mergedEnt?.status === 'active' || isDayPassActive));
 
         setUserRole(computedRole);
         setTerminalAccessGranted(Boolean(hasAccess));
@@ -1014,14 +1016,16 @@ export default function App() {
     isNewUser?: boolean
   ) => {
     const roleStr = String(role || '').toUpperCase();
-    const isPaid = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'DAY_PASS'].includes(roleStr) ||
-                   ['PRO', 'ADMIN', 'OWNER', 'ELITE'].includes(userRole) ||
+    const isPaid = ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'DAY_PASS', 'STARTER'].includes(roleStr) ||
+                   ['PRO', 'ADMIN', 'OWNER', 'ELITE', 'STARTER'].includes(userRole) ||
                    isSubscriptionActive ||
                    dayPassInfo.active;
 
     if (isPaid) {
       setTerminalAccessGranted(true);
-      const computedRole = roleStr === 'DAY_PASS' ? 'PRO' : (['OWNER', 'ADMIN', 'ELITE', 'PRO'].includes(roleStr) ? roleStr : 'PRO');
+      const computedRole = roleStr === 'DAY_PASS'
+        ? 'PRO'
+        : (['OWNER', 'ADMIN', 'ELITE', 'PRO', 'STARTER'].includes(roleStr) ? roleStr : 'PRO');
       setUserRole(computedRole as any);
       if (plan) {
         setSubscription(prev => ({
