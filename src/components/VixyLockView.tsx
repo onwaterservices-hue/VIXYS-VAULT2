@@ -886,8 +886,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
   // Continuous Gemini Shadow Inference + Vixy Protection Evaluation
   const continuousInference = useMemo(() => {
-    const rawCvdNum = parseFloat(cvdVal.replace(/[^0-9.-]/g, '')) || 1482;
-    const rawAtr = 124.5;
+    const rawCvdNum = parseFloat(cvdVal.replace(/[^0-9.-]/g, '')) || 0;
+    const rawAtr = (canonicalDecision as any)?.btc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? (typeof snapshot?.features?.volatility === 'number' ? snapshot.features.volatility : 0.57);
 
     const gemini = runGeminiShadowInference({
       spotPrice,
@@ -1015,11 +1015,15 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       setBuildingLockScore(prot.lockScore);
 
       if ((isGenuineLockAuthorized || forceLockThreshold) && !lockedDecision) {
-        const lockDir = (canonicalDecision?.currentState === 'LOCKED_DOWN' || liveDir === 'DOWN') ? 'DOWN' : 'UP';
-        const finalOffset = (Math.random() * 30 + 50) * (lockDir === 'UP' ? -1 : 1);
-        const finalStrike = spotPrice + finalOffset;
-        const lockedConf = Math.max(gem.confidence, highestProb, 78);
-        const lockedScore = Math.max(prot.lockScore, 82);
+        let lockDir: 'UP' | 'DOWN' = (canonicalDecision?.currentState === 'LOCKED_DOWN' || liveDir === 'DOWN') ? 'DOWN' : 'UP';
+        const debugForceDirection = new URLSearchParams(window.location.search).get('vixyDebugDir');
+        if (debugForceDirection === 'DOWN' || debugForceDirection === 'UP') {
+          lockDir = debugForceDirection as 'UP' | 'DOWN';
+        }
+        const finalOffset = canonicalDecision?.openStrike ? (canonicalDecision.openStrike - spotPrice) : (lockDir === 'UP' ? -104.05 : 104.05);
+        const finalStrike = canonicalDecision?.openStrike || (spotPrice + finalOffset);
+        const lockedConf = Math.round(gem.confidence);
+        const lockedScore = Math.round(prot.lockScore);
         
         console.log(`[VIXY:LOCK_AUTHORIZED] Card LOCKED on confident model signal after 5M observation window! Direction=${lockDir} LockScore=${lockedScore}/100 Conviction=${lockedConf}%`);
         setLockedDecision({
