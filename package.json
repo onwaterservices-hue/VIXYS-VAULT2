@@ -5,9 +5,9 @@
   "type": "module",
   "main": "dist/server.cjs",
   "scripts": {
-    "dev": "tsx backend.ts",
+    "dev": "tsx server.ts",
     "prebuild": "mkdir -p dist",
-    "build": "vite build && esbuild backend.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && cp dist/server.cjs dist/server.js",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && cp dist/server.cjs dist/server.js && cp -r dist build",
     "clean": "rm -rf dist",
     "start": "node server.ts",
     "lint": "tsc --noEmit",

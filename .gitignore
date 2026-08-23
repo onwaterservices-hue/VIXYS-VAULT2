@@ -6,3 +6,5 @@ coverage/
 !.env.example
 /data/
 /data/vixy_store.json
+dist/
+build/
