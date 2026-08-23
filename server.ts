@@ -15287,7 +15287,9 @@ async function processDiscordSyncQueue() {
           );
           if (
             syncResult.code === "INVALID_BOT_TOKEN" ||
-            syncResult.code === "INVALID_DISCORD_USER_ID"
+            syncResult.code === "INVALID_DISCORD_USER_ID" ||
+            syncResult.code === "DISCORD_UNAUTHORIZED" ||
+            syncResult.code === "BOT_TOKEN_MISSING"
           ) {
             item.status = "FAILED";
             console.error(
