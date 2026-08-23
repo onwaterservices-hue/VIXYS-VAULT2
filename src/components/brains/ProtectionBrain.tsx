@@ -181,7 +181,7 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
   return (
     <div 
       id="vixy-protection-awakened-hero"
-      className="bg-[#030109] rounded-2xl border border-purple-900/60 p-4 sm:p-5 font-mono shadow-[0_0_30px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col justify-between h-full group"
+      className="vixy-card-elevated hud-corners border border-purple-900/60 p-4 sm:p-5 font-mono shadow-[0_0_30px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col justify-between h-full group"
     >
       {/* HUD Corner Brackets */}
       <div className="absolute top-2 left-2 w-2.5 h-2.5 border-t-2 border-l-2 border-purple-600/50 pointer-events-none" />
@@ -277,13 +277,15 @@ export const ProtectionBrain: React.FC<ProtectionBrainProps> = ({
           </div>
 
           <div className="my-1">
-            <div className={`text-4xl sm:text-5xl font-black font-mono tracking-tight transition-colors ${
-              survivalScore >= 65 
-                ? 'text-emerald-400 drop-shadow-[0_0_15px_rgba(52,211,153,0.4)]' 
-                : survivalScore >= 45 
-                ? 'text-amber-300 drop-shadow-[0_0_15px_rgba(251,191,36,0.4)]' 
-                : 'text-rose-400 drop-shadow-[0_0_15px_rgba(244,63,94,0.5)]'
-            }`}>
+            <div className="text-4xl sm:text-5xl font-black font-mono tracking-tight hud-gradient-text"
+               style={
+                 survivalScore >= 65
+                   ? { "--grad-a": "#34d399", "--grad-b": "#f5f0ff", "--grad-c": "#10b981", "--grad-glow": "rgba(52,211,153,0.4)" } as React.CSSProperties
+                   : survivalScore >= 45
+                   ? { "--grad-a": "#fbbf24", "--grad-b": "#f5f0ff", "--grad-c": "#f59e0b", "--grad-glow": "rgba(251,191,36,0.4)" } as React.CSSProperties
+                   : { "--grad-a": "#fb7185", "--grad-b": "#f5f0ff", "--grad-c": "#e11d48", "--grad-glow": "rgba(244,63,94,0.5)" } as React.CSSProperties
+               }
+            >
               {survivalScore}%
             </div>
             <div className="text-[8.5px] font-bold uppercase tracking-widest mt-0.5 text-purple-300">

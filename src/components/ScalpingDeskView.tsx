@@ -93,7 +93,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-96 bg-gradient-to-b from-purple-600/15 via-emerald-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
       
       {/* 1. TOP IDENTITY STRIP */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 p-4 sm:p-5 rounded-2xl shadow-[0_0_35px_rgba(168,85,247,0.22)] flex flex-wrap items-center justify-between gap-3 relative overflow-hidden backdrop-blur-xl w-full min-w-0">
+      <div className="vixy-card-elevated hud-corners p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 relative overflow-hidden w-full min-w-0">
         <div className="absolute -top-12 -right-12 w-48 h-48 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
         <div className="flex items-center space-x-3 relative z-10 min-w-0">
           <div className="p-2.5 rounded-2xl bg-purple-600/25 text-purple-300 border border-purple-400/50 shadow-[0_0_20px_rgba(168,85,247,0.4)] shrink-0">
@@ -101,10 +101,10 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
           </div>
           <div className="min-w-0">
             <div className="flex items-center space-x-2 flex-wrap">
-              <h1 className="text-base sm:text-lg font-black text-white tracking-wider font-sans uppercase truncate">
+              <h1 className="vixy-page-title text-white truncate text-base sm:text-lg">
                 15S ALPHA INTELLIGENCE ENGINE
               </h1>
-              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#00FF88] border border-emerald-400/40 text-[9px] font-black tracking-widest uppercase shadow-[0_0_10px_rgba(0,255,136,0.3)] shrink-0">
+              <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border border-emerald-400/40">
                 ● ULTRA-FAST 15S
               </span>
             </div>
@@ -115,15 +115,15 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
         </div>
 
         {/* Asset Switcher Pills */}
-        <div className="flex items-center space-x-1.5 bg-[#0a0518]/90 p-1.5 rounded-2xl border border-purple-500/40 relative z-10 shadow-inner shrink-0">
+        <div className="flex items-center space-x-1.5 bg-[#0a0518]/90 p-1.5 rounded-2xl border border-purple-900/40 relative z-10 shrink-0">
           {['BTC', 'ETH', 'SOL', 'XRP'].map((symbol) => (
             <button
               key={symbol}
               onClick={() => onSelectAsset && onSelectAsset(symbol)}
               className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                 selectedAsset === symbol
-                  ? 'bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.6)] border border-purple-400'
-                  : 'text-gray-400 hover:text-white'
+                  ? 'bg-purple-600/50 text-white border border-purple-400/50'
+                  : 'text-purple-300/50 hover:text-white'
               }`}
             >
               {symbol}
@@ -153,7 +153,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
           </div>
 
           {/* 3. ORDER FLOW & INSTITUTIONAL MICROSTRUCTURE TELEMETRY (COMPACT TERMINAL GRID) */}
-          <div className="bg-[#0c0620] border border-purple-900/40 rounded-2xl overflow-hidden p-4 sm:p-5 space-y-4 shadow-[0_0_25px_rgba(0,0,0,0.5)] w-full min-w-0">
+          <div className="vixy-card hud-corners p-4 sm:p-5 space-y-4 w-full min-w-0">
             
             {/* Tab Controls Bar */}
             <div className="flex flex-wrap items-center justify-between border-b border-purple-900/40 pb-3 gap-2">
@@ -162,7 +162,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                   onClick={() => setDeskTab('SIGNAL')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'SIGNAL'
-                      ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                      ? 'bg-purple-600/50 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
@@ -172,7 +172,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                   onClick={() => setDeskTab('L2_SCANNER')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'L2_SCANNER'
-                      ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                      ? 'bg-purple-600/50 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
@@ -182,7 +182,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                   onClick={() => setDeskTab('PAPER_DESK')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
                     deskTab === 'PAPER_DESK'
-                      ? 'bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                      ? 'bg-purple-600/50 text-white shadow-[0_0_12px_rgba(168,85,247,0.4)]'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
@@ -211,49 +211,49 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 pt-1">
                 
                 {/* 1. Net Taker Delta */}
-                <div className="p-4 rounded-2xl bg-[#0a0518] border border-purple-900/40 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-black text-cyan-300 uppercase tracking-wider text-[11px]">
+                <div className="hud-stat-card bg-[#0a0518] border border-purple-900/40">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="hud-stat-label mb-0 text-cyan-300">
                       Net Taker Delta (15s)
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[#00FF88] text-[9px] font-bold">
+                    <span className="vixy-badge bg-emerald-500/20 text-emerald-400">
                       INFLOW
                     </span>
                   </div>
-                  <div className="text-2xl font-black text-[#00FF88] font-mono">+1,420 BTC</div>
-                  <p className="text-[10px] text-gray-400 font-sans leading-tight">
+                  <div className="hud-stat-value text-emerald-400">+1,420 BTC</div>
+                  <p className="text-[10px] text-gray-400 font-sans mt-2 leading-tight">
                     Market buyers absorbing ask liquidity walls rapidly with high velocity.
                   </p>
                 </div>
 
                 {/* 2. Orderbook Depth Ratio */}
-                <div className="p-4 rounded-2xl bg-[#0a0518] border border-purple-900/40 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-black text-cyan-300 uppercase tracking-wider text-[11px]">
+                <div className="hud-stat-card bg-[#0a0518] border border-purple-900/40">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="hud-stat-label mb-0 text-cyan-300">
                       Orderbook Depth Ratio
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[9px] font-bold">
+                    <span className="vixy-badge bg-purple-500/20 text-purple-300">
                       BIDS STACKED
                     </span>
                   </div>
-                  <div className="text-2xl font-black text-purple-200 font-mono">2.41 Bids / Asks</div>
-                  <p className="text-[10px] text-gray-400 font-sans leading-tight">
+                  <div className="hud-stat-value text-purple-200">2.41 Bids / Asks</div>
+                  <p className="text-[10px] text-gray-400 font-sans mt-2 leading-tight">
                     Bid support strongly clustered $12.50 below spot price floor.
                   </p>
                 </div>
 
                 {/* 3. Cross-Venue Spread */}
-                <div className="p-4 rounded-2xl bg-[#0a0518] border border-purple-900/40 space-y-1.5">
-                  <div className="flex justify-between items-center text-xs">
-                    <span className="font-black text-cyan-300 uppercase tracking-wider text-[11px]">
+                <div className="hud-stat-card bg-[#0a0518] border border-purple-900/40">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="hud-stat-label mb-0 text-cyan-300">
                       Cross-Venue Spread
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px] font-bold">
+                    <span className="vixy-badge bg-amber-500/20 text-amber-300">
                       SYNCHRONIZED
                     </span>
                   </div>
-                  <div className="text-2xl font-black text-amber-300 font-mono">0.02% Spread</div>
-                  <p className="text-[10px] text-gray-400 font-sans leading-tight">
+                  <div className="hud-stat-value text-amber-300">0.02% Spread</div>
+                  <p className="text-[10px] text-gray-400 font-sans mt-2 leading-tight">
                     Kalshi and Polymarket micro-implied probabilities tightly matched.
                   </p>
                 </div>

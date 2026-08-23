@@ -123,28 +123,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Account Info Card */}
-      <div className="bg-[#0c0620] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
+      <div className="vixy-card hud-corners p-6 space-y-6">
         <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
           <Shield className="w-4 h-4 text-purple-400" />
           <span>User Profile & Workspace</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
-          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/50 text-[10px] block">Full Name</span>
-            <span className="text-purple-100 font-bold">{authState.user?.name || 'Quant User'}</span>
+          <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
+            <span className="hud-stat-label">Full Name</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.name || 'Quant User'}</span>
           </div>
-          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/50 text-[10px] block">Email Address</span>
-            <span className="text-purple-100 font-bold">{authState.user?.email || 'trader@vixysvault.com'}</span>
+          <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
+            <span className="hud-stat-label">Email Address</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.email || 'trader@vixysvault.com'}</span>
           </div>
-          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/50 text-[10px] block">Account Tier</span>
-            <span className="text-purple-300 font-bold">{subscription.plan} Tier</span>
+          <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
+            <span className="hud-stat-label">Account Tier</span>
+            <span className="hud-stat-value text-purple-300">{subscription.plan} Tier</span>
           </div>
-          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
-            <span className="text-purple-300/50 text-[10px] block">Member Since</span>
-            <span className="text-purple-100 font-bold">{authState.user?.joinedDate || 'July 2026'}</span>
+          <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
+            <span className="hud-stat-label">Member Since</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.joinedDate || 'July 2026'}</span>
           </div>
         </div>
       </div>
@@ -158,7 +158,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       />
 
       {/* SECONDARY EXCHANGE CONNECTIONS (POLYMARKET & DRAFTKINGS) */}
-      <div className="bg-[#0c0620] border border-purple-900/60 rounded-2xl p-6 space-y-6 shadow-xl relative overflow-hidden">
+      <div className="vixy-card hud-corners p-6 space-y-6 relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -377,7 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* API Key Management (Vixy's Vault System API) */}
-      <div className="bg-[#0c0620] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
+      <div className="vixy-card hud-corners p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">

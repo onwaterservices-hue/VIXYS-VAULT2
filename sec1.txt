@@ -1,0 +1,181 @@
+        {/* 2. PRIMARY DECISION SUITE & COMMAND CENTER HERO (VISUAL PRIORITIES 1, 2, 3, 4) */}
+        <div id="vixy-command-hero" className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* PRIMARY DECISION AREA & DECISION AURA (Dominant Centerpiece - 7 cols on LG) */}
+          <div className={`lg:col-span-7 vixy-card-elevated hud-corners p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between transition-all duration-500 ${decisionAuraStyle}`}>
+            
+            {/* Laser scanning beam for Building / Calibrating states */}
+            {(isBuilding || isCalibrating) && (
+              <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
+                <div className="w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-laser-sweep opacity-75 shadow-[0_0_15px_rgba(6,182,212,0.9)]" />
+              </div>
+            )}
+
+            {/* Top State Bar */}
+            <div>
+              <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
+                <div className="flex items-center space-x-2.5">
+                  <div className={`w-3 h-3 rounded-full flex items-center justify-center ${isLockedState && isUp ? 'bg-[#00FF88]' : isLockedState && isDown ? 'bg-[#FF3B30]' : isBuilding ? (buildingDirection === 'UP' ? 'bg-[#00FF88]' : 'bg-[#FF3B30]') : 'bg-cyan-400'}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-black animate-ping" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] sm:text-xs text-purple-200 font-black tracking-widest uppercase">
+                      THE PLACE WHERE VIXY THINKS
+                    </span>
+                    <span className="text-[9px] text-gray-400 block font-sans">CANONICAL 15-MINUTE AUTONOMOUS DECISION</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {/* Highlighted LOCK Score Badge in Top Header */}
+                  <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-gradient-to-r from-amber-500/25 via-amber-400/20 to-yellow-500/25 border-2 border-amber-400/80 shadow-[0_0_15px_rgba(251,191,36,0.5)]">
+                    <ShieldCheck className="w-4 h-4 text-amber-300 animate-pulse" />
+                    <span className="text-[10px] text-amber-200 font-black tracking-wider uppercase">LOCK SCORE</span>
+                    <span className="text-sm font-black text-amber-300 drop-shadow-[0_0_10px_rgba(251,191,36,0.9)]">
+                      {displayLockScore}<span className="text-[10px] text-amber-200/80">/100</span>
+                    </span>
+                  </div>
+
+                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black tracking-wider uppercase flex items-center space-x-1.5 ${
+                    isLockedState && isUp
+                      ? 'bg-[#00FF88]/20 border border-[#00FF88]/60 text-[#00FF88] shadow-[0_0_12px_rgba(0,255,136,0.4)]'
+                      : isLockedState && isDown
+                      ? 'bg-[#FF3B30]/20 border border-[#FF3B30]/60 text-[#FF3B30] shadow-[0_0_12px_rgba(255,59,48,0.4)]'
+                      : isBuilding
+                      ? (buildingDirection === 'UP' ? 'bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] animate-pulse' : 'bg-[#FF3B30]/15 border border-[#FF3B30]/40 text-[#FF3B30] animate-pulse')
+                      : 'bg-cyan-500/20 border border-cyan-400/60 text-cyan-300 animate-pulse'
+                  }`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current animate-ping" />
+                    <span>{headerBadgeText}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* DOMINANT HERO DECISION TITLE */}
+              <div className="my-2">
+                <div className="text-[10.5px] font-bold text-gray-400 uppercase tracking-widest flex items-center space-x-1.5 mb-1">
+                  <Zap className="w-3.5 h-3.5 text-purple-400" />
+                  <span>AUTHORITATIVE 15M EXECUTION STATE</span>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className={`text-3xl sm:text-4xl md:text-5xl font-black tracking-tight font-sans drop-shadow-[0_2px_12px_rgba(0,0,0,0.8)] ${
+                    isLockedState && isUp ? 'text-[#00FF88] text-glow-emerald' : isLockedState && isDown ? 'text-[#FF3B30] text-glow-rose' : isBuilding ? (buildingDirection === 'UP' ? 'text-[#00FF88]' : 'text-[#FF3B30]') : 'text-cyan-300 text-glow-cyan'
+                  }`}>
+                    {primaryDecisionTitle}
+                  </h1>
+
+                  <span className={`px-3.5 py-1.5 rounded-xl text-xs font-black tracking-wider uppercase border flex items-center space-x-1.5 ${
+                    isLockedState && isUp
+                      ? 'bg-[#00FF88]/20 border-[#00FF88]/70 text-[#00FF88] shadow-[0_0_15px_rgba(0,255,136,0.3)]'
+                      : isLockedState && isDown
+                      ? 'bg-[#FF3B30]/20 border-[#FF3B30]/70 text-[#FF3B30] shadow-[0_0_15px_rgba(255,59,48,0.3)]'
+                      : isBuilding
+                      ? (buildingDirection === 'UP' ? 'bg-[#00FF88]/20 border-[#00FF88]/60 text-[#00FF88]' : 'bg-[#FF3B30]/20 border-[#FF3B30]/60 text-[#FF3B30]')
+                      : 'bg-cyan-500/20 border-cyan-400/70 text-cyan-300 shadow-[0_0_15px_rgba(6,182,212,0.3)]'
+                  }`}>
+                    {primaryDecisionPill}
+                  </span>
+                </div>
+              </div>
+
+              {/* DECISION RATIONALE: WHAT DOES VIXY THINK RIGHT NOW - AND WHY? */}
+              <div className="bg-[#0a0518]/90 p-3.5 rounded-2xl border border-purple-900/40 my-4 shadow-inner space-y-1.5">
+                <div className="flex items-center justify-between text-[9.5px]">
+                  <span className="text-purple-300 font-black uppercase tracking-wider flex items-center space-x-1">
+                    <Sparkles className="w-3 h-3 text-purple-400" />
+                    <span>VIXY SYNTHESIS & CONVICTION WHY</span>
+                  </span>
+                  <span className={`${isLockedState && isUp ? 'text-[#00FF88]' : isLockedState && isDown ? 'text-[#FF3B30]' : 'text-cyan-300'} font-bold font-mono`}>
+                    {isCalibrating ? `CALIBRATING: ${calibratingProgress}%` : `CONVICTION: ${displayConfidence}%`}
+                  </span>
+                </div>
+                <p className="text-xs sm:text-[13px] font-sans text-gray-200 leading-snug">
+                  {isLockedState && isUp
+                    ? `VIXY AI brain locked UP on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Sustained institutional taker delta (${cvdVal}) and multi-timeframe alignment validate upward continuation.`
+                    : isLockedState && isDown
+                    ? `VIXY AI brain locked DOWN on the 15M contract at $${strikePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} with ${displayConfidence}% Bayesian conviction. Heavy ask absorption and bearish momentum validate downward delta targeting.`
+                    : isBuilding
+                    ? `VIXY AI brain is actively building directional confluence for cycle ${cycleId} with a ${buildingDirection} bias (${displayConfidence}% conviction). Scanning multi-timeframe deltas (${cvdVal}) and institutional taker flow before authorizing final lock.`
+                    : `VIXY AI brain is actively calibrating order flow, cross-venue deltas, and market microstructure for cycle ${cycleId} with a ${buildingDirection} bias. Scanning evidence confluence before authorizing hard lock.`}
+                </p>
+              </div>
+
+              {/* 3-WAY NORMALIZED PROBABILITY DISTRIBUTION STRIP */}
+              <div className="space-y-2.5 my-4">
+                <div className="flex items-center justify-between text-[9.5px]">
+                  <div className="flex items-center space-x-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+                    <span className="text-gray-300 uppercase font-black tracking-wider">3-WAY NORMALIZED PROBABILITY DISTRIBUTION</span>
+                  </div>
+                  <div className="flex items-center space-x-2 text-[9px] font-mono">
+                    <span className="text-[#00FF88] font-bold">UP: {normalizedProbabilities.upPct}%</span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-amber-400 font-bold">CHOP: {normalizedProbabilities.noTradePct}%</span>
+                    <span className="text-gray-500">•</span>
+                    <span className="text-[#FF3B30] font-bold">DOWN: {normalizedProbabilities.downPct}%</span>
+                    <span className="px-1.5 py-0.5 rounded bg-purple-950/70 border border-purple-700/50 text-[8px] text-purple-300 font-bold ml-1 shadow-sm">
+                      100% SUM NORMALIZED
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3-Segment Animated Distribution Bar */}
+                <div className="w-full h-3.5 bg-[#0a0518] rounded-full overflow-hidden flex border border-purple-900/60 p-0.5 shadow-inner">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(0,255,136,0.6)]"
+                    style={{ width: `${normalizedProbabilities.upPct}%` }}
+                    title={`P(UP): ${normalizedProbabilities.upPct}%`}
+                  />
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300 ease-out shadow-[0_0_10px_rgba(245,158,11,0.5)]"
+                    style={{ width: `${normalizedProbabilities.noTradePct}%` }}
+                    title={`P(CHOP/NEUTRAL): ${normalizedProbabilities.noTradePct}%`}
+                  />
+                  <div
+                    className="h-full bg-gradient-to-r from-rose-500 to-[#FF3B30] rounded-r-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(255,59,48,0.6)]"
+                    style={{ width: `${normalizedProbabilities.downPct}%` }}
+                    title={`P(DOWN): ${normalizedProbabilities.downPct}%`}
+                  />
+                </div>
+
+                {/* 3 Metric Value Boxes */}
+                <div className="grid grid-cols-3 gap-2 text-center pt-1">
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(UP)</span>
+                    <span className="text-sm sm:text-base font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
+                  </div>
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 12 ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'border-amber-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(CHOP)</span>
+                    <span className="text-sm sm:text-base font-black text-amber-400 font-mono tracking-tight">{normalizedProbabilities.noTradePct}%</span>
+                  </div>
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
+                    <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(DOWN)</span>
+                    <span className="text-sm sm:text-base font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* STRIKE & SPOT DELTA METRICS BAR */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-white/10 text-[10px]">
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">PRICE TO BEAT (STRIKE)</span>
+                <span className="text-white font-black text-xs sm:text-sm">
+                  ${(strikePrice ?? 64150).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">LIVE SPOT (COINBASE)</span>
+                <span className="text-white font-black text-xs sm:text-sm">{coinbasePriceStr}</span>
+              </div>
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block text-[9px]">EXPECTED DELTA</span>
+                <span className={`font-black text-xs sm:text-sm ${isTargetAchieved ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
+                  {(deltaToBeat ?? 0) >= 0 ? '+' : ''}${(deltaToBeat ?? 0).toFixed(2)} ({isTargetAchieved ? 'IN THE MONEY' : 'BELOW TARGET'})
+                </span>
+              </div>
+            </div>
+
+          </div>
+

@@ -290,28 +290,28 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
       {/* ================================================== */}
       {/* 1. HEADER: 1-HOUR QUANTITATIVE DECISION DESK      */}
       {/* ================================================== */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#100624] to-[#080214] rounded-2xl p-4 sm:p-6 border border-purple-500/40 shadow-[0_0_45px_rgba(147,51,234,0.22)] relative overflow-hidden backdrop-blur-xl w-full min-w-0">
+      <div className="vixy-card-elevated hud-corners p-4 sm:p-6 relative overflow-hidden w-full min-w-0">
         <div className="absolute -right-12 -bottom-12 w-72 h-72 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-12 -top-12 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-5 relative z-10 min-w-0">
           <div className="space-y-2 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-3 py-1 rounded-full bg-purple-500/20 text-purple-300 border border-purple-400/40 text-xs font-bold flex items-center gap-1.5 shadow-[0_0_12px_rgba(168,85,247,0.3)]">
+              <span className="vixy-badge bg-purple-500/20 text-purple-300 border border-purple-400/40">
                 <Clock className="w-3.5 h-3.5 text-purple-400" />
                 <span>60-MINUTE CONTRACT DESK</span>
               </span>
-              <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-[#00FF88] border border-emerald-500/40 text-xs font-bold shadow-[0_0_12px_rgba(0,255,136,0.25)]">
+              <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
                 KALSHI & POLYMARKET 1H
               </span>
-              <span className="px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 text-xs font-bold">
+              <span className="vixy-badge bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
                 ● STRATEGIC QUANT LEAD
               </span>
               <ModelStatusBadge asset={selectedAsset} desk="1h" />
             </div>
 
             <div>
-              <h1 className="text-xl sm:text-3xl lg:text-4xl font-black tracking-tight text-white flex items-center gap-3 drop-shadow-[0_0_20px_rgba(255,255,255,0.3)]">
+              <h1 className="vixy-page-title text-white flex items-center gap-3">
                 <span>1-HOUR QUANTITATIVE DECISION DESK</span>
               </h1>
               <p className="text-xs sm:text-sm text-purple-200/80 font-sans tracking-wide mt-1">
@@ -358,7 +358,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 2. STRIKE MATRIX: MAIN DECISION SELECTION          */}
           {/* ================================================== */}
-          <div className="bg-[#0c0620]/95 rounded-2xl p-5 sm:p-6 border border-purple-500/40 shadow-[0_0_40px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl relative overflow-hidden">
+          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4 relative overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-2xl bg-amber-500/20 border border-amber-400/60 flex items-center justify-center shadow-[0_0_15px_rgba(251,191,36,0.35)]">
@@ -470,7 +470,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 4. UP/DOWN CAPSULES: CLEAR PROBABILITY RELATION    */}
           {/* ================================================== */}
-          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Scale className="w-5 h-5 text-purple-400" />
@@ -520,16 +520,16 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-emerald-500/20">
-                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-emerald-500/30">
-                    <span className="text-[9px] text-gray-400 block font-sans">QUANTITATIVE EDGE</span>
-                    <strong className="text-emerald-400 font-black text-sm">+{edgePctFormatted}%</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans">vs Kalshi 72¢ Implied</span>
+                  <div className="hud-stat-card bg-[#0a0518]/80 border border-emerald-500/30">
+                    <span className="hud-stat-label mb-1">QUANTITATIVE EDGE</span>
+                    <strong className="hud-stat-value text-emerald-400 block">+{edgePctFormatted}%</strong>
+                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">vs Kalshi 72¢ Implied</span>
                   </div>
 
-                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-emerald-500/30">
-                    <span className="text-[9px] text-gray-400 block font-sans">MARKET CONDITION</span>
-                    <strong className="text-cyan-300 font-bold text-xs">VWAP Expansion</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans">Macro Uptrend Intact</span>
+                  <div className="hud-stat-card bg-[#0a0518]/80 border border-emerald-500/30">
+                    <span className="hud-stat-label mb-1">MARKET CONDITION</span>
+                    <strong className="text-cyan-300 font-bold text-sm block mt-1">VWAP Expansion</strong>
+                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Macro Uptrend Intact</span>
                   </div>
                 </div>
               </button>
@@ -568,16 +568,16 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-rose-500/20">
-                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-rose-500/30">
-                    <span className="text-[9px] text-gray-400 block font-sans">QUANTITATIVE EDGE</span>
-                    <strong className="text-rose-400 font-black text-sm">-8.4%</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans">Counter-Trend Friction</span>
+                  <div className="hud-stat-card bg-[#0a0518]/80 border border-rose-500/30">
+                    <span className="hud-stat-label mb-1">QUANTITATIVE EDGE</span>
+                    <strong className="hud-stat-value text-rose-400 block">-8.4%</strong>
+                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Counter-Trend Friction</span>
                   </div>
 
-                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-rose-500/30">
-                    <span className="text-[9px] text-gray-400 block font-sans">MARKET CONDITION</span>
-                    <strong className="text-purple-300 font-bold text-xs">High Absorption</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans">Bids Wall Stacking</span>
+                  <div className="hud-stat-card bg-[#0a0518]/80 border border-rose-500/30">
+                    <span className="hud-stat-label mb-1">MARKET CONDITION</span>
+                    <strong className="text-purple-300 font-bold text-sm block mt-1">High Absorption</strong>
+                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Bids Wall Stacking</span>
                   </div>
                 </div>
               </button>
@@ -588,7 +588,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 5. AI CONVICTION: ANALYTICAL TIMELINE & HEAT METER */}
           {/* ================================================== */}
-          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Compass className="w-5 h-5 text-cyan-400" />
@@ -670,7 +670,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 6. CATALYSTS: CLEAN STRUCTURED EVENT STREAM        */}
           {/* ================================================== */}
-          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Layers className="w-5 h-5 text-purple-400" />
@@ -678,7 +678,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                   QUANTITATIVE CONVICTION CATALYSTS & EVENT STREAM
                 </h3>
               </div>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded-xl border border-emerald-500/30">
+              <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border-emerald-500/40">
                 5/5 SYNCHRONIZED
               </span>
             </div>
@@ -757,62 +757,62 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 7. BOTTOM STATUS: 4 EASILY SCANNABLE METRICS       */}
           {/* ================================================== */}
-          <div className="bg-[#0c0620]/95 border border-purple-500/40 p-5 rounded-2xl shadow-[0_0_35px_rgba(168,85,247,0.18)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono backdrop-blur-xl">
+          <div className="vixy-card hud-corners p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
             
             {/* Momentum Persistence */}
-            <div className="p-4 rounded-2xl bg-[#0a0518] border border-cyan-500/30 space-y-1.5 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
-              <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">
+            <div className="hud-stat-card bg-[#0a0518] border border-cyan-500/30">
+              <span className="hud-stat-label text-cyan-400">
                 Momentum Persistence
               </span>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-lg sm:text-xl font-black text-white">92.4%</span>
-                <span className="text-[10px] text-cyan-300 font-sans font-bold">HIGH DRIFT</span>
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="hud-stat-value text-white">92.4%</span>
+                <span className="vixy-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/40">HIGH DRIFT</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans">
+              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
                 Persistent 1H Directional Force
               </span>
             </div>
 
             {/* Reversal Risk */}
-            <div className="p-4 rounded-2xl bg-[#0a0518] border border-emerald-500/30 space-y-1.5 shadow-[0_0_15px_rgba(0,255,136,0.1)]">
-              <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
+            <div className="hud-stat-card bg-[#0a0518] border border-emerald-500/30">
+              <span className="hud-stat-label text-emerald-400">
                 Reversal Risk
               </span>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-lg sm:text-xl font-black text-[#00FF88]">14.2%</span>
-                <span className="text-[10px] text-emerald-300 font-sans font-bold">LOW THREAT</span>
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="hud-stat-value text-[#00FF88]">14.2%</span>
+                <span className="vixy-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">LOW THREAT</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans">
+              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
                 Heavy Bids Guarding VWAP
               </span>
             </div>
 
             {/* Strike Gap */}
-            <div className="p-4 rounded-2xl bg-[#0a0518] border border-amber-500/30 space-y-1.5 shadow-[0_0_15px_rgba(251,191,36,0.1)]">
-              <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">
+            <div className="hud-stat-card bg-[#0a0518] border border-amber-500/30">
+              <span className="hud-stat-label text-amber-400">
                 Strike Gap
               </span>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-lg sm:text-xl font-black text-amber-300">
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="hud-stat-value text-amber-300">
                   {isStrikeAbove ? '+' : '-'}${Math.abs(strikeGapVal).toFixed(2)}
                 </span>
-                <span className="text-[10px] text-amber-300 font-sans font-bold">BUFFER</span>
+                <span className="vixy-badge bg-amber-500/20 text-amber-300 border-amber-500/40">BUFFER</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans">
+              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
                 Distance to $64,200 Strike
               </span>
             </div>
 
             {/* Market Bias */}
-            <div className="p-4 rounded-2xl bg-[#0a0518] border border-purple-500/30 space-y-1.5 shadow-[0_0_15px_rgba(168,85,247,0.1)]">
-              <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">
+            <div className="hud-stat-card bg-[#0a0518] border border-purple-500/30">
+              <span className="hud-stat-label text-purple-400">
                 Market Bias
               </span>
-              <div className="flex items-baseline space-x-2">
-                <span className="text-lg sm:text-xl font-black text-purple-200">BULLISH</span>
-                <span className="text-[10px] text-purple-300 font-sans font-bold">CHANNEL</span>
+              <div className="flex items-baseline space-x-2 mt-1">
+                <span className="hud-stat-value text-purple-200">BULLISH</span>
+                <span className="vixy-badge bg-purple-500/20 text-purple-300 border-purple-500/40">CHANNEL</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans">
+              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
                 Multi-Timeframe Structure Intact
               </span>
             </div>
@@ -832,7 +832,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
             {/* Right Column: Server Kelly Sizing */}
             <div className="space-y-6">
-              <div className="bg-[#0c0620]/95 backdrop-blur-xl rounded-2xl p-5 border border-purple-500/40 shadow-[0_0_35px_rgba(147,51,234,0.15)] space-y-4">
+              <div className="vixy-card p-5 space-y-4">
                 <div className="font-bold text-white flex items-center justify-between border-b border-purple-900/40 pb-3">
                   <span className="flex items-center gap-2 text-sm font-mono tracking-wide">
                     <Calculator className="w-4 h-4 text-amber-400" />

@@ -19,7 +19,7 @@ export const OrderFlowPressure: React.FC<OrderFlowPressureProps> = ({
   const takerSellersPct = 100 - takerBuyersPct;
 
   return (
-    <div className="bg-[#080312] border border-purple-900/40 rounded-2xl p-6 relative overflow-hidden shadow-2xl font-mono">
+    <div className="vixy-card-elevated hud-corners border border-purple-900/40 rounded-2xl p-6 relative overflow-hidden shadow-2xl font-mono">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <div className="text-purple-400">

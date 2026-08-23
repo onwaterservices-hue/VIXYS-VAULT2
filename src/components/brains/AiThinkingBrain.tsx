@@ -22,7 +22,7 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
   const edgePct = safeNumber(signal?.edgePct, 0);
 
   return (
-    <div className="bg-[#030108] rounded-3xl border border-purple-800/70 p-6 space-y-5 font-mono shadow-2xl relative overflow-hidden">
+    <div className="vixy-card-elevated hud-corners border border-purple-800/70 p-6 space-y-5 font-mono shadow-2xl relative overflow-hidden">
       {/* Top Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-900/50 pb-4">
         <div className="flex items-center gap-2.5">
@@ -41,7 +41,7 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
       </div>
 
       {/* Main Rationale Card */}
-      <div className="bg-[#060210] p-5 rounded-2xl border border-purple-800/60 space-y-4">
+      <div className="hud-stat-card hud-corners p-5 border border-purple-800/60 space-y-4">
         <div className="text-xs font-bold text-purple-200 flex items-center gap-2">
           <Sparkles className="w-4 h-4 text-amber-400" />
           <span>PRIMARY DRIVER SYNTHESIS</span>
@@ -68,7 +68,7 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
       </div>
 
       {/* Live AI Reasoning Timeline */}
-      <div className="bg-[#060210] p-4 rounded-2xl border border-purple-900/50 space-y-3">
+      <div className="vixy-card hud-corners p-4 border border-purple-900/50 space-y-3">
         <div className="flex items-center justify-between">
           <div className="text-xs font-black text-white uppercase flex items-center gap-2">
             <Activity className="w-4 h-4 text-cyan-400" />
@@ -80,22 +80,22 @@ export const AiThinkingBrain: React.FC<AiThinkingBrainProps> = ({ signal, ticker
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs font-mono">
-          <div className="bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
+          <div className="hud-stat-card hud-corners border border-purple-800/40">
             <div className="text-[10px] text-purple-400">Step 1 • 10m ago</div>
             <div className="font-bold text-white text-[11px] pt-0.5">Whale Delta Intercept</div>
             <div className="text-[10px] text-emerald-400 font-bold">Confirmed ✓</div>
           </div>
-          <div className="bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
+          <div className="hud-stat-card hud-corners border border-purple-800/40">
             <div className="text-[10px] text-purple-400">Step 2 • 6m ago</div>
             <div className="font-bold text-white text-[11px] pt-0.5">Liquidity Sweep Trigger</div>
             <div className="text-[10px] text-emerald-400 font-bold">Confirmed ✓</div>
           </div>
-          <div className="bg-[#0a031a] p-2.5 rounded-xl border border-purple-800/40">
+          <div className="hud-stat-card hud-corners border border-purple-800/40">
             <div className="text-[10px] text-purple-400">Step 3 • 3m ago</div>
             <div className="font-bold text-white text-[11px] pt-0.5">Venue Pricing Disparity</div>
             <div className="text-[10px] text-emerald-400 font-bold">+{safeToFixed(edgePct, 1)}% Edge ✓</div>
           </div>
-          <div className="bg-[#0a031a] p-2.5 rounded-xl border border-amber-500/40 animate-pulse">
+          <div className="hud-stat-card hud-corners border border-amber-500/40 animate-pulse">
             <div className="text-[10px] text-amber-400">Step 4 • Current</div>
             <div className="font-bold text-amber-200 text-[11px] pt-0.5">Lock Verification</div>
             <div className="text-[10px] text-emerald-400 font-bold">100% Locked</div>

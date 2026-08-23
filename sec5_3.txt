@@ -1,0 +1,98 @@
+          {/* MULTI-TIMEFRAME MATRIX & REGIME */}
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <span className="font-black text-white text-xs uppercase">MULTI-TIMEFRAME MATRIX</span>
+              <span className="text-[#00FF88] text-[9.5px] font-bold">100% ALIGNMENT</span>
+            </div>
+
+            <div className="space-y-1 bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 text-[9.5px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
+                <span>TF</span>
+                <span>TREND</span>
+                <span>MOMENTUM</span>
+                <span>REGIME</span>
+              </div>
+              {[
+                { tf: '1M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '5M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '15M', trend: '▲ UP', mom: 'STRONG', regime: 'TRENDING' },
+                { tf: '1H', trend: '▶ FLAT', mom: 'MODERATE', regime: 'RANGING' }
+              ].map((row, idx) => (
+                <div key={idx} className="flex justify-between py-0.5 items-center">
+                  <span className="text-gray-300 font-bold">{row.tf}</span>
+                  <span className={row.trend.includes('UP') ? 'text-[#00FF88] font-bold' : 'text-gray-400'}>{row.trend}</span>
+                  <span className="text-purple-300">{row.mom}</span>
+                  <span className="text-[#00FF88] font-bold">{row.regime}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-gradient-to-r from-[#0C0819] to-[#14122B] p-3 rounded-2xl border border-purple-500/40 flex items-center justify-between mt-2.5">
+              <div>
+                <div className="text-[8.5px] text-gray-400 uppercase">REGIME DETECTOR</div>
+                <div className="text-xs font-black text-[#00FF88]">{regimeVal}</div>
+                <div className="text-[8.5px] text-gray-400">Confidence: 81% • Duration: 2H 15M</div>
+              </div>
+              <div className="text-[#00FF88] text-xl">🐂</div>
+            </div>
+
+            <div className="text-[8.5px] text-gray-500 mt-2 font-sans">
+              Consensus confirms sustained directional momentum across all active horizons.
+            </div>
+          </div>
+
+          {/* WHALE FLOW (>= $250K) */}
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Waves className="w-4 h-4 text-cyan-400" />
+                <span className="font-black text-white text-xs uppercase">WHALE FLOW (≥$250K)</span>
+              </div>
+              <div className="flex items-center space-x-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                <span className="text-[#00FF88] text-[9px] font-bold">{whaleFlowData.status}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 space-y-1.5 mb-2">
+              <div className="flex justify-between text-[9.5px]">
+                <span className="text-gray-400">5M ROLLING BIAS:</span>
+                <span className="text-[#00FF88] font-bold">{whaleFlowData.netBias}</span>
+              </div>
+              <div className="w-full h-2 bg-[#1E1435] rounded-full overflow-hidden flex">
+                <div className="bg-[#00FF88] h-full transition-all duration-500" style={{ width: `${whaleFlowData.buyPct}%` }} />
+                <div className="bg-[#FF3B30] h-full transition-all duration-500" style={{ width: `${whaleFlowData.sellPct}%` }} />
+              </div>
+              <div className="flex justify-between text-[8px] text-gray-400">
+                <span className="text-[#00FF88] font-bold">BUY: {whaleFlowData.buyPct}%</span>
+                <span className="text-cyan-300 font-bold truncate max-w-[150px]">{whaleFlowData.wallAlert}</span>
+                <span className="text-[#FF3B30] font-bold">SELL: {whaleFlowData.sellPct}%</span>
+              </div>
+            </div>
+
+            {/* Whale Tape Stream */}
+            <div className="space-y-1 bg-[#0a0518] p-2 rounded-2xl border border-purple-900/30 text-[9px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-0.5">
+                <span>TAPE</span>
+                <span>PRICE</span>
+                <span>USD SIZE</span>
+              </div>
+              {whaleTrades.slice(0, 3).map((wt, idx) => (
+                <div key={`${wt.id}-${idx}`} className="flex justify-between items-center py-0.5">
+                  <div className="flex items-center space-x-1 truncate max-w-[90px]">
+                    <span className={`px-1 py-0.2 rounded text-[7.5px] font-bold ${wt.side === 'BUY' ? 'bg-[#00FF88]/20 text-[#00FF88]' : 'bg-[#FF3B30]/20 text-[#FF3B30]'}`}>
+                      {wt.side}
+                    </span>
+                    <span className="text-gray-400 text-[8px]">{wt.exchange.slice(0, 3)}</span>
+                    {wt.isMegaWhale && <span className="text-amber-400 font-black text-[8px]">⚡$1M+</span>}
+                  </div>
+                  <span className="text-gray-300 text-[8.5px]">${wt.price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span>
+                  <span className={`font-bold text-[8.5px] ${wt.side === 'BUY' ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
+                    ${(wt.sizeUsd / 1000).toFixed(0)}k
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-[8.5px] text-gray-500 mt-2 font-mono">
+              Capturing institutional block orders across major venue aggregate streams.

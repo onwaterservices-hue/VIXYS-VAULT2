@@ -92,7 +92,7 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
   const isBuy = latest.action === 'BOUGHT';
 
   return (
-    <div className="bg-[#030109] rounded-2xl border border-purple-900/60 p-4 sm:p-5 font-mono shadow-[0_0_30px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col justify-between h-full group">
+    <div className="vixy-card-elevated hud-corners border border-purple-900/60 p-4 sm:p-5 font-mono shadow-[0_0_30px_rgba(0,0,0,0.8)] relative overflow-hidden flex flex-col justify-between h-full group">
       {/* HUD Corner Brackets */}
       <div className="absolute top-2 left-2 w-2.5 h-2.5 border-t-2 border-l-2 border-purple-600/50 pointer-events-none" />
       <div className="absolute top-2 right-2 w-2.5 h-2.5 border-t-2 border-r-2 border-purple-600/50 pointer-events-none" />
@@ -127,7 +127,7 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
 
         {/* Large Value Banner */}
         <div className="flex items-center justify-between gap-3 bg-[#030107] border border-purple-900/80 rounded-lg p-3">
-          <div className={`text-xl sm:text-2xl font-black tracking-tight ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <div className="text-xl sm:text-2xl font-black tracking-tight hud-gradient-text" style={isBuy ? { "--grad-a": "#34d399", "--grad-b": "#f5f0ff", "--grad-c": "#10b981", "--grad-glow": "rgba(52,211,153,0.4)" } as React.CSSProperties : { "--grad-a": "#fb7185", "--grad-b": "#f5f0ff", "--grad-c": "#e11d48", "--grad-glow": "rgba(244,63,94,0.5)" } as React.CSSProperties}>
             {latest.sizeUSD} {latest.asset} {latest.action}
           </div>
           <div className="px-2.5 py-1 rounded bg-[#0a0316] border border-purple-700/50 text-cyan-300 font-bold text-xs">
@@ -137,21 +137,21 @@ export const WhaleBrain: React.FC<WhaleBrainProps> = ({ ticker, selectedAsset = 
 
         {/* 3 Pill Badges */}
         <div className="grid grid-cols-3 gap-2 text-center text-[9px]">
-          <div className="bg-[#030108] border border-purple-900/50 rounded-lg p-1.5">
-            <div className="text-purple-400/70 font-bold uppercase text-[7.5px] tracking-wider">CONFIDENCE</div>
-            <div className="text-amber-300 font-black text-[10px] mt-0.5">{latest.confidence}</div>
+          <div className="hud-stat-card hud-corners border border-purple-900/50">
+            <div className="hud-stat-label">CONFIDENCE</div>
+            <div className="hud-stat-value text-amber-300">{latest.confidence}</div>
           </div>
 
-          <div className="bg-[#030108] border border-purple-900/50 rounded-lg p-1.5">
-            <div className="text-purple-400/70 font-bold uppercase text-[7.5px] tracking-wider">IMPACT</div>
-            <div className={`font-black text-[10px] mt-0.5 ${latest.effect === 'Bullish' ? 'text-emerald-400' : 'text-rose-400'}`}>
+          <div className="hud-stat-card hud-corners border border-purple-900/50">
+            <div className="hud-stat-label">IMPACT</div>
+            <div className={`hud-stat-value ${latest.effect === 'Bullish' ? 'text-emerald-400' : 'text-rose-400'}`}>
               {latest.effect}
             </div>
           </div>
 
-          <div className="bg-[#030108] border border-purple-900/50 rounded-lg p-1.5">
-            <div className="text-purple-400/70 font-bold uppercase text-[7.5px] tracking-wider">@TS</div>
-            <div className="text-cyan-300 font-black text-[10px] mt-0.5">{latest.timeAgo}</div>
+          <div className="hud-stat-card hud-corners border border-purple-900/50">
+            <div className="hud-stat-label">@TS</div>
+            <div className="hud-stat-value text-cyan-300">{latest.timeAgo}</div>
           </div>
         </div>
       </div>

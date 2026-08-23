@@ -564,7 +564,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       )}
 
       {/* Active Subscription Banner */}
-      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 font-mono">
+      <div className="vixy-card p-6 flex flex-wrap items-center justify-between gap-4 font-mono">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20 text-purple-400">
             <CreditCard className="w-6 h-6" />
@@ -603,7 +603,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       {/* 3 Pricing Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono">
         {/* STARTER */}
-        <div className="bg-[#0c0620] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
+        <div className="vixy-card p-6 sm:p-8 flex flex-col justify-between space-y-6">
           <div className="space-y-4">
             <div className="text-xs font-bold text-purple-300/60 uppercase tracking-widest">{plans.STARTER.name}</div>
             <div className="flex items-baseline gap-1">
@@ -635,7 +635,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
 
         {/* PROFESSIONAL (POPULAR) */}
-        <div className="bg-[#0c0620] rounded-2xl border-2 border-purple-500 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-2xl relative">
+        <div className="vixy-card-elevated hud-corners p-6 sm:p-8 flex flex-col justify-between space-y-6 relative">
           <div className="absolute -top-3.5 right-6 bg-purple-600 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full tracking-widest">
             RECOMMENDED FOR TRADERS
           </div>
@@ -643,7 +643,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           <div className="space-y-4">
             <div className="text-xs font-bold text-purple-300 uppercase tracking-widest">{plans.PRO.name}</div>
             <div className="flex items-baseline gap-1">
-              <span className="text-5xl font-black text-white">${priceFor('PRO')}</span>
+              <span className="text-5xl font-black hud-gradient-text">${priceFor('PRO')}</span>
               <span className="text-purple-300/60 text-xs">/ month</span>
             </div>
             <p className="text-purple-300/70 text-xs font-sans leading-relaxed">{plans.PRO.desc}</p>
@@ -672,7 +672,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
 
         {/* ELITE */}
-        <div className="bg-[#0c0620] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
+        <div className="vixy-card p-6 sm:p-8 flex flex-col justify-between space-y-6">
           <div className="space-y-4">
             <div className="text-xs font-bold text-violet-400 uppercase tracking-widest">{plans.ELITE.name}</div>
             <div className="flex items-baseline gap-1">
@@ -706,7 +706,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       </div>
 
       {/* Feature Comparison Matrix */}
-      <div className="bg-[#0c0620] border border-purple-900/40 rounded-2xl p-6 sm:p-8 space-y-6 font-mono text-xs">
+      <div className="vixy-card p-6 sm:p-8 space-y-6 font-mono text-xs">
         <h2 className="text-xl font-black text-white text-center">Comprehensive Tier Comparison</h2>
 
         <div className="overflow-x-auto">
@@ -762,7 +762,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       </div>
 
       {/* Risk Disclosure / Disclaimer */}
-      <div className="bg-[#0a0518] border border-purple-900/40 rounded-2xl p-6 text-xs text-purple-300/60 font-mono space-y-2">
+      <div className="vixy-card bg-[#0a0518] p-6 text-xs text-purple-300/60 font-mono space-y-2">
         <div className="flex items-center gap-2 font-bold text-purple-300">
           <FileText className="w-4 h-4 text-purple-400" />
           <span>RESPONSIBLE TRADING & RISK DISCLOSURE</span>

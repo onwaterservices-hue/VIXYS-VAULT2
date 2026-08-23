@@ -19,6 +19,8 @@ import { WhaleBrain } from './WhaleBrain';
 import { InstitutionalIntelRadar } from './InstitutionalIntelRadar';
 import { DecisionEngineDiagnostics } from '../DecisionEngineDiagnostics';
 
+const getGradients = (semanticClass: string) => { if (!semanticClass) return { "--grad-a": "#A855F7", "--grad-b": "#f5f0ff", "--grad-c": "#A855F7", "--grad-glow": "rgba(168,85,247,0.5)" }; if (semanticClass.includes("#00FF9D") || semanticClass.includes("emerald")) { return { "--grad-a": "#00FF9D", "--grad-b": "#ffffff", "--grad-c": "#00FF9D", "--grad-glow": "rgba(0,255,157,0.5)" }; } if (semanticClass.includes("#FF3366") || semanticClass.includes("rose") || semanticClass.includes("red")) { return { "--grad-a": "#FF3366", "--grad-b": "#ffffff", "--grad-c": "#FF3366", "--grad-glow": "rgba(255,51,102,0.5)" }; } if (semanticClass.includes("amber") || semanticClass.includes("yellow")) { return { "--grad-a": "#F59E0B", "--grad-b": "#ffffff", "--grad-c": "#F59E0B", "--grad-glow": "rgba(245,158,11,0.5)" }; } if (semanticClass.includes("cyan")) { return { "--grad-a": "#22D3EE", "--grad-b": "#ffffff", "--grad-c": "#22D3EE", "--grad-glow": "rgba(34,211,238,0.5)" }; } return { "--grad-a": "#A855F7", "--grad-b": "#f5f0ff", "--grad-c": "#A855F7", "--grad-glow": "rgba(168,85,247,0.5)" }; };
+
 interface SignalBrainProps {
   feedStatus?: string;
   latencyMs?: number;
@@ -647,7 +649,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         {/* 5 EVIDENCE METRICS */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-1 relative z-10">
            {/* Order Flow */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${orderFlowState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : orderFlowState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`hud-stat-card hud-corners border flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${orderFlowState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : orderFlowState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">ORDER FLOW</span>
                <span className="text-[8px] font-mono text-purple-500/60">{orderFlowState.unitText}</span>
@@ -675,7 +677,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
            
            {/* Momentum */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${momentumState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : momentumState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`hud-stat-card hud-corners border flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${momentumState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : momentumState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">MOMENTUM</span>
                <span className="text-[8px] font-mono text-purple-500/60">{momentumState.unitText}</span>
@@ -702,13 +704,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Volatility */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${volatilityState.isWarning ? 'border-amber-400/30 bg-amber-400/[0.03] hover:border-amber-400/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`hud-stat-card hud-corners border flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${volatilityState.isWarning ? 'border-amber-400/30 bg-amber-400/[0.03] hover:border-amber-400/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">VOLATILITY</span>
                <span className="text-[8px] font-mono text-purple-500/60">{volatilityState.unitText}</span>
              </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider ${volatilityState.semanticClass}`}>
+               <div className={`text-xl font-black tracking-wider ${volatilityState.semanticClass} hud-gradient-text`} style={getGradients(volatilityState.semanticClass) as React.CSSProperties}>
                  {volatilityState.valueText}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${volatilityState.semanticClass} opacity-90`}>
@@ -723,13 +725,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Distance */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${distanceState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : distanceState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`hud-stat-card hud-corners border flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${distanceState.isBullish ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : distanceState.isBearish ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">DISTANCE</span>
                <span className="text-[8px] font-mono text-purple-500/60">{distanceState.unitText}</span>
              </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider ${distanceState.semanticClass}`}>
+               <div className={`text-xl font-black tracking-wider ${distanceState.semanticClass} hud-gradient-text`} style={getGradients(distanceState.semanticClass) as React.CSSProperties}>
                  {distanceState.valueText}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${distanceState.semanticClass} opacity-90`}>
@@ -750,13 +752,13 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
            </div>
 
            {/* Regime */}
-           <div className={`rounded-xl border p-4 flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${regimeState.isBull ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : regimeState.isBear ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
+           <div className={`hud-stat-card hud-corners border flex flex-col justify-between space-y-3 shadow-[0_0_15px_rgba(0,0,0,0.5)] relative overflow-hidden group transition-colors ${regimeState.isBull ? 'border-[#00FF9D]/30 bg-[#00FF9D]/[0.03] hover:border-[#00FF9D]/60' : regimeState.isBear ? 'border-[#FF3366]/30 bg-[#FF3366]/[0.03] hover:border-[#FF3366]/60' : 'border-purple-900/30 bg-[#06020c] hover:border-purple-700/50'}`}>
              <div className="flex items-center justify-between">
                <span className="text-[10px] font-bold tracking-[0.15em] text-purple-400/60 uppercase relative z-10">REGIME</span>
                <span className="text-[8px] font-mono text-purple-500/60">MODEL</span>
              </div>
              <div className="relative z-10">
-               <div className={`text-xl font-black tracking-wider truncate ${regimeState.semanticClass}`}>
+               <div className={`text-xl font-black tracking-wider truncate ${regimeState.semanticClass} hud-gradient-text`} style={getGradients(regimeState.semanticClass) as React.CSSProperties}>
                  {regimeState.primaryText}
                </div>
                <div className={`text-[10px] font-bold tracking-widest uppercase mt-1 ${regimeState.semanticClass} opacity-90`}>

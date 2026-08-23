@@ -433,7 +433,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Main Navigation Bar */}
       <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3 font-mono">
         {/* Brand Logo Component */}
-        <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('terminal')} />
+        <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('hub')} />
 
         {/* Desktop Navigation - High-Contrast Ergonomic Nav Board */}
         <nav className="hidden lg:flex items-center gap-1 bg-[#0c0620] p-1 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">
@@ -645,7 +645,7 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               {activeTab !== 'terminal' && (
                 <button
-                  onClick={() => setActiveTab('terminal')}
+                  onClick={() => setActiveTab('hub')}
                   className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 transition-all flex items-center gap-1.5"
                 >
                   <LayoutDashboard className="w-3.5 h-3.5" />

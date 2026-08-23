@@ -41,14 +41,14 @@ export const CompareView: React.FC<CompareViewProps> = ({
   return (
     <div className="space-y-6 font-sans animate-fadeIn">
       {/* Top Header & Selectors */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-[#12082b] via-[#1a0e3a] to-[#12082b] border border-purple-500/30 shadow-2xl backdrop-blur-xl">
+      <div className="vixy-card-elevated hud-corners p-6 relative">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1.5">
               <Sliders className="w-4 h-4 text-purple-400" />
               <span>Institutional Quantitative Split-Screen Analysis</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+            <h1 className="vixy-page-title text-white">
               Asset Compare Mode
             </h1>
             <p className="text-xs sm:text-sm text-purple-200/70 mt-1 max-w-2xl">
@@ -69,7 +69,7 @@ export const CompareView: React.FC<CompareViewProps> = ({
                     }}
                     className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all ${
                       isActive
-                        ? 'bg-purple-600 text-white border border-purple-400/50 shadow-md'
+                        ? 'bg-purple-600/50 text-white border border-purple-400/50 shadow-md'
                         : 'bg-[#0a0518]/80 text-purple-300/80 hover:text-white border border-purple-900/40 hover:border-purple-500/40'
                     }`}
                   >
@@ -166,7 +166,7 @@ const AssetComparisonCard: React.FC<{
   const isPurple = highlightColor === 'purple';
 
   return (
-    <div className="p-6 rounded-2xl bg-[#0c0620]/90 border border-purple-500/30 shadow-xl backdrop-blur-xl space-y-6">
+    <div className="vixy-card hud-corners p-6 space-y-6">
       {/* Card Header */}
       <div className="flex items-center justify-between pb-4 border-b border-purple-900/40">
         <div className="flex items-center gap-3">
@@ -191,7 +191,7 @@ const AssetComparisonCard: React.FC<{
             {config.change24h >= 0 ? '+' : ''}
             {config.change24h.toFixed(2)}%
           </div>
-          <span className="text-[10px] text-purple-300/60 uppercase font-bold">24H Trend</span>
+          <span className="vixy-section-title">24H Trend</span>
         </div>
       </div>
 
@@ -202,20 +202,20 @@ const AssetComparisonCard: React.FC<{
             <Sparkles className="w-4 h-4 text-purple-400" />
             AI Direction Signal
           </span>
-          <span className="px-3 py-1 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-black text-xs flex items-center gap-1">
+          <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border-emerald-500/40">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             <span>{config.prediction.direction} (BULLISH)</span>
           </span>
         </div>
 
         <div className="grid grid-cols-2 gap-3 pt-2">
-          <div className="p-3 rounded-xl bg-[#0c0620] border border-purple-900/40">
-            <div className="text-[10px] text-purple-300/60 uppercase font-bold">AI Confidence</div>
-            <div className="text-xl font-black text-white">{config.prediction.confidence}%</div>
+          <div className="hud-stat-card bg-[#0c0620] border border-purple-900/40">
+            <div className="hud-stat-label">AI Confidence</div>
+            <div className="hud-stat-value hud-gradient-text">{config.prediction.confidence}%</div>
           </div>
-          <div className="p-3 rounded-xl bg-[#0c0620] border border-purple-900/40">
-            <div className="text-[10px] text-purple-300/60 uppercase font-bold">Statistical Edge</div>
-            <div className="text-xl font-black text-emerald-400">+{config.prediction.edgePct}%</div>
+          <div className="hud-stat-card bg-[#0c0620] border border-purple-900/40">
+            <div className="hud-stat-label">Statistical Edge</div>
+            <div className="hud-stat-value text-emerald-400">+{config.prediction.edgePct}%</div>
           </div>
         </div>
       </div>
@@ -259,7 +259,7 @@ const AssetComparisonCard: React.FC<{
               <div className="font-extrabold text-white">{w.usdValue}</div>
               <div className="text-[10px] text-purple-300/70">{w.venue} • {w.type}</div>
             </div>
-            <span className="px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+            <span className="vixy-badge bg-purple-500/20 text-purple-300 border-purple-500/30">
               {w.impact}
             </span>
           </div>
@@ -281,7 +281,7 @@ const AssetComparisonCard: React.FC<{
       {onSelectAssetAndNavigate && (
         <button
           onClick={() => onSelectAssetAndNavigate(config.symbol)}
-          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs transition-all shadow-lg shadow-purple-950/50 flex items-center justify-center gap-2 border border-purple-400/40 active:scale-[0.98]"
+          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-purple-600/80 to-indigo-600/80 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs transition-all flex items-center justify-center gap-2 border border-purple-400/40 active:scale-[0.98]"
         >
           <span>Analyze {config.symbol} in Live Terminal</span>
           <ArrowRight className="w-4 h-4" />

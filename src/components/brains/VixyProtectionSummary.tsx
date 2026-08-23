@@ -49,7 +49,7 @@ export const VixyProtectionSummary: React.FC<VixyProtectionSummaryProps> = ({
                        rawStage === 'VALIDATING' ? 'VALIDATING EVIDENCE' : 'PRIMARY CYCLE ACTIVE';
 
     return (
-      <div className="relative overflow-hidden rounded-2xl border border-purple-950/60 bg-[#040208]/90 px-4 py-3 flex items-center justify-between text-xs font-mono shadow-md">
+      <div className="relative overflow-hidden rounded-2xl border border-purple-950/60 vixy-card hud-corners px-4 py-3 flex items-center justify-between text-xs font-mono shadow-md">
         <div className="flex items-center gap-3">
           <div className="w-6 h-6 rounded-lg bg-purple-950/60 border border-purple-800/40 flex items-center justify-center">
             <Lock className="w-3.5 h-3.5 text-purple-400 opacity-60" />

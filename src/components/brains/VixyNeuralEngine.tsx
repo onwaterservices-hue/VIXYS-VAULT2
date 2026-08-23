@@ -433,125 +433,43 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
             style={{ backgroundColor: themeNeon }}
           />
 
-          <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center">
-            {/* SVG Dynamic Neural Radar Rings */}
-            <svg
-              className="w-full h-full transform -rotate-90 overflow-visible"
-              viewBox="0 0 160 160"
-            >
-              {/* Outer Tick Frame */}
-              <circle
-                cx="80"
-                cy="80"
-                r="74"
-                fill="none"
-                stroke="rgba(168, 85, 247, 0.15)"
-                strokeWidth="1"
-              />
-              <circle
-                cx="80"
-                cy="80"
-                r="74"
-                fill="none"
-                stroke={themeNeon}
-                strokeWidth="1.5"
-                strokeDasharray="2 12"
-                className="opacity-40 animate-[spin_20s_linear_infinite]"
-              />
-
-              {/* Middle Rotating Neural Arcs */}
-              <circle
-                cx="80"
-                cy="80"
-                r="64"
-                fill="none"
-                stroke="rgba(147, 51, 234, 0.25)"
-                strokeWidth="2"
-              />
-              <circle
-                cx="80"
-                cy="80"
-                r="64"
-                fill="none"
-                stroke={themeNeon}
-                strokeWidth="2.5"
-                strokeDasharray={isServerLocked ? 'none' : '60 40'}
-                strokeLinecap="round"
-                className={isServerLocked ? '' : 'animate-[spin_4s_linear_infinite]'}
-                style={{
-                  filter: `drop-shadow(0 0 6px ${themeGlow})`,
-                }}
-              />
-
-              {/* Inner Precision Arc */}
-              <circle
-                cx="80"
-                cy="80"
-                r="52"
-                fill="none"
-                stroke={isOfflineOrStale ? '#991B1B' : isUp ? 'rgba(0, 255, 157, 0.4)' : 'rgba(255, 51, 102, 0.4)'}
-                strokeWidth="2"
-                strokeDasharray="15 35"
-                className={isServerLocked ? '' : 'animate-[spin_6s_linear_infinite_reverse]'}
-              />
-
-              {/* Core Radar Calibration Sweep */}
-              <circle
-                cx="80"
-                cy="80"
-                r="38"
-                fill={isUp ? 'rgba(2, 21, 14, 0.9)' : isDown ? 'rgba(21, 3, 8, 0.9)' : 'rgba(8, 3, 20, 0.9)'}
-                stroke={themeNeon}
-                strokeWidth={isServerLocked ? 2.5 : 1.5}
-                strokeDasharray={isServerLocked ? 'none' : '4 4'}
-                style={{
-                  filter: `drop-shadow(0 0 10px ${themeGlow})`,
-                }}
-              />
-            </svg>
-
-            {/* Neural Center Core Indicator */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+          <div
+            className="relative w-40 h-40 sm:w-48 sm:h-48"
+            style={{
+              '--radar-color': themeNeon,
+              '--radar-color-2': themeNeon,
+              '--radar-glow': themeGlow,
+              '--radar-pct': isOfflineOrStale ? 0 : exactConfidencePct,
+            } as React.CSSProperties}
+          >
+            <div className="radar-outer-glow" />
+            <div className="radar-ring-track" />
+            <div className="radar-progress" />
+            <div className="radar-sweep-ring" />
+            <div className="radar-orbit"><span className="radar-glint" /></div>
+            <div className="radar-orbit rev"><span className="radar-glint b" /></div>
+            <div className="radar-core" style={{ animation: isServerLocked ? 'vixyGlow 3.2s ease-in-out infinite' : undefined }}>
               {isOfflineOrStale ? (
                 <WifiOff className="w-7 h-7 text-rose-400 animate-pulse" />
               ) : isCriticallyInvalidated ? (
                 <>
                   <AlertTriangle className="w-7 h-7 text-rose-400 animate-bounce" />
-                  <span className="text-[7.5px] font-black text-rose-400 tracking-widest uppercase mt-1">
-                    INVALIDATED
-                  </span>
+                  <span className="text-[7.5px] font-black text-rose-400 tracking-widest uppercase mt-1">INVALIDATED</span>
                 </>
               ) : isNoTrade ? (
                 <>
                   <ShieldCheck className="w-7 h-7 text-purple-300 animate-pulse" />
-                  <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">
-                    VIXY CALIBRATING
-                  </span>
+                  <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">VIXY CALIBRATING</span>
                 </>
               ) : isServerLocked ? (
                 <>
-                  <div
-                    className="text-2xl sm:text-3xl font-black leading-none animate-bounce"
-                    style={{
-                      color: themeNeon,
-                      textShadow: `0 0 15px ${themeGlow}`,
-                    }}
-                  >
-                    {isUp ? '▲' : isDown ? '▼' : '●'}
-                  </div>
-                  <span
-                    className="text-[8.5px] font-black tracking-widest uppercase mt-1 flex items-center gap-1"
-                    style={{ color: themeNeon }}
-                  >
-                    <Lock className="w-2.5 h-2.5" /> LOCKED
-                  </span>
+                  <span className="radar-value">{isUp ? '▲' : isDown ? '▼' : '●'}</span>
+                  <span className="radar-label flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> LOCKED</span>
                 </>
               ) : (
                 <>
-                  <Activity className="w-7 h-7 text-cyan-300 animate-pulse" />
-                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">
-                    {isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}
-                  </span>
+                  <span className="radar-value">{exactConfidencePct}%</span>
+                  <span className="radar-label">{isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
                 </>
               )}
             </div>
@@ -658,15 +576,19 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-3">
                 <div className="space-y-1">
                   <div
-                    className="text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2"
-                    style={{
-                      color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : isYellowPulseActive ? '#FACC15' : themeNeon,
-                      textShadow: reversalDetected 
-                        ? '0 0 25px rgba(239, 68, 68, 0.8)' 
-                        : isYellowPulseActive
-                        ? '0 0 25px rgba(234, 179, 8, 0.8)'
-                        : `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
-                    }}
+                    className={`text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2 ${!reversalDetected && !isYellowPulseActive ? 'hud-gradient-text' : ''}`}
+                    style={
+                      reversalDetected || isYellowPulseActive
+                        ? {
+                            color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : '#FACC15',
+                            textShadow: reversalDetected 
+                              ? '0 0 25px rgba(239, 68, 68, 0.8)' 
+                              : isYellowPulseActive
+                              ? '0 0 25px rgba(234, 179, 8, 0.8)'
+                              : `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
+                          }
+                        : ({ '--grad-a': themeNeon, '--grad-b': '#f5f0ff', '--grad-c': themeNeon, '--grad-glow': themeGlow } as React.CSSProperties)
+                    }
                   >
                     <span>{primaryDecisionHeadline}</span>
                     {isServerLocked && (
@@ -710,17 +632,17 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
 
               {/* ─── INSTITUTIONAL EDGE, LOCK QUALITY, & EVIDENCE CONSENSUS STRIP ─── */}
               <div className="pt-2.5 border-t border-purple-900/40 grid grid-cols-3 gap-2 font-mono text-[9px]">
-                <div className="bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
-                  <div className="text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">INSTITUTIONAL EDGE</div>
-                  <div className={`text-xs font-black tracking-tight ${rawEdge > 0 ? 'text-[#00FF9D]' : rawEdge < 0 ? 'text-[#FF3366]' : 'text-purple-300'}`}>
+                <div className="hud-corners hud-stat-card bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
+                  <div className="hud-stat-label text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">INSTITUTIONAL EDGE</div>
+                  <div className={`hud-stat-value text-xs font-black tracking-tight ${rawEdge > 0 ? 'text-[#00FF9D]' : rawEdge < 0 ? 'text-[#FF3366]' : 'text-purple-300'}`}>
                     {formattedEdgePct}
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-b from-[#1c0c01]/90 to-[#03010a]/95 rounded-lg p-2 border-2 border-orange-500/80 shadow-[0_0_15px_rgba(249,115,22,0.4)] animate-pulse">
-                  <div className="text-orange-400 font-black uppercase text-[8px] tracking-widest">LOCK QUALITY</div>
+                <div className="hud-corners hud-stat-card bg-gradient-to-b from-[#1c0c01]/90 to-[#03010a]/95 rounded-lg p-2 border-2 border-orange-500/80 shadow-[0_0_15px_rgba(249,115,22,0.4)] animate-pulse">
+                  <div className="hud-stat-label text-orange-400 font-black uppercase text-[8px] tracking-widest">LOCK QUALITY</div>
                   <div className="flex items-center justify-between mt-0.5">
-                    <span className="text-xs font-black tracking-tight text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]">
+                    <span className="hud-stat-value text-xs font-black tracking-tight text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]">
                       {rawLockQuality}/100
                     </span>
                     <span className="text-[7.5px] px-1 py-0.2 rounded font-black uppercase border bg-orange-950/80 text-orange-300 border-orange-500/50">
@@ -729,9 +651,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
                   </div>
                 </div>
 
-                <div className="bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
-                  <div className="text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">EVIDENCE CONSENSUS</div>
-                  <div className="text-xs font-black text-cyan-300 tracking-tight">
+                <div className="hud-corners hud-stat-card bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
+                  <div className="hud-stat-label text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">EVIDENCE CONSENSUS</div>
+                  <div className="hud-stat-value text-xs font-black text-cyan-300 tracking-tight">
                     {evidenceConfirmedCount} / {totalEvidenceCount} FAMILIES
                   </div>
                 </div>
@@ -844,7 +766,7 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
           {diagnosticNodes.map((node) => (
             <div
               key={node.id}
-              className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between transition-all duration-300 ${
+              className={`hud-corners px-2.5 py-1.5 rounded-lg border flex items-center justify-between transition-all duration-300 ${
                 node.active
                   ? 'bg-[#0a0316] border-purple-800/40 shadow-sm'
                   : 'bg-[#06020c] border-purple-950/40 opacity-40'

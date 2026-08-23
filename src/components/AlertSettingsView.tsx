@@ -123,7 +123,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
   return (
     <div className="space-y-6 font-mono text-purple-100">
       {/* Title Header */}
-      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 shadow-xl">
+      <div className="vixy-card hud-corners p-6">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20 text-purple-400">
             <Bell className="w-6 h-6" />
@@ -158,7 +158,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
       {/* Grid: Webhooks & Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Discord Primary Configuration */}
-        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
+        <div className="vixy-card hud-corners p-6 space-y-6">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
             <div className="flex items-center gap-2">
               <Send className="w-4 h-4 text-purple-400" />
@@ -329,7 +329,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
         </div>
 
         {/* Quant Filter Rules */}
-        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
+        <div className="vixy-card hud-corners p-6 space-y-6">
           <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
             <Sliders className="w-4 h-4 text-purple-400" />
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">Signal Filtering Parameters</h3>

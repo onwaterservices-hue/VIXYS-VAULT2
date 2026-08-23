@@ -4836,8 +4836,10 @@ app.post(
     const verificationStatus = isDupFingerprint
       ? "SUSPECTED_DUPLICATE"
       : "VERIFIED";
+    const newUserId = `usr_${Math.random().toString(36).substring(2, 10)}_${Date.now().toString(36)}`;
     const newUser = {
-      id: `usr_${Date.now().toString().slice(-4)}`,
+      id: newUserId,
+      uid: newUserId,
       email: cleanEmail,
       name: name?.trim() || cleanEmail.split("@")[0],
       role: role === "ADMIN" || role === "OWNER" ? role : "USER",
@@ -5316,10 +5318,11 @@ function addServerAuditLog(actor, action, details, level = "INFO") {
   return log;
 }
 __name(addServerAuditLog, "addServerAuditLog");
-function grantUserPlan(user, tierInput) {
+async function grantUserPlan(user, tierInput) {
   const nextTier =
     tierInput === "ELITE_PASS" || tierInput === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
   user.subscription = nextTier;
+  user.role = nextTier === "ELITE_PASS" ? "ELITE" : "PRO";
   user.status = "ACTIVE";
   user.grantSource = "MANUAL_GRANT";
   if (user.email) {
@@ -5338,7 +5341,7 @@ function grantUserPlan(user, tierInput) {
     userSubscriptions.set(cleanEmail, subRecord);
   }
   savePersistentStore();
-  persistSingleUser(user).catch(() => {});
+  await persistSingleUser(user);
   addServerAuditLog(
     "ADMIN",
     "GRANT_PREMIUM",
@@ -5352,7 +5355,7 @@ __name(grantUserPlan, "grantUserPlan");
 app.post(
   "/api/admin/users/batch-manual-grant",
   requireRole(["OWNER"]),
-  (req, res) => {
+  async (req, res) => {
     const MANUAL_GRANTS = [
       { email: "allanyahirpi@gmail.com", tier: "ELITE_PASS" },
       { email: "vksminhkaka@gmail.com", tier: "PRO_PASS" },
@@ -5379,8 +5382,12 @@ app.post(
         (u) => u.email && u.email.toLowerCase() === cleanTargetEmail,
       );
       if (user) {
-        const grantedTier = grantUserPlan(user, grant.tier);
-        updated.push({ email: grant.email, tier: grantedTier });
+        try {
+          const grantedTier = await grantUserPlan(user, grant.tier);
+          updated.push({ email: grant.email, tier: grantedTier });
+        } catch (err) {
+          skipped.push({ email: grant.email, reason: "FIRESTORE_WRITE_FAILED: " + (err?.message || String(err)) });
+        }
       } else {
         skipped.push({ email: grant.email, reason: "USER_NOT_FOUND" });
       }
@@ -5463,7 +5470,7 @@ app.get(
 app.post(
   "/api/admin/users/action",
   requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
+  async (req, res) => {
     const { userId, action, tier, role, password } = req.body || {};
     if (!userId) {
       return res
@@ -5532,12 +5539,19 @@ app.post(
             "Free trials are permanently disabled and removed on VIXY Vault.",
         });
     } else if (action === "grant_plan" || action === "grant_premium") {
-      const nextTier = grantUserPlan(user, tier);
-      return res.json({
-        success: true,
-        message: `Granted ${nextTier} to ${user.email}`,
-        user,
-      });
+      try {
+        const nextTier = await grantUserPlan(user, tier);
+        return res.json({
+          success: true,
+          message: `Granted ${nextTier} to ${user.email}`,
+          user,
+        });
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          message: "Failed to persist grant: " + (err?.message || String(err)),
+        });
+      }
     } else if (action === "revoke_plan" || action === "revoke_premium") {
       user.subscription = "NONE";
       user.role = "USER";
@@ -5582,17 +5596,85 @@ app.post(
     } else if (action === "update_role") {
       if (role) {
         user.role = role;
+        const cleanEmail = (user.email || "").toLowerCase();
+        if (cleanEmail) {
+           const sub = userSubscriptions.get(cleanEmail);
+           if (sub) {
+               sub.role = role;
+               sub.updatedAt = new Date().toISOString();
+           }
+        }
         addServerAuditLog(
           "ADMIN",
           "ROLE_UPDATED",
           `Updated role of ${user.email} to ${role}`,
         );
-        return res.json({
-          success: true,
-          message: `Role updated to ${role}`,
-          user,
-        });
+        savePersistentStore();
+        try {
+            await persistSingleUser(user);
+            return res.json({
+              success: true,
+              message: `Role updated to ${role}`,
+              user,
+            });
+        } catch (err) {
+            return res.status(500).json({ success: false, message: "Failed to persist role: " + (err?.message || String(err)) });
+        }
       }
+    } else if (action === "grant_timed_plan") {
+        const targetTier = tier === "ELITE_PASS" || tier === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
+        const targetRole = targetTier === "ELITE_PASS" ? "ELITE" : "PRO";
+        const daysToAdd = parseInt(req.body.days || 30, 10);
+        
+        user.subscription = targetTier;
+        user.role = targetRole;
+        user.status = "ACTIVE";
+        user.grantSource = "MANUAL_TIMED_GRANT";
+
+        let newExpMs = Date.now() + daysToAdd * 864e5;
+
+        if (user.email) {
+            const cleanEmail = user.email.toLowerCase();
+            const existingSub = userSubscriptions.get(cleanEmail);
+            
+            if (existingSub && existingSub.subscriptionExpiresAt && existingSub.status === "ACTIVE") {
+                const currentExp = new Date(existingSub.subscriptionExpiresAt).getTime();
+                if (currentExp > Date.now()) {
+                    newExpMs = currentExp + daysToAdd * 864e5;
+                }
+            }
+
+            const nextExpString = new Date(newExpMs).toISOString();
+            user.subscriptionExpiresAt = nextExpString;
+
+            const subRecord = existingSub || { email: cleanEmail };
+            subRecord.role = targetRole;
+            subRecord.plan = targetTier;
+            subRecord.status = "ACTIVE";
+            subRecord.subscriptionExpiresAt = nextExpString;
+            subRecord.updatedAt = new Date().toISOString();
+            userSubscriptions.set(cleanEmail, subRecord);
+        }
+
+        savePersistentStore();
+        try {
+            await persistSingleUser(user);
+            addServerAuditLog(
+                "ADMIN",
+                "GRANT_TIMED_PLAN",
+                `Granted ${daysToAdd} days of ${targetTier} to ${user.email}`,
+            );
+            return res.json({
+                success: true,
+                message: `Granted ${daysToAdd} days of ${targetTier} to ${user.email}`,
+                user,
+            });
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to persist timed grant: " + (err?.message || String(err)),
+            });
+        }
     } else if (action === "grant_day_pass") {
       const existingDp =
         userDayPasses.get(user.email.toLowerCase()) ||
@@ -7728,9 +7810,18 @@ function getUserEntitlement(emailOrUid) {
     (u) =>
       u.email?.toLowerCase() === clean || u.id === clean || u.uid === clean,
   );
-  const role = (sub?.role || user?.role || "USER").toUpperCase();
-  const rawPlan = (sub?.plan || user?.subscription || "NONE").toUpperCase();
-  const status = (sub?.status || user?.status || "INACTIVE").toUpperCase();
+
+  const subExpiresAt = sub?.subscriptionExpiresAt || sub?.expiresAt || user?.subscriptionExpiresAt || user?.expiresAt;
+  let forceExpired = false;
+  if (subExpiresAt) {
+      if (new Date(subExpiresAt).getTime() < Date.now()) {
+          forceExpired = true;
+      }
+  }
+
+  const role = forceExpired ? "USER" : (sub?.role || user?.role || "USER").toUpperCase();
+  const rawPlan = forceExpired ? "NONE" : (sub?.plan || user?.subscription || "NONE").toUpperCase();
+  const status = forceExpired ? "EXPIRED" : (sub?.status || user?.status || "INACTIVE").toUpperCase();
   const isOwnerOrAdmin = ["OWNER", "ADMIN", "SUPPORT"].includes(role);
   const resolvedSub = getEntitlementsFromSubscription(
     rawPlan,

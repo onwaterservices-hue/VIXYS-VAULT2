@@ -1094,14 +1094,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onClick={() =>
                       setActiveSection(kpi.targetTab as AdminSection)
                     }
-                    className="p-3 bg-slate-900/80 border border-slate-800 hover:border-purple-500/40 rounded-xl text-left transition transform hover:-translate-y-0.5 cursor-pointer shadow-lg"
+                    className="hud-stat-card border border-purple-900/40 hover:border-purple-500/40 text-left transition transform hover:-translate-y-0.5 cursor-pointer shadow-lg"
                   >
-                    <div className="flex items-center justify-between text-slate-400 text-[10px] font-bold tracking-wider uppercase mb-1">
+                    <div className="flex items-center justify-between hud-stat-label mb-1">
                       <span>{kpi.title}</span>
                       <Icon className={`w-3.5 h-3.5 ${kpi.color}`} />
                     </div>
                     <div
-                      className={`text-base font-black font-mono tracking-tight ${kpi.color}`}
+                      className={`hud-stat-value ${kpi.color}`}
                     >
                       {kpi.value}
                     </div>
@@ -1113,7 +1113,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {/* STARK INSTITUTIONAL COMMAND CENTER */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* PANEL 1: SYSTEM CONNECTIVITY MATRIX */}
-              <div className="bg-[#0b061d]/90 border border-cyan-500/30 rounded-2xl p-5 space-y-4 shadow-2xl relative overflow-hidden">
+              <div className="vixy-card-elevated hud-corners p-5 space-y-4 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none" />
                 <div className="flex items-center justify-between border-b border-cyan-950 pb-3">
                   <div className="flex items-center space-x-2">
@@ -1194,7 +1194,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         </span>
                       </div>
                       <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                        className={`vixy-badge ${
                           sys.status === "ONLINE"
                             ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/40"
                             : "bg-rose-950/80 text-rose-400 border-rose-800/40"
@@ -1208,7 +1208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* PANEL 2: 15M ENGINE DEEP ANALYSIS */}
-              <div className="bg-[#0b061d]/90 border border-purple-500/30 rounded-2xl p-5 space-y-4 shadow-2xl relative overflow-hidden">
+              <div className="vixy-card-elevated hud-corners p-5 space-y-4 shadow-2xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-24 h-24 bg-purple-500/5 rounded-full blur-2xl pointer-events-none" />
                 <div className="flex items-center justify-between border-b border-purple-950 pb-3">
                   <div className="flex items-center space-x-2">
@@ -1365,7 +1365,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* PANEL 3: DISCORD INFRASTRUCTURE & RETRY QUEUE */}
-              <div className="bg-[#0b061d]/90 border border-indigo-500/30 rounded-2xl p-5 space-y-4 shadow-2xl relative overflow-hidden flex flex-col justify-between">
+              <div className="vixy-card-elevated hud-corners p-5 space-y-4 shadow-2xl relative overflow-hidden flex flex-col justify-between">
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b border-indigo-950 pb-3">
                     <div className="flex items-center space-x-2">
@@ -1470,7 +1470,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             {/* Service Health Quick Matrix & Resync Bar */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+              <div className="vixy-card hud-corners p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center space-x-2">
                     <Server className="w-4 h-4 text-purple-400" />
@@ -1525,7 +1525,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {/* Emergency Entitlement Resync Tool */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3 md:col-span-2">
+              <div className="vixy-card hud-corners p-4 space-y-3 md:col-span-2">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center space-x-2">
                     <Zap className="w-4 h-4 text-purple-400" />
@@ -1574,7 +1574,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* Audit Logs Stream Preview */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-3">
+            <div className="vixy-card hud-corners p-5 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300 flex items-center space-x-2">
                   <Terminal className="w-4 h-4 text-purple-400" />
@@ -1629,7 +1629,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeSection === "users" && (
           <div className="space-y-4">
             {/* Control Bar & Actions */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-4 rounded-2xl shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 vixy-card hud-corners p-4 shadow-xl">
               <div className="flex items-center space-x-2 flex-1 max-w-md">
                 <div className="relative flex-1">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -1701,7 +1701,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* Dense User Directory Table */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+            <div className="vixy-card hud-corners overflow-hidden shadow-2xl">
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs font-mono">
                   <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[10px] uppercase tracking-wider">
@@ -1959,7 +1959,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {activeSection === "billing" && (
           <div className="space-y-6">
             {/* Connection Status & Summary Metrics */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
+            <div className="vixy-card hud-corners p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
@@ -2025,7 +2025,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* Transactions & Revenue Table */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="vixy-card hud-corners overflow-hidden">
               <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-purple-300">
                   Recent Stripe Checkout & Renewal Transactions
@@ -2165,7 +2165,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* 1. 24-HOUR DAY PASSES STORE TABLE */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden p-5 space-y-4">
+            <div className="vixy-card hud-corners overflow-hidden p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-sm font-bold uppercase tracking-wider text-amber-300 flex items-center space-x-2">
@@ -2309,7 +2309,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* 2. FREE TRIALS & ANTI-DUPLICATE TABLE */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden p-5 space-y-4">
+            <div className="vixy-card hud-corners overflow-hidden p-5 space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
                 <Clock className="w-5 h-5 text-amber-400" />
                 <span>Free Trials & Hardware Protection</span>
@@ -2404,7 +2404,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "referrals" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 p-4 rounded-2xl">
+            <div className="flex items-center justify-between vixy-card hud-corners p-4">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200">
                   Referral & Promo Code Engine
@@ -2429,7 +2429,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </button>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="vixy-card hud-corners overflow-hidden">
               <table className="w-full text-left text-xs font-mono">
                 <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-[10px] uppercase">
                   <tr>
@@ -2480,7 +2480,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "audit_log" && (
           <div className="space-y-4">
-            <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div className="vixy-card hud-corners p-4 flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
                 <FileText className="w-4 h-4 text-purple-400" />
                 <span>Backend Audit Log Records</span>
@@ -2503,7 +2503,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
             </div>
 
-            <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="vixy-card hud-corners overflow-hidden">
               <div className="divide-y divide-slate-800/60 font-mono text-xs">
                 {auditLogs
                   .filter(
@@ -2553,7 +2553,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "system_health" && (
           <div className="space-y-6">
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl space-y-4">
+            <div className="vixy-card hud-corners p-5 space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
                 <span>Real-Time Backend Service Matrix</span>
@@ -2723,14 +2723,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "support" && (
           <div className="space-y-4">
-            <div className="bg-slate-900/80 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div className="vixy-card hud-corners p-4 flex items-center justify-between">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200">
                 Support Tickets & Member Inquiries
               </h2>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-slate-900/80 border border-slate-800 rounded-2xl overflow-hidden divide-y divide-slate-800">
+              <div className="vixy-card hud-corners overflow-hidden divide-y divide-slate-800">
                 {tickets.map((t) => (
                   <div
                     key={t.id}
@@ -2816,7 +2816,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "acceptance_test" && (
           <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl shadow-xl">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 vixy-card hud-corners p-5 shadow-xl">
               <div>
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-5 h-5 text-purple-400" />
@@ -2932,7 +2932,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   {acceptanceMatrixData.results.map((planRes) => (
                     <div
                       key={planRes.planType}
-                      className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3 font-mono text-xs"
+                      className="vixy-card hud-corners p-4 space-y-3 font-mono text-xs"
                     >
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                         <div>
@@ -3021,7 +3021,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* 10. QUANT CONTROLS SECTION */}
         {/* ========================================================================= */}
         {activeSection === "quant_controls" && (
-          <div className="space-y-4 bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
+          <div className="space-y-4 vixy-card hud-corners p-5">
             <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
               <Sliders className="w-5 h-5 text-purple-400" />
               <span>VIXY AI Model Tuning & 15M Candle Lock Thresholds</span>
@@ -3059,7 +3059,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* USER INSPECTOR MODAL / DRAWER */}
       {inspectorUser && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-purple-500/40 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 text-xs font-mono shadow-2xl">
+          <div className="vixy-card-elevated hud-corners max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 text-xs font-mono shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-xl bg-purple-900/40 border border-purple-500/40 flex items-center justify-center font-bold text-purple-300 text-base">
@@ -3269,7 +3269,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* CREATE USER MODAL */}
       {isAddUserOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-purple-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 text-xs font-mono">
+          <div className="vixy-card-elevated hud-corners max-w-md w-full p-6 space-y-4 text-xs font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-slate-100 text-sm">
                 Create New Member Account
@@ -3392,7 +3392,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       {/* ADD / EDIT REFERRAL MODAL */}
       {isAddReferralOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-purple-500/40 rounded-2xl max-w-md w-full p-6 space-y-4 text-xs font-mono">
+          <div className="vixy-card-elevated hud-corners max-w-md w-full p-6 space-y-4 text-xs font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="font-bold text-slate-100 text-sm">
                 Create Promo / Referral Code
