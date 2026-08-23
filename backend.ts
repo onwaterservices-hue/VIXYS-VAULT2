@@ -2866,10 +2866,38 @@ function canLockCurrentCycle(livePrice) {
   );
   if (!predictionComputedFromCurrentCycle)
     reasons.push("PREDICTION_CYCLE_MISMATCH");
-  const validationPassed = true;
+  const validationPassed = Boolean(
+    minimumObservationWindowPassed &&
+    withinEntryWindow &&
+    dataFresh &&
+    cryptoTracking &&
+    algorithm &&
+    authoritativeState &&
+    vixyWebSocket &&
+    currentCycle &&
+    cycleExpiryFuture &&
+    latencyAcceptable &&
+    calibrationComplete &&
+    analysisComplete &&
+    isNotChoppy &&
+    signalPersistent &&
+    dataQualityPass &&
+    lockQualityPass &&
+    evidenceAgreementPass &&
+    mtfPass &&
+    strikeFeasiblePass &&
+    reversalThreatPass &&
+    evidenceSufficient &&
+    rollingStabilityPassed &&
+    !active15mCycle.hasConflict &&
+    !active15mCycle.signalUnstable &&
+    protectionApproved &&
+    !crossAssetSevereDivergence &&
+    predictionComputedFromCurrentCycle,
+  );
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
-  const allowed = !alreadyLocked;
+  const allowed = !alreadyLocked && validationPassed;
   const dir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -5292,7 +5320,6 @@ function grantUserPlan(user, tierInput) {
   const nextTier =
     tierInput === "ELITE_PASS" || tierInput === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
   user.subscription = nextTier;
-  user.role = nextTier === "ELITE_PASS" ? "ELITE" : "PRO";
   user.status = "ACTIVE";
   user.grantSource = "MANUAL_GRANT";
   if (user.email) {
@@ -13108,42 +13135,7 @@ app.get("/api/performance-stats", (req, res) => {
   const winRate = Math.round((wins / sampleSize) * 1e3) / 10;
   res.json({ winRate, brierScore: 0.185, sampleSize, verified: true });
 });
-app.get("/api/system-status", (req, res) => {
-  res.json({
-    binanceWs: { status: "CONNECTED", lastMessageTs: Date.now(), latencyMs: 8 },
-    kalshiPoller: {
-      status: "ACTIVE",
-      lastFetchTs: Date.now() - 2e3,
-      latencyMs: 12,
-    },
-    polymarketPoller: {
-      status: "ACTIVE",
-      lastFetchTs: Date.now() - 1e3,
-      latencyMs: 18,
-    },
-    settlementCron: {
-      status: "RUNNING",
-      lastRunTs: Date.now() - 3e5,
-      checkedCount: 18,
-      settledCount: 4,
-    },
-    sampleCollector: { collected: 340, required: 500, pctComplete: 68 },
-    changelog: [
-      {
-        date: "2026-08-03",
-        title: "Real API Integration & Live Feed Binding",
-        description:
-          "Connected top status bar, terminal desks, and journal to live backend endpoints with zero hardcoded placeholders.",
-      },
-      {
-        date: "2026-08-01",
-        title: "Sample Gating & SHA-256 Journal Verification",
-        description:
-          "Enforced 500-contract minimum threshold and cryptographically verified journal logs.",
-      },
-    ],
-  });
-});
+
 app.get("/api/journal", (req, res) => {
   const userId = req.query.userId || "usr_owner_01";
   const userEntries = serverJournalEntries.filter(
