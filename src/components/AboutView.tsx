@@ -10,7 +10,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
   return (
     <div className="max-w-5xl mx-auto space-y-8 py-6 font-sans text-purple-100 animate-fadeIn">
       {/* Header Banner */}
-      <div className="bg-gradient-to-r from-[#12072b] via-[#0b051a] to-[#180a36] border border-purple-500/30 rounded-3xl p-8 sm:p-10 relative overflow-hidden shadow-2xl">
+      <div className="bg-gradient-to-r from-[#12072b] via-[#0b051a] to-[#180a36] border border-purple-500/30 rounded-2xl p-8 sm:p-10 relative overflow-hidden shadow-2xl">
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 relative z-10">
           <div className="space-y-3">
@@ -49,7 +49,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
       </div>
 
       {/* Main Content */}
-      <div className="bg-[#0b061a]/90 border border-purple-900/40 rounded-3xl p-6 sm:p-10 space-y-8 backdrop-blur-xl shadow-xl font-sans leading-relaxed text-sm">
+      <div className="bg-[#0a0518]/90 border border-purple-900/40 rounded-2xl p-6 sm:p-10 space-y-8 backdrop-blur-xl shadow-xl font-sans leading-relaxed text-sm">
         
         {/* Our Mission */}
         <section className="space-y-3">

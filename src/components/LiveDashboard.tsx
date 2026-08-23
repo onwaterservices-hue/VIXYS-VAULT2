@@ -459,7 +459,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       )}
 
       {/* Active Market Contract Bar */}
-      <div className="bg-[#120B28] p-3 rounded-2xl border border-purple-900/40 flex flex-wrap items-center justify-between gap-3 text-xs">
+      <div className="vixy-card p-3 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-3">
           <span className="text-purple-300 font-extrabold uppercase font-mono text-xs flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -467,12 +467,12 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </span>
 
           {/* Quick Asset Switcher */}
-          <div className="flex items-center gap-1 bg-[#090417] p-1 rounded-xl border border-purple-800/40">
+          <div className="flex items-center gap-1 bg-[#0c0620] p-1 rounded-xl border border-purple-800/40">
             {['BTC', 'ETH', 'SOL'].map((sym) => (
               <button
                 key={sym}
                 onClick={() => onSelectAsset(sym)}
-                className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`px-2.5 py-0.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   selectedAsset === sym ? 'bg-purple-600 text-white shadow' : 'text-purple-300/70 hover:text-white'
                 }`}
               >
@@ -482,10 +482,10 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
           </div>
 
           {/* Timeframe Switcher */}
-          <div className="flex items-center gap-1 bg-[#090417] p-1 rounded-xl border border-purple-800/40">
+          <div className="flex items-center gap-1 bg-[#0c0620] p-1 rounded-xl border border-purple-800/40">
             <button
               onClick={() => handleMarketChange('BTC15M')}
-              className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-0.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 timeframe === '15M' ? 'bg-purple-600 text-white shadow' : 'text-purple-300/70 hover:text-white'
               }`}
             >
@@ -493,7 +493,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </button>
             <button
               onClick={() => handleMarketChange('BTC1H')}
-              className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-0.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 timeframe === '1H' ? 'bg-purple-600 text-white shadow' : 'text-purple-300/70 hover:text-white'
               }`}
             >
@@ -579,7 +579,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
           {/* 6. STAGE 1: MARKET EVIDENCE & NEURAL ORDER FLOW */}
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0c0620] rounded-xl border border-purple-800/40 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-purple-300">
                   <span className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_#c084fc]" />
@@ -589,7 +589,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   REAL-TIME CANDLE TAPE & TAKER FLOW RIBBON
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-cyan-300 bg-purple-950/60 px-2.5 py-0.5 rounded border border-purple-800/60">
+              <span className="vixy-badge text-cyan-300 bg-cyan-950/80 border border-cyan-500/40">
                 15M / 1H GRANULARITY
               </span>
             </div>
@@ -611,7 +611,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
           {/* 8. STAGE 2: MARKET STRUCTURE & SCALP DECISION MATRIX */}
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0c0620] rounded-xl border border-purple-800/40 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-amber-300">
                   <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_#fbbf24]" />
@@ -621,7 +621,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   DNA CLUSTERS & SCALP PROBABILITY CONE
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-amber-300 bg-amber-950/60 px-2.5 py-0.5 rounded border border-amber-800/60">
+              <span className="vixy-badge text-amber-300 bg-amber-950/80 border border-amber-500/40">
                 MULTI-TIMEFRAME ALIGNMENT
               </span>
             </div>
@@ -637,7 +637,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
           {/* 9. STAGE 3: EXECUTION INTELLIGENCE & RISK SIZING */}
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0c0620] rounded-xl border border-purple-800/40 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-emerald-300">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]" />
@@ -647,7 +647,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   OPTIMAL BIDS, SCALING GUIDANCE & HEALTH WATCH
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-emerald-300 bg-emerald-950/60 px-2.5 py-0.5 rounded border border-emerald-800/60">
+              <span className="vixy-badge text-emerald-300 bg-emerald-950/80 border border-emerald-500/40">
                 DYNAMIC KELLY CRITERION
               </span>
             </div>
@@ -665,7 +665,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
           {/* 10. STAGE 4: MODEL REASONING & COMMAND SYNTHESIS */}
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0c0620] rounded-xl border border-purple-800/40 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-cyan-300">
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_8px_#22d3ee]" />
@@ -675,7 +675,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   QUANT SYNTHESIS, CONFLUENCE DRIVERS & STEP LOG
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-cyan-300 bg-cyan-950/60 px-2.5 py-0.5 rounded border border-cyan-800/60">
+              <span className="vixy-badge text-cyan-300 bg-cyan-950/80 border border-cyan-500/40">
                 LIVE MODEL REASONING STREAM
               </span>
             </div>
@@ -697,7 +697,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
 
           {/* 11. STAGE 5: AI STATUS & CONTINUOUS NEURAL LEARNING */}
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 bg-[#04010d] rounded-xl border border-purple-800/60 font-mono text-xs shadow-md">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 bg-[#0c0620] rounded-xl border border-purple-800/40 font-mono text-xs shadow-md">
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 font-black text-rose-300">
                   <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shadow-[0_0_8px_#fb7185]" />
@@ -707,7 +707,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   MODELS ONLINE, NEURAL MEMORY VAULT & FEATURE VOTE
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold text-rose-300 bg-rose-950/60 px-2.5 py-0.5 rounded border border-rose-800/60">
+              <span className="vixy-badge text-rose-300 bg-rose-950/80 border border-rose-500/40">
                 RECURSIVE WEIGHT RECALIBRATION
               </span>
             </div>

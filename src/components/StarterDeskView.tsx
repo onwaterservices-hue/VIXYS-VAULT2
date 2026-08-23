@@ -96,7 +96,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
   return (
     <div className="space-y-6 max-w-[1500px] mx-auto animate-fadeIn font-mono text-purple-100">
       {/* 1. Starter Tier Active Header Banner */}
-      <div className="bg-gradient-to-r from-[#12082b] via-[#1a0c3b] to-[#0d0620] border-2 border-purple-500/40 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#12082b] via-[#1a0c3b] to-[#0d0620] border-2 border-purple-500/40 rounded-2xl p-6 shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
@@ -132,7 +132,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
       </div>
 
       {/* 2. Asset Selector Tabs (BTC, ETH, SOL) */}
-      <div className="flex items-center justify-between gap-3 bg-[#0d071e] p-2 rounded-2xl border border-purple-900/40">
+      <div className="flex items-center justify-between gap-3 bg-[#0c0620] p-2 rounded-2xl border border-purple-900/40">
         <div className="flex items-center gap-2">
           {['BTC', 'ETH', 'SOL'].map((sym) => {
             const isSelected = activeAsset === sym;
@@ -163,7 +163,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
       {/* 3. Core Decision Intelligence Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Signal Direction & Confidence Card (7 cols) */}
-        <div className="lg:col-span-7 bg-[#110926] border border-purple-500/30 rounded-3xl p-6 shadow-xl space-y-5">
+        <div className="lg:col-span-7 bg-[#0c0620] border border-purple-500/30 rounded-2xl p-6 shadow-xl space-y-5">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-4">
             <div className="flex items-center gap-3">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl shadow-lg ${
@@ -223,7 +223,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
           </div>
 
           {/* Reasoning Narrative */}
-          <div className="p-4 rounded-2xl bg-[#0c061d] border border-purple-900/40 space-y-2">
+          <div className="p-4 rounded-2xl bg-[#0c0620] border border-purple-900/40 space-y-2">
             <div className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-purple-400" />
               <span>VIXY 15M MODEL REASONING</span>
@@ -248,7 +248,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
         </div>
 
         {/* Pro Quant Feature Gate Card (5 cols) */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-[#150a30] via-[#0d061f] to-[#080314] border-2 border-amber-500/30 rounded-3xl p-6 shadow-xl flex flex-col justify-between space-y-4 relative overflow-hidden">
+        <div className="lg:col-span-5 bg-gradient-to-br from-[#150a30] via-[#0d061f] to-[#080314] border-2 border-amber-500/30 rounded-2xl p-6 shadow-xl flex flex-col justify-between space-y-4 relative overflow-hidden">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-bold font-mono flex items-center gap-1.5">
@@ -297,7 +297,7 @@ export const StarterDeskView: React.FC<StarterDeskViewProps> = ({
       </div>
 
       {/* 4. Real-Time 15M Candle Tape */}
-      <div className="bg-[#0e0720] border border-purple-900/40 rounded-3xl p-6 shadow-xl space-y-4">
+      <div className="bg-[#0c0620] border border-purple-900/40 rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
           <div className="flex items-center gap-2">
             <BarChart2 className="w-4 h-4 text-purple-400" />

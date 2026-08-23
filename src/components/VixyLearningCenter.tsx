@@ -110,7 +110,7 @@ export const VixyLearningCenter = () => {
           </p>
         </div>
         <div className={`flex flex-col items-end`}>
-          <div className="flex items-center gap-2 px-4 py-2 bg-[#0F0826] border border-white/10 rounded-lg shadow-xl">
+          <div className="flex items-center gap-2 px-4 py-2 bg-[#0c0620] border border-white/10 rounded-xl shadow-xl">
             <div className="flex flex-col items-end">
               <div className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">
                 Background Execution
@@ -128,7 +128,7 @@ export const VixyLearningCenter = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* VIXY CLOUD ENGINE */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl relative overflow-hidden group">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Cpu className="w-24 h-24 text-blue-500" />
           </div>
@@ -136,7 +136,7 @@ export const VixyLearningCenter = () => {
             <Server className="w-4 h-4 text-blue-400" /> VIXY CLOUD ENGINE
           </h3>
           <div className="space-y-3">
-            <div className="flex justify-between items-center bg-[#0a0514] p-3 rounded-lg border border-white/5">
+            <div className="flex justify-between items-center bg-[#0a0518] p-3 rounded-xl border border-white/5">
               <span className="text-xs text-slate-400 font-mono">STATUS</span>
               <span
                 className={`text-sm font-bold font-mono ${engineStatusColor}`}
@@ -144,7 +144,7 @@ export const VixyLearningCenter = () => {
                 ● {engineStatusText}
               </span>
             </div>
-            <div className="flex justify-between items-center bg-[#0a0514] p-3 rounded-lg border border-white/5">
+            <div className="flex justify-between items-center bg-[#0a0518] p-3 rounded-xl border border-white/5">
               <span className="text-xs text-slate-400 font-mono">
                 LAST HEARTBEAT
               </span>
@@ -154,7 +154,7 @@ export const VixyLearningCenter = () => {
                   : "N/A"}
               </span>
             </div>
-            <div className="flex justify-between items-center bg-[#0a0514] p-3 rounded-lg border border-white/5">
+            <div className="flex justify-between items-center bg-[#0a0518] p-3 rounded-xl border border-white/5">
               <span className="text-xs text-slate-400 font-mono">UPTIME</span>
               <span className="text-sm text-blue-400 font-mono">
                 {uptimeStr}
@@ -164,7 +164,7 @@ export const VixyLearningCenter = () => {
         </div>
 
         {/* LEARNING PIPELINE */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl relative overflow-hidden group">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
             <Activity className="w-24 h-24 text-emerald-500" />
           </div>
@@ -172,7 +172,7 @@ export const VixyLearningCenter = () => {
             <Database className="w-4 h-4 text-emerald-400" /> LEARNING PIPELINE
           </h3>
           <div className="grid grid-cols-2 gap-3 mb-3">
-            <div className="bg-[#0a0514] p-3 rounded-lg border border-white/5">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-white/5">
               <div className="text-[10px] text-slate-500 font-mono mb-1">
                 TOTAL OBSERVATIONS
               </div>
@@ -180,7 +180,7 @@ export const VixyLearningCenter = () => {
                 {stats.totalObservations}
               </div>
             </div>
-            <div className="bg-[#0a0514] p-3 rounded-lg border border-white/5">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-white/5">
               <div className="text-[10px] text-slate-500 font-mono mb-1">
                 SETTLED CYCLES
               </div>
@@ -190,7 +190,7 @@ export const VixyLearningCenter = () => {
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="bg-[#0a0514] p-2 rounded-lg border border-white/5">
+            <div className="bg-[#0a0518] p-2 rounded-xl border border-white/5">
               <div className="text-[10px] text-slate-500 font-mono mb-1">
                 LAST LEARNING RUN
               </div>
@@ -200,7 +200,7 @@ export const VixyLearningCenter = () => {
                   : "N/A"}
               </div>
             </div>
-            <div className="bg-[#0a0514] p-2 rounded-lg border border-white/5">
+            <div className="bg-[#0a0518] p-2 rounded-xl border border-white/5">
               <div className="text-[10px] text-slate-500 font-mono mb-1">
                 NEXT RUN IN
               </div>
@@ -229,12 +229,12 @@ export const VixyLearningCenter = () => {
       )}
 
       {/* MODEL PERFORMANCE */}
-      <div className="bg-[#120D1D] rounded-xl border border-white/10 p-6 shadow-2xl">
+      <div className="bg-[#0c0620] rounded-xl border border-white/10 p-6 shadow-2xl">
         <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
           <Target className="w-4 h-4 text-purple-400" /> MODEL PERFORMANCE
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-[#0a0514] p-4 rounded-lg border border-purple-500/20 text-center">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-500/20 text-center">
             <div className="text-xs text-slate-500 font-mono font-bold tracking-widest mb-1">
               LOCK PRECISION
             </div>
@@ -245,7 +245,7 @@ export const VixyLearningCenter = () => {
               SAMPLE SIZE: {stats.settledCycles}
             </div>
           </div>
-          <div className="bg-[#0a0514] p-4 rounded-lg border border-purple-500/20 text-center">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-500/20 text-center">
             <div className="text-xs text-slate-500 font-mono font-bold tracking-widest mb-1">
               BRIER SCORE
             </div>
@@ -256,7 +256,7 @@ export const VixyLearningCenter = () => {
               TARGET &lt; 0.150
             </div>
           </div>
-          <div className="bg-[#0a0514] p-4 rounded-lg border border-purple-500/20 text-center">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-500/20 text-center">
             <div className="text-xs text-slate-500 font-mono font-bold tracking-widest mb-1">
               DIRECTIONAL ACCURACY
             </div>
@@ -272,7 +272,7 @@ export const VixyLearningCenter = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* CONFIDENCE CALIBRATION */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl">
           <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
             <BarChart3 className="w-4 h-4 text-amber-400" /> CONFIDENCE
             CALIBRATION
@@ -288,7 +288,7 @@ export const VixyLearningCenter = () => {
             {stats.calibrationBuckets.map((b: any, i: number) => (
               <div
                 key={i}
-                className="grid grid-cols-5 gap-2 items-center bg-[#0a0514] p-2 rounded border border-white/5 text-xs font-mono"
+                className="grid grid-cols-5 gap-2 items-center bg-[#0a0518] p-2 rounded border border-white/5 text-xs font-mono"
               >
                 <div className="text-amber-400">{b.bucket}</div>
                 <div className="text-slate-300">{b.pred}</div>
@@ -305,7 +305,7 @@ export const VixyLearningCenter = () => {
         </div>
 
         {/* REGIME PERFORMANCE */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl flex flex-col">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl flex flex-col">
           <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
             <TrendingUp className="w-4 h-4 text-pink-400" /> REGIME PERFORMANCE
           </h3>
@@ -313,7 +313,7 @@ export const VixyLearningCenter = () => {
             {stats.regimes.map((r: any, i: number) => (
               <div
                 key={i}
-                className="bg-[#0a0514] p-3 rounded-lg border border-white/5 flex justify-between items-center"
+                className="bg-[#0a0518] p-3 rounded-xl border border-white/5 flex justify-between items-center"
               >
                 <div>
                   <div className="text-sm font-bold text-white mb-0.5">
@@ -336,7 +336,7 @@ export const VixyLearningCenter = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* FEATURE RELIABILITY */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl">
           <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
             <Zap className="w-4 h-4 text-yellow-400" /> FEATURE RELIABILITY
           </h3>
@@ -344,7 +344,7 @@ export const VixyLearningCenter = () => {
             {stats.features.map((f: any, i: number) => (
               <div
                 key={i}
-                className="bg-[#0a0514] p-3 rounded-lg border border-white/5 flex justify-between items-center"
+                className="bg-[#0a0518] p-3 rounded-xl border border-white/5 flex justify-between items-center"
               >
                 <div>
                   <div className="text-sm font-bold text-white mb-0.5">
@@ -365,12 +365,12 @@ export const VixyLearningCenter = () => {
         </div>
 
         {/* SHADOW MODEL */}
-        <div className="bg-[#120D1D] rounded-xl border border-white/10 p-5 shadow-2xl">
+        <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl">
           <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
             <Lock className="w-4 h-4 text-emerald-500" /> SHADOW MODEL INTEGRITY
           </h3>
 
-          <div className="bg-[#0a0514] p-4 rounded-xl border border-white/10 mb-4">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-white/10 mb-4">
             <div className="flex justify-between items-center mb-4 pb-2 border-b border-white/5">
               <div className="text-xs text-slate-400 font-mono">
                 PRODUCTION <span className="text-white ml-2">v1.0.0</span>

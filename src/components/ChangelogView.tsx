@@ -159,7 +159,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans animate-fadeIn">
       {/* Header Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#140b2e] via-[#100726] to-[#140b2e] border-2 border-purple-500/30 p-6 sm:p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#140b2e] via-[#100726] to-[#140b2e] border-2 border-purple-500/30 p-6 sm:p-8 shadow-2xl">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-xs font-mono font-bold">
@@ -208,7 +208,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
             return (
               <div
                 key={idx}
-                className="bg-[#0c061a] border border-purple-900/40 hover:border-purple-500/40 p-4 rounded-2xl flex items-start justify-between gap-3 transition-all shadow-md"
+                className="bg-[#0a0518] border border-purple-900/40 hover:border-purple-500/40 p-4 rounded-2xl flex items-start justify-between gap-3 transition-all shadow-md"
               >
                 <div className="space-y-1.5 flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -237,7 +237,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
       </div>
 
       {/* Model Walk-Forward Sample Collector Progress Card */}
-      <div className="bg-[#0f0722] border-2 border-purple-500/30 rounded-2xl p-6 space-y-4 font-mono">
+      <div className="bg-[#0c0620] border-2 border-purple-500/30 rounded-2xl p-6 space-y-4 font-mono">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center text-purple-300 shrink-0">
@@ -281,15 +281,15 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
-          <div className="bg-[#070412] p-3 rounded-xl border border-purple-900/30">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30">
             <span className="text-slate-400 block text-[10px] uppercase font-bold">Current Walk-Forward Brier</span>
             <span className="text-white font-black text-sm">0.184 (n=340)</span>
           </div>
-          <div className="bg-[#070412] p-3 rounded-xl border border-purple-900/30">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30">
             <span className="text-slate-400 block text-[10px] uppercase font-bold">Estimated Completion</span>
             <span className="text-emerald-300 font-black text-sm">~4 Days</span>
           </div>
-          <div className="bg-[#070412] p-3 rounded-xl border border-purple-900/30">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30">
             <span className="text-slate-400 block text-[10px] uppercase font-bold">Model Status</span>
             <span className="text-purple-300 font-black text-sm">Collecting Data</span>
           </div>
@@ -310,10 +310,10 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
               <button
                 key={cat}
                 onClick={() => setFilterCategory(cat)}
-                className={`px-3 py-1 rounded-lg border text-xs font-bold transition-all ${
+                className={`px-3 py-1 rounded-xl border text-xs font-bold transition-all ${
                   filterCategory === cat
                     ? 'bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-600/30'
-                    : 'bg-[#0e0720] border-purple-900/50 text-purple-300/70 hover:text-white'
+                    : 'bg-[#0c0620] border-purple-900/50 text-purple-300/70 hover:text-white'
                 }`}
               >
                 {cat}
@@ -373,7 +373,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
       </div>
 
       {/* Compliance Disclaimer Footer */}
-      <div className="p-4 rounded-xl bg-[#090514] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
+      <div className="p-4 rounded-xl bg-[#0a0518] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
         <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <p>
           <strong className="text-purple-300">Platform Transparency Notice:</strong> VIXY AI displays live public exchange data (Binance, Kalshi, Polymarket). Model progress metrics are calculated from real time-series logged records. No prediction accuracy is guaranteed.

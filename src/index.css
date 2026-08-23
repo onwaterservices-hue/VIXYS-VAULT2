@@ -1,6 +1,48 @@
 @import "tailwindcss";
 
 @layer utilities {
+  /* Canonical card surface — replaces the dozen near-duplicate bg-[#xxxxxx] values */
+  .vixy-card {
+    background-color: #0a0518;
+    border: 1px solid rgba(168, 85, 247, 0.18);
+    border-radius: 1rem; /* = rounded-2xl */
+  }
+  .vixy-card-elevated {
+    background-color: #0c0620;
+    border: 1px solid rgba(168, 85, 247, 0.28);
+    border-radius: 1rem;
+    box-shadow: 0 0 24px rgba(168, 85, 247, 0.12);
+  }
+
+  /* Canonical pill/badge — replaces the hand-rolled badge markup per-component */
+  .vixy-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 0.75rem; /* = rounded-xl */
+    font-size: 0.65rem;
+    font-weight: 800;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    letter-spacing: 0.02em;
+  }
+
+  /* Canonical page/section headings — one hierarchy used everywhere */
+  .vixy-page-title {
+    font-family: 'Syne', 'Orbitron', 'Space Grotesk', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .vixy-section-title {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(216, 180, 254, 0.7);
+  }
+
   /* Quant / Cyberpunk Typography classes */
   .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;

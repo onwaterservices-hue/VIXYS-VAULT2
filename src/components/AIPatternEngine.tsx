@@ -255,7 +255,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
       title="AI PATTERN RECOGNITION LOCKED"
       subtitle="Verify your VIXY Vault Discord membership to unlock live AI microstructure patterns, liquidity sweeps, and L2 order book detection."
     >
-      <div className="bg-[#0B0A1C] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden transition-all duration-300">
+      <div className="bg-[#0a0518] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden transition-all duration-300">
       {/* Background Soft Ambient Glow */}
       <div className="absolute top-0 right-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -271,7 +271,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
               <h2 className="text-base sm:text-lg font-black tracking-tight text-white uppercase flex items-center gap-2">
                 <span>PATTERN DETECTOR</span>
               </h2>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-500/30">
+              <span className="px-2 py-0.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-500/30">
                 LIVE L2 SCANNER
               </span>
             </div>
@@ -299,11 +299,11 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
       </div>
 
       {/* FILTER TABS BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#080517] p-1.5 rounded-xl border border-purple-900/40 relative z-10">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/40 relative z-10">
         <div className="flex flex-wrap items-center gap-1">
           <button
             onClick={() => setActiveFilter('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeFilter === 'ALL'
                 ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md font-black'
                 : 'text-purple-300/60 hover:text-white'
@@ -314,7 +314,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
           <button
             onClick={() => setActiveFilter('BULLISH')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
               activeFilter === 'BULLISH'
                 ? 'bg-emerald-600 text-white shadow-md font-black'
                 : 'text-emerald-400/70 hover:text-emerald-300'
@@ -326,7 +326,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
           <button
             onClick={() => setActiveFilter('BEARISH')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
               activeFilter === 'BEARISH'
                 ? 'bg-rose-600 text-white shadow-md font-black'
                 : 'text-rose-400/70 hover:text-rose-300'
@@ -338,7 +338,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
           <button
             onClick={() => setActiveFilter('MICRO')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
               activeFilter === 'MICRO'
                 ? 'bg-cyan-600 text-white shadow-md font-black'
                 : 'text-cyan-400/70 hover:text-cyan-300'
@@ -350,7 +350,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
           <button
             onClick={() => setActiveFilter('EXPERIMENTAL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
               activeFilter === 'EXPERIMENTAL'
                 ? 'bg-amber-600 text-white shadow-md font-black'
                 : 'text-amber-400/70 hover:text-amber-300'
@@ -372,7 +372,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
           <div
             key={pat.id}
             onClick={() => setSelectedPattern(pat)}
-            className={`bg-[#100B24] p-4 rounded-xl border transition-all duration-200 cursor-pointer space-y-3 hover:border-purple-400/80 hover:shadow-lg hover:shadow-purple-900/20 group relative overflow-hidden ${
+            className={`bg-[#0c0620] p-4 rounded-xl border transition-all duration-200 cursor-pointer space-y-3 hover:border-purple-400/80 hover:shadow-lg hover:shadow-purple-900/20 group relative overflow-hidden ${
               pat.isExperimental
                 ? 'border-amber-500/50 bg-amber-950/10'
                 : 'border-purple-900/40'
@@ -422,7 +422,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
               </div>
             </div>
 
-            <div className="text-[11px] text-cyan-300 font-sans bg-[#080517] px-2.5 py-1.5 rounded-lg border border-purple-900/40 flex items-center justify-between">
+            <div className="text-[11px] text-cyan-300 font-sans bg-[#0a0518] px-2.5 py-1.5 rounded-xl border border-purple-900/40 flex items-center justify-between">
               <span className="text-purple-300/60 text-[10px] font-bold">Follow Through:</span>
               <span className="font-semibold text-cyan-200 text-[11px]">{pat.expectedFollowThrough}</span>
             </div>
@@ -433,10 +433,10 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
       {/* DEEP DETAIL MODAL DIALOG WHEN CARD IS CLICKED */}
       {selectedPattern && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#120A2A] border border-purple-500/50 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4 text-purple-100 relative">
+          <div className="bg-[#0c0620] border border-purple-500/50 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4 text-purple-100 relative">
             <button
               onClick={() => setSelectedPattern(null)}
-              className="absolute top-4 right-4 p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 transition-colors"
+              className="absolute top-4 right-4 p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
@@ -446,7 +446,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
               <h3 className="text-base font-black text-white">{selectedPattern.name} Breakdown</h3>
             </div>
 
-            <div className="bg-[#0A0518] p-3 rounded-xl border border-purple-900/50 space-y-2 text-xs">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/50 space-y-2 text-xs">
               <div className="flex justify-between border-b border-purple-900/40 pb-2">
                 <span className="text-purple-300/60">Category:</span>
                 <span className="font-bold text-emerald-400">{selectedPattern.category}</span>
@@ -467,7 +467,7 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
 
             <div className="space-y-1">
               <span className="text-xs font-bold text-purple-200">Institutional L2 Explanation:</span>
-              <p className="text-xs text-purple-200/90 leading-relaxed font-sans bg-[#080414] p-3 rounded-xl border border-purple-900/40">
+              <p className="text-xs text-purple-200/90 leading-relaxed font-sans bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
                 {selectedPattern.detailBreakdown || selectedPattern.description}
               </p>
             </div>

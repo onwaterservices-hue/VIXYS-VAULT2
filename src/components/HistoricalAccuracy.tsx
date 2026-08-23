@@ -300,11 +300,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
 
             <div className="flex items-center gap-2 self-end sm:self-auto font-mono text-xs font-bold">
-              <select value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)} className="bg-black border border-purple-900/60 text-white rounded-lg px-3 py-1.5 focus:border-purple-400 outline-none">
+              <select value={selectedAsset} onChange={e => setSelectedAsset(e.target.value)} className="bg-black border border-purple-900/60 text-white rounded-xl px-3 py-1.5 focus:border-purple-400 outline-none">
                 <option value="ALL">ALL MARKETS</option>
                 {assetMatrix.map(a => <option key={a.asset} value={a.asset}>{a.asset}</option>)}
               </select>
-              <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="bg-black border border-purple-900/60 text-white rounded-lg px-3 py-1.5 focus:border-purple-400 outline-none">
+              <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)} className="bg-black border border-purple-900/60 text-white rounded-xl px-3 py-1.5 focus:border-purple-400 outline-none">
                 <option value="ALL">ALL DECISIONS</option>
                 <option value="WIN">WINS</option>
                 <option value="LOSS">LOSSES</option>
@@ -399,7 +399,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   {/* Header Row */}
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
                     <div className="flex items-center gap-2.5">
-                      <span className={`text-[10px] font-mono font-black tracking-widest px-2.5 py-1 rounded-md border uppercase shadow-md ${
+                      <span className={`text-[10px] font-mono font-black tracking-widest px-2.5 py-1 rounded-xl border uppercase shadow-md ${
                         isSkip ? 'bg-purple-950/90 border-purple-400 text-purple-200' :
                         isLocked ? (isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200' : 'bg-rose-950/90 border-rose-400 text-rose-200') :
                         'bg-cyan-950/90 border-cyan-400 text-cyan-200'
@@ -411,7 +411,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </span>
                     </div>
 
-                    <div className={`text-xs font-mono font-black px-3 py-1 rounded-lg border flex items-center gap-2 shadow-md uppercase ${
+                    <div className={`text-xs font-mono font-black px-3 py-1 rounded-xl border flex items-center gap-2 shadow-md uppercase ${
                       isSkip ? 'bg-purple-950/90 border-purple-400 text-purple-200' :
                       isLocked ? (isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200' : 'bg-rose-950/90 border-rose-400 text-rose-200') :
                       'bg-cyan-950/90 border-cyan-400 text-cyan-200'
@@ -545,9 +545,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   onClick={() => setActiveProvenance(log)}
                   className={`border cursor-pointer transition-all duration-300 rounded-[18px] p-5 shadow-xl relative overflow-hidden group ${
                     isLocked 
-                      ? 'bg-[#0d0526] border-cyan-400 hover:border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.25)] animate-pulse' 
+                      ? 'bg-[#0a0518] border-cyan-400 hover:border-cyan-300 shadow-[0_0_20px_rgba(34,211,238,0.25)] animate-pulse' 
                       : isNoTrade 
-                      ? 'bg-[#150529] border-purple-500/80 hover:border-purple-300 shadow-[0_0_20px_rgba(168,85,247,0.25)]' 
+                      ? 'bg-[#0c0620] border-purple-500/80 hover:border-purple-300 shadow-[0_0_20px_rgba(168,85,247,0.25)]' 
                       : isUpDir 
                       ? 'bg-[#031d12] border-emerald-500/80 hover:border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.2)]' 
                       : 'bg-[#1c060d] border-rose-500/80 hover:border-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.2)]'
@@ -556,7 +556,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   {/* Card Header */}
                   <div className="flex justify-between items-center mb-3.5 relative z-10">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-mono font-black tracking-widest px-2.5 py-1 rounded-md uppercase border shadow-md ${
+                      <span className={`text-[10px] font-mono font-black tracking-widest px-2.5 py-1 rounded-xl uppercase border shadow-md ${
                         isNoTrade ? 'bg-purple-950/90 border-purple-400 text-purple-200' :
                         isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200' :
                         'bg-rose-950/90 border-rose-400 text-rose-200'
@@ -610,7 +610,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       )}
                     </div>
 
-                    <div className="text-[11px] font-mono font-black px-2.5 py-1 rounded-md bg-black/80 border border-zinc-800 text-zinc-300 uppercase">
+                    <div className="text-[11px] font-mono font-black px-2.5 py-1 rounded-xl bg-black/80 border border-zinc-800 text-zinc-300 uppercase">
                       ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400 font-black' : log.actualOutcome === 'DOWN' ? 'text-rose-400 font-black' : 'text-purple-300 font-black'}>{log.actualOutcome || (isNoTrade ? 'SKIPPED' : log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')}</span>
                     </div>
                   </div>
@@ -746,7 +746,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <div className="col-span-1 text-right">STREAK</div>
               </div>
               {assetMatrix.map(a => (
-                <div key={a.asset} className="grid grid-cols-4 items-center p-2 rounded-lg hover:bg-zinc-900 transition-colors border border-transparent hover:border-zinc-800 text-xs">
+                <div key={a.asset} className="grid grid-cols-4 items-center p-2 rounded-xl hover:bg-zinc-900 transition-colors border border-transparent hover:border-zinc-800 text-xs">
                   <div className="col-span-1 font-black text-white">{a.asset}</div>
                   <div className="col-span-1 text-right text-zinc-400">
                     {a.totalLocks >= 5 ? `${a.wins}W / ${a.losses}L` : '-'}

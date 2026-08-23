@@ -219,7 +219,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
       )}
 
       {/* INSTITUTIONAL COMMAND CENTER DIAGNOSTICS */}
-      <div className="bg-[#0B061F] border border-purple-900/60 rounded-2xl p-6 shadow-2xl space-y-6">
+      <div className="bg-[#0a0518] border border-purple-900/60 rounded-2xl p-6 shadow-2xl space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-purple-900/40 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -242,7 +242,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         {/* 9 core fields grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* BOT_CONNECTED */}
-          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
             <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
               <span>Bot Connected</span>
               <Activity className="w-3.5 h-3.5 text-purple-400" />
@@ -259,7 +259,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* GUILD_FOUND */}
-          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
             <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
               <span>Guild Found</span>
               <Users className="w-3.5 h-3.5 text-indigo-400" />
@@ -276,7 +276,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* ROLE_FOUND */}
-          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
             <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
               <span>Elite Role Found</span>
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -293,7 +293,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* ROLE_MANAGEABLE */}
-          <div className="bg-[#10092B] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 space-y-1.5 shadow-inner">
             <div className="flex items-center justify-between text-[10px] text-purple-300/50 font-mono uppercase tracking-wider">
               <span>Hierarchy & Permissions</span>
               <Lock className="w-3.5 h-3.5 text-amber-400" />
@@ -314,19 +314,19 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
           {/* Left Column (Stats counts) */}
           <div className="md:col-span-5 grid grid-cols-3 gap-3">
-            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Pending Jobs</span>
               <span className={`text-2xl font-black block ${diagnostics?.PENDING_COUNT > 0 ? 'text-amber-400' : 'text-white/60'}`}>
                 {diagnostics?.PENDING_COUNT ?? 0}
               </span>
             </div>
-            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Synced Success</span>
               <span className="text-2xl font-black text-emerald-400 block">
                 {diagnostics?.SUCCESS_COUNT ?? 0}
               </span>
             </div>
-            <div className="bg-[#0A051C] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Failed Jobs</span>
               <span className={`text-2xl font-black block ${diagnostics?.FAILED_COUNT > 0 ? 'text-rose-400 animate-pulse' : 'text-white/60'}`}>
                 {diagnostics?.FAILED_COUNT ?? 0}
@@ -335,7 +335,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* Right Column (Sync Timestamp and Errors) */}
-          <div className="md:col-span-7 flex flex-col justify-between p-3.5 bg-[#08031A] rounded-xl border border-purple-900/40">
+          <div className="md:col-span-7 flex flex-col justify-between p-3.5 bg-[#0a0518] rounded-xl border border-purple-900/40">
             <div className="flex items-center justify-between text-[11px] font-mono text-purple-300/70 border-b border-purple-950 pb-2 mb-2">
               <span className="flex items-center gap-1">
                 <RefreshCw className="w-3.5 h-3.5 text-indigo-400" />
@@ -347,7 +347,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
             </div>
 
             {diagnostics?.LAST_ERROR ? (
-              <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800/40 text-[11px] font-mono text-rose-300 flex items-start gap-2">
+              <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/40 text-[11px] font-mono text-rose-300 flex items-start gap-2">
                 <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <div className="truncate">
                   <span className="font-bold block uppercase text-[9px] text-rose-400">Last Encountered Sync Error:</span>
@@ -355,7 +355,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 </div>
               </div>
             ) : (
-              <div className="p-2 px-3 rounded-lg bg-emerald-950/35 border border-emerald-900/30 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
+              <div className="p-2 px-3 rounded-xl bg-emerald-950/35 border border-emerald-900/30 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                 <span>All asynchronous queue workers are running idle with zero active system exceptions.</span>
               </div>
@@ -365,13 +365,13 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
 
         {/* Real-time background sync queue active display */}
         {syncQueue.length > 0 && (
-          <div className="bg-[#09041A] rounded-xl p-4 border border-purple-900/30 space-y-2">
+          <div className="bg-[#0a0518] rounded-xl p-4 border border-purple-900/30 space-y-2">
             <span className="text-[10px] text-purple-400/70 font-mono font-bold uppercase block tracking-wider">
               Asynchronous Sync Queue Diagnostics:
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto custom-scrollbar pr-1">
               {syncQueue.map((item: any) => (
-                <div key={item.id} className="p-2.5 rounded-lg bg-[#110A2B] border border-purple-900/40 flex items-center justify-between text-xs font-mono">
+                <div key={item.id} className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-900/40 flex items-center justify-between text-xs font-mono">
                   <div className="space-y-0.5 truncate max-w-[70%]">
                     <span className="text-white font-bold block truncate">{item.email}</span>
                     <span className="text-[10px] text-purple-400">Tier: {item.tier} • Attempts: {item.attempts}</span>
@@ -394,7 +394,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         {/* Left Column (8 cols): Signal Dispatcher & Live Discord Embed Preview */}
         <div className="lg:col-span-7 space-y-6">
           {/* Signal Dispatcher Box */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-4 shadow-lg">
+          <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-900/40 space-y-4 shadow-lg">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-indigo-400" />
@@ -411,7 +411,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <select
                   value={testSymbol}
                   onChange={(e) => setTestSymbol(e.target.value)}
-                  className="w-full bg-[#140B30] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-purple-500"
+                  className="w-full bg-[#0c0620] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-purple-500"
                 >
                   <option value="BTC/USDT 15M">BTC/USDT 15M Contract</option>
                   <option value="ETH/USDT 15M">ETH/USDT 15M Contract</option>
@@ -429,7 +429,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                     className={`py-2 rounded-xl text-xs font-bold border transition-all ${
                       testDirection === 'YES'
                         ? 'bg-emerald-600 text-white border-emerald-400 shadow-md font-black'
-                        : 'bg-[#140B30] text-purple-300/70 border-purple-800/50 hover:text-white'
+                        : 'bg-[#0c0620] text-purple-300/70 border-purple-800/50 hover:text-white'
                     }`}
                   >
                     BUY UP (YES)
@@ -440,7 +440,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                     className={`py-2 rounded-xl text-xs font-bold border transition-all ${
                       testDirection === 'NO'
                         ? 'bg-rose-600 text-white border-rose-400 shadow-md font-black'
-                        : 'bg-[#140B30] text-purple-300/70 border-purple-800/50 hover:text-white'
+                        : 'bg-[#0c0620] text-purple-300/70 border-purple-800/50 hover:text-white'
                     }`}
                   >
                     BUY DOWN (NO)
@@ -458,7 +458,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 placeholder="https://discord.com/api/webhooks/..."
                 value={customWebhook}
                 onChange={(e) => setCustomWebhook(e.target.value)}
-                className="w-full bg-[#140B30] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500"
+                className="w-full bg-[#0c0620] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500"
               />
             </div>
 
@@ -493,7 +493,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* Discord Embed Pixel-Matched Live Visual Preview */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-3">
+          <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-900/40 space-y-3">
             <div className="flex items-center justify-between text-xs text-purple-300/70 font-mono">
               <span className="flex items-center gap-2">
                 <MessageSquare className="w-4 h-4 text-indigo-400" />
@@ -592,7 +592,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         {/* Right Column (5 cols): Slash Command Reference & VIP Role Sync Tool */}
         <div className="lg:col-span-5 space-y-6">
           {/* Bot Slash Commands Reference */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-3">
+          <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-900/40 space-y-3">
             <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
               <Terminal className="w-5 h-5 text-purple-400" />
               <h3 className="font-black text-white text-sm">Discord Slash Commands Directory</h3>
@@ -603,7 +603,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
             </p>
 
             <div className="space-y-2 text-xs font-mono">
-              <div className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-emerald-400 flex items-center justify-between">
                   <span>/predict [asset]</span>
                   <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Live AI Signal</span>
@@ -611,7 +611,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <p className="text-[11px] text-purple-200/80">Fetches live prediction signal, confidence, and Kalshi implied odds.</p>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-purple-300 flex items-center justify-between">
                   <span>/price [asset]</span>
                   <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Spot Market</span>
@@ -619,7 +619,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <p className="text-[11px] text-purple-200/80">Real-time spot price & 24h change from Coinbase Pro / Binance.</p>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-indigo-300 flex items-center justify-between">
                   <span>/status</span>
                   <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Model Stats</span>
@@ -627,7 +627,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <p className="text-[11px] text-purple-200/80">Displays AI Brier score calibration, active market regime & accuracy.</p>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-amber-300 flex items-center justify-between">
                   <span>/vip</span>
                   <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Pro Access</span>
@@ -635,7 +635,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <p className="text-[11px] text-purple-200/80">Check or verify VIP Pro membership status and upgrade links.</p>
               </div>
 
-              <div className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-cyan-300 flex items-center justify-between">
                   <span>/leaderboard</span>
                   <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Alpha Rankings</span>
@@ -646,7 +646,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* VIP Role Assignment & Emergency Resync Panel */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-4 shadow-xl">
+          <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-900/40 space-y-4 shadow-xl">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-5 h-5 text-emerald-400" />
@@ -669,7 +669,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                   placeholder="e.g. 10428491029301920 or user@example.com"
                   value={resyncIdentifier}
                   onChange={(e) => setResyncIdentifier(e.target.value)}
-                  className="flex-1 bg-[#140B30] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500"
+                  className="flex-1 bg-[#0c0620] border border-purple-800/50 rounded-xl px-3 py-2 text-xs font-mono text-white placeholder-purple-500/40 focus:outline-none focus:border-purple-500"
                 />
                 <button
                   onClick={handleEmergencyResync}
@@ -701,7 +701,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
           </div>
 
           {/* LIVE SYSTEM EVENT STREAM FEED */}
-          <div className="bg-[#0D0722] p-5 rounded-2xl border border-purple-900/40 space-y-3 shadow-xl">
+          <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-900/40 space-y-3 shadow-xl">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <Activity className="w-5 h-5 text-indigo-400" />
@@ -718,7 +718,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <div className="p-4 text-center text-purple-400/50 text-xs">Waiting for live Stripe or Discord events...</div>
               ) : (
                 localEvents.slice(0, 15).map((evt) => (
-                  <div key={evt.id} className="p-2.5 rounded-xl bg-[#140B30] border border-purple-800/40 space-y-1">
+                  <div key={evt.id} className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                     <div className="flex items-center justify-between">
                       <span className={`font-bold text-[11px] ${
                         evt.status === 'SUCCESS' ? 'text-emerald-400' :
@@ -741,9 +741,9 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
             </div>
           </div>
           {/* Bot OAuth Link Copy Box */}
-          <div className="bg-[#0D0722] p-4 rounded-xl border border-purple-900/40 space-y-2 text-xs font-mono">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 space-y-2 text-xs font-mono">
             <span className="text-purple-300/70 block font-bold">Bot OAuth2 Server Invite Link</span>
-            <div className="flex items-center gap-2 bg-[#140B30] p-2 rounded-lg border border-purple-800/50">
+            <div className="flex items-center gap-2 bg-[#0c0620] p-2 rounded-xl border border-purple-800/50">
               <input
                 type="text"
                 readOnly

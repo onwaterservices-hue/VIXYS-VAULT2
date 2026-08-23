@@ -67,7 +67,7 @@ export const VixyLearningPanel: React.FC = () => {
   };
 
   return (
-    <div className="bg-[#090314] border border-cyan-500/30 rounded-3xl p-6 font-mono space-y-6 shadow-2xl text-white">
+    <div className="bg-[#0a0518] border border-cyan-500/30 rounded-2xl p-6 font-mono space-y-6 shadow-2xl text-white">
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-purple-900/40 pb-5">
         <div className="flex items-center gap-3">
@@ -114,7 +114,7 @@ export const VixyLearningPanel: React.FC = () => {
       </div>
 
       {/* Forensic Cycle Breakdown Row */}
-      <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-800/40 space-y-3">
+      <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-800/40 space-y-3">
         <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-cyan-400" />
@@ -128,31 +128,31 @@ export const VixyLearningPanel: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-          <div className="bg-[#080414] p-3 rounded-xl border border-emerald-500/30 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-emerald-500/30 space-y-1">
             <div className="text-[10px] text-emerald-400 font-bold">LIVE SETTLED CYCLES</div>
             <div className="text-lg font-black text-white">{cycleBreakdown.LIVE_SETTLED_CYCLES}</div>
             <div className="text-[9px] text-purple-400">Genuine Production</div>
           </div>
 
-          <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/40 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-800/40 space-y-1">
             <div className="text-[10px] text-purple-400 font-bold">HISTORICAL BENCHMARK</div>
             <div className="text-lg font-black text-cyan-300">{cycleBreakdown.SEEDED_HISTORICAL_CYCLES}</div>
             <div className="text-[9px] text-purple-400">Calib Dataset v1.4</div>
           </div>
 
-          <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/40 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-800/40 space-y-1">
             <div className="text-[10px] text-amber-400 font-bold">TEST HARNESS CYCLES</div>
             <div className="text-lg font-black text-amber-300">{cycleBreakdown.TEST_HARNESS_CYCLES}</div>
             <div className="text-[9px] text-purple-400">Audit Harness Only</div>
           </div>
 
-          <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/40 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-800/40 space-y-1">
             <div className="text-[10px] text-purple-400 font-bold">SHADOW MODEL CYCLES</div>
             <div className="text-lg font-black text-purple-200">{cycleBreakdown.SHADOW_MODEL_CYCLES}</div>
             <div className="text-[9px] text-purple-400">Parallel Shadow Engine</div>
           </div>
 
-          <div className="bg-[#080414] p-3 rounded-xl border border-cyan-500/30 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-cyan-500/30 space-y-1">
             <div className="text-[10px] text-cyan-400 font-bold">TOTAL BENCHMARK DATASET</div>
             <div className="text-lg font-black text-cyan-300">{cycleBreakdown.SUM_TOTAL_SETTLED}</div>
             <div className="text-[9px] text-emerald-400">Sample Size Verified</div>
@@ -161,7 +161,7 @@ export const VixyLearningPanel: React.FC = () => {
       </div>
 
       {/* Calibration Improvement Proof Grid */}
-      <div className="bg-[#0e0622] p-4 rounded-2xl border border-cyan-500/30 space-y-3">
+      <div className="bg-[#0c0620] p-4 rounded-2xl border border-cyan-500/30 space-y-3">
         <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-cyan-400" />
@@ -175,7 +175,7 @@ export const VixyLearningPanel: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="bg-[#080414] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
+          <div className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
             <div className="text-purple-400 text-[10px] font-bold uppercase">BRIER SCORE IMPROVEMENT</div>
             <div className="flex justify-between items-baseline">
               <span className="text-rose-400 font-bold">v1.0: {proof.before.brierScore}</span>
@@ -186,7 +186,7 @@ export const VixyLearningPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#080414] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
+          <div className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
             <div className="text-purple-400 text-[10px] font-bold uppercase">CALIBRATION ERROR REDUCTION</div>
             <div className="flex justify-between items-baseline">
               <span className="text-rose-400 font-bold">v1.0: {(proof.before.calibrationError * 100).toFixed(1)}%</span>
@@ -197,7 +197,7 @@ export const VixyLearningPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#080414] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
+          <div className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-800/40 space-y-1.5">
             <div className="text-purple-400 text-[10px] font-bold uppercase">LOG LOSS IMPROVEMENT</div>
             <div className="flex justify-between items-baseline">
               <span className="text-rose-400 font-bold">v1.0: {proof.before.logLoss}</span>
@@ -212,7 +212,7 @@ export const VixyLearningPanel: React.FC = () => {
 
       {/* Primary KPI Grid */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-800/40">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-800/40">
           <div className="text-[10px] text-purple-400 font-bold uppercase">CALIBRATION VERSION</div>
           <div className="text-xl font-black text-cyan-300 mt-1 flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-cyan-400" />
@@ -221,7 +221,7 @@ export const VixyLearningPanel: React.FC = () => {
           <div className="text-[10px] text-purple-400 mt-1">Symmetric Matrix Active</div>
         </div>
 
-        <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-800/40">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-800/40">
           <div className="text-[10px] text-purple-400 font-bold uppercase">SETTLED BENCHMARK</div>
           <div className="text-xl font-black text-white mt-1">
             {stats.totalSettledCycles.toLocaleString()}
@@ -229,7 +229,7 @@ export const VixyLearningPanel: React.FC = () => {
           <div className="text-[10px] text-emerald-400 mt-1">100% Verified Outcomes</div>
         </div>
 
-        <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-800/40">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-800/40">
           <div className="text-[10px] text-purple-400 font-bold uppercase">OVERALL WIN RATE</div>
           <div className="text-xl font-black text-emerald-400 mt-1">
             {stats.overallWinRatePct}%
@@ -237,7 +237,7 @@ export const VixyLearningPanel: React.FC = () => {
           <div className="text-[10px] text-purple-400 mt-1">Empirical Accuracy</div>
         </div>
 
-        <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-800/40">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-800/40">
           <div className="text-[10px] text-purple-400 font-bold uppercase">BRIER SCORE</div>
           <div className="text-xl font-black text-cyan-300 mt-1">
             {stats.overallBrierScore}
@@ -247,7 +247,7 @@ export const VixyLearningPanel: React.FC = () => {
       </div>
 
       {/* Real DOWN Locks Status Panel */}
-      <div className="bg-[#0e0622] p-4 rounded-2xl border border-rose-500/30 space-y-3">
+      <div className="bg-[#0c0620] p-4 rounded-2xl border border-rose-500/30 space-y-3">
         <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
           <div className="flex items-center gap-2">
             <TrendingDown className="w-4 h-4 text-rose-400" />
@@ -261,7 +261,7 @@ export const VixyLearningPanel: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/40 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-800/40 space-y-1">
             <div className="text-purple-400 text-[10px]">PRODUCTION LOCK STATUS</div>
             <div className="text-white font-bold">{realDownLocks.status}</div>
             <div className="text-[10px] text-purple-400 mt-1">
@@ -269,7 +269,7 @@ export const VixyLearningPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/40 space-y-1">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-800/40 space-y-1">
             <div className="text-purple-400 text-[10px]">LAST EVALUATED BEAR CONFLUENCE</div>
             <div className="text-cyan-300 font-bold">
               P(DOWN): {(realDownLocks.lastEvaluatedDownConfluence.pDown * 100).toFixed(1)}% | Eligible: {realDownLocks.lastEvaluatedDownConfluence.lockEligible ? 'YES' : 'NO'}
@@ -290,7 +290,7 @@ export const VixyLearningPanel: React.FC = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
           {/* UP Performance */}
-          <div className="bg-[#0e0622] p-4 rounded-2xl border border-emerald-500/30 space-y-2">
+          <div className="bg-[#0c0620] p-4 rounded-2xl border border-emerald-500/30 space-y-2">
             <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
               <span className="font-bold text-emerald-400 flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4" />
@@ -325,7 +325,7 @@ export const VixyLearningPanel: React.FC = () => {
           </div>
 
           {/* DOWN Performance */}
-          <div className="bg-[#0e0622] p-4 rounded-2xl border border-rose-500/30 space-y-2">
+          <div className="bg-[#0c0620] p-4 rounded-2xl border border-rose-500/30 space-y-2">
             <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
               <span className="font-bold text-rose-400 flex items-center gap-1.5">
                 <TrendingDown className="w-4 h-4" />
@@ -360,7 +360,7 @@ export const VixyLearningPanel: React.FC = () => {
           </div>
 
           {/* CHOP / SKIP Performance */}
-          <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-500/30 space-y-2">
+          <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-2">
             <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
               <span className="font-bold text-purple-300 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-purple-400" />
@@ -408,7 +408,7 @@ export const VixyLearningPanel: React.FC = () => {
         </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="bg-[#0e0622] p-3.5 rounded-2xl border border-cyan-500/30 space-y-1">
+          <div className="bg-[#0c0620] p-3.5 rounded-2xl border border-cyan-500/30 space-y-1">
             <div className="text-cyan-300 font-bold">⚡ EARLY LOCK (02:00–05:00)</div>
             <div className="flex justify-between text-[11px] text-purple-300 mt-1">
               <span>Settled Locks:</span>
@@ -424,7 +424,7 @@ export const VixyLearningPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#0e0622] p-3.5 rounded-2xl border border-indigo-500/30 space-y-1">
+          <div className="bg-[#0c0620] p-3.5 rounded-2xl border border-indigo-500/30 space-y-1">
             <div className="text-indigo-300 font-bold">🎯 STANDARD LOCK (05:00–08:00)</div>
             <div className="flex justify-between text-[11px] text-purple-300 mt-1">
               <span>Settled Locks:</span>
@@ -440,7 +440,7 @@ export const VixyLearningPanel: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#0e0622] p-3.5 rounded-2xl border border-purple-500/30 space-y-1">
+          <div className="bg-[#0c0620] p-3.5 rounded-2xl border border-purple-500/30 space-y-1">
             <div className="text-purple-300 font-bold">🛡️ LATE LOCK (08:00–14:00)</div>
             <div className="flex justify-between text-[11px] text-purple-300 mt-1">
               <span>Settled Locks:</span>
@@ -459,7 +459,7 @@ export const VixyLearningPanel: React.FC = () => {
       </div>
 
       {/* Live Decision Journal Section */}
-      <div className="bg-[#0e0622] p-4 rounded-2xl border border-purple-500/30 space-y-3">
+      <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-3">
         <div className="flex justify-between items-center border-b border-purple-900/30 pb-2">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-cyan-400" />
@@ -473,13 +473,13 @@ export const VixyLearningPanel: React.FC = () => {
         </div>
 
         {journalEntries.length === 0 ? (
-          <div className="text-xs text-purple-400 p-4 text-center bg-[#080414] rounded-xl border border-purple-900/40">
+          <div className="text-xs text-purple-400 p-4 text-center bg-[#0a0518] rounded-xl border border-purple-900/40">
             Awaiting live cycle ticks. Journal will record observation ticks, lock events, and settlement outcomes in real time.
           </div>
         ) : (
           <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
             {journalEntries.slice(0, 10).map((entry, idx) => (
-              <div key={`${entry.cycleId}-${entry.timestamp}-${idx}`} className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/40 text-[11px] flex items-center justify-between gap-3">
+              <div key={`${entry.cycleId}-${entry.timestamp}-${idx}`} className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/40 text-[11px] flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-[9px] font-black ${
                     entry.event === 'LOCK_AUTHORIZED' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
@@ -504,7 +504,7 @@ export const VixyLearningPanel: React.FC = () => {
 
       {/* JSON Export Modal/Box */}
       {showJsonExport && (
-        <div className="bg-[#05020a] border border-cyan-500/50 rounded-2xl p-4 space-y-3">
+        <div className="bg-[#0a0518] border border-cyan-500/50 rounded-2xl p-4 space-y-3">
           <div className="flex justify-between items-center border-b border-purple-900/40 pb-2">
             <div className="flex items-center gap-2">
               <FileCode className="w-4 h-4 text-cyan-400" />
@@ -520,7 +520,7 @@ export const VixyLearningPanel: React.FC = () => {
               {copiedJson ? 'COPIED!' : 'COPY JSON'}
             </button>
           </div>
-          <pre className="bg-[#030107] p-3 rounded-xl border border-purple-900/40 text-[10px] text-cyan-200 overflow-x-auto max-h-80 font-mono">
+          <pre className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40 text-[10px] text-cyan-200 overflow-x-auto max-h-80 font-mono">
             {JSON.stringify(finalAuditReportJson, null, 2)}
           </pre>
         </div>
@@ -528,7 +528,7 @@ export const VixyLearningPanel: React.FC = () => {
 
       {/* Audit Output Box */}
       {auditReport && (
-        <div className="bg-[#05020a] border border-cyan-500/40 rounded-2xl p-5 space-y-4">
+        <div className="bg-[#0a0518] border border-cyan-500/40 rounded-2xl p-5 space-y-4">
           <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5 text-emerald-400" />
@@ -544,7 +544,7 @@ export const VixyLearningPanel: React.FC = () => {
           {/* Audit Summary 10 PASS/FAIL Grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 font-mono text-[11px]">
             {Object.entries(auditReport.auditSummary).map(([key, val]) => (
-              <div key={key} className="bg-[#0e0622] p-2.5 rounded-xl border border-purple-900/40 space-y-1">
+              <div key={key} className="bg-[#0c0620] p-2.5 rounded-xl border border-purple-900/40 space-y-1">
                 <div className="text-purple-400 text-[9px] uppercase font-bold leading-tight">{key}</div>
                 <div className={`font-black ${val === 'PASS' ? 'text-emerald-400' : 'text-rose-400'}`}>
                   {val === 'PASS' ? '✓ PASS' : '✗ FAIL'}
@@ -557,7 +557,7 @@ export const VixyLearningPanel: React.FC = () => {
           <div className="space-y-2 mt-3">
             <div className="text-[11px] font-bold text-purple-300">SCENARIO DETAILS:</div>
             {auditReport.scenarioResults.map((sc, idx) => (
-              <div key={idx} className="bg-[#0a0418] p-3 rounded-xl border border-purple-900/50 space-y-1 text-[11px]">
+              <div key={idx} className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/50 space-y-1 text-[11px]">
                 <div className="flex justify-between items-center font-bold">
                   <span className="text-cyan-300">{sc.scenarioName}</span>
                   <span className={`px-2 py-0.5 rounded text-[10px] ${sc.testPassed ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'}`}>

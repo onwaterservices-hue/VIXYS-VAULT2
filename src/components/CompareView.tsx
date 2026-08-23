@@ -41,7 +41,7 @@ export const CompareView: React.FC<CompareViewProps> = ({
   return (
     <div className="space-y-6 font-sans animate-fadeIn">
       {/* Top Header & Selectors */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-[#12082b] via-[#1a0e3a] to-[#12082b] border border-purple-500/30 shadow-2xl backdrop-blur-xl">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-[#12082b] via-[#1a0e3a] to-[#12082b] border border-purple-500/30 shadow-2xl backdrop-blur-xl">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1.5">
@@ -70,7 +70,7 @@ export const CompareView: React.FC<CompareViewProps> = ({
                     className={`px-3 py-1 rounded-xl text-xs font-mono font-bold transition-all ${
                       isActive
                         ? 'bg-purple-600 text-white border border-purple-400/50 shadow-md'
-                        : 'bg-[#090415]/80 text-purple-300/80 hover:text-white border border-purple-900/40 hover:border-purple-500/40'
+                        : 'bg-[#0a0518]/80 text-purple-300/80 hover:text-white border border-purple-900/40 hover:border-purple-500/40'
                     }`}
                   >
                     {pair.label}
@@ -81,14 +81,14 @@ export const CompareView: React.FC<CompareViewProps> = ({
           </div>
 
           {/* Asset Selectors & Swap Control */}
-          <div className="flex items-center gap-3 bg-[#080413] p-3 rounded-2xl border border-purple-900/50 shrink-0">
+          <div className="flex items-center gap-3 bg-[#0a0518] p-3 rounded-2xl border border-purple-900/50 shrink-0">
             {/* Asset A Selector */}
             <div className="flex flex-col">
               <label className="text-[10px] font-mono font-bold text-purple-300 uppercase mb-1">Asset A</label>
               <select
                 value={assetA}
                 onChange={(e) => setAssetA(e.target.value)}
-                className="bg-[#120729] border border-purple-500/40 rounded-xl px-3.5 py-2 text-xs font-bold text-white focus:outline-none focus:border-purple-400 cursor-pointer"
+                className="bg-[#0c0620] border border-purple-500/40 rounded-xl px-3.5 py-2 text-xs font-bold text-white focus:outline-none focus:border-purple-400 cursor-pointer"
               >
                 {allAssets.map((sym) => (
                   <option key={sym} value={sym}>
@@ -116,7 +116,7 @@ export const CompareView: React.FC<CompareViewProps> = ({
               <select
                 value={assetB}
                 onChange={(e) => setAssetB(e.target.value)}
-                className="bg-[#120729] border border-purple-500/40 rounded-xl px-3.5 py-2 text-xs font-bold text-white focus:outline-none focus:border-purple-400 cursor-pointer"
+                className="bg-[#0c0620] border border-purple-500/40 rounded-xl px-3.5 py-2 text-xs font-bold text-white focus:outline-none focus:border-purple-400 cursor-pointer"
               >
                 {allAssets.map((sym) => (
                   <option key={sym} value={sym}>
@@ -166,7 +166,7 @@ const AssetComparisonCard: React.FC<{
   const isPurple = highlightColor === 'purple';
 
   return (
-    <div className="p-6 rounded-3xl bg-[#0e0722]/90 border border-purple-500/30 shadow-xl backdrop-blur-xl space-y-6">
+    <div className="p-6 rounded-2xl bg-[#0c0620]/90 border border-purple-500/30 shadow-xl backdrop-blur-xl space-y-6">
       {/* Card Header */}
       <div className="flex items-center justify-between pb-4 border-b border-purple-900/40">
         <div className="flex items-center gap-3">
@@ -196,7 +196,7 @@ const AssetComparisonCard: React.FC<{
       </div>
 
       {/* AI Direction Signal & Calibrated Edge */}
-      <div className="p-4 rounded-2xl bg-[#090415]/80 border border-purple-800/40 space-y-3 font-mono">
+      <div className="p-4 rounded-2xl bg-[#0a0518]/80 border border-purple-800/40 space-y-3 font-mono">
         <div className="flex items-center justify-between">
           <span className="text-xs text-purple-300 font-bold flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-purple-400" />
@@ -209,11 +209,11 @@ const AssetComparisonCard: React.FC<{
         </div>
 
         <div className="grid grid-cols-2 gap-3 pt-2">
-          <div className="p-3 rounded-xl bg-[#120729] border border-purple-900/40">
+          <div className="p-3 rounded-xl bg-[#0c0620] border border-purple-900/40">
             <div className="text-[10px] text-purple-300/60 uppercase font-bold">AI Confidence</div>
             <div className="text-xl font-black text-white">{config.prediction.confidence}%</div>
           </div>
-          <div className="p-3 rounded-xl bg-[#120729] border border-purple-900/40">
+          <div className="p-3 rounded-xl bg-[#0c0620] border border-purple-900/40">
             <div className="text-[10px] text-purple-300/60 uppercase font-bold">Statistical Edge</div>
             <div className="text-xl font-black text-emerald-400">+{config.prediction.edgePct}%</div>
           </div>
@@ -227,7 +227,7 @@ const AssetComparisonCard: React.FC<{
           <span className="text-emerald-400 font-bold">{config.orderFlow.netDelta} Net</span>
         </div>
 
-        <div className="w-full bg-[#090415] rounded-full h-2.5 overflow-hidden flex border border-purple-900/40">
+        <div className="w-full bg-[#0a0518] rounded-full h-2.5 overflow-hidden flex border border-purple-900/40">
           <div
             className="bg-emerald-400 h-full transition-all duration-500"
             style={{ width: `${config.orderFlow.bullVolumePct}%` }}
@@ -253,13 +253,13 @@ const AssetComparisonCard: React.FC<{
         {config.whales.map((w) => (
           <div
             key={w.id}
-            className="p-3 rounded-xl bg-[#090415]/70 border border-purple-900/40 flex items-center justify-between text-xs"
+            className="p-3 rounded-xl bg-[#0a0518]/70 border border-purple-900/40 flex items-center justify-between text-xs"
           >
             <div>
               <div className="font-extrabold text-white">{w.usdValue}</div>
               <div className="text-[10px] text-purple-300/70">{w.venue} • {w.type}</div>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+            <span className="px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
               {w.impact}
             </span>
           </div>

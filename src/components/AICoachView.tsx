@@ -18,7 +18,7 @@ export const AICoachView: React.FC = () => {
   return (
     <div className="space-y-6 font-sans text-slate-200">
       {/* Header */}
-      <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-amber-400 uppercase tracking-widest mb-1">
             <Compass className="w-4 h-4 text-amber-400" />
@@ -31,12 +31,12 @@ export const AICoachView: React.FC = () => {
         </div>
 
         {/* Strategy Profile Switcher */}
-        <div className="flex items-center gap-1.5 bg-[#0D081D] p-1.5 rounded-xl border border-slate-800 font-mono">
+        <div className="flex items-center gap-1.5 bg-[#0c0620] p-1.5 rounded-xl border border-slate-800 font-mono">
           {(['BALANCED', 'AGGRESSIVE', 'INSTITUTIONAL'] as const).map((strat) => (
             <button
               key={strat}
               onClick={() => setSelectedStrategy(strat)}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 selectedStrategy === strat
                   ? 'bg-purple-600 text-white font-black shadow'
                   : 'text-slate-400 hover:text-white'
@@ -51,7 +51,7 @@ export const AICoachView: React.FC = () => {
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Core Question: "Why isn't this 99%?" Breakdown */}
-        <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 space-y-4">
+        <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Brain className="w-5 h-5 text-purple-400" />
@@ -69,7 +69,7 @@ export const AICoachView: React.FC = () => {
           </p>
 
           <div className="space-y-3 font-mono text-xs">
-            <div className="bg-[#0D081D] p-3.5 rounded-xl border border-amber-500/30 space-y-2">
+            <div className="bg-[#0c0620] p-3.5 rounded-xl border border-amber-500/30 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-amber-300 font-bold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -82,7 +82,7 @@ export const AICoachView: React.FC = () => {
               </p>
             </div>
 
-            <div className="bg-[#0D081D] p-3.5 rounded-xl border border-amber-500/30 space-y-2">
+            <div className="bg-[#0c0620] p-3.5 rounded-xl border border-amber-500/30 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-amber-300 font-bold flex items-center gap-1.5">
                   <AlertTriangle className="w-4 h-4 text-amber-400" />
@@ -96,7 +96,7 @@ export const AICoachView: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-[#120B28] p-4 rounded-xl border border-purple-500/30 space-y-2 font-mono text-xs">
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-500/30 space-y-2 font-mono text-xs">
             <span className="text-purple-300 font-bold block uppercase tracking-wider text-[11px]">
               💡 AI Coach Execution Recommendation:
             </span>
@@ -114,7 +114,7 @@ export const AICoachView: React.FC = () => {
         </div>
 
         {/* Strategy Profiler & Risk Management Engine */}
-        <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 space-y-4 font-mono">
+        <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 space-y-4 font-mono">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">
@@ -128,7 +128,7 @@ export const AICoachView: React.FC = () => {
           </div>
 
           <div className="space-y-3 text-xs">
-            <div className="bg-[#0D081D] p-3.5 rounded-xl border border-slate-800 space-y-2">
+            <div className="bg-[#0c0620] p-3.5 rounded-xl border border-slate-800 space-y-2">
               <div className="flex justify-between">
                 <span className="text-slate-400">Min Confidence Threshold:</span>
                 <span className="text-white font-bold">{selectedStrategy === 'AGGRESSIVE' ? '75%' : selectedStrategy === 'INSTITUTIONAL' ? '90%' : '82%'}</span>
@@ -143,7 +143,7 @@ export const AICoachView: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-[#0D081D] p-3.5 rounded-xl border border-slate-800 space-y-2 font-sans text-xs">
+            <div className="bg-[#0c0620] p-3.5 rounded-xl border border-slate-800 space-y-2 font-sans text-xs">
               <span className="font-bold text-white font-mono uppercase text-[11px] block">
                 Recommended Risk Management Rule
               </span>

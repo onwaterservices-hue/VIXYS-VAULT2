@@ -1011,7 +1011,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
     <div className="space-y-4 font-mono text-gray-200 w-full min-w-0">
       
       {/* 1. TOP HEADER: 15S or 1H QUANTITATIVE ENGINE WITH AURA GLOW */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 rounded-3xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_35px_rgba(168,85,247,0.22)] relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#14082e] via-[#0e0521] to-[#080214] border border-purple-500/40 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_35px_rgba(168,85,247,0.22)] relative overflow-hidden">
         <div className="absolute -top-16 -right-16 w-48 h-48 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-16 -left-16 w-48 h-48 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -1042,7 +1042,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         {/* Live Spot Metric & Audio / Indicator Controls */}
         <div className="flex items-center space-x-2.5 relative z-10 flex-wrap">
-          <div className="px-3.5 py-1.5 rounded-xl bg-[#080414]/90 border border-purple-500/40 text-[11px] flex items-center space-x-2 shadow-inner">
+          <div className="px-3.5 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-500/40 text-[11px] flex items-center space-x-2 shadow-inner">
             <span className="text-purple-300 font-semibold">SPOT PRICE:</span>
             <span className="font-black text-white font-mono text-xs sm:text-sm drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]">
               ${currentPrice >= 1000 ? currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : currentPrice.toFixed(2)}
@@ -1050,10 +1050,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
 
           {/* Quick Indicator Toggles */}
-          <div className="hidden sm:flex items-center space-x-1 bg-[#080414] p-1 rounded-xl border border-purple-900/40 text-[10px]">
+          <div className="hidden sm:flex items-center space-x-1 bg-[#0a0518] p-1 rounded-xl border border-purple-900/40 text-[10px]">
             <button
               onClick={() => setShowEma(!showEma)}
-              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer font-bold ${
                 showEma ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               title="Toggle EMA 9/21 Ribbon"
@@ -1062,7 +1062,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </button>
             <button
               onClick={() => setShowBands(!showBands)}
-              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer font-bold ${
                 showBands ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               title="Toggle Bollinger Cloud"
@@ -1071,7 +1071,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </button>
             <button
               onClick={() => setShowCone(!showCone)}
-              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer font-bold ${
                 showCone ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               title="Toggle AI Volatility Cone"
@@ -1080,7 +1080,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </button>
             <button
               onClick={() => setShowVolume(!showVolume)}
-              className={`px-2 py-1 rounded-lg transition-all cursor-pointer font-bold ${
+              className={`px-2 py-1 rounded-xl transition-all cursor-pointer font-bold ${
                 showVolume ? 'bg-purple-600 text-white' : 'text-gray-500 hover:text-gray-300'
               }`}
               title="Toggle Orderflow Volume"
@@ -1104,7 +1104,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       </div>
 
       {/* 2. VISUAL CENTERPIECE: EXPANSIVE CANDLESTICK & PROBABILITY CONE CHART */}
-      <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-3.5 relative overflow-hidden backdrop-blur-xl">
+      <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-4 sm:p-5 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-3.5 relative overflow-hidden backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between text-xs border-b border-purple-900/40 pb-2.5 gap-2">
           <div className="flex items-center space-x-2">
             <BarChart2 className="w-4 h-4 text-cyan-400" />
@@ -1133,7 +1133,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
 
         {/* Spacious, Non-Compressed Canvas Visualizer Frame (460px on mobile, 520px on desktop) */}
-        <div className="relative rounded-2xl bg-[#05020F] border border-purple-500/30 overflow-hidden h-[440px] sm:h-[490px] lg:h-[530px] shadow-[inset_0_0_40px_rgba(0,0,0,0.85)] w-full">
+        <div className="relative rounded-2xl bg-[#0a0518] border border-purple-500/30 overflow-hidden h-[440px] sm:h-[490px] lg:h-[530px] shadow-[inset_0_0_40px_rgba(0,0,0,0.85)] w-full">
           <div ref={containerRef} className="w-full h-full relative">
             <canvas
               ref={canvasRef}
@@ -1143,13 +1143,13 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             />
 
             {/* Overlaid Active Direction & Cone Badge */}
-            <div className="absolute top-2.5 left-2.5 flex items-center space-x-2 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+            <div className="absolute top-2.5 left-2.5 flex items-center space-x-2 bg-[#0c0620]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] shadow-[0_0_15px_rgba(0,0,0,0.5)]">
               <Radio className="w-3 h-3 text-[#00FF88] animate-pulse" />
               <span className="text-gray-300 font-bold">PROJECTED CONE:</span>
               <span className="text-cyan-300 font-black">{upProbability}% BULLISH</span>
             </div>
 
-            <div className="absolute top-2.5 right-2.5 bg-[#0C0819]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
+            <div className="absolute top-2.5 right-2.5 bg-[#0c0620]/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-purple-500/40 text-[10px] text-purple-300 font-mono shadow-[0_0_15px_rgba(0,0,0,0.5)]">
               CONFIDENCE: <strong className="text-white">{confidence}%</strong>
             </div>
           </div>
@@ -1157,7 +1157,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       </div>
 
       {/* 3. PROBABILITY BAR (CLEARLY LABELED) */}
-      <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-5 shadow-[0_0_30px_rgba(168,85,247,0.15)] space-y-2.5 backdrop-blur-xl">
+      <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 shadow-[0_0_30px_rgba(168,85,247,0.15)] space-y-2.5 backdrop-blur-xl">
         <div className="flex flex-wrap items-center justify-between text-xs gap-2">
           <div className="flex items-center space-x-2">
             <Target className="w-4 h-4 text-cyan-400" />
@@ -1174,7 +1174,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
         {/* Clean High-Contrast Bar Display */}
         <div className="grid grid-cols-2 gap-3 text-center my-1">
-          <div className="bg-[#080414] py-2.5 px-3 rounded-2xl border border-emerald-500/50 shadow-[0_0_15px_rgba(0,255,136,0.15)] flex items-center justify-between">
+          <div className="bg-[#0a0518] py-2.5 px-3 rounded-2xl border border-emerald-500/50 shadow-[0_0_15px_rgba(0,255,136,0.15)] flex items-center justify-between">
             <span className="text-xs font-black text-emerald-400 flex items-center space-x-1">
               <ArrowUpRight className="w-4 h-4" />
               <span>BUY UP</span>
@@ -1184,7 +1184,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </span>
           </div>
 
-          <div className="bg-[#080414] py-2.5 px-3 rounded-2xl border border-rose-500/50 shadow-[0_0_15px_rgba(255,59,48,0.15)] flex items-center justify-between">
+          <div className="bg-[#0a0518] py-2.5 px-3 rounded-2xl border border-rose-500/50 shadow-[0_0_15px_rgba(255,59,48,0.15)] flex items-center justify-between">
             <span className="text-xs font-black text-rose-400 flex items-center space-x-1">
               <ArrowDownRight className="w-4 h-4" />
               <span>BUY DOWN</span>
@@ -1196,7 +1196,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         </div>
 
         {/* Progress Bar Strip */}
-        <div className="h-3.5 w-full bg-[#080414] rounded-full overflow-hidden p-0.5 border border-purple-500/40 flex">
+        <div className="h-3.5 w-full bg-[#0a0518] rounded-full overflow-hidden p-0.5 border border-purple-500/40 flex">
           <div
             className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-300 shadow-[0_0_12px_rgba(0,255,136,0.8)]"
             style={{ width: `${upProbability}%` }}
@@ -1214,10 +1214,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         {/* BUY UP CAPSULE */}
         <button
           onClick={() => handleActionSound('UP')}
-          className={`p-5 rounded-3xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+          className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
             selectedDirection === 'UP'
               ? 'bg-gradient-to-br from-[#081F15]/95 via-[#0D0A20]/95 to-[#06030D]/95 border-emerald-400 shadow-[0_0_35px_rgba(0,255,136,0.35)] scale-[1.01]'
-              : 'bg-[#080414] border-purple-900/40 hover:border-emerald-500/50'
+              : 'bg-[#0a0518] border-purple-900/40 hover:border-emerald-500/50'
           }`}
         >
           <div className="flex items-center justify-between mb-3">
@@ -1239,7 +1239,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </div>
           </div>
 
-          <div className="space-y-1.5 text-[10px] bg-[#05020F] p-3 rounded-2xl border border-purple-900/30">
+          <div className="space-y-1.5 text-[10px] bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
             <div className="flex justify-between">
               <span className="text-gray-400">EXPECTED EDGE:</span>
               <span className="text-[#00FF88] font-bold">+14.2% Net Edge</span>
@@ -1258,10 +1258,10 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         {/* BUY DOWN CAPSULE */}
         <button
           onClick={() => handleActionSound('DOWN')}
-          className={`p-5 rounded-3xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+          className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
             selectedDirection === 'DOWN'
               ? 'bg-gradient-to-br from-[#240A13]/95 via-[#0D0A20]/95 to-[#06030D]/95 border-rose-400 shadow-[0_0_35px_rgba(255,59,48,0.35)] scale-[1.01]'
-              : 'bg-[#080414] border-purple-900/40 hover:border-rose-500/50'
+              : 'bg-[#0a0518] border-purple-900/40 hover:border-rose-500/50'
           }`}
         >
           <div className="flex items-center justify-between mb-3">
@@ -1283,7 +1283,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
             </div>
           </div>
 
-          <div className="space-y-1.5 text-[10px] bg-[#05020F] p-3 rounded-2xl border border-purple-900/30">
+          <div className="space-y-1.5 text-[10px] bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
             <div className="flex justify-between">
               <span className="text-gray-400">EXPECTED EDGE:</span>
               <span className="text-amber-400 font-bold">-0.38% Net Move</span>
@@ -1302,7 +1302,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       </div>
 
       {/* 5. AI CONVICTION TIMELINE & LIVE NEURAL SIGNAL HISTORY */}
-      <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
+      <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
         
         {/* Module Header */}
         <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 gap-2">
@@ -1321,11 +1321,11 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
 
           <div className="flex items-center space-x-2 font-mono text-xs">
-            <div className="px-3 py-1 rounded-xl bg-[#080414] border border-emerald-500/40 text-[10px]">
+            <div className="px-3 py-1 rounded-xl bg-[#0a0518] border border-emerald-500/40 text-[10px]">
               <span className="text-gray-400">VELOCITY: </span>
               <span className="text-[#00FF88] font-black">{velocity}</span>
             </div>
-            <div className="px-3 py-1 rounded-xl bg-[#080414] border border-cyan-500/40 text-[10px]">
+            <div className="px-3 py-1 rounded-xl bg-[#0a0518] border border-cyan-500/40 text-[10px]">
               <span className="text-gray-400">SWING (2M): </span>
               <span className="text-cyan-300 font-black">{momentumDelta}</span>
             </div>
@@ -1336,7 +1336,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* Left: Sparkline Curve & Step Nodes (7 cols) */}
-          <div className="lg:col-span-7 bg-[#080414] p-4 rounded-2xl border border-purple-900/30 space-y-3">
+          <div className="lg:col-span-7 bg-[#0a0518] p-4 rounded-2xl border border-purple-900/30 space-y-3">
             <div className="flex justify-between items-center text-[10px] font-bold">
               <span className="text-purple-300 flex items-center space-x-1.5">
                 <Clock className="w-3.5 h-3.5 text-cyan-400" />
@@ -1372,7 +1372,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                       {pt.value}%
                     </div>
                     <div className={`w-2 h-2 rounded-full border ${
-                      pt.label === 'Now' ? 'bg-[#00FF88] border-white ring-2 ring-emerald-500/40' : 'bg-[#080318] border-purple-400'
+                      pt.label === 'Now' ? 'bg-[#00FF88] border-white ring-2 ring-emerald-500/40' : 'bg-[#0a0518] border-purple-400'
                     }`} />
                     <span className="text-[9px] text-gray-400">{pt.label}</span>
                   </div>
@@ -1389,7 +1389,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                 {driverChips.map((chip, idx) => (
                   <span
                     key={idx}
-                    className={`px-2 py-0.5 rounded-lg text-[9.5px] font-bold flex items-center space-x-1 border ${
+                    className={`px-2 py-0.5 rounded-xl text-[9.5px] font-bold flex items-center space-x-1 border ${
                       chip.positive
                         ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/30'
                         : 'bg-rose-950/60 text-rose-300 border-rose-500/30'
@@ -1404,7 +1404,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
           </div>
 
           {/* Right: Conviction Events Stream (5 cols) */}
-          <div className="lg:col-span-5 bg-[#080414] p-4 rounded-2xl border border-purple-900/30 space-y-2.5 flex flex-col justify-between">
+          <div className="lg:col-span-5 bg-[#0a0518] p-4 rounded-2xl border border-purple-900/30 space-y-2.5 flex flex-col justify-between">
             <div className="flex justify-between items-center text-[10px] font-bold">
               <span className="text-purple-300 flex items-center space-x-1.5">
                 <History className="w-3.5 h-3.5 text-purple-400" />
@@ -1417,7 +1417,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               {convictionEvents.map((evt) => (
                 <div
                   key={evt.id}
-                  className="p-2 rounded-xl bg-[#0C0819] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono"
+                  className="p-2 rounded-xl bg-[#0c0620] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono"
                 >
                   <div className="flex items-center space-x-2 truncate">
                     <span className={`w-1.5 h-1.5 rounded-full ${evt.type === 'up' ? 'bg-[#00FF88] animate-ping' : 'bg-[#FF3B30]'}`} />

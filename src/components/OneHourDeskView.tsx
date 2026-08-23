@@ -290,7 +290,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
       {/* ================================================== */}
       {/* 1. HEADER: 1-HOUR QUANTITATIVE DECISION DESK      */}
       {/* ================================================== */}
-      <div className="bg-gradient-to-r from-[#14082e] via-[#100624] to-[#080214] rounded-3xl p-4 sm:p-6 border border-purple-500/40 shadow-[0_0_45px_rgba(147,51,234,0.22)] relative overflow-hidden backdrop-blur-xl w-full min-w-0">
+      <div className="bg-gradient-to-r from-[#14082e] via-[#100624] to-[#080214] rounded-2xl p-4 sm:p-6 border border-purple-500/40 shadow-[0_0_45px_rgba(147,51,234,0.22)] relative overflow-hidden backdrop-blur-xl w-full min-w-0">
         <div className="absolute -right-12 -bottom-12 w-72 h-72 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -left-12 -top-12 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -322,7 +322,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             {/* Live Spot Price Header Capsule */}
-            <div className="px-4 py-2 rounded-2xl bg-[#080414]/90 border border-purple-500/40 text-xs flex items-center space-x-2 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
+            <div className="px-4 py-2 rounded-2xl bg-[#0a0518]/90 border border-purple-500/40 text-xs flex items-center space-x-2 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
               <span className="text-purple-300 font-semibold">LIVE SPOT:</span>
               <span className="font-black text-white font-mono text-sm sm:text-base drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]">
                 ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -358,7 +358,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 2. STRIKE MATRIX: MAIN DECISION SELECTION          */}
           {/* ================================================== */}
-          <div className="bg-[#0C0819]/95 rounded-3xl p-5 sm:p-6 border border-purple-500/40 shadow-[0_0_40px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl relative overflow-hidden">
+          <div className="bg-[#0c0620]/95 rounded-2xl p-5 sm:p-6 border border-purple-500/40 shadow-[0_0_40px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl relative overflow-hidden">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-2xl bg-amber-500/20 border border-amber-400/60 flex items-center justify-center shadow-[0_0_15px_rgba(251,191,36,0.35)]">
@@ -376,7 +376,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               
               <div className="flex items-center space-x-2 text-xs text-purple-300 font-mono">
                 <span className="text-gray-400">ACTIVE SELECTION:</span>
-                <span className="font-black text-amber-300 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-400/40">
+                <span className="font-black text-amber-300 px-2 py-0.5 rounded-xl bg-amber-500/15 border border-amber-400/40">
                   ${selectedStrike.toLocaleString()}
                 </span>
               </div>
@@ -393,7 +393,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                   <button
                     key={item.strike}
                     onClick={() => handleSelectStrike(item)}
-                    className={`p-5 rounded-3xl border-2 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-xl cursor-pointer group flex flex-col justify-between ${
+                    className={`p-5 rounded-2xl border-2 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-xl cursor-pointer group flex flex-col justify-between ${
                       isSelected
                         ? isOptimal
                           ? 'bg-gradient-to-br from-[#1C0E38] via-[#120726] to-[#070212] border-amber-400 shadow-[0_0_40px_rgba(251,191,36,0.45)] ring-4 ring-amber-400/30 scale-[1.02]'
@@ -401,8 +401,8 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                           ? 'bg-gradient-to-br from-[#0B2418] via-[#091515] to-[#040908] border-emerald-400 shadow-[0_0_40px_rgba(0,255,136,0.35)] ring-4 ring-emerald-400/30 scale-[1.02]'
                           : 'bg-gradient-to-br from-[#240D36] via-[#140724] to-[#070212] border-purple-400 shadow-[0_0_40px_rgba(168,85,247,0.4)] ring-4 ring-purple-400/30 scale-[1.02]'
                         : isOptimal
-                        ? 'bg-[#0E0620]/90 border-amber-500/40 hover:border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.15)] opacity-95'
-                        : 'bg-[#080314]/85 border-purple-900/50 hover:border-purple-600/70 opacity-80 hover:opacity-100'
+                        ? 'bg-[#0c0620]/90 border-amber-500/40 hover:border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.15)] opacity-95'
+                        : 'bg-[#0a0518]/85 border-purple-900/50 hover:border-purple-600/70 opacity-80 hover:opacity-100'
                     }`}
                   >
                     {/* Top Selection Status Pill */}
@@ -411,7 +411,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                         {item.categoryLabel}
                       </span>
                       {isSelected ? (
-                        <span className="flex items-center space-x-1 text-[10px] font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-lg border border-amber-400/50 animate-pulse">
+                        <span className="flex items-center space-x-1 text-[10px] font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-xl border border-amber-400/50 animate-pulse">
                           <Check className="w-3 h-3" />
                           <span>SELECTED</span>
                         </span>
@@ -440,11 +440,11 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
                     {/* Bottom Metrics Bar */}
                     <div className="mt-4 pt-3 border-t border-purple-900/40 grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-[#05020E]/80 p-2 rounded-xl border border-purple-900/40">
+                      <div className="bg-[#0a0518]/80 p-2 rounded-xl border border-purple-900/40">
                         <span className="text-[9px] text-gray-400 block font-sans">MODEL WIN PROB</span>
                         <strong className="text-white font-black text-sm">{item.winProb}%</strong>
                       </div>
-                      <div className="bg-[#05020E]/80 p-2 rounded-xl border border-purple-900/40">
+                      <div className="bg-[#0a0518]/80 p-2 rounded-xl border border-purple-900/40">
                         <span className="text-[9px] text-gray-400 block font-sans">NET 1H EDGE</span>
                         <strong className="text-emerald-400 font-black text-sm">+{item.edge}%</strong>
                       </div>
@@ -470,7 +470,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 4. UP/DOWN CAPSULES: CLEAR PROBABILITY RELATION    */}
           {/* ================================================== */}
-          <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Scale className="w-5 h-5 text-purple-400" />
@@ -489,10 +489,10 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               {/* BUY UP Capsule */}
               <button
                 onClick={() => handleDirectionSound('UP')}
-                className={`p-5 rounded-3xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
                   selectedDirection === 'UP'
                     ? 'bg-gradient-to-br from-[#0A2619] via-[#0D1822] to-[#050B10] border-emerald-400 shadow-[0_0_35px_rgba(0,255,136,0.35)] scale-[1.01]'
-                    : 'bg-[#080414] border-purple-900/50 hover:border-emerald-500/50 opacity-85 hover:opacity-100'
+                    : 'bg-[#0a0518] border-purple-900/50 hover:border-emerald-500/50 opacity-85 hover:opacity-100'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
@@ -520,13 +520,13 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-emerald-500/20">
-                  <div className="bg-[#05020E]/80 p-2.5 rounded-xl border border-emerald-500/30">
+                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-emerald-500/30">
                     <span className="text-[9px] text-gray-400 block font-sans">QUANTITATIVE EDGE</span>
                     <strong className="text-emerald-400 font-black text-sm">+{edgePctFormatted}%</strong>
                     <span className="text-[8.5px] text-gray-400 block font-sans">vs Kalshi 72¢ Implied</span>
                   </div>
 
-                  <div className="bg-[#05020E]/80 p-2.5 rounded-xl border border-emerald-500/30">
+                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-emerald-500/30">
                     <span className="text-[9px] text-gray-400 block font-sans">MARKET CONDITION</span>
                     <strong className="text-cyan-300 font-bold text-xs">VWAP Expansion</strong>
                     <span className="text-[8.5px] text-gray-400 block font-sans">Macro Uptrend Intact</span>
@@ -537,10 +537,10 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               {/* BUY DOWN Capsule */}
               <button
                 onClick={() => handleDirectionSound('DOWN')}
-                className={`p-5 rounded-3xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
                   selectedDirection === 'DOWN'
                     ? 'bg-gradient-to-br from-[#2E0B13] via-[#1E091B] to-[#0A030C] border-rose-400 shadow-[0_0_35px_rgba(255,59,48,0.35)] scale-[1.01]'
-                    : 'bg-[#080414] border-purple-900/50 hover:border-rose-500/50 opacity-85 hover:opacity-100'
+                    : 'bg-[#0a0518] border-purple-900/50 hover:border-rose-500/50 opacity-85 hover:opacity-100'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
@@ -568,13 +568,13 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-rose-500/20">
-                  <div className="bg-[#05020E]/80 p-2.5 rounded-xl border border-rose-500/30">
+                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-rose-500/30">
                     <span className="text-[9px] text-gray-400 block font-sans">QUANTITATIVE EDGE</span>
                     <strong className="text-rose-400 font-black text-sm">-8.4%</strong>
                     <span className="text-[8.5px] text-gray-400 block font-sans">Counter-Trend Friction</span>
                   </div>
 
-                  <div className="bg-[#05020E]/80 p-2.5 rounded-xl border border-rose-500/30">
+                  <div className="bg-[#0a0518]/80 p-2.5 rounded-xl border border-rose-500/30">
                     <span className="text-[9px] text-gray-400 block font-sans">MARKET CONDITION</span>
                     <strong className="text-purple-300 font-bold text-xs">High Absorption</strong>
                     <span className="text-[8.5px] text-gray-400 block font-sans">Bids Wall Stacking</span>
@@ -588,7 +588,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 5. AI CONVICTION: ANALYTICAL TIMELINE & HEAT METER */}
           {/* ================================================== */}
-          <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Compass className="w-5 h-5 text-cyan-400" />
@@ -604,7 +604,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
               <div className="flex items-center space-x-2">
                 <span className="text-[10px] text-gray-400 font-mono">CALIBRATION SCORE:</span>
-                <span className="text-xs font-black text-[#00FF88] bg-[#05020E] px-2.5 py-1 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(0,255,136,0.2)]">
+                <span className="text-xs font-black text-[#00FF88] bg-[#0a0518] px-2.5 py-1 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(0,255,136,0.2)]">
                   0.118 BRIER (HIGH)
                 </span>
               </div>
@@ -625,7 +625,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                   className={`p-3 rounded-2xl border ${
                     step.time === 'NOW'
                       ? 'bg-gradient-to-b from-[#180A33] to-[#0A0418] border-emerald-400 shadow-[0_0_20px_rgba(0,255,136,0.3)] ring-2 ring-emerald-500/40'
-                      : 'bg-[#080414] border-purple-900/40'
+                      : 'bg-[#0a0518] border-purple-900/40'
                   }`}
                 >
                   <span className="text-[10px] text-gray-400 block font-sans">{step.time}</span>
@@ -641,7 +641,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
             {/* Analytical Metrics Row */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
                 <div>
                   <span className="text-[9.5px] text-gray-400 block font-sans">CONVICTION TRAJECTORY</span>
                   <span className="text-sm font-black text-cyan-300">+8.4% DRIFT (30M)</span>
@@ -649,7 +649,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 <Sparkles className="w-5 h-5 text-cyan-400" />
               </div>
 
-              <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
                 <div>
                   <span className="text-[9.5px] text-gray-400 block font-sans">VOLATILITY SQUEEZE (ATR)</span>
                   <span className="text-sm font-black text-amber-300">$128.40 (EXPANDING)</span>
@@ -657,7 +657,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 <Activity className="w-5 h-5 text-amber-400" />
               </div>
 
-              <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
                 <div>
                   <span className="text-[9.5px] text-gray-400 block font-sans">CROSS-TF ALIGNMENT</span>
                   <span className="text-sm font-black text-[#00FF88]">5M / 15M / 1H BULLISH</span>
@@ -670,7 +670,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 6. CATALYSTS: CLEAN STRUCTURED EVENT STREAM        */}
           {/* ================================================== */}
-          <div className="bg-[#0C0819]/95 border border-purple-500/40 rounded-3xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
+          <div className="bg-[#0c0620]/95 border border-purple-500/40 rounded-2xl p-5 sm:p-6 shadow-[0_0_35px_rgba(168,85,247,0.18)] space-y-4 backdrop-blur-xl">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center space-x-2.5">
                 <Layers className="w-5 h-5 text-purple-400" />
@@ -678,7 +678,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                   QUANTITATIVE CONVICTION CATALYSTS & EVENT STREAM
                 </h3>
               </div>
-              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-500/30">
+              <span className="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded-xl border border-emerald-500/30">
                 5/5 SYNCHRONIZED
               </span>
             </div>
@@ -687,7 +687,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             <div className="space-y-2.5 font-mono text-xs">
               
               {/* 1. ORDER FLOW */}
-              <div className="p-3.5 rounded-2xl bg-[#080414] border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(0,255,136,0.08)]">
+              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(0,255,136,0.08)]">
                 <div className="flex items-center space-x-3">
                   <span className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-[#00FF88] border border-emerald-500/40 text-[9.5px] font-black tracking-wider">
                     ORDER FLOW
@@ -700,7 +700,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 2. STRIKE GAP */}
-              <div className="p-3.5 rounded-2xl bg-[#080414] border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(168,85,247,0.08)]">
+              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(168,85,247,0.08)]">
                 <div className="flex items-center space-x-3">
                   <span className="px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/40 text-[9.5px] font-black tracking-wider">
                     STRIKE GAP
@@ -713,7 +713,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 3. VOLATILITY */}
-              <div className="p-3.5 rounded-2xl bg-[#080414] border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(34,211,238,0.08)]">
+              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(34,211,238,0.08)]">
                 <div className="flex items-center space-x-3">
                   <span className="px-2.5 py-1 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 text-[9.5px] font-black tracking-wider">
                     VOLATILITY
@@ -726,7 +726,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 4. CROSS-VENUE */}
-              <div className="p-3.5 rounded-2xl bg-[#080414] border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(251,191,36,0.08)]">
+              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(251,191,36,0.08)]">
                 <div className="flex items-center space-x-3">
                   <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[9.5px] font-black tracking-wider">
                     CROSS-VENUE
@@ -739,7 +739,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 5. MICROSTRUCTURE */}
-              <div className="p-3.5 rounded-2xl bg-[#080414] border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(99,102,241,0.08)]">
+              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(99,102,241,0.08)]">
                 <div className="flex items-center space-x-3">
                   <span className="px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 text-[9.5px] font-black tracking-wider">
                     MICROSTRUCTURE
@@ -757,10 +757,10 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 7. BOTTOM STATUS: 4 EASILY SCANNABLE METRICS       */}
           {/* ================================================== */}
-          <div className="bg-[#0C0819]/95 border border-purple-500/40 p-5 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.18)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono backdrop-blur-xl">
+          <div className="bg-[#0c0620]/95 border border-purple-500/40 p-5 rounded-2xl shadow-[0_0_35px_rgba(168,85,247,0.18)] grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono backdrop-blur-xl">
             
             {/* Momentum Persistence */}
-            <div className="p-4 rounded-2xl bg-[#080414] border border-cyan-500/30 space-y-1.5 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
+            <div className="p-4 rounded-2xl bg-[#0a0518] border border-cyan-500/30 space-y-1.5 shadow-[0_0_15px_rgba(34,211,238,0.1)]">
               <span className="text-[10px] text-cyan-400 font-bold uppercase tracking-wider block">
                 Momentum Persistence
               </span>
@@ -774,7 +774,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
 
             {/* Reversal Risk */}
-            <div className="p-4 rounded-2xl bg-[#080414] border border-emerald-500/30 space-y-1.5 shadow-[0_0_15px_rgba(0,255,136,0.1)]">
+            <div className="p-4 rounded-2xl bg-[#0a0518] border border-emerald-500/30 space-y-1.5 shadow-[0_0_15px_rgba(0,255,136,0.1)]">
               <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider block">
                 Reversal Risk
               </span>
@@ -788,7 +788,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
 
             {/* Strike Gap */}
-            <div className="p-4 rounded-2xl bg-[#080414] border border-amber-500/30 space-y-1.5 shadow-[0_0_15px_rgba(251,191,36,0.1)]">
+            <div className="p-4 rounded-2xl bg-[#0a0518] border border-amber-500/30 space-y-1.5 shadow-[0_0_15px_rgba(251,191,36,0.1)]">
               <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">
                 Strike Gap
               </span>
@@ -804,7 +804,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
 
             {/* Market Bias */}
-            <div className="p-4 rounded-2xl bg-[#080414] border border-purple-500/30 space-y-1.5 shadow-[0_0_15px_rgba(168,85,247,0.1)]">
+            <div className="p-4 rounded-2xl bg-[#0a0518] border border-purple-500/30 space-y-1.5 shadow-[0_0_15px_rgba(168,85,247,0.1)]">
               <span className="text-[10px] text-purple-400 font-bold uppercase tracking-wider block">
                 Market Bias
               </span>
@@ -832,7 +832,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
             {/* Right Column: Server Kelly Sizing */}
             <div className="space-y-6">
-              <div className="bg-[#0C0819]/95 backdrop-blur-xl rounded-3xl p-5 border border-purple-500/40 shadow-[0_0_35px_rgba(147,51,234,0.15)] space-y-4">
+              <div className="bg-[#0c0620]/95 backdrop-blur-xl rounded-2xl p-5 border border-purple-500/40 shadow-[0_0_35px_rgba(147,51,234,0.15)] space-y-4">
                 <div className="font-bold text-white flex items-center justify-between border-b border-purple-900/40 pb-3">
                   <span className="flex items-center gap-2 text-sm font-mono tracking-wide">
                     <Calculator className="w-4 h-4 text-amber-400" />
@@ -851,7 +851,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                       type="number"
                       value={bankroll}
                       onChange={(e) => setBankroll(Math.max(1, Number(e.target.value)))}
-                      className="w-32 bg-[#060312] border border-purple-500/40 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400/50 rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold transition-all"
+                      className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400/50 rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold transition-all"
                     />
                   </div>
 
@@ -860,7 +860,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                     <select
                       value={kellyFraction}
                       onChange={(e) => setKellyFraction(Number(e.target.value))}
-                      className="w-32 bg-[#060312] border border-purple-500/40 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400/50 rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold transition-all cursor-pointer"
+                      className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none focus:ring-1 focus:ring-purple-400/50 rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold transition-all cursor-pointer"
                     >
                       <option value={0.125}>1/8 Kelly (0.125)</option>
                       <option value={0.25}>1/4 Kelly (0.25)</option>
@@ -894,7 +894,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                     const evPct = Math.max(0.1, Math.round(evPctNum * 10) / 10);
 
                     return (
-                      <div className="bg-[#060312] p-4 rounded-2xl border border-purple-500/40 space-y-2.5 font-mono text-xs mt-2 shadow-[0_0_20px_rgba(16,185,129,0.08)]">
+                      <div className="bg-[#0a0518] p-4 rounded-2xl border border-purple-500/40 space-y-2.5 font-mono text-xs mt-2 shadow-[0_0_20px_rgba(16,185,129,0.08)]">
                         <div className="flex justify-between items-center pb-1.5 border-b border-purple-900/40">
                           <span className="text-purple-300 font-semibold">Recommended Stake:</span>
                           <strong className="text-emerald-400 text-sm font-black tabular-nums font-mono drop-shadow-[0_0_8px_rgba(52,211,153,0.4)]">
@@ -922,13 +922,13 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 1H Quant Confirmation Score */}
-              <div className="bg-[#0C0819]/95 backdrop-blur-xl rounded-3xl p-5 border border-purple-900/50 space-y-3.5 text-xs shadow-xl">
+              <div className="bg-[#0c0620]/95 backdrop-blur-xl rounded-2xl p-5 border border-purple-900/50 space-y-3.5 text-xs shadow-xl">
                 <div className="font-bold text-white flex items-center justify-between border-b border-purple-900/40 pb-3">
                   <span className="flex items-center gap-2 font-mono tracking-wide text-sm">
                     <ShieldCheck className="w-4 h-4 text-purple-400" />
                     <span>1H QUANT CONFIRMATION SCORE</span>
                   </span>
-                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-[#00FF88] border border-emerald-500/40 text-[10px] font-black tracking-wider shadow-[0_0_10px_rgba(0,255,136,0.25)]">
+                  <span className="px-2 py-0.5 rounded-xl bg-emerald-500/20 text-[#00FF88] border border-emerald-500/40 text-[10px] font-black tracking-wider shadow-[0_0_10px_rgba(0,255,136,0.25)]">
                     3/3 PASSED
                   </span>
                 </div>

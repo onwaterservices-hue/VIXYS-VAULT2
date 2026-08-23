@@ -47,7 +47,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
   return (
     <div className="space-y-6 font-sans">
       {/* Header Banner */}
-      <div className="p-6 rounded-3xl bg-gradient-to-r from-[#140a32] via-[#1f1145] to-[#140a32] border border-purple-500/20 shadow-2xl backdrop-blur-xl">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-[#140a32] via-[#1f1145] to-[#140a32] border border-purple-500/20 shadow-2xl backdrop-blur-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
@@ -82,7 +82,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
           return (
             <div
               key={asset.symbol}
-              className="p-6 rounded-3xl bg-[#0e0722]/90 border border-purple-500/20 hover:border-purple-500/60 shadow-xl hover:shadow-2xl hover:shadow-purple-900/30 backdrop-blur-xl transition-all duration-300 transform hover:-translate-y-1.5 flex flex-col justify-between group"
+              className="p-6 rounded-2xl bg-[#0c0620]/90 border border-purple-500/20 hover:border-purple-500/60 shadow-xl hover:shadow-2xl hover:shadow-purple-900/30 backdrop-blur-xl transition-all duration-300 transform hover:-translate-y-1.5 flex flex-col justify-between group"
             >
               {/* Top Row: Symbol, Name, Price & Favorite Star */}
               <div>
@@ -117,7 +117,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                     ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                   </div>
                   <div
-                    className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                    className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${
                       displayChange >= 0
                         ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
                         : 'text-rose-400 bg-rose-500/10 border-rose-500/30'

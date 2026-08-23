@@ -102,7 +102,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
   return (
     <div className="space-y-6 font-mono text-purple-100">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0c051f] border border-purple-500/30 p-6 rounded-2xl shadow-[0_0_35px_rgba(147,51,234,0.15)]">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0a0518] border border-purple-500/30 p-6 rounded-2xl shadow-[0_0_35px_rgba(147,51,234,0.15)]">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/30 text-purple-400">
             <BookOpen className="w-6 h-6 text-purple-300" />
@@ -132,7 +132,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-[#0e0624] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
+        <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
           <span className="text-purple-300/60 text-xs block mb-1 uppercase font-bold">Cumulative Net PnL</span>
           <div className="flex items-baseline gap-2">
             <span className={`text-3xl font-black ${totalPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -142,7 +142,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
           </div>
         </div>
 
-        <div className="bg-[#0e0624] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
+        <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
           <span className="text-purple-300/60 text-xs block mb-1 uppercase font-bold">Journaled Win Rate</span>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-cyan-300">{winRate.toFixed(1)}%</span>
@@ -150,7 +150,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
           </div>
         </div>
 
-        <div className="bg-[#0e0624] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
+        <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
           <span className="text-purple-300/60 text-xs block mb-1 uppercase font-bold">Average Implied Edge</span>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-black text-purple-200">+11.4%</span>
@@ -160,7 +160,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
       </div>
 
       {/* Journal Entries Table / List */}
-      <div className="bg-[#0e0624] rounded-2xl border border-purple-500/30 overflow-hidden shadow-2xl">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 overflow-hidden shadow-2xl">
         <div className="p-4 border-b border-purple-900/40 flex items-center justify-between">
           <span className="font-bold text-xs text-purple-200 flex items-center gap-2">
             <Shield className="w-4 h-4 text-cyan-400" />
@@ -248,8 +248,8 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
 
       {/* Add Entry Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-[#060312]/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0e0624] border border-purple-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono text-xs text-purple-100">
+        <div className="fixed inset-0 z-50 bg-[#0a0518]/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-[#0c0620] border border-purple-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 font-mono text-xs text-purple-100">
             <h3 className="text-base font-black text-white border-b border-purple-900/40 pb-3">LOG PREDICTION POSITION</h3>
 
             <form onSubmit={handleAddEntry} className="space-y-4">
@@ -259,7 +259,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                   type="text"
                   value={market}
                   onChange={(e) => setMarket(e.target.value)}
-                  className="w-full bg-[#060312] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
+                  className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
                   required
                 />
               </div>
@@ -270,7 +270,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                   <select
                     value={direction}
                     onChange={(e) => setDirection(e.target.value as 'YES' | 'NO')}
-                    className="w-full bg-[#060312] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
                   >
                     <option value="YES">BUY UP (YES)</option>
                     <option value="NO">BUY DOWN (NO)</option>
@@ -283,7 +283,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                     type="number"
                     value={stakeUSD}
                     onChange={(e) => setStakeUSD(e.target.value)}
-                    className="w-full bg-[#060312] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
                     required
                   />
                 </div>
@@ -297,7 +297,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                     step="0.01"
                     value={entryOdds}
                     onChange={(e) => setEntryOdds(e.target.value)}
-                    className="w-full bg-[#060312] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
                     required
                   />
                 </div>
@@ -309,7 +309,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                     step="0.01"
                     value={exitOdds}
                     onChange={(e) => setExitOdds(e.target.value)}
-                    className="w-full bg-[#060312] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-purple-100"
                     required
                   />
                 </div>
@@ -322,7 +322,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Order flow delta, bid depth imbalance..."
-                  className="w-full bg-[#060312] border border-purple-900/60 rounded-xl p-3 text-purple-100 font-sans"
+                  className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl p-3 text-purple-100 font-sans"
                 />
               </div>
 
@@ -330,7 +330,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 rounded-xl bg-[#060312] text-purple-300/70 hover:text-white"
+                  className="px-4 py-2 rounded-xl bg-[#0a0518] text-purple-300/70 hover:text-white"
                 >
                   Cancel
                 </button>

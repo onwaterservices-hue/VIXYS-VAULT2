@@ -1476,8 +1476,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
     <div className="relative min-h-screen">
       {/* PAYWALL / SUBSCRIPTION ACCESS GUARD OVERLAY */}
       {!hasActiveAccess && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#05020F]/85 backdrop-blur-xl animate-fadeIn font-mono">
-          <div className="max-w-xl w-full p-6 sm:p-8 rounded-3xl bg-[#0D071E] border-2 border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.4)] text-center space-y-6 relative overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#0a0518]/85 backdrop-blur-xl animate-fadeIn font-mono">
+          <div className="max-w-xl w-full p-6 sm:p-8 rounded-2xl bg-[#0c0620] border-2 border-cyan-500/50 shadow-[0_0_50px_rgba(6,182,212,0.4)] text-center space-y-6 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-purple-600/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -1545,10 +1545,10 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
       )}
 
       {/* Main Terminal View (blurred backdrop when access not active) */}
-      <div className={`min-h-screen bg-[#06030D] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none transition-all duration-500 ${!hasActiveAccess ? 'filter blur-[14px] opacity-25 pointer-events-none select-none overflow-hidden h-[90vh]' : ''}`}>
+      <div className={`min-h-screen bg-[#0a0518] text-gray-200 font-mono text-xs pb-16 space-y-4 select-none transition-all duration-500 ${!hasActiveAccess ? 'filter blur-[14px] opacity-25 pointer-events-none select-none overflow-hidden h-[90vh]' : ''}`}>
         
         {/* 1. TOP SYSTEM STATUS HEADER */}
-        <div className="flex flex-wrap items-center justify-between bg-[#0C0819]/90 border border-purple-900/40 backdrop-blur-md rounded-2xl px-4 sm:px-5 py-3 shadow-[0_4px_25px_rgba(0,0,0,0.6)] gap-3">
+        <div className="flex flex-wrap items-center justify-between bg-[#0c0620]/90 border border-purple-900/40 backdrop-blur-md rounded-2xl px-4 sm:px-5 py-3 shadow-[0_4px_25px_rgba(0,0,0,0.6)] gap-3">
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
             {/* Live Indicator */}
             <div className="flex items-center space-x-2 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[#00FF88]">
@@ -1560,14 +1560,14 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* Asset Pair */}
-            <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-[#080511] border border-purple-900/30 text-white font-black text-xs sm:text-sm">
+            <div className="flex items-center space-x-1.5 px-3 py-1 rounded-xl bg-[#0a0518] border border-purple-900/30 text-white font-black text-xs sm:text-sm">
               <span className="text-purple-400">BTC</span>
               <span className="text-gray-500">/</span>
               <span>USD</span>
             </div>
 
             {/* 15M Contract */}
-            <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#080511] border border-purple-900/30 text-[10px] text-purple-300">
+            <div className="hidden md:flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-[#0a0518] border border-purple-900/30 text-[10px] text-purple-300">
               <span className="text-gray-500">CONTRACT:</span>
               <span className="font-bold text-white">{tickerName}</span>
             </div>
@@ -1610,7 +1610,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </span>
             </button>
 
-            <div className="hidden sm:flex items-center space-x-1.5 text-[10px] text-gray-400 font-mono bg-[#080511] px-2.5 py-1.5 rounded-lg border border-purple-900/30">
+            <div className="hidden sm:flex items-center space-x-1.5 text-[10px] text-gray-400 font-mono bg-[#0a0518] px-2.5 py-1.5 rounded-xl border border-purple-900/30">
               <Clock className="w-3 h-3 text-purple-400" />
               <span>{new Date(adjustedNow).toLocaleTimeString()} EST</span>
             </div>
@@ -1621,11 +1621,11 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         <div id="vixy-command-hero" className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* PRIMARY DECISION AREA & DECISION AURA (Dominant Centerpiece - 7 cols on LG) */}
-          <div className={`lg:col-span-7 rounded-3xl p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between border-2 transition-all duration-500 ${decisionAuraStyle}`}>
+          <div className={`lg:col-span-7 rounded-2xl p-5 sm:p-6 relative overflow-hidden flex flex-col justify-between border-2 transition-all duration-500 ${decisionAuraStyle}`}>
             
             {/* Laser scanning beam for Building / Calibrating states */}
             {(isBuilding || isCalibrating) && (
-              <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+              <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-2xl">
                 <div className="w-full h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-laser-sweep opacity-75 shadow-[0_0_15px_rgba(6,182,212,0.9)]" />
               </div>
             )}
@@ -1699,7 +1699,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </div>
 
               {/* DECISION RATIONALE: WHAT DOES VIXY THINK RIGHT NOW - AND WHY? */}
-              <div className="bg-[#080414]/90 p-3.5 rounded-2xl border border-purple-900/40 my-4 shadow-inner space-y-1.5">
+              <div className="bg-[#0a0518]/90 p-3.5 rounded-2xl border border-purple-900/40 my-4 shadow-inner space-y-1.5">
                 <div className="flex items-center justify-between text-[9.5px]">
                   <span className="text-purple-300 font-black uppercase tracking-wider flex items-center space-x-1">
                     <Sparkles className="w-3 h-3 text-purple-400" />
@@ -1740,7 +1740,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 </div>
 
                 {/* 3-Segment Animated Distribution Bar */}
-                <div className="w-full h-3.5 bg-[#080511] rounded-full overflow-hidden flex border border-purple-900/60 p-0.5 shadow-inner">
+                <div className="w-full h-3.5 bg-[#0a0518] rounded-full overflow-hidden flex border border-purple-900/60 p-0.5 shadow-inner">
                   <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-[#00FF88] rounded-l-full transition-all duration-300 ease-out shadow-[0_0_12px_rgba(0,255,136,0.6)]"
                     style={{ width: `${normalizedProbabilities.upPct}%` }}
@@ -1760,15 +1760,15 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
                 {/* 3 Metric Value Boxes */}
                 <div className="grid grid-cols-3 gap-2 text-center pt-1">
-                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.upPct >= 50 ? 'border-emerald-500/60 shadow-[0_0_15px_rgba(0,255,136,0.15)] ring-1 ring-emerald-500/30' : 'border-emerald-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(UP)</span>
                     <span className="text-sm sm:text-base font-black text-[#00FF88] font-mono tracking-tight">{normalizedProbabilities.upPct}%</span>
                   </div>
-                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 12 ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'border-amber-500/25'}`}>
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.noTradePct >= 12 ? 'border-amber-500/60 shadow-[0_0_15px_rgba(245,158,11,0.15)]' : 'border-amber-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(CHOP)</span>
                     <span className="text-sm sm:text-base font-black text-amber-400 font-mono tracking-tight">{normalizedProbabilities.noTradePct}%</span>
                   </div>
-                  <div className={`bg-[#080414]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
+                  <div className={`bg-[#0a0518]/95 py-2 px-2 rounded-xl border transition-all duration-300 ${normalizedProbabilities.downPct >= 50 ? 'border-rose-500/60 shadow-[0_0_15px_rgba(255,59,48,0.15)] ring-1 ring-rose-500/30' : 'border-rose-500/25'}`}>
                     <span className="text-[8.5px] text-gray-400 block font-sans font-bold tracking-wider">P(DOWN)</span>
                     <span className="text-sm sm:text-base font-black text-[#FF3B30] font-mono tracking-tight">{normalizedProbabilities.downPct}%</span>
                   </div>
@@ -1778,17 +1778,17 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
             {/* STRIKE & SPOT DELTA METRICS BAR */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-3 border-t border-white/10 text-[10px]">
-              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
                 <span className="text-gray-400 block text-[9px]">PRICE TO BEAT (STRIKE)</span>
                 <span className="text-white font-black text-xs sm:text-sm">
                   ${(strikePrice ?? 64150).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
                 <span className="text-gray-400 block text-[9px]">LIVE SPOT (COINBASE)</span>
                 <span className="text-white font-black text-xs sm:text-sm">{coinbasePriceStr}</span>
               </div>
-              <div className="bg-[#080414] p-2.5 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2.5 rounded-xl border border-purple-900/30">
                 <span className="text-gray-400 block text-[9px]">EXPECTED DELTA</span>
                 <span className={`font-black text-xs sm:text-sm ${isTargetAchieved ? 'text-[#00FF88]' : 'text-[#FF3B30]'}`}>
                   {(deltaToBeat ?? 0) >= 0 ? '+' : ''}${(deltaToBeat ?? 0).toFixed(2)} ({isTargetAchieved ? 'IN THE MONEY' : 'BELOW TARGET'})
@@ -1802,7 +1802,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           <div className="lg:col-span-5 flex flex-col gap-4">
             
             {/* 15M COUNTDOWN CARD WITH PROGRESS RING (VISUAL PRIORITY 2) */}
-            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] flex items-center justify-between relative overflow-hidden">
+            <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] flex items-center justify-between relative overflow-hidden">
               <div className="space-y-1">
                 <div className="flex items-center space-x-2">
                   <Clock className="w-4 h-4 text-cyan-400" />
@@ -1853,7 +1853,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* VIXY PROTECTION GUARDIAN CARD (VISUAL PRIORITY 3) */}
-            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(157,78,221,0.15)] flex flex-col justify-between">
+            <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(157,78,221,0.15)] flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
                   <div className="flex items-center space-x-2">
@@ -1884,7 +1884,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       {continuousInference.protectionDecision.lockScore} <span className="text-xs text-amber-200/70 font-normal">/ 100</span>
                     </div>
                   </div>
-                  <div className="bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 flex flex-col justify-between">
+                  <div className="bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 flex flex-col justify-between">
                     <span className="text-gray-400 block text-[8.5px]">REVERSAL RISK</span>
                     <span className={`text-xl sm:text-2xl font-black ${continuousInference.gemini.contradictionScore <= 25 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
                       {continuousInference.gemini.contradictionScore}% <span className="text-[10px] text-gray-400 font-normal">({continuousInference.gemini.contradictionScore <= 25 ? 'LOW' : 'ELEVATED'})</span>
@@ -1893,7 +1893,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 </div>
 
                 {/* Evidence Confluence Checklist */}
-                <div className="grid grid-cols-3 gap-1 text-[8px] bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+                <div className="grid grid-cols-3 gap-1 text-[8px] bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
                   <div className="flex items-center space-x-1">
                     <span className={continuousInference.protectionDecision.checklist.directionalScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
                       {continuousInference.protectionDecision.checklist.directionalScorePassed ? '✓' : '✗'}
@@ -1939,7 +1939,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* GEMINI SHADOW INTELLIGENCE CARD (VISUAL PRIORITY 4) */}
-            <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(6,182,212,0.1)] flex flex-col justify-between">
+            <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(6,182,212,0.1)] flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
                   <div className="flex items-center space-x-2">
@@ -1954,27 +1954,27 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
                 {/* 6 Analytical Dimensions */}
                 <div className="grid grid-cols-2 gap-1.5 text-[8.5px]">
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">MOMENTUM:</span>
                     <span className="text-[#00FF88] font-bold">+{continuousInference.gemini.signalMomentum}</span>
                   </div>
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">ORDER FLOW:</span>
                     <span className="text-cyan-300 font-bold">{whaleFlowData.netBias.split(' ')[0]}</span>
                   </div>
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">VOLATILITY:</span>
                     <span className="text-purple-300 font-bold">{volatilityVal}</span>
                   </div>
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">CROSS VENUE:</span>
                     <span className="text-[#00FF88] font-bold">SYNCHRONIZED</span>
                   </div>
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">TEMPORAL:</span>
                     <span className="text-[#00FF88] font-bold">{continuousInference.stabilityResult.stabilityScore}% ALIGNED</span>
                   </div>
-                  <div className="bg-[#080414] p-1.5 rounded-lg border border-purple-900/30 flex justify-between">
+                  <div className="bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/30 flex justify-between">
                     <span className="text-gray-400">REVERSAL RISK:</span>
                     <span className="text-emerald-300 font-bold">{continuousInference.gemini.contradictionScore}% LOW</span>
                   </div>
@@ -1997,7 +1997,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* BTC/USD 15M CHART */}
-          <div className="lg:col-span-8 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+          <div className="lg:col-span-8 vixy-card-elevated p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
             <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 mb-3 gap-2">
               <div className="flex items-center space-x-2.5">
                 <span className="font-bold text-white text-xs sm:text-sm tracking-tight">LIVE PRICE ACTION • BTC/USD (15M EPOCH)</span>
@@ -2020,7 +2020,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* SVG Price Action & Candlestick Visualization */}
-            <div className="relative h-56 sm:h-64 w-full bg-[#080414] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
+            <div className="relative h-56 sm:h-64 w-full bg-[#0a0518] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
               <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 p-2">
                 <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,300.00</span></div>
                 <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,200.00</span></div>
@@ -2104,29 +2104,29 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           {/* COMPACT ORDER FLOW & BOOK DEPTH */}
-          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <span className="font-black text-white text-xs uppercase">ORDER FLOW & BOOK DEPTH</span>
               <span className="text-[10px] text-[#00FF88] font-bold">DELTA: {deltaVal}</span>
             </div>
 
             <div className="grid grid-cols-3 gap-1.5 text-[10px] mb-2.5">
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
                 <span className="text-gray-500 block text-[8px]">ORDER FLOW</span>
                 <span className="text-[#00FF88] font-bold text-xs">{deltaVal}</span>
               </div>
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
                 <span className="text-gray-500 block text-[8px]">CVD DELTA</span>
                 <span className="text-[#00FF88] font-bold text-xs">{cvdVal}</span>
               </div>
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 text-center">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
                 <span className="text-gray-500 block text-[8px]">VWAP</span>
                 <span className="text-cyan-400 font-bold text-xs">$64,098</span>
               </div>
             </div>
 
             {/* Depth Ladder */}
-            <div className="space-y-1 bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 text-[9px]">
+            <div className="space-y-1 bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 text-[9px]">
               <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
                 <span>BIDS (BTC)</span>
                 <span>PRICE ($)</span>
@@ -2156,7 +2156,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         </div>
 
         {/* ROW B: CROSS-VENUE SYNAPSE */}
-        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(157,78,221,0.1)]">
+        <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(157,78,221,0.1)]">
           <div className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3 flex items-center justify-between">
             <span className="flex items-center space-x-2">
               <Layers className="w-4 h-4 text-purple-400" />
@@ -2166,7 +2166,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
-            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
               <div className="text-[9.5px] text-purple-300 font-semibold mb-1">KALSHI 15M CONTRACT</div>
               <div className="flex justify-between text-xs my-0.5">
                 <span className="text-[#00FF88] font-bold">UP ${(rawKalshiProb ?? 0.57).toFixed(2)}</span>
@@ -2179,7 +2179,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               <div className="text-[9px] text-gray-500 mt-1.5">VOL $1.24M • 12ms</div>
             </div>
 
-            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
               <div className="text-[9.5px] text-purple-300 font-semibold mb-1">POLYMARKET 15M</div>
               <div className="flex justify-between text-xs my-0.5">
                 <span className="text-[#00FF88] font-bold">UP ${(rawPolyProb ?? 0.59).toFixed(2)}</span>
@@ -2192,21 +2192,21 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               <div className="text-[9px] text-gray-500 mt-1.5">VOL $2.18M • 16ms</div>
             </div>
 
-            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
               <div className="text-[9.5px] text-cyan-400 font-semibold mb-1">COINBASE SPOT</div>
               <div className="text-base font-black text-white my-0.5">{coinbasePriceStr}</div>
               <div className="text-xs text-[#00FF88] font-bold">+{(typeof priceChange === 'number' && !isNaN(priceChange) ? priceChange : 572.18).toFixed(2)} (+{(typeof priceChangePct === 'number' && !isNaN(priceChangePct) ? priceChangePct : 0.90).toFixed(2)}%)</div>
               <div className="text-[9px] text-gray-500 mt-1.5">VOL $892.4M • 24ms</div>
             </div>
 
-            <div className="bg-[#080414] p-3.5 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
               <div className="text-[9.5px] text-blue-400 font-semibold mb-1">KRAKEN SPOT</div>
               <div className="text-base font-black text-white my-0.5">{krakenPriceStr}</div>
               <div className="text-xs text-[#00FF88] font-bold">+564.12 (+0.89%)</div>
               <div className="text-[9px] text-gray-500 mt-1.5">VOL $234.7M • 26ms</div>
             </div>
 
-            <div className="bg-[#080414] p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col justify-between">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col justify-between">
               <div>
                 <div className="text-[9.5px] text-[#00FF88] font-semibold mb-0.5">CROSS-VENUE SPREAD</div>
                 <div className="text-lg font-black text-white">{spreadValueStr}</div>
@@ -2224,7 +2224,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* TECHNICAL SIGNAL STACK */}
-          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <div className="flex items-center space-x-2">
                 <Activity className="w-4 h-4 text-[#00FF88]" />
@@ -2234,7 +2234,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             <div className="space-y-2.5 text-[10px]">
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
                 <div className="flex justify-between items-center mb-1">
                   <span className="text-gray-400">RSI (14)</span>
                   <span className="text-[#00FF88] font-bold">{technicalIndicators.rsi}</span>
@@ -2245,7 +2245,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 <span className="text-[8px] text-gray-500 mt-1 block">{technicalIndicators.rsiStatus}</span>
               </div>
 
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-400">MACD (12, 26, 9)</span>
                   <span className="text-[#00FF88] font-bold">+{technicalIndicators.macd.histogram}</span>
@@ -2253,7 +2253,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 <div className="text-[8px] text-[#00FF88] mt-0.5">{technicalIndicators.macd.status}</div>
               </div>
 
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30 flex justify-between items-center">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 flex justify-between items-center">
                 <div>
                   <span className="text-gray-400 block">BOLLINGER (20, 2)</span>
                   <span className="text-[8px] text-gray-500">BW: {technicalIndicators.bollinger.bandwidth}</span>
@@ -2261,18 +2261,18 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                 <span className="text-purple-300 font-bold">{technicalIndicators.bollinger.status}</span>
               </div>
 
-              <div className="bg-[#080414] p-2 rounded-xl border border-purple-900/30">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
                 <span className="text-gray-400 block mb-1">MULTI-PERIOD SUPERTREND</span>
                 <div className="grid grid-cols-3 gap-1 text-center">
-                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                  <div className="bg-[#0c0620] p-1 rounded-lg border border-[#00FF88]/30">
                     <div className="text-[7.5px] text-gray-400">1M</div>
                     <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
                   </div>
-                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                  <div className="bg-[#0c0620] p-1 rounded-lg border border-[#00FF88]/30">
                     <div className="text-[7.5px] text-gray-400">5M</div>
                     <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
                   </div>
-                  <div className="bg-[#0C0819] p-1 rounded-lg border border-[#00FF88]/30">
+                  <div className="bg-[#0c0620] p-1 rounded-lg border border-[#00FF88]/30">
                     <div className="text-[7.5px] text-gray-400">15M</div>
                     <div className="text-[#00FF88] font-bold text-[9px]">▲ UP</div>
                   </div>
@@ -2286,13 +2286,13 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           {/* MULTI-TIMEFRAME MATRIX & REGIME */}
-          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <span className="font-black text-white text-xs uppercase">MULTI-TIMEFRAME MATRIX</span>
               <span className="text-[#00FF88] text-[9.5px] font-bold">100% ALIGNMENT</span>
             </div>
 
-            <div className="space-y-1 bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 text-[9.5px]">
+            <div className="space-y-1 bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 text-[9.5px]">
               <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
                 <span>TF</span>
                 <span>TREND</span>
@@ -2329,7 +2329,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           {/* WHALE FLOW (>= $250K) */}
-          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <div className="flex items-center space-x-2">
                 <Waves className="w-4 h-4 text-cyan-400" />
@@ -2341,7 +2341,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               </div>
             </div>
 
-            <div className="bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30 space-y-1.5 mb-2">
+            <div className="bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 space-y-1.5 mb-2">
               <div className="flex justify-between text-[9.5px]">
                 <span className="text-gray-400">5M ROLLING BIAS:</span>
                 <span className="text-[#00FF88] font-bold">{whaleFlowData.netBias}</span>
@@ -2358,7 +2358,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             {/* Whale Tape Stream */}
-            <div className="space-y-1 bg-[#080414] p-2 rounded-2xl border border-purple-900/30 text-[9px]">
+            <div className="space-y-1 bg-[#0a0518] p-2 rounded-2xl border border-purple-900/30 text-[9px]">
               <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-0.5">
                 <span>TAPE</span>
                 <span>PRICE</span>
@@ -2389,7 +2389,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         </div>
 
         {/* ROW D: SIGNAL ATTRIBUTION MATRIX & AUTONOMOUS LEARNING LOOP */}
-        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,255,136,0.08)] space-y-3.5">
+        <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(0,255,136,0.08)] space-y-3.5">
           <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 gap-2">
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-400/30 flex items-center justify-center text-purple-300">
@@ -2411,7 +2411,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
             </div>
 
             <div className="flex items-center space-x-2 text-xs">
-              <span className="px-2.5 py-1 rounded-xl bg-[#080414] border border-purple-900/40 text-[10px] text-gray-300">
+              <span className="px-2.5 py-1 rounded-xl bg-[#0a0518] border border-purple-900/40 text-[10px] text-gray-300">
                 CURRENT REGIME: <span className="text-[#00FF88] font-bold">{getRegimeProfile(activeRegimeProfile).title}</span>
               </span>
             </div>
@@ -2424,7 +2424,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               return (
                 <div
                   key={ind.id || idx}
-                  className={`bg-[#080414] p-3.5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
+                  className={`bg-[#0a0518] p-3.5 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
                     isWinner
                       ? 'border-[#00FF88]/40 shadow-[0_0_15px_rgba(0,255,136,0.12)]'
                       : 'border-purple-900/40 opacity-85'
@@ -2446,7 +2446,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       {ind.name}
                     </div>
 
-                    <div className="space-y-1 text-[8.5px] bg-[#0C0819] p-2 rounded-xl border border-purple-900/30 mb-2">
+                    <div className="space-y-1 text-[8.5px] bg-[#0c0620] p-2 rounded-xl border border-purple-900/30 mb-2">
                       <div className="flex justify-between">
                         <span className="text-gray-400">10-CYCLE HIT RATE:</span>
                         <span className={`font-bold ${ind.rollingAccuracy10 >= 75 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
@@ -2474,7 +2474,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         </div>
 
         {/* ROW E: SCOREBOARD & HISTORICAL STREAKS + LAST 10 ROUNDS SETTLEMENT STRIP */}
-        <div className="bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
+        <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(0,0,0,0.5)] space-y-4">
           <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 gap-2">
             <div className="flex items-center space-x-3">
               <Flame className="w-5 h-5 text-[#00FF88]" />
@@ -2497,19 +2497,19 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 text-[10px]">
-            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
               <span className="text-gray-400 block text-[8.5px]">TRENDING REGIME ACCURACY</span>
               <span className="text-base sm:text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.trending}%</span>
             </div>
-            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
               <span className="text-gray-400 block text-[8.5px]">REVERSAL REGIME ACCURACY</span>
               <span className="text-base sm:text-lg font-black text-[#00FF88]">{streakStats.regimeAccuracy.reversal}%</span>
             </div>
-            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
               <span className="text-gray-400 block text-[8.5px]">CHOPPY REGIME ACCURACY</span>
               <span className="text-base sm:text-lg font-black text-amber-400">{streakStats.regimeAccuracy.choppy}%</span>
             </div>
-            <div className="bg-[#080414] p-3 rounded-2xl border border-purple-900/30">
+            <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/30">
               <span className="text-gray-400 block text-[8.5px]">TODAY'S RECORD</span>
               <span className="text-base sm:text-lg font-black text-white">{streakStats.todayRecord.wins}W - {streakStats.todayRecord.losses}L</span>
             </div>
@@ -2533,8 +2533,8 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                       isActive
                         ? 'bg-[#00FF88]/10 border-[#00FF88]/50 shadow-[0_0_15px_rgba(0,255,136,0.2)]'
                         : isWin
-                        ? 'bg-[#080414] border-[#00FF88]/30'
-                        : 'bg-[#080414] border-[#FF3B30]/30'
+                        ? 'bg-[#0a0518] border-[#00FF88]/30'
+                        : 'bg-[#0a0518] border-[#FF3B30]/30'
                     }`}
                   >
                     <div className="text-[7.5px] text-gray-400">{round.cycle}</div>
@@ -2560,7 +2560,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
           {/* RESOLVED CYCLES LOG */}
-          <div className="lg:col-span-8 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+          <div className="lg:col-span-8 vixy-card-elevated p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <span className="font-black text-white text-xs uppercase">RECENT 15M CYCLE RESOLUTION LEDGER</span>
               <span className="text-gray-400 text-[9.5px]">PAST 10 CYCLES</span>
@@ -2585,7 +2585,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
                     const isAct = item.status === 'ACTIVE';
 
                     return (
-                      <tr key={idx} className="hover:bg-[#080414] transition-colors">
+                      <tr key={idx} className="hover:bg-[#0a0518] transition-colors">
                         <td className="py-1.5 font-bold text-gray-300">{item.cycleId}</td>
                         <td className="py-1.5 text-gray-400">{item.time}</td>
                         <td className={`py-1.5 font-black ${item.decision.includes('UP') ? 'text-[#00FF88]' : item.decision.includes('DOWN') ? 'text-[#FF3B30]' : 'text-gray-400'}`}>
@@ -2616,7 +2616,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
           </div>
 
           {/* AUDIT INTEGRITY */}
-          <div className="lg:col-span-4 bg-[#0C0819] border border-purple-900/40 rounded-3xl p-5 flex flex-col justify-between">
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
             <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
               <div className="flex items-center space-x-2">
                 <Database className="w-4 h-4 text-[#00FF88]" />
@@ -2625,7 +2625,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
               <span className="text-[#00FF88] text-[9.5px] font-bold">VERIFIED</span>
             </div>
 
-            <div className="space-y-1.5 text-[9.5px] bg-[#080414] p-2.5 rounded-2xl border border-purple-900/30">
+            <div className="space-y-1.5 text-[9.5px] bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30">
               <div className="flex justify-between">
                 <span className="text-gray-400">Market Data Stream:</span>
                 <span className="text-[#00FF88] font-bold">VERIFIED ✓</span>
@@ -2650,7 +2650,7 @@ export const VixyLockView: React.FC<VixyLockViewProps> = ({
 
             <button
               onClick={onOpenTerminal}
-              className="w-full mt-2.5 py-2 rounded-xl bg-[#080414] hover:bg-purple-900/30 border border-purple-900/40 text-gray-300 text-[10px] font-bold tracking-wider transition-all cursor-pointer"
+              className="w-full mt-2.5 py-2 rounded-xl bg-[#0a0518] hover:bg-purple-900/30 border border-purple-900/40 text-gray-300 text-[10px] font-bold tracking-wider transition-all cursor-pointer"
             >
               VIEW FULL AUDIT REPORT
             </button>

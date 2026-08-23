@@ -190,7 +190,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   return (
     <div className="space-y-6 font-sans pb-12">
       {/* HEADER HERO BAR */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#12072b] via-[#0b051b] to-[#170a38] border border-purple-500/30 p-6 md:p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#12072b] via-[#0b051b] to-[#170a38] border border-purple-500/30 p-6 md:p-8 shadow-2xl">
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-1/3 -mb-8 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
 
@@ -212,19 +212,19 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
 
           {/* Quick Metrics Pills */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div className="p-3.5 rounded-2xl bg-[#090415]/90 border border-purple-900/60 font-mono">
+            <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
               <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Tracked Volume (24h)</span>
               <span className="text-base sm:text-lg font-black text-emerald-400">
                 ${(totalWhaleVolume24h / 1000000).toFixed(1)}M
               </span>
             </div>
-            <div className="p-3.5 rounded-2xl bg-[#090415]/90 border border-purple-900/60 font-mono">
+            <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
               <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Whale Sentiment</span>
               <span className="text-base sm:text-lg font-black text-purple-200 flex items-center gap-1">
                 89% <span className="text-emerald-400 text-xs font-sans font-bold">BULL DEFENSE</span>
               </span>
             </div>
-            <div className="col-span-2 sm:col-span-1 p-3.5 rounded-2xl bg-[#090415]/90 border border-purple-900/60 font-mono">
+            <div className="col-span-2 sm:col-span-1 p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
               <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Live Status</span>
               <button
                 onClick={() => setIsLiveStreaming(!isLiveStreaming)}
@@ -239,7 +239,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
       </div>
 
       {/* FILTER & CONTROL TOOLBAR */}
-      <div className="p-4 rounded-2xl bg-[#0d0620]/90 border border-purple-900/40 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
+      <div className="p-4 rounded-2xl bg-[#0c0620]/90 border border-purple-900/40 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
         {/* Asset Filter Pills */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-purple-300/60 font-bold uppercase text-[10px] mr-1 flex items-center gap-1">
@@ -252,7 +252,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
               className={`px-3 py-1.5 rounded-xl font-extrabold transition-all ${
                 selectedAssetFilter === sym
                   ? 'bg-purple-600 text-white shadow-md shadow-purple-600/40 border border-purple-400/40'
-                  : 'bg-[#06030d] text-purple-300/70 hover:text-white hover:bg-purple-900/30 border border-purple-950'
+                  : 'bg-[#0a0518] text-purple-300/70 hover:text-white hover:bg-purple-900/30 border border-purple-950'
               }`}
             >
               {sym}
@@ -262,7 +262,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
 
         {/* Order Size Threshold Dropdown / Selector */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-[#06030d] p-1 rounded-xl border border-purple-950">
+          <div className="flex items-center gap-1.5 bg-[#0a0518] p-1 rounded-xl border border-purple-950">
             <span className="text-[10px] text-purple-300/60 uppercase font-bold px-2">Min Size:</span>
             {[
               { label: '$50k+', value: 50000 },
@@ -273,7 +273,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
               <button
                 key={th.value}
                 onClick={() => setMinSizeFilter(th.value)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
                   minSizeFilter === th.value
                     ? 'bg-purple-700 text-white shadow-sm'
                     : 'text-purple-300/70 hover:text-white'
@@ -336,7 +336,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
 
           <div className="space-y-2.5">
             {filteredOrders.length === 0 ? (
-              <div className="p-12 text-center rounded-2xl bg-[#090415] border border-purple-900/30 text-purple-300/60 font-mono text-xs">
+              <div className="p-12 text-center rounded-2xl bg-[#0a0518] border border-purple-900/30 text-purple-300/60 font-mono text-xs">
                 No whale block orders match current filter criteria.
               </div>
             ) : (
@@ -348,7 +348,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                     className={`p-4 rounded-2xl border transition-all duration-200 group hover:border-purple-500/60 ${
                       isCritical
                         ? 'bg-gradient-to-r from-[#170a33] via-[#0d0620] to-[#12072b] border-purple-500/50 shadow-lg shadow-purple-950/40'
-                        : 'bg-[#0b051b] border-purple-900/40'
+                        : 'bg-[#0a0518] border-purple-900/40'
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -364,7 +364,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                               {order.contractPrice}
                             </span>
                             <span
-                              className={`px-2 py-0.5 rounded-md text-[10px] font-mono font-extrabold ${
+                              className={`px-2 py-0.5 rounded-xl text-[10px] font-mono font-extrabold ${
                                 order.action === 'BUY_SWEEP'
                                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                   : order.action === 'STRIKE_DEFENSE'
@@ -420,7 +420,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
         {/* COLUMN 3: WHALE STRIKE WALLS & TOP TRACKED ENTITIES */}
         <div className="space-y-6">
           {/* WHALE STRIKE DEFENSE WALLS */}
-          <div className="p-5 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-4">
+          <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-cyan-400" />
@@ -435,7 +435,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
               {STRIKE_WALLS.map((wall, idx) => (
                 <div
                   key={idx}
-                  className="p-3 rounded-2xl bg-[#120729]/80 border border-purple-900/40 space-y-2 hover:border-purple-600/40 transition-all"
+                  className="p-3 rounded-2xl bg-[#0c0620]/80 border border-purple-900/40 space-y-2 hover:border-purple-600/40 transition-all"
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -467,7 +467,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
           </div>
 
           {/* TOP TRACKED INSTITUTIONAL VAULTS */}
-          <div className="p-5 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-4">
+          <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-purple-400" />
@@ -482,7 +482,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
               {TOP_WHALE_ENTITIES.map((entity, idx) => (
                 <div
                   key={idx}
-                  className="p-3 rounded-2xl bg-[#0e0720] border border-purple-900/40 flex items-center justify-between gap-3"
+                  className="p-3 rounded-2xl bg-[#0c0620] border border-purple-900/40 flex items-center justify-between gap-3"
                 >
                   <div className="space-y-0.5">
                     <div className="font-extrabold text-purple-200 text-xs">

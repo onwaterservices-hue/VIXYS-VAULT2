@@ -123,7 +123,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
   return (
     <div className="space-y-6 font-mono text-purple-100">
       {/* Title Header */}
-      <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 shadow-xl">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 shadow-xl">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20 text-purple-400">
             <Bell className="w-6 h-6" />
@@ -158,7 +158,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
       {/* Grid: Webhooks & Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Discord Primary Configuration */}
-        <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
             <div className="flex items-center gap-2">
               <Send className="w-4 h-4 text-purple-400" />
@@ -179,7 +179,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
           <CommunityAccessNode settings={settings} setSettings={setSettings} mode="settings" />
 
           {/* Sound & Audio Notifications */}
-          <div className="p-4 bg-[#0B061A] rounded-xl border border-purple-900/60 space-y-3">
+          <div className="p-4 bg-[#0a0518] rounded-xl border border-purple-900/60 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Music className="w-4 h-4 text-purple-400" />
@@ -192,7 +192,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                     discordSoundEnabled: !prev.discordSoundEnabled,
                   }))
                 }
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
                   settings.discordSoundEnabled
                     ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                     : 'bg-zinc-800 text-zinc-400 border-zinc-700'
@@ -222,7 +222,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                         discordNotificationSound: e.target.value as any,
                       })
                     }
-                    className="w-full bg-[#120B28] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
                   >
                     <option value="discord_ping">Discord Ping (Dual High-Pitch Chime)</option>
                     <option value="quant_chime">Quant Bell (Institutional Sine)</option>
@@ -233,7 +233,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 <button
                   type="button"
                   onClick={() => playAlertSound(settings.discordNotificationSound || 'discord_ping')}
-                  className="px-3 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
                 >
                   <Volume2 className="w-3.5 h-3.5" />
                   Test Sound Effect Audio Chime 🔊
@@ -250,7 +250,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 type="checkbox"
                 checked={settings.discordEnabled}
                 onChange={(e) => setSettings({ ...settings, discordEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-purple-900 bg-[#0B061A] text-purple-600 focus:ring-purple-500"
+                className="w-4 h-4 rounded border-purple-900 bg-[#0a0518] text-purple-600 focus:ring-purple-500"
               />
             </div>
 
@@ -261,7 +261,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 placeholder="https://discord.com/api/webhooks/..."
                 value={settings.discordWebhook}
                 onChange={(e) => setSettings({ ...settings, discordWebhook: e.target.value })}
-                className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
               />
             </div>
 
@@ -291,7 +291,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 type="checkbox"
                 checked={settings.telegramEnabled}
                 onChange={(e) => setSettings({ ...settings, telegramEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-purple-900 bg-[#0B061A] text-purple-600 focus:ring-purple-500"
+                className="w-4 h-4 rounded border-purple-900 bg-[#0a0518] text-purple-600 focus:ring-purple-500"
               />
             </div>
 
@@ -302,7 +302,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
                 value={settings.telegramBotToken}
                 onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
               />
             </div>
 
@@ -313,7 +313,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 placeholder="-100123456789"
                 value={settings.telegramChatId}
                 onChange={(e) => setSettings({ ...settings, telegramChatId: e.target.value })}
-                className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
               />
             </div>
 
@@ -329,7 +329,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
         </div>
 
         {/* Quant Filter Rules */}
-        <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-6 shadow-xl">
           <div className="flex items-center gap-2 border-b border-purple-900/40 pb-3">
             <Sliders className="w-4 h-4 text-purple-400" />
             <h3 className="text-xs font-bold text-white uppercase tracking-wider">Signal Filtering Parameters</h3>
@@ -349,7 +349,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 step="5"
                 value={settings.minConfidence}
                 onChange={(e) => setSettings({ ...settings, minConfidence: Number(e.target.value) })}
-                className="w-full accent-purple-500 bg-[#0B061A] rounded-lg h-2 cursor-pointer"
+                className="w-full accent-purple-500 bg-[#0a0518] rounded-xl h-2 cursor-pointer"
               />
             </div>
 
@@ -372,11 +372,11 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                     minEdge: Number(e.target.value),
                   })
                 }
-                className="w-full accent-purple-500 bg-[#0B061A] rounded-lg h-2 cursor-pointer"
+                className="w-full accent-purple-500 bg-[#0a0518] rounded-xl h-2 cursor-pointer"
               />
             </div>
 
-            <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-3">
+            <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-3">
               <span className="text-xs font-bold text-white block">Active Notification Triggers</span>
 
               <label className="flex items-center gap-2 text-xs text-purple-200/80 cursor-pointer">
@@ -384,7 +384,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                   type="checkbox"
                   checked={settings.notifyNewSignal ?? true}
                   onChange={(e) => setSettings({ ...settings, notifyNewSignal: e.target.checked })}
-                  className="rounded border-purple-900 bg-[#120B28] text-purple-600 focus:ring-purple-500"
+                  className="rounded border-purple-900 bg-[#0c0620] text-purple-600 focus:ring-purple-500"
                 />
                 <span>Alert on new 15m candle opened</span>
               </label>
@@ -394,7 +394,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                   type="checkbox"
                   checked={settings.notifyOutcome ?? true}
                   onChange={(e) => setSettings({ ...settings, notifyOutcome: e.target.checked })}
-                  className="rounded border-purple-900 bg-[#120B28] text-purple-600 focus:ring-purple-500"
+                  className="rounded border-purple-900 bg-[#0c0620] text-purple-600 focus:ring-purple-500"
                 />
                 <span>Alert on candle resolution outcome</span>
               </label>
@@ -404,7 +404,7 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                   type="checkbox"
                   checked={settings.onlyHighGrade ?? true}
                   onChange={(e) => setSettings({ ...settings, onlyHighGrade: e.target.checked })}
-                  className="rounded border-purple-900 bg-[#120B28] text-purple-600 focus:ring-purple-500"
+                  className="rounded border-purple-900 bg-[#0c0620] text-purple-600 focus:ring-purple-500"
                 />
                 <span>Restrict to Grade A/A+ Signals Only</span>
               </label>

@@ -402,7 +402,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     <>
       {!authState?.isAuthenticated ? (
         <div className="max-w-3xl mx-auto py-12 px-4 font-sans text-purple-100">
-          <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/60 rounded-3xl p-8 sm:p-12 text-center space-y-6 shadow-2xl shadow-purple-950/90 font-mono">
+          <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/60 rounded-2xl p-8 sm:p-12 text-center space-y-6 shadow-2xl shadow-purple-950/90 font-mono">
             <div className="w-16 h-16 bg-purple-500/20 border-2 border-purple-400/50 rounded-2xl flex items-center justify-center mx-auto text-purple-300 shadow-[0_0_30px_rgba(168,85,247,0.4)]">
               <Lock className="w-8 h-8 text-cyan-400 animate-pulse" />
             </div>
@@ -437,7 +437,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               </button>
             </div>
 
-            <div className="bg-[#080414] border border-purple-900/60 rounded-2xl p-4 text-left space-y-2 max-w-lg mx-auto text-[11px] text-purple-300/80">
+            <div className="bg-[#0a0518] border border-purple-900/60 rounded-2xl p-4 text-left space-y-2 max-w-lg mx-auto text-[11px] text-purple-300/80">
               <div className="font-bold text-white uppercase tracking-wider mb-1 flex items-center gap-1.5">
                 <ShieldCheck className="w-4 h-4 text-emerald-400" />
                 <span>Why account creation first matters:</span>
@@ -453,7 +453,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       ) : (
         <div className="space-y-12 py-4 font-sans text-purple-100">
       {/* High-Impact Psychological Conversion Quote Callout - Bigger & Bolder */}
-      <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/50 rounded-3xl p-8 sm:p-14 text-center relative overflow-hidden shadow-2xl shadow-purple-950/80 font-mono">
+      <div className="bg-gradient-to-br from-[#1B0A38] via-[#0B051A] to-[#12072B] border-2 border-purple-500/50 rounded-2xl p-8 sm:p-14 text-center relative overflow-hidden shadow-2xl shadow-purple-950/80 font-mono">
         {/* Subtle Ambient Radial Glow */}
         <div className="absolute inset-0 bg-radial from-purple-600/20 via-transparent to-transparent opacity-80 pointer-events-none" />
 
@@ -480,7 +480,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           {/* VIXY 24-Hour Day Pass CTA Box */}
           <div className="pt-2 max-w-xl mx-auto">
-            <div className="bg-[#0D0722]/90 border-2 border-amber-500/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/10">
+            <div className="bg-[#0c0620]/90 border-2 border-amber-500/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/10">
               <div className="text-left space-y-0.5">
                 <div className="flex items-center gap-2">
                   <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-500 text-slate-950">
@@ -506,7 +506,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
       {/* Header Banner & Monthly / Annual Toggle */}
       <div className="text-center space-y-4 max-w-3xl mx-auto font-mono">
-        <div className="inline-flex items-center gap-3 p-2 bg-gradient-to-r from-[#0d0421] to-[#150a30] border-2 border-purple-500/30 rounded-3xl text-xs shadow-[0_0_35px_rgba(139,92,246,0.15)] shadow-purple-950/80 backdrop-blur-md relative overflow-hidden">
+        <div className="inline-flex items-center gap-3 p-2 bg-gradient-to-r from-[#0d0421] to-[#150a30] border-2 border-purple-500/30 rounded-2xl text-xs shadow-[0_0_35px_rgba(139,92,246,0.15)] shadow-purple-950/80 backdrop-blur-md relative overflow-hidden">
           <button
             onClick={() => setBillingInterval('monthly')}
             className={`relative px-6 py-3 rounded-2xl font-black uppercase tracking-wider transition-all duration-300 cursor-pointer active:scale-95 ${
@@ -528,8 +528,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <span>Annual Billing</span>
             <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black border transition-all ${
               billingInterval === 'annual'
-                ? 'bg-[#0B061A] text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
-                : 'bg-[#0B061A]/40 text-purple-400/60 border-purple-500/20'
+                ? 'bg-[#0a0518] text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+                : 'bg-[#0a0518]/40 text-purple-400/60 border-purple-500/20'
             }`}>
               SAVE 20%
             </span>
@@ -564,7 +564,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       )}
 
       {/* Active Subscription Banner */}
-      <div className="bg-[#120B28] rounded-2xl border border-purple-500/30 p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 font-mono">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 shadow-xl flex flex-wrap items-center justify-between gap-4 font-mono">
         <div className="flex items-center gap-4">
           <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20 text-purple-400">
             <CreditCard className="w-6 h-6" />
@@ -603,7 +603,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       {/* 3 Pricing Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono">
         {/* STARTER */}
-        <div className="bg-[#120B28] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
           <div className="space-y-4">
             <div className="text-xs font-bold text-purple-300/60 uppercase tracking-widest">{plans.STARTER.name}</div>
             <div className="flex items-baseline gap-1">
@@ -635,7 +635,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
 
         {/* PROFESSIONAL (POPULAR) */}
-        <div className="bg-[#120B28] rounded-2xl border-2 border-purple-500 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-2xl relative">
+        <div className="bg-[#0c0620] rounded-2xl border-2 border-purple-500 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-2xl relative">
           <div className="absolute -top-3.5 right-6 bg-purple-600 text-white text-[10px] font-black uppercase px-3 py-1 rounded-full tracking-widest">
             RECOMMENDED FOR TRADERS
           </div>
@@ -672,7 +672,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         </div>
 
         {/* ELITE */}
-        <div className="bg-[#120B28] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-900/40 p-6 sm:p-8 flex flex-col justify-between space-y-6 shadow-xl">
           <div className="space-y-4">
             <div className="text-xs font-bold text-violet-400 uppercase tracking-widest">{plans.ELITE.name}</div>
             <div className="flex items-baseline gap-1">
@@ -706,7 +706,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       </div>
 
       {/* Feature Comparison Matrix */}
-      <div className="bg-[#120B28] border border-purple-900/40 rounded-3xl p-6 sm:p-8 space-y-6 font-mono text-xs">
+      <div className="bg-[#0c0620] border border-purple-900/40 rounded-2xl p-6 sm:p-8 space-y-6 font-mono text-xs">
         <h2 className="text-xl font-black text-white text-center">Comprehensive Tier Comparison</h2>
 
         <div className="overflow-x-auto">
@@ -762,7 +762,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       </div>
 
       {/* Risk Disclosure / Disclaimer */}
-      <div className="bg-[#0B061A] border border-purple-900/40 rounded-2xl p-6 text-xs text-purple-300/60 font-mono space-y-2">
+      <div className="bg-[#0a0518] border border-purple-900/40 rounded-2xl p-6 text-xs text-purple-300/60 font-mono space-y-2">
         <div className="flex items-center gap-2 font-bold text-purple-300">
           <FileText className="w-4 h-4 text-purple-400" />
           <span>RESPONSIBLE TRADING & RISK DISCLOSURE</span>

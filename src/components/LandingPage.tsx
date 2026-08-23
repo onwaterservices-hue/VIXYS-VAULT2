@@ -164,7 +164,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Hero Left Content */}
         <div className="lg:col-span-6 space-y-7 text-left">
           {/* Institutional Status Badge */}
-          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-[#0d071e]/90 border border-purple-500/30 backdrop-blur-md text-[11px] font-mono font-semibold tracking-wider text-purple-200 shadow-lg shadow-purple-950/40">
+          <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-[#0c0620]/90 border border-purple-500/30 backdrop-blur-md text-[11px] font-mono font-semibold tracking-wider text-purple-200 shadow-lg shadow-purple-950/40">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -203,7 +203,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               onClick={onLaunchTerminal}
-              className="px-6 py-4 rounded-xl bg-[#0e0722]/90 hover:bg-[#160b33] border border-purple-500/30 hover:border-purple-400/50 text-slate-200 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              className="px-6 py-4 rounded-xl bg-[#0c0620]/90 hover:bg-[#0c0620] border border-purple-500/30 hover:border-purple-400/50 text-slate-200 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
             >
               <Cpu className="w-4 h-4 text-purple-400" />
               <span>DASHBOARD</span>
@@ -211,7 +211,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               onClick={onOpenPricing}
-              className="px-6 py-4 rounded-xl bg-[#090417]/80 hover:bg-[#120728] border border-purple-900/60 text-purple-300/90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
+              className="px-6 py-4 rounded-xl bg-[#0a0518]/80 hover:bg-[#0c0620] border border-purple-900/60 text-purple-300/90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
             >
               <span>PLANS &amp; PRICING</span>
             </button>
@@ -234,9 +234,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         {/* Hero Right: Futuristic LIVE INTELLIGENCE Terminal */}
         <div className="lg:col-span-6 relative">
           {/* Luminous atmospheric halo behind terminal */}
-          <div className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-cyan-500/20 to-violet-600/30 rounded-3xl blur-xl opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200" />
+          <div className="absolute -inset-1 bg-gradient-to-r from-purple-600/30 via-cyan-500/20 to-violet-600/30 rounded-2xl blur-xl opacity-75 group-hover:opacity-100 transition duration-1000 group-hover:duration-200" />
 
-          <div className="relative rounded-3xl bg-[#070314]/95 border border-purple-500/40 p-6 sm:p-7 shadow-2xl shadow-purple-950/80 backdrop-blur-xl font-mono text-left space-y-5 overflow-hidden">
+          <div className="relative rounded-2xl bg-[#0a0518]/95 border border-purple-500/40 p-6 sm:p-7 shadow-2xl shadow-purple-950/80 backdrop-blur-xl font-mono text-left space-y-5 overflow-hidden">
             {/* Terminal Window Header Bar */}
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3.5 text-xs">
               <div className="flex items-center gap-2.5">
@@ -264,7 +264,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Price & State Matrix */}
             <div className="grid grid-cols-2 gap-4 pt-1">
               {/* CURRENT PRICE */}
-              <div className="p-3.5 rounded-2xl bg-[#0d071e]/90 border border-purple-900/60 space-y-1">
+              <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">CURRENT PRICE</span>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-black text-white tracking-tight">
@@ -277,7 +277,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               {/* TIME REMAINING */}
-              <div className="p-3.5 rounded-2xl bg-[#0d071e]/90 border border-purple-900/60 space-y-1">
+              <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">TIME REMAINING</span>
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl sm:text-3xl font-black text-cyan-300 font-mono tracking-tight">
@@ -293,7 +293,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* VIXY CONFIDENCE & MARKET STATE STRIP */}
             <div className="grid grid-cols-2 gap-4">
               {/* VIXY CONFIDENCE */}
-              <div className="p-3.5 rounded-2xl bg-[#0d071e]/90 border border-purple-900/60 space-y-1">
+              <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">VIXY CONFIDENCE</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-white">
@@ -312,7 +312,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
 
               {/* MARKET STATE */}
-              <div className="p-3.5 rounded-2xl bg-[#0d071e]/90 border border-purple-900/60 space-y-1">
+              <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">MARKET STATE</span>
                 <div className="pt-0.5">
                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider border ${stateColor}`}>
@@ -327,7 +327,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Sparkline & Micro-Telemetry Ribbon */}
-            <div className="p-3.5 rounded-2xl bg-[#0b051a]/90 border border-purple-900/50 space-y-2">
+            <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 space-y-2">
               <div className="flex items-center justify-between text-[10px] text-purple-300/80">
                 <span className="flex items-center gap-1.5">
                   <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
@@ -393,7 +393,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* 2. 24H DAY PASS — ULTRA-PREMIUM ACCESS CREDENTIAL */}
       {/* ========================================================================= */}
       <section className="relative z-10">
-        <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#12072e]/95 via-[#0a041c]/98 to-[#090318] border-2 border-cyan-500/40 shadow-2xl shadow-cyan-950/60 relative overflow-hidden font-mono group hover:border-cyan-400/70 transition-all duration-500">
+        <div className="p-6 sm:p-8 rounded-2xl bg-gradient-to-br from-[#12072e]/95 via-[#0a041c]/98 to-[#090318] border-2 border-cyan-500/40 shadow-2xl shadow-cyan-950/60 relative overflow-hidden font-mono group hover:border-cyan-400/70 transition-all duration-500">
           {/* Luminous Glow Orbs */}
           <div className="absolute -top-24 -right-24 w-72 h-72 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none group-hover:bg-cyan-400/25 transition-all duration-700" />
           <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
@@ -408,7 +408,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             {/* Left Info Column */}
             <div className="lg:col-span-7 space-y-4 text-left">
               <div className="flex flex-wrap items-center gap-2.5">
-                <span className="px-3 py-1 rounded-md text-[11px] font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md">
+                <span className="px-3 py-1 rounded-xl text-[11px] font-black uppercase tracking-wider bg-gradient-to-r from-cyan-400 to-blue-500 text-slate-950 shadow-md">
                   24H PASS
                 </span>
                 <span className="text-xs text-purple-300 font-bold tracking-wider uppercase">
@@ -427,15 +427,15 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
               {/* Feature Matrix Pills */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] font-mono text-purple-200 pt-1">
-                <div className="px-3 py-1.5 rounded-xl bg-[#060212]/90 border border-purple-900/60 flex items-center gap-2">
+                <div className="px-3 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-900/60 flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   <span>96 Prediction Cycles</span>
                 </div>
-                <div className="px-3 py-1.5 rounded-xl bg-[#060212]/90 border border-purple-900/60 flex items-center gap-2">
+                <div className="px-3 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-900/60 flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   <span>Sub-Second L2 Depth</span>
                 </div>
-                <div className="px-3 py-1.5 rounded-xl bg-[#060212]/90 border border-purple-900/60 flex items-center gap-2 col-span-2 sm:col-span-1">
+                <div className="px-3 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-900/60 flex items-center gap-2 col-span-2 sm:col-span-1">
                   <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                   <span>Discord Signals Feed</span>
                 </div>
@@ -443,7 +443,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* Right Pricing & Action Column */}
-            <div className="lg:col-span-5 p-6 rounded-2xl bg-[#060212]/95 border border-cyan-500/30 flex flex-col items-center sm:items-stretch gap-4 text-center sm:text-left">
+            <div className="lg:col-span-5 p-6 rounded-2xl bg-[#0a0518]/95 border border-cyan-500/30 flex flex-col items-center sm:items-stretch gap-4 text-center sm:text-left">
               <div className="flex items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
                 <div>
                   <span className="text-[10px] text-purple-400/80 uppercase font-bold block">FLAT ACCESS FEE</span>
@@ -485,7 +485,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5 text-center">
           {/* 1. 15M DECISION ENGINE */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-300 flex items-center justify-center">
               <Crosshair className="w-5 h-5" />
             </div>
@@ -494,7 +494,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* 2. LIVE MARKET INTELLIGENCE */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-cyan-300 flex items-center justify-center">
               <Radio className="w-5 h-5" />
             </div>
@@ -503,7 +503,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* 3. PROBABILITY EDGE */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-emerald-400 flex items-center justify-center">
               <TrendingUp className="w-5 h-5" />
             </div>
@@ -512,7 +512,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* 4. HISTORICAL ANALYTICS */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-indigo-400 flex items-center justify-center">
               <BarChart3 className="w-5 h-5" />
             </div>
@@ -521,7 +521,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* 5. AUTOMATED ALERTS */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-violet-300 flex items-center justify-center">
               <Bell className="w-5 h-5" />
             </div>
@@ -530,7 +530,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* 6. PERFORMANCE TRACKING */}
-          <div className="p-4 rounded-2xl bg-[#090417]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
+          <div className="p-4 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 hover:border-purple-500/40 transition-all space-y-2 flex flex-col items-center text-center">
             <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-300 flex items-center justify-center">
               <Gauge className="w-5 h-5" />
             </div>
@@ -559,12 +559,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-left">
           {/* LEFT: UNASSISTED SPECULATION */}
-          <div className="bg-[#0b0417]/90 border border-rose-500/30 rounded-3xl p-6 sm:p-7 space-y-5 shadow-xl">
+          <div className="bg-[#0a0518]/90 border border-rose-500/30 rounded-2xl p-6 sm:p-7 space-y-5 shadow-xl">
             <div className="flex items-center justify-between pb-3 border-b border-rose-500/20">
               <span className="font-bold text-rose-400 text-sm flex items-center gap-2">
                 <XCircle className="w-4 h-4 text-rose-500" /> UNASSISTED SPECULATION
               </span>
-              <span className="text-[10px] bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-lg font-black tracking-wider">
+              <span className="text-[10px] bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded-xl font-black tracking-wider">
                 DISADVANTAGED
               </span>
             </div>
@@ -590,7 +590,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* RIGHT: VIXY AI DECISION INTELLIGENCE */}
-          <div className="bg-gradient-to-br from-[#13072e]/95 via-[#0d0522]/98 to-[#090318] border-2 border-purple-500/60 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl shadow-purple-950/80 relative">
+          <div className="bg-gradient-to-br from-[#13072e]/95 via-[#0d0522]/98 to-[#090318] border-2 border-purple-500/60 rounded-2xl p-6 sm:p-7 space-y-5 shadow-2xl shadow-purple-950/80 relative">
             {/* Ambient Glow */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -598,7 +598,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="font-bold text-white text-sm flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-cyan-400" /> VIXY AI INTELLIGENCE
               </span>
-              <span className="text-[10px] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-3 py-1 rounded-lg font-black uppercase tracking-wider shadow-md">
+              <span className="text-[10px] bg-gradient-to-r from-purple-600 to-indigo-600 text-white px-3 py-1 rounded-xl font-black uppercase tracking-wider shadow-md">
                 INSTITUTIONAL EDGE
               </span>
             </div>
@@ -636,7 +636,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* ========================================================================= */}
       {/* 5. INTERACTIVE EXPECTED VALUE & EDGE CALCULATOR */}
       {/* ========================================================================= */}
-      <section className="relative z-10 bg-[#0d0622]/90 border border-purple-500/30 rounded-3xl p-6 sm:p-8 space-y-6 font-mono shadow-2xl backdrop-blur-md">
+      <section className="relative z-10 bg-[#0c0620]/90 border border-purple-500/30 rounded-2xl p-6 sm:p-8 space-y-6 font-mono shadow-2xl backdrop-blur-md">
         <div className="text-center space-y-1">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-300 text-xs font-bold">
             <Gauge className="w-3.5 h-3.5" />
@@ -645,7 +645,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <h2 className="text-2xl sm:text-3xl font-black text-white font-sans">Calculate Your Probability Edge</h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#060212] p-5 rounded-2xl border border-purple-900/40 text-xs">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#0a0518] p-5 rounded-2xl border border-purple-900/40 text-xs">
           <div className="space-y-2 text-left">
             <div className="flex justify-between font-bold">
               <span className="text-purple-300/70">VIXY Model Estimated Prob:</span>
@@ -677,7 +677,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
         </div>
 
-        <div className="bg-[#060212] p-5 rounded-2xl border border-purple-900/40 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="bg-[#0a0518] p-5 rounded-2xl border border-purple-900/40 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-left">
             <span className="text-xs text-purple-300/70 block font-bold">ESTIMATED PROBABILITY EDGE (+EV)</span>
             <span className="text-3xl sm:text-4xl font-black text-emerald-400 tracking-tight">+{estimatedEdge}%</span>
@@ -707,7 +707,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </p>
 
           <div className="pt-2 flex justify-center">
-            <div className="inline-flex items-center gap-3 p-2 bg-gradient-to-r from-[#0d0421] to-[#150a30] border-2 border-purple-500/30 rounded-3xl text-xs shadow-[0_0_35px_rgba(139,92,246,0.15)] shadow-purple-950/80 backdrop-blur-md relative overflow-hidden">
+            <div className="inline-flex items-center gap-3 p-2 bg-gradient-to-r from-[#0d0421] to-[#150a30] border-2 border-purple-500/30 rounded-2xl text-xs shadow-[0_0_35px_rgba(139,92,246,0.15)] shadow-purple-950/80 backdrop-blur-md relative overflow-hidden">
               <button
                 onClick={() => setBillingInterval('monthly')}
                 className={`relative px-5 py-2.5 rounded-2xl font-black uppercase tracking-wider transition-all duration-300 cursor-pointer active:scale-95 ${
@@ -729,8 +729,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span>Annual Billing</span>
                 <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black border transition-all ${
                   billingInterval === 'annual'
-                    ? 'bg-[#0B061A] text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
-                    : 'bg-[#0B061A]/40 text-purple-400/60 border-purple-500/20'
+                    ? 'bg-[#0a0518] text-cyan-300 border-cyan-400/40 shadow-[0_0_10px_rgba(34,211,238,0.2)]'
+                    : 'bg-[#0a0518]/40 text-purple-400/60 border-purple-500/20'
                 }`}>
                   SAVE 20%
                 </span>
@@ -741,7 +741,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
           {/* STARTER */}
-          <div className="bg-[#090417]/90 border border-purple-900/40 rounded-3xl p-6 space-y-6 flex flex-col justify-between">
+          <div className="bg-[#0a0518]/90 border border-purple-900/40 rounded-2xl p-6 space-y-6 flex flex-col justify-between">
             <div className="space-y-4">
               <h3 className="font-bold text-white text-sm uppercase tracking-wider">STARTER</h3>
               <div className="space-y-0.5">
@@ -780,14 +780,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               onClick={() => onOpenAuth('register')}
-              className="w-full py-3.5 rounded-xl bg-[#140C2A] hover:bg-[#1C123A] border border-purple-900/60 text-white font-bold text-xs transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] border border-purple-900/60 text-white font-bold text-xs transition-all cursor-pointer"
             >
               Subscribe Starter
             </button>
           </div>
 
           {/* PROFESSIONAL */}
-          <div className="bg-[#0e0626] border-2 border-purple-500 rounded-3xl p-6 space-y-6 flex flex-col justify-between relative shadow-2xl shadow-purple-600/30">
+          <div className="bg-[#0c0620] border-2 border-purple-500 rounded-2xl p-6 space-y-6 flex flex-col justify-between relative shadow-2xl shadow-purple-600/30">
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="font-bold text-cyan-300 text-sm uppercase tracking-wider">PROFESSIONAL</h3>
@@ -836,7 +836,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </div>
 
           {/* ELITE */}
-          <div className="bg-[#090417]/90 border border-purple-900/40 rounded-3xl p-6 space-y-6 flex flex-col justify-between">
+          <div className="bg-[#0a0518]/90 border border-purple-900/40 rounded-2xl p-6 space-y-6 flex flex-col justify-between">
             <div className="space-y-4">
               <h3 className="font-bold text-white text-sm uppercase tracking-wider">ELITE</h3>
               <div className="space-y-0.5">
@@ -875,7 +875,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <button
               onClick={() => onOpenAuth('register')}
-              className="w-full py-3.5 rounded-xl bg-[#140C2A] hover:bg-[#1C123A] border border-purple-900/60 text-white font-bold text-xs transition-all cursor-pointer"
+              className="w-full py-3.5 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] border border-purple-900/60 text-white font-bold text-xs transition-all cursor-pointer"
             >
               Subscribe Elite
             </button>
@@ -883,7 +883,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
 
         {/* Persistent Risk Disclosure Callout */}
-        <div className="bg-[#070314] p-4 rounded-2xl border border-amber-500/30 text-[11px] text-slate-300 text-center space-y-1.5 font-sans">
+        <div className="bg-[#0a0518] p-4 rounded-2xl border border-amber-500/30 text-[11px] text-slate-300 text-center space-y-1.5 font-sans">
           <p className="font-bold text-amber-300 flex items-center justify-center gap-1.5">
             <AlertTriangle className="w-4 h-4 text-amber-400" />
             Mandatory Risk Disclosure
@@ -905,7 +905,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="space-y-2.5 text-xs text-left">
           {faqs.map((faq, idx) => (
-            <div key={idx} className="bg-[#090417] border border-purple-900/40 rounded-2xl overflow-hidden">
+            <div key={idx} className="bg-[#0a0518] border border-purple-900/40 rounded-2xl overflow-hidden">
               <button
                 onClick={() => setOpenFaq(openFaq === idx ? null : idx)}
                 className="w-full p-4 font-bold text-white flex items-center justify-between gap-4 cursor-pointer"
@@ -914,7 +914,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 {openFaq === idx ? <ChevronUp className="w-4 h-4 text-purple-400" /> : <ChevronDown className="w-4 h-4 text-purple-300/60" />}
               </button>
               {openFaq === idx && (
-                <div className="p-4 pt-0 text-purple-300/80 leading-relaxed font-sans border-t border-purple-900/40 bg-[#060212]">
+                <div className="p-4 pt-0 text-purple-300/80 leading-relaxed font-sans border-t border-purple-900/40 bg-[#0a0518]">
                   {faq.a}
                 </div>
               )}
@@ -962,8 +962,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* MODAL 1: 14-FACTOR MODEL ALIGNMENT CRITERIA */}
       {showFactorsModal && (
-        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-mono my-auto max-h-[85vh] overflow-y-auto text-left">
+        <div className="fixed inset-0 z-50 bg-[#0a0518]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0c0620] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-mono my-auto max-h-[85vh] overflow-y-auto text-left">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
               <div className="flex items-center gap-2">
                 <Layers className="w-5 h-5 text-purple-400" />
@@ -971,7 +971,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button
                 onClick={() => setShowFactorsModal(false)}
-                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -987,7 +987,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               {modelFactors.map((fac) => (
                 <div
                   key={fac.id}
-                  className="p-3 rounded-xl border bg-[#0B061A] border-purple-900/40 space-y-1"
+                  className="p-3 rounded-xl border bg-[#0a0518] border-purple-900/40 space-y-1"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-white text-xs flex items-center gap-1.5">
@@ -1016,8 +1016,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* MODAL 2: TERMS OF SERVICE */}
       {showTermsModal && (
-        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
+        <div className="fixed inset-0 z-50 bg-[#0a0518]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0c0620] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-purple-400" />
@@ -1025,7 +1025,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button
                 onClick={() => setShowTermsModal(false)}
-                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1053,8 +1053,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* MODAL 3: PRIVACY POLICY */}
       {showPrivacyModal && (
-        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#0D071E] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
+        <div className="fixed inset-0 z-50 bg-[#0a0518]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0c0620] border border-purple-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
               <div className="flex items-center gap-2">
                 <Shield className="w-5 h-5 text-purple-400" />
@@ -1062,7 +1062,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button
                 onClick={() => setShowPrivacyModal(false)}
-                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -1088,8 +1088,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
       {/* MODAL 4: RISK & JURISDICTION DISCLAIMER */}
       {showRiskModal && (
-        <div className="fixed inset-0 z-50 bg-[#05020E]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
-          <div className="bg-[#0D071E] border border-amber-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
+        <div className="fixed inset-0 z-50 bg-[#0a0518]/90 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto animate-fadeIn">
+          <div className="bg-[#0c0620] border border-amber-500/50 rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl font-sans my-auto max-h-[85vh] overflow-y-auto text-xs text-purple-100 text-left">
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3 font-mono">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
@@ -1097,7 +1097,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <button
                 onClick={() => setShowRiskModal(false)}
-                className="p-1 rounded-lg bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
+                className="p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 hover:text-white cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>

@@ -112,7 +112,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <div className="flex items-center gap-2">
           <span className="text-xs text-purple-300/60 font-mono">Plan Status:</span>
-          <span className={`px-3 py-1 rounded-lg border text-xs font-mono font-bold uppercase ${
+          <span className={`px-3 py-1 rounded-xl border text-xs font-mono font-bold uppercase ${
             isElite
               ? 'bg-amber-500/20 border-amber-500/50 text-amber-300 shadow-md shadow-amber-500/20'
               : 'bg-purple-500/20 border-purple-500/40 text-purple-300'
@@ -123,26 +123,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* Account Info Card */}
-      <div className="bg-[#120B28] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
+      <div className="bg-[#0c0620] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
         <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
           <Shield className="w-4 h-4 text-purple-400" />
           <span>User Profile & Workspace</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
             <span className="text-purple-300/50 text-[10px] block">Full Name</span>
             <span className="text-purple-100 font-bold">{authState.user?.name || 'Quant User'}</span>
           </div>
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
             <span className="text-purple-300/50 text-[10px] block">Email Address</span>
             <span className="text-purple-100 font-bold">{authState.user?.email || 'trader@vixysvault.com'}</span>
           </div>
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
             <span className="text-purple-300/50 text-[10px] block">Account Tier</span>
             <span className="text-purple-300 font-bold">{subscription.plan} Tier</span>
           </div>
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 space-y-1">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 space-y-1">
             <span className="text-purple-300/50 text-[10px] block">Member Since</span>
             <span className="text-purple-100 font-bold">{authState.user?.joinedDate || 'July 2026'}</span>
           </div>
@@ -158,7 +158,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       />
 
       {/* SECONDARY EXCHANGE CONNECTIONS (POLYMARKET & DRAFTKINGS) */}
-      <div className="bg-[#120B28] border border-purple-900/60 rounded-2xl p-6 space-y-6 shadow-xl relative overflow-hidden">
+      <div className="bg-[#0c0620] border border-purple-900/60 rounded-2xl p-6 space-y-6 shadow-xl relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-4">
           <div>
             <div className="flex items-center gap-2">
@@ -183,7 +183,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* Exchange Key Cards Container */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* 1. POLYMARKET API CARD */}
-          <div className="bg-[#0B061A] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
+          <div className="bg-[#0a0518] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
                 <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }))
                     }
                     placeholder="poly_l2_0x..."
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
@@ -228,7 +228,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }))
                     }
                     placeholder="0x7129... or passphrase"
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-indigo-500"
                   />
                 </div>
 
@@ -242,7 +242,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         polymarket: { ...prev.polymarket, environment: e.target.value as any },
                       }))
                     }
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2 py-1.5 text-purple-200 focus:outline-none"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2 py-1.5 text-purple-200 focus:outline-none"
                   >
                     <option value="live">Polygon Mainnet (USDC)</option>
                     <option value="paper">Amoy Testnet</option>
@@ -255,7 +255,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 onClick={() => handleTestConnection('polymarket')}
                 disabled={testingVenue === 'polymarket'}
-                className="flex-1 py-1.5 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                className="flex-1 py-1.5 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
               >
                 {testingVenue === 'polymarket' ? (
                   <RefreshCw className="w-3 h-3 animate-spin text-indigo-400" />
@@ -267,7 +267,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <button
                 onClick={() => handleToggleConnect('polymarket')}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                   exchangeKeys.polymarket.connected
                     ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
                     : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
@@ -279,7 +279,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           {/* 2. DRAFTKINGS API CARD */}
-          <div className="bg-[#0B061A] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
+          <div className="bg-[#0a0518] rounded-xl border border-purple-900/60 p-4 space-y-3.5 flex flex-col justify-between">
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b border-purple-900/40 pb-2">
                 <div className="flex items-center gap-2">
@@ -308,7 +308,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }))
                     }
                     placeholder="dk_micro_key_..."
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -324,7 +324,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       }))
                     }
                     placeholder="DK-ACC-8912"
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-emerald-500"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-purple-200 focus:outline-none focus:border-emerald-500"
                   />
                 </div>
 
@@ -338,7 +338,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         draftkings: { ...prev.draftkings, environment: e.target.value as any },
                       }))
                     }
-                    className="w-full bg-[#120826] border border-purple-900/60 rounded-lg px-2 py-1.5 text-purple-200 focus:outline-none"
+                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2 py-1.5 text-purple-200 focus:outline-none"
                   >
                     <option value="live">Sportsbook Live Odds</option>
                     <option value="paper">Simulated Odds Sandbox</option>
@@ -351,7 +351,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 onClick={() => handleTestConnection('draftkings')}
                 disabled={testingVenue === 'draftkings'}
-                className="flex-1 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                className="flex-1 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
               >
                 {testingVenue === 'draftkings' ? (
                   <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
@@ -363,7 +363,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
               <button
                 onClick={() => handleToggleConnect('draftkings')}
-                className={`px-2.5 py-1.5 rounded-lg text-[10px] font-bold border transition-all ${
+                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
                   exchangeKeys.draftkings.connected
                     ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
                     : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
@@ -377,7 +377,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </div>
 
       {/* API Key Management (Vixy's Vault System API) */}
-      <div className="bg-[#120B28] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
+      <div className="bg-[#0c0620] border border-purple-500/30 rounded-2xl p-6 space-y-6 shadow-xl">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-base font-bold font-mono text-white flex items-center gap-2">
@@ -406,11 +406,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 type="text"
                 readOnly
                 value={apiKey}
-                className="flex-1 bg-[#0B061A] border border-purple-900/60 rounded-xl px-3 py-2 text-xs font-mono text-purple-300 select-all focus:outline-none"
+                className="flex-1 bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs font-mono text-purple-300 select-all focus:outline-none"
               />
               <button
                 onClick={handleCopyKey}
-                className="px-3 py-2 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-200 border border-purple-900/40 text-xs font-bold transition-all flex items-center gap-1.5"
+                className="px-3 py-2 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] text-purple-200 border border-purple-900/40 text-xs font-bold transition-all flex items-center gap-1.5"
               >
                 {copiedKey ? <Check className="w-4 h-4 text-purple-400" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedKey ? 'Copied' : 'Copy Key'}</span>
@@ -418,7 +418,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <button
                 onClick={handleRegenerateKey}
                 disabled={isGenerating}
-                className="p-2 rounded-xl bg-[#1A1038] hover:bg-[#221648] text-purple-300/70 hover:text-white border border-purple-900/40 transition-all"
+                className="p-2 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] text-purple-300/70 hover:text-white border border-purple-900/40 transition-all"
                 title="Regenerate API Key"
               >
                 <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin text-purple-400' : ''}`} />
@@ -426,12 +426,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
 
-          <div className="bg-[#0B061A] p-4 rounded-xl border border-purple-900/40 text-xs font-mono space-y-2">
+          <div className="bg-[#0a0518] p-4 rounded-xl border border-purple-900/40 text-xs font-mono space-y-2">
             <div className="flex items-center gap-2 text-purple-300 font-bold">
               <Terminal className="w-4 h-4" />
               <span>API Endpoint Sample (Python / Node)</span>
             </div>
-            <pre className="text-[11px] text-purple-300/70 overflow-x-auto p-2 bg-[#080314] rounded border border-purple-900/40 font-mono">
+            <pre className="text-[11px] text-purple-300/70 overflow-x-auto p-2 bg-[#0a0518] rounded border border-purple-900/40 font-mono">
               curl -H "X-VAULT-KEY: {apiKey}" https://api.vixysvault.com/v1/predict/btc15m
             </pre>
           </div>

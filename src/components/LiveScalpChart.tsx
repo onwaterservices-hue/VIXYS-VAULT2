@@ -324,7 +324,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
   const netDelta = (buyVolume30s - sellVolume30s).toFixed(2);
 
   return (
-    <div className="bg-[#090418]/90 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_0_30px_rgba(147,51,234,0.12)] space-y-4">
+    <div className="bg-[#0a0518]/90 backdrop-blur-xl border border-purple-500/30 rounded-2xl p-4 sm:p-5 shadow-[0_0_30px_rgba(147,51,234,0.12)] space-y-4">
       {/* Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-900/40 pb-3">
         <div className="flex items-center gap-3">
@@ -354,7 +354,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
       </div>
 
       {/* Signal / Confluence Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-[#12082b]/80 border border-purple-500/20">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-[#0c0620]/80 border border-purple-500/20">
         <div>
           <span className="text-[10px] text-slate-400 uppercase font-mono block">Engine Signal State</span>
           <div className="flex items-center gap-2 mt-0.5">
@@ -390,7 +390,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
       </div>
 
       {/* Taker Buy / Sell Pressure Bar (30s Rolling Window) */}
-      <div className="space-y-1.5 p-3.5 rounded-xl bg-[#0c061d] border border-purple-900/50 shadow-inner">
+      <div className="space-y-1.5 p-3.5 rounded-xl bg-[#0c0620] border border-purple-900/50 shadow-inner">
         <div className="flex items-center justify-between text-[11px] font-mono font-extrabold">
           <span className="text-emerald-400 flex items-center gap-1">
             <TrendingUp className="w-3.5 h-3.5" />
@@ -422,7 +422,7 @@ export const LiveScalpChart: React.FC<LiveScalpChartProps> = ({
       </div>
 
       {/* Lightweight Candlestick Chart Render Container */}
-      <div className="relative rounded-xl overflow-hidden border border-purple-500/20 bg-[#080414]">
+      <div className="relative rounded-xl overflow-hidden border border-purple-500/20 bg-[#0a0518]">
         <div ref={chartContainerRef} className="w-full" />
       </div>
     </div>

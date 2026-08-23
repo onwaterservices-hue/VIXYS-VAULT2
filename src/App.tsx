@@ -58,6 +58,7 @@ import { RiskDisclosureView } from './components/RiskDisclosureView';
 import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
+import { TAB_TO_PATH, PATH_TO_TAB } from './utils/routePaths';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyLockView } from './components/VixyLockView';
 import { StarterDeskView } from './components/StarterDeskView';
@@ -457,19 +458,27 @@ export default function App() {
     'vixylive', 'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
     'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
     'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
-    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot'
+    'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot',
+    'vixy-learning'
   ];
 
   const getTabFromLocation = (): string => {
     try {
+      const path = window.location.pathname.replace(/^\//, '').trim();
       const hash = window.location.hash.replace(/^#\/?/, '').trim();
+
+      // New clean paths (e.g. /vixy-live) — canonical going forward.
+      if (path && PATH_TO_TAB[path]) return PATH_TO_TAB[path];
+
+      // Legacy hash links (#terminal, #vixylive, ...) from before this change — still work.
       if (hash && VALID_ROUTES.includes(hash)) return hash;
       if (hash === 'subscription') return 'pricing';
-      if (hash && !VALID_ROUTES.includes(hash)) return '404';
 
-      const path = window.location.pathname.replace(/^\//, '').trim();
+      // Legacy raw tab-name paths (e.g. /terminal) from before this change — still work.
       if (path && VALID_ROUTES.includes(path)) return path;
       if (path === 'subscription') return 'pricing';
+
+      if (hash && !VALID_ROUTES.includes(hash)) return '404';
       if (path && !VALID_ROUTES.includes(path)) return '404';
     } catch (e) {
       console.error(e);
@@ -495,25 +504,26 @@ export default function App() {
 
   const setActiveTab = (tab: string) => {
     setActiveTabState(tab);
-    if (VALID_ROUTES.includes(tab)) {
-      window.location.hash = tab;
+    const path = TAB_TO_PATH[tab] || (VALID_ROUTES.includes(tab) ? `/${tab}` : null);
+    if (path && window.location.pathname !== path) {
+      window.history.pushState(null, '', path);
     }
   };
 
-  // Sync with browser back/forward and location hash changes
+  // Sync with browser back/forward and direct URL navigation
   useEffect(() => {
-    const handleHashChange = () => {
+    const handleLocationChange = () => {
       const newTab = getTabFromLocation();
       if (newTab) {
         setActiveTabState(newTab);
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    window.addEventListener('popstate', handleHashChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    window.addEventListener('popstate', handleLocationChange);
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
-      window.removeEventListener('popstate', handleHashChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+      window.removeEventListener('popstate', handleLocationChange);
     };
   }, []);
 

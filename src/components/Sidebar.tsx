@@ -35,6 +35,7 @@ import {
   Flame,
   Clock,
 } from "lucide-react";
+import { TAB_TO_PATH } from "../utils/routePaths";
 
 interface SidebarProps {
   activeTab: string;
@@ -218,7 +219,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={toggleCollapse}
             title={isCollapsed ? "Expand Sidebar" : "Collapse / Fold Sidebar"}
-            className="p-1.5 rounded-xl bg-[#120826] hover:bg-purple-800/50 border border-purple-800/40 text-purple-300 hover:text-white transition-all shadow-sm active:scale-95"
+            className="p-1.5 rounded-xl bg-[#0c0620] hover:bg-purple-800/50 border border-purple-800/40 text-purple-300 hover:text-white transition-all shadow-sm active:scale-95"
           >
             {isCollapsed ? (
               <PanelLeftOpen className="w-4 h-4 text-purple-300" />
@@ -233,7 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={onOpenSearch}
             title="Smart Search (⌘K)"
-            className="w-12 h-12 rounded-2xl bg-[#120826] hover:bg-purple-800/50 border border-purple-800/40 flex items-center justify-center text-purple-300 hover:text-white transition-all shadow-sm"
+            className="w-12 h-12 rounded-2xl bg-[#0c0620] hover:bg-purple-800/50 border border-purple-800/40 flex items-center justify-center text-purple-300 hover:text-white transition-all shadow-sm"
           >
             <Search className="w-5 h-5 text-purple-400" />
           </button>
@@ -241,7 +242,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="relative group w-full">
             <button
               onClick={onOpenSearch}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#120826] hover:bg-purple-900/40 border border-purple-800/40 text-purple-300 text-xs font-medium transition-all shadow-sm"
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#0c0620] hover:bg-purple-900/40 border border-purple-800/40 text-purple-300 text-xs font-medium transition-all shadow-sm"
             >
               <div className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-purple-400 group-hover:text-white transition-colors" />
@@ -254,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span
                   onClick={toggleHideSearch}
                   title="Hide fast search bar (Press ⌘K anytime)"
-                  className="p-1 rounded-lg hover:bg-purple-800/60 text-purple-400/80 hover:text-white transition-all cursor-pointer"
+                  className="p-1 rounded-xl hover:bg-purple-800/60 text-purple-400/80 hover:text-white transition-all cursor-pointer"
                 >
                   <EyeOff className="w-3.5 h-3.5" />
                 </span>
@@ -262,7 +263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#0e0720]/80 border border-purple-900/30 text-xs text-purple-300/70 transition-all w-full">
+          <div className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-[#0c0620]/80 border border-purple-900/30 text-xs text-purple-300/70 transition-all w-full">
             <button
               onClick={onOpenSearch}
               title="Open Smart Search (⌘K)"
@@ -339,9 +340,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                     if (isCollapsed) {
                       return (
-                        <button
+                        <a
                           key={item.id}
-                          onClick={handleItemClick}
+                          href={TAB_TO_PATH[item.id] ?? '#'}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleItemClick();
+                          }}
                           title={`${item.label} ${item.badge ? `(${item.badge})` : ""} ${isGated ? "(Subscription Required)" : ""}`}
                           className={`w-full h-11 rounded-2xl flex items-center justify-center transition-all duration-200 relative group cursor-pointer ${
                             isActive
@@ -366,7 +371,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             )
                           )}
                           {/* Hover Tooltip Popup */}
-                          <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#130A2A] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
+                          <div className="absolute left-full ml-3 px-2.5 py-1 rounded-xl bg-[#0c0620] border border-purple-500/40 text-white text-xs font-bold whitespace-nowrap shadow-2xl opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
                             {item.label}{" "}
                             {isGated ? (
                               <span className="text-amber-400 font-mono text-[10px]">
@@ -380,7 +385,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               )
                             )}
                           </div>
-                        </button>
+                        </a>
                       );
                     }
 
@@ -388,9 +393,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     const isDesk = (item as any).isDesk;
 
                     return (
-                      <button
+                      <a
                         key={item.id}
-                        onClick={handleItemClick}
+                        href={TAB_TO_PATH[item.id] ?? '#'}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleItemClick();
+                        }}
                         className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl font-bold text-xs transition-all duration-200 group cursor-pointer ${
                           isActive
                             ? isFlagship
@@ -461,7 +470,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             </span>
                           )
                         )}
-                      </button>
+                      </a>
                     );
                   })}
               </div>
@@ -555,7 +564,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onOpenSearch();
                 onCloseMobile();
               }}
-              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#120826] border border-purple-800/40 text-purple-300 text-xs font-medium"
+              className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-[#0c0620] border border-purple-800/40 text-purple-300 text-xs font-medium"
             >
               <div className="flex items-center gap-2">
                 <Search className="w-4 h-4 text-purple-400" />
@@ -585,9 +594,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         const isDesk = (item as any).isDesk;
 
                         return (
-                          <button
+                          <a
                             key={item.id}
-                            onClick={() => {
+                            href={TAB_TO_PATH[item.id] ?? '#'}
+                            onClick={(e) => {
+                              e.preventDefault();
                               setActiveTab(item.id);
                               onCloseMobile();
                             }}
@@ -654,7 +665,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 </span>
                               )
                             )}
-                          </button>
+                          </a>
                         );
                       })}
                   </div>

@@ -59,7 +59,7 @@ export const ReplayCenterView: React.FC = () => {
   return (
     <div className="space-y-6 font-sans text-slate-200">
       {/* Header */}
-      <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
             <History className="w-4 h-4 text-purple-400" />
@@ -84,7 +84,7 @@ export const ReplayCenterView: React.FC = () => {
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
                 selectedScenario === idx
                   ? 'bg-purple-600 text-white font-black shadow'
-                  : 'bg-[#0D081D] text-slate-400 hover:text-white border border-slate-800'
+                  : 'bg-[#0c0620] text-slate-400 hover:text-white border border-slate-800'
               }`}
             >
               {scen.asset} Precedent ({scen.date})
@@ -94,7 +94,7 @@ export const ReplayCenterView: React.FC = () => {
       </div>
 
       {/* Main Interactive Replay Terminal */}
-      <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 space-y-6">
+      <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 space-y-6">
         {/* Playback Controls & Timeline Progress */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
@@ -109,7 +109,7 @@ export const ReplayCenterView: React.FC = () => {
                 setCurrentStep(0);
                 setIsPlaying(false);
               }}
-              className="p-3 rounded-xl bg-[#0D081D] hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-all"
+              className="p-3 rounded-xl bg-[#0c0620] hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800 transition-all"
             >
               <RotateCcw className="w-5 h-5" />
             </button>
@@ -138,10 +138,10 @@ export const ReplayCenterView: React.FC = () => {
               }}
               className={`p-3 rounded-xl border text-center space-y-1 transition-all ${
                 i === currentStep
-                  ? 'bg-[#130B28] border-purple-500 text-white shadow-lg ring-1 ring-purple-400'
+                  ? 'bg-[#0c0620] border-purple-500 text-white shadow-lg ring-1 ring-purple-400'
                   : i < currentStep
-                  ? 'bg-[#0D081D] border-slate-800 text-slate-300'
-                  : 'bg-[#070410] border-slate-800/60 text-slate-600'
+                  ? 'bg-[#0c0620] border-slate-800 text-slate-300'
+                  : 'bg-[#0a0518] border-slate-800/60 text-slate-600'
               }`}
             >
               <div className="text-[10px] text-slate-400 font-bold">{st.time}</div>
@@ -152,7 +152,7 @@ export const ReplayCenterView: React.FC = () => {
         </div>
 
         {/* Active Frame Inspection */}
-        <div className="bg-[#0D081D] p-6 rounded-2xl border border-slate-800 grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono">
+        <div className="bg-[#0c0620] p-6 rounded-2xl border border-slate-800 grid grid-cols-1 lg:grid-cols-3 gap-6 font-mono">
           <div className="space-y-2">
             <span className="text-slate-400 text-xs block">Frame Decision</span>
             <div className="text-3xl font-black text-emerald-400">{stepData.status}</div>
@@ -161,7 +161,7 @@ export const ReplayCenterView: React.FC = () => {
 
           <div className="lg:col-span-2 space-y-2 font-sans">
             <span className="text-slate-400 text-xs font-mono block">Observed L2 Microstructure Event</span>
-            <div className="bg-[#070312] p-4 rounded-xl border border-slate-800 text-sm text-slate-200 leading-relaxed font-mono">
+            <div className="bg-[#0a0518] p-4 rounded-xl border border-slate-800 text-sm text-slate-200 leading-relaxed font-mono">
               "{stepData.event}"
             </div>
           </div>

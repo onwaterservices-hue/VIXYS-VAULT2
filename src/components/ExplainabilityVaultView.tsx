@@ -218,7 +218,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
   return (
     <div className="space-y-6 font-sans pb-12">
       {/* EXPLAINABILITY VAULT HEADER */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#12072b] via-[#0d0620] to-[#19093b] border border-purple-500/30 p-6 md:p-8 shadow-2xl">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#12072b] via-[#0d0620] to-[#19093b] border border-purple-500/30 p-6 md:p-8 shadow-2xl">
         <div className="absolute top-0 right-0 -mt-8 -mr-8 w-64 h-64 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -238,7 +238,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           </div>
 
           {/* Asset Selector */}
-          <div className="flex items-center gap-2 bg-[#080413] p-1.5 rounded-2xl border border-purple-900/60 font-mono text-xs">
+          <div className="flex items-center gap-2 bg-[#0a0518] p-1.5 rounded-2xl border border-purple-900/60 font-mono text-xs">
             {['BTC', 'ETH', 'SOL', 'NVDA', 'SPY'].map((sym) => (
               <button
                 key={sym}
@@ -272,7 +272,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           {/* TOP METRIC / CONFIDENCE STABILITY HIGHLIGHT */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Card 1: Calibrated Probability */}
-        <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2 relative overflow-hidden">
+        <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2 relative overflow-hidden">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
             <span>CALIBRATED PROBABILITY</span>
             <span title="Historical success rate under matching market conditions">
@@ -281,7 +281,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           </div>
           <div className="flex items-baseline gap-2 font-mono">
             <span className="text-3xl font-black text-emerald-400">78.4%</span>
-            <span className="text-xs font-bold text-emerald-300/80 bg-emerald-500/15 px-2 py-0.5 rounded-md border border-emerald-500/30">
+            <span className="text-xs font-bold text-emerald-300/80 bg-emerald-500/15 px-2 py-0.5 rounded-xl border border-emerald-500/30">
               STABLE ↑ (+3.2% 5m)
             </span>
           </div>
@@ -291,14 +291,14 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
         </div>
 
         {/* Card 2: Signal Disagreement Score */}
-        <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2">
+        <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
             <span>ENGINE HARMONY</span>
             <Gauge className="w-3.5 h-3.5 text-cyan-400" />
           </div>
           <div className="flex items-baseline gap-2 font-mono">
             <span className="text-3xl font-black text-cyan-300">88.0%</span>
-            <span className="text-xs font-bold text-cyan-300/80 bg-cyan-500/15 px-2 py-0.5 rounded-md border border-cyan-500/30">
+            <span className="text-xs font-bold text-cyan-300/80 bg-cyan-500/15 px-2 py-0.5 rounded-xl border border-cyan-500/30">
               LOW FRICTION
             </span>
           </div>
@@ -308,7 +308,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
         </div>
 
         {/* Card 3: Historical Match Accuracy */}
-        <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2">
+        <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
             <span>HISTORICAL WIN RATE</span>
             <History className="w-3.5 h-3.5 text-purple-400" />
@@ -325,7 +325,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
         </div>
 
         {/* Card 4: Primary Evidence Driver */}
-        <div className="p-5 rounded-2xl bg-[#0b051b] border border-purple-900/50 space-y-2">
+        <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2">
           <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
             <span>KEY CATALYST</span>
             <Zap className="w-3.5 h-3.5 text-amber-400" />
@@ -369,7 +369,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
         <button
           onClick={() => setShowRawVsCalibrated(!showRawVsCalibrated)}
-          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#090415] border border-purple-800/40 text-purple-200 text-xs font-bold hover:bg-purple-900/30 transition-all"
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0a0518] border border-purple-800/40 text-purple-200 text-xs font-bold hover:bg-purple-900/30 transition-all"
         >
           <Scale className="w-3.5 h-3.5 text-purple-400" />
           <span>{showRawVsCalibrated ? 'Showing Calibrated Scores' : 'Showing Raw Model Scores'}</span>
@@ -395,7 +395,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
               {engineModules.map((module, idx) => (
                 <div
                   key={idx}
-                  className="p-4 rounded-2xl bg-[#0b051b] border border-purple-900/40 space-y-3 hover:border-purple-600/50 transition-all"
+                  className="p-4 rounded-2xl bg-[#0a0518] border border-purple-900/40 space-y-3 hover:border-purple-600/50 transition-all"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div className="flex items-center gap-3">
@@ -438,7 +438,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                   </div>
 
                   {/* Fact line */}
-                  <p className="text-xs text-purple-200/80 font-sans bg-[#06030e] p-2.5 rounded-xl border border-purple-950/60 leading-relaxed">
+                  <p className="text-xs text-purple-200/80 font-sans bg-[#0a0518] p-2.5 rounded-xl border border-purple-950/60 leading-relaxed">
                     💡 <strong>Observed Fact:</strong> {module.observedFact}
                   </p>
                 </div>
@@ -449,7 +449,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           {/* RIGHT COL: SIGNAL DISAGREEMENT & MAIN RISKS */}
           <div className="space-y-6">
             {/* SIGNAL DISAGREEMENT METER */}
-            <div className="p-5 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-4">
+            <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
               <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-cyan-400" />
@@ -461,7 +461,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
               </div>
 
               <div className="space-y-3 font-mono text-xs">
-                <div className="p-3 rounded-2xl bg-[#120729] border border-purple-900/40 space-y-2">
+                <div className="p-3 rounded-2xl bg-[#0c0620] border border-purple-900/40 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-purple-300 font-bold">Agreement Level</span>
                     <span className="text-emerald-400 font-black">5 / 6 Engines Bullish</span>
@@ -471,7 +471,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                   </div>
                 </div>
 
-                <div className="p-3 rounded-2xl bg-[#0e0720] border border-purple-900/40 space-y-1.5 font-sans">
+                <div className="p-3 rounded-2xl bg-[#0c0620] border border-purple-900/40 space-y-1.5 font-sans">
                   <span className="text-xs font-bold text-amber-300 flex items-center gap-1 font-mono">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     Divergent Signal Detected:
@@ -484,7 +484,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
             </div>
 
             {/* WHAT WOULD WEAKEN OR STRENGTHEN ASSESSMENT */}
-            <div className="p-5 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-4">
+            <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
               <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider flex items-center gap-2 border-b border-purple-900/40 pb-3">
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 Evidence Sensitivity Drivers
@@ -516,7 +516,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
       {/* TAB CONTENT 2: CONFIDENCE DELTA TIMELINE */}
       {activeTab === 'timeline' && (
-        <div className="p-6 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-6">
+        <div className="p-6 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-6">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-4">
             <div>
               <h2 className="text-lg font-black text-white font-mono">
@@ -536,7 +536,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
             {confidenceTimeline.map((item, idx) => (
               <div
                 key={idx}
-                className="p-4 rounded-2xl bg-[#0f0724] border border-purple-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-purple-500/40 transition-all"
+                className="p-4 rounded-2xl bg-[#0c0620] border border-purple-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-purple-500/40 transition-all"
               >
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-2xl bg-purple-900/40 border border-purple-700/40 flex items-center justify-center font-extrabold text-purple-200 text-xs shrink-0">
@@ -576,7 +576,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
       {/* TAB CONTENT 3: HISTORICAL SETUP MATCHER */}
       {activeTab === 'historical' && (
-        <div className="p-6 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-6">
+        <div className="p-6 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-purple-900/40 pb-4">
             <div>
               <h2 className="text-lg font-black text-white font-mono flex items-center gap-2">
@@ -596,7 +596,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
             {historicalMatches.map((m) => (
               <div
                 key={m.id}
-                className="p-4 rounded-2xl bg-[#0e0720] border border-purple-900/40 space-y-3 hover:border-purple-500/50 transition-all"
+                className="p-4 rounded-2xl bg-[#0c0620] border border-purple-900/40 space-y-3 hover:border-purple-500/50 transition-all"
               >
                 <div className="flex items-center justify-between border-b border-purple-900/30 pb-2">
                   <div className="flex items-center gap-2">
@@ -633,7 +633,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
 
       {/* TAB CONTENT 4: CROSS-ASSET OPPORTUNITY RANKING */}
       {activeTab === 'ranking' && (
-        <div className="p-6 rounded-3xl bg-[#0a0518] border border-purple-900/50 space-y-6">
+        <div className="p-6 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-6">
           <div className="flex items-center justify-between border-b border-purple-900/40 pb-4">
             <div>
               <h2 className="text-lg font-black text-white font-mono">
@@ -661,7 +661,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                 {opportunityRankings.map((row, idx) => (
                   <tr key={idx} className="hover:bg-purple-900/20 transition-colors">
                     <td className="p-3 font-extrabold text-white flex items-center gap-2">
-                      <span className="w-6 h-6 rounded-lg bg-purple-900/60 flex items-center justify-center text-[10px] text-purple-300">
+                      <span className="w-6 h-6 rounded-xl bg-purple-900/60 flex items-center justify-center text-[10px] text-purple-300">
                         {idx + 1}
                       </span>
                       <span>{row.asset} - {row.strike}</span>

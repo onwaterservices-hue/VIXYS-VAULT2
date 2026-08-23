@@ -122,7 +122,7 @@ export const PerformanceLabView: React.FC = () => {
     <div className="max-w-7xl mx-auto space-y-8 font-sans text-purple-100 pb-20">
       
       {/* 1. WAR ROOM TOP BANNER & MODEL CLAIM GATE */}
-      <div className="bg-gradient-to-r from-[#14082B] via-[#0D051F] to-[#170A33] border-2 border-purple-500/50 rounded-3xl p-6 sm:p-8 relative overflow-hidden shadow-2xl shadow-purple-950/80">
+      <div className="bg-gradient-to-r from-[#14082B] via-[#0D051F] to-[#170A33] border-2 border-purple-500/50 rounded-2xl p-6 sm:p-8 relative overflow-hidden shadow-2xl shadow-purple-950/80">
         <div className="flex flex-wrap items-center justify-between gap-6 relative z-10">
           <div>
             <div className="flex items-center gap-3 mb-2">
@@ -143,7 +143,7 @@ export const PerformanceLabView: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-3 bg-[#0A0418] p-3 rounded-2xl border border-purple-500/30 font-mono text-xs">
+          <div className="flex items-center gap-3 bg-[#0a0518] p-3 rounded-2xl border border-purple-500/30 font-mono text-xs">
             <div>
               <span className="text-purple-400 text-[10px] uppercase font-bold block">Verified Sample</span>
               <span className="text-lg font-black text-white">{verifiedSampleN} Cycles</span>
@@ -161,42 +161,42 @@ export const PerformanceLabView: React.FC = () => {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 font-mono">
         
         {/* Directional Accuracy */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Directional Accuracy</span>
           <span className="text-2xl font-black text-emerald-400">{formattedAccuracy}%</span>
           <span className="text-[10px] text-emerald-300/80 block font-semibold">95% CI: {ciLower}–{ciUpper}%</span>
         </div>
 
         {/* Brier Score */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Brier Score</span>
           <span className="text-2xl font-black text-purple-200">{brierScore.toFixed(3)}</span>
           <span className="text-[10px] text-purple-400 block font-semibold">Target: &lt; 0.080</span>
         </div>
 
         {/* Log Loss */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Log Loss</span>
           <span className="text-2xl font-black text-purple-200">{logLoss.toFixed(3)}</span>
           <span className="text-[10px] text-purple-400 block font-semibold">Target: &lt; 0.350</span>
         </div>
 
         {/* Calibration Error */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Calibration Error</span>
           <span className="text-2xl font-black text-emerald-400">{calibrationErrorPct}%</span>
           <span className="text-[10px] text-emerald-300/80 block font-semibold">Near-Ideal Curve</span>
         </div>
 
         {/* SKIP Rate */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">SKIP Rate</span>
           <span className="text-2xl font-black text-amber-300">{skipRatePct}%</span>
           <span className="text-[10px] text-amber-400 block font-semibold">{modelMetadata.totalSkipCycles} Capital Preserved</span>
         </div>
 
         {/* Max Streaks */}
-        <div className="bg-[#12072B] p-4 rounded-2xl border border-purple-500/30 space-y-1">
+        <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Max Streaks</span>
           <div className="flex items-center gap-2">
             <span className="text-lg font-black text-emerald-400">+{maxWinStreak}</span>
@@ -212,7 +212,7 @@ export const PerformanceLabView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Confidence Bucket Table */}
-        <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -230,7 +230,7 @@ export const PerformanceLabView: React.FC = () => {
 
           <div className="space-y-3 font-mono text-xs">
             {confidenceBuckets.map((bucket) => (
-              <div key={bucket.range} className="bg-[#0A0418] p-3.5 rounded-xl border border-purple-900/40 space-y-2">
+              <div key={bucket.range} className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-900/40 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-black text-white">{bucket.range} Confidence</span>
                   <div className="flex items-center gap-2">
@@ -269,7 +269,7 @@ export const PerformanceLabView: React.FC = () => {
         </div>
 
         {/* Empirical Reliability Chart & Calibration Curve */}
-        <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -286,7 +286,7 @@ export const PerformanceLabView: React.FC = () => {
             </span>
           </div>
 
-          <div className="h-64 bg-[#0A0418] rounded-xl border border-purple-900/40 p-4 relative flex items-center justify-center font-mono">
+          <div className="h-64 bg-[#0a0518] rounded-xl border border-purple-900/40 p-4 relative flex items-center justify-center font-mono">
             {/* 45 Degree Reference Line */}
             <svg className="absolute inset-4 w-[calc(100%-2rem)] h-[calc(100%-2rem)] overflow-visible">
               <line x1="0" y1="100%" x2="100%" y2="0" stroke="#6B7280" strokeDasharray="4 4" strokeWidth="1.5" />
@@ -308,7 +308,7 @@ export const PerformanceLabView: React.FC = () => {
             </div>
           </div>
 
-          <div className="text-xs text-purple-300/70 font-mono bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+          <div className="text-xs text-purple-300/70 font-mono bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
             <span>Ideal Calibration Slope: <strong className="text-white">1.00</strong></span>
             <span>Empirical Slope: <strong className="text-emerald-400">0.982</strong></span>
             <span>Sample Gate: <strong className="text-purple-300">N &ge; 30 / bucket</strong></span>
@@ -318,7 +318,7 @@ export const PerformanceLabView: React.FC = () => {
       </div>
 
       {/* 4. MARKET REGIME PERFORMANCE MATRIX */}
-      <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
           <div>
             <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -370,7 +370,7 @@ export const PerformanceLabView: React.FC = () => {
       </div>
 
       {/* 5. OBJECTIVE BASELINE COMPARISON ENGINE */}
-      <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
           <div>
             <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -434,7 +434,7 @@ export const PerformanceLabView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Automated Integrity Auditor */}
-        <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -452,7 +452,7 @@ export const PerformanceLabView: React.FC = () => {
 
           <div className="space-y-2.5 font-mono text-xs">
             {integrityChecks.map((check) => (
-              <div key={check.check} className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+              <div key={check.check} className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
                 <div>
                   <span className="font-bold text-white block">{check.check}</span>
                   <span className="text-purple-400 text-[10px] block">{check.detail}</span>
@@ -466,7 +466,7 @@ export const PerformanceLabView: React.FC = () => {
           </div>
 
           {/* Local Disk Fallback Safety Notice */}
-          <div className="bg-[#0A0418] p-3.5 rounded-xl border border-amber-500/30 space-y-1 font-mono text-xs">
+          <div className="bg-[#0a0518] p-3.5 rounded-xl border border-amber-500/30 space-y-1 font-mono text-xs">
             <div className="flex items-center justify-between">
               <span className="font-bold text-amber-300 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
@@ -483,7 +483,7 @@ export const PerformanceLabView: React.FC = () => {
         </div>
 
         {/* Disaster-Recovery Test Matrix */}
-        <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+        <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -500,7 +500,7 @@ export const PerformanceLabView: React.FC = () => {
           </div>
 
           <div className="space-y-2 font-mono text-xs">
-            <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <span className="font-extrabold text-white block">Firestore Outage Fallback</span>
                 <span className="text-purple-400 text-[10px]">Buffered write-ahead to vixy_store.json</span>
@@ -508,7 +508,7 @@ export const PerformanceLabView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">PASS</span>
             </div>
 
-            <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <span className="font-extrabold text-white block">Process Cold-Boot Hydration</span>
                 <span className="text-purple-400 text-[10px]">Re-hydrates 520 signal logs on server boot</span>
@@ -516,7 +516,7 @@ export const PerformanceLabView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">PASS</span>
             </div>
 
-            <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <span className="font-extrabold text-white block">Idempotent Merge & Deduplication</span>
                 <span className="text-purple-400 text-[10px]">Document key = predictionId prevents duplicates</span>
@@ -524,7 +524,7 @@ export const PerformanceLabView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">PASS</span>
             </div>
 
-            <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <span className="font-extrabold text-white block">Settlement Priority Queue</span>
                 <span className="text-purple-400 text-[10px]">Settlements processed ahead of telemetry</span>
@@ -532,7 +532,7 @@ export const PerformanceLabView: React.FC = () => {
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">PASS</span>
             </div>
 
-            <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <span className="font-extrabold text-white block">Circuit Breaker & Exponential Backoff</span>
                 <span className="text-purple-400 text-[10px]">Auto-probes recovery at 20s intervals</span>
@@ -545,7 +545,7 @@ export const PerformanceLabView: React.FC = () => {
       </div>
 
       {/* 7. FORENSIC RECONCILIATION AUDIT LEDGER */}
-      <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl font-mono">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl font-mono">
         <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
           <div>
             <h3 className="text-sm font-extrabold text-white uppercase tracking-wider flex items-center gap-2">
@@ -562,41 +562,41 @@ export const PerformanceLabView: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">TOTAL STORED LOGS</span>
             <span className="text-lg font-black text-white">520</span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">RESOLVED SETTLEMENTS</span>
             <span className="text-lg font-black text-emerald-400">396</span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">DIRECTIONAL WINS (UP+DOWN)</span>
             <span className="text-lg font-black text-purple-300">255 <span className="text-[10px] text-purple-400 font-normal">(123 UP / 132 DOWN)</span></span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">CAPITAL-PRESERVING SKIPS</span>
             <span className="text-lg font-black text-purple-400">105</span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">LEGACY SEED RECORDS</span>
             <span className="text-lg font-black text-amber-300">36 <span className="text-[10px] text-amber-400/80 font-normal">(Reconciled Residual)</span></span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">IN-FLIGHT PENDING</span>
             <span className="text-lg font-black text-blue-400">14</span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">ORPHAN / DUPLICATE RECORDS</span>
             <span className="text-lg font-black text-emerald-400">0</span>
           </div>
-          <div className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/40">
+          <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
             <span className="text-purple-400 text-[10px] block font-bold">LOOKAHEAD VIOLATIONS</span>
             <span className="text-lg font-black text-emerald-400">0</span>
           </div>
         </div>
 
-        <div className="bg-[#0A0418] p-3.5 rounded-xl border border-purple-900/40 text-[11px] text-purple-200 space-y-1">
+        <div className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-900/40 text-[11px] text-purple-200 space-y-1">
           <div className="font-bold text-white flex items-center justify-between">
             <span>MATHEMATICAL IDENTITY PROOF:</span>
             <span className="text-emerald-400 font-bold">RESIDUAL = 0</span>
@@ -608,7 +608,7 @@ export const PerformanceLabView: React.FC = () => {
       </div>
 
       {/* Verified Settlement Tape */}
-      <div className="bg-[#12072B] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
+      <div className="bg-[#0c0620] rounded-2xl border border-purple-500/30 p-6 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
           <div>
             <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
@@ -623,7 +623,7 @@ export const PerformanceLabView: React.FC = () => {
 
         <div className="space-y-2 font-mono text-xs">
           {verifiedSettlements.map((s) => (
-            <div key={s.cycleId} className="bg-[#0A0418] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
+            <div key={s.cycleId} className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-extrabold text-white">{s.cycleId}</span>

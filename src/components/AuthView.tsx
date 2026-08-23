@@ -170,7 +170,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column (5 cols): Features & Trust Badges */}
-        <div className="lg:col-span-5 bg-[#120B28] rounded-3xl p-6 sm:p-8 border border-purple-500/30 shadow-2xl space-y-6">
+        <div className="lg:col-span-5 bg-[#0c0620] rounded-2xl p-6 sm:p-8 border border-purple-500/30 shadow-2xl space-y-6">
           <div className="space-y-2">
             <h3 className="text-lg font-black text-white uppercase tracking-tight flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-purple-400" />
@@ -182,7 +182,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
           </div>
 
           <div className="space-y-4 text-xs font-mono">
-            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0B051A] border border-purple-900/50">
+            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <strong className="text-white block font-bold">15S & 1H Pre-Spike Lead Signals</strong>
@@ -192,7 +192,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0B051A] border border-purple-900/50">
+            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Flame className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <div>
                 <strong className="text-white block font-bold">24-Hour Day Pass ($9.99)</strong>
@@ -202,7 +202,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               </div>
             </div>
 
-            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0B051A] border border-purple-900/50">
+            <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Globe className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
                 <strong className="text-white block font-bold">Discord & Telegram Bot Sync</strong>
@@ -223,11 +223,11 @@ export const AuthView: React.FC<AuthViewProps> = ({
         </div>
 
         {/* Right Column (7 cols): Interactive Auth Form Page */}
-        <div className="lg:col-span-7 bg-[#120B28] rounded-3xl p-6 sm:p-8 border border-purple-500/40 shadow-2xl relative overflow-hidden space-y-6">
+        <div className="lg:col-span-7 bg-[#0c0620] rounded-2xl p-6 sm:p-8 border border-purple-500/40 shadow-2xl relative overflow-hidden space-y-6">
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-purple-500 via-violet-500 to-amber-400" />
 
           {/* Mode Switcher Tabs */}
-          <div className="flex items-center bg-[#0B051A] p-1.5 rounded-2xl border border-purple-900/60">
+          <div className="flex items-center bg-[#0a0518] p-1.5 rounded-2xl border border-purple-900/60">
             <button
               onClick={() => {
                 
@@ -293,7 +293,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                         placeholder="Alex Mercer"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                        className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                       />
                     </div>
                   </div>
@@ -315,7 +315,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                         placeholder="Optional Referral or Promo Code"
                         value={referralCode}
                         onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
-                        className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 uppercase font-mono placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                        className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 uppercase font-mono placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                       />
                     </div>
                     {referralCode.trim().length > 0 && (
@@ -345,7 +345,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     placeholder="trader@vixysvault.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
@@ -362,7 +362,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     placeholder="••••••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                    className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                   />
                 </div>
               </div>
@@ -380,7 +380,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                       placeholder="••••••••••••"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full bg-[#0B061A] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
+                      className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl pl-10 pr-4 py-2.5 text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
                     />
                   </div>
                 </div>

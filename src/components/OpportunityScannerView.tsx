@@ -31,7 +31,7 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
   return (
     <div className="space-y-6 font-sans text-slate-200">
       {/* Header */}
-      <div className="bg-[#070410] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
+      <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div>
           <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
             <Target className="w-4 h-4 text-purple-400" />
@@ -63,7 +63,7 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
           <div
             key={asset.symbol}
             onClick={() => onSelectAssetAndNavigate(asset.symbol)}
-            className="bg-[#070410] p-5 rounded-2xl border border-slate-800 hover:border-purple-500/60 cursor-pointer transition-all space-y-4 group shadow-lg"
+            className="bg-[#0a0518] p-5 rounded-2xl border border-slate-800 hover:border-purple-500/60 cursor-pointer transition-all space-y-4 group shadow-lg"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">

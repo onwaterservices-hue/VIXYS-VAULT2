@@ -128,7 +128,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans animate-fadeIn">
       {/* Top Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#170b36] via-[#12072b] to-[#170b36] border-2 border-purple-500/30 p-6 sm:p-8 shadow-2xl font-mono">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#170b36] via-[#12072b] to-[#170b36] border-2 border-purple-500/30 p-6 sm:p-8 shadow-2xl font-mono">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold">
@@ -213,7 +213,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all ${
                   filterTab === t
                     ? 'bg-purple-600 border-purple-500 text-white shadow-md'
-                    : 'bg-[#0f0722] border-purple-900/50 text-purple-300/70 hover:text-white'
+                    : 'bg-[#0c0620] border-purple-900/50 text-purple-300/70 hover:text-white'
                 }`}
               >
                 {t === 'ALL' ? 'All Traders' : t === 'MY_LOGS' ? 'My Logged Trades' : 'Community Leaders'}
@@ -228,7 +228,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
               placeholder="Search trader or hash..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-[#110726] border border-purple-900/40 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
+              className="w-full bg-[#0c0620] border border-purple-900/40 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
             />
           </div>
         </div>
@@ -311,7 +311,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       <td className="py-3 px-3">
                         <span
                           title="Client-side SHA-256 hash"
-                          className="px-2 py-0.5 rounded bg-[#070312] border border-purple-900/60 text-purple-300 font-mono text-[10px] flex items-center gap-1 w-fit"
+                          className="px-2 py-0.5 rounded bg-[#0a0518] border border-purple-900/60 text-purple-300 font-mono text-[10px] flex items-center gap-1 w-fit"
                         >
                           <Hash className="w-3 h-3 text-purple-400" />
                           {trd.lastHash ? `${trd.lastHash.substring(0, 10)}...` : '0x7e...'}
@@ -333,7 +333,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       </div>
 
       {/* Compliance Disclaimer Footer */}
-      <div className="p-4 rounded-xl bg-[#090514] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
+      <div className="p-4 rounded-xl bg-[#0a0518] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
         <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <p>
           <strong className="text-purple-300">Leaderboard Integrity Standard:</strong> Leaderboard statistics are compiled exclusively from user-logged trade journal entries with verified client-side SHA-256 hashes. VIXY AI does not seed synthetic leaderboard entries or guarantee future trading performance.
