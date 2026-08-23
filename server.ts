@@ -4500,66 +4500,20 @@ app.post("/api/auth/login", async (req, res) => {
     `[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith("vixy$") || false} reqId=${reqId}`,
   );
   if (!hasPasswordHash) {
-    if (password && password.trim().length > 0) {
-      const hashed = hashPassword(password);
-      user.passwordHash = hashed;
-      savePersistentStore();
-      try {
-        await persistSingleUser(user);
-      } catch (persistErr) {
-        console.warn(
-          "[AUTH] Error persisting newly auto-bound password:",
-          persistErr?.message,
-        );
-      }
-      console.log(
-        `[AUTH LOGIN] Seamlessly bound initial password for Day Pass / Stripe account: ${cleanEmail}`,
-      );
-      hasPasswordHash = true;
-    } else {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          error: "PASSWORD_REQUIRED",
-          message: "Please enter a password to secure and access your account.",
-        });
-    }
+    console.log(
+      `[AUTH LOGIN REJECTED] email=${cleanEmail} reason=PASSWORD_NOT_SET reqId=${reqId}`,
+    );
+    return res
+      .status(401)
+      .json({
+        success: false,
+        error: "PASSWORD_NOT_SET",
+        message:
+          "This account doesn't have a password set yet. Contact support or use account recovery to set one.",
+      });
   }
   let verificationSuccess = verifyPassword(password, user.passwordHash);
-  if (
-    !verificationSuccess &&
-    isMasterAdminEmail(cleanEmail) &&
-    password &&
-    password.length >= 4
-  ) {
-    console.log(
-      `[AUTH MASTER OVERRIDE] Owner authenticated and password synced for: ${cleanEmail}`,
-    );
-    const hashed = hashPassword(password);
-    user.passwordHash = hashed;
-    user.role = "OWNER";
-    user.subscription = "ELITE_PASS";
-    user.status = "ACTIVE";
-    verificationSuccess = true;
-    savePersistentStore();
-    try {
-      await persistSingleUser(user);
-    } catch (persistErr) {
-      console.warn(
-        "[AUTH] Error persisting updated owner password:",
-        persistErr?.message,
-      );
-    }
-  } else if (
-    !verificationSuccess &&
-    (cleanEmail === "ogershey@gmail.com" ||
-      cleanEmail.endsWith("@vixyvault.test")) &&
-    (password === "Seattle007" || password === "123456")
-  ) {
-    user.passwordHash = hashPassword(password);
-    verificationSuccess = true;
-  }
+
   const credentialSource = user.passwordHash.startsWith("vixy$")
     ? "SCRYPT"
     : "LEGACY";
@@ -4669,15 +4623,12 @@ app.post("/api/auth/register", async (req, res) => {
     resolution.user ||
     serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
   if (existing) {
-    const isOwner = isMasterAdminEmail(cleanEmail);
-    const hasPasswordHash =
-      !isOwner &&
-      !!(
-        existing.passwordHash &&
-        typeof existing.passwordHash === "string" &&
-        existing.passwordHash !== "AuthManaged2026!" &&
-        existing.passwordHash.length > 0
-      );
+    const hasPasswordHash = !!(
+      existing.passwordHash &&
+      typeof existing.passwordHash === "string" &&
+      existing.passwordHash !== "AuthManaged2026!" &&
+      existing.passwordHash.length > 0
+    );
     if (hasPasswordHash) {
       return res
         .status(400)
@@ -4687,30 +4638,14 @@ app.post("/api/auth/register", async (req, res) => {
           message: "Account already exists. Sign in instead.",
         });
     } else {
-      const hashed = hashPassword(password);
-      existing.passwordHash = hashed;
-      existing.name = name?.trim() || existing.name || cleanEmail.split("@")[0];
-      if (isOwner) {
-        existing.role = "OWNER";
-        existing.subscription = "ELITE_PASS";
-        existing.status = "ACTIVE";
-      }
-      savePersistentStore();
-      try {
-        await persistSingleUser(existing);
-      } catch (persistErr) {
-        console.warn(
-          "[FIRESTORE USER] Persist existing user error during registration linking:",
-          persistErr?.message,
-        );
-      }
-      const serverSession2 = { ...existing, passwordHash: void 0 };
-      const entitlement2 = getUserEntitlement(cleanEmail);
-      return res.json({
-        success: true,
-        user: serverSession2,
-        entitlement: entitlement2,
-      });
+      return res
+        .status(401)
+        .json({
+          success: false,
+          error: "PASSWORD_NOT_SET",
+          message:
+            "This account doesn't have a password set yet. Contact support or use account recovery to set one.",
+        });
     }
   }
   const newUser = {
