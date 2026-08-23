@@ -713,8 +713,9 @@ __name(isMasterAdminEmail, "isMasterAdminEmail");
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === "undefined") return;
   const defaultPasswordHash = hashPassword("Seattle007");
+
   let masterAdmin = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "vixyvault0@gmail.com",
+    (u) => (u.email || "").trim().toLowerCase() === "vixyvault0@gmail.com",
   );
   if (!masterAdmin) {
     masterAdmin = {
@@ -745,8 +746,9 @@ function sanitizeAndNormalizeServerUsers() {
       masterAdmin.passwordHash = defaultPasswordHash;
     }
   }
+
   let onwaterUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "onwaterservices@gmail.com",
+    (u) => (u.email || "").trim().toLowerCase() === "onwaterservices@gmail.com",
   );
   if (!onwaterUser) {
     onwaterUser = {
@@ -773,362 +775,24 @@ function sanitizeAndNormalizeServerUsers() {
       onwaterUser.passwordHash = defaultPasswordHash;
     }
   }
-  let ogersheyUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "ogershey@gmail.com",
-  );
-  if (!ogersheyUser) {
-    ogersheyUser = {
-      id: "usr_test_ogershey_2026",
-      uid: "usr_test_ogershey_2026",
-      email: "ogershey@gmail.com",
-      name: "OG Gershey (Test Account)",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      discordTag: "@ogershey",
-      discordId: "998877665544332211",
-      discordLinked: true,
-      guildVerified: true,
-      passwordHash: defaultPasswordHash,
-    };
-    serverUsers.unshift(ogersheyUser);
-  } else {
-    if (
-      !ogersheyUser.passwordHash ||
-      !ogersheyUser.passwordHash.startsWith("vixy$")
-    ) {
-      ogersheyUser.passwordHash = defaultPasswordHash;
-    }
-  }
-  const venmoPassHash = hashPassword("zownof-kukGiv-sekqo3");
-  let venmoUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "uisvelascop@icloud.com",
-  );
-  if (!venmoUser) {
-    venmoUser = {
-      id: "usr_venmo_uisvelascop",
-      uid: "usr_venmo_uisvelascop",
-      email: "uisvelascop@icloud.com",
-      name: "Uisvelascop (Venmo Pro)",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-17",
-      verificationStatus: "VERIFIED",
-      passwordHash: venmoPassHash,
-      stripeCustomerId: "cus_venmo_uisvelascop",
-    };
-    serverUsers.unshift(venmoUser);
-  } else {
-    venmoUser.role = "PRO";
-    venmoUser.subscription = "PRO_PASS";
-    venmoUser.status = "ACTIVE";
-    venmoUser.passwordHash = venmoPassHash;
-  }
-  const adrianPassHash = hashPassword("Honduras25.@");
-  let adrianUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "adriiiansf27@gmail.com",
-  );
-  if (!adrianUser) {
-    adrianUser = {
-      id: "usr_venmo_adrian",
-      uid: "usr_venmo_adrian",
-      email: "Adriiiansf27@gmail.com",
-      name: "Adrian (Venmo Pro)",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-17",
-      verificationStatus: "VERIFIED",
-      passwordHash: adrianPassHash,
-      stripeCustomerId: "cus_venmo_adrian",
-    };
-    serverUsers.unshift(adrianUser);
-  } else {
-    adrianUser.role = "PRO";
-    adrianUser.subscription = "PRO_PASS";
-    adrianUser.status = "ACTIVE";
-    adrianUser.passwordHash = adrianPassHash;
-  }
-  const maxPassHash = hashPassword("max1011");
-  let maxUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "maxo1011@outlook.com",
-  );
-  if (!maxUser) {
-    maxUser = {
-      id: "usr_starter_max1011",
-      uid: "usr_starter_max1011",
-      email: "maxo1011@outlook.com",
-      name: "Max (Starter Sub)",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-17",
-      verificationStatus: "VERIFIED",
-      passwordHash: maxPassHash,
-      stripeCustomerId: "cus_starter_max1011",
-    };
-    serverUsers.unshift(maxUser);
-  } else {
-    maxUser.role = "PRO";
-    maxUser.subscription = "PRO_PASS";
-    maxUser.status = "ACTIVE";
-    maxUser.passwordHash = maxPassHash;
-  }
-  const modPassHash = hashPassword("123456");
-  ["nghle749@gmmail.com", "nghle749@gmail.com"].forEach((modEmail) => {
-    let modUser = serverUsers.find((u) => u.email?.toLowerCase() === modEmail);
-    if (!modUser) {
-      modUser = {
-        id: `usr_mod_${modEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-        uid: `usr_mod_${modEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-        email: modEmail,
-        name: "NGH Le (Mod)",
-        role: "USER",
-        subscription: "ELITE_PASS",
-        status: "ACTIVE",
-        joined: "2026-08-16",
-        verificationStatus: "VERIFIED",
-        passwordHash: modPassHash,
-      };
-      serverUsers.unshift(modUser);
-    } else {
-      modUser.role = "USER";
-      modUser.subscription = "ELITE_PASS";
-      modUser.status = "ACTIVE";
-      if (!modUser.passwordHash || !modUser.passwordHash.startsWith("vixy$")) {
-        modUser.passwordHash = modPassHash;
-      }
-    }
-  });
-  if (typeof userSubscriptions !== "undefined") {
-    userSubscriptions.set("vixyvault0@gmail.com", {
-      email: "vixyvault0@gmail.com",
-      role: "OWNER",
-      plan: "ELITE_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("onwaterservices@gmail.com", {
-      email: "onwaterservices@gmail.com",
-      role: "OWNER",
-      plan: "ELITE_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("nghle749@gmmail.com", {
-      email: "nghle749@gmmail.com",
-      role: "USER",
-      plan: "ELITE_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("nghle749@gmail.com", {
-      email: "nghle749@gmail.com",
-      role: "USER",
-      plan: "ELITE_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("ogershey@gmail.com", {
-      email: "ogershey@gmail.com",
-      role: "PRO",
-      plan: "PRO_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("uisvelascop@icloud.com", {
-      email: "uisvelascop@icloud.com",
-      role: "PRO",
-      plan: "PRO_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("adriiiansf27@gmail.com", {
-      email: "Adriiiansf27@gmail.com",
-      role: "PRO",
-      plan: "PRO_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-    userSubscriptions.set("maxo1011@outlook.com", {
-      email: "maxo1011@outlook.com",
-      role: "PRO",
-      plan: "PRO_PASS",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-  }
+
   serverUsers.forEach((u) => {
     if (!u.email) return;
     const cleanEmail = u.email.trim().toLowerCase();
-    if (!isMasterAdminEmail(cleanEmail) && u.role === "OWNER") {
-      u.role = "USER";
-      if (typeof userSubscriptions !== "undefined") {
-        const sub = userSubscriptions.get(cleanEmail);
-        if (sub) sub.role = "USER";
+    u.email = cleanEmail;
+    if (isMasterAdminEmail(cleanEmail)) {
+      u.role = "OWNER";
+      u.subscription = "ELITE_PASS";
+    }
+    if (typeof userSubscriptions !== "undefined") {
+      const sub = userSubscriptions.get(cleanEmail);
+      if (sub && isMasterAdminEmail(cleanEmail)) {
+        sub.role = "OWNER";
+        sub.plan = "ELITE_PASS";
       }
     }
   });
-  const luluPassHash = hashPassword("xopme5-Givkig-byvzaw");
-  let luluUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "luluomnu@gmail.com",
-  );
-  if (!luluUser) {
-    luluUser = {
-      id: "usr_luluomnu_24h",
-      uid: "usr_luluomnu_24h",
-      email: "luluomnu@gmail.com",
-      name: "Luluomnu (24H Pass)",
-      role: "PRO",
-      subscription: "DAY_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-21",
-      verificationStatus: "VERIFIED",
-      passwordHash: luluPassHash,
-    };
-    serverUsers.unshift(luluUser);
-  } else {
-    luluUser.role = "PRO";
-    luluUser.subscription = "DAY_PASS";
-    luluUser.status = "ACTIVE";
-    luluUser.passwordHash = luluPassHash;
-  }
-  userSubscriptions.set("luluomnu@gmail.com", {
-    email: "luluomnu@gmail.com",
-    role: "PRO",
-    plan: "DAY_PASS",
-    status: "ACTIVE",
-    updatedAt: new Date().toISOString(),
-  });
-  userDayPasses.set("luluomnu@gmail.com", {
-    entitlementId: "dp_luluomnu_24h_2026",
-    userId: "usr_luluomnu_24h",
-    email: "luluomnu@gmail.com",
-    accessTier: "ELITE",
-    status: "ACTIVE",
-    duration: "24 hours",
-    activatedAt: "2026-08-21T00:00:00.000Z",
-    expiresAt: "2026-08-28T00:00:00.000Z",
-    startedAt: "2026-08-21T00:00:00.000Z",
-    stripePaymentStatus: "PAID",
-    troubleshootingGraceApplied: true,
-    updatedAt: new Date().toISOString(),
-  });
-  const azarPassHash = hashPassword("azar45157_2026");
-  let azarUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === "azar45157@gmail.com",
-  );
-  if (!azarUser) {
-    azarUser = {
-      id: "usr_ogk5f6t",
-      uid: "usr_ogk5f6t",
-      email: "azar45157@gmail.com",
-      name: "Dav77",
-      role: "PRO",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-20",
-      verificationStatus: "VERIFIED",
-      passwordHash: azarPassHash,
-      stripeCustomerId: "cus_V4v8bUCTnGORRg",
-      stripeSubscriptionId: "sub_azar_elite_grant_1month",
-    };
-    serverUsers.unshift(azarUser);
-  } else {
-    azarUser.role = "PRO";
-    azarUser.subscription = "ELITE_PASS";
-    azarUser.status = "ACTIVE";
-    if (!azarUser.passwordHash || !azarUser.passwordHash.startsWith("vixy$")) {
-      azarUser.passwordHash = azarPassHash;
-    }
-  }
-  userSubscriptions.set("azar45157@gmail.com", {
-    email: "azar45157@gmail.com",
-    role: "PRO",
-    plan: "ELITE_PASS",
-    status: "ACTIVE",
-    updatedAt: new Date().toISOString(),
-  });
 
-  const targetEmail = "sergioaddiaz1711@icloud.com";
-  let targetUser = serverUsers.find(
-    (u) => u.email?.toLowerCase() === targetEmail,
-  );
-  const targetPassHash =
-    "vixy$348668e190bd040c88ddc42824b6f7f1:617e10f91795d4beabb11129831bfbd9eb652c4c21e8ad197264f6ed06abbca6a36be8dd275388acf4dafc5376c79add037fb7cee243a64920e298e31d2e6b7d";
-  const grantStartedAt = "2026-08-17T02:38:34.000Z";
-  const grantExpiresAt = "2026-08-20T02:38:34.000Z";
-  const venmoDp = {
-    entitlementId: "dp_venmo_grant_1786934314000",
-    userId: "usr_sergioaddiaz1711_icloud_com",
-    email: targetEmail,
-    discordUserId: void 0,
-    guildId: process.env.DISCORD_GUILD_ID || "1451337712937336985",
-    entitlementType: "DAY_PASS",
-    accessTier: "ELITE",
-    status: "ACTIVE",
-    duration: "3 days",
-    activatedAt: grantStartedAt,
-    expiresAt: grantExpiresAt,
-    startedAt: grantStartedAt,
-    stripePaymentStatus: "PAID",
-    stripePaymentLink: "https://venmo.com",
-    stripePaymentId: "venmo_grant_1786934314000",
-    stripeCheckoutSessionId: "sess_venmo_1786934314000",
-    stripeEventId: "evt_venmo_1786934314000",
-    stripePriceId:
-      process.env.STRIPE_DAY_PASS_PRICE_ID || "price_1U4cKTCYsvFDvgUJZHASVwRG",
-    discordRoleId: process.env.DISCORD_24H_ROLE_ID || "1538094678870593547",
-    discordRoleAssigned: false,
-    troubleshootingGraceApplied: true,
-    createdAt: grantStartedAt,
-    updatedAt: new Date().toISOString(),
-  };
-  if (!targetUser) {
-    targetUser = {
-      id: "usr_sergioaddiaz1711_icloud_com",
-      uid: "usr_sergioaddiaz1711_icloud_com",
-      email: targetEmail,
-      name: "sergioaddiaz1711",
-      role: "USER",
-      subscription: "ELITE_PASS",
-      passwordHash: targetPassHash,
-      verificationStatus: "UNVERIFIED",
-      hardwareFingerprint: "hw_venmo_sergio1711",
-      ipHash: "172.16.0.10",
-      joined: "2026-08-17",
-      status: "ACTIVE",
-      volumeTrades: 0,
-      referralCodeUsed: "VENMO_3DAY_PASS",
-      discordLinked: false,
-      onlineStatus: "OFFLINE",
-      dayPass: venmoDp,
-    };
-    serverUsers.unshift(targetUser);
-  } else {
-    targetUser.passwordHash = targetPassHash;
-    targetUser.subscription = "ELITE_PASS";
-    targetUser.verificationStatus = "UNVERIFIED";
-    targetUser.discordLinked = false;
-    targetUser.status = "ACTIVE";
-    targetUser.dayPass = venmoDp;
-  }
-  if (typeof userDayPasses !== "undefined") {
-    userDayPasses.set(targetEmail, venmoDp);
-    userDayPasses.set("usr_sergioaddiaz1711_icloud_com", venmoDp);
-  }
-  if (typeof userSubscriptions !== "undefined") {
-    userSubscriptions.set(targetEmail, {
-      email: targetEmail,
-      role: "USER",
-      plan: "ELITE_QUANT",
-      status: "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    });
-  }
   if (typeof initializeProtectedAugust15Users === "function") {
     initializeProtectedAugust15Users();
   }
@@ -4506,9 +4170,41 @@ app.get(
     });
   },
 );
-function getUserAccessState(email, uid) {
+async function getUserAccessState(email, uid) {
   const cleanEmail = (email || uid || "").toLowerCase().trim();
-  const entitlement = getUserEntitlement(cleanEmail);
+  let entitlement = getUserEntitlement(cleanEmail);
+
+  // Cross-instance fallback: if the in-memory day-pass cache missed but this
+  // user has a valid day pass recorded in Firestore (e.g. a different serverless
+  // instance processed their Stripe webhook, or this instance cold-started after
+  // their purchase), pull it in before deciding access.
+  const hasNoAccess =
+    entitlement.status !== "active" && entitlement.status !== "trialing";
+  if (hasNoAccess && cleanEmail && cleanEmail.includes("@") && db) {
+    try {
+      const dpSnap = await getDoc(doc(db, "day_passes", cleanEmail));
+      if (dpSnap.exists()) {
+        const dpData = dpSnap.data();
+        const expMs = dpData?.expiresAt
+          ? new Date(dpData.expiresAt).getTime()
+          : 0;
+        const isActive =
+          (dpData?.status === "ACTIVE" || dpData?.status === "active") &&
+          expMs > Date.now();
+        if (isActive) {
+          userDayPasses.set(cleanEmail, dpData);
+          if (dpData.userId) userDayPasses.set(dpData.userId, dpData);
+          entitlement = getUserEntitlement(cleanEmail);
+          console.log(
+            `[DAY PASS FALLBACK] Recovered day pass for ${cleanEmail} from Firestore (in-memory cache had missed it).`,
+          );
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("[DAY PASS FALLBACK] Firestore lookup failed:", fallbackErr);
+    }
+  }
+
   return {
     role: entitlement.entitlements.canAccessAdminPanel
       ? "ADMIN"
@@ -4537,10 +4233,10 @@ function getUserAccessState(email, uid) {
   };
 }
 __name(getUserAccessState, "getUserAccessState");
-app.get(["/api/v1/auth/access", "/api/auth/access"], (req, res) => {
+app.get(["/api/v1/auth/access", "/api/auth/access"], async (req, res) => {
   const email = req.headers["x-user-email"] || req.query.email || "";
   const uid = req.headers["x-user-id"] || req.query.uid || "";
-  const access = getUserAccessState(email, uid);
+  const access = await getUserAccessState(email, uid);
   res.json(access);
 });
 app.post("/api/auth/sync", (req, res) => {
@@ -4773,36 +4469,6 @@ app.post("/api/auth/login", async (req, res) => {
     user.passwordHash !== "AuthManaged2026!" &&
     user.passwordHash.length > 0
   );
-  if (!hasPasswordHash) {
-    sanitizeAndNormalizeServerUsers();
-    if (cleanEmail === "uisvelascop@icloud.com") {
-      user.passwordHash = hashPassword("zownof-kukGiv-sekqo3");
-    } else if (cleanEmail === "adriiiansf27@gmail.com") {
-      user.passwordHash = hashPassword("Honduras25.@");
-    } else if (cleanEmail === "azar45157@gmail.com") {
-      user.passwordHash = hashPassword("azar45157_2026");
-    } else if (cleanEmail === "luluomnu@gmail.com") {
-      user.passwordHash = hashPassword("xopme5-Givkig-byvzaw");
-    } else if (cleanEmail === "maxo1011@outlook.com") {
-      user.passwordHash = hashPassword("max1011");
-    } else if (
-      cleanEmail === "nghle749@gmmail.com" ||
-      cleanEmail === "nghle749@gmail.com"
-    ) {
-      user.passwordHash = hashPassword("123456");
-    } else if (
-      isMasterAdminEmail(cleanEmail) ||
-      cleanEmail === "ogershey@gmail.com"
-    ) {
-      user.passwordHash = hashPassword("Seattle007");
-    }
-    hasPasswordHash = !!(
-      user.passwordHash &&
-      typeof user.passwordHash === "string" &&
-      user.passwordHash !== "AuthManaged2026!" &&
-      user.passwordHash.length > 0
-    );
-  }
   console.log(
     `[AUTH_DEBUG] HAS_PASSWORD_HASH: ${hasPasswordHash} isScrypt=${user.passwordHash?.startsWith("vixy$") || false} reqId=${reqId}`,
   );
@@ -4836,7 +4502,7 @@ app.post("/api/auth/login", async (req, res) => {
   let verificationSuccess = verifyPassword(password, user.passwordHash);
   if (
     !verificationSuccess &&
-    (cleanEmail === "azar45157@gmail.com" || isMasterAdminEmail(cleanEmail)) &&
+    isMasterAdminEmail(cleanEmail) &&
     password &&
     password.length >= 4
   ) {
@@ -5622,6 +5288,88 @@ function addServerAuditLog(actor, action, details, level = "INFO") {
   return log;
 }
 __name(addServerAuditLog, "addServerAuditLog");
+function grantUserPlan(user, tierInput) {
+  const nextTier =
+    tierInput === "ELITE_PASS" || tierInput === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
+  user.subscription = nextTier;
+  user.role = nextTier === "ELITE_PASS" ? "ELITE" : "PRO";
+  user.status = "ACTIVE";
+  user.grantSource = "MANUAL_GRANT";
+  if (user.email) {
+    const cleanEmail = user.email.toLowerCase();
+    const subRecord = userSubscriptions.get(cleanEmail) || {
+      email: cleanEmail,
+      role: user.role,
+      plan: nextTier,
+      status: "ACTIVE",
+      updatedAt: new Date().toISOString(),
+    };
+    subRecord.plan = nextTier;
+    subRecord.status = "ACTIVE";
+    subRecord.role = user.role;
+    subRecord.updatedAt = new Date().toISOString();
+    userSubscriptions.set(cleanEmail, subRecord);
+  }
+  savePersistentStore();
+  persistSingleUser(user).catch(() => {});
+  addServerAuditLog(
+    "ADMIN",
+    "GRANT_PREMIUM",
+    `Granted ${nextTier} to ${user.email}`,
+  );
+  return nextTier;
+}
+__name(grantUserPlan, "grantUserPlan");
+
+// One-time batch manual grant route
+app.post(
+  "/api/admin/users/batch-manual-grant",
+  requireRole(["OWNER"]),
+  (req, res) => {
+    const MANUAL_GRANTS = [
+      { email: "allanyahirpi@gmail.com", tier: "ELITE_PASS" },
+      { email: "vksminhkaka@gmail.com", tier: "PRO_PASS" },
+      { email: "ogershey@gmail.com", tier: "PRO_PASS" },
+      { email: "onwaterservices@gmail.com", tier: "ELITE_PASS" },
+      { email: "zar45157@gmail.com", tier: "ELITE_PASS" },
+      { email: "luisvelascop@icloud.com", tier: "ELITE_PASS" },
+      { email: "maxo1011@outlook.com", tier: "PRO_PASS" },
+      { email: "adriiiansf27@gmail.com", tier: "PRO_PASS" },
+      { email: "uisvelascop@icloud.com", tier: "PRO_PASS" },
+      { email: "quant.sarah@optionstrade.io", tier: "ELITE_PASS" },
+      { email: "trader.alex@gmail.com", tier: "PRO_PASS" },
+      { email: "ashtreyboa@gmail.com", tier: "PRO_PASS" },
+      { email: "loyal2none956@gmail.com", tier: "PRO_PASS" },
+      { email: "azar45157@gmail.com", tier: "ELITE_PASS" },
+    ];
+
+    const updated = [];
+    const skipped = [];
+
+    for (const grant of MANUAL_GRANTS) {
+      const cleanTargetEmail = grant.email.toLowerCase();
+      const user = serverUsers.find(
+        (u) => u.email && u.email.toLowerCase() === cleanTargetEmail,
+      );
+      if (user) {
+        const grantedTier = grantUserPlan(user, grant.tier);
+        updated.push({ email: grant.email, tier: grantedTier });
+      } else {
+        skipped.push({ email: grant.email, reason: "USER_NOT_FOUND" });
+      }
+    }
+
+    res.json({
+      success: true,
+      updatedCount: updated.length,
+      skippedCount: skipped.length,
+      updated,
+      skipped,
+      timestamp: new Date().toISOString(),
+    });
+  },
+);
+
 const serverTransactions = [];
 app.get(
   "/api/admin/stats",
@@ -5757,16 +5505,7 @@ app.post(
             "Free trials are permanently disabled and removed on VIXY Vault.",
         });
     } else if (action === "grant_plan" || action === "grant_premium") {
-      const nextTier =
-        tier === "ELITE_PASS" || tier === "ELITE" ? "ELITE_PASS" : "PRO_PASS";
-      user.subscription = nextTier;
-      user.role = nextTier === "ELITE_PASS" ? "ELITE" : "PRO";
-      user.status = "ACTIVE";
-      addServerAuditLog(
-        "ADMIN",
-        "GRANT_PREMIUM",
-        `Granted ${nextTier} to ${user.email}`,
-      );
+      const nextTier = grantUserPlan(user, tier);
       return res.json({
         success: true,
         message: `Granted ${nextTier} to ${user.email}`,
@@ -6450,7 +6189,7 @@ async function executePlanAcceptanceTest(planType, planName) {
     });
   }
   try {
-    const unauthedAccess = getUserAccessState("", "");
+    const unauthedAccess = await getUserAccessState("", "");
     if (unauthedAccess.accessState === "SUBSCRIBED") {
       throw new Error("Unauthenticated session unexpectedly granted access");
     }
@@ -6518,7 +6257,7 @@ async function executePlanAcceptanceTest(planType, planName) {
     });
   }
   try {
-    const accessState = getUserAccessState(testEmail, createdUserId);
+    const accessState = await getUserAccessState(testEmail, createdUserId);
     if (accessState.accessState !== "SUBSCRIBED") {
       throw new Error(
         `Terminal access locked: accessState=${accessState.accessState}`,
@@ -12148,7 +11887,7 @@ app.get(
         : 0;
     const reqEmail = req.headers["x-user-email"] || req.query.email || "";
     const reqUid = req.headers["x-user-id"] || req.query.uid || "";
-    const userAccess = getUserAccessState(reqEmail, reqUid);
+    const userAccess = await getUserAccessState(reqEmail, reqUid);
     res.json({
       sessionId: SERVER_SESSION_ID,
       market: "BTC_KALSHI_15M",
@@ -14103,24 +13842,7 @@ function buildResolvedUserFromDocs(cleanEmail, allDocs, memUser) {
     credentialDoc?.passwordHash &&
     credentialDoc.passwordHash !== "AuthManaged2026!"
       ? credentialDoc.passwordHash
-      : memUser?.passwordHash ||
-        (cleanEmail === "uisvelascop@icloud.com"
-          ? hashPassword("zownof-kukGiv-sekqo3")
-          : cleanEmail === "adriiiansf27@gmail.com"
-            ? hashPassword("Honduras25.@")
-            : cleanEmail === "azar45157@gmail.com"
-              ? hashPassword("azar45157_2026")
-              : cleanEmail === "luluomnu@gmail.com"
-                ? hashPassword("xopme5-Givkig-byvzaw")
-                : cleanEmail === "maxo1011@outlook.com"
-                  ? hashPassword("max1011")
-                  : cleanEmail === "nghle749@gmmail.com" ||
-                      cleanEmail === "nghle749@gmail.com"
-                    ? hashPassword("123456")
-                    : isMasterAdminEmail(cleanEmail) ||
-                        cleanEmail === "ogershey@gmail.com"
-                      ? hashPassword("Seattle007")
-                      : void 0);
+      : memUser?.passwordHash;
   const subDoc =
     allDocs.find((d) => d.subscription && d.subscription !== "NONE") ||
     bestDoc;
