@@ -1,1 +1,1 @@
-require('./dist/server.cjs');
+import './dist/server.cjs';
