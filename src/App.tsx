@@ -60,6 +60,7 @@ import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
 import { TAB_TO_PATH, PATH_TO_TAB } from './utils/routePaths';
 import { NotFoundView } from './components/NotFoundView';
+import { VixyHubView } from './components/VixyHubView';
 import { VixyLockView } from './components/VixyLockView';
 import { StarterDeskView } from './components/StarterDeskView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
@@ -455,7 +456,7 @@ export default function App() {
 
 
   const VALID_ROUTES = [
-    'vixylive', 'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
+    'hub', 'vixylive', 'terminal', 'markets', 'compare', 'scalping', 'onehour', 'patterns', 'whales',
     'explainability', 'perflab', 'coach', 'replay', 'scanner', 'history', 'changelog',
     'leaderboard', 'journal', 'alerts', 'settings', 'admin', 'landing', 'pricing',
     'auth', 'terms', 'privacy', 'risk', 'refunds', 'contact', 'about', 'discord-bot',
@@ -494,7 +495,7 @@ export default function App() {
       const savedAuth = localStorage.getItem('vixy_auth');
       if (savedAuth) {
         const parsed = JSON.parse(savedAuth);
-        if (parsed?.isAuthenticated) return 'vixylive';
+        if (parsed?.isAuthenticated) return 'hub';
       }
     } catch (e) {
       console.error(e);
@@ -1156,6 +1157,18 @@ export default function App() {
         {/* Main Content Workspace Area */}
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
           {/* 1. Public Pages always accessible */}
+            {activeTab === 'hub' && (
+            <VixyHubView
+              ticker={ticker}
+              userRole={userRole}
+              userProduct={userProduct}
+              hasActiveAccess={hasActiveAccess}
+              isAuthenticated={isAuthenticated}
+              onOpenAuth={handleOpenAuth}
+              setActiveTab={setActiveTab}
+            />
+          )}
+
           {(activeTab === 'vixylive' || activeTab === 'vixylocks') && (
             <VixyLockView
               ticker={ticker}

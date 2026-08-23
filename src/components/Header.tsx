@@ -5,6 +5,7 @@ import {
   CreditCard,
   Settings,
   LayoutDashboard,
+  Home,
   Sparkles,
   BarChart2,
   BookOpen,
@@ -436,6 +437,21 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Desktop Navigation - High-Contrast Ergonomic Nav Board */}
         <nav className="hidden lg:flex items-center gap-1 bg-[#0c0620] p-1 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">
+          
+          {/* Hub / Home */}
+          <a
+            href={TAB_TO_PATH['hub']}
+            onClick={(e) => { e.preventDefault(); setActiveTab('hub'); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+              activeTab === 'hub'
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
+                : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
+            }`}
+          >
+            <Home className="w-4 h-4 text-purple-300" />
+            <span>Home</span>
+          </a>
+
           {/* Dashboard */}
           <a
             href={TAB_TO_PATH['terminal']}
