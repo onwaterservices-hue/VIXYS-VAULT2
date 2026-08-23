@@ -1,3 +1,25 @@
+
+export function isMasterAdminEmail(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = String(email).trim().toLowerCase();
+  return clean === "vixyvault0@gmail.com" || clean === "onwaterservices@gmail.com";
+}
+
+export function getViewAsTier(): string {
+  try {
+    return localStorage.getItem("vixy_view_as_tier") || "REAL";
+  } catch {
+    return "REAL";
+  }
+}
+
+export function setViewAsTier(tier: string) {
+  try {
+    localStorage.setItem("vixy_view_as_tier", tier);
+    window.dispatchEvent(new Event("vixy_view_as_changed"));
+  } catch {}
+}
+
 import { BTCTicker, Candle, PredictionSignal, SignalStateType, AccessStateType, UserAccessObject, SignalPredictionState } from '../types';
 import { resolveCanonicalAsset } from './market/cryptoUniverseRegistry';
 
@@ -43,7 +65,7 @@ export async function safeFetchJson<T>(url: string, options?: RequestInit): Prom
         return null;
       }
 
-      const res = await fetch(url, options);
+      const res = await fetch(url, effectiveOptions);
       
       if (res.status === 429) {
         console.warn(`[API 429] Rate limited on ${url}. Activating client-side backoff.`);
@@ -881,8 +903,10 @@ export async function fetchUserAccess(email?: string, uid?: string): Promise<Use
   const isAdmin = cleanEmail === 'vixyvault0@gmail.com';
 
   try {
+    const simTier = getViewAsTier();
+    const simParam = simTier && simTier !== "REAL" && simTier !== "MY REAL ACCOUNT" ? `&viewAsTier=${encodeURIComponent(simTier)}` : "";
     const data = await safeFetchJson<UserAccessObject>(
-      `/api/v1/auth/access?email=${encodeURIComponent(cleanEmail)}&uid=${encodeURIComponent(uid || '')}&_t=${Date.now()}`
+      `/api/v1/auth/access?email=${encodeURIComponent(cleanEmail)}&uid=${encodeURIComponent(uid || '')}${simParam}&_t=${Date.now()}`
     );
     if (data) return data;
   } catch {

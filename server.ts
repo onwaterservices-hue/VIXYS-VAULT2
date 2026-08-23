@@ -4197,9 +4197,12 @@ app.get(
     });
   },
 );
-async function getUserAccessState(email, uid) {
+async function getUserAccessState(email, uid, simTier = "") {
   const cleanEmail = (email || uid || "").toLowerCase().trim();
   let entitlement = getUserEntitlement(cleanEmail);
+  if (isMasterAdminEmail(cleanEmail) && simTier) {
+    entitlement = getSimulatedEntitlement(entitlement, simTier, cleanEmail);
+  }
 
   // Cross-instance fallback: if the in-memory day-pass cache missed but this
   // user has a valid day pass recorded in Firestore (e.g. a different serverless
@@ -4263,7 +4266,8 @@ __name(getUserAccessState, "getUserAccessState");
 app.get(["/api/v1/auth/access", "/api/auth/access"], async (req, res) => {
   const email = req.headers["x-user-email"] || req.query.email || "";
   const uid = req.headers["x-user-id"] || req.query.uid || "";
-  const access = await getUserAccessState(email, uid);
+  const simTier = req.headers["x-view-as-tier"] || req.query.viewAsTier || "";
+  const access = await getUserAccessState(email, uid, simTier);
   res.json(access);
 });
 app.post("/api/auth/sync", (req, res) => {
@@ -7444,6 +7448,59 @@ function getEntitlementsFromSubscription(
   };
 }
 __name(getEntitlementsFromSubscription, "getEntitlementsFromSubscription");
+
+function getSimulatedEntitlement(baseEntitlement, simTier, cleanEmail) {
+  const tier = (simTier || "").toUpperCase().trim();
+  if (!tier || tier === "REAL" || tier === "MY REAL ACCOUNT") {
+    return baseEntitlement;
+  }
+  const isOwner = isMasterAdminEmail(cleanEmail);
+  let plan = "NONE";
+  let status = "active";
+  let entitlements = {
+    starter: false,
+    proQuant: false,
+    eliteQuant: false,
+    scalping15s: false,
+    canAccessProDesks: false,
+    canAccessAdminPanel: isOwner, // Admin panel access preserved for master admin
+  };
+
+  if (tier === "STARTER") {
+    plan = "STARTER";
+    entitlements.starter = true;
+  } else if (tier === "PRO_QUANT" || tier === "PRO") {
+    plan = "PRO_QUANT";
+    entitlements.starter = true;
+    entitlements.proQuant = true;
+    entitlements.scalping15s = true;
+    entitlements.canAccessProDesks = true;
+  } else if (tier === "ELITE_QUANT" || tier === "ELITE") {
+    plan = "ELITE_QUANT";
+    entitlements.starter = true;
+    entitlements.proQuant = true;
+    entitlements.eliteQuant = true;
+    entitlements.scalping15s = true;
+    entitlements.canAccessProDesks = true;
+  } else if (tier === "DAY_PASS") {
+    plan = "DAY_PASS";
+    entitlements.starter = true;
+    entitlements.proQuant = true;
+    entitlements.scalping15s = true;
+    entitlements.canAccessProDesks = true;
+  }
+
+  return {
+    ...baseEntitlement,
+    plan,
+    status,
+    entitlements,
+    dayPass: tier === "DAY_PASS" ? { active: true, secondsRemaining: 86400 } : baseEntitlement.dayPass,
+    simulatedTier: tier,
+  };
+}
+__name(getSimulatedEntitlement, "getSimulatedEntitlement");
+
 function getUserEntitlement(emailOrUid) {
   const clean = emailOrUid.toLowerCase().trim();
   if (clean === "selvinrom1.6@gmail.com") {
@@ -8652,15 +8709,19 @@ app.get(
       req.query.uid ||
       ""
     ).trim();
+    const simTier = req.headers["x-view-as-tier"] || req.query.viewAsTier || "";
     const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
     let hydrationRes = null;
     if (reqEmail || reqUserId) {
       hydrationRes = await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => null);
     }
-    const entitlement = await reconcileUserEntitlement({
+    let entitlement = await reconcileUserEntitlement({
       email: reqEmail,
       userId: reqUserId,
     });
+    if (isMasterAdminEmail(reqEmail) && simTier) {
+      entitlement = getSimulatedEntitlement(entitlement, simTier, reqEmail);
+    }
     const isDegraded = Boolean(
       (hydrationRes && (hydrationRes as any)._degraded) ||
       (entitlement as any)?.degraded

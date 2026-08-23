@@ -19,6 +19,7 @@ import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAll
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
+import { isMasterAdminEmail, getViewAsTier, setViewAsTier } from './services/api';
 import { Sidebar } from './components/Sidebar';
 import { TopNavControls } from './components/TopNavControls';
 import { LiveDashboard } from './components/LiveDashboard';
@@ -1115,6 +1116,34 @@ export default function App() {
         </div>
       )}
 
+      {/* Master Admin View As Banner */}
+      {isMasterAdminEmail(authState.user?.email) && (() => {
+        const [viewAsTier, setViewAsTierState] = React.useState<string>(getViewAsTier());
+        React.useEffect(() => {
+          const handleStorage = () => setViewAsTierState(getViewAsTier());
+          window.addEventListener("vixy_view_as_changed", handleStorage);
+          return () => window.removeEventListener("vixy_view_as_changed", handleStorage);
+        }, []);
+        const isSimulated = viewAsTier && viewAsTier !== "REAL" && viewAsTier !== "MY REAL ACCOUNT";
+        if (!isSimulated) return null;
+        return (
+          <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-purple-600 text-white px-4 py-1.5 text-xs font-black tracking-wide text-center flex items-center justify-center gap-2 shadow-lg z-50">
+            <span className="animate-pulse">⚠️ SIMULATED MODE ACTIVE</span>
+            <span>•</span>
+            <span>Viewing as: {viewAsTier} (simulated entitlements)</span>
+            <button
+              onClick={() => {
+                setViewAsTier("REAL");
+                setViewAsTierState("REAL");
+                window.location.reload();
+              }}
+              className="ml-3 px-2 py-0.5 rounded bg-black/40 hover:bg-black/60 text-[10px] uppercase font-bold tracking-wider text-amber-200 border border-amber-300/40 transition-all cursor-pointer"
+            >
+              Reset to Real Account
+            </button>
+          </div>
+        );
+      })()}
       {/* Top Header Bar */}
       <Header
         ticker={ticker}
