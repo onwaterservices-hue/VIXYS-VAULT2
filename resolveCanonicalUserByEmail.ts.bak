@@ -1,0 +1,96 @@
+async function resolveCanonicalUserByEmail(email: string): Promise<CanonicalUserResolution> {
+  const cleanEmail = String(email || '').trim().toLowerCase();
+  if (!cleanEmail) {
+    return { user: null, allDocs: [] };
+  }
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr: any) {
+    console.error('[AUTH_DEBUG] ensureFirebaseReady error in resolveCanonicalUserByEmail:', initErr?.message || initErr);
+    const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+    if (memUser) return { user: memUser, allDocs: [] };
+    return { user: null, allDocs: [], error: 'FIREBASE_INIT_FAILED' };
+  }
+
+  if (!db) {
+    const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+    return { user: memUser || null, allDocs: [] };
+  }
+
+  try {
+    await ensureFirestoreNetworkEnabled().catch(() => {});
+    const q = query(collection(db, 'users'), where('email', '==', cleanEmail));
+    const snap = await getDocs(q);
+
+    const allDocs: any[] = [];
+    snap.forEach((d: any) => {
+      allDocs.push({ _docId: d.id, ...d.data() });
+    });
+
+    if (allDocs.length === 0) {
+      // Secondary check: memory
+      const memUser = serverUsers.find(u => u.email?.toLowerCase() === cleanEmail);
+      return { user: memUser || null, allDocs: [] };
+    }
+
+    // Sort documents by heuristic score
+    const sortedDocs = [...allDocs].sort((a, b) => scoreUserDoc(b) - scoreUserDoc(a));
+    const bestDoc = sortedDocs[0];
+
+    // Check if ANY doc for this email contains a valid scrypt or legacy hash
+    const credentialDoc = allDocs.find(d => d.passwordHash && typeof d.passwordHash === 'string' && d.passwordHash.startsWith('vixy$'))
+      || allDocs.find(d => d.passwordHash && typeof d.passwordHash === 'string' && d.passwordHash !== 'AuthManaged2026!' && d.passwordHash.length > 0);
+
+    const effectivePasswordHash = credentialDoc?.passwordHash && credentialDoc.passwordHash !== 'AuthManaged2026!'
+      ? credentialDoc.passwordHash
+      : undefined;
+
+    const subDoc = allDocs.find(d => d.subscription && d.subscription !== 'NONE') || bestDoc;
+
+    const resolvedUser: ServerUser = {
+      id: bestDoc.id || bestDoc._docId,
+      uid: bestDoc.uid || bestDoc._docId,
+      email: cleanEmail,
+      name: bestDoc.name || credentialDoc?.name || cleanEmail.split('@')[0],
+      role: isMasterAdminEmail(cleanEmail) ? 'OWNER' : (bestDoc.role || 'USER'),
+      subscription: isMasterAdminEmail(cleanEmail) ? 'ELITE_PASS' : (subDoc.subscription || bestDoc.subscription || 'NONE'),
+      passwordHash: effectivePasswordHash,
+      status: bestDoc.status || (subDoc.subscription && subDoc.subscription !== 'NONE' ? 'ACTIVE' : 'INACTIVE'),
+      joined: bestDoc.joined || bestDoc.createdAt || new Date().toISOString().split('T')[0],
+      stripeCustomerId: bestDoc.stripeCustomerId || subDoc.stripeCustomerId || undefined,
+      stripeSubscriptionId: bestDoc.stripeSubscriptionId || subDoc.stripeSubscriptionId || undefined,
+      discordLinked: Boolean(bestDoc.discordLinked || bestDoc.discordId),
+      discordId: bestDoc.discordId || undefined,
+      discordTag: bestDoc.discordTag || undefined,
+      guildVerified: bestDoc.guildVerified || undefined
+    };
+
+    // Hydrate safely into serverUsers memory without overwriting valid credentials
+    const memIdx = serverUsers.findIndex(u => u.email?.toLowerCase() === cleanEmail || (resolvedUser.id && u.id === resolvedUser.id));
+    if (memIdx >= 0) {
+      const existing = serverUsers[memIdx];
+      if (resolvedUser.passwordHash !== undefined) {
+        existing.passwordHash = resolvedUser.passwordHash;
+      }
+      existing.email = cleanEmail;
+      if (resolvedUser.name) existing.name = resolvedUser.name;
+      if (resolvedUser.role) existing.role = resolvedUser.role;
+      if (resolvedUser.subscription) existing.subscription = resolvedUser.subscription;
+      if (resolvedUser.status) existing.status = resolvedUser.status;
+      if (resolvedUser.stripeCustomerId) existing.stripeCustomerId = resolvedUser.stripeCustomerId;
+      if (resolvedUser.stripeSubscriptionId) existing.stripeSubscriptionId = resolvedUser.stripeSubscriptionId;
+      if (resolvedUser.discordLinked !== undefined) existing.discordLinked = resolvedUser.discordLinked;
+      if (resolvedUser.discordId) existing.discordId = resolvedUser.discordId;
+    } else {
+      serverUsers.unshift(resolvedUser);
+    }
+
+    return { user: resolvedUser, allDocs };
+  } catch (firestoreErr: any) {
+    console.error('[AUTH_DEBUG] FIRESTORE_QUERY_ERROR in resolveCanonicalUserByEmail:', {
+      email: cleanEmail,
+      code: firestoreErr?.code,
+      message: firestoreErr?.message
+    });
+    return { user: null, allDocs: [], error: firestoreErr?.message || 'FIRESTORE_ERROR' };

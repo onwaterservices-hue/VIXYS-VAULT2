@@ -1,0 +1,46 @@
+            {/* VIXY PROTECTION GUARDIAN CARD (VISUAL PRIORITY 3) */}
+            <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(157,78,221,0.15)] flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+                  <div className="flex items-center space-x-2">
+                    <ShieldCheck className="w-4 h-4 text-purple-400" />
+                    <span className="text-[11px] text-white font-black uppercase tracking-wider">🛡️ VIXY PROTECTION</span>
+                  </div>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black tracking-wider uppercase ${
+                    continuousInference.protectionDecision.protectionStatus === 'CLEAR'
+                      ? 'bg-[#00FF88]/20 border border-[#00FF88]/50 text-[#00FF88]'
+                      : continuousInference.protectionDecision.protectionStatus === 'EVALUATING'
+                      ? 'bg-cyan-500/20 border border-cyan-400/50 text-cyan-300'
+                      : 'bg-[#FF3B30]/20 border border-[#FF3B30]/50 text-[#FF3B30]'
+                  }`}>
+                    STATUS: {continuousInference.protectionDecision.checklist.allPassed ? 'AUTHORIZED' : continuousInference.protectionDecision.protectionStatus === 'EVALUATING' ? 'HOLDING' : 'BLOCKED'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] mb-2.5">
+                  <div className="bg-gradient-to-br from-amber-500/25 via-purple-900/40 to-cyan-500/20 p-2.5 rounded-2xl border-2 border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.35)] relative overflow-hidden">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-amber-300 font-black text-[9px] tracking-widest uppercase flex items-center space-x-1">
+                        <ShieldCheck className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                        <span>LOCK SCORE</span>
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/60 text-amber-300 text-[8px] font-bold">HIGH CONVICTION</span>
+                    </div>
+                    <div className="text-xl sm:text-2xl font-black text-amber-300 font-mono drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]">
+                      {continuousInference.protectionDecision.lockScore} <span className="text-xs text-amber-200/70 font-normal">/ 100</span>
+                    </div>
+                  </div>
+                  <div className="bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 flex flex-col justify-between">
+                    <span className="text-gray-400 block text-[8.5px]">REVERSAL RISK</span>
+                    <span className={`text-xl sm:text-2xl font-black ${continuousInference.gemini.contradictionScore <= 25 ? 'text-[#00FF88]' : 'text-amber-400'}`}>
+                      {continuousInference.gemini.contradictionScore}% <span className="text-[10px] text-gray-400 font-normal">({continuousInference.gemini.contradictionScore <= 25 ? 'LOW' : 'ELEVATED'})</span>
+                    </span>
+                  </div>
+                </div>
+
+                {/* Evidence Confluence Checklist */}
+                <div className="grid grid-cols-3 gap-1 text-[8px] bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
+                  <div className="flex items-center space-x-1">
+                    <span className={continuousInference.protectionDecision.checklist.directionalScorePassed ? 'text-[#00FF88] font-black' : 'text-gray-500'}>
+                      {continuousInference.protectionDecision.checklist.directionalScorePassed ? '✓' : '✗'}
+                    </span>

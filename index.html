@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (function() {
+        var isViteError = function(err) {
+          if (!err) return false;
+          var str = String(
+            err.message ||
+            err.reason ||
+            err.stack ||
+            err.type ||
+            err.description ||
+            err || ''
+          ).toLowerCase();
+          return (
+            str.indexOf('websocket') !== -1 ||
+            str.indexOf('vite') !== -1 ||
+            str.indexOf('closed without opened') !== -1 ||
+            str.indexOf('hmr') !== -1 ||
+            str.indexOf('failed to connect') !== -1 ||
+            str.indexOf('ws') !== -1
+          );
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+          if (isViteError(event.reason) || isViteError(event.promise) || isViteError(event)) {
+            event.preventDefault();
+            if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          }
+        }, true);
+        window.addEventListener('error', function(event) {
+          if (isViteError(event.error) || isViteError(event.message) || isViteError(event)) {
+            event.preventDefault();
+            if (typeof event.stopPropagation === 'function') event.stopPropagation();
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VIXY AI | Real-Time Market Intelligence</title>
+    <meta name="description" content="AI-powered market intelligence with live predictions, whale tracking, order flow analysis, smart money monitoring, and real-time trading insights." />
+    <meta name="application-name" content="VIXY AI" />
+    <meta name="theme-color" content="#6D28FF" />
+    <meta name="background-color" content="#09090B" />
+    
+    <!-- Google Fonts for Quant / Terminal Aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300..800;1,300..800&family=Orbitron:wght@400..900&family=Space+Grotesk:wght@300..700&family=Syne:wght@400..800&display=swap" rel="stylesheet">
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="VIXY AI | Real-Time Market Intelligence" />
+    <meta property="og:description" content="AI-powered market intelligence with live predictions, whale tracking, order flow analysis, smart money monitoring, and real-time trading insights." />
+    <meta property="og:type" content="website" />
+
+    <!-- Apple Web App -->
+    <meta name="apple-mobile-web-app-title" content="VIXY AI" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

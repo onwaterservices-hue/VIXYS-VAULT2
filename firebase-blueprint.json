@@ -1,0 +1,315 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "User Profile",
+      "description": "User profile data including role and tier subscription",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "role": { "type": "string", "enum": ["USER", "SUPPORT", "ADMIN", "OWNER"] },
+        "subscription": { "type": "string", "enum": ["FREE_TRIAL", "PRO_PASS", "ELITE_PASS"] },
+        "joined": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["email", "role", "subscription"]
+    },
+    "journalEntry": {
+      "title": "Trading Journal Entry",
+      "description": "Logged trade prediction journal entry",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "market": { "type": "string", "maxLength": 120 },
+        "direction": { "type": "string", "enum": ["YES", "NO"] },
+        "entryOdds": { "type": "number" },
+        "exitOdds": { "type": "number" },
+        "stakeUSD": { "type": "number" },
+        "pnlUSD": { "type": "number" },
+        "confidence": { "type": "number" },
+        "edge": { "type": "number" },
+        "notes": { "type": "string", "maxLength": 1000 },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["userId", "market", "direction", "stakeUSD", "timestamp"]
+    },
+    "supportTicket": {
+      "title": "Support Ticket",
+      "description": "User support ticket inquiry",
+      "type": "object",
+      "properties": {
+        "userEmail": { "type": "string", "maxLength": 128 },
+        "subject": { "type": "string", "maxLength": 200 },
+        "category": { "type": "string", "maxLength": 100 },
+        "status": { "type": "string", "enum": ["OPEN", "IN_PROGRESS", "RESOLVED"] },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+        "date": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["userEmail", "subject", "status"]
+    },
+    "predictionSignal": {
+      "title": "Prediction Signal",
+      "description": "15-minute prediction terminal signal record",
+      "type": "object",
+      "properties": {
+        "direction": { "type": "string", "enum": ["YES", "NO"] },
+        "targetPrice": { "type": "number" },
+        "currentPrice": { "type": "number" },
+        "confidence": { "type": "number" },
+        "tradeGrade": { "type": "string", "enum": ["A+", "A", "B", "SKIP"] },
+        "status": { "type": "string", "enum": ["PENDING", "WIN", "LOSS"] },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["direction", "targetPrice", "confidence", "timestamp"]
+    },
+    "signalLog": {
+      "title": "Persistent 15M Signal Log",
+      "description": "15-minute prediction cycle record with settlement and outcome tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "market": { "type": "string", "maxLength": 100 },
+        "intervalStart": { "type": "string", "maxLength": 100 },
+        "intervalEnd": { "type": "string", "maxLength": 100 },
+        "direction": { "type": "string", "maxLength": 10 },
+        "confidence": { "type": "number" },
+        "targetStrike": { "type": "number" },
+        "spotAtLock": { "type": "number" },
+        "status": { "type": "string", "maxLength": 20 },
+        "settlementPrice": { "type": "number" },
+        "actualOutcome": { "type": "string", "maxLength": 10 },
+        "wasCorrect": { "type": "boolean" },
+        "brierScore": { "type": "number" }
+      },
+      "required": ["id", "market", "intervalStart", "direction", "confidence", "targetStrike", "status"]
+    },
+    "telemetryObservation": {
+      "title": "Telemetry Observation",
+      "description": "Real-time tick and observation telemetry snapshot",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "timestampMs": { "type": "number" },
+        "asset": { "type": "string", "maxLength": 20 },
+        "btcPrice": { "type": "number" },
+        "kalshiStrike": { "type": "number" },
+        "kalshiImpliedProb": { "type": "number" },
+        "modelProb": { "type": "number" },
+        "edgePct": { "type": "number" },
+        "confidence": { "type": "number" },
+        "direction": { "type": "string", "maxLength": 20 },
+        "engineState": { "type": "string", "maxLength": 50 }
+      },
+      "required": ["id", "timestamp", "timestampMs", "asset", "btcPrice", "modelProb", "engineState"]
+    },
+    "activeCycleLock": {
+      "title": "Active Cycle Lock",
+      "description": "Authoritative single-source-of-truth 15-minute locked contract state",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "intervalStart": { "type": "number" },
+        "intervalEnd": { "type": "number" },
+        "decision": { "type": "string", "maxLength": 50 },
+        "direction": { "type": "string", "maxLength": 20 },
+        "confidence": { "type": "number" },
+        "probability": { "type": "number" },
+        "targetStrike": { "type": "number" },
+        "spotAtLock": { "type": "number" },
+        "spotPrice": { "type": "number" },
+        "edgePct": { "type": "number" },
+        "lockQuality": { "type": "number" },
+        "regime": { "type": "string", "maxLength": 50 },
+        "failsafeActive": { "type": "boolean" },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["cycleId", "intervalStart", "intervalEnd", "decision", "confidence", "targetStrike"]
+    },
+    "regimeMemory": {
+      "title": "Regime Memory Vault",
+      "description": "Long-term historical optimal weight profile for specific market regimes",
+      "type": "object",
+      "properties": {
+        "regimeId": { "type": "string", "maxLength": 64 },
+        "title": { "type": "string", "maxLength": 100 },
+        "historicalWinRate": { "type": "number" },
+        "totalCyclesTrained": { "type": "number" },
+        "optimalWeights": { "type": "object" },
+        "lastOptimizedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["regimeId", "title", "historicalWinRate", "totalCyclesTrained"]
+    },
+    "algorithmHistory": {
+      "title": "Algorithm Learning Performance History",
+      "description": "Cycle-by-cycle Signal Attribution Matrix score grade and Bayesian weight shift record",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "timestamp": { "type": "string", "maxLength": 100 },
+        "regime": { "type": "string", "maxLength": 50 },
+        "marketOutcome": { "type": "string", "maxLength": 20 },
+        "accuracyScore": { "type": "number" },
+        "correctCount": { "type": "number" },
+        "totalIndicators": { "type": "number" },
+        "weightShiftSummary": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["cycleId", "timestamp", "regime", "marketOutcome", "accuracyScore"]
+    },
+    "decisionOutcome": {
+      "title": "Decision Outcome Record",
+      "description": "Historical 15M cycle outcome and accuracy learning record",
+      "type": "object",
+      "properties": {
+        "cycleId": { "type": "string", "maxLength": 128 },
+        "closePrice": { "type": "number" },
+        "direction": { "type": "string", "maxLength": 20 },
+        "confidence": { "type": "number" },
+        "settlementOutcome": { "type": "string", "maxLength": 20 },
+        "wasCorrect": { "type": "boolean" },
+        "recordedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["cycleId", "direction", "settlementOutcome"]
+    },
+    "userSubscription": {
+      "title": "User Subscription Entitlement",
+      "description": "Authoritative subscription record",
+      "type": "object",
+      "properties": {
+        "subscriptionId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "enum": ["DAY_PASS", "STARTER", "PRO_QUANT", "ELITE_QUANT", "NONE"] },
+        "plan": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "TRIALING", "PAST_DUE", "CANCELED", "INACTIVE"] },
+        "stripeCustomerId": { "type": "string", "maxLength": 128 },
+        "stripeSubscriptionId": { "type": "string", "maxLength": 128 },
+        "stripePriceId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "product", "status"]
+    },
+    "dayPass": {
+      "title": "24-Hour Day Pass Record",
+      "description": "Authoritative 24-hour day pass access window",
+      "type": "object",
+      "properties": {
+        "entitlementId": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "maxLength": 50 },
+        "status": { "type": "string", "enum": ["ACTIVE", "EXPIRED"] },
+        "startedAt": { "type": "string", "maxLength": 100 },
+        "expiresAt": { "type": "string", "maxLength": 100 },
+        "stripeCheckoutSessionId": { "type": "string", "maxLength": 128 },
+        "updatedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "startedAt", "expiresAt", "status"]
+    },
+    "stripeEvent": {
+      "title": "Stripe Webhook Event Record",
+      "description": "Processed Stripe webhook event for idempotency",
+      "type": "object",
+      "properties": {
+        "eventId": { "type": "string", "maxLength": 128 },
+        "eventType": { "type": "string", "maxLength": 100 },
+        "customerEmail": { "type": "string", "maxLength": 128 },
+        "processedAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["eventId", "eventType", "processedAt"]
+    },
+    "pendingEntitlement": {
+      "title": "Pending Pre-Registration Entitlement",
+      "description": "Purchased entitlement awaiting user registration",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "maxLength": 128 },
+        "product": { "type": "string", "enum": ["DAY_PASS", "STARTER", "PRO_QUANT", "ELITE_QUANT"] },
+        "accessSource": { "type": "string", "maxLength": 50 },
+        "stripeCustomerId": { "type": "string", "maxLength": 128 },
+        "stripeSubscriptionId": { "type": "string", "maxLength": 128 },
+        "claimed": { "type": "boolean" },
+        "claimedAt": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 }
+      },
+      "required": ["email", "product", "claimed"]
+    },
+    "userWorkspace": {
+      "title": "User Customizable Workspace",
+      "description": "Persistent layout configuration and settings for customizable VIXY workspace",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 },
+        "version": { "type": "number" },
+        "layoutVersion": { "type": "number" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "name", "createdAt", "updatedAt", "version", "layoutVersion"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/userProfile" },
+      "description": "User account document"
+    },
+    "/users/{userId}/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/userWorkspace" },
+      "description": "User persistent customizable workspaces"
+    },
+    "/subscriptions/{subscriptionId}": {
+      "schema": { "$ref": "#/entities/userSubscription" },
+      "description": "Authoritative subscription record"
+    },
+    "/day_passes/{passId}": {
+      "schema": { "$ref": "#/entities/dayPass" },
+      "description": "24-Hour Day Pass records"
+    },
+    "/stripe_events/{eventId}": {
+      "schema": { "$ref": "#/entities/stripeEvent" },
+      "description": "Processed Stripe events for idempotency"
+    },
+    "/pending_entitlements/{email}": {
+      "schema": { "$ref": "#/entities/pendingEntitlement" },
+      "description": "Pending entitlements for users who paid before registration"
+    },
+    "/users/{userId}/journalEntries/{entryId}": {
+      "schema": { "$ref": "#/entities/journalEntry" },
+      "description": "User trade journal entries"
+    },
+    "/tickets/{ticketId}": {
+      "schema": { "$ref": "#/entities/supportTicket" },
+      "description": "Global support tickets"
+    },
+    "/predictions/{predictionId}": {
+      "schema": { "$ref": "#/entities/predictionSignal" },
+      "description": "Market prediction signals"
+    },
+    "/signal_logs/{signalId}": {
+      "schema": { "$ref": "#/entities/signalLog" },
+      "description": "Persistent 15M signal cycle logs"
+    },
+    "/telemetry_observations/{obsId}": {
+      "schema": { "$ref": "#/entities/telemetryObservation" },
+      "description": "Real-time telemetry observations"
+    },
+    "/active_cycle_lock/{lockId}": {
+      "schema": { "$ref": "#/entities/activeCycleLock" },
+      "description": "Authoritative real-time active cycle lock payload"
+    },
+    "/regime_memory_bank/{memoryId}": {
+      "schema": { "$ref": "#/entities/regimeMemory" },
+      "description": "Deep learning long-term regime memory vault"
+    },
+    "/algorithm_performance_history/{historyId}": {
+      "schema": { "$ref": "#/entities/algorithmHistory" },
+      "description": "Cycle-by-cycle self-learning attribution scores and grades"
+    },
+    "/decision_outcomes/{outcomeId}": {
+      "schema": { "$ref": "#/entities/decisionOutcome" },
+      "description": "Settled decision learning outcomes stored in Vixy Vault"
+    }
+  }
+}

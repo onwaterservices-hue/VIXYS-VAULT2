@@ -1,0 +1,160 @@
+        {/* ROW A: LIVE CHART + ORDER FLOW & BOOK DEPTH */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* BTC/USD 15M CHART */}
+          <div className="lg:col-span-8 vixy-card-elevated hud-corners p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-wrap items-center justify-between border-b border-purple-900/30 pb-3 mb-3 gap-2">
+              <div className="flex items-center space-x-2.5">
+                <span className="font-bold text-white text-xs sm:text-sm tracking-tight">LIVE PRICE ACTION • BTC/USD (15M EPOCH)</span>
+                <div className="flex items-center space-x-1.5 px-2 py-0.5 rounded-full bg-[#00FF88]/15 border border-[#00FF88]/40 text-[#00FF88] text-[9px] font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                  <span>SOCKET BOUND</span>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-3 text-[10px] text-gray-400 font-mono">
+                <div className="flex items-center space-x-1">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span>VWAP: ${(spotPrice - 28.5).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex items-center space-x-1">
+                  <span className="w-2 h-2 rounded-full bg-purple-400" />
+                  <span>EMA 9: ${(spotPrice + 8.4).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* SVG Price Action & Candlestick Visualization */}
+            <div className="relative h-56 sm:h-64 w-full bg-[#0a0518] rounded-2xl border border-purple-900/30 p-3 overflow-hidden">
+              <div className="absolute inset-0 flex flex-col justify-between pointer-events-none opacity-20 p-2">
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,300.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,200.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,100.00</span></div>
+                <div className="border-b border-purple-900/40 w-full flex justify-between text-[8px] text-gray-500"><span>64,000.00</span></div>
+                <div className="w-full flex justify-between text-[8px] text-gray-500"><span>63,900.00</span></div>
+              </div>
+
+              {/* Target & Strike Reference Line */}
+              <div className="absolute top-1/2 left-0 right-0 border-b border-dashed border-purple-500 opacity-75 z-10 flex items-center justify-end px-2">
+                <span className="bg-purple-600 text-white text-[8px] font-bold px-2 py-0.5 rounded-full shadow">LOCKED STRIKE ${strikePrice.toFixed(2)}</span>
+              </div>
+
+              {/* Chart SVG Graphic */}
+              <svg className="w-full h-full" viewBox="0 0 800 240" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#00FF88" stopOpacity="0.25" />
+                    <stop offset="100%" stopColor="#00FF88" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+
+                <path
+                  d="M 20 180 Q 100 160, 180 140 T 340 100 T 500 80 T 660 60 T 780 40 L 780 230 L 20 230 Z"
+                  fill="url(#chartGrad)"
+                />
+                <path
+                  d="M 20 190 Q 100 170, 180 155 T 340 120 T 500 100 T 660 85 T 780 70"
+                  fill="none"
+                  stroke="#38BDF8"
+                  strokeWidth="2"
+                  strokeDasharray="4 4"
+                />
+                <path
+                  d="M 20 175 Q 100 150, 180 135 T 340 95 T 500 70 T 660 55 T 780 35"
+                  fill="none"
+                  stroke="#C084FC"
+                  strokeWidth="2"
+                />
+                <path
+                  d="M 20 180 L 80 165 L 140 175 L 200 145 L 260 150 L 320 115 L 380 125 L 440 95 L 500 85 L 560 100 L 620 70 L 680 60 L 740 45 L 780 40"
+                  fill="none"
+                  stroke="#00FF88"
+                  strokeWidth="2.5"
+                />
+
+                {[
+                  { x: 50, o: 175, c: 165, h: 160, l: 180, green: true },
+                  { x: 110, o: 165, c: 172, h: 162, l: 175, green: false },
+                  { x: 170, o: 172, c: 148, h: 142, l: 174, green: true },
+                  { x: 230, o: 148, c: 152, h: 145, l: 155, green: false },
+                  { x: 290, o: 152, c: 118, h: 112, l: 154, green: true },
+                  { x: 350, o: 118, c: 124, h: 115, l: 128, green: false },
+                  { x: 410, o: 124, c: 98, h: 92, l: 126, green: true },
+                  { x: 470, o: 98, c: 88, h: 82, l: 102, green: true },
+                  { x: 530, o: 88, c: 98, h: 84, l: 104, green: false },
+                  { x: 590, o: 98, c: 72, h: 68, l: 100, green: true },
+                  { x: 650, o: 72, c: 62, h: 58, l: 75, green: true },
+                  { x: 710, o: 62, c: 48, h: 42, l: 65, green: true },
+                  { x: 770, o: 48, c: 40, h: 36, l: 50, green: true }
+                ].map((bar, i) => (
+                  <g key={i}>
+                    <line x1={bar.x} y1={bar.h} x2={bar.x} y2={bar.l} stroke={bar.green ? '#00FF88' : '#FF3B30'} strokeWidth="1.5" />
+                    <rect
+                      x={bar.x - 4}
+                      y={Math.min(bar.o, bar.c)}
+                      width="8"
+                      height={Math.max(4, Math.abs(bar.o - bar.c))}
+                      fill={bar.green ? '#00FF88' : '#FF3B30'}
+                      rx="1"
+                    />
+                  </g>
+                ))}
+              </svg>
+            </div>
+
+            <div className="flex justify-between items-center text-[10px] text-gray-400 mt-2">
+              <span>TIMEFRAME: 15M (KALSHI CONVERGENCE)</span>
+              <span className="text-[#00FF88] font-bold">DELTA: {deltaToBeat >= 0 ? '+' : ''}${deltaToBeat.toFixed(2)} vs STRIKE</span>
+            </div>
+          </div>
+
+          {/* COMPACT ORDER FLOW & BOOK DEPTH */}
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between shadow-[0_0_25px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <span className="font-black text-white text-xs uppercase">ORDER FLOW & BOOK DEPTH</span>
+              <span className="text-[10px] text-[#00FF88] font-bold">DELTA: {deltaVal}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-1.5 text-[10px] mb-2.5">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">ORDER FLOW</span>
+                <span className="text-[#00FF88] font-bold text-xs">{deltaVal}</span>
+              </div>
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">CVD DELTA</span>
+                <span className="text-[#00FF88] font-bold text-xs">{cvdVal}</span>
+              </div>
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 text-center">
+                <span className="text-gray-500 block text-[8px]">VWAP</span>
+                <span className="text-cyan-400 font-bold text-xs">$64,098</span>
+              </div>
+            </div>
+
+            {/* Depth Ladder */}
+            <div className="space-y-1 bg-[#0a0518] p-2.5 rounded-2xl border border-purple-900/30 text-[9px]">
+              <div className="flex justify-between text-gray-500 font-bold border-b border-purple-900/30 pb-1">
+                <span>BIDS (BTC)</span>
+                <span>PRICE ($)</span>
+                <span>ASKS (BTC)</span>
+              </div>
+              {[
+                { bid: '12.45', price: '64,170', ask: '11.23' },
+                { bid: '18.32', price: '64,160', ask: '15.07' },
+                { bid: '23.16', price: '64,140', ask: '22.64' },
+                { bid: '31.46', price: '64,130', ask: '28.91' },
+                { bid: '25.94', price: '64,120', ask: '26.33' }
+              ].map((row, idx) => (
+                <div key={idx} className="flex justify-between py-0.5 items-center">
+                  <span className="text-[#00FF88] font-bold w-14 text-left">{row.bid}</span>
+                  <span className="text-gray-300 font-bold">{row.price}</span>
+                  <span className="text-[#FF3B30] font-bold w-14 text-right">{row.ask}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center text-[9px] text-gray-500 mt-2">
+              <span>SPREAD: {bookSpreadVal}</span>
+              <span className="text-[#00FF88] font-bold">ICEBERG FLOW: ACTIVE ✓</span>
+            </div>
+          </div>
+

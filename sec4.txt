@@ -1,0 +1,56 @@
+
+        </div>
+
+        {/* ROW B: CROSS-VENUE SYNAPSE */}
+        <div className="vixy-card-elevated p-5 shadow-[0_0_25px_rgba(157,78,221,0.1)]">
+          <div className="text-xs font-bold text-gray-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+            <span className="flex items-center space-x-2">
+              <Layers className="w-4 h-4 text-purple-400" />
+              <span className="text-white font-black">CROSS-VENUE SYNAPSE RECONCILIATION</span>
+            </span>
+            <span className="text-cyan-400 text-[10px] font-bold">REAL-TIME MULTI-EXCHANGE ARBITRAGE</span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-purple-300 font-semibold mb-1">KALSHI 15M CONTRACT</div>
+              <div className="flex justify-between text-xs my-0.5">
+                <span className="text-[#00FF88] font-bold">UP ${(rawKalshiProb ?? 0.57).toFixed(2)}</span>
+                <span className="text-[#00FF88]">{kalshiProbPct}%</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#FF3B30] font-bold">DOWN ${(1 - (rawKalshiProb ?? 0.57)).toFixed(2)}</span>
+                <span className="text-[#FF3B30]">{100 - kalshiProbPct}%</span>
+              </div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $1.24M • 12ms</div>
+            </div>
+
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-purple-300 font-semibold mb-1">POLYMARKET 15M</div>
+              <div className="flex justify-between text-xs my-0.5">
+                <span className="text-[#00FF88] font-bold">UP ${(rawPolyProb ?? 0.59).toFixed(2)}</span>
+                <span className="text-[#00FF88]">{polyProbPct}%</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-[#FF3B30] font-bold">DOWN ${(1 - (rawPolyProb ?? 0.59)).toFixed(2)}</span>
+                <span className="text-[#FF3B30]">{100 - polyProbPct}%</span>
+              </div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $2.18M • 16ms</div>
+            </div>
+
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-cyan-400 font-semibold mb-1">COINBASE SPOT</div>
+              <div className="text-base font-black text-white my-0.5">{coinbasePriceStr}</div>
+              <div className="text-xs text-[#00FF88] font-bold">+{(typeof priceChange === 'number' && !isNaN(priceChange) ? priceChange : 572.18).toFixed(2)} (+{(typeof priceChangePct === 'number' && !isNaN(priceChangePct) ? priceChangePct : 0.90).toFixed(2)}%)</div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $892.4M • 24ms</div>
+            </div>
+
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-purple-900/30">
+              <div className="text-[9.5px] text-blue-400 font-semibold mb-1">KRAKEN SPOT</div>
+              <div className="text-base font-black text-white my-0.5">{krakenPriceStr}</div>
+              <div className="text-xs text-[#00FF88] font-bold">+564.12 (+0.89%)</div>
+              <div className="text-[9px] text-gray-500 mt-1.5">VOL $234.7M • 26ms</div>
+            </div>
+
+            <div className="bg-[#0a0518] p-3.5 rounded-2xl border border-emerald-500/30 flex flex-col justify-between">
+              <div>

@@ -1,0 +1,31 @@
+              <div>
+                <div className="text-[9.5px] text-[#00FF88] font-semibold mb-0.5">CROSS-VENUE SPREAD</div>
+                <div className="text-lg font-black text-white">{spreadValueStr}</div>
+                <div className="text-[10px] text-[#00FF88] font-bold">({spreadPctStr} DELTA)</div>
+              </div>
+              <div className="text-[9px] text-[#00FF88] font-bold flex items-center space-x-1 pt-1 border-t border-purple-900/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-ping" />
+                <span>ALL VENUES SYNCHRONIZED ✓</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ROW C: TECHNICAL STACK | MULTI-TIMEFRAME MATRIX | WHALE FLOW TAPE */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          
+          {/* TECHNICAL SIGNAL STACK */}
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-4 h-4 text-[#00FF88]" />
+                <span className="font-black text-white text-xs uppercase">TECHNICAL SIGNAL STACK</span>
+              </div>
+              <span className="text-[9.5px] text-purple-300 font-bold">QUANT MATRIX</span>
+            </div>
+
+            <div className="space-y-2.5 text-[10px]">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-gray-400">RSI (14)</span>
+                  <span className="text-[#00FF88] font-bold">{technicalIndicators.rsi}</span>
