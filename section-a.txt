@@ -1,0 +1,128 @@
+        {/* ─── SECTION A: THE FUTURISTIC NEURAL SIGNAL RING ─── */}
+        <div className="flex flex-col items-center justify-center relative select-none">
+          {/* Ambient Glow behind Ring */}
+          <div
+            className="absolute w-36 h-36 sm:w-44 sm:h-44 rounded-full blur-[35px] opacity-25 pointer-events-none transition-colors duration-700"
+            style={{ backgroundColor: themeNeon }}
+          />
+
+          <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center">
+            {/* SVG Dynamic Neural Radar Rings */}
+            <svg
+              className="w-full h-full transform -rotate-90 overflow-visible"
+              viewBox="0 0 160 160"
+            >
+              {/* Outer Tick Frame */}
+              <circle
+                cx="80"
+                cy="80"
+                r="74"
+                fill="none"
+                stroke="rgba(168, 85, 247, 0.15)"
+                strokeWidth="1"
+              />
+              <circle
+                cx="80"
+                cy="80"
+                r="74"
+                fill="none"
+                stroke={themeNeon}
+                strokeWidth="1.5"
+                strokeDasharray="2 12"
+                className="opacity-40 animate-[spin_20s_linear_infinite]"
+              />
+
+              {/* Middle Rotating Neural Arcs */}
+              <circle
+                cx="80"
+                cy="80"
+                r="64"
+                fill="none"
+                stroke="rgba(147, 51, 234, 0.25)"
+                strokeWidth="2"
+              />
+              <circle
+                cx="80"
+                cy="80"
+                r="64"
+                fill="none"
+                stroke={themeNeon}
+                strokeWidth="2.5"
+                strokeDasharray={isServerLocked ? 'none' : '60 40'}
+                strokeLinecap="round"
+                className={isServerLocked ? '' : 'animate-[spin_4s_linear_infinite]'}
+                style={{
+                  filter: `drop-shadow(0 0 6px ${themeGlow})`,
+                }}
+              />
+
+              {/* Inner Precision Arc */}
+              <circle
+                cx="80"
+                cy="80"
+                r="52"
+                fill="none"
+                stroke={isOfflineOrStale ? '#991B1B' : isUp ? 'rgba(0, 255, 157, 0.4)' : 'rgba(255, 51, 102, 0.4)'}
+                strokeWidth="2"
+                strokeDasharray="15 35"
+                className={isServerLocked ? '' : 'animate-[spin_6s_linear_infinite_reverse]'}
+              />
+
+              {/* Core Radar Calibration Sweep */}
+              <circle
+                cx="80"
+                cy="80"
+                r="38"
+                fill={isUp ? 'rgba(2, 21, 14, 0.9)' : isDown ? 'rgba(21, 3, 8, 0.9)' : 'rgba(8, 3, 20, 0.9)'}
+                stroke={themeNeon}
+                strokeWidth={isServerLocked ? 2.5 : 1.5}
+                strokeDasharray={isServerLocked ? 'none' : '4 4'}
+                style={{
+                  filter: `drop-shadow(0 0 10px ${themeGlow})`,
+                }}
+              />
+            </svg>
+
+            {/* Neural Center Core Indicator */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+              {isOfflineOrStale ? (
+                <WifiOff className="w-7 h-7 text-rose-400 animate-pulse" />
+              ) : isCriticallyInvalidated ? (
+                <>
+                  <AlertTriangle className="w-7 h-7 text-rose-400 animate-bounce" />
+                  <span className="text-[7.5px] font-black text-rose-400 tracking-widest uppercase mt-1">
+                    INVALIDATED
+                  </span>
+                </>
+              ) : isNoTrade ? (
+                <>
+                  <ShieldCheck className="w-7 h-7 text-purple-300 animate-pulse" />
+                  <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">
+                    VIXY CALIBRATING
+                  </span>
+                </>
+              ) : isServerLocked ? (
+                <>
+                  <div
+                    className="text-2xl sm:text-3xl font-black leading-none animate-bounce"
+                    style={{
+                      color: themeNeon,
+                      textShadow: `0 0 15px ${themeGlow}`,
+                    }}
+                  >
+                    {isUp ? '▲' : isDown ? '▼' : '●'}
+                  </div>
+                  <span
+                    className="text-[8.5px] font-black tracking-widest uppercase mt-1 flex items-center gap-1"
+                    style={{ color: themeNeon }}
+                  >
+                    <Lock className="w-2.5 h-2.5" /> LOCKED
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Activity className="w-7 h-7 text-cyan-300 animate-pulse" />
+                  <span className="text-[8px] font-black text-cyan-300 tracking-widest uppercase mt-1">
+                    {isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}
+                  </span>
+                </>

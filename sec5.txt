@@ -1,0 +1,40 @@
+          {/* TECHNICAL SIGNAL STACK */}
+          <div className="lg:col-span-4 vixy-card-elevated p-5 flex flex-col justify-between">
+            <div className="flex items-center justify-between border-b border-purple-900/30 pb-2.5 mb-2.5">
+              <div className="flex items-center space-x-2">
+                <Activity className="w-4 h-4 text-[#00FF88]" />
+                <span className="font-black text-white text-xs uppercase">TECHNICAL SIGNAL STACK</span>
+              </div>
+              <span className="text-[9.5px] text-purple-300 font-bold">QUANT MATRIX</span>
+            </div>
+
+            <div className="space-y-2.5 text-[10px]">
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-gray-400">RSI (14)</span>
+                  <span className="text-[#00FF88] font-bold">{technicalIndicators.rsi}</span>
+                </div>
+                <div className="w-full h-1.5 bg-[#1E1435] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#00FF88]" style={{ width: `${technicalIndicators.rsi}%` }} />
+                </div>
+                <span className="text-[8px] text-gray-500 mt-1 block">{technicalIndicators.rsiStatus}</span>
+              </div>
+
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-400">MACD (12, 26, 9)</span>
+                  <span className="text-[#00FF88] font-bold">+{technicalIndicators.macd.histogram}</span>
+                </div>
+                <div className="text-[8px] text-[#00FF88] mt-0.5">{technicalIndicators.macd.status}</div>
+              </div>
+
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30 flex justify-between items-center">
+                <div>
+                  <span className="text-gray-400 block">BOLLINGER (20, 2)</span>
+                  <span className="text-[8px] text-gray-500">BW: {technicalIndicators.bollinger.bandwidth}</span>
+                </div>
+                <span className="text-purple-300 font-bold">{technicalIndicators.bollinger.status}</span>
+              </div>
+
+              <div className="bg-[#0a0518] p-2 rounded-xl border border-purple-900/30">
+                <span className="text-gray-400 block mb-1">MULTI-PERIOD SUPERTREND</span>

@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isBackendSystem() {
+      return request.auth != null && request.auth.token.email == 'backend_system@vixy.local';
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /_connection_check/{docId} { allow read, write: if true; }
+    match /test/{docId} { allow read, write: if true; }
+
+    match /active_cycle_lock/{lockId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /signal_logs/{signalId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /users/{userId} {
+      allow read, write: if isBackendSystem();
+      match /journalEntries/{entryId} { allow read, write: if isBackendSystem(); }
+    }
+    match /tickets/{ticketId} { allow read, write: if isBackendSystem(); }
+    match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
+    match /telemetry_observations/{obsId} { allow read, write: if isBackendSystem(); }
+    match /day_passes/{docId} { allow read, write: if isBackendSystem(); }
+    match /subscriptions/{subId} { allow read, write: if isBackendSystem(); }
+    match /webhook_events/{eventId} { allow read, write: if isBackendSystem(); }
+    match /stripe_events/{eventId} { allow read, write: if isBackendSystem(); }
+    match /pending_entitlements/{email} { allow read, write: if isBackendSystem(); }
+    match /discordProfiles/{profileId} { allow read, write: if isBackendSystem(); }
+    match /discord_profiles/{profileId} { allow read, write: if isBackendSystem(); }
+    match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
+    match /calibration_state/{stateId} { allow read, write: if isBackendSystem(); }
+    match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }
+    match /decision_outcomes/{outcomeId} { allow read, write: if isBackendSystem(); }
+    match /regime_memory_bank/{memoryId} { allow read, write: if isBackendSystem(); }
+    match /algorithm_performance_history/{historyId} { allow read, write: if isBackendSystem(); }
+    match /kalshi_credentials/{userId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_configs/{userId} { allow read, write: if isBackendSystem(); }
+    match /vixy_engine_heartbeat/{docId} { allow read, write: if isBackendSystem(); }
+  }
+}
