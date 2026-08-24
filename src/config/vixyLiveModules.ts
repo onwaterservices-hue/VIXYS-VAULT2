@@ -18,7 +18,8 @@ import {
   Scale
 } from 'lucide-react';
 import { BTCTicker } from '../types';
-import { Canonical15mDecisionState, FeedHealthStatus } from '../hooks/useCanonical15mDecision';
+import { Canonical15mDecision } from '../types/canonicalDecision';
+import { FeedHealthStatus } from '../hooks/useCanonical15mDecision';
 
 export type ModuleSize = 'small' | 'medium' | 'large' | 'full-width';
 
@@ -34,7 +35,7 @@ export interface VixyLiveModuleDefinition {
 }
 
 export interface ModuleRenderProps {
-  canonical15m: Canonical15mDecisionState;
+  canonical15m: Canonical15mDecision;
   ticker?: BTCTicker;
   dataHealthStatus?: FeedHealthStatus;
   localUpdatedAt?: number;

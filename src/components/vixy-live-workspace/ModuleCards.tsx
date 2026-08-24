@@ -16,11 +16,9 @@ import {
   Database,
   ArrowUpRight,
   ArrowDownRight,
-  Minus,
-  CheckCircle2,
-  ExternalLink
+  Minus
 } from 'lucide-react';
-import { ModuleRenderProps } from '../config/vixyLiveModules';
+import { ModuleRenderProps } from '../../config/vixyLiveModules';
 
 export const CurrentSignalModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
   const rawDirection = canonical15m.direction || 'UP';
@@ -150,7 +148,7 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
 
 export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
   const reversalRisk = canonical15m.reversalRisk ?? 22;
-  const isProtected = canonical15m.lifecycle === 'LOCKED' || canonical15m.lifecycle === 'PROTECTED';
+  const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -489,7 +487,7 @@ export const LiveMarketFeedModule: React.FC<ModuleRenderProps> = ({ ticker, cano
 };
 
 export const VixyProtectionModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const isProtected = canonical15m.lifecycle === 'LOCKED' || canonical15m.lifecycle === 'PROTECTED';
+  const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
