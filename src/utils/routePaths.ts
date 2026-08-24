@@ -4,8 +4,7 @@
 export const TAB_TO_PATH: Record<string, string> = {
   hub: '/hub',
   landing: '/',
-  terminal: '/dashboard',
-  vixylive: '/vixy-live',
+  terminal: '/vixy-live',
   compare: '/asset-compare',
   scalping: '/scalping-desk',
   onehour: '/1-hour-desk',

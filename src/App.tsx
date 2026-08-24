@@ -1349,36 +1349,7 @@ export default function App() {
                     />
                   )}
 
-                  {(activeTab === 'starter' || (activeTab === 'terminal' && (userProduct === 'STARTER' || userProduct === 'NONE' || userRole === 'UNPAID' || !hasActiveAccess))) ? (
-                    <StarterDeskView
-                      ticker={ticker}
-                      candles={candles}
-                      onOpenPricing={() => setActiveTab('pricing')}
-                      onOpenAlerts={() => setActiveTab('alerts')}
-                      onOpenSettings={() => setActiveTab('settings')}
-                      userEmail={authState.user?.email}
-                      selectedAsset={selectedAsset}
-                      onSelectAsset={(sym) => setSelectedAsset(sym)}
-                    />
-                  ) : activeTab === 'terminal' ? (
-                    <LiveDashboard
-                      ticker={ticker}
-                      candles={candles}
-                      onOpenAlerts={() => setActiveTab('alerts')}
-                      onOpenPricing={() => setActiveTab('pricing')}
-                      onOpenJournal={() => setActiveTab('journal')}
-                      onOpenCompare={() => setActiveTab('compare')}
-                      userRole={userRole}
-                      selectedAsset={selectedAsset}
-                      onSelectAsset={(sym) => setSelectedAsset(sym)}
-                      selectedTimeframe={selectedTimeframe}
-                      selectedVenues={selectedVenues}
-                      exchangeKeys={exchangeKeys}
-                      onOpenSettings={() => setActiveTab('settings')}
-                      alertSettings={alertSettings}
-                      setAlertSettings={setAlertSettings}
-                    />
-                  ) : activeTab === 'vixylive' ? (
+                  {(activeTab === 'terminal' || activeTab === 'vixylive') ? (
                     <VixyLockView
                       ticker={ticker}
                       userEmail={authState.user?.email}

@@ -87,9 +87,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: "VIXY VAULT",
       items: [
-        { id: "terminal", label: "Dashboard", icon: LayoutDashboard },
         {
-          id: "vixylive",
+          id: "terminal",
           label: "VIXY LIVE",
           icon: Flame,
           badge: "FLAGSHIP",
@@ -304,7 +303,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     const isActive = activeTab === item.id;
                     const isStarterUser = userProduct === "STARTER" || userProduct === "NONE" || userRole === "UNPAID" || !hasActiveAccess;
                     const isProOnlyFeature = isStarterUser && [
-                      "vixylive",
+                      "terminal",
                       "scalping",
                       "onehour",
                       "scanner",
@@ -313,16 +312,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     ].includes(item.id);
                     
                     const isGated =
-                      (item.id === "vixylive" && !hasActiveAccess) ||
+                      (item.id === "terminal" && !hasActiveAccess) ||
                       isProOnlyFeature;
 
                     let displayLabel = item.label;
                     let displayBadge = item.badge;
-
-                    if (isStarterUser && item.id === "terminal") {
-                      displayLabel = "Starter Desk";
-                      displayBadge = "15M";
-                    }
 
                     const handleItemClick = () => {
                       if (isProOnlyFeature) {
