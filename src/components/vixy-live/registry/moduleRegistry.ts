@@ -6,7 +6,10 @@ import {
   CycleCountdownModule,
   LockQualityModule,
   VixyProtectionModule,
-  VixyReadModule
+  VixyReadModule,
+  Vixy1mDecisionModule,
+  DataHealthModule,
+  NeuralRibbonModule
 } from '../modules/EngineModules';
 import {
   BtcPriceModule,
@@ -23,7 +26,9 @@ import {
   SentimentModule,
   WhaleFlowModule,
   PatternEngineModule,
-  NewsModule
+  NewsModule,
+  SignalMatrixModule,
+  LiveFeedModule
 } from '../modules/QuantModules';
 import {
   KalshiModule,
@@ -57,6 +62,16 @@ export const MODULE_REGISTRY: Record<string, VixyModuleDefinition> = {
     defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
     isAvailable: true,
     component: VixyConfidenceModule
+  },
+  'vixy.signal_1m': {
+    id: 'vixy.signal_1m',
+    name: '1-MINUTE DECISION',
+    category: 'VIXY',
+    description: 'Ultra-fast 1M taker momentum & directional scalper bias',
+    iconName: 'Zap',
+    defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
+    isAvailable: true,
+    component: Vixy1mDecisionModule
   },
   'vixy.lock_status': {
     id: 'vixy.lock_status',
@@ -97,6 +112,26 @@ export const MODULE_REGISTRY: Record<string, VixyModuleDefinition> = {
     defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
     isAvailable: true,
     component: VixyProtectionModule
+  },
+  'vixy.neural_ribbon': {
+    id: 'vixy.neural_ribbon',
+    name: 'NEURAL RIBBON',
+    category: 'VIXY',
+    description: 'Multi-timeframe EMA convergence ribbon & trend regime',
+    iconName: 'Activity',
+    defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
+    isAvailable: true,
+    component: NeuralRibbonModule
+  },
+  'vixy.data_health': {
+    id: 'vixy.data_health',
+    name: 'DATA HEALTH',
+    category: 'VIXY',
+    description: 'WebSocket stream latency & multi-exchange heartbeat',
+    iconName: 'Activity',
+    defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
+    isAvailable: true,
+    component: DataHealthModule
   },
   'vixy.read': {
     id: 'vixy.read',
@@ -231,6 +266,26 @@ export const MODULE_REGISTRY: Record<string, VixyModuleDefinition> = {
     defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
     isAvailable: true,
     component: PatternEngineModule
+  },
+  'quant.signal_matrix': {
+    id: 'quant.signal_matrix',
+    name: 'SIGNAL MATRIX',
+    category: 'INTELLIGENCE',
+    description: '10-factor confluence score table and alignment flags',
+    iconName: 'Layers',
+    defaultDimensions: { w: 6, h: 2, minW: 3, minH: 2 },
+    isAvailable: true,
+    component: SignalMatrixModule
+  },
+  'quant.live_feed': {
+    id: 'quant.live_feed',
+    name: 'LIVE MARKET FEED',
+    category: 'INTELLIGENCE',
+    description: 'Live order prints tape & venue execution feed',
+    iconName: 'Activity',
+    defaultDimensions: { w: 3, h: 2, minW: 2, minH: 2 },
+    isAvailable: true,
+    component: LiveFeedModule
   },
   'quant.news': {
     id: 'quant.news',

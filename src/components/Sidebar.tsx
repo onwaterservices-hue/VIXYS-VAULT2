@@ -23,7 +23,8 @@ import {
   ChevronRight,
   ShieldCheck,
   User,
-  LogOut
+  LogOut,
+  Sliders
 } from "lucide-react";
 import { TAB_TO_PATH } from "../utils/routePaths";
 
@@ -64,12 +65,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const navSections = [
     {
-      title: "COMMAND",
+      title: "PRIMARY",
       items: [
         {
           id: "hub",
-          label: "Dashboard",
+          label: "Command Center",
           icon: LayoutDashboard,
+          badge: "LIVE",
         },
         {
           id: "terminal",
@@ -82,7 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: "vixylive",
           label: "VIXY LIVE",
           icon: Flame,
-          badge: "LIVE",
+          badge: "CUSTOM",
         },
       ],
     },
@@ -93,15 +95,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
           id: "scalping",
           label: "Scalping Desk",
           icon: Zap,
-          badge: "PRO",
+          badge: "15S",
           isDesk: true,
         },
         {
           id: "onehour",
           label: "1-Hour Desk",
           icon: Clock,
-          badge: "PRO",
+          badge: "1H",
           isDesk: true,
+        },
+        {
+          id: "compare",
+          label: "Asset Compare",
+          icon: Sliders,
+          badge: "MULTI",
         },
       ],
     },
@@ -117,11 +125,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: "News & Sentiment",
           icon: BrainCircuit,
         },
-      ],
-    },
-    {
-      title: "HISTORY",
-      items: [
         {
           id: "history",
           label: "VIXY Locks",
@@ -129,28 +132,43 @@ export const Sidebar: React.FC<SidebarProps> = ({
           badge: "LEDGER",
           isLockLayer: true,
         },
+      ],
+    },
+    {
+      title: "HISTORY",
+      items: [
         {
           id: "perflab",
           label: "Performance",
           icon: Award,
         },
         { id: "journal", label: "Trade Journal", icon: BookOpen },
+        { id: "replay", label: "Replay Center", icon: Clock },
       ],
     },
     {
-      title: "ACCOUNT & SYSTEM",
+      title: "ACCOUNT",
       items: [
         { id: "alerts", label: "Alerts", icon: Bell },
         { id: "pricing", label: "Pricing", icon: CreditCard, badge: "PRO" },
         { id: "settings", label: "Settings", icon: Settings },
-        {
-          id: "design-system",
-          label: "Design System V2",
-          icon: Layers,
-          badge: "V2",
-        },
       ],
     },
+    ...(userRole === "ADMIN" || userRole === "OWNER"
+      ? [
+          {
+            title: "ADMIN",
+            items: [
+              {
+                id: "admin",
+                label: "Master Admin",
+                icon: ShieldCheck,
+                badge: "CONTROL",
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   return (

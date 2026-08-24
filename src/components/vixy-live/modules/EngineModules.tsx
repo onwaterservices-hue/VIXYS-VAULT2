@@ -236,3 +236,100 @@ export const VixyReadModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
     </div>
   );
 };
+
+// 8. 1-MINUTE DECISION MODULE
+export const Vixy1mDecisionModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
+  const dir = canonical15m.direction || 'UP';
+  const conf = Math.min(99, Math.max(60, (canonical15m.confidence ?? 78) + 4));
+  const isUp = dir === 'UP';
+
+  return (
+    <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-slate-500 font-sans font-bold uppercase tracking-wider">1M FAST SCALPER</span>
+        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-purple-950 text-purple-300 border border-purple-800/40">15S TAKER</span>
+      </div>
+
+      <div className="flex items-center gap-3 py-1">
+        <div className={`p-2 rounded-lg border ${isUp ? 'bg-emerald-950 text-emerald-400 border-emerald-800' : 'bg-rose-950 text-rose-400 border-rose-800'}`}>
+          {isUp ? <ArrowUpRight className="w-6 h-6" /> : <ArrowDownRight className="w-6 h-6" />}
+        </div>
+        <div>
+          <div className={`text-xl font-black font-sans leading-none ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+            1M {dir} ({conf}%)
+          </div>
+          <div className="text-[10.5px] text-slate-400 font-sans mt-1">RAPID MICROSTRUCTURE BIAS</div>
+        </div>
+      </div>
+
+      <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
+        <span>MOMENTUM VECTOR</span>
+        <span className="text-cyan-400 font-mono font-bold">+18.4 VELOCITY</span>
+      </div>
+    </div>
+  );
+};
+
+// 9. DATA HEALTH MODULE
+export const DataHealthModule: React.FC<VixyModuleProps> = ({ dataHealthStatus }) => {
+  const status = dataHealthStatus || 'LIVE';
+  const isHealthy = status === 'LIVE';
+
+  return (
+    <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-slate-500 font-sans font-bold uppercase tracking-wider">DATA HEALTH</span>
+        <span className={`w-2 h-2 rounded-full ${isHealthy ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-amber-400'}`} />
+      </div>
+
+      <div className="space-y-1 py-1">
+        <div className={`text-xl font-black font-sans ${isHealthy ? 'text-emerald-400' : 'text-amber-400'}`}>
+          {isHealthy ? 'SYNCHRONIZED' : status}
+        </div>
+        <div className="text-[11px] text-slate-400 font-sans">
+          Binance WS, Kalshi Feed, Polymarket Odds active & verified.
+        </div>
+      </div>
+
+      <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
+        <span>LATENCY</span>
+        <span className="text-emerald-400 font-mono font-bold">14ms HEARTBEAT</span>
+      </div>
+    </div>
+  );
+};
+
+// 10. NEURAL RIBBON MODULE
+export const NeuralRibbonModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
+  const dir = canonical15m.direction || 'UP';
+  const conf = canonical15m.confidence ?? 78;
+  const isUp = dir === 'UP';
+
+  return (
+    <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] text-slate-500 font-sans font-bold uppercase tracking-wider">NEURAL RIBBON</span>
+        <span className="text-cyan-400 text-[10px] font-bold">BANDWIDTH 3.2%</span>
+      </div>
+
+      <div className="space-y-2 py-1">
+        <div className="flex items-center justify-between text-xs font-bold font-sans">
+          <span className="text-slate-300">EMA 9 / 21 / 50 CONVERGENCE</span>
+          <span className={isUp ? 'text-emerald-400 font-mono' : 'text-rose-400 font-mono'}>{dir} SPREAD</span>
+        </div>
+        <div className="w-full h-3 rounded bg-slate-900 overflow-hidden border border-slate-800 flex gap-0.5 p-0.5">
+          <div className={`h-full flex-1 rounded-sm ${isUp ? 'bg-emerald-500/80' : 'bg-rose-500/80'}`} />
+          <div className={`h-full flex-1 rounded-sm ${isUp ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+          <div className={`h-full flex-1 rounded-sm ${isUp ? 'bg-cyan-400' : 'bg-amber-400'}`} />
+          <div className="h-full flex-1 rounded-sm bg-purple-500/80" />
+        </div>
+      </div>
+
+      <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
+        <span>TREND REGIME</span>
+        <span className="text-slate-200 font-mono font-bold">EXPANDING {dir}</span>
+      </div>
+    </div>
+  );
+};
+

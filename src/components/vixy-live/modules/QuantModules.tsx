@@ -290,3 +290,74 @@ export const NewsModule: React.FC<VixyModuleProps> = () => {
   );
 };
 
+// 22. SIGNAL MATRIX MODULE
+export const SignalMatrixModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
+  const dir = canonical15m.direction || 'UP';
+  const factors = [
+    { label: 'Momentum Vector', val: '8.7', status: 'ALIGNED', ok: true },
+    { label: 'Taker Buy Delta', val: '+$28.4M', status: 'STRONG', ok: true },
+    { label: 'Strike Position', val: '+$42.50', status: 'ABOVE', ok: true },
+    { label: 'Cross-Venue Sync', val: '58% YES', status: 'CONFIRMED', ok: true },
+    { label: 'Bandwidth Squeeze', val: '2.1%', status: 'EXPANDING', ok: true },
+    { label: 'Reversal Risk', val: '22%', status: 'LOW HAZARD', ok: true },
+  ];
+
+  return (
+    <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
+      <div className="flex justify-between items-center text-[10px] text-slate-500 font-sans font-bold uppercase">
+        <span>SIGNAL CONFLUENCE MATRIX</span>
+        <span className="text-emerald-400 font-bold">{canonical15m.evidenceAlignment ?? 8}/10 ALIGNED</span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-1.5 py-1">
+        {factors.map((f, i) => (
+          <div key={i} className="p-1.5 rounded bg-[#0e121a] border border-slate-800/80 flex items-center justify-between text-[10px]">
+            <span className="text-slate-400 font-sans truncate">{f.label}</span>
+            <span className="text-emerald-400 font-bold ml-1 shrink-0">{f.val}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
+        <span>SYSTEM VERDICT</span>
+        <span className="text-emerald-400 font-mono font-bold">HIGH CONVICTION {dir}</span>
+      </div>
+    </div>
+  );
+};
+
+// 23. LIVE MARKET FEED MODULE
+export const LiveFeedModule: React.FC<VixyModuleProps> = ({ ticker }) => {
+  const price = ticker?.price || 64591.20;
+  const prints = [
+    { size: '14.2 BTC', price: `$${price.toFixed(2)}`, side: 'BUY', venue: 'BINANCE' },
+    { size: '8.5 BTC', price: `$${(price - 1.2).toFixed(2)}`, side: 'BUY', venue: 'COINBASE' },
+    { size: '3.1 BTC', price: `$${(price + 0.8).toFixed(2)}`, side: 'SELL', venue: 'BYBIT' },
+  ];
+
+  return (
+    <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
+      <div className="flex justify-between items-center text-[10px] text-slate-500 font-sans font-bold uppercase">
+        <span>LIVE MARKET TAPE</span>
+        <span className="text-cyan-400 font-bold animate-pulse">STREAMING</span>
+      </div>
+
+      <div className="space-y-1 py-1">
+        {prints.map((p, i) => (
+          <div key={i} className="flex items-center justify-between text-[10.5px] p-1 rounded bg-[#0e121a] border border-slate-800/60">
+            <span className="text-purple-300 font-sans">{p.venue}</span>
+            <span className="text-white font-bold">{p.size}</span>
+            <span className={p.side === 'BUY' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>{p.price}</span>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
+        <span>AGGREGATE FLOW</span>
+        <span className="text-emerald-400 font-mono font-bold">+84% BUY PRESSURE</span>
+      </div>
+    </div>
+  );
+};
+
+

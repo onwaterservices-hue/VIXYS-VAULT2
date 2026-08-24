@@ -21,30 +21,57 @@ export const CURRENT_LAYOUT_VERSION = 1;
 export const DEFAULT_WORKSPACES: Omit<UserWorkspace, 'userId'>[] = [
   {
     id: 'ws_vixy_core',
-    name: 'VIXY CORE',
+    name: 'VIXY PRO (DEFAULT)',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     version: 1,
     layoutVersion: CURRENT_LAYOUT_VERSION,
     isDefault: true,
-    settings: { autoRefreshRate: 3000, gridDensity: 'standard' },
+    settings: { autoRefreshRate: 2000, gridDensity: 'standard' },
     modules: [
       'c_bias',
       'c_conf',
+      'c_cd',
       'c_lock',
+      'c_1m',
+      'c_qual',
       'c_prot',
+      'c_health',
       'c_chart',
+      'c_matrix',
+      'c_flow',
       'c_mom',
-      'c_flow'
+      'c_vol',
+      'c_regime',
+      'c_tape',
+      'c_read'
     ],
     layout: [
+      // ROW 1: CURRENT SIGNAL, CALIBRATION CONFIDENCE, 15M CYCLE, LOCK STATUS
       { instanceId: 'c_bias', moduleId: 'vixy.bias', x: 0, y: 0, w: 3, h: 2, sizeMode: 'default' },
       { instanceId: 'c_conf', moduleId: 'vixy.confidence', x: 3, y: 0, w: 3, h: 2, sizeMode: 'default' },
-      { instanceId: 'c_lock', moduleId: 'vixy.lock_status', x: 6, y: 0, w: 3, h: 2, sizeMode: 'default' },
-      { instanceId: 'c_prot', moduleId: 'vixy.protection', x: 9, y: 0, w: 3, h: 2, sizeMode: 'default' },
-      { instanceId: 'c_chart', moduleId: 'market.btc_chart', x: 0, y: 2, w: 6, h: 2, sizeMode: 'expanded' },
-      { instanceId: 'c_mom', moduleId: 'quant.momentum', x: 6, y: 2, w: 3, h: 2, sizeMode: 'default' },
-      { instanceId: 'c_flow', moduleId: 'quant.order_flow', x: 9, y: 2, w: 3, h: 2, sizeMode: 'default' }
+      { instanceId: 'c_cd', moduleId: 'vixy.cycle_countdown', x: 6, y: 0, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_lock', moduleId: 'vixy.lock_status', x: 9, y: 0, w: 3, h: 2, sizeMode: 'default' },
+
+      // ROW 2: 1M DECISION, LOCK QUALITY, VIXY PROTECTION, DATA HEALTH
+      { instanceId: 'c_1m', moduleId: 'vixy.signal_1m', x: 0, y: 2, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_qual', moduleId: 'vixy.lock_quality', x: 3, y: 2, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_prot', moduleId: 'vixy.protection', x: 6, y: 2, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_health', moduleId: 'vixy.data_health', x: 9, y: 2, w: 3, h: 2, sizeMode: 'default' },
+
+      // ROW 3: CHART / NEURAL RIBBON, SIGNAL CONFLUENCE MATRIX
+      { instanceId: 'c_chart', moduleId: 'market.btc_chart', x: 0, y: 4, w: 6, h: 2, sizeMode: 'expanded' },
+      { instanceId: 'c_matrix', moduleId: 'quant.signal_matrix', x: 6, y: 4, w: 6, h: 2, sizeMode: 'expanded' },
+
+      // ROW 4: ORDER FLOW, MOMENTUM, VOLUME, MARKET REGIME
+      { instanceId: 'c_flow', moduleId: 'quant.order_flow', x: 0, y: 6, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_mom', moduleId: 'quant.momentum', x: 3, y: 6, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_vol', moduleId: 'quant.volume', x: 6, y: 6, w: 3, h: 2, sizeMode: 'default' },
+      { instanceId: 'c_regime', moduleId: 'quant.market_regime', x: 9, y: 6, w: 3, h: 2, sizeMode: 'default' },
+
+      // ROW 5: LIVE MARKET FEED, VIXY READ
+      { instanceId: 'c_tape', moduleId: 'quant.live_feed', x: 0, y: 8, w: 6, h: 2, sizeMode: 'expanded' },
+      { instanceId: 'c_read', moduleId: 'vixy.read', x: 6, y: 8, w: 6, h: 2, sizeMode: 'expanded' }
     ]
   },
   {

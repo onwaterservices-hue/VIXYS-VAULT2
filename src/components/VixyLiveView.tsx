@@ -1,13 +1,15 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { BTCTicker } from '../types';
-import { VixyLiveWorkspace } from './vixy-live/VixyLiveWorkspace';
+import { VixyLiveWorkspace } from './VixyLiveWorkspace';
 
 interface VixyLiveViewProps {
   ticker?: BTCTicker;
   onOpenTerminal?: () => void;
   onOpenReplay?: () => void;
   onOpenPricing?: () => void;
+  userRole?: string;
+  hasActiveAccess?: boolean;
 }
 
 class VixyLiveErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -39,8 +41,12 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = (props) => {
   return (
     <VixyLiveErrorBoundary>
       <VixyLiveWorkspace
-        initialTicker={props.ticker}
+        ticker={props.ticker}
         onOpenTerminal={props.onOpenTerminal}
+        onOpenReplay={props.onOpenReplay}
+        onOpenPricing={props.onOpenPricing}
+        userRole={props.userRole}
+        hasActiveAccess={props.hasActiveAccess}
       />
     </VixyLiveErrorBoundary>
   );

@@ -102,15 +102,21 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
     };
   }, [selectedAsset, timeframe]);
 
-  // Simulated Time Remaining for current candle
-  const [timeRemainingSec, setTimeRemainingSec] = useState<number>(432);
+  // Authoritative Time Remaining calculation from epoch cycle timestamps
+  const [nowMs, setNowMs] = useState<number>(Date.now());
 
   React.useEffect(() => {
     const timer = setInterval(() => {
-      setTimeRemainingSec((prev) => (prev <= 1 ? 900 : prev - 1));
+      setNowMs(Date.now());
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  const timeRemainingSec = React.useMemo(() => {
+    const epochSec = Math.floor(nowMs / 1000);
+    const fifteenMinSec = 15 * 60;
+    return fifteenMinSec - (epochSec % fifteenMinSec);
+  }, [nowMs]);
 
   const minutes = Math.floor(timeRemainingSec / 60);
   const seconds = timeRemainingSec % 60;
