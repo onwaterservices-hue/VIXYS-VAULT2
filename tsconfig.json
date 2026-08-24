@@ -23,9 +23,13 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
+  "include": [
+    "src"
+  ],
   "exclude": [
     "node_modules",
     "dist",
+    "server.ts",
     "backend.ts",
     "backend.ts.recovered",
     "scripts",
