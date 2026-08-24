@@ -337,14 +337,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         </div>
 
         {/* Global Motion Controls & Interactive Testing Bar */}
-        <div className="flex flex-wrap items-center gap-3 ml-auto">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           
           {/* Sound Toggle */}
           <button
             onClick={() => setAudioMuted(!audioMuted)}
-            className={`p-2 rounded-xl border transition-all ${
+            className={`p-2 rounded-xl border transition-all cursor-pointer ${
               audioMuted
-                ? 'bg-[#0d0722] border-purple-800/40 text-purple-400/60'
+                ? 'bg-[#0d0722] border-purple-800/40 text-purple-400/60 hover:text-purple-300'
                 : 'bg-emerald-950/60 border-emerald-500/50 text-emerald-400 shadow-md'
             }`}
             title={audioMuted ? "Audio muted" : "Institutional Chime Active"}
@@ -358,7 +358,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <button
                 key={sym}
                 onClick={() => setSelectedAsset(sym)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   selectedAsset === sym
                     ? 'bg-purple-600 text-white shadow-md'
                     : 'text-purple-300 hover:text-white'
@@ -372,7 +372,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Manual Refresh */}
           <button
             onClick={handleManualRefresh}
-            className={`p-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-purple-300 hover:text-white transition-all ${
+            className={`p-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-purple-300 hover:text-white transition-all cursor-pointer ${
               isRefreshing ? 'animate-spin' : ''
             }`}
             title="Refresh Terminal Data"
@@ -398,7 +398,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             : '0 0 35px rgba(147, 51, 234, 0.12)'
         }}
         transition={{ duration: 0.5 }}
-        className="p-4 sm:p-6 rounded-3xl bg-[#0b061d] border-2 relative overflow-hidden space-y-5"
+        className="p-4 sm:p-6 rounded-3xl bg-[#0b061d] border-2 relative overflow-hidden space-y-4 sm:space-y-5"
       >
         {/* Horizontal Laser Border Sweep on Lock Confirmation */}
         <AnimatePresence>
@@ -430,7 +430,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         />
 
         {/* Top Primary Answer Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4 relative z-10 border-b border-purple-900/40 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 relative z-10 border-b border-purple-900/40 pb-3.5 sm:pb-4">
           <div className="flex items-center gap-3">
             <span className={`w-2.5 h-2.5 rounded-full ${
               computedCycleState === 'LOCKED'
@@ -440,17 +440,17 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 : 'bg-blue-400 animate-pulse'
             }`} />
             
-            <span className="text-xs font-black text-purple-200 uppercase tracking-widest font-sans flex items-center gap-2">
+            <span className="text-xs font-black text-purple-200 uppercase tracking-widest font-sans flex items-center gap-2 whitespace-nowrap">
               <span>VIXY BIAS // 15-MINUTE CYCLE</span>
             </span>
           </div>
 
           {/* Time Remaining & Dynamic State Pill */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             
             {/* Cycle Progress Bar / Countdown */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#130b32] border border-purple-800/40 text-xs">
-              <Clock className="w-4 h-4 text-purple-400" />
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#130b32] border border-purple-800/40 text-xs whitespace-nowrap">
+              <Clock className="w-4 h-4 text-purple-400 shrink-0" />
               <span className="text-purple-300 font-bold">CYCLE EXPIRES:</span>
               <motion.span
                 key={countdownFormatted}
@@ -473,7 +473,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-700/50 text-xs font-bold text-purple-300"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-700/50 text-xs font-bold text-purple-300 whitespace-nowrap"
                 >
                   <Activity className="w-3.5 h-3.5 text-purple-400 animate-spin" />
                   <span>VIXY ANALYZING (CALIBRATING)...</span>
@@ -487,7 +487,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-700/50 text-xs font-bold text-blue-300"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-700/50 text-xs font-bold text-blue-300 whitespace-nowrap"
                 >
                   <Activity className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
                   <span>BUILDING CONVICTION...</span>
@@ -501,7 +501,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -10 }}
                   transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/50 text-xs font-bold text-amber-300"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/50 text-xs font-bold text-amber-300 whitespace-nowrap"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                   <span>CONFIRMING GATES...</span>
@@ -515,7 +515,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.3, type: 'spring', stiffness: 300, damping: 20 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-xs font-bold text-emerald-300 shadow-md shadow-emerald-950/50"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-xs font-bold text-emerald-300 shadow-md shadow-emerald-950/50 whitespace-nowrap"
                 >
                   <Lock className="w-3.5 h-3.5 text-emerald-400" />
                   <span>LOCKED — {rawDirection === 'UP' || (rawDirection as any) === 'YES' ? 'UP' : 'DOWN'} // AUTHORITATIVE</span>
@@ -529,7 +529,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
                   transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/90 border border-amber-600/60 text-xs font-bold text-amber-300 shadow-md"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/90 border border-amber-600/60 text-xs font-bold text-amber-300 shadow-md whitespace-nowrap"
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
                   <span>VIXY SKIP // CRITERIA NOT MET</span>
