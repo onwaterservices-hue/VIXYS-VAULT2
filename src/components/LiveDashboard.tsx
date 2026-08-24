@@ -438,7 +438,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   const isBullish = signal.direction === 'YES';
 
   return (
-    <div className="space-y-6 font-mono text-purple-100">
+    <div className="space-y-8 sm:space-y-10 font-mono text-purple-100">
       {/* Top Banner Alert / 24-Hour Day Pass & Access Notice */}
       {userRole === 'UNPAID' && (
         <div className="bg-gradient-to-r from-amber-900/60 via-[#130B2A] to-purple-900/60 border border-amber-500/40 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3 text-purple-200 text-xs shadow-xl">
@@ -545,7 +545,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
         title="VIXY VAULT INTELLIGENCE LOCKED"
         subtitle="Connect your Discord account & verify server membership in the gateway above to unlock live predictions, candle charts, protection telemetry, and order flow intelligence."
       >
-        <div className="space-y-6">
+        <div className="space-y-8 sm:space-y-10">
           {/* 5. PRIMARY DECISION CENTER (NEURAL CORE + STEP 2 PROTECTION + TELEMETRY + 3-PANEL INTEL) */}
           <div>
             <SignalBrain
@@ -589,7 +589,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   REAL-TIME CANDLE TAPE & TAKER FLOW RIBBON
                 </span>
               </div>
-              <span className="vixy-badge text-cyan-300 bg-cyan-950/80 border border-cyan-500/40">
+              <span className="vixy-badge text-purple-300 bg-purple-950/80 border border-purple-700/40">
                 15M / 1H GRANULARITY
               </span>
             </div>
@@ -621,7 +621,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   DNA CLUSTERS & SCALP PROBABILITY CONE
                 </span>
               </div>
-              <span className="vixy-badge text-amber-300 bg-amber-950/80 border border-amber-500/40">
+              <span className="vixy-badge text-purple-300 bg-purple-950/80 border border-purple-700/40">
                 MULTI-TIMEFRAME ALIGNMENT
               </span>
             </div>
@@ -647,7 +647,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   OPTIMAL BIDS, SCALING GUIDANCE & HEALTH WATCH
                 </span>
               </div>
-              <span className="vixy-badge text-emerald-300 bg-emerald-950/80 border border-emerald-500/40">
+              <span className="vixy-badge text-purple-300 bg-purple-950/80 border border-purple-700/40">
                 DYNAMIC KELLY CRITERION
               </span>
             </div>
@@ -675,7 +675,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   QUANT SYNTHESIS, CONFLUENCE DRIVERS & STEP LOG
                 </span>
               </div>
-              <span className="vixy-badge text-cyan-300 bg-cyan-950/80 border border-cyan-500/40">
+              <span className="vixy-badge text-purple-300 bg-purple-950/80 border border-purple-700/40">
                 LIVE MODEL REASONING STREAM
               </span>
             </div>
@@ -707,7 +707,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
                   MODELS ONLINE, NEURAL MEMORY VAULT & FEATURE VOTE
                 </span>
               </div>
-              <span className="vixy-badge text-rose-300 bg-rose-950/80 border border-rose-500/40">
+              <span className="vixy-badge text-purple-300 bg-purple-950/80 border border-purple-700/40">
                 RECURSIVE WEIGHT RECALIBRATION
               </span>
             </div>

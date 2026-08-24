@@ -77,7 +77,6 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   onExecute,
 }) => {
   // ─── 1. AUTHORITATIVE SERVER-SIDE CYCLE & LOCK STATE ───
-  // Strictly respects the invariant: ONE CYCLE → ONE PREDICTION → ONE LOCK → ONE SETTLEMENT
   const isServerLocked = Boolean(
     rawApiData?.isLocked === true &&
     (rawApiData?.status === 'LOCKED' ||
@@ -96,22 +95,16 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const isCriticallyInvalidated = rawApiData?.status === 'CRITICALLY_INVALIDATED' || rawApiData?.isCriticallyInvalidated;
 
   // 1.1 EVIDENCE AGREEMENT & CONFLICT DATA FROM SERVER
-  const evidenceAgreement = String(rawApiData?.evidenceAgreement || 'MODERATE_AGREEMENT').toUpperCase();
   const hasConflict = Boolean(rawApiData?.hasConflict || rawApiData?.provisionalBias === 'SIGNAL_CONFLICT');
   const signalUnstable = Boolean(rawApiData?.signalUnstable || rawApiData?.provisionalBias === 'SIGNAL_UNSTABLE');
   const provisionalBias = String(rawApiData?.provisionalBias || 'NEUTRAL_BIAS').toUpperCase();
-  const historicalSimilarityPct = Number(rawApiData?.historicalSimilarityPct || 84);
-  const isChoppy = Boolean(rawApiData?.isChoppy);
-
-  const cycleId = String(rawApiData?.cycleId || '15M-ACTIVE-CYCLE');
   const lockedAt = rawApiData?.lockedAt ? new Date(rawApiData.lockedAt) : null;
   const lockedAtFormatted = lockedAt ? lockedAt.toLocaleTimeString() : 'CONFIRMED';
-
   const rawDirection = isServerLocked ? (rawApiData?.lockedDirection || 'NONE').toUpperCase() : 'NONE';
   const isUp = isServerLocked && (rawDirection.includes('UP') || rawDirection.includes('YES'));
   const isDown = isServerLocked && (rawDirection.includes('DOWN') || rawDirection.includes('NO'));
 
-  // Primary Headline Text (NO DANCING UI DURING PRE-LOCK)
+  // Primary Headline Text
   const primaryDecisionHeadline = isServerLocked
     ? (rawApiData?.lockedDecision || (isUp ? 'BUY UP' : isDown ? 'BUY DOWN' : 'PASS'))
     : isNoTrade
@@ -148,11 +141,9 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
       ? rawApiData.confidence
       : 74
   );
-
   const exactConfidencePct = Math.min(99, Math.max(50, Math.round(authoritativeRawConf)));
-  const confBand = formatConfidenceLabel(exactConfidencePct, isUp ? 'UP' : isDown ? 'DOWN' : 'NEUTRAL');
 
-  // Authoritative Institutional Edge & Lock Quality calculation
+  // Institutional Edge
   const rawEdge = Number(
     rawApiData?.realEdgePct ?? 
     rawApiData?.edge ?? 
@@ -160,24 +151,6 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
     (isServerLocked ? (isUp ? 11.8 : -11.8) : (exactConfidencePct - 50) * 0.35)
   );
   const formattedEdgePct = `${rawEdge >= 0 ? '+' : ''}${safeToFixed(rawEdge, 1)}%`;
-
-  const rawLockQuality = Math.min(99, Math.max(0, Math.round(Number(
-    rawApiData?.lockQuality ?? 
-    rawApiData?.pipeline?.lockQuality ?? 
-    (isServerLocked ? 93 : isNoTrade ? 42 : Math.round(exactConfidencePct * 0.95))
-  ))));
-
-  const lockQualityTier: 'HIGH_CONVICTION' | 'QUALIFIED' | 'SKIP' = 
-    rawApiData?.lockQualityTier ?? 
-    rawApiData?.pipeline?.lockQualityTier ?? 
-    (rawLockQuality >= 90 ? 'HIGH_CONVICTION' : rawLockQuality >= 80 ? 'QUALIFIED' : 'SKIP');
-
-  const evidenceConfirmedCount = Number(
-    rawApiData?.evidenceAgreementCount ?? 
-    rawApiData?.pipeline?.evidenceAgreementCount ?? 
-    (isServerLocked ? 8 : isNoTrade ? 3 : 6)
-  );
-  const totalEvidenceCount = 11;
 
   // Network & Market Link States
   const isSignalActive = Boolean(rawApiData?.signalActive || rawApiData?.direction) && !isOfflineOrStale;
@@ -189,37 +162,11 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   const formattedSeconds = timeRemainingSec % 60;
   const timeRemainingFormatted = `${formattedMinutes}:${formattedSeconds < 10 ? '0' : ''}${formattedSeconds}`;
 
-  // Direction-Aware Visual State
-  const visualConfig = getVisualStateConfig(directionVisualState);
-  const themeNeon = visualConfig.primaryColor;
-  const themeGlow = visualConfig.glowColor;
+  // Direction-Aware Visual State - Restrained purple identity accent
+  const themeNeon = isUp ? '#00FF9D' : isDown ? '#FF3366' : '#a855f7';
 
-  // ─── 1.5 STATE SEPARATION & STRICT POST-LOCK REVERSAL GATE ───
-  const confidencePct = exactConfidencePct;
-  const lockedProbability = rawApiData?.lockedProbability !== undefined 
-    ? Math.round(rawApiData.lockedProbability * (rawApiData.lockedProbability <= 1 ? 100 : 1)) 
-    : exactConfidencePct;
-  const liveProbability = rawApiData?.calibratedModelProbability !== undefined 
-    ? Math.round(rawApiData.calibratedModelProbability * (rawApiData.calibratedModelProbability <= 1 ? 100 : 1)) 
-    : exactConfidencePct;
-  const probabilityForLockedDirection = isUp ? liveProbability : (100 - liveProbability);
-  const reversalRiskValue = reversalRisk;
-
-  // Strict state gate for Risk Reversal alerts & animations (ONLY when completely locked and validated)
-  const isPostLockGated = isServerLocked && (isUp || isDown);
-  const hasReversalThreat = isPostLockGated && (reversalRiskValue >= 30);
-  const hasActiveReversal = isPostLockGated && (reversalRiskValue >= 45 || isProtectState);
-  const reversalDetected = hasActiveReversal;
-
-  // Strict Yellow Pulse: ONLY activates on actual danger, conflict, chop, or protection
-  const isYellowPulseActive = Boolean(
-    hasConflict ||
-    signalUnstable ||
-    isChoppy ||
-    hasReversalThreat ||
-    isProtectState ||
-    isCriticallyInvalidated
-  );
+  // Reversal gate checks
+  const reversalDetected = isProtectState || reversalRisk >= 50 || isCriticallyInvalidated;
 
   // ─── 2. DIAGNOSTIC REAL INPUT VECTORS (Direct telemetry) ───
   const diagnosticNodes = useMemo(() => {
@@ -275,558 +222,286 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
   return (
     <div
       id="vixy-neural-hero-terminal"
-      className={`relative overflow-hidden rounded-2xl border-2 transition-all duration-500 p-4 sm:p-5 font-mono shadow-[0_0_40px_rgba(0,0,0,0.95)] ${visualConfig.borderClass} ${visualConfig.bgClass.replace('/10', '/20')}`}
-      style={{ boxShadow: `0 0 50px ${themeGlow}` }}
+      className="relative overflow-hidden rounded-2xl border border-purple-800/30 bg-[#080414] p-6 sm:p-8 font-mono shadow-2xl transition-all duration-300"
     >
-      <style dangerouslySetInnerHTML={{ __html: `
-        @keyframes vixy-red-pulse {
-          0%, 100% {
-            border-color: rgba(239, 68, 68, 0.95);
-            box-shadow: 0 0 20px rgba(239, 68, 68, 0.45), inset 0 0 12px rgba(239, 68, 68, 0.25);
-            background-color: rgba(220, 38, 38, 0.1);
-          }
-          50% {
-            border-color: rgba(239, 68, 68, 0.4);
-            box-shadow: 0 0 6px rgba(239, 68, 68, 0.1), inset 0 0 3px rgba(239, 68, 68, 0.05);
-            background-color: rgba(220, 38, 38, 0.02);
-          }
-        }
-        @keyframes vixy-yellow-pulse {
-          0%, 100% {
-            border-color: rgba(234, 179, 8, 0.95);
-            box-shadow: 0 0 20px rgba(234, 179, 8, 0.45), inset 0 0 12px rgba(234, 179, 8, 0.25);
-            background-color: rgba(234, 179, 8, 0.1);
-          }
-          50% {
-            border-color: rgba(234, 179, 8, 0.4);
-            box-shadow: 0 0 6px rgba(234, 179, 8, 0.1), inset 0 0 3px rgba(234, 179, 8, 0.05);
-            background-color: rgba(234, 179, 8, 0.02);
-          }
-        }
-        .vixy-animate-pulse-red {
-          animation: vixy-red-pulse 1.5s infinite ease-in-out !important;
-        }
-        .vixy-animate-pulse-yellow {
-          animation: vixy-yellow-pulse 1.5s infinite ease-in-out !important;
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .vixy-animate-pulse-red, .vixy-animate-pulse-yellow {
-            animation: none !important;
-          }
-        }
-      `}} />
-      {/* ─── HUD BACKGROUND GRID & CYBERNETIC PERIMETER LIGHT ─── */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(147,51,234,0.03)_1px,transparent_1px),linear-gradient(90deg,rgba(147,51,234,0.03)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none opacity-90" />
-
-      {/* Top Animated Energy Perimeter Beam */}
+      {/* Subtle Top Accent Beam */}
       <div
-        className="absolute top-0 left-0 right-0 h-[2.5px] transition-all duration-700"
+        className="absolute top-0 left-0 right-0 h-[2px] transition-all duration-500"
         style={{
-          background: `linear-gradient(90deg, transparent, ${themeNeon}, ${themeNeon}, transparent)`,
-          boxShadow: `0 0 20px ${themeNeon}`,
+          background: `linear-gradient(90deg, transparent, ${themeNeon}, transparent)`,
         }}
       />
 
-      {/* Precision Corner Brackets */}
-      <div className="absolute top-2 left-2 w-3 h-3 border-t-2 border-l-2 border-purple-500/40 pointer-events-none" />
-      <div className="absolute top-2 right-2 w-3 h-3 border-t-2 border-r-2 border-purple-500/40 pointer-events-none" />
-      <div className="absolute bottom-2 left-2 w-3 h-3 border-b-2 border-l-2 border-purple-500/40 pointer-events-none" />
-      <div className="absolute bottom-2 right-2 w-3 h-3 border-b-2 border-r-2 border-purple-500/40 pointer-events-none" />
-
-      {/* ─── TOP HEADER: TITLE & IMMUTABLE CYCLE LOCK STATUS ─── */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-purple-900/40 pb-3 relative z-10">
-        <div className="flex items-center gap-2.5">
-          <div className={`w-7 h-7 rounded-md flex items-center justify-center border shadow-inner ${visualConfig.bgClass.replace('/10', '/80')} ${visualConfig.borderClass} ${visualConfig.textClass}`}>
+      {/* ─── TOP HEADER: TITLE & CYCLE LOCK STATUS ─── */}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-purple-900/30 pb-4 relative z-10">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-purple-950/80 border border-purple-700/40 flex items-center justify-center text-purple-300 shadow-sm">
             {isServerLocked ? (
-              <Lock className="w-3.5 h-3.5 animate-pulse" />
+              <Lock className="w-4 h-4" />
             ) : (
-              <Zap className="w-3.5 h-3.5 animate-pulse" />
+              <Zap className="w-4 h-4 text-purple-400" />
             )}
           </div>
           <div>
-            <h2 className="text-xs sm:text-sm font-black text-slate-100 tracking-[0.22em] uppercase drop-shadow flex items-center gap-2">
+            <h2 className="text-sm sm:text-base font-black text-white tracking-[0.2em] uppercase flex items-center gap-2">
               <span>VIXY NEURAL EXECUTION CORE</span>
-              <span className="text-[8px] font-bold text-purple-400 px-1.5 py-0.5 rounded bg-purple-950/80 border border-purple-700/40 hidden sm:inline-block">
+              <span className="text-[9px] font-bold text-purple-300 px-2 py-0.5 rounded bg-purple-950/80 border border-purple-700/40 hidden sm:inline-block">
                 15M KALSHI
               </span>
             </h2>
-            <div className="flex items-center gap-2 text-[8.5px] font-bold tracking-[0.15em] uppercase">
-              <span className={`flex items-center gap-1 ${visualConfig.textClass}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${visualConfig.bgClass.replace('/10', '')} ${isServerLocked ? '' : 'animate-pulse'}`} style={{ backgroundColor: themeNeon }} />
-                {isServerLocked ? '● IMMUTABLE CYCLE LOCK' : isNoTrade ? '● VIXY CALIBRATING // CHOP DETECTION' : isObserving ? '● OBSERVING 15M CYCLE' : isCalibrating ? '● CALIBRATING 15M CYCLE' : isQualifying ? '● QUALIFYING CONFLUENCE' : isValidating ? '● VALIDATING EVIDENCE' : isReadyToLock ? '● FINALIZING LOCK' : '● ANALYZING 15M CYCLE'}
+            <div className="flex items-center gap-2 text-[10px] font-bold tracking-wider uppercase mt-0.5 text-purple-300/70">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={`w-2 h-2 rounded-full ${isServerLocked ? 'bg-emerald-400' : 'bg-purple-400 animate-pulse'}`}
+                />
+                {isServerLocked
+                  ? 'IMMUTABLE CYCLE LOCK'
+                  : isNoTrade
+                  ? 'VIXY CALIBRATING // CHOP DETECTION'
+                  : isObserving
+                  ? 'OBSERVING 15M CYCLE'
+                  : isCalibrating
+                  ? 'CALIBRATING 15M CYCLE'
+                  : isQualifying
+                  ? 'QUALIFYING CONFLUENCE'
+                  : isValidating
+                  ? 'VALIDATING EVIDENCE'
+                  : isReadyToLock
+                  ? 'FINALIZING LOCK'
+                  : 'ANALYZING 15M CYCLE'}
               </span>
-              <span className="text-purple-700">|</span>
-              <span className="text-slate-300">EXPIRY IN {timeRemainingFormatted}</span>
+              <span className="text-purple-800">|</span>
+              <span className="text-slate-400">EXPIRY IN {timeRemainingFormatted}</span>
             </div>
           </div>
         </div>
 
-        {/* Cycle Stage Badge */}
+        {/* Cycle Stage Badge - Restrained Purple Theme */}
         <div className="flex items-center gap-2">
-          <span
-            className={`flex items-center gap-1.5 text-[9.5px] font-mono font-black uppercase px-3 py-1.5 rounded-lg border transition-all ${visualConfig.textClass} ${visualConfig.borderClass} ${visualConfig.bgClass}`}
-            style={{ boxShadow: `0 0 15px ${themeGlow}` }}
-          >
+          <span className="flex items-center gap-2 text-xs font-mono font-black uppercase px-3.5 py-1.5 rounded-xl bg-purple-950/60 border border-purple-700/40 text-purple-200 shadow-sm">
             {isCriticallyInvalidated ? (
               <>
-                <AlertTriangle className="w-3.5 h-3.5 text-rose-400 animate-bounce" />
-                <span>STATE: CRITICALLY INVALIDATED</span>
+                <AlertTriangle className="w-4 h-4 text-rose-400 animate-bounce" />
+                <span className="text-rose-300">INVALIDATED</span>
               </>
             ) : isNoTrade ? (
               <>
-                <ShieldCheck className="w-3.5 h-3.5 text-purple-300" />
-                <span>STATE: VIXY CALIBRATING (PROTECTED)</span>
+                <ShieldCheck className="w-4 h-4 text-purple-300" />
+                <span>STATE: VIXY CALIBRATING</span>
               </>
             ) : isServerLocked ? (
               <>
-                <Lock className="w-3.5 h-3.5 animate-pulse" />
-                <span>STATE 04: LOCKED — {primaryDecisionHeadline}</span>
-              </>
-            ) : isObserving ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
-                <span>STATE 01: OBSERVING 15M CYCLE</span>
-              </>
-            ) : isCalibrating ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-spin text-purple-400" />
-                <span>STATE 02: CALIBRATING ENGINE</span>
-              </>
-            ) : isAnalyzing ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
-                <span>STATE 03: ANALYZING MARKET</span>
-              </>
-            ) : isQualifying ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-pulse text-indigo-300" />
-                <span>STATE 04: QUALIFYING ENTRY</span>
-              </>
-            ) : isValidating ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                <span>STATE 04: VALIDATING EVIDENCE</span>
-              </>
-            ) : isReadyToLock ? (
-              <>
-                <Activity className="w-3.5 h-3.5 animate-pulse text-amber-400" />
-                <span>STATE 04: FINALIZING LOCK</span>
+                <Lock className="w-4 h-4 text-emerald-400" />
+                <span className="text-emerald-300">LOCKED — {primaryDecisionHeadline}</span>
               </>
             ) : (
               <>
-                <Activity className="w-3.5 h-3.5 animate-spin text-cyan-300" />
-                <span>STATE 01: OBSERVING 15M CYCLE</span>
+                <Activity className="w-4 h-4 text-purple-400 animate-pulse" />
+                <span>STATE: ANALYZING MARKET</span>
               </>
             )}
           </span>
         </div>
       </div>
 
-      {/* ─── MAIN HERO STAGE: NEURAL SIGNAL RING + HERO DIRECTIONAL CORE ─── */}
-      <div className="py-4 sm:py-6 grid grid-cols-1 md:grid-cols-[200px_1fr] lg:grid-cols-[220px_1fr] items-center gap-4 sm:gap-6 relative z-10">
+      {/* ─── MAIN HERO DECISION STAGE: NEURAL SIGNAL RING + HEADLINE CONFIDENCE ─── */}
+      <div className="py-6 sm:py-8 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[240px_1fr] items-center gap-6 sm:gap-10 relative z-10">
         
-        {/* ─── SECTION A: THE FUTURISTIC NEURAL SIGNAL RING ─── */}
+        {/* SECTION A: NEURAL SIGNAL RING GAUGE */}
         <div className="flex flex-col items-center justify-center relative select-none">
-          {/* Ambient Glow behind Ring */}
+          {/* Subtle Backing Glow */}
           <div
-            className="absolute w-36 h-36 sm:w-44 sm:h-44 rounded-full blur-[35px] opacity-25 pointer-events-none transition-colors duration-700"
+            className="absolute w-40 h-40 sm:w-48 sm:h-48 rounded-full blur-[40px] opacity-15 pointer-events-none transition-colors duration-700"
             style={{ backgroundColor: themeNeon }}
           />
+          
+          <div className="relative w-40 h-40 sm:w-48 sm:h-48 flex items-center justify-center">
+            {/* Clean Outer SVG Circle Gauge */}
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r="42"
+                fill="none"
+                stroke="#180b33"
+                strokeWidth="6"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r="42"
+                fill="none"
+                stroke={themeNeon}
+                strokeWidth="6"
+                strokeDasharray={`${(exactConfidencePct / 100) * 263.8} 263.8`}
+                strokeLinecap="round"
+                className="transition-all duration-1000 ease-out"
+              />
+            </svg>
 
-          <div
-            className="relative w-40 h-40 sm:w-48 sm:h-48"
-            style={{
-              '--radar-color': themeNeon,
-              '--radar-color-2': themeNeon,
-              '--radar-glow': themeGlow,
-              '--radar-pct': isOfflineOrStale ? 0 : exactConfidencePct,
-            } as React.CSSProperties}
-          >
-            <div className="radar-outer-glow" />
-            <div className="radar-ring-track" />
-            <div className="radar-progress" />
-            <div className="radar-sweep-ring" />
-            <div className="radar-orbit"><span className="radar-glint" /></div>
-            <div className="radar-orbit rev"><span className="radar-glint b" /></div>
-            <div className="radar-core" style={{ animation: isServerLocked ? 'vixyGlow 3.2s ease-in-out infinite' : undefined }}>
+            {/* Central Value Core */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-2">
               {isOfflineOrStale ? (
-                <WifiOff className="w-7 h-7 text-rose-400 animate-pulse" />
+                <>
+                  <WifiOff className="w-8 h-8 text-rose-400 mb-1" />
+                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">OFFLINE</span>
+                </>
               ) : isCriticallyInvalidated ? (
                 <>
-                  <AlertTriangle className="w-7 h-7 text-rose-400 animate-bounce" />
-                  <span className="text-[7.5px] font-black text-rose-400 tracking-widest uppercase mt-1">INVALIDATED</span>
-                </>
-              ) : isNoTrade ? (
-                <>
-                  <ShieldCheck className="w-7 h-7 text-purple-300 animate-pulse" />
-                  <span className="text-[7.5px] font-black text-purple-300 tracking-widest uppercase mt-1">VIXY CALIBRATING</span>
-                </>
-              ) : isServerLocked ? (
-                <>
-                  <span className="radar-value">{isUp ? '▲' : isDown ? '▼' : '●'}</span>
-                  <span className="radar-label flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> LOCKED</span>
+                  <AlertTriangle className="w-8 h-8 text-rose-400 animate-bounce mb-1" />
+                  <span className="text-[10px] font-black text-rose-400 uppercase tracking-widest">INVALIDATED</span>
                 </>
               ) : (
                 <>
-                  <span className="radar-value">{exactConfidencePct}%</span>
-                  <span className="radar-label">{isObserving ? 'OBSERVING' : isCalibrating ? 'CALIBRATING' : isQualifying ? 'QUALIFYING' : isValidating ? 'VALIDATING' : isReadyToLock ? 'READY' : 'ANALYZING'}</span>
+                  <span className="text-3xl sm:text-4xl font-black text-white tracking-tight leading-none mb-1">
+                    {exactConfidencePct}%
+                  </span>
+                  <span className="text-[9px] font-bold tracking-widest uppercase text-purple-300/80">
+                    {isServerLocked ? 'LOCKED CONF' : 'MODEL CONF'}
+                  </span>
                 </>
               )}
             </div>
           </div>
 
-          <div className="mt-1 text-center">
-            <span className="text-[9px] font-mono font-bold tracking-widest uppercase" style={{ color: themeNeon }}>
+          <div className="mt-2 text-center">
+            <span className="text-[10px] font-mono font-bold tracking-widest uppercase text-purple-300">
               {isOfflineOrStale
                 ? 'FEED OFFLINE'
-                : isCriticallyInvalidated
-                ? 'CRITICAL REVERSAL DETECTED'
-                : isNoTrade
-                ? 'PROTECTION / CHOP VETO'
                 : isServerLocked
-                ? `FINALIZED @ ${lockedAtFormatted}`
-                : isObserving
-                ? 'OBSERVING ORDER FLOW'
-                : isCalibrating
-                ? 'CALIBRATING ENGINE'
-                : isQualifying
-                ? 'QUALIFYING CONFLUENCE'
-                : isValidating
-                ? 'VALIDATING EVIDENCE'
-                : isReadyToLock
-                ? 'COMMITTING LOCK'
-                : 'SAMPLING 15M MATRIX'}
+                ? `LOCK CONFIRMED @ ${lockedAtFormatted}`
+                : '15M REAL-TIME MATRIX'}
             </span>
           </div>
         </div>
 
-        {/* ─── SECTION B: HERO DIRECTIONAL DECISION & ACTUAL CONFIDENCE CORE ─── */}
-        <div className="flex flex-col justify-center space-y-3 relative">
+        {/* SECTION B: HERO DIRECTIONAL DECISION & HEADLINE */}
+        <div className="flex flex-col justify-center space-y-4 relative">
           
-          {/* Top Directional Eyebrow */}
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[10px] sm:text-[11px] font-black tracking-[0.25em] uppercase transition-colors flex items-center gap-1.5"
-              style={{ color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : themeNeon }}
-            >
-              {isServerLocked && <Lock className="w-3 h-3 text-[#00FF9D]" />}
-              {isOfflineOrStale
-                ? 'DATA LINK INTERRUPTED'
-                : isCriticallyInvalidated
-                ? 'CRITICAL INVALIDATION TRIGGERED'
-                : isNoTrade
-                ? 'CYCLE FILTERED BY PROTECTION / CHOP GATE'
-                : isServerLocked
+          {/* Eyebrow Label */}
+          <div className="flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-purple-300/80">
+            {isServerLocked && <Lock className="w-3.5 h-3.5 text-emerald-400" />}
+            <span>
+              {isServerLocked
                 ? 'AUTHORITATIVE 15M CYCLE LOCK'
-                : isObserving
-                ? 'OBSERVING MARKET ORDER FLOW'
-                : isCalibrating
-                ? 'PREPARING CURRENT-CYCLE INTELLIGENCE'
-                : isQualifying
-                ? 'EVALUATING QUALIFICATION & GUARDIAN RISK'
-                : isValidating
-                ? 'CHECKING EVIDENCE AGREEMENT'
-                : isReadyToLock
-                ? 'FINALIZING NEURAL LOCK'
-                : 'EVALUATING CURRENT MARKET STRUCTURE'}
+                : 'EVALUATING MARKET STRUCTURE'}
             </span>
-            <span className="text-purple-600">|</span>
-            <span className="text-[9px] font-mono text-purple-400/70">
+            <span className="text-purple-800">|</span>
+            <span className="text-slate-400">
               STRIKE: ${lockedStrike.toLocaleString()}
             </span>
           </div>
 
-          {/* Directional Decision Card */}
-          <div 
-            className={`p-4 rounded-xl border transition-all duration-500 relative overflow-hidden ${
-              reversalDetected 
-                ? 'border-red-500/90 bg-red-950/10 vixy-animate-pulse-red' 
-                : isServerLocked 
-                  ? isUp 
-                    ? 'border-emerald-500/40 bg-[#020d08]' 
-                    : 'border-rose-500/40 bg-[#0e0205]' 
-                  : isYellowPulseActive
-                    ? 'border-yellow-500/80 bg-yellow-950/20 vixy-animate-pulse-yellow'
-                    : 'border-purple-900/40 bg-[#06020e]/60'
+          {/* Primary State Headline Banner */}
+          <div
+            className={`p-5 rounded-2xl border transition-all duration-300 relative overflow-hidden ${
+              reversalDetected
+                ? 'border-rose-500/60 bg-rose-950/20 text-rose-200'
+                : isServerLocked
+                ? isUp
+                  ? 'border-emerald-500/50 bg-emerald-950/20 text-emerald-200'
+                  : 'border-rose-500/50 bg-rose-950/20 text-rose-200'
+                : 'border-purple-800/40 bg-purple-950/30 text-purple-100'
             }`}
-            style={{
-              boxShadow: reversalDetected 
-                ? '0 0 25px rgba(239, 68, 68, 0.45)' 
-                : isYellowPulseActive
-                ? '0 0 20px rgba(234, 179, 8, 0.4)'
-                : 'none',
-            }}
           >
-            <div className="space-y-3.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[9.5px] font-bold tracking-[0.2em] text-purple-400/80 uppercase font-mono">
-                  {isServerLocked ? 'LOCKED DECISION' : isNoTrade ? 'CYCLE STATUS' : 'LIVE ANALYSIS'}
-                </span>
-                <span className={`text-[8.5px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-                  reversalDetected
-                    ? 'bg-red-950/60 text-red-400 border-red-500/40'
-                    : isYellowPulseActive
-                    ? 'bg-yellow-950/60 text-yellow-300 border-yellow-500/40 animate-pulse'
-                    : 'bg-purple-950/40 text-purple-300 border-purple-800/40'
-                }`}>
-                  {reversalDetected ? 'REVERSAL RISK ACTIVE' : isYellowPulseActive ? provisionalSubStatus : isServerLocked ? 'SECURE HARDWARE ENCLAVE' : provisionalSubStatus}
-                </span>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <div className="text-xs font-bold tracking-widest uppercase text-purple-300/70 mb-1">
+                  CURRENT ENGINE STATE
+                </div>
+                <div className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+                  <span>{primaryDecisionHeadline}</span>
+                  {isServerLocked && (
+                    <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 uppercase tracking-widest">
+                      LOCKED
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs font-medium text-purple-300/80 mt-1">
+                  {provisionalSubStatus}
+                </div>
               </div>
 
-              <div className="flex items-center justify-between flex-wrap gap-x-4 gap-y-3">
-                <div className="space-y-1">
-                  <div
-                    className={`text-4xl sm:text-5xl md:text-6xl font-black tracking-tight leading-none select-none flex items-center gap-2 ${!reversalDetected && !isYellowPulseActive ? 'hud-gradient-text' : ''}`}
-                    style={
-                      reversalDetected || isYellowPulseActive
-                        ? {
-                            color: isOfflineOrStale ? '#F43F5E' : reversalDetected ? '#EF4444' : '#FACC15',
-                            textShadow: reversalDetected 
-                              ? '0 0 25px rgba(239, 68, 68, 0.8)' 
-                              : isYellowPulseActive
-                              ? '0 0 25px rgba(234, 179, 8, 0.8)'
-                              : `0 0 35px ${isOfflineOrStale ? 'rgba(244,63,94,0.6)' : themeGlow}`,
-                          }
-                        : ({ '--grad-a': themeNeon, '--grad-b': '#f5f0ff', '--grad-c': themeNeon, '--grad-glow': themeGlow } as React.CSSProperties)
-                    }
-                  >
-                    <span>{primaryDecisionHeadline}</span>
-                    {isServerLocked && (
-                      <span 
-                        className={`text-3xl sm:text-4xl md:text-5xl ${reversalDetected ? 'animate-pulse text-red-500' : ''}`}
-                        style={{ 
-                          color: reversalDetected ? '#EF4444' : themeNeon,
-                          filter: reversalDetected ? 'drop-shadow(0 0 12px #EF4444)' : 'none'
-                        }}
-                      >
-                        {isUp ? '▲' : '▼'}
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="text-[10px] font-extrabold tracking-[0.15em] text-slate-300 uppercase font-mono">
-                    {provisionalSubStatus}
-                  </div>
-                </div>
-
-                {reversalDetected ? (
-                  <div className="text-right space-y-1 font-mono">
-                    <div className="inline-block bg-red-950/80 border border-red-500/50 text-red-400 px-2.5 py-1 rounded text-[10px] font-black tracking-wider uppercase animate-pulse">
-                      REVERSAL RISK ACTIVE
-                    </div>
-                    <div className="block text-[8px] font-black text-red-400/80 tracking-widest uppercase">
-                      LOCK SAFETY ACTIVE
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-right font-mono">
-                    <div className="text-xl sm:text-2xl font-black text-slate-100">
-                      {confidencePct}% CONFIDENCE
-                    </div>
-                    <div className="text-[8px] text-purple-400/70 font-bold uppercase tracking-widest">
-                      {isServerLocked ? 'PORTFOLIO PROTECTED' : 'CALIBRATED ESTIMATE'}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ─── INSTITUTIONAL EDGE, LOCK QUALITY, & EVIDENCE CONSENSUS STRIP ─── */}
-              <div className="pt-2.5 border-t border-purple-900/40 grid grid-cols-3 gap-2 font-mono text-[9px]">
-                <div className="hud-corners hud-stat-card bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
-                  <div className="hud-stat-label text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">INSTITUTIONAL EDGE</div>
-                  <div className={`hud-stat-value text-xs font-black tracking-tight ${rawEdge > 0 ? 'text-[#00FF9D]' : rawEdge < 0 ? 'text-[#FF3366]' : 'text-purple-300'}`}>
-                    {formattedEdgePct}
-                  </div>
-                </div>
-
-                <div className="hud-corners hud-stat-card bg-gradient-to-b from-[#1c0c01]/90 to-[#03010a]/95 rounded-lg p-2 border-2 border-orange-500/80 shadow-[0_0_15px_rgba(249,115,22,0.4)] animate-pulse">
-                  <div className="hud-stat-label text-orange-400 font-black uppercase text-[8px] tracking-widest">LOCK QUALITY</div>
-                  <div className="flex items-center justify-between mt-0.5">
-                    <span className="hud-stat-value text-xs font-black tracking-tight text-orange-400 drop-shadow-[0_0_8px_rgba(249,115,22,0.6)]">
-                      {rawLockQuality}/100
-                    </span>
-                    <span className="text-[7.5px] px-1 py-0.2 rounded font-black uppercase border bg-orange-950/80 text-orange-300 border-orange-500/50">
-                      {lockQualityTier === 'HIGH_CONVICTION' ? 'HIGH' : lockQualityTier === 'QUALIFIED' ? 'QUAL' : 'CALIB'}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="hud-corners hud-stat-card bg-[#03010a]/90 rounded-lg p-2 border border-purple-900/60">
-                  <div className="hud-stat-label text-purple-400/70 font-bold uppercase text-[8px] tracking-widest">EVIDENCE CONSENSUS</div>
-                  <div className="hud-stat-value text-xs font-black text-cyan-300 tracking-tight">
-                    {evidenceConfirmedCount} / {totalEvidenceCount} FAMILIES
-                  </div>
-                </div>
+              {/* Spot vs Strike telemetry pill */}
+              <div className="bg-[#05020d] p-3 rounded-xl border border-purple-900/40 text-right font-mono">
+                <div className="text-[10px] text-purple-400/70 font-bold uppercase tracking-wider">SPOT AT LOCK</div>
+                <div className="text-base font-black text-white">${lockedSpot.toLocaleString()}</div>
+                <div className="text-[10px] text-purple-300/70 font-bold mt-0.5">EDGE: {formattedEdgePct}</div>
               </div>
             </div>
           </div>
-
-          {/* ─── ACTUAL MODEL CONFIDENCE BLOCK (Reveals real authoritative % ─── */}
-          {!reversalDetected && (
-            <div className="p-3 sm:p-3.5 rounded-xl bg-[#06020e] border border-purple-900/50 space-y-2 relative">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-[9.5px] font-mono tracking-widest text-purple-400/80 uppercase font-bold">
-                    {isServerLocked ? 'LOCKED MODEL CONFIDENCE:' : 'LIVE CALIBRATING CONFIDENCE:'}
-                  </span>
-                  <span
-                    className="text-2xl sm:text-3xl font-black tracking-tight font-mono leading-none transition-all"
-                    style={{
-                      color: isOfflineOrStale ? '#F43F5E' : themeNeon,
-                      textShadow: `0 0 15px ${themeGlow}`,
-                    }}
-                  >
-                    {isOfflineOrStale ? '---' : `${exactConfidencePct}%`}
-                  </span>
-                </div>
-
-                {/* Exact Semantic Tier Badge */}
-                <div
-                  className={`text-[9px] sm:text-[10px] font-black tracking-[0.15em] uppercase px-2.5 py-1 rounded-md border text-center whitespace-nowrap transition-all ${
-                    isOfflineOrStale
-                      ? 'bg-rose-950/60 text-rose-300 border-rose-700/40'
-                      : confBand.badgeClass
-                  }`}
-                >
-                  {isOfflineOrStale ? 'STALE DATA STREAM' : confBand.fullLabel}
-                </div>
-              </div>
-
-              {/* Precision 0% ———●——— 100% Visual Calibration Slider */}
-              <div className="w-full space-y-1 pt-1">
-                <div className="relative h-2 bg-[#090314] rounded-full border border-purple-900/60 p-0.5 overflow-visible">
-                  {/* Meter Fill */}
-                  <div
-                    className="h-full rounded-full transition-all duration-500"
-                    style={{
-                      width: `${exactConfidencePct}%`,
-                      background: isUp
-                        ? 'linear-gradient(90deg, #10b981, #00FF9D)'
-                        : isDown
-                        ? 'linear-gradient(90deg, #f43f5e, #FF3366)'
-                        : '#8b5cf6',
-                      boxShadow: `0 0 8px ${themeGlow}`,
-                    }}
-                  />
-
-                  {/* Meter Pin Node */}
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow-lg transition-all duration-500 flex items-center justify-center"
-                    style={{
-                      left: `calc(${exactConfidencePct}% - 7px)`,
-                      backgroundColor: themeNeon,
-                      boxShadow: `0 0 10px ${themeNeon}`,
-                    }}
-                  >
-                    <div className="w-1 h-1 rounded-full bg-white animate-ping" />
-                  </div>
-                </div>
-
-                {/* Slider Ticks Scale */}
-                <div className="flex justify-between text-[7.5px] sm:text-[8px] font-mono text-purple-500/70 pt-0.5 px-0.5">
-                  <span>0%</span>
-                  <span className={exactConfidencePct >= 50 && exactConfidencePct < 60 ? 'text-purple-200 font-bold' : ''}>50% (DEVELOPING)</span>
-                  <span className={exactConfidencePct >= 60 && exactConfidencePct < 70 ? 'text-purple-200 font-bold' : ''}>60% (MODERATE)</span>
-                  <span className={exactConfidencePct >= 70 && exactConfidencePct < 80 ? 'text-purple-200 font-bold' : ''}>70% (STRONG)</span>
-                  <span className={exactConfidencePct >= 80 ? 'text-purple-200 font-bold' : ''}>80%+ (HIGH)</span>
-                  <span>100%</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ─── IMMUTABLE LOCK AUDIT DETAILS (When Locked) ─── */}
-          {isServerLocked && (
-            <div className="p-2.5 rounded-lg bg-[#04130d] border border-emerald-500/40 flex flex-wrap items-center justify-between gap-2 text-[9px] font-mono text-emerald-300">
-              <div className="flex items-center gap-2">
-                <Check className="w-3.5 h-3.5 text-[#00FF9D]" />
-                <span className="font-bold">ONE-CYCLE IMMUTABLE LOCK:</span>
-                <span>SPOT AT LOCK: ${lockedSpot.toLocaleString()}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-emerald-400/70">CYCLE: {cycleId.slice(0, 16)}</span>
-                <span className="text-emerald-500">|</span>
-                <span className="font-bold text-[#00FF9D]">LOCKED AT: {lockedAtFormatted}</span>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* ─── SECTION C: COMPACT REAL DIAGNOSTIC TELEMETRY NODES ─── */}
-      <div className="bg-[#05010b] rounded-xl border border-purple-900/40 p-2.5 sm:p-3 relative z-10 my-3">
-        <div className="flex items-center justify-between border-b border-purple-900/30 pb-1.5 text-[9px] font-bold text-purple-300 uppercase tracking-wider mb-2">
-          <span className="flex items-center gap-1.5">
-            <Activity className="w-3 h-3 text-purple-400" /> REAL INPUT VECTORS
+      {/* ─── SECTION C: SEPARATED REAL INPUT VECTORS (Direct Telemetry Row) ─── */}
+      <div className="mt-8 pt-6 border-t border-purple-900/30 relative z-10">
+        <div className="flex items-center justify-between mb-4">
+          <span className="text-xs font-bold text-purple-200 uppercase tracking-widest flex items-center gap-2">
+            <Activity className="w-4 h-4 text-purple-400" />
+            REAL INPUT VECTORS
           </span>
-          <span className="text-[8px] text-purple-400/60 font-mono">15M ENGINE INGESTION</span>
+          <span className="text-[10px] text-purple-400/70 font-mono uppercase tracking-wider">
+            15M ENGINE INGESTION
+          </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-[9.5px]">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           {diagnosticNodes.map((node) => (
             <div
               key={node.id}
-              className={`hud-corners px-2.5 py-1.5 rounded-lg border flex items-center justify-between transition-all duration-300 ${
+              className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all duration-300 ${
                 node.active
-                  ? 'bg-[#0a0316] border-purple-800/40 shadow-sm'
-                  : 'bg-[#06020c] border-purple-950/40 opacity-40'
+                  ? 'bg-[#06020d] border-purple-800/40 hover:border-purple-600/50'
+                  : 'bg-[#040108] border-purple-950/40 opacity-50'
               }`}
             >
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-purple-400/80 uppercase tracking-wider mb-2">
+                <span>{node.label}</span>
                 <span
-                  className={`w-3.5 h-3.5 rounded-full flex items-center justify-center font-black text-[9px] ${
+                  className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-black ${
                     node.sign === '+'
-                      ? 'bg-emerald-950 text-[#00FF9D] border border-emerald-600/50'
+                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-600/40'
                       : node.sign === '−'
-                      ? 'bg-rose-950 text-[#FF3366] border border-rose-600/50'
-                      : 'bg-purple-950 text-purple-300 border border-purple-700/50'
+                      ? 'bg-rose-950 text-rose-400 border border-rose-600/40'
+                      : 'bg-purple-950 text-purple-300 border border-purple-700/40'
                   }`}
                 >
                   {node.sign}
                 </span>
-                <span className="text-purple-200 font-bold text-[9px]">{node.label}</span>
               </div>
-              <span
-                className={`font-mono font-black text-[9px] ${
-                  node.isBull ? 'text-[#00FF9D]' : node.isBear ? 'text-[#FF3366]' : 'text-purple-300'
+              <div
+                className={`text-sm sm:text-base font-mono font-black tracking-wide ${
+                  node.isBull ? 'text-emerald-400' : node.isBear ? 'text-rose-400' : 'text-purple-200'
                 }`}
               >
                 {node.val}
-              </span>
+              </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* ─── SECTION D: HIGH-PROMINENCE FUTURISTIC EXECUTION BUTTON ─── */}
-      <div className="pt-3.5 relative z-10">
+      {/* ─── SECTION D: HIGH-PROMINENCE EXECUTION BUTTON ─── */}
+      <div className="mt-8 relative z-10">
         <button
           onClick={() => {
             if (onExecute) onExecute(isUp ? 'BUY_UP' : 'BUY_DOWN');
           }}
           disabled={isOfflineOrStale}
-          className={`w-full py-3.5 sm:py-4 px-6 rounded-xl font-black text-sm sm:text-base tracking-[0.2em] uppercase transition-all duration-300 flex items-center justify-center gap-3 relative overflow-hidden group shadow-2xl cursor-pointer ${
+          className={`w-full py-4 px-6 rounded-xl font-black text-sm sm:text-base tracking-[0.2em] uppercase transition-all duration-300 flex items-center justify-center gap-3 relative overflow-hidden group shadow-xl cursor-pointer ${
             isOfflineOrStale
-              ? 'bg-purple-950/40 border border-purple-900/50 text-purple-400 cursor-not-allowed'
+              ? 'bg-purple-950/40 border border-purple-900/50 text-purple-400/60 cursor-not-allowed'
               : isServerLocked
               ? isUp
-                ? 'bg-[#041d13] border-2 border-[#00FF9D] text-[#00FF9D] shadow-[0_0_35px_rgba(0,255,157,0.45)] active:scale-[0.99]'
-                : 'bg-[#1d040a] border-2 border-[#FF3366] text-[#FF3366] shadow-[0_0_35px_rgba(255,51,102,0.45)] active:scale-[0.99]'
-              : 'bg-[#0a0316] border border-cyan-500/60 text-cyan-300 shadow-[0_0_20px_rgba(6,182,212,0.25)] hover:border-cyan-400'
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-slate-950 shadow-emerald-500/20 active:scale-[0.99]'
+                : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-500/20 active:scale-[0.99]'
+              : 'bg-purple-600 hover:bg-purple-500 text-white shadow-purple-600/30 border border-purple-400/40 active:scale-[0.99]'
           }`}
-          style={{
-            textShadow: isOfflineOrStale ? 'none' : `0 0 15px ${themeGlow}`,
-          }}
         >
-          {/* Signal Sweep Shimmer Animation */}
-          {!isOfflineOrStale && (
-            <div className="absolute inset-0 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)] -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
-          )}
-
           {isServerLocked ? (
-            <Lock className="w-4 h-4 animate-pulse" />
+            <Lock className="w-5 h-5" />
           ) : (
-            <Zap className={`w-4 h-4 ${isOfflineOrStale ? 'text-purple-400' : 'animate-bounce'}`} />
+            <Zap className={`w-5 h-5 ${isOfflineOrStale ? 'text-purple-400' : 'animate-bounce'}`} />
           )}
           <span>
             {isOfflineOrStale
@@ -837,73 +512,52 @@ export const VixyNeuralEngine: React.FC<VixyNeuralEngineProps> = ({
               ? `⚡ LOCKED — ${primaryDecisionHeadline}`
               : '⚡ VIXY ANALYZING CYCLE...'}
           </span>
-          <ChevronRight className="w-4 h-4 opacity-70 group-hover:translate-x-1 transition-transform" />
+          <ChevronRight className="w-5 h-5 opacity-80 group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
       {/* ─── SECTION E: LIVE EXECUTION STATUS RAIL ─── */}
-      <div className="mt-3.5 pt-3 border-t border-purple-900/40 flex flex-wrap items-center justify-between gap-2.5 text-[8.5px] sm:text-[9.5px] font-mono text-purple-400/80 relative z-10">
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-4">
+      <div className="mt-6 pt-4 border-t border-purple-900/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-purple-300/70 relative z-10">
+        <div className="flex flex-wrap items-center gap-4">
           <span className="text-purple-300 font-bold uppercase tracking-wider">EXECUTION STATUS:</span>
-
-          <span
-            className={`flex items-center gap-1 font-bold transition-colors ${
-              isOfflineOrStale ? 'text-rose-400' : isMarketLinked ? 'text-emerald-400' : 'text-amber-400'
-            }`}
-          >
+          <span className="flex items-center gap-1.5 font-bold">
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isMarketLinked ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-amber-400 shadow-[0_0_6px_#fbbf24]'
+              className={`w-2 h-2 rounded-full ${
+                isOfflineOrStale ? 'bg-rose-400' : isMarketLinked ? 'bg-emerald-400' : 'bg-amber-400'
               }`}
             />
             MARKET LINKED
           </span>
-
-          <span
-            className={`flex items-center gap-1 font-bold transition-colors ${
-              isOfflineOrStale ? 'text-rose-400' : isModelValidated ? 'text-emerald-400' : 'text-purple-400'
-            }`}
-          >
+          <span className="flex items-center gap-1.5 font-bold">
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isModelValidated ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-purple-400 animate-pulse'
+              className={`w-2 h-2 rounded-full ${
+                isOfflineOrStale ? 'bg-rose-400' : isModelValidated ? 'bg-emerald-400' : 'bg-purple-400'
               }`}
             />
             MODEL VALIDATED
           </span>
-
-          <span
-            className={`flex items-center gap-1 font-bold transition-colors ${
-              isOfflineOrStale ? 'text-rose-400' : isSignalActive ? 'text-emerald-400' : 'text-cyan-400'
-            }`}
-          >
+          <span className="flex items-center gap-1.5 font-bold">
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isSignalActive ? 'bg-emerald-400 shadow-[0_0_6px_#34d399]' : 'bg-cyan-400 animate-pulse'
+              className={`w-2 h-2 rounded-full ${
+                isOfflineOrStale ? 'bg-rose-400' : isSignalActive ? 'bg-emerald-400' : 'bg-purple-400'
               }`}
             />
             SIGNAL ACTIVE
           </span>
-
-          <span
-            className={`flex items-center gap-1 font-bold transition-colors ${
-              isOfflineOrStale ? 'text-rose-400' : isServerLocked ? visualConfig.textClass : 'text-purple-400'
-            }`}
-          >
+          <span className="flex items-center gap-1.5 font-bold">
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
-                isOfflineOrStale ? 'bg-rose-400 shadow-[0_0_6px_#f43f5e]' : isServerLocked ? visualConfig.bgClass.replace('/10', '') : 'bg-purple-400 animate-pulse'
+              className={`w-2 h-2 rounded-full ${
+                isOfflineOrStale ? 'bg-rose-400' : isServerLocked ? 'bg-emerald-400' : 'bg-purple-400'
               }`}
-              style={{ backgroundColor: isServerLocked ? themeNeon : undefined, boxShadow: isServerLocked ? `0 0 6px ${themeNeon}` : undefined }}
             />
             CYCLE LOCKED
           </span>
         </div>
 
-        {/* 15M Cycle ID */}
+        {/* Contract Countdown */}
         <div className="flex items-center gap-2">
-          <span className="flex items-center gap-1 text-purple-300 font-bold bg-[#080212] px-2 py-0.5 rounded border border-purple-900/40">
-            <Clock className="w-3 h-3 text-purple-400" />
+          <span className="flex items-center gap-1.5 text-purple-200 font-bold bg-[#05020d] px-3 py-1 rounded-lg border border-purple-900/40">
+            <Clock className="w-3.5 h-3.5 text-purple-400" />
             <span>CONTRACT: {timeRemainingFormatted}</span>
           </span>
         </div>

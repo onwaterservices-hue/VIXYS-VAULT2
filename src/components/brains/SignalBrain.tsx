@@ -468,99 +468,52 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const spotVsStrikePct = targetPrice > 0 ? (spotVsStrikeDelta / targetPrice) * 100 : 0;
   const formattedSpotVsStrikeVal = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${safeToFixed(Math.abs(spotVsStrikeDelta), 2)}`;
   const formattedSpotVsStrikePct = `${spotVsStrikeDelta >= 0 ? '+' : '-'}${safeToFixed(Math.abs(spotVsStrikePct), 2)}%`;
-
   return (
-    <div className="space-y-4">
-      {/* TOP STATUS BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono tracking-widest uppercase pb-1">
-        <div className="flex items-center gap-6">
-          <div>
-            <div className="text-purple-500/70 mb-1">MARKET</div>
-            <div className="text-purple-100 font-bold">BTC KALSHI 15M</div>
+    <div className="space-y-8 sm:space-y-10 font-mono">
+      {/* CONSOLIDATED SINGLE STATUS BAR */}
+      <div className="bg-[#080414] rounded-2xl border border-purple-800/30 p-3.5 px-5 flex flex-wrap items-center justify-between gap-4 font-mono shadow-lg">
+        {/* Left: Live Price & Market Pair */}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_8px_#c084fc]" />
+            <span className="text-xs font-bold text-purple-300 uppercase tracking-widest">
+              BTC / USD
+            </span>
           </div>
-          <div>
-            <div className="text-purple-500/70 mb-1">VIXY SIGNAL</div>
-            <div className={`${isConnectedStatus ? 'text-emerald-400' : 'text-rose-400'} font-bold flex items-center gap-1`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${isConnectedStatus ? 'bg-emerald-400' : 'bg-rose-400'} animate-pulse`} />
-              {isConnectedStatus ? 'ONLINE' : 'OFFLINE'}
-            </div>
-          </div>
-          <div className={`px-3 py-1.5 rounded-full border ${
-            displayDecisionText === 'BUY UP' ? 'bg-[#041510] border-emerald-900/60 text-emerald-400' :
-            displayDecisionText === 'BUY DOWN' ? 'bg-[#1a050a] border-rose-900/60 text-rose-400' :
-            displayDecisionText === 'DATA STALE' ? 'bg-[#1a050a] border-rose-950 text-rose-500' :
-            'bg-purple-950/30 border-purple-900/60 text-purple-300'
-          } flex items-center gap-2 font-black shadow-lg`}>
-            <span className={`w-2 h-2 rounded-full ${
-              displayDecisionText === 'BUY UP' ? 'bg-emerald-400' :
-              displayDecisionText === 'BUY DOWN' ? 'bg-rose-500' :
-              displayDecisionText === 'DATA STALE' ? 'bg-rose-600' :
-              'bg-purple-400'
-            } shadow-sm`} />
-            {displayDecisionText} {displayCalibratedProb !== 'CALIBRATING' && displayDecisionText !== 'CALIBRATING' && displayDecisionText !== 'DATA STALE' ? displayCalibratedProb : ''} 
-            <span className="text-[8px] opacity-70 ml-1 font-normal">{calibrationStatus}</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div>
-            <div className="flex items-center gap-1 mb-1">
-              <span className="text-purple-500/70">LAST 10</span>
-              <div className="flex gap-1 ml-2">
-                {Array.from({ length: 10 }).map((_, idx) => {
-                  const item = displayLogs[idx];
-                  if (!item) {
-                    return (
-                      <span
-                        key={idx}
-                        className="w-1.5 h-1.5 rounded-full bg-purple-900/30 border border-purple-800/40"
-                        title="Pending settlement"
-                      />
-                    );
-                  }
-                  const outcome = (item.outcome || item.actualOutcome || item.direction || '').toUpperCase();
-                  const isUp = outcome === 'UP';
-                  return (
-                    <span
-                      key={idx}
-                      className={`w-1.5 h-1.5 rounded-full ${isUp ? 'bg-cyan-400' : 'bg-rose-500'}`}
-                      title={`${item.cycleId || 'Cycle'}: ${outcome} (Strike: ${item.strike || ''}, Settle: ${item.settlementPrice || ''})`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-            <div className="text-cyan-400/80 font-bold">
-              {totalResolved} RESOLVED • {displayDecisionText}
-            </div>
-          </div>
-          <div>
-            <div className="text-purple-500/70 mb-1">EXPIRY</div>
-            <div className="text-purple-100 font-bold">{timeString}</div>
-          </div>
-          <div>
-            <div className="text-purple-500/70 mb-1 flex items-center gap-1"><Radio className="w-3 h-3" /> LATENCY</div>
-            <div className="text-emerald-400 font-bold">{latencyMs}ms</div>
-          </div>
-        </div>
-      </div>
-
-      {/* MINIMAL AUTHORITATIVE LIVE STATUS INDICATOR */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-1.5 rounded-xl bg-[#090314]/90 border border-purple-900/40 text-[10px] font-mono shadow-md">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <span className={`flex items-center gap-1.5 font-extrabold tracking-wider ${freshnessState.statusClass}`}>
-            <span className={`w-2 h-2 rounded-full ${freshnessState.isLive ? 'bg-[#00FF9D] animate-pulse' : freshnessState.isStale ? 'bg-[#FF3366]' : 'bg-amber-400'}`} />
-            {freshnessState.label}
+          <span className="text-lg sm:text-xl font-black text-white tracking-tight">
+            ${ticker.price ? ticker.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '64,108.00'}
           </span>
-          <span className="text-purple-700">|</span>
-          <span className="text-purple-400 tracking-wider">MODEL <span className="text-cyan-300 font-bold">{rawApiData?.modelVersion || rawApiData?.learningEngine?.modelVersion || 'v4.3'}</span></span>
-          <span className="text-purple-700">|</span>
-          <span className="text-purple-400 tracking-wider">CALIBRATION <span className="text-amber-300 font-bold">{rawApiData?.calibrationVersion || (rawApiData?.calibrationSampleSize ? `v${rawApiData.calibrationSampleSize}` : 'v148')}</span></span>
-          <span className="text-purple-700">|</span>
-          <span className="text-purple-300 font-medium"><span className="text-emerald-400 font-bold">{rawApiData?.calibrationSampleSize ?? rawApiData?.sampleSize ?? rawApiData?.validationSampleSize ?? (totalResolved > 0 ? totalResolved : 148)}</span> VALID CYCLES</span>
+          <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-lg bg-purple-950/80 border border-purple-700/40 text-purple-300">
+            {timeframe} KALSHI
+          </span>
         </div>
-        <div className="text-purple-400/80 text-[9px] tracking-wider font-semibold">
-          UPDATED <span className="text-slate-200 font-bold">{freshnessState.ageText.toUpperCase()}</span>
+
+        {/* Right: Compact System-Health Cluster with muted text and color-coded dots */}
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs text-purple-300/70 font-mono">
+          <span className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${feedStatus === 'OFFLINE' ? 'bg-rose-500' : 'bg-emerald-400 animate-pulse'}`} />
+            <span>SIGNAL: <strong className={feedStatus === 'OFFLINE' ? 'text-rose-400 font-bold' : 'text-slate-200 font-bold'}>{feedStatus === 'OFFLINE' ? 'OFFLINE' : 'ONLINE'}</strong></span>
+          </span>
+          <span className="text-purple-800">|</span>
+          <span className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${latencyMs > 100 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            <span>LATENCY: <strong className="text-slate-200 font-bold">{latencyMs}ms</strong></span>
+          </span>
+          <span className="text-purple-800">|</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-purple-400" />
+            <span>MODEL: <strong className="text-slate-200 font-bold">{rawApiData?.modelVersion || 'v4.3'}</strong></span>
+          </span>
+          <span className="text-purple-800">|</span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-purple-400" />
+            <span>CALIB: <strong className="text-slate-200 font-bold">{rawApiData?.calibrationVersion || 'v148'}</strong></span>
+          </span>
+          <span className="text-purple-800">|</span>
+          <span className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full ${freshnessState.isStale ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+            <span>HEALTH: <strong className="text-slate-200 font-bold">{freshnessState.label}</strong></span>
+          </span>
         </div>
       </div>
 
