@@ -1,51 +1,148 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import {
   Flame,
   Zap,
   ShieldCheck,
-  ShieldAlert,
   Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Minus,
   Activity,
-  BarChart2,
-  TrendingUp,
-  TrendingDown,
-  Layers,
   Sparkles,
-  Radio,
-  ExternalLink,
-  RefreshCw,
   Sliders,
-  Maximize2,
-  Eye,
   CheckCircle2,
   Lock,
-  Compass,
-  DollarSign
+  Plus,
+  RotateCcw,
+  GripVertical,
+  X,
+  Maximize2,
+  Minimize2,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  Check,
+  Crown,
+  Eye,
+  SlidersHorizontal,
+  Layers,
+  BarChart2
 } from 'lucide-react';
 import { BTCTicker } from '../types';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
-import { NeuralRibbonChart } from './NeuralRibbonChart';
+import {
+  VIXY_LIVE_MODULES,
+  DEFAULT_VIXY_LIVE_LAYOUT,
+  ModuleSize,
+  getSizeSpanClass,
+  VixyLiveModuleDefinition
+} from '../config/vixyLiveModules';
+import { MODULE_COMPONENT_MAP } from './vixy-live-workspace/ModuleCards';
+import { auth, db } from '../lib/firebase';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 export interface VixyLiveWorkspaceProps {
   ticker?: BTCTicker;
   onOpenTerminal?: () => void;
   onOpenReplay?: () => void;
   onOpenPricing?: () => void;
+  userRole?: string;
+  hasActiveAccess?: boolean;
 }
+
+export interface WorkspaceModuleConfig {
+  id: string;
+  size: ModuleSize;
+  hidden?: boolean;
+}
+
+const DEFAULT_WORKSPACE_CONFIGS: WorkspaceModuleConfig[] = DEFAULT_VIXY_LIVE_LAYOUT.map((id) => {
+  const def = VIXY_LIVE_MODULES.find((m) => m.id === id);
+  return {
+    id,
+    size: def?.defaultSize || 'small',
+    hidden: false
+  };
+});
 
 export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
   ticker,
   onOpenTerminal,
   onOpenReplay,
-  onOpenPricing
+  onOpenPricing,
+  userRole = 'UNPAID',
+  hasActiveAccess = false
 }) => {
   const { decision: canonical15m, dataHealthStatus, localUpdatedAt } = useCanonical15mDecision();
   const [nowMs, setNowMs] = useState<number>(Date.now());
-  const [activeViewMode, setActiveViewMode] = useState<'grid' | 'compact'>('grid');
+  const [isCustomizeMode, setIsCustomizeMode] = useState<boolean>(false);
+  const [isModuleLibraryOpen, setIsModuleLibraryOpen] = useState<boolean>(false);
+  const [isSaveSuccess, setIsSaveSuccess] = useState<boolean>(false);
+
+  // Authenticated User Tracking
+  const [currentUserId, setCurrentUserId] = useState<string>(auth.currentUser?.uid || 'guest');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>(auth.currentUser?.email || '');
+
+  useEffect(() => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
+      if (user) {
+        setCurrentUserId(user.uid);
+        setCurrentUserEmail(user.email || '');
+      } else {
+        setCurrentUserId('guest');
+        setCurrentUserEmail('');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Entitlement / Pro Gating Check
+  const effectiveRole = (userRole || 'UNPAID').toUpperCase();
+  const isProOrAdmin = useMemo(() => {
+    if (['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(effectiveRole)) return true;
+    if (currentUserEmail.toLowerCase() === 'vixyvault0@gmail.com' || currentUserEmail.toLowerCase() === 'onwaterservices@gmail.com') return true;
+    return Boolean(hasActiveAccess);
+  }, [effectiveRole, currentUserEmail, hasActiveAccess]);
+
+  // Workspace layout state
+  const [moduleConfigs, setModuleConfigs] = useState<WorkspaceModuleConfig[]>(() => {
+    try {
+      const cached = localStorage.getItem('vixy_live_workspace_config');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return DEFAULT_WORKSPACE_CONFIGS;
+  });
+
+  // Load user workspace from Firestore / localStorage
+  useEffect(() => {
+    if (!currentUserId || currentUserId === 'guest') return;
+
+    let isMounted = true;
+    async function loadWorkspaceFromFirestore() {
+      try {
+        const userDocRef = doc(db, 'users', currentUserId);
+        const snap = await getDoc(userDocRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data?.vixyLiveWorkspace && Array.isArray(data.vixyLiveWorkspace.modules)) {
+            if (isMounted) {
+              setModuleConfigs(data.vixyLiveWorkspace.modules);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch workspace from Firestore, using local config:', err);
+      }
+    }
+
+    loadWorkspaceFromFirestore();
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserId]);
 
   // High precision second interval for authoritative cycle countdown
   useEffect(() => {
@@ -70,46 +167,96 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
   const mins = Math.floor(secondsRemaining / 60);
   const secs = secondsRemaining % 60;
   const cycleCountdown = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  const cycleProgressPct = Math.min(100, Math.max(0, ((900 - secondsRemaining) / 900) * 100));
-
-  // Direction & Lifecycle
-  const rawDirection = canonical15m.direction || 'UP';
-  const isUp = rawDirection === 'UP' || (rawDirection as any) === 'YES';
-  const isDown = rawDirection === 'DOWN' || (rawDirection as any) === 'NO';
-  const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
 
   const lifecycle = getNormalizedLifecycleState(canonical15m);
   const isLocked = lifecycle === 'LOCKED' || lifecycle === 'PROTECTED';
 
-  // Metrics
-  const confidence = canonical15m.confidence ?? 78;
-  const rawLockScore = canonical15m.lockScore ?? (canonical15m.lockEvaluation?.lockScore ?? 87);
-  const lockQuality = rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
-  const reversalRisk = canonical15m.reversalRisk ?? 22;
-  const regime = canonical15m.regime || 'TRENDING_BULL';
+  // Persistence handler
+  const saveWorkspace = useCallback(async (configs: WorkspaceModuleConfig[]) => {
+    try {
+      localStorage.setItem('vixy_live_workspace_config', JSON.stringify(configs));
+      if (currentUserId && currentUserId !== 'guest') {
+        const userDocRef = doc(db, 'users', currentUserId);
+        await setDoc(
+          userDocRef,
+          {
+            vixyLiveWorkspace: {
+              modules: configs,
+              updatedAt: new Date().toISOString()
+            }
+          },
+          { merge: true }
+        );
+      }
+      setIsSaveSuccess(true);
+      setTimeout(() => setIsSaveSuccess(false), 2000);
+    } catch (e) {
+      console.error('Failed to save workspace layout:', e);
+    }
+  }, [currentUserId]);
 
-  // Spot Price
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const spotChange = ticker?.change24h || 1.85;
-  const targetStrike = canonical15m.openStrike || (spotPrice - 38.50);
-  const strikeDelta = spotPrice - targetStrike;
+  // Layout mutators
+  const handleReorder = (newOrder: WorkspaceModuleConfig[]) => {
+    setModuleConfigs(newOrder);
+    saveWorkspace(newOrder);
+  };
 
-  // Mock real-time prints for Live Market Feed module
-  const livePrints = useMemo(() => [
-    { id: '1', venue: 'BINANCE', size: '12.45 BTC', price: spotPrice, side: 'BUY', time: '10:48:12' },
-    { id: '2', venue: 'COINBASE', size: '8.20 BTC', price: spotPrice - 1.1, side: 'BUY', time: '10:48:09' },
-    { id: '3', venue: 'BYBIT', size: '4.80 BTC', price: spotPrice + 0.9, side: 'SELL', time: '10:48:04' },
-    { id: '4', venue: 'OKX', size: '15.10 BTC', price: spotPrice + 0.4, side: 'BUY', time: '10:47:58' },
-    { id: '5', venue: 'KRAKEN', size: '3.60 BTC', price: spotPrice - 0.8, side: 'BUY', time: '10:47:51' },
-  ], [spotPrice]);
+  const handleToggleHide = (id: string) => {
+    const updated = moduleConfigs.map((m) => (m.id === id ? { ...m, hidden: !m.hidden } : m));
+    setModuleConfigs(updated);
+    saveWorkspace(updated);
+  };
+
+  const handleResize = (id: string, newSize: ModuleSize) => {
+    const updated = moduleConfigs.map((m) => (m.id === id ? { ...m, size: newSize } : m));
+    setModuleConfigs(updated);
+    saveWorkspace(updated);
+  };
+
+  const handleMove = (index: number, direction: 'up' | 'down') => {
+    const newIdx = direction === 'up' ? index - 1 : index + 1;
+    if (newIdx < 0 || newIdx >= moduleConfigs.length) return;
+    const next = [...moduleConfigs];
+    const temp = next[index];
+    next[index] = next[newIdx];
+    next[newIdx] = temp;
+    setModuleConfigs(next);
+    saveWorkspace(next);
+  };
+
+  const handleResetLayout = () => {
+    setModuleConfigs(DEFAULT_WORKSPACE_CONFIGS);
+    saveWorkspace(DEFAULT_WORKSPACE_CONFIGS);
+  };
+
+  const handleAddModule = (id: string) => {
+    const exists = moduleConfigs.some((m) => m.id === id);
+    let updated: WorkspaceModuleConfig[];
+    if (exists) {
+      updated = moduleConfigs.map((m) => (m.id === id ? { ...m, hidden: false } : m));
+    } else {
+      const def = VIXY_LIVE_MODULES.find((m) => m.id === id);
+      updated = [...moduleConfigs, { id, size: def?.defaultSize || 'small', hidden: false }];
+    }
+    setModuleConfigs(updated);
+    saveWorkspace(updated);
+  };
+
+  const visibleConfigs = useMemo(() => {
+    return moduleConfigs.filter((m) => !m.hidden);
+  }, [moduleConfigs]);
+
+  const hiddenCount = useMemo(() => {
+    return moduleConfigs.filter((m) => m.hidden).length;
+  }, [moduleConfigs]);
 
   return (
     <div className="min-h-screen bg-[#05040a] p-3 sm:p-5 md:p-6 lg:p-8 text-slate-200 font-sans space-y-6">
       
-      {/* 1. TOP COMMAND DECK BAR */}
+      {/* 1. TOP COMMAND DECK & CUSTOMIZATION TOOLBAR */}
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-lg">
         
-        {/* Left: Deck Branding & Cycle Status */}
+        {/* Left: Branding & Subtitle */}
         <div className="flex flex-wrap items-center gap-3 sm:gap-4">
           <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-600/50 text-amber-400 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
             <Flame className="w-6 h-6 text-amber-400" />
@@ -122,14 +269,19 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
               <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-700/50 text-[10px] font-mono font-bold">
                 COMMAND DECK
               </span>
+              {isCustomizeMode && (
+                <span className="px-2 py-0.5 rounded-full bg-purple-900 text-purple-200 border border-purple-500/50 text-[10px] font-mono font-bold animate-pulse">
+                  EDIT MODE
+                </span>
+              )}
             </div>
             <p className="text-slate-400 text-xs font-sans">
-              Personal multi-module quantitative trading terminal • Cycle {canonical15m.contractId || canonical15m.decisionId}
+              Personal modular quantitative terminal • Cycle {canonical15m.contractId || canonical15m.decisionId}
             </p>
           </div>
         </div>
 
-        {/* Center/Right: Live Telemetry Status Pills & Actions */}
+        {/* Center/Right: Live Telemetry, Gated Customize Mode & Actions */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-xs font-mono w-full xl:w-auto justify-start xl:justify-end">
           
           {/* Feed Health */}
@@ -155,6 +307,30 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
             <span>{lifecycle}</span>
           </div>
 
+          {/* CUSTOMIZE TOGGLE BUTTON (PRO/ELITE GATED) */}
+          {isProOrAdmin ? (
+            <button
+              onClick={() => setIsCustomizeMode(!isCustomizeMode)}
+              className={`px-3.5 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                isCustomizeMode
+                  ? 'bg-purple-600 hover:bg-purple-500 text-white border border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.4)]'
+                  : 'bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-700/60'
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              <span>{isCustomizeMode ? 'Done Customizing' : 'Customize'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={onOpenPricing}
+              title="Drag & drop modular customization requires PRO or Elite Pass"
+              className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-amber-500/40 text-amber-300 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>Unlock Customizer (Pro)</span>
+            </button>
+          )}
+
           {/* Nav Links */}
           {onOpenTerminal && (
             <button
@@ -178,408 +354,263 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* 2. COMMAND-DECK MODULAR GRID */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-
-        {/* MODULE 1: CURRENT SIGNAL & DIRECTION */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Compass className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">CURRENT SIGNAL</span>
-            </div>
-            <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-              isUp ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-              isDown ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-              'bg-purple-950 text-purple-300 border border-purple-800'
-            }`}>
-              15M AUTHORITATIVE
-            </span>
-          </div>
-
-          <div className="flex items-center gap-3.5">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-inner ${
-              isUp ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' :
-              isDown ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]' :
-              'bg-purple-950/80 border-purple-500/50 text-purple-300'
-            }`}>
-              {isUp ? <ArrowUpRight className="w-7 h-7" /> : isDown ? <ArrowDownRight className="w-7 h-7" /> : <Minus className="w-7 h-7" />}
-            </div>
-            <div>
-              <div className={`text-2xl font-black font-sans tracking-tight ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
-                {rawDirection}
-              </div>
-              <div className="text-[11px] text-slate-400 font-mono">
-                STRIKE: <strong className="text-white">${targetStrike.toFixed(2)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>DELTA TO STRIKE</span>
-            <span className={`font-bold ${strikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {strikeDelta >= 0 ? '+' : ''}${strikeDelta.toFixed(2)}
-            </span>
-          </div>
-        </div>
-
-        {/* MODULE 2: CALIBRATION CONFIDENCE */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Sparkles className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">CALIBRATION</span>
-            </div>
-            <span className="text-purple-300 font-mono text-[10px] font-bold">MODEL CONVICTION</span>
-          </div>
-
-          <div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-3xl font-black text-white font-mono">{confidence}%</span>
-              <span className="text-xs font-bold text-emerald-400 font-mono">HIGH TIER</span>
-            </div>
-            {/* Progress Bar */}
-            <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400"
-                style={{ width: `${confidence}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>EVIDENCE CONFLUENCE</span>
-            <span className="text-slate-200 font-bold">{canonical15m.evidenceAlignment ?? 8}/10 GATES ALIGNED</span>
-          </div>
-        </div>
-
-        {/* MODULE 3: LOCK QUALITY */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Lock className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">LOCK QUALITY</span>
-            </div>
-            <span className="text-emerald-400 font-mono text-[10px] font-black">{lockQuality} / 100</span>
-          </div>
-
-          <div>
-            <div className="text-xl font-black text-white font-sans">
-              {lockQuality >= 80 ? 'OPTIMAL LOCK' : lockQuality >= 60 ? 'STRONG LOCK' : 'MODERATE LOCK'}
-            </div>
-            <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-purple-600 to-emerald-400"
-                style={{ width: `${Math.min(100, Math.max(0, lockQuality))}%` }}
-              />
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>PROTECTION STABILITY</span>
-            <span className="text-emerald-400 font-bold">98.4% RETENTION</span>
-          </div>
-        </div>
-
-        {/* MODULE 4: REVERSAL RISK & VIXY PROTECTION */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">REVERSAL RISK</span>
-            </div>
-            <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-              reversalRisk < 30 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-              reversalRisk < 50 ? 'bg-amber-950 text-amber-400 border border-amber-800' :
-              'bg-rose-950 text-rose-400 border border-rose-800'
-            }`}>
-              {reversalRisk < 30 ? 'LOW HAZARD' : reversalRisk < 50 ? 'MODERATE' : 'ELEVATED'}
-            </span>
-          </div>
-
-          <div className="flex items-baseline justify-between">
-            <span className={`text-3xl font-black font-mono ${reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {reversalRisk}%
-            </span>
-            <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 font-mono">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>{isLocked ? 'PROTECTED' : 'MONITORING'}</span>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>DOWNSTREAM SAFETY</span>
-            <span className="text-slate-300 font-bold">HARD STOP AT 62%</span>
-          </div>
-        </div>
-
-        {/* MODULE 5: LIVE SPOT PRICE & 24H DELTA */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <DollarSign className="w-4 h-4" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">BTC / USD SPOT</span>
-            </div>
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          </div>
-
-          <div>
-            <div className="text-2xl sm:text-3xl font-black text-white font-mono">
-              ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
-                spotChange >= 0 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950 text-rose-400 border border-rose-800/40'
-              }`}>
-                {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}% (24h)
+      {/* 2. CUSTOMIZE ACTION BAR (Visible when customize mode is active) */}
+      <AnimatePresence>
+        {isCustomizeMode && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="p-4 rounded-2xl bg-[#0e0a22] border border-purple-600/40 flex flex-wrap items-center justify-between gap-4 font-mono text-xs shadow-xl"
+          >
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-purple-300 font-bold flex items-center gap-1.5">
+                <SlidersHorizontal className="w-4 h-4 text-purple-400" />
+                WORKSPACE EDITOR:
               </span>
-              <span className="text-[10.5px] text-slate-400 font-mono">BINANCE FEED</span>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>24H SPREAD</span>
-            <span className="text-slate-300 font-bold">$63,890 — $65,240</span>
-          </div>
-        </div>
-
-        {/* MODULE 6: MOMENTUM VECTOR & VELOCITY */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Zap className="w-4 h-4 text-amber-400" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">MOMENTUM</span>
-            </div>
-            <span className="text-amber-400 font-mono text-[10px] font-bold">15S VELOCITY</span>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-baseline justify-between">
-              <span className="text-2xl font-black text-emerald-400 font-mono">+18.4</span>
-              <span className="text-xs text-slate-400 font-mono">RSI (14): 64.2</span>
-            </div>
-            <p className="text-[11px] text-slate-300 font-sans">
-              Aggressive buyer absorption pushing past VWAP band.
-            </p>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>ACCELERATION</span>
-            <span className="text-cyan-400 font-bold">+2.4σ BULL BURST</span>
-          </div>
-        </div>
-
-        {/* MODULE 7: MARKET REGIME & TREND CONTINUITY */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <TrendingUp className="w-4 h-4 text-emerald-400" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">REGIME & TREND</span>
-            </div>
-            <span className="text-purple-300 font-mono text-[10px] font-bold">SUPERTREND</span>
-          </div>
-
-          <div className="space-y-1">
-            <div className="text-xl font-black text-white font-mono uppercase">
-              {regime.replace('_', ' ')}
-            </div>
-            <p className="text-[11px] text-slate-300 font-sans">
-              EMA 9 &gt; 21 &gt; 50 stacked bullish on 15M / 1H frames.
-            </p>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>CONTINUITY SCORE</span>
-            <span className="text-emerald-400 font-bold">8.4 / 10 STRONG</span>
-          </div>
-        </div>
-
-        {/* MODULE 8: ORDER FLOW & TAKER DELTA */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <BarChart2 className="w-4 h-4 text-cyan-400" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">ORDER FLOW</span>
-            </div>
-            <span className="text-cyan-400 font-mono text-[10px] font-bold">CROSS-VENUE</span>
-          </div>
-
-          <div>
-            <div className="text-2xl font-black text-emerald-400 font-mono">+$28.4M</div>
-            <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-              Net Taker Buy Volume Delta (CVD)
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>BUY / SELL RATIO</span>
-            <span className="text-emerald-400 font-bold">64.8% BUY SIDE</span>
-          </div>
-        </div>
-
-        {/* MODULE 9: VOLUME PROFILE & LIQUIDITY DEPTH */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Layers className="w-4 h-4 text-purple-300" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">VOLUME & DEPTH</span>
-            </div>
-            <span className="text-purple-300 font-mono text-[10px] font-bold">LIQUIDITY</span>
-          </div>
-
-          <div>
-            <div className="text-2xl font-black text-white font-mono">$1.42B</div>
-            <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-              24h Spot Turnover • Deep Book
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>BID / ASK SPREAD</span>
-            <span className="text-emerald-400 font-bold">$0.10 (TIGHT)</span>
-          </div>
-        </div>
-
-        {/* MODULE 10: NEURAL RIBBON / CHART (Span 2 cols on lg) */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 lg:col-span-2 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Activity className="w-4 h-4 text-emerald-400" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">NEURAL RIBBON & CONVERGENCE</span>
-            </div>
-            <span className="text-cyan-400 font-mono text-[10px] font-bold">BANDWIDTH 3.2% (EXPANDING)</span>
-          </div>
-
-          {/* Neural Ribbon Spectrum Graphic */}
-          <div className="space-y-2 py-1">
-            <div className="flex items-center justify-between text-xs font-mono">
-              <span className="text-slate-400">EMA CLUSTER SPREAD:</span>
-              <span className="text-emerald-400 font-bold">BULLISH DIVERGENCE</span>
-            </div>
-            <div className="w-full h-5 rounded-lg bg-[#070512] border border-purple-900/40 p-1 flex gap-1 items-center">
-              <div className="h-full flex-1 rounded bg-emerald-500/80 animate-pulse" />
-              <div className="h-full flex-1 rounded bg-emerald-400" />
-              <div className="h-full flex-1 rounded bg-cyan-400" />
-              <div className="h-full flex-1 rounded bg-purple-500" />
-              <div className="h-full flex-1 rounded bg-indigo-500" />
-            </div>
-            <div className="flex justify-between text-[9.5px] text-slate-500 font-mono">
-              <span>FAST EMA (9)</span>
-              <span>MEDIUM (21)</span>
-              <span>SLOW (50)</span>
-              <span>BASELINE (200)</span>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>SQUEEZE STATE</span>
-            <span className="text-emerald-400 font-bold">EXPANSION PHASE ACTIVE</span>
-          </div>
-        </div>
-
-        {/* MODULE 11: LIVE MARKET FEED (Real-time tape) */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">LIVE FEED TAPE</span>
-            </div>
-            <span className="text-emerald-400 font-mono text-[9px] font-bold uppercase">STREAMING</span>
-          </div>
-
-          <div className="space-y-1.5">
-            {livePrints.map((p) => (
-              <div key={p.id} className="flex items-center justify-between text-[10.5px] font-mono p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30">
-                <span className="text-purple-300 font-bold">{p.venue}</span>
-                <span className="text-white">{p.size}</span>
-                <span className={`font-bold ${p.side === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ${p.price.toFixed(2)}
+              <span className="text-slate-400">
+                Drag modules to reorder, resize blocks, or toggle module visibility.
+              </span>
+              {hiddenCount > 0 && (
+                <span className="px-2 py-0.5 rounded bg-amber-950 border border-amber-700/50 text-amber-300 font-bold">
+                  {hiddenCount} hidden {hiddenCount === 1 ? 'module' : 'modules'}
                 </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              <button
+                onClick={() => setIsModuleLibraryOpen(!isModuleLibraryOpen)}
+                className="px-3 py-1.5 rounded-xl bg-purple-900/70 hover:bg-purple-800 text-purple-200 border border-purple-600/60 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isModuleLibraryOpen ? 'Hide Library' : 'Add / Restore Modules'}</span>
+              </button>
+
+              <button
+                onClick={handleResetLayout}
+                className="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700 transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Defaults</span>
+              </button>
+
+              {isSaveSuccess && (
+                <span className="text-emerald-400 flex items-center gap-1 font-bold animate-pulse">
+                  <Check className="w-3.5 h-3.5" /> Saved
+                </span>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 3. MODULE LIBRARY / RESTORE TRAY (When open in customize mode) */}
+      <AnimatePresence>
+        {isCustomizeMode && isModuleLibraryOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-4 rounded-2xl bg-[#090614] border border-purple-800/60 space-y-3"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-mono font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Layers className="w-4 h-4 text-purple-400" />
+                AVAILABLE MODULE REGISTRY
+              </span>
+              <button
+                onClick={() => setIsModuleLibraryOpen(false)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 font-sans">
+              {VIXY_LIVE_MODULES.map((mod) => {
+                const isCurrentlyActive = moduleConfigs.some((m) => m.id === mod.id && !m.hidden);
+                const IconComponent = mod.icon;
+
+                return (
+                  <div
+                    key={mod.id}
+                    className={`p-3 rounded-xl border transition-all flex items-center justify-between ${
+                      isCurrentlyActive
+                        ? 'bg-purple-950/30 border-purple-900/40 opacity-60'
+                        : 'bg-[#0e0a22] border-purple-600/50 hover:border-purple-400'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="p-1.5 rounded-lg bg-purple-900/50 text-purple-300 flex-shrink-0">
+                        <IconComponent className="w-4 h-4" />
+                      </div>
+                      <div className="truncate">
+                        <div className="text-xs font-bold text-white truncate">{mod.title}</div>
+                        <div className="text-[10px] text-slate-400 font-mono capitalize">{mod.category}</div>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleAddModule(mod.id)}
+                      disabled={isCurrentlyActive}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all flex-shrink-0 ${
+                        isCurrentlyActive
+                          ? 'bg-slate-800 text-slate-500 cursor-default'
+                          : 'bg-purple-600 hover:bg-purple-500 text-white cursor-pointer shadow-[0_0_8px_rgba(168,85,247,0.3)]'
+                      }`}
+                    >
+                      {isCurrentlyActive ? 'Active' : '+ Add'}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 4. DRAG-AND-DROP MODULAR GRID (Reorder with Framer Motion) */}
+      {isCustomizeMode ? (
+        <Reorder.Group
+          axis="y"
+          values={moduleConfigs}
+          onReorder={handleReorder}
+          className="space-y-4 font-mono"
+        >
+          {moduleConfigs.map((config, index) => {
+            const modDef = VIXY_LIVE_MODULES.find((m) => m.id === config.id);
+            if (!modDef) return null;
+            const ComponentToRender = MODULE_COMPONENT_MAP[config.id];
+            if (!ComponentToRender) return null;
+            const IconComp = modDef.icon;
+
+            return (
+              <Reorder.Item
+                key={config.id}
+                value={config}
+                className={`p-4 rounded-2xl bg-[#090614] border ${
+                  config.hidden
+                    ? 'border-dashed border-slate-800/60 opacity-50'
+                    : 'border-purple-700/60 shadow-lg'
+                } relative`}
+              >
+                {/* Module Edit Header Controls */}
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-purple-900/40 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="cursor-grab active:cursor-grabbing p-1.5 rounded-lg bg-purple-900/50 hover:bg-purple-800 text-purple-300">
+                      <GripVertical className="w-4 h-4" />
+                    </div>
+                    <IconComp className="w-4 h-4 text-purple-400" />
+                    <span className="font-bold text-white uppercase">{modDef.title}</span>
+                    <span className="text-[10px] text-slate-400 font-sans">({config.size})</span>
+                  </div>
+
+                  {/* Size Picker & Hide/Show controls */}
+                  <div className="flex items-center gap-1.5 font-sans">
+                    {/* Size Selector */}
+                    <div className="flex items-center gap-1 bg-[#05040a] p-1 rounded-lg border border-purple-900/40">
+                      {(['small', 'medium', 'large', 'full-width'] as ModuleSize[]).map((sz) => (
+                        <button
+                          key={sz}
+                          onClick={() => handleResize(config.id, sz)}
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all capitalize ${
+                            config.size === sz
+                              ? 'bg-purple-600 text-white font-bold'
+                              : 'text-slate-400 hover:text-slate-200'
+                          }`}
+                        >
+                          {sz === 'full-width' ? 'Full' : sz}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Up / Down Move fallback buttons */}
+                    <button
+                      onClick={() => handleMove(index, 'up')}
+                      disabled={index === 0}
+                      className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30"
+                      title="Move up"
+                    >
+                      <ChevronUp className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleMove(index, 'down')}
+                      disabled={index === moduleConfigs.length - 1}
+                      className="p-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 disabled:opacity-30"
+                      title="Move down"
+                    >
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Hide Button */}
+                    <button
+                      onClick={() => handleToggleHide(config.id)}
+                      className="p-1 rounded bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-800/60"
+                      title={config.hidden ? 'Restore module' : 'Hide module'}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Card Preview Content */}
+                {!config.hidden && (
+                  <div className="opacity-80 pointer-events-none">
+                    <ComponentToRender
+                      canonical15m={canonical15m}
+                      ticker={ticker}
+                      dataHealthStatus={dataHealthStatus}
+                      localUpdatedAt={localUpdatedAt}
+                      nowMs={nowMs}
+                      onOpenTerminal={onOpenTerminal}
+                      onOpenReplay={onOpenReplay}
+                      onOpenPricing={onOpenPricing}
+                      isEditMode={true}
+                    />
+                  </div>
+                )}
+                {config.hidden && (
+                  <div className="py-2 text-center text-xs text-slate-500 font-sans">
+                    Module hidden from personal dashboard view
+                  </div>
+                )}
+              </Reorder.Item>
+            );
+          })}
+        </Reorder.Group>
+      ) : (
+        /* STANDARD RESPONSIVE GRID (Live View) */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {visibleConfigs.map((config) => {
+            const modDef = VIXY_LIVE_MODULES.find((m) => m.id === config.id);
+            if (!modDef) return null;
+            const ComponentToRender = MODULE_COMPONENT_MAP[config.id];
+            if (!ComponentToRender) return null;
+
+            const spanClass = getSizeSpanClass(config.size);
+
+            return (
+              <div
+                key={config.id}
+                className={`p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between group hover:border-purple-600/50 transition-all ${spanClass}`}
+              >
+                <ComponentToRender
+                  canonical15m={canonical15m}
+                  ticker={ticker}
+                  dataHealthStatus={dataHealthStatus}
+                  localUpdatedAt={localUpdatedAt}
+                  nowMs={nowMs}
+                  onOpenTerminal={onOpenTerminal}
+                  onOpenReplay={onOpenReplay}
+                  onOpenPricing={onOpenPricing}
+                  isEditMode={false}
+                />
               </div>
-            ))}
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>TAPE FLOW</span>
-            <span className="text-emerald-400 font-bold">+84% BUY DELTA</span>
-          </div>
+            );
+          })}
         </div>
-
-        {/* MODULE 12: CROSS-VENUE ODDS (Kalshi & Polymarket) */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Sparkles className="w-4 h-4 text-cyan-400" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">CROSS-VENUE ODDS</span>
-            </div>
-            <span className="text-cyan-400 font-mono text-[10px] font-bold">PREDICTION MARKETS</span>
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center justify-between p-2 rounded-xl bg-[#0e0a22] border border-purple-900/30">
-              <span className="text-xs font-bold text-slate-300 font-sans">KALSHI 15M</span>
-              <span className="text-xs font-bold font-mono text-emerald-400">YES 58¢ • NO 42¢</span>
-            </div>
-            <div className="flex items-center justify-between p-2 rounded-xl bg-[#0e0a22] border border-purple-900/30">
-              <span className="text-xs font-bold text-slate-300 font-sans">POLYMARKET</span>
-              <span className="text-xs font-bold font-mono text-emerald-400">UP 59% (+$420K)</span>
-            </div>
-          </div>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-            <span>VENUE ARBITRAGE</span>
-            <span className="text-emerald-400 font-bold">+1.2% BULLISH PREM</span>
-          </div>
-        </div>
-
-        {/* MODULE 13: VIXY REASONING & HYPOTHESIS READ (Span 3 cols on xl) */}
-        <div className="p-4 rounded-2xl bg-[#090614] border border-purple-900/40 shadow-sm flex flex-col justify-between space-y-3 lg:col-span-2 xl:col-span-3 group hover:border-purple-600/50 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-                <Sparkles className="w-4 h-4 text-purple-300" />
-              </div>
-              <span className="text-xs font-mono font-bold text-slate-300 uppercase tracking-wider">VIXY REASONING SYNTHESIS</span>
-            </div>
-            <span className="text-purple-300 font-mono text-[10px] font-bold">NEURAL EVIDENCE MATRIX</span>
-          </div>
-
-          <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
-            {canonical15m.gemini?.primaryHypothesis ||
-              "Multi-venue taker flow alignment synchronized with 15M cycle policy. Order book imbalance exhibits heavy ask depletion across Binance and Coinbase, confirming directional persistence above current strike."}
-          </p>
-
-          <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex flex-wrap justify-between gap-2">
-            <span>CONTRACT HASH: <strong className="text-slate-300">{canonical15m.contractId || canonical15m.decisionId}</strong></span>
-            <span>LAST SYNC: <strong className="text-slate-300">{new Date(localUpdatedAt || nowMs).toLocaleTimeString()}</strong></span>
-          </div>
-        </div>
-
-      </div>
+      )}
 
     </div>
   );

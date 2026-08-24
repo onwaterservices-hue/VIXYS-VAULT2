@@ -8,6 +8,8 @@ interface VixyLiveViewProps {
   onOpenTerminal?: () => void;
   onOpenReplay?: () => void;
   onOpenPricing?: () => void;
+  userRole?: string;
+  hasActiveAccess?: boolean;
 }
 
 class VixyLiveErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
@@ -39,8 +41,12 @@ export const VixyLiveView: React.FC<VixyLiveViewProps> = (props) => {
   return (
     <VixyLiveErrorBoundary>
       <VixyLiveWorkspace
-        initialTicker={props.ticker}
+        ticker={props.ticker}
         onOpenTerminal={props.onOpenTerminal}
+        onOpenReplay={props.onOpenReplay}
+        onOpenPricing={props.onOpenPricing}
+        userRole={props.userRole}
+        hasActiveAccess={props.hasActiveAccess}
       />
     </VixyLiveErrorBoundary>
   );

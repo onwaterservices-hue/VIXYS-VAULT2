@@ -1181,6 +1181,8 @@ export default function App() {
           {activeTab === 'vixylive' && (
             <VixyLiveView
               ticker={ticker}
+              userRole={userRole}
+              hasActiveAccess={hasActiveAccess}
               onOpenTerminal={() => setActiveTab('terminal')}
               onOpenReplay={() => setActiveTab('replay')}
               onOpenPricing={() => setActiveTab('pricing')}
