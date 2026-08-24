@@ -2,8 +2,8 @@
 // Internal tab keys (used everywhere else in the app as `activeTab === '...'`)
 // are unchanged by this file — this only controls what shows in the address bar.
 export const TAB_TO_PATH: Record<string, string> = {
-  hub: '/hub',
-  landing: '/',
+  hub: '/',
+  landing: '/landing',
   terminal: '/dashboard',
   vixylive: '/vixy-live',
   compare: '/asset-compare',

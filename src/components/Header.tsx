@@ -99,6 +99,19 @@ export const Header: React.FC<HeaderProps> = ({
 
   const { signal: apiSignal, status: modelStatus } = useLiveSignal(selectedAsset || 'BTC', selectedTimeframe || '15M');
 
+  const [isScrolled, setIsScrolled] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      setIsScrolled(scrollY >= 80);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
   const {
     isAuthenticated,
     hasActiveAccess,
@@ -133,9 +146,11 @@ export const Header: React.FC<HeaderProps> = ({
 
   if (activeTab === 'landing') {
     return (
-      <header className="sticky top-0 z-40 bg-[#0a0518]/95 backdrop-blur-md border-b border-purple-900/40 text-purple-100 font-sans">
+      <header className="sticky top-0 z-40 bg-[#0a0518]/95 backdrop-blur-md border-b border-purple-900/40 text-purple-100 font-sans transition-all duration-300 ease-in-out">
         {/* Top System Status Bar */}
-        <div className="bg-[#0c0620] px-4 py-1.5 text-xs border-b border-purple-900/30 flex items-center justify-between font-mono">
+        <div className={`bg-[#0c0620] text-xs border-purple-900/30 flex items-center justify-between font-mono transition-all duration-300 ease-in-out overflow-hidden ${
+          isScrolled ? 'max-h-0 opacity-0 py-0 border-b-0' : 'max-h-12 opacity-100 py-1.5 border-b px-4'
+        }`}>
           <div className="flex items-center gap-2 mx-auto text-purple-300 text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" />
             <span className="text-amber-300 font-bold">VIXY SYSTEM ACTIVE:</span>
@@ -145,9 +160,11 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Dedicated Public Landing Header Bar */}
-        <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-8 h-16 flex items-center justify-between gap-4 font-mono">
+        <div className={`w-full max-w-[1700px] mx-auto px-4 sm:px-8 flex items-center justify-between gap-4 font-mono transition-all duration-300 ease-in-out ${
+          isScrolled ? 'h-12' : 'h-16'
+        }`}>
           {/* Logo */}
-          <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('landing')} />
+          <Logo size={isScrolled ? 'sm' : 'md'} showText={!isScrolled} showSubtitle={!isScrolled} onClick={() => setActiveTab('landing')} />
 
           {/* Public Navigation */}
           <nav className="hidden md:flex items-center gap-6 text-xs font-bold text-purple-200">
@@ -287,9 +304,11 @@ export const Header: React.FC<HeaderProps> = ({
   }
 
   return (
-    <header className="sticky top-0 z-40 bg-[#06030d]/95 backdrop-blur-xl border-b border-purple-500/30 shadow-[0_4px_25px_rgba(147,51,234,0.15)] text-purple-100">
+    <header className="sticky top-0 z-40 bg-[#06030d]/95 backdrop-blur-xl border-b border-purple-500/30 shadow-[0_4px_25px_rgba(147,51,234,0.15)] text-purple-100 transition-all duration-300 ease-in-out">
       {/* Top Real-time Ticker & Institutional Context Bar - Compact High-Performance Terminal Strip */}
-      <div className="bg-[#0a0518]/90 px-3 sm:px-4 py-1 text-xs border-b border-purple-900/40 flex flex-wrap items-center justify-between gap-2 font-mono">
+      <div className={`bg-[#0a0518]/90 text-xs border-purple-900/40 flex flex-wrap items-center justify-between gap-2 font-mono transition-all duration-300 ease-in-out overflow-hidden ${
+        isScrolled ? 'max-h-0 opacity-0 py-0 border-b-0' : 'max-h-12 opacity-100 py-1 border-b px-3 sm:px-4'
+      }`}>
         <div className="flex items-center gap-2 overflow-x-auto py-0.5 scrollbar-none">
           {/* Active Market Chip - LIVE Status */}
           {(() => {
@@ -431,9 +450,11 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Main Navigation Bar */}
-      <div className="w-full max-w-[1700px] mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3 font-mono">
+      <div className={`w-full max-w-[1700px] mx-auto px-4 sm:px-6 flex items-center justify-between gap-3 font-mono transition-all duration-300 ease-in-out ${
+        isScrolled ? 'h-12' : 'h-16'
+      }`}>
         {/* Brand Logo Component */}
-        <Logo size="md" showSubtitle={true} onClick={() => setActiveTab('hub')} />
+        <Logo size={isScrolled ? 'sm' : 'md'} showText={!isScrolled} showSubtitle={!isScrolled} onClick={() => setActiveTab('hub')} />
 
         {/* Desktop Navigation - High-Contrast Ergonomic Nav Board */}
         <nav className="hidden lg:flex items-center gap-1 bg-[#0c0620] p-1 rounded-2xl border border-purple-800/40 shadow-inner shadow-purple-950/50">

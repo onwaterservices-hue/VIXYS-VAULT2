@@ -326,7 +326,7 @@ export default function App() {
           setUserRole('UNPAID');
           setTerminalAccessGranted(false);
           localStorage.removeItem('vixy_auth');
-          setActiveTab('landing');
+          setActiveTab('hub');
           return;
         }
 
@@ -500,7 +500,7 @@ export default function App() {
     } catch (e) {
       console.error(e);
     }
-    return 'landing';
+    return 'hub';
   });
 
   const setActiveTab = (tab: string) => {
@@ -983,7 +983,7 @@ export default function App() {
       user: null,
     });
     setUserRole('UNPAID');
-    setActiveTab('landing');
+    setActiveTab('hub');
   };
 
   const {
