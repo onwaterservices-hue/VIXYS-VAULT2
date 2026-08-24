@@ -1334,7 +1334,7 @@ export default function App() {
                   )}
 
                   {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
-                  {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
+                  {['terminal', 'vixylive', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
                     <TopNavControls
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
@@ -1377,6 +1377,17 @@ export default function App() {
                       onOpenSettings={() => setActiveTab('settings')}
                       alertSettings={alertSettings}
                       setAlertSettings={setAlertSettings}
+                    />
+                  ) : activeTab === 'vixylive' ? (
+                    <VixyLockView
+                      ticker={ticker}
+                      userEmail={authState.user?.email}
+                      onOpenTerminal={() => setActiveTab('terminal')}
+                      onOpenReplay={() => setActiveTab('replay')}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                      isAuthenticated={authState.isAuthenticated}
+                      hasActiveAccess={hasActiveAccess}
+                      onOpenAuth={handleOpenAuth}
                     />
                   ) : null}
 
