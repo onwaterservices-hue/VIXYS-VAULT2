@@ -1334,7 +1334,7 @@ export default function App() {
                   )}
 
                   {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
-                  {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
+                  {['terminal', 'vixylive', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
                     <TopNavControls
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
@@ -1349,34 +1349,16 @@ export default function App() {
                     />
                   )}
 
-                  {(activeTab === 'starter' || (activeTab === 'terminal' && (userProduct === 'STARTER' || userProduct === 'NONE' || userRole === 'UNPAID' || !hasActiveAccess))) ? (
-                    <StarterDeskView
+                  {(activeTab === 'terminal' || activeTab === 'vixylive') ? (
+                    <VixyLockView
                       ticker={ticker}
-                      candles={candles}
-                      onOpenPricing={() => setActiveTab('pricing')}
-                      onOpenAlerts={() => setActiveTab('alerts')}
-                      onOpenSettings={() => setActiveTab('settings')}
                       userEmail={authState.user?.email}
-                      selectedAsset={selectedAsset}
-                      onSelectAsset={(sym) => setSelectedAsset(sym)}
-                    />
-                  ) : activeTab === 'terminal' ? (
-                    <LiveDashboard
-                      ticker={ticker}
-                      candles={candles}
-                      onOpenAlerts={() => setActiveTab('alerts')}
+                      onOpenTerminal={() => setActiveTab('terminal')}
+                      onOpenReplay={() => setActiveTab('replay')}
                       onOpenPricing={() => setActiveTab('pricing')}
-                      onOpenJournal={() => setActiveTab('journal')}
-                      onOpenCompare={() => setActiveTab('compare')}
-                      userRole={userRole}
-                      selectedAsset={selectedAsset}
-                      onSelectAsset={(sym) => setSelectedAsset(sym)}
-                      selectedTimeframe={selectedTimeframe}
-                      selectedVenues={selectedVenues}
-                      exchangeKeys={exchangeKeys}
-                      onOpenSettings={() => setActiveTab('settings')}
-                      alertSettings={alertSettings}
-                      setAlertSettings={setAlertSettings}
+                      isAuthenticated={authState.isAuthenticated}
+                      hasActiveAccess={hasActiveAccess}
+                      onOpenAuth={handleOpenAuth}
                     />
                   ) : null}
 

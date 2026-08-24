@@ -283,35 +283,29 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const isStrikeAbove = strikeGapVal >= 0;
 
   return (
-    <div className="space-y-6 font-mono text-purple-100 animate-fadeIn relative w-full max-w-7xl mx-auto min-w-0">
-      {/* Radiant Glowing Ambient Aura Background */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-5xl h-96 bg-gradient-to-b from-purple-600/15 via-indigo-600/5 to-transparent blur-3xl pointer-events-none -z-10" />
-
+    <div className="space-y-8 sm:space-y-10 font-mono text-purple-100 animate-fadeIn relative w-full max-w-7xl mx-auto min-w-0">
       {/* ================================================== */}
       {/* 1. HEADER: 1-HOUR QUANTITATIVE DECISION DESK      */}
       {/* ================================================== */}
-      <div className="vixy-card-elevated hud-corners p-4 sm:p-6 relative overflow-hidden w-full min-w-0">
-        <div className="absolute -right-12 -bottom-12 w-72 h-72 bg-purple-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -left-12 -top-12 w-72 h-72 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-5 relative z-10 min-w-0">
+      <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-5 sm:p-6 shadow-xl relative overflow-hidden w-full min-w-0">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 sm:gap-6 relative z-10 min-w-0">
           <div className="space-y-2 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="vixy-badge bg-purple-500/20 text-purple-300 border border-purple-400/40">
+              <span className="px-2.5 py-1 rounded-lg font-bold bg-purple-600/30 text-purple-300 border border-purple-500/40 text-xs flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-purple-400" />
                 <span>60-MINUTE CONTRACT DESK</span>
               </span>
-              <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+              <span className="px-2.5 py-1 rounded-lg font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs">
                 KALSHI & POLYMARKET 1H
               </span>
-              <span className="vixy-badge bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">
+              <span className="px-2.5 py-1 rounded-lg font-bold bg-purple-600/20 text-purple-300 border border-purple-500/30 text-xs">
                 ● STRATEGIC QUANT LEAD
               </span>
               <ModelStatusBadge asset={selectedAsset} desk="1h" />
             </div>
 
             <div>
-              <h1 className="vixy-page-title text-white flex items-center gap-3">
+              <h1 className="text-xl sm:text-2xl font-black font-mono tracking-tight text-white flex items-center gap-3">
                 <span>1-HOUR QUANTITATIVE DECISION DESK</span>
               </h1>
               <p className="text-xs sm:text-sm text-purple-200/80 font-sans tracking-wide mt-1">
@@ -322,18 +316,18 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             {/* Live Spot Price Header Capsule */}
-            <div className="px-4 py-2 rounded-2xl bg-[#0a0518]/90 border border-purple-500/40 text-xs flex items-center space-x-2 shadow-[0_0_20px_rgba(168,85,247,0.15)]">
+            <div className="px-4 py-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-xs flex items-center space-x-2.5 shadow-md">
               <span className="text-purple-300 font-semibold">LIVE SPOT:</span>
-              <span className="font-black text-white font-mono text-sm sm:text-base drop-shadow-[0_0_8px_rgba(255,255,255,0.4)]">
+              <span className="font-black text-white font-mono text-sm sm:text-base">
                 ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
 
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
-              className={`p-2.5 rounded-2xl border text-xs transition-all cursor-pointer ${
+              className={`p-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
                 soundEnabled
-                  ? 'bg-purple-950/80 border-purple-400/50 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.35)]'
+                  ? 'bg-purple-950/80 border-purple-600/50 text-purple-200 shadow-md'
                   : 'bg-slate-900/60 border-slate-800 text-slate-500'
               }`}
               title="Toggle Audio Feedback"
@@ -353,37 +347,37 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
         title="1-HOUR DESK INTELLIGENCE LOCKED"
         subtitle="Verify your VIXY Vault Discord membership to unlock live 1H macro trend probability, strike targets, and directional conviction."
       >
-        <div className="space-y-6 w-full min-w-0">
+        <div className="space-y-8 sm:space-y-10 w-full min-w-0">
           
           {/* ================================================== */}
           {/* 2. STRIKE MATRIX: MAIN DECISION SELECTION          */}
           {/* ================================================== */}
-          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4 relative overflow-hidden">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-2xl bg-amber-500/20 border border-amber-400/60 flex items-center justify-center shadow-[0_0_15px_rgba(251,191,36,0.35)]">
-                  <Target className="w-4 h-4 text-amber-400" />
+          <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-6 sm:p-8 space-y-5 shadow-xl relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/30 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-purple-900/40 border border-purple-700/50 flex items-center justify-center shrink-0">
+                  <Target className="w-4 h-4 text-purple-300" />
                 </div>
                 <div>
                   <h3 className="font-black text-base sm:text-lg text-white font-mono tracking-wider">
                     1-HOUR STRIKE SELECTION MATRIX
                   </h3>
-                  <span className="text-[10.5px] text-purple-300/80 font-sans">
+                  <p className="text-xs text-purple-300/70 font-sans mt-0.5">
                     Institutional decision cards with distinct probability, edge, and risk profile hierarchies
-                  </span>
+                  </p>
                 </div>
               </div>
               
               <div className="flex items-center space-x-2 text-xs text-purple-300 font-mono">
-                <span className="text-gray-400">ACTIVE SELECTION:</span>
-                <span className="font-black text-amber-300 px-2 py-0.5 rounded-xl bg-amber-500/15 border border-amber-400/40">
+                <span className="text-purple-300/60">ACTIVE SELECTION:</span>
+                <span className="font-bold text-purple-200 px-2.5 py-1 rounded-lg bg-purple-900/40 border border-purple-700/40">
                   ${selectedStrike.toLocaleString()}
                 </span>
               </div>
             </div>
 
             {/* The 3 Distinct Strike Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {strikeOptions.map((item) => {
                 const isSelected = selectedStrike === item.strike;
                 const isOptimal = item.category === 'OPTIMAL_ENTRY';
@@ -393,60 +387,54 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                   <button
                     key={item.strike}
                     onClick={() => handleSelectStrike(item)}
-                    className={`p-5 rounded-2xl border-2 text-left transition-all duration-300 relative overflow-hidden backdrop-blur-xl cursor-pointer group flex flex-col justify-between ${
+                    className={`p-5 rounded-2xl border text-left transition-all duration-300 relative overflow-hidden cursor-pointer group flex flex-col justify-between ${
                       isSelected
-                        ? isOptimal
-                          ? 'bg-gradient-to-br from-[#1C0E38] via-[#120726] to-[#070212] border-amber-400 shadow-[0_0_40px_rgba(251,191,36,0.45)] ring-4 ring-amber-400/30 scale-[1.02]'
-                          : isHighProb
-                          ? 'bg-gradient-to-br from-[#0B2418] via-[#091515] to-[#040908] border-emerald-400 shadow-[0_0_40px_rgba(0,255,136,0.35)] ring-4 ring-emerald-400/30 scale-[1.02]'
-                          : 'bg-gradient-to-br from-[#240D36] via-[#140724] to-[#070212] border-purple-400 shadow-[0_0_40px_rgba(168,85,247,0.4)] ring-4 ring-purple-400/30 scale-[1.02]'
-                        : isOptimal
-                        ? 'bg-[#0c0620]/90 border-amber-500/40 hover:border-amber-400/80 shadow-[0_0_20px_rgba(251,191,36,0.15)] opacity-95'
-                        : 'bg-[#0a0518]/85 border-purple-900/50 hover:border-purple-600/70 opacity-80 hover:opacity-100'
+                        ? 'bg-[#0f0728] border-purple-500 shadow-lg ring-1 ring-purple-500/50'
+                        : 'bg-[#0d0722]/80 border-purple-800/30 hover:border-purple-600/50'
                     }`}
                   >
                     {/* Top Selection Status Pill */}
                     <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className={`text-[10px] font-black px-3 py-1 rounded-xl font-mono ${item.badgeColor}`}>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg font-mono ${item.badgeColor}`}>
                         {item.categoryLabel}
                       </span>
                       {isSelected ? (
-                        <span className="flex items-center space-x-1 text-[10px] font-black text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-xl border border-amber-400/50 animate-pulse">
+                        <span className="flex items-center space-x-1 text-[10px] font-bold text-purple-200 bg-purple-900/60 px-2 py-0.5 rounded-lg border border-purple-500/40">
                           <Check className="w-3 h-3" />
                           <span>SELECTED</span>
                         </span>
                       ) : (
-                        <span className="text-[10px] text-gray-400 font-mono group-hover:text-purple-300">
+                        <span className="text-[10px] text-purple-300/50 font-mono group-hover:text-purple-200">
                           Click to Select
                         </span>
                       )}
                     </div>
 
                     {/* Strike Target & Pricing */}
-                    <div className="space-y-1 my-1">
+                    <div className="space-y-1.5 my-1">
                       <div className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight flex items-baseline justify-between">
                         <span>${item.strike.toLocaleString()} Target</span>
-                        <span className="text-xs font-bold text-cyan-300 font-sans">{item.payoutMultiplier} Payout</span>
+                        <span className="text-xs font-bold text-purple-300 font-sans">{item.payoutMultiplier} Payout</span>
                       </div>
                       <div className="text-sm font-black text-purple-200 font-mono tracking-wide flex items-center space-x-2">
                         <span className="text-emerald-400">YES {item.yesOdds}¢</span>
-                        <span className="text-gray-500">/</span>
+                        <span className="text-purple-400/50">/</span>
                         <span className="text-rose-400">NO {item.noOdds}¢</span>
                       </div>
-                      <p className="text-[10.5px] text-purple-300/80 font-sans mt-1 line-clamp-2">
+                      <p className="text-xs text-purple-300/70 font-sans line-clamp-2 mt-1">
                         {item.description}
                       </p>
                     </div>
 
                     {/* Bottom Metrics Bar */}
-                    <div className="mt-4 pt-3 border-t border-purple-900/40 grid grid-cols-2 gap-2 text-xs font-mono">
-                      <div className="bg-[#0a0518]/80 p-2 rounded-xl border border-purple-900/40">
-                        <span className="text-[9px] text-gray-400 block font-sans">MODEL WIN PROB</span>
-                        <strong className="text-white font-black text-sm">{item.winProb}%</strong>
+                    <div className="mt-4 pt-3 border-t border-purple-800/30 grid grid-cols-2 gap-2 text-xs font-mono">
+                      <div className="bg-[#080414] p-2 rounded-xl border border-purple-800/30">
+                        <span className="text-[9px] text-purple-300/60 block font-sans">MODEL WIN PROB</span>
+                        <strong className="text-white font-bold text-sm">{item.winProb}%</strong>
                       </div>
-                      <div className="bg-[#0a0518]/80 p-2 rounded-xl border border-purple-900/40">
-                        <span className="text-[9px] text-gray-400 block font-sans">NET 1H EDGE</span>
-                        <strong className="text-emerald-400 font-black text-sm">+{item.edge}%</strong>
+                      <div className="bg-[#080414] p-2 rounded-xl border border-purple-800/30">
+                        <span className="text-[9px] text-purple-300/60 block font-sans">NET 1H EDGE</span>
+                        <strong className="text-emerald-400 font-bold text-sm">+{item.edge}%</strong>
                       </div>
                     </div>
                   </button>
@@ -470,66 +458,66 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 4. UP/DOWN CAPSULES: CLEAR PROBABILITY RELATION    */}
           {/* ================================================== */}
-          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
+          <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-6 sm:p-8 space-y-5 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/30 pb-4">
               <div className="flex items-center space-x-2.5">
                 <Scale className="w-5 h-5 text-purple-400" />
-                <h3 className="font-black text-white text-base tracking-wider uppercase">
+                <h3 className="font-bold text-white text-base tracking-wider uppercase font-mono">
                   1-HOUR DIRECTIONAL PROBABILITY & MARKET EDGE
                 </h3>
               </div>
               <div className="text-xs text-purple-300 font-mono">
-                EXPIRATION IN: <strong className="text-amber-300 font-black">{timeRemainingMin}m {timeRemainingSec}s</strong>
+                EXPIRATION IN: <strong className="text-purple-200 font-bold">{timeRemainingMin}m {timeRemainingSec}s</strong>
               </div>
             </div>
 
             {/* BUY UP vs BUY DOWN Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               
               {/* BUY UP Capsule */}
               <button
                 onClick={() => handleDirectionSound('UP')}
-                className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`p-5 sm:p-6 rounded-2xl text-left border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                   selectedDirection === 'UP'
-                    ? 'bg-gradient-to-br from-[#0A2619] via-[#0D1822] to-[#050B10] border-emerald-400 shadow-[0_0_35px_rgba(0,255,136,0.35)] scale-[1.01]'
-                    : 'bg-[#0a0518] border-purple-900/50 hover:border-emerald-500/50 opacity-85 hover:opacity-100'
+                    ? 'bg-[#081510] border-emerald-500/50 shadow-lg'
+                    : 'bg-[#0d0722]/80 border-purple-800/30 hover:border-emerald-500/40'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-[#00FF88] border border-emerald-400/40 flex items-center justify-center font-black text-lg shadow-[0_0_12px_rgba(0,255,136,0.3)]">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold text-lg">
                       ▲
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-base font-black text-white tracking-wide">BUY UP (YES)</span>
-                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-[#00FF88] text-[9px] font-black border border-emerald-500/30">
+                        <span className="text-base font-bold text-white tracking-wide font-mono">BUY UP (YES)</span>
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[9px] font-bold border border-emerald-500/30">
                           FAVORED
                         </span>
                       </div>
-                      <span className="text-[10px] text-gray-400 font-sans">Target: Strike ${selectedStrike.toLocaleString()}</span>
+                      <span className="text-[10px] text-purple-300/60 font-sans">Target: Strike ${selectedStrike.toLocaleString()}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[9px] text-gray-400 block font-sans">PROBABILITY</span>
-                    <span className="text-2xl font-black text-[#00FF88] font-mono drop-shadow-[0_0_10px_rgba(0,255,136,0.5)]">
+                    <span className="text-[9px] text-purple-300/60 block font-sans">PROBABILITY</span>
+                    <span className="text-2xl font-black text-emerald-400 font-mono">
                       {kalshiYesCent}%
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-emerald-500/20">
-                  <div className="hud-stat-card bg-[#0a0518]/80 border border-emerald-500/30">
-                    <span className="hud-stat-label mb-1">QUANTITATIVE EDGE</span>
-                    <strong className="hud-stat-value text-emerald-400 block">+{edgePctFormatted}%</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">vs Kalshi 72¢ Implied</span>
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono my-2 pt-3 border-t border-purple-800/30">
+                  <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/30">
+                    <span className="text-[9px] text-purple-300/60 block font-sans mb-1">QUANTITATIVE EDGE</span>
+                    <strong className="text-emerald-400 block font-bold">+{edgePctFormatted}%</strong>
+                    <span className="text-[9px] text-purple-300/50 block font-sans mt-1">vs Kalshi 72¢ Implied</span>
                   </div>
 
-                  <div className="hud-stat-card bg-[#0a0518]/80 border border-emerald-500/30">
-                    <span className="hud-stat-label mb-1">MARKET CONDITION</span>
-                    <strong className="text-cyan-300 font-bold text-sm block mt-1">VWAP Expansion</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Macro Uptrend Intact</span>
+                  <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/30">
+                    <span className="text-[9px] text-purple-300/60 block font-sans mb-1">MARKET CONDITION</span>
+                    <strong className="text-purple-200 font-bold block">VWAP Expansion</strong>
+                    <span className="text-[9px] text-purple-300/50 block font-sans mt-1">Macro Uptrend Intact</span>
                   </div>
                 </div>
               </button>
@@ -537,47 +525,47 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               {/* BUY DOWN Capsule */}
               <button
                 onClick={() => handleDirectionSound('DOWN')}
-                className={`p-5 rounded-2xl text-left border-2 transition-all duration-300 relative overflow-hidden cursor-pointer ${
+                className={`p-5 sm:p-6 rounded-2xl text-left border transition-all duration-300 relative overflow-hidden cursor-pointer ${
                   selectedDirection === 'DOWN'
-                    ? 'bg-gradient-to-br from-[#2E0B13] via-[#1E091B] to-[#0A030C] border-rose-400 shadow-[0_0_35px_rgba(255,59,48,0.35)] scale-[1.01]'
-                    : 'bg-[#0a0518] border-purple-900/50 hover:border-rose-500/50 opacity-85 hover:opacity-100'
+                    ? 'bg-[#180810] border-rose-500/50 shadow-lg'
+                    : 'bg-[#0d0722]/80 border-purple-800/30 hover:border-rose-500/40'
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 rounded-2xl bg-rose-500/20 text-[#FF3B30] border border-rose-400/40 flex items-center justify-center font-black text-lg shadow-[0_0_12px_rgba(255,59,48,0.3)]">
+                    <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center font-bold text-lg">
                       ▼
                     </div>
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-base font-black text-white tracking-wide">BUY DOWN (NO)</span>
-                        <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-[#FF3B30] text-[9px] font-black border border-rose-500/30">
+                        <span className="text-base font-bold text-white tracking-wide font-mono">BUY DOWN (NO)</span>
+                        <span className="px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 text-[9px] font-bold border border-rose-500/30">
                           HEDGE
                         </span>
                       </div>
-                      <span className="text-[10px] text-gray-400 font-sans">Target: Strike Below ${selectedStrike.toLocaleString()}</span>
+                      <span className="text-[10px] text-purple-300/60 font-sans">Target: Strike Below ${selectedStrike.toLocaleString()}</span>
                     </div>
                   </div>
 
                   <div className="text-right">
-                    <span className="text-[9px] text-gray-400 block font-sans">PROBABILITY</span>
-                    <span className="text-2xl font-black text-[#FF3B30] font-mono drop-shadow-[0_0_10px_rgba(255,59,48,0.5)]">
+                    <span className="text-[9px] text-purple-300/60 block font-sans">PROBABILITY</span>
+                    <span className="text-2xl font-black text-rose-400 font-mono">
                       {kalshiNoCent}%
                     </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-xs font-mono my-2 pt-2 border-t border-rose-500/20">
-                  <div className="hud-stat-card bg-[#0a0518]/80 border border-rose-500/30">
-                    <span className="hud-stat-label mb-1">QUANTITATIVE EDGE</span>
-                    <strong className="hud-stat-value text-rose-400 block">-8.4%</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Counter-Trend Friction</span>
+                <div className="grid grid-cols-2 gap-3 text-xs font-mono my-2 pt-3 border-t border-purple-800/30">
+                  <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/30">
+                    <span className="text-[9px] text-purple-300/60 block font-sans mb-1">QUANTITATIVE EDGE</span>
+                    <strong className="text-rose-400 block font-bold">-8.4%</strong>
+                    <span className="text-[9px] text-purple-300/50 block font-sans mt-1">Counter-Trend Friction</span>
                   </div>
 
-                  <div className="hud-stat-card bg-[#0a0518]/80 border border-rose-500/30">
-                    <span className="hud-stat-label mb-1">MARKET CONDITION</span>
-                    <strong className="text-purple-300 font-bold text-sm block mt-1">High Absorption</strong>
-                    <span className="text-[8.5px] text-gray-400 block font-sans mt-1">Bids Wall Stacking</span>
+                  <div className="bg-[#080414] p-3 rounded-xl border border-purple-800/30">
+                    <span className="text-[9px] text-purple-300/60 block font-sans mb-1">MARKET CONDITION</span>
+                    <strong className="text-purple-200 font-bold block">High Absorption</strong>
+                    <span className="text-[9px] text-purple-300/50 block font-sans mt-1">Bids Wall Stacking</span>
                   </div>
                 </div>
               </button>
@@ -588,51 +576,51 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 5. AI CONVICTION: ANALYTICAL TIMELINE & HEAT METER */}
           {/* ================================================== */}
-          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-900/40 pb-3">
+          <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-6 sm:p-8 space-y-5 shadow-xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-800/30 pb-4">
               <div className="flex items-center space-x-2.5">
-                <Compass className="w-5 h-5 text-cyan-400" />
+                <Compass className="w-5 h-5 text-purple-400" />
                 <div>
-                  <h3 className="font-black text-white text-base tracking-wider uppercase">
+                  <h3 className="font-bold text-white text-base tracking-wider uppercase font-mono">
                     30-MINUTE AI CONVICTION TIMELINE & CALIBRATION
                   </h3>
-                  <span className="text-[10px] text-purple-300/80 font-sans">
+                  <p className="text-xs text-purple-300/70 font-sans mt-0.5">
                     Statistical Bayesian probability drift, Brier calibration index, and volatility envelope
-                  </span>
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center space-x-2">
-                <span className="text-[10px] text-gray-400 font-mono">CALIBRATION SCORE:</span>
-                <span className="text-xs font-black text-[#00FF88] bg-[#0a0518] px-2.5 py-1 rounded-xl border border-emerald-500/40 shadow-[0_0_10px_rgba(0,255,136,0.2)]">
+                <span className="text-[10px] text-purple-300/60 font-mono">CALIBRATION SCORE:</span>
+                <span className="text-xs font-bold text-emerald-400 bg-[#0d0722] px-2.5 py-1 rounded-lg border border-emerald-500/30">
                   0.118 BRIER (HIGH)
                 </span>
               </div>
             </div>
 
             {/* Conviction Timeline Grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-center font-mono">
+            <div className="grid grid-cols-2 sm:grid-cols-6 gap-3 text-center font-mono">
               {[
                 { time: '-30m', prob: 74, status: 'INITIAL BREAKOUT', color: 'text-purple-300' },
-                { time: '-25m', prob: 78, status: 'VWAP RETEST', color: 'text-cyan-300' },
-                { time: '-20m', prob: 82, status: 'WHALE INFLOW', color: 'text-cyan-300' },
+                { time: '-25m', prob: 78, status: 'VWAP RETEST', color: 'text-purple-200' },
+                { time: '-20m', prob: 82, status: 'WHALE INFLOW', color: 'text-purple-200' },
                 { time: '-15m', prob: 86, status: 'SPREAD EXPANSION', color: 'text-emerald-300' },
                 { time: '-5m', prob: 89, status: 'ORDER BOOK ACCEL', color: 'text-emerald-400' },
-                { time: 'NOW', prob: 91.6, status: 'MAX CONVICTION', color: 'text-[#00FF88]' },
+                { time: 'NOW', prob: 91.6, status: 'MAX CONVICTION', color: 'text-emerald-400' },
               ].map((step, idx) => (
                 <div
                   key={idx}
-                  className={`p-3 rounded-2xl border ${
+                  className={`p-3.5 rounded-xl border ${
                     step.time === 'NOW'
-                      ? 'bg-gradient-to-b from-[#180A33] to-[#0A0418] border-emerald-400 shadow-[0_0_20px_rgba(0,255,136,0.3)] ring-2 ring-emerald-500/40'
-                      : 'bg-[#0a0518] border-purple-900/40'
+                      ? 'bg-[#0e0725] border-emerald-500/50 ring-1 ring-emerald-500/30'
+                      : 'bg-[#0d0722]/80 border-purple-800/30'
                   }`}
                 >
-                  <span className="text-[10px] text-gray-400 block font-sans">{step.time}</span>
-                  <span className={`text-lg sm:text-xl font-black ${step.color} block my-0.5`}>
+                  <span className="text-[10px] text-purple-300/60 block font-sans">{step.time}</span>
+                  <span className={`text-lg sm:text-xl font-bold ${step.color} block my-0.5`}>
                     {step.prob}%
                   </span>
-                  <span className="text-[8px] text-purple-300/80 block font-sans truncate">
+                  <span className="text-[9px] text-purple-300/70 block font-sans truncate">
                     {step.status}
                   </span>
                 </div>
@@ -640,29 +628,29 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
             </div>
 
             {/* Analytical Metrics Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+              <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30 flex items-center justify-between">
                 <div>
-                  <span className="text-[9.5px] text-gray-400 block font-sans">CONVICTION TRAJECTORY</span>
-                  <span className="text-sm font-black text-cyan-300">+8.4% DRIFT (30M)</span>
+                  <span className="text-[10px] text-purple-300/60 block font-sans">CONVICTION TRAJECTORY</span>
+                  <span className="text-sm font-bold text-purple-200 font-mono">+8.4% DRIFT (30M)</span>
                 </div>
-                <Sparkles className="w-5 h-5 text-cyan-400" />
+                <Sparkles className="w-5 h-5 text-purple-400" />
               </div>
 
-              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+              <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30 flex items-center justify-between">
                 <div>
-                  <span className="text-[9.5px] text-gray-400 block font-sans">VOLATILITY SQUEEZE (ATR)</span>
-                  <span className="text-sm font-black text-amber-300">$128.40 (EXPANDING)</span>
+                  <span className="text-[10px] text-purple-300/60 block font-sans">VOLATILITY SQUEEZE (ATR)</span>
+                  <span className="text-sm font-bold text-purple-200 font-mono">$128.40 (EXPANDING)</span>
                 </div>
-                <Activity className="w-5 h-5 text-amber-400" />
+                <Activity className="w-5 h-5 text-purple-400" />
               </div>
 
-              <div className="bg-[#0a0518] p-3 rounded-2xl border border-purple-900/40 flex items-center justify-between">
+              <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30 flex items-center justify-between">
                 <div>
-                  <span className="text-[9.5px] text-gray-400 block font-sans">CROSS-TF ALIGNMENT</span>
-                  <span className="text-sm font-black text-[#00FF88]">5M / 15M / 1H BULLISH</span>
+                  <span className="text-[10px] text-purple-300/60 block font-sans">CROSS-TF ALIGNMENT</span>
+                  <span className="text-sm font-bold text-emerald-400 font-mono">5M / 15M / 1H BULLISH</span>
                 </div>
-                <ShieldCheck className="w-5 h-5 text-[#00FF88]" />
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
               </div>
             </div>
           </div>
@@ -670,39 +658,39 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 6. CATALYSTS: CLEAN STRUCTURED EVENT STREAM        */}
           {/* ================================================== */}
-          <div className="vixy-card hud-corners p-5 sm:p-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
+          <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-6 sm:p-8 space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-purple-800/30 pb-4">
               <div className="flex items-center space-x-2.5">
                 <Layers className="w-5 h-5 text-purple-400" />
-                <h3 className="font-black text-white text-base tracking-wider uppercase">
+                <h3 className="font-bold text-white text-base tracking-wider uppercase font-mono">
                   QUANTITATIVE CONVICTION CATALYSTS & EVENT STREAM
                 </h3>
               </div>
-              <span className="vixy-badge bg-emerald-500/20 text-emerald-400 border-emerald-500/40">
+              <span className="px-2.5 py-1 rounded-lg font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs">
                 5/5 SYNCHRONIZED
               </span>
             </div>
 
             {/* 5 Clean Catalyst Rows */}
-            <div className="space-y-2.5 font-mono text-xs">
+            <div className="space-y-3 font-mono text-xs">
               
               {/* 1. ORDER FLOW */}
-              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-emerald-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(0,255,136,0.08)]">
+              <div className="p-4 rounded-xl bg-[#0d0722]/80 border border-purple-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 rounded-xl bg-emerald-500/20 text-[#00FF88] border border-emerald-500/40 text-[9.5px] font-black tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold tracking-wider">
                     ORDER FLOW
                   </span>
                   <span className="text-white font-bold">
                     Institutional Whale Inflow: +2,840 BTC Net Sweep across Spot & Perp Venues
                   </span>
                 </div>
-                <span className="text-gray-400 text-[10px] sm:text-right font-sans">3m ago • Taker Delta +$28.4M</span>
+                <span className="text-purple-300/60 text-[10px] sm:text-right font-sans">3m ago • Taker Delta +$28.4M</span>
               </div>
 
               {/* 2. STRIKE GAP */}
-              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-purple-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(168,85,247,0.08)]">
+              <div className="p-4 rounded-xl bg-[#0d0722]/80 border border-purple-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-400/40 text-[9.5px] font-black tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold tracking-wider">
                     STRIKE GAP
                   </span>
                   <span className="text-white font-bold">
@@ -713,42 +701,42 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               </div>
 
               {/* 3. VOLATILITY */}
-              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-cyan-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(34,211,238,0.08)]">
+              <div className="p-4 rounded-xl bg-[#0d0722]/80 border border-purple-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 rounded-xl bg-cyan-500/20 text-cyan-300 border border-cyan-400/40 text-[9.5px] font-black tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold tracking-wider">
                     VOLATILITY
                   </span>
                   <span className="text-white font-bold">
                     1H Realized Squeeze Index 24.2 • Low Counter-Trend Friction Envelope
                   </span>
                 </div>
-                <span className="text-gray-400 text-[10px] sm:text-right font-sans">ATR $128.40 • Orderly Drift</span>
+                <span className="text-purple-300/60 text-[10px] sm:text-right font-sans">ATR $128.40 • Orderly Drift</span>
               </div>
 
               {/* 4. CROSS-VENUE */}
-              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(251,191,36,0.08)]">
+              <div className="p-4 rounded-xl bg-[#0d0722]/80 border border-purple-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/40 text-[9.5px] font-black tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold tracking-wider">
                     CROSS-VENUE
                   </span>
                   <span className="text-white font-bold">
                     Kalshi ($0.72) vs Polymarket ($0.74) • +2¢ Cross-Venue Arbitrage Alpha
                   </span>
                 </div>
-                <span className="text-amber-300 text-[10px] sm:text-right font-sans font-bold">Consensus Alignment High</span>
+                <span className="text-purple-200 text-[10px] sm:text-right font-sans font-bold">Consensus Alignment High</span>
               </div>
 
               {/* 5. MICROSTRUCTURE */}
-              <div className="p-3.5 rounded-2xl bg-[#0a0518] border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-[0_0_15px_rgba(99,102,241,0.08)]">
+              <div className="p-4 rounded-xl bg-[#0d0722]/80 border border-purple-800/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div className="flex items-center space-x-3">
-                  <span className="px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-400/40 text-[9.5px] font-black tracking-wider">
+                  <span className="px-2.5 py-1 rounded-lg bg-purple-600/30 text-purple-300 border border-purple-500/40 text-[10px] font-bold tracking-wider">
                     MICROSTRUCTURE
                   </span>
                   <span className="text-white font-bold">
                     1H VWAP Anchor $64,138 Confirmed Supported • Upper Ask Liquidity Void
                   </span>
                 </div>
-                <span className="text-gray-400 text-[10px] sm:text-right font-sans">Resistance Clear to $64,350</span>
+                <span className="text-purple-300/60 text-[10px] sm:text-right font-sans">Resistance Clear to $64,350</span>
               </div>
 
             </div>
@@ -757,62 +745,62 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           {/* ================================================== */}
           {/* 7. BOTTOM STATUS: 4 EASILY SCANNABLE METRICS       */}
           {/* ================================================== */}
-          <div className="vixy-card hud-corners p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono">
+          <div className="bg-[#080414] border border-purple-800/30 rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 text-xs font-mono shadow-xl">
             
             {/* Momentum Persistence */}
-            <div className="hud-stat-card bg-[#0a0518] border border-cyan-500/30">
-              <span className="hud-stat-label text-cyan-400">
+            <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30">
+              <span className="text-[10px] font-bold text-purple-300/70 uppercase tracking-wider block">
                 Momentum Persistence
               </span>
-              <div className="flex items-baseline space-x-2 mt-1">
-                <span className="hud-stat-value text-white">92.4%</span>
-                <span className="vixy-badge bg-cyan-500/20 text-cyan-300 border-cyan-500/40">HIGH DRIFT</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-xl font-bold text-white">92.4%</span>
+                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-600/30 text-purple-300 border border-purple-500/40">HIGH DRIFT</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
+              <span className="text-[10px] text-purple-300/50 block font-sans mt-2">
                 Persistent 1H Directional Force
               </span>
             </div>
 
             {/* Reversal Risk */}
-            <div className="hud-stat-card bg-[#0a0518] border border-emerald-500/30">
-              <span className="hud-stat-label text-emerald-400">
+            <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30">
+              <span className="text-[10px] font-bold text-purple-300/70 uppercase tracking-wider block">
                 Reversal Risk
               </span>
-              <div className="flex items-baseline space-x-2 mt-1">
-                <span className="hud-stat-value text-[#00FF88]">14.2%</span>
-                <span className="vixy-badge bg-emerald-500/20 text-emerald-300 border-emerald-500/40">LOW THREAT</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-xl font-bold text-emerald-400">14.2%</span>
+                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">LOW THREAT</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
+              <span className="text-[10px] text-purple-300/50 block font-sans mt-2">
                 Heavy Bids Guarding VWAP
               </span>
             </div>
 
             {/* Strike Gap */}
-            <div className="hud-stat-card bg-[#0a0518] border border-amber-500/30">
-              <span className="hud-stat-label text-amber-400">
+            <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30">
+              <span className="text-[10px] font-bold text-purple-300/70 uppercase tracking-wider block">
                 Strike Gap
               </span>
-              <div className="flex items-baseline space-x-2 mt-1">
-                <span className="hud-stat-value text-amber-300">
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-xl font-bold text-purple-200">
                   {isStrikeAbove ? '+' : '-'}${Math.abs(strikeGapVal).toFixed(2)}
                 </span>
-                <span className="vixy-badge bg-amber-500/20 text-amber-300 border-amber-500/40">BUFFER</span>
+                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-600/30 text-purple-300 border border-purple-500/40">BUFFER</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
+              <span className="text-[10px] text-purple-300/50 block font-sans mt-2">
                 Distance to $64,200 Strike
               </span>
             </div>
 
             {/* Market Bias */}
-            <div className="hud-stat-card bg-[#0a0518] border border-purple-500/30">
-              <span className="hud-stat-label text-purple-400">
+            <div className="bg-[#0d0722]/80 p-4 rounded-xl border border-purple-800/30">
+              <span className="text-[10px] font-bold text-purple-300/70 uppercase tracking-wider block">
                 Market Bias
               </span>
-              <div className="flex items-baseline space-x-2 mt-1">
-                <span className="hud-stat-value text-purple-200">BULLISH</span>
-                <span className="vixy-badge bg-purple-500/20 text-purple-300 border-purple-500/40">CHANNEL</span>
+              <div className="flex items-baseline space-x-2 mt-2">
+                <span className="text-xl font-bold text-purple-200">BULLISH</span>
+                <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-purple-600/30 text-purple-300 border border-purple-500/40">CHANNEL</span>
               </div>
-              <span className="text-[9.5px] text-gray-400 block font-sans mt-2">
+              <span className="text-[10px] text-purple-300/50 block font-sans mt-2">
                 Multi-Timeframe Structure Intact
               </span>
             </div>

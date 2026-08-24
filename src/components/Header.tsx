@@ -452,27 +452,12 @@ export const Header: React.FC<HeaderProps> = ({
             <span>Home</span>
           </a>
 
-          {/* Dashboard */}
+          {/* VIXY LIVE - FLAGSHIP NAVIGATION ITEM */}
           <a
             href={TAB_TO_PATH['terminal']}
             onClick={(e) => { e.preventDefault(); handleNavigateTerminal(); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
-              activeTab === 'terminal'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-purple-400/30'
-                : 'text-purple-200/90 hover:text-white hover:bg-purple-900/40'
-            }`}
-          >
-            <LayoutDashboard className="w-4 h-4 text-purple-300" />
-            <span>Dashboard</span>
-            {!hasActiveAccess && <Lock className="w-3 h-3 text-purple-400" />}
-          </a>
-
-          {/* VIXY LIVE - FLAGSHIP NAVIGATION ITEM */}
-          <a
-            href={TAB_TO_PATH['vixylive']}
-            onClick={(e) => { e.preventDefault(); handleNavigateVixyLive(); }}
             className={`relative flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all duration-200 cursor-pointer ${
-              activeTab === 'vixylive'
+              activeTab === 'terminal' || activeTab === 'vixylive'
                 ? 'bg-gradient-to-r from-amber-500 via-purple-600 to-amber-500 text-slate-950 shadow-[0_0_25px_rgba(251,191,36,0.5)] border border-amber-300 ring-2 ring-amber-400/30'
                 : 'bg-gradient-to-r from-amber-500/20 via-purple-900/30 to-amber-500/10 border border-amber-500/50 text-amber-200 hover:text-white hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.3)]'
             }`}
