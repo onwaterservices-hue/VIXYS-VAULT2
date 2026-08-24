@@ -58,15 +58,21 @@ import { RiskDisclosureView } from './components/RiskDisclosureView';
 import { RefundPolicyView } from './components/RefundPolicyView';
 import { ContactView } from './components/ContactView';
 import { AboutView } from './components/AboutView';
+import { DesignSystemShowcase } from './components/vixyV2/DesignSystemShowcase';
+import { ContextualRightRail } from './components/vixyV2/ContextualRightRail';
+import { SystemStatusBar } from './components/vixyV2/SystemStatusBar';
+import { useCanonical15mDecision } from './hooks/useCanonical15mDecision';
 import { TAB_TO_PATH, PATH_TO_TAB } from './utils/routePaths';
 import { NotFoundView } from './components/NotFoundView';
 import { VixyHubView } from './components/VixyHubView';
 import { VixyLockView } from './components/VixyLockView';
+import { VixyLiveView } from './components/VixyLiveView';
 import { StarterDeskView } from './components/StarterDeskView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 export default function App() {
+  const canonical15m = useCanonical15mDecision();
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [authToast, setAuthToast] = useState<AuthToastData | null>(null);
 
@@ -1134,6 +1140,7 @@ export default function App() {
         selectedTimeframe={selectedTimeframe}
         selectedVenue={selectedVenues[0] || 'Kalshi'}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
       />
 
       {/* Main Layout Container (Sidebar + Content Area) */}
@@ -1156,6 +1163,8 @@ export default function App() {
 
         {/* Main Content Workspace Area */}
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
+          <div className="flex gap-6">
+            <div className="flex-1 min-w-0">
           {/* 1. Public Pages always accessible */}
             {activeTab === 'hub' && (
             <VixyHubView
@@ -1179,7 +1188,6 @@ export default function App() {
               isAuthenticated={isAuthenticated}
               hasActiveAccess={hasActiveAccess}
               onOpenAuth={handleOpenAuth}
-              dayPassCountdown={passCountdownFormatted}
             />
           )}
 
@@ -1334,7 +1342,7 @@ export default function App() {
                   )}
 
                   {/* Top Control Panel (Asset Selector Pills, Timeframe, Venue & AI Summary) */}
-                  {['terminal', 'vixylive', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
+                  {['terminal', 'markets', 'patterns', 'whales', 'explainability'].includes(activeTab) && (
                     <TopNavControls
                       selectedAsset={selectedAsset}
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
@@ -1349,7 +1357,7 @@ export default function App() {
                     />
                   )}
 
-                  {(activeTab === 'terminal' || activeTab === 'vixylive') ? (
+                  {activeTab === 'terminal' && (
                     <VixyLockView
                       ticker={ticker}
                       userEmail={authState.user?.email}
@@ -1360,7 +1368,16 @@ export default function App() {
                       hasActiveAccess={hasActiveAccess}
                       onOpenAuth={handleOpenAuth}
                     />
-                  ) : null}
+                  )}
+
+                  {activeTab === 'vixylive' && (
+                    <VixyLiveView
+                      ticker={ticker}
+                      onOpenTerminal={() => setActiveTab('terminal')}
+                      onOpenReplay={() => setActiveTab('replay')}
+                      onOpenPricing={() => setActiveTab('pricing')}
+                    />
+                  )}
 
                   {activeTab === 'markets' && (
                     <MarketCardsView
@@ -1478,6 +1495,8 @@ export default function App() {
                     <AlertSettingsView settings={alertSettings} setSettings={setAlertSettings} />
                   )}
 
+                  {activeTab === 'design-system' && <DesignSystemShowcase />}
+
                   {activeTab === 'discord-bot' && (
                     userRole === 'ADMIN' ? (
                       <DiscordBotHubView />
@@ -1532,8 +1551,25 @@ export default function App() {
               )}
             </>
           )}
+            </div>
+
+            {/* Contextual Right Intelligence Rail on Terminal Desks */}
+            {['terminal', 'hub', 'scalping', 'onehour'].includes(activeTab) && (
+              <ContextualRightRail
+                decision={canonical15m.decision}
+                selectedAsset={selectedAsset}
+                onOpenPredictionCenter={() => setActiveTab('terminal')}
+                className="hidden xl:block"
+              />
+            )}
+          </div>
         </main>
       </div>
+
+      {/* System Status Bar */}
+      {activeTab !== 'landing' && (
+        <SystemStatusBar secondsRemaining={canonical15m.decision?.secondsRemaining} />
+      )}
 
       {/* Global Smart Search Modal */}
       <SmartSearchModal

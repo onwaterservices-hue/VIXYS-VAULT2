@@ -5,6 +5,35 @@ import { db } from '../lib/firebase';
 import { safeFetchJson } from '../services/api';
 import { createInitial15mDecision } from '../services/engine/canonicalDecisionEngine';
 
+export type FeedHealthStatus = 'LIVE' | 'STALE' | 'DISCONNECTED' | 'API_ERROR' | 'MISSING_DATA' | 'AUTH_ERROR';
+
+export type NormalizedLifecycleState = 
+  | 'CALIBRATING' 
+  | 'BUILDING' 
+  | 'CONFIRMING' 
+  | 'LOCKED' 
+  | 'PROTECTED' 
+  | 'SETTLED' 
+  | 'SKIPPED';
+
+export function getNormalizedLifecycleState(decision: Canonical15mDecision): NormalizedLifecycleState {
+  if (!decision || !decision.currentState) return 'CALIBRATING';
+  
+  const st = decision.currentState;
+  if (st === 'SETTLED') return 'SETTLED';
+  if (st === 'PROTECTED') return 'PROTECTED';
+  if (st === 'SKIP') return 'SKIPPED';
+  if (st === 'LOCKED_UP' || st === 'LOCKED_DOWN') return 'LOCKED';
+  if (st === 'CONFIRMING') return 'CONFIRMING';
+
+  const secondsRemaining = decision.timeRemainingSec ?? 900;
+  const elapsed = Math.max(0, 900 - secondsRemaining);
+  if (elapsed < 120) {
+    return 'CALIBRATING';
+  }
+  return 'BUILDING';
+}
+
 export function useCanonical15mDecision(): {
   decision: Canonical15mDecision;
   isLoading: boolean;
@@ -13,19 +42,42 @@ export function useCanonical15mDecision(): {
   isLocked: boolean;
   refreshDecision: () => Promise<void>;
   localUpdatedAt: number;
+  dataHealthStatus: FeedHealthStatus;
+  feedError: string | null;
+  normalizedLifecycle: NormalizedLifecycleState;
+  isStale: boolean;
+  isDisconnected: boolean;
 } {
   const [decision, setDecision] = useState<Canonical15mDecision>(() => createInitial15mDecision());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [localUpdatedAt, setLocalUpdatedAt] = useState<number>(Date.now());
+  const [dataHealthStatus, setDataHealthStatus] = useState<FeedHealthStatus>('LIVE');
+  const [feedError, setFeedError] = useState<string | null>(null);
   const currentVersionRef = useRef<number>(0);
   const currentDecisionIdRef = useRef<string>('');
 
+  // Heartbeat checker to detect stale feeds (> 12 seconds with no update)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const age = Date.now() - localUpdatedAt;
+      if (age > 12000) {
+        setDataHealthStatus('STALE');
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [localUpdatedAt]);
+
   // Apply state update safely to allow continuous live data updates
   const applySafeUpdate = (incoming: Canonical15mDecision, source: string = 'FIRESTORE') => {
-    if (!incoming || !incoming.decisionId) return;
+    if (!incoming || !incoming.decisionId) {
+      setDataHealthStatus('MISSING_DATA');
+      return;
+    }
     
     // Always update heartbeat if we receive a valid payload
     setLocalUpdatedAt(Date.now());
+    setDataHealthStatus('LIVE');
+    setFeedError(null);
 
     // If new cycle / decisionId, accept unconditionally and reset version counter
     if (incoming.decisionId !== currentDecisionIdRef.current) {
@@ -58,13 +110,14 @@ export function useCanonical15mDecision(): {
             }
           },
           (err) => {
-            // Graceful fallback to REST polling if Firestore rules or stream disconnects
             console.warn('[useCanonical15mDecision] Snapshot fallback notice:', err);
+            setFeedError(err.message || 'Firestore stream disconnected');
           }
         );
       }
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[useCanonical15mDecision] Firestore setup warning:', e);
+      setFeedError(e?.message || 'Firestore setup error');
     }
 
     return () => {
@@ -78,9 +131,14 @@ export function useCanonical15mDecision(): {
       const data = await safeFetchJson<Canonical15mDecision>(`/api/vixy/15m/current?_t=${Date.now()}`);
       if (data && data.decisionId) {
         applySafeUpdate(data, 'REST_API');
+      } else if (!decision?.decisionId) {
+        setDataHealthStatus('MISSING_DATA');
       }
-    } catch {
-      // ignore transient network hiccups
+    } catch (err: any) {
+      if (Date.now() - localUpdatedAt > 12000) {
+        setDataHealthStatus('API_ERROR');
+        setFeedError(err?.message || 'API fetch failed');
+      }
     }
   };
 
@@ -92,6 +150,7 @@ export function useCanonical15mDecision(): {
 
   // 3. User-Facing Display Name & Badge Color
   const isLocked = decision.currentState === 'LOCKED_UP' || decision.currentState === 'LOCKED_DOWN';
+  const normalizedLifecycle = getNormalizedLifecycleState(decision);
 
   let displayName = 'VIXY WATCH';
   let badgeColor = 'text-purple-400 bg-purple-500/20 border-purple-500/40';
@@ -133,6 +192,11 @@ export function useCanonical15mDecision(): {
     badgeColor,
     isLocked,
     refreshDecision: fetchFromServer,
-    localUpdatedAt
+    localUpdatedAt,
+    dataHealthStatus,
+    feedError,
+    normalizedLifecycle,
+    isStale: dataHealthStatus === 'STALE',
+    isDisconnected: dataHealthStatus === 'DISCONNECTED' || dataHealthStatus === 'API_ERROR'
   };
 }

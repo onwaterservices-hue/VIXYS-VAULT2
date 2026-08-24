@@ -4,7 +4,8 @@
 export const TAB_TO_PATH: Record<string, string> = {
   hub: '/hub',
   landing: '/',
-  terminal: '/vixy-live',
+  terminal: '/crypto-prediction-center',
+  vixylive: '/vixy-live',
   compare: '/asset-compare',
   scalping: '/scalping-desk',
   onehour: '/1-hour-desk',
@@ -33,6 +34,7 @@ export const TAB_TO_PATH: Record<string, string> = {
   'vixy-learning': '/vixy-learning-center',
   leaderboard: '/leaderboard',
   changelog: '/system-status',
+  'design-system': '/design-system',
 };
 
 export const PATH_TO_TAB: Record<string, string> = Object.fromEntries(

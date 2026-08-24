@@ -11213,7 +11213,7 @@ __name(persistGlobalSequence, "persistGlobalSequence");
 setInterval(persistGlobalSequence, 15e3);
 app.get("/api/vixy/state", async (req, res) => {
   const currentCycleIdForStateSync = active15mCycle.cycleId;
-  if (currentCycleIdForStateSync && db) {
+  if (currentCycleIdForStateSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
     try {
       const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForStateSync);
       const lockDocSnap = await getDoc(lockDocRef);
@@ -11273,7 +11273,7 @@ app.get("/api/vixy/state", async (req, res) => {
         }
       }
     } catch (err) {
-      console.error(`[LOCK_SYNC_ERROR] Route /api/vixy/state error fetching lock doc:`, err);
+      handleFirestoreReadError(err, "Route /api/vixy/state");
     }
   }
 
@@ -11399,7 +11399,7 @@ app.get("/api/vixy/state", async (req, res) => {
 });
 app.get("/api/vixy/15m/current", async (req, res) => {
   const currentCycleIdForCurrentSync = active15mCycle.cycleId;
-  if (currentCycleIdForCurrentSync && db) {
+  if (currentCycleIdForCurrentSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
     try {
       const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForCurrentSync);
       const lockDocSnap = await getDoc(lockDocRef);
@@ -11459,7 +11459,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         }
       }
     } catch (err) {
-      console.error(`[LOCK_SYNC_ERROR] Route /api/vixy/15m/current error fetching lock doc:`, err);
+      handleFirestoreReadError(err, "Route /api/vixy/15m/current");
     }
   }
 
@@ -11670,7 +11670,7 @@ app.get(
   ["/api/signal", "/api/signal/latest", "/api/live-engine"],
   async (req, res) => {
     const currentCycleIdForSignalSync = active15mCycle.cycleId;
-    if (currentCycleIdForSignalSync && db) {
+    if (currentCycleIdForSignalSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
       try {
         const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForSignalSync);
         const lockDocSnap = await getDoc(lockDocRef);
@@ -11730,7 +11730,7 @@ app.get(
           }
         }
       } catch (err) {
-        console.error(`[LOCK_SYNC_ERROR] Route /api/signal error fetching lock doc:`, err);
+        handleFirestoreReadError(err, "Route /api/signal");
       }
     }
 
@@ -13455,7 +13455,7 @@ function isCircuitOpen() {
 }
 __name(isCircuitOpen, "isCircuitOpen");
 function canAttemptFirestoreWrite(writeTarget = "unknown") {
-  if (!db || persistenceState === "RESOURCE_EXHAUSTED") return false;
+  if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
   if (isCircuitOpen()) {
     if (firestoreQuotaFailureCount === 0) {
       console.log(
@@ -13467,6 +13467,32 @@ function canAttemptFirestoreWrite(writeTarget = "unknown") {
   return true;
 }
 __name(canAttemptFirestoreWrite, "canAttemptFirestoreWrite");
+
+function canAttemptFirestoreRead(readTarget = "unknown") {
+  if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
+  if (isCircuitOpen()) return false;
+  return true;
+}
+__name(canAttemptFirestoreRead, "canAttemptFirestoreRead");
+
+function handleFirestoreReadError(err, readTarget = "unknown") {
+  const rawMsg = err?.message || String(err);
+  const isOffline =
+    rawMsg.includes("offline") ||
+    rawMsg.includes("client is offline");
+  const isQuota =
+    rawMsg.includes("RESOURCE_EXHAUSTED") ||
+    rawMsg.includes("Quota limit exceeded") ||
+    rawMsg.includes("code 8") ||
+    rawMsg.includes("429");
+
+  if (isQuota) {
+    handleFirestoreWriteError(err, readTarget);
+  } else if (!isOffline) {
+    console.warn(`[FIRESTORE_READ_NOTICE] ${readTarget}:`, rawMsg);
+  }
+}
+__name(handleFirestoreReadError, "handleFirestoreReadError");
 function handleFirestoreWriteError(err, writeTarget = "unknown") {
   firestoreWriteFailureCount += 1;
   lastFirestoreWriteSuccess = false;
@@ -14928,7 +14954,7 @@ function seedInitialUsers() {
       stripeCustomerId: "cus_allan_yahir_active",
       stripeSubscriptionId: "sub_allan_yahir_elite",
       volumeTrades: 142,
-      passwordHash: defaultPass,
+      passwordHash: hashPassword("Vixy123"),
     },
     {
       id: "usr_alex_trader_8821",
@@ -15038,6 +15064,7 @@ function seedInitialUsers() {
       if (
         seed.passwordHash &&
         (seed.email.toLowerCase() === "wasan@cartwrightrn.com" ||
+          seed.email.toLowerCase() === "allanyahirpi@gmail.com" ||
           !existing.passwordHash ||
           !existing.passwordHash.startsWith("vixy$"))
       ) {

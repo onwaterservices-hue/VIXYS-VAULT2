@@ -22,8 +22,9 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read, write: if isBackendSystem();
-      match /journalEntries/{entryId} { allow read, write: if isBackendSystem(); }
+      allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId);
+      match /journalEntries/{entryId} { allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId); }
+      match /workspaces/{workspaceId} { allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId); }
     }
     match /tickets/{ticketId} { allow read, write: if isBackendSystem(); }
     match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }

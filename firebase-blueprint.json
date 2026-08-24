@@ -232,12 +232,32 @@
         "createdAt": { "type": "string", "maxLength": 100 }
       },
       "required": ["email", "product", "claimed"]
+    },
+    "userWorkspace": {
+      "title": "User Customizable Workspace",
+      "description": "Persistent layout configuration and settings for customizable VIXY workspace",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "createdAt": { "type": "string", "maxLength": 100 },
+        "updatedAt": { "type": "string", "maxLength": 100 },
+        "version": { "type": "number" },
+        "layoutVersion": { "type": "number" },
+        "isDefault": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "name", "createdAt", "updatedAt", "version", "layoutVersion"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/userProfile" },
       "description": "User account document"
+    },
+    "/users/{userId}/workspaces/{workspaceId}": {
+      "schema": { "$ref": "#/entities/userWorkspace" },
+      "description": "User persistent customizable workspaces"
     },
     "/subscriptions/{subscriptionId}": {
       "schema": { "$ref": "#/entities/userSubscription" },

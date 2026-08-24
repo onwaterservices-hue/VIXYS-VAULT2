@@ -60,49 +60,34 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
               <div
                 key={asset.symbol}
                 onClick={() => onSelectAsset(asset.symbol)}
-                className={`relative group flex items-center gap-3 px-3.5 py-2 rounded-2xl cursor-pointer transition-all duration-300 border select-none shrink-0 ${
+                className={`relative group flex items-center gap-2.5 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-200 border select-none shrink-0 ${
                   isSelected
-                    ? 'bg-gradient-to-r from-purple-900/90 via-purple-800/80 to-purple-950/90 border-purple-400/60 shadow-xl shadow-purple-900/40 text-white transform scale-105'
-                    : 'bg-[#0d071d]/80 hover:bg-purple-900/30 border-purple-900/30 text-purple-200/80 hover:text-white'
+                    ? 'bg-slate-800 border-slate-700 text-white shadow-sm font-bold'
+                    : 'bg-[#0e121a] hover:bg-slate-800/60 border-slate-800/80 text-slate-400 hover:text-white'
                 }`}
               >
                 {/* Logo Badge */}
                 <div
-                  className="w-7 h-7 rounded-xl flex items-center justify-center font-black text-[11px] text-white shadow-md shrink-0"
+                  className="w-5 h-5 rounded flex items-center justify-center font-black text-[10px] text-white shrink-0"
                   style={{ backgroundColor: asset.color }}
                 >
                   {asset.symbol.slice(0, 3)}
                 </div>
 
                 {/* Name & Price */}
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <span>{asset.symbol}</span>
-                    <span
-                      className={`text-[10px] font-mono ${
-                        asset.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                      }`}
-                    >
-                      {asset.change24h >= 0 ? '+' : ''}
-                      {asset.change24h.toFixed(2)}%
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-mono text-purple-200/90 font-bold">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-white">{asset.symbol}</span>
+                  <span className="text-xs font-mono font-bold text-slate-200">
                     ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
-                </div>
-
-                {/* Mini Sparkline Visualization */}
-                <div className="hidden sm:flex items-center gap-0.5 h-4 w-10 opacity-70 group-hover:opacity-100 transition-opacity">
-                  {asset.sparkline.map((pt, idx) => (
-                    <div
-                      key={idx}
-                      className={`w-1 rounded-full ${asset.change24h >= 0 ? 'bg-emerald-400' : 'bg-rose-400'}`}
-                      style={{
-                        height: `${Math.max(20, Math.min(100, ((pt - asset.sparkline[0]) / asset.sparkline[0]) * 1000 + 40))}%`,
-                      }}
-                    />
-                  ))}
+                  <span
+                    className={`text-[10px] font-mono font-bold ${
+                      asset.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                    }`}
+                  >
+                    {asset.change24h >= 0 ? '+' : ''}
+                    {asset.change24h.toFixed(2)}%
+                  </span>
                 </div>
 
                 {/* Star Favorite Button */}
@@ -111,10 +96,10 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                     e.stopPropagation();
                     onToggleFavorite(asset.symbol);
                   }}
-                  className="p-1 rounded-lg text-purple-400/50 hover:text-amber-400 transition-colors shrink-0"
+                  className="p-1 text-slate-500 hover:text-amber-400 transition-colors shrink-0"
                   title={isFav ? `Remove ${asset.symbol} from favorites` : `Add ${asset.symbol} to favorites`}
                 >
-                  <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-purple-400/50 hover:text-amber-400'}`} />
+                  <Star className={`w-3.5 h-3.5 ${isFav ? 'fill-amber-400 text-amber-400' : 'text-slate-500 hover:text-amber-400'}`} />
                 </button>
               </div>
             );
@@ -141,16 +126,16 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
       </div>
 
       {/* 2. AUTO-SYNC & VENUE CONTROLS ROW */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-3 rounded-2xl bg-[#0c061b]/90 border border-purple-900/40 backdrop-blur-xl font-mono text-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2.5 rounded-lg bg-[#0e121a] border border-slate-800/80 font-mono text-xs">
         {/* Single Clean Data Stream Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/50 border border-emerald-500/50 text-emerald-300 font-bold text-xs" title="Connected to live exchange websocket streams & backtested quant models. Sub-second direct orderbook execution.">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400 animate-pulse" />
-          <span>LIVE QUANT STREAM ({selectedTimeframe} • Direct Feed)</span>
+        <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 font-bold text-xs">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="font-sans text-[11px]">QUANT STREAM ({selectedTimeframe} • Direct Feed)</span>
         </div>
 
         {/* Venue Selector - Clean Ghost vs Solid Style */}
         <div className="flex items-center gap-1.5 overflow-x-auto">
-          <span className="text-[10px] text-purple-400 font-bold px-1 uppercase tracking-wider hidden sm:inline">
+          <span className="text-[10px] text-slate-500 font-bold px-1 uppercase tracking-wider hidden sm:inline">
             Venues:
           </span>
           {venues.map((v) => {
@@ -161,16 +146,15 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                 key={v}
                 onClick={() => !isDisabled && onToggleVenue(v)}
                 disabled={isDisabled}
-                title={isDisabled ? 'DraftKings Sportsbook API integration coming soon' : undefined}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded font-bold text-xs font-sans transition-all flex items-center gap-1.5 ${
                   isDisabled
-                    ? 'bg-purple-950/40 text-purple-400/40 border border-purple-900/20 cursor-not-allowed opacity-60'
+                    ? 'bg-slate-900/40 text-slate-600 border border-slate-900 cursor-not-allowed'
                     : isSelected
-                    ? 'bg-purple-600 text-white shadow-md border border-purple-400/50 font-black'
-                    : 'bg-transparent text-purple-300/70 border border-purple-900/40 hover:border-purple-500/40 hover:text-white'
+                    ? 'bg-slate-800 text-white border border-slate-700'
+                    : 'bg-transparent text-slate-400 border border-slate-800 hover:text-white'
                 }`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full ${isDisabled ? 'bg-purple-800' : isSelected ? 'bg-emerald-300 animate-pulse' : 'bg-purple-700/50'}`} />
+                <div className={`w-1.5 h-1.5 rounded-full ${isDisabled ? 'bg-slate-700' : isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
                 <span>{isDisabled ? 'DraftKings (Soon)' : v}</span>
               </button>
             );
@@ -178,22 +162,22 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
         </div>
       </div>
 
-      {/* 3. EXECUTIVE AI SUMMARY BANNER */}
-      <div className="p-3.5 rounded-2xl bg-gradient-to-r from-purple-950/60 via-[#0d071e] to-purple-950/60 border border-purple-500/30 flex items-center justify-between gap-3 text-xs backdrop-blur-md">
-        <div className="flex items-center gap-2.5">
-          <Sparkles className="w-4 h-4 text-purple-400 shrink-0" />
-          <span className="text-purple-100 font-medium leading-relaxed font-sans">
-            <strong className="text-white font-mono uppercase font-black tracking-wide">
-              AI QUANT MODEL:
+      {/* 3. EXECUTIVE SUMMARY BANNER */}
+      <div className="p-3 rounded-lg bg-[#0e121a] border border-slate-800/80 flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+          <span className="text-slate-300 font-sans leading-relaxed">
+            <strong className="text-white font-mono uppercase text-[11px] font-bold tracking-wider">
+              QUANT MODEL:
             </strong>{' '}
             {getAiSummary()}
           </span>
         </div>
         <div className="hidden lg:flex items-center gap-2 shrink-0 font-mono text-[11px]">
-          <span className="px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold border border-emerald-800/50">
             CONFIDENCE: {activeConfig.prediction.confidence}%
           </span>
-          <span className="px-2 py-0.5 rounded-lg bg-purple-500/20 text-purple-300 font-bold border border-purple-500/30">
+          <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 font-bold border border-slate-800">
             EDGE: +{activeConfig.prediction.edgePct}%
           </span>
         </div>
