@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import { Canonical15mDecision } from '../types/canonicalDecision';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import { safeFetchJson } from '../services/api';
 import { createInitial15mDecision } from '../services/engine/canonicalDecisionEngine';
 
@@ -95,37 +93,7 @@ export function useCanonical15mDecision(): {
     }
   };
 
-  // 1. Real-Time Firestore Listener (Primary Live Source)
-  useEffect(() => {
-    let unsubscribe: (() => void) | null = null;
-    try {
-      if (db) {
-        const lockDocRef = doc(db, 'active_cycle_lock', 'current_15m');
-        unsubscribe = onSnapshot(
-          lockDocRef,
-          (snapshot) => {
-            if (snapshot.exists()) {
-              const data = snapshot.data() as Canonical15mDecision;
-              applySafeUpdate(data, 'FIRESTORE_SNAPSHOT');
-            }
-          },
-          (err) => {
-            console.warn('[useCanonical15mDecision] Snapshot fallback notice:', err);
-            setFeedError(err.message || 'Firestore stream disconnected');
-          }
-        );
-      }
-    } catch (e: any) {
-      console.warn('[useCanonical15mDecision] Firestore setup warning:', e);
-      setFeedError(e?.message || 'Firestore setup error');
-    }
-
-    return () => {
-      if (unsubscribe) unsubscribe();
-    };
-  }, []);
-
-  // 2. REST API Polling Fallback (Every 3 seconds)
+  // REST API Polling (Authoritative Live Source every 3 seconds)
   const fetchFromServer = async () => {
     try {
       const data = await safeFetchJson<Canonical15mDecision>(`/api/vixy/15m/current?_t=${Date.now()}`);
