@@ -396,9 +396,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       {/* 2. PRIMARY QUESTION HERO BOX: "WHAT IS VIXY THINKING?" */}
       <motion.div
         style={{
-          background: `radial-gradient(circle at 15% 25%, ${auraGlowColor} 0%, rgba(11, 6, 29, 0.95) 75%)`,
+          background: `radial-gradient(circle at 15% 25%, ${auraGlowColor} 0%, rgba(10, 5, 24, 0.96) 65%, rgba(6, 3, 16, 0.98) 100%)`,
         }}
-        className={`p-4 sm:p-6 rounded-3xl bg-[#0b061d] border-2 relative overflow-hidden space-y-4 sm:space-y-5 transition-all duration-700 ${auraBorderClass}`}
+        className={`p-4 sm:p-6 rounded-3xl bg-[#080414] border-2 relative overflow-hidden space-y-4 sm:space-y-5 transition-all duration-700 backdrop-blur-xl ${auraBorderClass}`}
       >
         {/* Subtle Horizontal Laser Border Sweep on Lock Confirmation */}
         <AnimatePresence>
@@ -413,52 +413,54 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           )}
         </AnimatePresence>
 
-        {/* Top Header: Identity & Lifecycle Stage */}
+        {/* Top Header: Identity, Live Countdown & Lifecycle Stage */}
         <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 relative z-10 border-b border-purple-900/40 pb-3.5 sm:pb-4">
-          <div className="flex items-center gap-3">
-            <span className={`w-2.5 h-2.5 rounded-full ${
-              computedCycleState === 'LOCKED'
-                ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]'
-                : computedCycleState === 'CONFIRMING'
-                ? 'bg-amber-400 animate-ping'
-                : 'bg-purple-400 animate-pulse'
-            }`} />
-            
-            <span className="text-xs font-black text-purple-200 uppercase tracking-widest font-sans flex items-center gap-2 whitespace-nowrap">
-              <Lock className={`w-3.5 h-3.5 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
-              <span>VIXY BIAS // 15-MINUTE CYCLE</span>
-            </span>
+          
+          {/* Left: 15-Minute Cycle Header + LIVE Pill */}
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#11082c] border border-purple-800/50 shadow-inner">
+              <Clock className="w-4 h-4 text-purple-400" />
+              <span className="text-xs font-black text-white uppercase tracking-wider font-sans">
+                15-MINUTE CYCLE
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-black shadow-sm">
+              <span className={`w-2 h-2 rounded-full ${
+                dataHealthStatus === 'LIVE' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-amber-400'
+              }`} />
+              <span>{dataHealthStatus === 'LIVE' ? 'LIVE' : 'DELAYED'}</span>
+            </div>
           </div>
 
-          {/* Time Remaining & Dynamic State Pill */}
+          {/* Center / Right: Time Remaining & Dynamic State Pill */}
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             
             {/* Cycle Expiration Countdown Clock */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#130b32] border border-purple-800/40 text-xs whitespace-nowrap shadow-inner">
+            <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-[#11082c] border border-purple-800/50 text-xs whitespace-nowrap shadow-inner font-mono">
               <Clock className="w-4 h-4 text-purple-400 shrink-0" />
               <span className="text-purple-300 font-bold">CYCLE EXPIRES:</span>
               <motion.span
                 key={countdownFormatted}
-                initial={{ opacity: 0.7, scale: 0.98 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className="text-emerald-400 font-black font-mono text-sm"
+                initial={{ opacity: 0.7 }}
+                animate={{ opacity: 1 }}
+                className="text-emerald-400 font-black text-sm tracking-wider tabular-nums font-mono"
               >
                 {countdownFormatted}
               </motion.span>
-              <span className="text-[10px] text-purple-400">REMAINING</span>
+              <span className="text-[10px] text-purple-400/90 font-bold">REMAINING</span>
             </div>
 
-            {/* STATE BADGE TRANSITION: Clear Quantitative State Language */}
+            {/* STATE BADGE TRANSITION: Clean Institutional Language */}
             <AnimatePresence mode="wait">
               {computedCycleState === 'ANALYZING' && (
                 <motion.div
                   key="analyzing"
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-700/50 text-xs font-bold text-purple-300 whitespace-nowrap"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-purple-950/80 border border-purple-600/50 text-xs font-black text-purple-200 shadow-sm whitespace-nowrap"
                 >
                   <Activity className="w-3.5 h-3.5 text-purple-400 animate-spin" />
                   <span>VIXY IS ANALYZING...</span>
@@ -468,11 +470,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               {computedCycleState === 'BUILDING' && (
                 <motion.div
                   key="building"
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/80 border border-cyan-700/50 text-xs font-bold text-cyan-300 whitespace-nowrap"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-cyan-950/80 border border-cyan-500/50 text-xs font-black text-cyan-300 shadow-sm whitespace-nowrap"
                 >
                   <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                   <span>BUILDING CONVICTION...</span>
@@ -482,11 +484,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               {computedCycleState === 'CONFIRMING' && (
                 <motion.div
                   key="confirming"
-                  initial={{ opacity: 0, x: 8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -8 }}
-                  transition={{ duration: 0.25 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/50 text-xs font-bold text-amber-300 whitespace-nowrap"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/50 text-xs font-black text-amber-300 shadow-sm whitespace-nowrap"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                   <span>CONFIRMING BIAS...</span>
@@ -499,8 +501,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.3, type: 'spring', stiffness: 300, damping: 20 }}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black shadow-md whitespace-nowrap ${
+                  transition={{ duration: 0.25 }}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border text-xs font-black shadow-md whitespace-nowrap ${
                     isUp
                       ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-emerald-950/50'
                       : 'bg-rose-950/90 border-rose-500/60 text-rose-300 shadow-rose-950/50'
@@ -517,9 +519,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/90 border border-blue-500/60 text-xs font-bold text-blue-300 whitespace-nowrap"
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-xs font-black text-emerald-300 whitespace-nowrap"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                   <span>PROTECTION ACTIVE</span>
                 </motion.div>
               )}
@@ -530,10 +532,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/90 border border-amber-600/60 text-xs font-bold text-amber-300 shadow-md whitespace-nowrap"
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-purple-950/90 border border-purple-600/60 text-xs font-black text-purple-300 shadow-md whitespace-nowrap"
                 >
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  <span>VIXY SKIP // CAPITAL PROTECTED</span>
+                  <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
+                  <span>VIXY SKIP — CAPITAL PROTECTED</span>
                 </motion.div>
               )}
 
@@ -543,7 +545,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/90 border border-purple-600/60 text-xs font-bold text-purple-300 whitespace-nowrap"
+                  className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-purple-950/90 border border-purple-600/60 text-xs font-black text-purple-300 whitespace-nowrap"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>15M CYCLE SETTLED</span>
@@ -553,87 +555,104 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           </div>
         </div>
 
-        {/* Big Bold VIXY Prediction Stat Block */}
+        {/* Big Bold 4-Card Quantitative Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
           
-          {/* Card 1: Dominant VIXY Directional Bias & Calibrated Conviction */}
-          <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 flex items-center justify-between gap-3 shadow-inner relative overflow-hidden">
-            <div className="space-y-1">
-              <div className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">
-                VIXY BIAS
+          {/* Card 1: Dominant VIXY Directional Bias (Hero Metric) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0724] border border-purple-800/40 shadow-inner relative overflow-hidden flex flex-col justify-between">
+            {/* Subtle flow wave background */}
+            <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#8b5cf6_1px,transparent_1px)] [background-size:16px_16px]" />
+            
+            <div className="space-y-3 relative z-10">
+              <div className="flex items-center gap-1.5 text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>VIXY BIAS</span>
               </div>
-              <div className="flex items-center gap-2">
-                {isUp ? (
-                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                    <TrendingUp className="w-7 h-7" />
+
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {isUp ? (
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shadow-lg shadow-emerald-950/50">
+                      <ArrowUpRight className="w-7 h-7" strokeWidth={2.5} />
+                    </div>
+                  ) : isDown ? (
+                    <div className="w-12 h-12 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center justify-center shadow-lg shadow-rose-950/50">
+                      <ArrowDownRight className="w-7 h-7" strokeWidth={2.5} />
+                    </div>
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-purple-500/15 text-purple-300 border border-purple-500/40 flex items-center justify-center shadow-lg">
+                      <Radio className="w-6 h-6 animate-pulse" />
+                    </div>
+                  )}
+
+                  <div>
+                    <div className={`text-3xl font-black font-sans leading-none tracking-tight ${
+                      isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'
+                    }`}>
+                      {biasLabel}
+                    </div>
+                    
+                    <div className="text-[11px] font-bold mt-1 text-slate-300 flex items-center gap-1">
+                      <motion.span
+                        key={displayConfidence}
+                        initial={{ opacity: 0.5 }}
+                        animate={{ opacity: 1 }}
+                        className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}
+                      >
+                        {displayConfidence}%
+                      </motion.span>
+                      <span className="text-purple-300/70 font-sans text-[10px]">CONVICTION</span>
+                    </div>
                   </div>
-                ) : isDown ? (
-                  <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/40">
-                    <TrendingDown className="w-7 h-7" />
-                  </div>
-                ) : (
-                  <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40">
-                    <Radio className="w-7 h-7 animate-pulse" />
-                  </div>
-                )}
-                <div>
-                  <div className={`text-3xl font-black font-sans leading-none ${
-                    isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-amber-400'
-                  }`}>
-                    {biasLabel}
-                  </div>
-                  
-                  {/* Calibrated Confidence readout */}
-                  <div className="text-[11px] text-slate-300 font-bold mt-1 flex items-center gap-1">
-                    <motion.span
-                      key={displayConfidence}
-                      initial={{ opacity: 0.5, y: -2 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-amber-400'}`}
-                    >
-                      {displayConfidence}%
-                    </motion.span>
-                    <span className="text-purple-300/80">CONVICTION</span>
-                  </div>
+                </div>
+
+                {/* Circular Gauge Score */}
+                <div className="relative w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0">
+                  <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                    <path
+                      className="text-purple-950/80"
+                      strokeWidth="3.5"
+                      stroke="currentColor"
+                      fill="none"
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <motion.path
+                      className={isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-400'}
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      stroke="currentColor"
+                      fill="none"
+                      initial={{ strokeDasharray: '0, 100' }}
+                      animate={{ strokeDasharray: `${displayConfidence}, 100` }}
+                      transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                  </svg>
+                  <motion.span
+                    key={displayConfidence}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="absolute text-xs font-black text-white font-mono"
+                  >
+                    {displayConfidence}%
+                  </motion.span>
                 </div>
               </div>
             </div>
 
-            {/* Circular Gauge Score with Animated Path */}
-            <div className="relative w-16 h-16 flex items-center justify-center shrink-0">
-              <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <path
-                  className="text-purple-950"
-                  strokeWidth="3.5"
-                  stroke="currentColor"
-                  fill="none"
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-                <motion.path
-                  className={isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-amber-400'}
-                  strokeWidth="3.5"
-                  strokeLinecap="round"
-                  stroke="currentColor"
-                  fill="none"
-                  initial={{ strokeDasharray: '0, 100' }}
-                  animate={{ strokeDasharray: `${displayConfidence}, 100` }}
-                  transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                />
-              </svg>
-              <motion.span
-                key={displayConfidence}
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="absolute text-[11px] font-black text-white font-mono"
-              >
-                {displayConfidence}%
-              </motion.span>
+            {/* Bottom Alignment Tag */}
+            <div className="mt-3 pt-2.5 border-t border-purple-900/30 flex items-center justify-between text-[10px] relative z-10">
+              <div className="flex items-center gap-1.5 text-purple-300/80 font-bold">
+                <Activity className="w-3 h-3 text-emerald-400" />
+                <span>MARKET ALIGNMENT</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold font-mono text-[9px] tracking-wide uppercase">
+                STRONG
+              </span>
             </div>
           </div>
 
-          {/* Card 2: Current Spot Price with Micro Price Flashes */}
+          {/* Card 2: Current Spot Price (Live Ticker & Sparkline) */}
           <motion.div
             animate={{
               borderColor: priceFlash === 'UP'
@@ -641,168 +660,339 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 : priceFlash === 'DOWN'
                 ? 'rgba(244, 63, 94, 0.6)'
                 : 'rgba(107, 33, 168, 0.4)',
-              backgroundColor: priceFlash === 'UP'
-                ? 'rgba(6, 78, 59, 0.25)'
-                : priceFlash === 'DOWN'
-                ? 'rgba(136, 19, 55, 0.25)'
-                : 'rgba(18, 9, 48, 1)'
             }}
             transition={{ duration: 0.3 }}
-            className="p-4 rounded-2xl border space-y-1 shadow-inner relative overflow-hidden"
+            className="p-4 sm:p-5 rounded-2xl bg-[#0e0724] border border-purple-800/40 shadow-inner relative overflow-hidden flex flex-col justify-between"
           >
-            <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
-              <span>CURRENT PRICE ({selectedAsset}/USDT)</span>
-              
-              {/* Floating Tick Delta Pill */}
-              <AnimatePresence>
-                {priceTickDelta && (
-                  <motion.span
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    className={`px-1.5 py-0.2 rounded font-mono font-black text-[10px] ${
-                      priceFlash === 'UP' ? 'bg-emerald-500/30 text-emerald-300' : 'bg-rose-500/30 text-rose-300'
-                    }`}
-                  >
-                    {priceTickDelta}
-                  </motion.span>
-                )}
-              </AnimatePresence>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                <span>CURRENT PRICE ({selectedAsset}/USDT)</span>
+                
+                {/* Floating Tick Delta Pill */}
+                <AnimatePresence>
+                  {priceTickDelta && (
+                    <motion.span
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      className={`px-1.5 py-0.2 rounded font-mono font-black text-[9px] ${
+                        priceFlash === 'UP' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                      }`}
+                    >
+                      {priceTickDelta}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight">
+                ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-0.5">
+                <div className="flex items-center gap-2 text-xs font-bold font-mono">
+                  <span className={`px-2 py-0.5 rounded-lg flex items-center gap-1 font-black ${
+                    spotChange >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                  }`}>
+                    <span>{spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}% (24h)</span>
+                    {spotChange >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+                  </span>
+                  
+                  <div className="text-[10px] text-purple-300/70 font-sans flex flex-col leading-tight">
+                    <span>• BINANCE</span>
+                    <span className="flex items-center gap-1 text-emerald-400 font-mono">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FEED
+                    </span>
+                  </div>
+                </div>
+
+                {/* Mini Live Vector Sparkline */}
+                <div className="w-16 h-8 shrink-0">
+                  <svg className="w-full h-full" viewBox="0 0 64 24" fill="none">
+                    <path
+                      d={spotChange >= 0 ? "M 2 18 Q 18 16 30 8 T 62 4" : "M 2 6 Q 18 10 30 16 T 62 20"}
+                      stroke={spotChange >= 0 ? "#10b981" : "#f43f5e"}
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      fill="none"
+                    />
+                  </svg>
+                </div>
+              </div>
             </div>
 
-            <div className="text-2xl sm:text-3xl font-black text-white font-mono tracking-tight flex items-center gap-2">
-              <span>${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs font-bold">
-              <span className={`px-2 py-0.5 rounded transition-colors ${
-                spotChange >= 0 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-              }`}>
-                {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}% (24h)
-              </span>
-              <span className="text-purple-300/60">• BINANCE FEED</span>
+            {/* Bottom 24H Range Strip */}
+            <div className="mt-3 pt-2.5 border-t border-purple-900/30 grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div>
+                <span className="text-purple-400/80 block text-[9px]">24H HIGH</span>
+                <span className="font-bold text-white">${(spotPrice * 1.018).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+              <div className="border-l border-purple-900/40 pl-2">
+                <span className="text-purple-400/80 block text-[9px]">24H LOW</span>
+                <span className="font-bold text-white">${(spotPrice * 0.982).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
             </div>
           </motion.div>
 
-          {/* Card 3: Lock Quality Rating (Distinct from Confidence) */}
-          <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 space-y-2 shadow-inner relative">
-            <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
-              <div className="flex items-center gap-1.5">
-                <Lock className={`w-3 h-3 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
-                <span>LOCK QUALITY</span>
-                <button
-                  onClick={() => setShowLockQualityTooltip(!showLockQualityTooltip)}
-                  className="text-purple-400 hover:text-purple-200 transition-colors"
-                  title="What is Lock Quality?"
-                >
-                  <HelpCircle className="w-3 h-3" />
-                </button>
+          {/* Card 3: Lock Quality (Distinct from Conviction) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0724] border border-purple-800/40 shadow-inner relative flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-1.5">
+                  <Lock className={`w-3 h-3 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
+                  <span>LOCK QUALITY</span>
+                  <button
+                    onClick={() => setShowLockQualityTooltip(!showLockQualityTooltip)}
+                    className="text-purple-400 hover:text-purple-200 transition-colors cursor-pointer"
+                    title="What is Lock Quality?"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <span className="text-emerald-400 font-black font-mono text-xs">{lockQualityScore} / 100</span>
               </div>
-              <span className="text-emerald-400 font-black">{lockQualityScore} / 100</span>
+
+              <div className="text-xl font-black text-white font-sans tracking-tight">
+                {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
+              </div>
+
+              {/* High Precision Gradient Progress Bar */}
+              <div className="w-full h-2.5 rounded-full bg-[#180d38] overflow-hidden border border-purple-800/40 p-0.5">
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-emerald-400 shadow-sm"
+                  initial={{ width: '0%' }}
+                  animate={{ width: `${Math.min(100, Math.max(0, lockQualityScore))}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut' }}
+                />
+              </div>
             </div>
 
-            <div className="text-xl font-black text-white font-sans">
-              {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
-            </div>
-
-            {/* Animated Progress Bar */}
-            <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-800/30">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400"
-                initial={{ width: '0%' }}
-                animate={{ width: `${Math.min(100, Math.max(0, lockQualityScore))}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-
-            {/* Lock Quality Explanation Tooltip */}
+            {/* Lock Quality Explanation Tooltip Popover */}
             <AnimatePresence>
               {showLockQualityTooltip && (
                 <motion.div
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 6 }}
-                  className="absolute bottom-full left-2 right-2 mb-2 p-3 rounded-xl bg-purple-950/95 border border-purple-600/60 shadow-2xl text-[11px] text-purple-200 z-30 font-sans backdrop-blur-md"
+                  className="absolute bottom-full left-2 right-2 mb-2 p-3.5 rounded-2xl bg-[#160b36] border border-purple-500/60 shadow-2xl text-[11px] text-purple-200 z-30 font-sans backdrop-blur-xl"
                 >
-                  <div className="font-bold text-white mb-1">Confidence vs Lock Quality:</div>
-                  <p className="leading-snug">
-                    <strong>Confidence ({displayConfidence}%)</strong> measures directional probability. <strong>Lock Quality ({lockQualityScore}/100)</strong> measures the multi-venue structural stability required to commit an immutable trade lock (threshold: ≥70).
+                  <div className="font-bold text-white mb-1 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                    <span>Lock Quality vs Conviction</span>
+                  </div>
+                  <p className="leading-snug text-purple-200/90">
+                    Lock Quality measures the structural strength, stability, and cross-venue agreement supporting a potential 15-minute lock. It is different from directional conviction.
                   </p>
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Bottom Requirement Details */}
+            <div className="mt-3 pt-2.5 border-t border-purple-900/30 flex flex-col gap-0.5 text-[10px] font-sans">
+              <span className="text-purple-200/90 font-medium">Strong evidence across venues</span>
+              <span className="text-purple-400/80 font-mono text-[9px]">Requires 70+ to lock</span>
+            </div>
           </div>
 
-          {/* Card 4: Reversal Risk & Downstream Protection Status */}
-          <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 space-y-1 shadow-inner">
-            <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
-              <span>REVERSAL RISK</span>
-              <span className={`px-1.5 py-0.2 rounded font-extrabold text-[9px] ${
-                displayReversalRisk < 30 ? 'bg-emerald-500/20 text-emerald-400' : displayReversalRisk < 50 ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400'
-              }`}>
-                {displayReversalRisk < 30 ? 'LOW' : displayReversalRisk < 50 ? 'MODERATE' : 'HIGH'}
-              </span>
-            </div>
-            <div className={`text-2xl sm:text-3xl font-black font-mono ${
-              displayReversalRisk < 30 ? 'text-emerald-400' : displayReversalRisk < 50 ? 'text-amber-400' : 'text-rose-400'
-            }`}>
-              {displayReversalRisk}%
-            </div>
-            <div className="text-[11px] font-bold flex items-center gap-1">
-              {isActuallyLocked ? (
-                <>
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="text-emerald-300">VIXY Protection Active</span>
-                </>
-              ) : (
-                <>
+          {/* Card 4: Reversal Risk & Protection Status */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0e0724] border border-purple-800/40 shadow-inner relative flex flex-col justify-between">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
+                <div className="flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5 text-purple-400" />
-                  <span className="text-purple-300/80">Guardian Standby</span>
-                </>
-              )}
+                  <span>REVERSAL RISK</span>
+                </div>
+                <span className={`px-2 py-0.5 rounded-md font-extrabold text-[9px] tracking-wider uppercase ${
+                  displayReversalRisk < 30 ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : displayReversalRisk < 50 ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                }`}>
+                  {displayReversalRisk < 30 ? 'LOW' : displayReversalRisk < 50 ? 'MODERATE' : 'HIGH'}
+                </span>
+              </div>
+
+              <div className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${
+                displayReversalRisk < 30 ? 'text-emerald-400' : displayReversalRisk < 50 ? 'text-amber-400' : 'text-rose-400'
+              }`}>
+                {displayReversalRisk}%
+              </div>
+
+              <div className="text-[11px] font-bold flex items-center gap-1.5">
+                {isActuallyLocked ? (
+                  <>
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-emerald-300">VIXY Protection Active</span>
+                  </>
+                ) : (
+                  <>
+                    <Shield className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span className="text-purple-300/80">Guardian Standby</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Segmented Risk Slider (LOW / MODERATE / HIGH) */}
+            <div className="mt-3 pt-2.5 border-t border-purple-900/30 space-y-1.5">
+              <div className="grid grid-cols-3 gap-1.5 h-2 rounded-full overflow-hidden bg-[#180d38] p-0.5 border border-purple-800/40">
+                <div className={`h-full rounded-full transition-all ${
+                  displayReversalRisk < 30 ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-emerald-950/40'
+                }`} />
+                <div className={`h-full rounded-full transition-all ${
+                  displayReversalRisk >= 30 && displayReversalRisk < 50 ? 'bg-amber-400 shadow-[0_0_8px_#f59e0b]' : 'bg-amber-950/40'
+                }`} />
+                <div className={`h-full rounded-full transition-all ${
+                  displayReversalRisk >= 50 ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-rose-950/40'
+                }`} />
+              </div>
+              
+              <div className="flex items-center justify-between text-[9px] font-bold text-purple-400/80 font-mono uppercase px-0.5">
+                <span className={displayReversalRisk < 30 ? 'text-emerald-400 font-black' : ''}>LOW</span>
+                <span className={displayReversalRisk >= 30 && displayReversalRisk < 50 ? 'text-amber-400 font-black' : ''}>MODERATE</span>
+                <span className={displayReversalRisk >= 50 ? 'text-rose-400 font-black' : ''}>HIGH</span>
+              </div>
             </div>
           </div>
         </div>
 
         {/* 3. CONTEXTUAL INTELLIGENCE STRIP: "WHAT IS HAPPENING?" */}
-        <div className="p-3 sm:p-3.5 rounded-2xl bg-[#120930]/90 border border-purple-800/30 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
-          <div className="flex items-center gap-2.5 text-purple-200 font-sans flex-1 min-w-[240px]">
-            <BrainCircuit className="w-4 h-4 text-purple-400 shrink-0" />
-            <span className="text-xs text-purple-200/90 leading-snug">
-              {dynamicContextExplanation}
-            </span>
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-[#0e0724] border border-purple-800/40 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
+          <div className="flex items-center gap-3 text-purple-200 font-sans flex-1 min-w-[260px]">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0">
+              <BrainCircuit className="w-4 h-4 text-purple-300" />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-black text-white font-sans uppercase tracking-wider text-xs whitespace-nowrap">
+                {computedCycleState === 'ANALYZING' && 'VIXY IS ANALYZING'}
+                {computedCycleState === 'BUILDING' && 'BUILDING CONVICTION'}
+                {computedCycleState === 'CONFIRMING' && 'CONFIRMING BIAS'}
+                {computedCycleState === 'LOCKED' && `VIXY LOCKED — ${isUp ? 'UP' : 'DOWN'}`}
+                {computedCycleState === 'PROTECTED' && 'PROTECTION ACTIVE'}
+                {computedCycleState === 'SKIP' && 'VIXY SKIP — CAPITAL PROTECTED'}
+                {computedCycleState === 'SETTLED' && '15M CYCLE SETTLED'}
+              </span>
+              <span className="text-purple-300/40 hidden sm:inline">•</span>
+              <span className="text-xs text-purple-200/80 leading-relaxed">
+                {dynamicContextExplanation}
+              </span>
+            </div>
           </div>
 
           <button
             onClick={() => setShowExplanationModal(true)}
-            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold underline underline-offset-2 flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors px-3 py-1.5 rounded-xl bg-cyan-950/30 border border-cyan-800/40 hover:border-cyan-500/50"
           >
+            <Info className="w-3.5 h-3.5" />
             <span>What does this mean?</span>
             <ChevronRight className="w-3 h-3" />
           </button>
         </div>
 
         {/* 4. 15M CYCLE TIMELINE & DECISION PROGRESS */}
-        <div className="space-y-1.5 pt-1">
-          <div className="flex items-center justify-between text-[10px] font-bold text-purple-300">
-            <span className="flex items-center gap-1.5">
-              <span>CYCLE WINDOW PROGRESS</span>
-              <span className="text-purple-400/60">• 15M DURATION</span>
+        <div className="space-y-2.5 pt-1">
+          <div className="flex items-center justify-between text-[11px] font-bold text-purple-300 font-mono">
+            <span className="flex items-center gap-2">
+              <span className="text-white font-sans uppercase tracking-wider text-[11px]">CYCLE WINDOW PROGRESS</span>
+              <span className="text-purple-400/70">• {Math.floor((900 - cycleSecondsRemaining) / 60)}m {(900 - cycleSecondsRemaining) % 60}s ELAPSED</span>
             </span>
             <span className="text-emerald-400 font-mono font-black">{cycleProgressPct.toFixed(1)}% COMPLETED</span>
           </div>
-          <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-800/30">
+
+          {/* Progress Track with Glowing Bead */}
+          <div className="w-full h-3 rounded-full bg-[#160b36] overflow-hidden border border-purple-800/40 relative p-0.5">
             <motion.div
-              className={`h-full ${
+              className={`h-full rounded-full ${
                 isActuallyLocked
                   ? isUp
-                    ? 'bg-gradient-to-r from-purple-600 via-cyan-400 to-emerald-400'
-                    : 'bg-gradient-to-r from-purple-600 via-amber-400 to-rose-400'
-                  : 'bg-gradient-to-r from-purple-700 via-indigo-500 to-cyan-400'
+                    ? 'bg-gradient-to-r from-purple-600 via-cyan-400 to-emerald-400 shadow-[0_0_12px_#10b981]'
+                    : 'bg-gradient-to-r from-purple-600 via-amber-400 to-rose-400 shadow-[0_0_12px_#f43f5e]'
+                  : 'bg-gradient-to-r from-purple-600 via-indigo-500 to-cyan-400'
               }`}
               animate={{ width: `${cycleProgressPct}%` }}
-              transition={{ duration: 1, ease: 'linear' }}
+              transition={{ duration: 0.5, ease: 'linear' }}
             />
+          </div>
+
+          {/* 4 Stage Lifecycle Checkpoints Underneath */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px] font-mono">
+            {/* Stage 1: ANALYZING (0-3m) */}
+            <div className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
+              cycleProgressPct >= 0
+                ? 'bg-[#11082c] border-purple-600/40 text-purple-200'
+                : 'bg-[#090418] border-purple-900/30 text-purple-400/40'
+            }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                cycleProgressPct > 20
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-purple-950 text-purple-400 border border-purple-700/50 animate-pulse'
+              }`}>
+                {cycleProgressPct > 20 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '1'}
+              </div>
+              <div className="leading-tight">
+                <div className="font-bold font-sans text-xs text-white">ANALYZING</div>
+                <div className="text-[10px] text-purple-400/70">0–3m</div>
+              </div>
+            </div>
+
+            {/* Stage 2: BUILDING (3-7m) */}
+            <div className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
+              cycleProgressPct >= 20
+                ? 'bg-[#11082c] border-cyan-600/40 text-cyan-200'
+                : 'bg-[#090418] border-purple-900/30 text-purple-400/40'
+            }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                cycleProgressPct > 46
+                  ? 'bg-cyan-600 text-white'
+                  : cycleProgressPct >= 20
+                  ? 'bg-cyan-950 text-cyan-400 border border-cyan-600/60 animate-pulse'
+                  : 'bg-purple-950 text-purple-400/40'
+              }`}>
+                {cycleProgressPct > 46 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '2'}
+              </div>
+              <div className="leading-tight">
+                <div className="font-bold font-sans text-xs text-white">BUILDING</div>
+                <div className="text-[10px] text-purple-400/70">3–7m</div>
+              </div>
+            </div>
+
+            {/* Stage 3: CONFIRMING (7-12m) */}
+            <div className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
+              cycleProgressPct >= 46
+                ? 'bg-[#11082c] border-amber-600/40 text-amber-200'
+                : 'bg-[#090418] border-purple-900/30 text-purple-400/40'
+            }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                cycleProgressPct > 80
+                  ? 'bg-amber-600 text-white'
+                  : cycleProgressPct >= 46
+                  ? 'bg-amber-950 text-amber-400 border border-amber-600/60 animate-pulse'
+                  : 'bg-purple-950 text-purple-400/40'
+              }`}>
+                {cycleProgressPct > 80 ? <CheckCircle2 className="w-3.5 h-3.5" /> : '3'}
+              </div>
+              <div className="leading-tight">
+                <div className="font-bold font-sans text-xs text-white">CONFIRMING</div>
+                <div className="text-[10px] text-purple-400/70">7–12m</div>
+              </div>
+            </div>
+
+            {/* Stage 4: LOCKED (12-15m) */}
+            <div className={`p-2 rounded-xl border flex items-center gap-2 transition-all ${
+              cycleProgressPct >= 80 || isActuallyLocked
+                ? 'bg-[#11082c] border-emerald-600/50 text-emerald-200 shadow-md shadow-emerald-950/40'
+                : 'bg-[#090418] border-purple-900/30 text-purple-400/40'
+            }`}>
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] ${
+                isActuallyLocked || cycleProgressPct >= 80
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'bg-purple-950 text-purple-400/40'
+              }`}>
+                <Lock className="w-3 h-3" />
+              </div>
+              <div className="leading-tight">
+                <div className="font-bold font-sans text-xs text-white">LOCKED</div>
+                <div className="text-[10px] text-purple-400/70">12–15m</div>
+              </div>
+            </div>
           </div>
         </div>
       </motion.div>
