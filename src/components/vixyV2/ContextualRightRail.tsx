@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -20,6 +20,7 @@ import {
   V2StatusIndicator 
 } from '../ui/vixyV2Primitives';
 import { Canonical15mDecision } from '../../types/canonicalDecision';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 
 interface ContextualRightRailProps {
   decision?: Canonical15mDecision;
@@ -34,16 +35,27 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
   onOpenPredictionCenter,
   className = '',
 }) => {
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  // Second-by-second smooth tick
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const direction = decision?.direction || 'UP';
   const confidence = decision?.confidence || 78;
   const isUp = direction === 'UP';
-  const secondsRemaining = decision?.secondsRemaining ?? 402;
 
-  const formatTimer = (secs: number) => {
-    const m = Math.floor(secs / 60);
-    const s = secs % 60;
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
+  const secondsRemaining = useMemo(() => {
+    return calculateCycleSecondsRemaining(900, decision?.cycleEnd, nowMs);
+  }, [decision?.cycleEnd, nowMs]);
+
+  const formattedTimer = useMemo(() => {
+    return formatCountdownMmSs(secondsRemaining);
+  }, [secondsRemaining]);
 
   // Signal factors (using decision evidence or fallback defaults based on canonical data)
   const factors = (decision as any)?.evidence?.subScores || [
@@ -96,7 +108,7 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
             <div className="text-right shrink-0">
               <div className="text-xs font-extrabold text-slate-100 flex items-center justify-end gap-1">
                 <Clock className="w-3 h-3 text-purple-400 animate-pulse" />
-                <span className="font-mono">{formatTimer(secondsRemaining)}</span>
+                <span className="font-mono">{formattedTimer}</span>
               </div>
               <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider">
                 REMAINING

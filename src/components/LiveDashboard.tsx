@@ -27,6 +27,7 @@ import { AIPatternEngine } from './AIPatternEngine';
 import { fetchPrediction } from '../services/api';
 import { useLiveSignal } from '../hooks/useLiveSignal';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 import { ExecutiveCommandCenter } from './ExecutiveCommandCenter';
 import { CompactSignalChart } from './CompactSignalChart';
 import { ModelStatusBadge } from './ModelStatusBadge';
@@ -97,13 +98,26 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
   const [appMode, setAppMode] = useState<'SIMPLE' | 'PRO'>('SIMPLE');
   const [showAdvanced, setShowAdvanced] = useState<boolean>(false);
 
-  // Candle Countdown Timers (15m = 900s, 1h = 3600s)
-  const [secondsRemaining15M, setSecondsRemaining15M] = useState<number>(542);
-  const [secondsRemaining1H, setSecondsRemaining1H] = useState<number>(2054);
-
   // Synchronize with global live signal hook
   const { signal: liveApiData } = useLiveSignal(selectedAsset || 'BTC', timeframe === '1H' ? '1h' : '15m');
   const { decision: canonicalDecision } = useCanonical15mDecision();
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  // Precision 1-second interval
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const secondsRemaining15M = useMemo(() => {
+    return calculateCycleSecondsRemaining(900, canonicalDecision?.cycleEnd, nowMs);
+  }, [canonicalDecision?.cycleEnd, nowMs]);
+
+  const secondsRemaining1H = useMemo(() => {
+    return calculateCycleSecondsRemaining(3600, undefined, nowMs);
+  }, [nowMs]);
 
   // Authoritative Access Unlock Logic:
   // ADMIN -> FULL ACCESS (no lock gate, no subscription gate, no discord gate)
@@ -186,12 +200,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
       const validKalshiProb = Number.isFinite(data.kalshiImpliedProbability) ? data.kalshiImpliedProbability : 0.54;
       const kalshiProbPct = Math.round(validKalshiProb * 1000) / 10;
       
-      if (Number.isFinite(data.timeRemaining)) {
-        setSecondsRemaining15M((prev) => (prev === data.timeRemaining ? prev : data.timeRemaining));
-      } else if (Number.isFinite(data.features?.crossVenue?.timeRemainingSec)) {
-        setSecondsRemaining15M((prev) => (prev === data.features.crossVenue.timeRemainingSec ? prev : data.features.crossVenue.timeRemainingSec));
-      }
-      
       // Calculate or extract independent probabilities
       const pUpVal = data.pUp !== undefined ? (data.pUp <= 1 ? data.pUp * 100 : data.pUp) : (data.independentProbability?.pUpPct ?? (isBull ? 68.4 : 31.6));
       const pDownVal = data.pDown !== undefined ? (data.pDown <= 1 ? data.pDown * 100 : data.pDown) : (data.independentProbability?.pDownPct ?? (isBear ? 68.4 : 31.6));
@@ -239,7 +247,6 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     const modelProbVal = isBull ? pUpVal : (isBear ? pDownVal : Math.max(pUpVal, pDownVal));
     const kalshiProbPct = 54.0;
 
-    setSecondsRemaining15M(canonicalDecision.timeRemainingSec);
     setEngineState(canonicalDecision.currentState);
 
     setSignal((prev) => ({
@@ -383,19 +390,8 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
     return h1Candles.length > 0 ? h1Candles : candles;
   }, [candles, timeframe]);
 
-  // Ticking Countdown Timers
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setSecondsRemaining15M((prev) => Math.max(0, prev - 1));
-      setSecondsRemaining1H((prev) => Math.max(0, prev - 1));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
   const activeSeconds = timeframe === '15M' ? secondsRemaining15M : secondsRemaining1H;
-  const minutes = Math.floor(activeSeconds / 60);
-  const seconds = activeSeconds % 60;
-  const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const timeString = formatCountdownMmSs(activeSeconds);
 
   // Handle Market Switch
   const handleMarketChange = (marketKey: 'BTC15M' | 'BTC1H' | 'ETH15M' | 'SOL15M') => {

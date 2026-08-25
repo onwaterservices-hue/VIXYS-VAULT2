@@ -39,6 +39,7 @@ import {
 import { BTCTicker, Candle } from '../types';
 import { fetchBTCTicker, fetchCryptoKlines } from '../services/api';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 import { CandleChart } from './CandleChart';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
 
@@ -190,21 +191,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
   // Compute 15-Minute Cycle Countdown from authoritative timestamps
   const cycleSecondsRemaining = useMemo(() => {
-    if (canonicalDecision && typeof canonicalDecision.secondsRemaining === 'number') {
-      return canonicalDecision.secondsRemaining;
-    }
-    if (canonicalDecision && typeof canonicalDecision.timeRemainingSec === 'number') {
-      return canonicalDecision.timeRemainingSec;
-    }
-    const epochSec = Math.floor(nowMs / 1000);
-    const fifteenMinSec = 15 * 60;
-    return fifteenMinSec - (epochSec % fifteenMinSec);
-  }, [canonicalDecision, nowMs]);
+    return calculateCycleSecondsRemaining(900, canonicalDecision?.cycleEnd, nowMs);
+  }, [canonicalDecision?.cycleEnd, nowMs]);
 
   const countdownFormatted = useMemo(() => {
-    const mins = Math.floor(Math.max(0, cycleSecondsRemaining) / 60);
-    const secs = Math.max(0, cycleSecondsRemaining) % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    return formatCountdownMmSs(cycleSecondsRemaining);
   }, [cycleSecondsRemaining]);
 
   const cycleProgressPct = useMemo(() => {
@@ -516,7 +507,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   }`}
                 >
                   <Lock className="w-3.5 h-3.5" />
-                  <span>🔒 VIXY LOCKED — {isUp ? 'UP' : 'DOWN'}</span>
+                  <span>VIXY LOCKED — {isUp ? 'UP' : 'DOWN'}</span>
                 </motion.div>
               )}
 
@@ -711,7 +702,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </div>
 
             <div className="text-xl font-black text-white font-sans">
-              {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 60 ? 'STRONG LOCK' : 'BUILDING EVIDENCE'}
+              {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
             </div>
 
             {/* Animated Progress Bar */}

@@ -150,7 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: "ACCOUNT",
       items: [
         { id: "alerts", label: "Alerts", icon: Bell },
-        { id: "pricing", label: "Pricing", icon: CreditCard, badge: "PRO" },
+        { id: "pricing", label: "Membership Terminal", icon: CreditCard, badge: hasActiveAccess ? "ACTIVE" : "PRO" },
         { id: "settings", label: "Settings", icon: Settings },
       ],
     },

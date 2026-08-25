@@ -1226,6 +1226,7 @@ export default function App() {
               setUserRole={setUserRole}
               authState={authState}
               onOpenAuth={handleOpenAuth}
+              onOpenTerminal={() => setActiveTab('terminal')}
             />
           )}
 
@@ -1579,7 +1580,10 @@ export default function App() {
 
       {/* System Status Bar */}
       {activeTab !== 'landing' && (
-        <SystemStatusBar secondsRemaining={canonical15m.decision?.secondsRemaining} />
+        <SystemStatusBar
+          secondsRemaining={canonical15m.decision?.secondsRemaining}
+          cycleEnd={canonical15m.decision?.cycleEnd}
+        />
       )}
 
       {/* Global Smart Search Modal */}

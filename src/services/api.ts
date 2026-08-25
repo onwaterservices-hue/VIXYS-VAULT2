@@ -1671,6 +1671,39 @@ export async function fetchVixyStateApi(): Promise<any> {
   return data;
 }
 
+export async function extendMembershipApi(payload: {
+  email?: string;
+  uid?: string;
+  months?: number;
+  plan?: string;
+}): Promise<{
+  success: boolean;
+  message: string;
+  expiresAt?: string;
+  entitlement?: any;
+  user?: any;
+  error?: string;
+}> {
+  try {
+    const res = await fetch('/api/subscription/extend', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-user-email': payload.email || '',
+        'x-user-uid': payload.uid || '',
+      },
+      body: JSON.stringify(payload),
+    });
+    return await safeParseJson(res);
+  } catch (err: any) {
+    return {
+      success: false,
+      error: 'NETWORK_ERROR',
+      message: err.message || 'Connection error extending membership',
+    };
+  }
+}
+
 export async function restoreAccessApi(payload: {
   email?: string;
   uid?: string;

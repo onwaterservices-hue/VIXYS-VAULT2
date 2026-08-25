@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { VixyModuleProps } from '../types';
 import { ArrowUpRight, ArrowDownRight, Minus, Lock, Activity, ShieldCheck, Clock, Gauge, Award } from 'lucide-react';
 import { ModuleUnavailableState } from '../ModuleStates';
 import { getNormalizedLifecycleState } from '../../../hooks/useCanonical15mDecision';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../../utils/cycleTime';
 
 // 1. VIXY BIAS
 export const VixyBiasModule: React.FC<VixyModuleProps> = ({ canonical15m, normalizedLifecycle }) => {
@@ -118,10 +119,23 @@ export const LockStatusModule: React.FC<VixyModuleProps> = ({ canonical15m, norm
 
 // 4. CYCLE COUNTDOWN
 export const CycleCountdownModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
-  const secondsRemaining = canonical15m.timeRemainingSec ?? 342;
-  const mins = Math.floor(secondsRemaining / 60);
-  const secs = secondsRemaining % 60;
-  const countdownFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const secondsRemaining = useMemo(() => {
+    return calculateCycleSecondsRemaining(900, canonical15m?.cycleEnd, nowMs);
+  }, [canonical15m?.cycleEnd, nowMs]);
+
+  const countdownFormatted = useMemo(() => {
+    return formatCountdownMmSs(secondsRemaining);
+  }, [secondsRemaining]);
+
   const cycleProgressPct = Math.min(100, Math.max(0, ((900 - secondsRemaining) / 900) * 100));
 
   return (

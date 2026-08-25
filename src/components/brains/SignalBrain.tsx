@@ -18,6 +18,7 @@ import { ProtectionBrain } from './ProtectionBrain';
 import { WhaleBrain } from './WhaleBrain';
 import { InstitutionalIntelRadar } from './InstitutionalIntelRadar';
 import { DecisionEngineDiagnostics } from '../DecisionEngineDiagnostics';
+import { calculateCycleSecondsRemaining } from '../../utils/cycleTime';
 
 const getGradients = (semanticClass: string) => { if (!semanticClass) return { "--grad-a": "#A855F7", "--grad-b": "#f5f0ff", "--grad-c": "#A855F7", "--grad-glow": "rgba(168,85,247,0.5)" }; if (semanticClass.includes("#00FF9D") || semanticClass.includes("emerald")) { return { "--grad-a": "#00FF9D", "--grad-b": "#ffffff", "--grad-c": "#00FF9D", "--grad-glow": "rgba(0,255,157,0.5)" }; } if (semanticClass.includes("#FF3366") || semanticClass.includes("rose") || semanticClass.includes("red")) { return { "--grad-a": "#FF3366", "--grad-b": "#ffffff", "--grad-c": "#FF3366", "--grad-glow": "rgba(255,51,102,0.5)" }; } if (semanticClass.includes("amber") || semanticClass.includes("yellow")) { return { "--grad-a": "#F59E0B", "--grad-b": "#ffffff", "--grad-c": "#F59E0B", "--grad-glow": "rgba(245,158,11,0.5)" }; } if (semanticClass.includes("cyan")) { return { "--grad-a": "#22D3EE", "--grad-b": "#ffffff", "--grad-c": "#22D3EE", "--grad-glow": "rgba(34,211,238,0.5)" }; } return { "--grad-a": "#A855F7", "--grad-b": "#f5f0ff", "--grad-c": "#A855F7", "--grad-glow": "rgba(168,85,247,0.5)" }; };
 
@@ -49,8 +50,22 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
   const isStaleOrInvalid = false;
   const displayVenue = venue || 'Kalshi';
 
-  // Dynamic real-time second-by-second data age counter
+  // Dynamic real-time second-by-second data age counter and cycle clock
   const [liveAgeSeconds, setLiveAgeSeconds] = useState<number>(0);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const cycleRemainingSec = calculateCycleSecondsRemaining(
+    timeframe === '1H' ? 3600 : 900,
+    rawApiData?.cycleEnd,
+    nowMs
+  );
 
   useEffect(() => {
     const calcAge = () => {
@@ -575,7 +590,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         freshnessState={freshnessState}
         currentPrice={currentPrice}
         targetPrice={targetPrice}
-        timeRemainingSec={rawApiData?.timeRemainingSec || rawApiData?.features?.timeRemaining || 540}
+        timeRemainingSec={cycleRemainingSec}
         isProtectState={isProtectState}
         reversalRisk={reversalRisk}
         isOfflineOrStale={isOfflineOrStale}
@@ -594,7 +609,7 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
         reversalRisk={reversalRisk}
         currentPrice={currentPrice}
         targetPrice={targetPrice}
-        timeRemainingSec={rawApiData?.timeRemainingSec || rawApiData?.features?.timeRemaining || 540}
+        timeRemainingSec={cycleRemainingSec}
         onExecute={triggerHapticPulse}
       />
 

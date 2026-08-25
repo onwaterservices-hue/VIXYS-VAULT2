@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
-import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi } from '../services/api';
+import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi, extendMembershipApi } from '../services/api';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -34,6 +34,7 @@ interface SubscriptionViewProps {
   onExpireTrial?: () => void;
   authState?: AuthState;
   onOpenAuth?: (mode: 'login' | 'register', prefillEmail?: string) => void;
+  onOpenTerminal?: () => void;
 }
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
@@ -45,7 +46,10 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   onExpireTrial,
   authState,
   onOpenAuth,
+  onOpenTerminal,
 }) => {
+  const [isExtendingMonth, setIsExtendingMonth] = useState<boolean>(false);
+  const [extendMonthSuccess, setExtendMonthSuccess] = useState<string>('');
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
   const [selectedPlanToBuy, setSelectedPlanToBuy] = useState<'STARTER' | 'PRO' | 'ELITE'>('PRO');
   const [cardNumber, setCardNumber] = useState<string>('4242 •••• •••• 4242');
@@ -60,6 +64,40 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPct: number; promoterName: string; desc: string } | null>(null);
   const [promoStatusMsg, setPromoStatusMsg] = useState<string>('');
   const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
+
+  const handleExtendMonth = async () => {
+    setIsExtendingMonth(true);
+    setStripeError('');
+    setExtendMonthSuccess('');
+    try {
+      const userEmail = authState?.user?.email || localStorage.getItem('vixy_user_email') || '';
+      const uid = authState?.user?.id || '';
+      const activePlan = subscription?.plan && subscription.plan !== 'NONE' ? subscription.plan : 'PRO_PASS';
+      const res = await extendMembershipApi({
+        email: userEmail,
+        uid,
+        months: 1,
+        plan: activePlan,
+      });
+
+      if (res.success) {
+        setExtendMonthSuccess(res.message || 'Membership extended by 1 month!');
+        setSubscription((prev) => ({
+          ...prev,
+          status: 'active',
+          plan: prev.plan && prev.plan !== 'NONE' ? prev.plan : 'PRO',
+          renewalDate: res.expiresAt ? new Date(res.expiresAt).toLocaleDateString() : 'Extended +1 Month',
+        }));
+        setUserRole('PRO');
+      } else {
+        setStripeError(res.message || 'Failed to extend membership');
+      }
+    } catch (err: any) {
+      setStripeError(err.message || 'Error extending membership');
+    } finally {
+      setIsExtendingMonth(false);
+    }
+  };
 
   const handleValidatePromo = async () => {
     if (!promoCodeInput.trim()) return;
@@ -556,46 +594,73 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       )}
 
       {/* Success Notification */}
-      {successMessage && !isVerifyingWebhook && (
-        <div className="bg-emerald-950/40 border border-emerald-500/60 rounded-2xl p-4 flex items-center gap-3 text-emerald-200 shadow-xl font-mono">
+      {(successMessage || extendMonthSuccess) && !isVerifyingWebhook && (
+        <div className="bg-emerald-950/40 border border-emerald-500/60 rounded-2xl p-4 flex items-center gap-3 text-emerald-200 shadow-xl font-mono animate-fade-in">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-          <span className="text-xs sm:text-sm font-bold">{successMessage}</span>
+          <span className="text-xs sm:text-sm font-bold">{extendMonthSuccess || successMessage}</span>
         </div>
       )}
 
-      {/* Active Subscription Banner */}
-      <div className="vixy-card p-6 flex flex-wrap items-center justify-between gap-4 font-mono">
+      {/* Active Subscription & Membership Terminal Header */}
+      <div className="vixy-card p-6 flex flex-wrap items-center justify-between gap-4 font-mono bg-gradient-to-r from-purple-950/40 via-purple-900/20 to-black/60 border border-purple-500/30">
         <div className="flex items-center gap-4">
-          <div className="p-3 bg-purple-500/10 rounded-2xl border border-purple-500/20 text-purple-400">
+          <div className="p-3 bg-purple-500/20 rounded-2xl border border-purple-500/40 text-purple-300 shadow-inner">
             <CreditCard className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2 text-xs">
-              <span className="text-purple-300/60">Your Subscription:</span>
-              <span className="font-bold px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 uppercase">
-                {subscription.plan} ACTIVE
+              <span className="text-purple-300/60">Membership Status:</span>
+              <span className="font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                {subscription.plan || 'PRO'} ACTIVE
               </span>
             </div>
-            <h2 className="text-lg font-black text-white mt-0.5">
-              VIXY AI {subscription.plan} Tier
+            <h2 className="text-lg font-black text-white mt-0.5 flex items-center gap-2">
+              VIXY AI {subscription.plan || 'PRO'} Membership Terminal
             </h2>
-            <p className="text-purple-300/60 text-xs font-sans mt-0.5">
-              Status: Active • Renews {subscription.renewalDate} via {subscription.paymentMethod}
+            <p className="text-purple-300/70 text-xs font-sans mt-0.5">
+              Account: {authState?.user?.email || 'Logged in trader'} • Renews / Expires: <span className="text-white font-mono font-bold">{subscription.renewalDate || 'Active'}</span>
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-purple-300 text-xs font-bold flex items-center gap-1.5 mr-2">
-            <CheckCircle2 className="w-4 h-4 text-purple-400" /> Account Active
-          </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={handleExtendMonth}
+            disabled={isExtendingMonth}
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs transition-all border border-emerald-400/50 shadow-lg shadow-emerald-950/50 flex items-center gap-2 cursor-pointer active:scale-95"
+            title="Add 1 Month (+30 Days) to active subscription"
+          >
+            {isExtendingMonth ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-100" />
+                <span>Extending Membership...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-emerald-200" />
+                <span>Extend Membership (+1 Month)</span>
+              </>
+            )}
+          </button>
+
+          {onOpenTerminal && (
+            <button
+              onClick={onOpenTerminal}
+              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all border border-purple-400/40 shadow-lg shadow-purple-900/30 flex items-center gap-2 cursor-pointer active:scale-95"
+            >
+              <Zap className="w-4 h-4 text-amber-300" />
+              <span>Launch Production Terminal →</span>
+            </button>
+          )}
+
           <button
             onClick={handleOpenCustomerPortal}
             disabled={isOpeningPortal}
-            className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all border border-purple-400/40 shadow-lg shadow-purple-900/30 flex items-center gap-2"
+            className="px-3.5 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs transition-all border border-purple-500/30 shadow flex items-center gap-2"
           >
-            <CreditCard className="w-4 h-4" />
-            {isOpeningPortal ? 'Launching Stripe Portal...' : 'Manage Billing (Stripe Customer Portal)'}
+            <CreditCard className="w-3.5 h-3.5 text-purple-400" />
+            {isOpeningPortal ? 'Launching...' : 'Stripe Portal'}
           </button>
         </div>
       </div>

@@ -34,6 +34,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { ModuleRenderProps } from '../../config/vixyLiveModules';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 
 // ================= CORE MODULES =================
 
@@ -240,10 +241,9 @@ export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }
 };
 
 export const CycleStatusModule: React.FC<ModuleRenderProps> = ({ canonical15m, nowMs }) => {
-  const secondsRemaining = Math.max(0, Math.floor(((canonical15m.cycleEnd || (nowMs + 340000)) - nowMs) / 1000));
-  const mins = Math.floor(secondsRemaining / 60);
-  const secs = secondsRemaining % 60;
-  const timeFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  const currentNow = nowMs || Date.now();
+  const secondsRemaining = calculateCycleSecondsRemaining(900, canonical15m?.cycleEnd, currentNow);
+  const timeFormatted = formatCountdownMmSs(secondsRemaining);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">

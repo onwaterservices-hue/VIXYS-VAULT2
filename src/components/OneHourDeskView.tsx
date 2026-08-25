@@ -83,8 +83,25 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 }) => {
   const [selectedStrike, setSelectedStrike] = useState<number>(64200);
   const [selectedDirection, setSelectedDirection] = useState<'UP' | 'DOWN'>('UP');
-  const [timeRemainingMin, setTimeRemainingMin] = useState<number>(24);
-  const [timeRemainingSec, setTimeRemainingSec] = useState<number>(18);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  // Precision 1-second interval
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const totalSecRemaining1H = useMemo(() => {
+    const epochSec = Math.floor(nowMs / 1000);
+    const mod = epochSec % 3600;
+    const rem = 3600 - mod;
+    return rem === 0 ? 3600 : rem;
+  }, [nowMs]);
+
+  const timeRemainingMin = Math.floor(totalSecRemaining1H / 60);
+  const timeRemainingSec = totalSecRemaining1H % 60;
 
   const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
   const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
@@ -245,18 +262,6 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
       active = false;
     };
   }, [bankroll, kellyFraction, confidenceScore, kalshiYesCent, selectedAsset]);
-
-  // Countdown timer effect
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeRemainingSec((prevSec) => {
-        if (prevSec > 0) return prevSec - 1;
-        setTimeRemainingMin((prevMin) => (prevMin > 0 ? prevMin - 1 : 59));
-        return 59;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const action = apiSignal?.action || 'BUY_YES';
   const isBuyUp = action.includes('YES') || action.includes('BUY');

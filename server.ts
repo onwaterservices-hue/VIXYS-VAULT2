@@ -4563,6 +4563,112 @@ app.post("/api/auth/login", async (req, res) => {
   const entitlement = getUserEntitlement(cleanEmail);
   res.json({ success: true, user: serverSession, entitlement });
 });
+
+// ================= EXTEND MEMBERSHIP ROUTE =================
+app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
+  try {
+    const { email, uid, months = 1, plan = "PRO_PASS" } = req.body || {};
+    const targetEmail = String(email || req.headers["x-user-email"] || "").trim().toLowerCase();
+    
+    if (!targetEmail) {
+      return res.status(400).json({ success: false, error: "EMAIL_REQUIRED", message: "User email is required to extend membership." });
+    }
+
+    let user = serverUsers.find(u => u.email?.toLowerCase() === targetEmail || u.id === uid || u.uid === uid);
+    if (!user) {
+      ensureUserExists({
+        email: targetEmail,
+        name: targetEmail.split("@")[0],
+        role: plan.includes("ELITE") ? "ELITE" : (plan.includes("STARTER") ? "USER" : "PRO"),
+        subscription: plan,
+      });
+      user = serverUsers.find(u => u.email?.toLowerCase() === targetEmail);
+    }
+
+    const currentSub = userSubscriptions.get(targetEmail);
+    const existingExpiry = currentSub?.subscriptionExpiresAt || currentSub?.expiresAt || user?.subscriptionExpiresAt || user?.expiresAt;
+    
+    const nowMs = Date.now();
+    let baseTime = nowMs;
+    if (existingExpiry) {
+      const expMs = new Date(existingExpiry).getTime();
+      if (!isNaN(expMs) && expMs > nowMs) {
+        baseTime = expMs;
+      }
+    }
+
+    const addedMs = Number(months || 1) * 30 * 24 * 60 * 60 * 1000;
+    const newExpiryMs = baseTime + addedMs;
+    const newExpiryIso = new Date(newExpiryMs).toISOString();
+
+    const selectedRole = plan.includes("ELITE") ? "ELITE" : (plan.includes("STARTER") ? "USER" : "PRO");
+    const targetPlan = plan || user?.subscription || "PRO_PASS";
+
+    if (user) {
+      user.subscription = targetPlan;
+      user.role = selectedRole;
+      user.status = "ACTIVE";
+      user.expiresAt = newExpiryIso;
+      user.subscriptionExpiresAt = newExpiryIso;
+      user.verificationStatus = "VERIFIED";
+    }
+
+    userSubscriptions.set(targetEmail, {
+      email: targetEmail,
+      role: selectedRole,
+      plan: targetPlan,
+      status: "ACTIVE",
+      expiresAt: newExpiryIso,
+      subscriptionExpiresAt: newExpiryIso,
+      currentPeriodEnd: Math.floor(newExpiryMs / 1000),
+      updatedAt: new Date().toISOString(),
+    });
+
+    // Persist to Firestore
+    if (db && typeof canAttemptFirestoreWrite === "function" && canAttemptFirestoreWrite("users")) {
+      ensureFirestoreNetworkEnabled().then(() => {
+        const userDocId = user?.id || `usr_${targetEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+        const userPayload = {
+          id: userDocId,
+          email: targetEmail,
+          subscription: targetPlan,
+          role: selectedRole,
+          status: "ACTIVE",
+          expiresAt: newExpiryIso,
+          subscriptionExpiresAt: newExpiryIso,
+          updatedAt: new Date().toISOString(),
+        };
+        setDoc(doc(db, "users", userDocId), userPayload, { merge: true }).catch(() => {});
+        setDoc(doc(db, "users", targetEmail), userPayload, { merge: true }).catch(() => {});
+        setDoc(doc(db, "subscriptions", targetEmail), {
+          email: targetEmail,
+          role: selectedRole,
+          plan: targetPlan,
+          status: "ACTIVE",
+          expiresAt: newExpiryIso,
+          subscriptionExpiresAt: newExpiryIso,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+      }).catch(() => {});
+    }
+
+    saveDiskStore();
+    const entitlement = getUserEntitlement(targetEmail);
+    console.log(`[MEMBERSHIP_EXTENDED] email=${targetEmail} newExpiry=${newExpiryIso} plan=${targetPlan}`);
+
+    return res.json({
+      success: true,
+      message: `Membership successfully extended by ${months} month(s) to ${new Date(newExpiryMs).toLocaleDateString()}!`,
+      expiresAt: newExpiryIso,
+      user: { ...user, passwordHash: undefined },
+      entitlement,
+    });
+  } catch (err) {
+    console.error("[MEMBERSHIP_EXTEND_ERROR]", err);
+    return res.status(500).json({ success: false, error: "EXTEND_FAILED", message: err?.message || String(err) });
+  }
+});
+
 app.post("/api/admin/strip-pwd", async (req, res) => {
   const { email } = req.body;
   const user = serverUsers.find((u) => u.email === email);
@@ -5455,6 +5561,54 @@ app.post(
         success: true,
         message: `User ${user.email} activated/unfrozen`,
         user,
+      });
+    } else if (action === "extend_month" || action === "extend_membership" || action === "extend") {
+      const currentExpiry = user.subscriptionExpiresAt || user.expiresAt;
+      const nowMs = Date.now();
+      let baseTime = nowMs;
+      if (currentExpiry) {
+        const expMs = new Date(currentExpiry).getTime();
+        if (!isNaN(expMs) && expMs > nowMs) baseTime = expMs;
+      }
+      const newExpiryMs = baseTime + 30 * 24 * 60 * 60 * 1000;
+      const newExpiryIso = new Date(newExpiryMs).toISOString();
+      user.status = "ACTIVE";
+      user.subscription = user.subscription && user.subscription !== "NONE" ? user.subscription : "PRO_PASS";
+      user.expiresAt = newExpiryIso;
+      user.subscriptionExpiresAt = newExpiryIso;
+      userSubscriptions.set(user.email.toLowerCase(), {
+        email: user.email.toLowerCase(),
+        role: user.role || "PRO",
+        plan: user.subscription,
+        status: "ACTIVE",
+        expiresAt: newExpiryIso,
+        subscriptionExpiresAt: newExpiryIso,
+        currentPeriodEnd: Math.floor(newExpiryMs / 1000),
+        updatedAt: new Date().toISOString(),
+      });
+      if (db && typeof canAttemptFirestoreWrite === "function" && canAttemptFirestoreWrite("users")) {
+        ensureFirestoreNetworkEnabled().then(() => {
+          setDoc(doc(db, "users", user.id || user.email.toLowerCase()), {
+            status: "ACTIVE",
+            subscription: user.subscription,
+            expiresAt: newExpiryIso,
+            subscriptionExpiresAt: newExpiryIso,
+          }, { merge: true }).catch(() => {});
+          setDoc(doc(db, "subscriptions", user.email.toLowerCase()), {
+            status: "ACTIVE",
+            plan: user.subscription,
+            expiresAt: newExpiryIso,
+            subscriptionExpiresAt: newExpiryIso,
+          }, { merge: true }).catch(() => {});
+        }).catch(() => {});
+      }
+      saveDiskStore();
+      addServerAuditLog("ADMIN", "MEMBERSHIP_EXTENDED", `Extended membership for ${user.email} by 1 month to ${newExpiryIso}`);
+      return res.json({
+        success: true,
+        message: `Extended membership for ${user.email} by 1 month to ${new Date(newExpiryMs).toLocaleDateString()}`,
+        user,
+        expiresAt: newExpiryIso,
       });
     } else if (action === "extend_trial") {
       return res
@@ -7446,6 +7600,71 @@ function getEntitlementsFromSubscription(
 __name(getEntitlementsFromSubscription, "getEntitlementsFromSubscription");
 function getUserEntitlement(emailOrUid) {
   const clean = emailOrUid.toLowerCase().trim();
+  if (clean === "ogaccount85@gmail.com" || clean === "ogacount85@gmail.com") {
+    const memUser = serverUsers.find(
+      (u) => u.email?.toLowerCase() === clean,
+    );
+    const sub = userSubscriptions.get(clean);
+    const grantStartedAt = "2026-08-16T00:00:00.000Z";
+    const grantExpiresAt = sub?.expiresAt || sub?.subscriptionExpiresAt || memUser?.expiresAt || memUser?.subscriptionExpiresAt || "2026-10-16T00:00:00.000Z";
+    const nowMs2 = Date.now();
+    const expMs = new Date(grantExpiresAt).getTime();
+    const secondsRemaining = Math.max(0, Math.floor((expMs - nowMs2) / 1e3));
+    const active = secondsRemaining > 0;
+    const proEntitlements = getEntitlementsFromSubscription(
+      "PRO_QUANT",
+      "ACTIVE",
+      false,
+    );
+    const discordVerified = Boolean(
+      memUser &&
+      memUser.verificationStatus === "VERIFIED" &&
+      memUser.discordLinked,
+    );
+    return {
+      authenticated: true,
+      entitled: active,
+      access: active,
+      userId: memUser?.id || "usr_ogaccount85_gmail_com",
+      email: clean,
+      stripeVerified: false,
+      plan: active ? "PRO_QUANT" : "NONE",
+      logicalPlan: active ? "PRO_QUANT_MONTHLY" : "NONE",
+      billing: "MONTHLY",
+      status: active ? "active" : "inactive",
+      expiresAt: grantExpiresAt,
+      compensationApplied: true,
+      stripeCustomerId: "cus_venmo_ogaccount85",
+      subscriptionId: "sub_ogaccount85_pro",
+      currentPeriodStart: Math.floor(new Date(grantStartedAt).getTime() / 1e3),
+      currentPeriodEnd: Math.floor(expMs / 1e3),
+      cancelAtPeriodEnd: false,
+      discordVerified: true,
+      discordUserId: memUser?.discordId || void 0,
+      guildMember: true,
+      entitlements: active
+        ? proEntitlements.entitlements
+        : {
+            starter: false,
+            proQuant: false,
+            eliteQuant: false,
+            scalping15s: false,
+            canAccessProDesks: false,
+            canAccessAdminPanel: false,
+          },
+      entitlementState: {
+        status: active ? "PRO_ACTIVE" : "EXPIRED",
+        plan: active ? "PRO" : "FREE",
+        type: "SUBSCRIPTION",
+        expiresAt: grantExpiresAt,
+        updatedAt: new Date().toISOString(),
+      },
+      sessionVersion: memUser?.sessionVersion || 1,
+      dayPass: { active: false, secondsRemaining: 0 },
+      updatedAt: new Date().toISOString(),
+    };
+  }
+
   if (clean === "selvinrom1.6@gmail.com") {
     const grantStartedAt = "2026-08-16T00:00:00.000Z";
     const grantExpiresAt = "2026-09-16T00:00:00.000Z";
@@ -14871,6 +15090,88 @@ function seedInitialUsers() {
   const defaultPass = hashPassword("Seattle007");
   const modPass = hashPassword("123456");
   const seedUsers = [
+    {
+      id: "usr_ogaccount85_gmail_com",
+      email: "ogaccount85@gmail.com",
+      name: "OG Account 85",
+      role: "PRO",
+      subscription: "PRO_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: hashPassword("Seattle007"),
+      stripeCustomerId: "cus_venmo_ogaccount85",
+      stripeSubscriptionId: "sub_ogaccount85_pro",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "usr_venmo_ogacount85",
+      email: "ogacount85@gmail.com",
+      name: "OG Account 85",
+      role: "PRO",
+      subscription: "PRO_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: hashPassword("Seattle007"),
+      stripeCustomerId: "cus_venmo_ogacount85",
+      stripeSubscriptionId: "sub_ogacount85_pro",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "usr_venmo_adrian",
+      email: "adriiiansf27@gmail.com",
+      name: "Adrian SF",
+      role: "PRO",
+      subscription: "PRO_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: defaultPass,
+      stripeCustomerId: "cus_venmo_adrian",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "usr_venmo_luisvelascop",
+      email: "luisvelascop@icloud.com",
+      name: "Luis Velasco",
+      role: "ELITE",
+      subscription: "ELITE_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: defaultPass,
+      stripeCustomerId: "cus_venmo_luisvelascop",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "usr_albertt2700_gmail_com",
+      email: "albertt2700@gmail.com",
+      name: "Albert T",
+      role: "PRO",
+      subscription: "PRO_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: defaultPass,
+      stripeCustomerId: "cus_albertt2700",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      id: "usr_zar45157_gmail_com",
+      email: "zar45157@gmail.com",
+      name: "Zar 45157",
+      role: "ELITE",
+      subscription: "ELITE_PASS",
+      status: "ACTIVE",
+      joined: "2026-08-16",
+      verificationStatus: "VERIFIED",
+      passwordHash: defaultPass,
+      stripeCustomerId: "cus_zar45157_elite_quant",
+      stripeSubscriptionId: "sub_zar45157_elite_quant_1m",
+      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    },
+
     {
       id: "usr_mod_nghle_gmmail",
       email: "nghle749@gmmail.com",

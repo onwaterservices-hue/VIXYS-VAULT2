@@ -33,6 +33,7 @@ import {
 import { TAB_TO_PATH } from '../utils/routePaths';
 import { BTCTicker } from '../types';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
+import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 
 interface VixyHubViewProps {
   ticker: BTCTicker;
@@ -80,19 +81,12 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
 
   // Authoritative countdown calculation: cycleEnd timestamp minus current epoch
   const secondsRemaining = useMemo(() => {
-    if (canonical15m.cycleEnd && canonical15m.cycleEnd > nowMs) {
-      return Math.max(0, Math.floor((canonical15m.cycleEnd - nowMs) / 1000));
-    }
-    if (typeof canonical15m.timeRemainingSec === 'number') {
-      return Math.max(0, canonical15m.timeRemainingSec);
-    }
-    const epochSec = Math.floor(nowMs / 1000);
-    return 900 - (epochSec % 900);
-  }, [canonical15m.cycleEnd, canonical15m.timeRemainingSec, nowMs]);
+    return calculateCycleSecondsRemaining(900, canonical15m.cycleEnd, nowMs);
+  }, [canonical15m.cycleEnd, nowMs]);
 
-  const mm = Math.floor(secondsRemaining / 60);
-  const ss = secondsRemaining % 60;
-  const cycleExpiry = `${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  const cycleExpiry = useMemo(() => {
+    return formatCountdownMmSs(secondsRemaining);
+  }, [secondsRemaining]);
 
   const spotPrice = ticker.price || canonical15m.currentSpot || 64591.20;
   const spotChange = ticker.change24h || 1.85;

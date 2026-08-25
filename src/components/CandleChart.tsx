@@ -1440,7 +1440,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
         {/* AI Confidence Chip */}
         <span className="px-2 py-1 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-[10px] font-extrabold text-cyan-300">
-          AI CONF {(activeSignal.confidence * 100).toFixed(0)}%
+          AI CONF {activeSignal.confidence > 1 ? Math.round(activeSignal.confidence) : Math.round(activeSignal.confidence * 100)}%
         </span>
 
         {/* Edge Chip */}
