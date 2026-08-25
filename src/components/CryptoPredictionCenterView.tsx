@@ -31,7 +31,10 @@ import {
   Crosshair,
   Volume2,
   VolumeX,
-  Play
+  Play,
+  HelpCircle,
+  Shield,
+  Gauge
 } from 'lucide-react';
 import { BTCTicker, Candle } from '../types';
 import { fetchBTCTicker, fetchCryptoKlines } from '../services/api';
@@ -50,7 +53,7 @@ interface CryptoPredictionCenterViewProps {
   onOpenAuth?: (mode: 'login' | 'register') => void;
 }
 
-export type CycleState = 'BUILDING' | 'CONFIRMING' | 'LOCKED';
+export type CycleState = 'ANALYZING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'PROTECTED' | 'SETTLED' | 'SKIP';
 
 // Web Audio Soft Institutional Chime (Restrained, Optional)
 const playLockChime = () => {
@@ -88,7 +91,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   hasActiveAccess = true,
   onOpenAuth,
 }) => {
-  const { decision: canonicalDecision, isLoading: isDecisionLoading } = useCanonical15mDecision();
+  const {
+    decision: canonicalDecision,
+    isLoading: isDecisionLoading,
+    dataHealthStatus,
+    localUpdatedAt,
+    isStale,
+    isDisconnected,
+    refreshDecision,
+  } = useCanonical15mDecision();
+
   const [liveTicker, setLiveTicker] = useState<BTCTicker | null>(ticker || null);
   const [chartCandles, setChartCandles] = useState<Candle[]>(initialCandles || []);
   const [selectedAsset, setSelectedAsset] = useState<string>('BTC');
@@ -98,30 +110,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [audioMuted, setAudioMuted] = useState<boolean>(true);
+  const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
+  const [showLockQualityTooltip, setShowLockQualityTooltip] = useState<boolean>(false);
 
   // Motion & Dynamic State Trackers
   const prevSpotPriceRef = useRef<number>(64591.20);
   const [priceFlash, setPriceFlash] = useState<'UP' | 'DOWN' | 'NONE'>('NONE');
   const [priceTickDelta, setPriceTickDelta] = useState<string | null>(null);
-
   const [lockBeamActive, setLockBeamActive] = useState<boolean>(false);
 
-  // Dynamic Live Market Micro-Feed Stream
-  const [feedEvents, setFeedEvents] = useState([
-    { id: '1', time: '1m ago', text: '15M Cycle locked: VIXY Bias set to UP (78% confidence)', type: 'lock' },
-    { id: '2', time: '2m ago', text: 'BTC momentum vector turned strongly bullish', type: 'momentum' },
-    { id: '3', time: '3m ago', text: 'Large buyer detected on Binance ($1.4M buy wall)', type: 'whale' },
-    { id: '4', time: '4m ago', text: 'Funding rate remains neutral at +0.008%', type: 'funding' },
-    { id: '5', time: '7m ago', text: 'ETH following BTC trend with +2.43% expansion', type: 'alt' },
-  ]);
-
-  // Dynamic Confidence Simulation (for smooth demonstration)
+  // Dynamic Confidence & Reversal Risk from canonical engine
   const [displayConfidence, setDisplayConfidence] = useState<number>(78);
-
-  // Dynamic Reversal Risk
   const [displayReversalRisk, setDisplayReversalRisk] = useState<number>(28);
 
-  // Automatically sync with real-time canonicalDecision from Firestore if available
+  // Synchronize state with real-time canonicalDecision from backend
   useEffect(() => {
     if (canonicalDecision) {
       if (typeof canonicalDecision.confidence === 'number' && canonicalDecision.confidence > 0) {
@@ -133,7 +135,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     }
   }, [canonicalDecision]);
 
-  // Poll BTCTicker for fresh spot price & simulate price micro-ticks
+  // Poll BTCTicker for fresh spot price & compute price tick deltas
   useEffect(() => {
     const updateTicker = async () => {
       try {
@@ -147,7 +149,6 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             setPriceTickDelta(`${diff >= 0 ? '+' : ''}$${Math.abs(diff).toFixed(2)}`);
             prevSpotPriceRef.current = newPrice;
 
-            // Clear price flash highlight after 700ms
             setTimeout(() => {
               setPriceFlash('NONE');
               setPriceTickDelta(null);
@@ -179,7 +180,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     loadCandles();
   }, [selectedAsset, selectedTimeframe]);
 
-  // Precise Clock Update
+  // Isolated timestamp-synchronized Clock Update
   useEffect(() => {
     const interval = setInterval(() => {
       setNowMs(Date.now());
@@ -187,10 +188,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     return () => clearInterval(interval);
   }, []);
 
-  // Compute 15-Minute Cycle Countdown
+  // Compute 15-Minute Cycle Countdown from authoritative timestamps
   const cycleSecondsRemaining = useMemo(() => {
     if (canonicalDecision && typeof canonicalDecision.secondsRemaining === 'number') {
       return canonicalDecision.secondsRemaining;
+    }
+    if (canonicalDecision && typeof canonicalDecision.timeRemainingSec === 'number') {
+      return canonicalDecision.timeRemainingSec;
     }
     const epochSec = Math.floor(nowMs / 1000);
     const fifteenMinSec = 15 * 60;
@@ -198,39 +202,38 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   }, [canonicalDecision, nowMs]);
 
   const countdownFormatted = useMemo(() => {
-    const mins = Math.floor(cycleSecondsRemaining / 60);
-    const secs = cycleSecondsRemaining % 60;
+    const mins = Math.floor(Math.max(0, cycleSecondsRemaining) / 60);
+    const secs = Math.max(0, cycleSecondsRemaining) % 60;
     return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   }, [cycleSecondsRemaining]);
 
   const cycleProgressPct = useMemo(() => {
-    const elapsed = 900 - cycleSecondsRemaining;
+    const elapsed = Math.max(0, 900 - cycleSecondsRemaining);
     return Math.min(100, Math.max(0, (elapsed / 900) * 100));
   }, [cycleSecondsRemaining]);
 
-  // Derive Current Cycle Presentation State: CALIBRATING -> BUILDING -> CONFIRMING -> LOCKED -> SETTLED / SKIP
+  // Derive Canonical Cycle Presentation State
   const isActuallyLocked = useMemo(() => {
     const st = canonicalDecision?.currentState;
     return st === 'LOCKED_UP' || st === 'LOCKED_DOWN';
   }, [canonicalDecision?.currentState]);
 
-  const computedCycleState = useMemo<'CALIBRATING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'SKIP' | 'SETTLED'>(() => {
+  const computedCycleState = useMemo<CycleState>(() => {
     const st = canonicalDecision?.currentState;
     if (st === 'SETTLED') return 'SETTLED';
     if (st === 'LOCKED_UP' || st === 'LOCKED_DOWN') return 'LOCKED';
     if (st === 'SKIP') return 'SKIP';
+    if (st === 'PROTECTED') return 'PROTECTED';
     if (st === 'CONFIRMING') return 'CONFIRMING';
-    if (st === 'PROTECTED') return 'LOCKED';
 
-    // In pre-lock phase, use elapsed time strictly for sub-phase descriptions
     const secondsRemaining = canonicalDecision?.timeRemainingSec ?? (900 - (Math.floor(nowMs / 1000) % 900));
     const elapsed = Math.max(0, 900 - secondsRemaining);
-    if (elapsed < 120) return 'CALIBRATING';
+    if (elapsed < 120) return 'ANALYZING';
     if (elapsed < 360) return 'BUILDING';
     return 'CONFIRMING';
   }, [canonicalDecision?.currentState, canonicalDecision?.timeRemainingSec, nowMs]);
 
-  // Spot Price & Bias Calculations
+  // Spot Price & Direction Calculations
   const spotPrice = liveTicker?.price || (canonicalDecision as any)?.spotPrice || 64591.20;
   const spotChange = liveTicker?.change24h || 1.85;
 
@@ -242,18 +245,62 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const biasLabel = isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN';
   const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? 87;
   const lockQualityScore = rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
-  const regime = (canonicalDecision as any)?.regime || 'TRENDING_BULL';
-  const decisionId = (canonicalDecision as any)?.decisionId || '#48291';
 
-  // Sub-score factor breakdown (6 core signals)
-  const factorBreakdown = useMemo(() => [
-    { name: 'Momentum Vector', score: 8.7, detail: 'Taker buy delta +$28.4M across Binance/Coinbase', aligned: true },
-    { name: 'Trend Continuity', score: 8.2, detail: 'Supertrend bullish lock above $64,120 support', aligned: true },
-    { name: 'Order Flow Delta', score: 8.1, detail: '85% Buy Taker Delta absorption in order book', aligned: true },
-    { name: 'Volume Profile', score: 7.8, detail: 'Trading +$54.20 above Volume POC ($64,095)', aligned: true },
-    { name: 'Sentiment & Venue Sync', score: 7.2, detail: 'Kalshi 57% YES / Polymarket 59% YES consensus', aligned: true },
-    { name: 'Volatility Squeeze', score: 6.9, detail: 'Bandwidth 2.1% — Volatility expansion active', aligned: true },
-  ], [spotPrice]);
+  // Aura Style Configuration
+  const auraBorderClass = useMemo(() => {
+    if (isActuallyLocked) {
+      return isUp
+        ? 'border-emerald-500/50 shadow-[0_0_35px_rgba(16,185,129,0.14)]'
+        : 'border-rose-500/50 shadow-[0_0_35px_rgba(244,63,94,0.14)]';
+    }
+    if (isUp) {
+      return 'border-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.08)]';
+    }
+    if (isDown) {
+      return 'border-rose-500/30 shadow-[0_0_30px_rgba(244,63,94,0.08)]';
+    }
+    return 'border-purple-500/25 shadow-[0_0_25px_rgba(139,92,246,0.06)]';
+  }, [isActuallyLocked, isUp, isDown]);
+
+  const auraGlowColor = useMemo(() => {
+    if (isUp) return 'rgba(16, 185, 129, 0.08)';
+    if (isDown) return 'rgba(244, 63, 94, 0.08)';
+    return 'rgba(139, 92, 246, 0.06)';
+  }, [isUp, isDown]);
+
+  // Contextual Dynamic Explanation Text
+  const dynamicContextExplanation = useMemo(() => {
+    switch (computedCycleState) {
+      case 'ANALYZING':
+        return 'VIXY is evaluating momentum, trend continuity, taker order flow, and cross-venue sync before committing to an authoritative 15-minute lock.';
+      case 'BUILDING':
+        return 'Directional order flow is accumulating across venues. Multi-venue taker buy pressure is validating primary hypothesis.';
+      case 'CONFIRMING':
+        return 'Confluence criteria met. Finalizing cross-venue gate verification and stability checks before immutable lock.';
+      case 'LOCKED':
+        return `Authoritative 15M cycle lock committed for ${isUp ? 'UP' : 'DOWN'}. Autonomous protection guardian actively monitoring strike protection.`;
+      case 'PROTECTED':
+        return 'Autonomous capital preservation shield engaged. Volatility defense active.';
+      case 'SETTLED':
+        return '15-Minute cycle finalized and verified against benchmark settlement index.';
+      case 'SKIP':
+        return 'Conflicting multi-venue order flow or choppy regime detected. System recommended SKIP to protect capital.';
+      default:
+        return 'VIXY quantitative intelligence engine is monitoring 15-minute cycle structures in real time.';
+    }
+  }, [computedCycleState, isUp]);
+
+  // Manual Refresh Trigger
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshDecision();
+    } catch (e) {
+      // ignore
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
 
   // Recent 15M Cycle Settlement Strip
   const recentCycles = useMemo(() => [
@@ -263,49 +310,6 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     { id: '#48288', dir: 'UP', conf: 72, price: '$64,100.50', status: 'WIN', pnl: '+1.5%' },
     { id: '#48287', dir: 'SKIP', conf: 52, price: '$63,980.00', status: 'SKIPPED', pnl: '0.0%' },
   ], [displayConfidence, spotPrice]);
-
-  // Handle Manual Lock Trigger (Restrained Confirmation Interaction)
-  const triggerRestrainedLock = () => {
-    setLockBeamActive(true);
-    if (!audioMuted) {
-      playLockChime();
-    }
-    setTimeout(() => {
-      setLockBeamActive(false);
-    }, 1800);
-  };
-
-
-
-  // Simulate Live Event Insertion
-  const handleSimulateLiveEvent = () => {
-    const options = [
-      { text: 'Order Book Imbalance: Taker Buy ratio jumped to 89%', type: 'orderflow' },
-      { text: 'Kalshi 15M contract probability adjusted to 61% YES', type: 'venue' },
-      { text: 'Binance $2.1M buy order filled at $64,580', type: 'whale' },
-      { text: 'Vol Squeeze compression released — Momentum +18.4', type: 'volatility' },
-    ];
-    const picked = options[Math.floor(Math.random() * options.length)];
-    const newEv = {
-      id: String(Date.now()),
-      time: 'Just now',
-      text: picked.text,
-      type: picked.type
-    };
-
-    setFeedEvents(prev => [newEv, ...prev.slice(0, 5)]);
-
-    // Slightly nudge confidence to simulate live model update
-    setDisplayConfidence(prev => Math.min(94, Math.max(68, prev + (Math.random() > 0.4 ? 1 : -1))));
-  };
-
-  const handleManualRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      handleSimulateLiveEvent();
-    }, 600);
-  };
 
   return (
     <motion.div
@@ -318,7 +322,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       {/* 1. TOP HEADER & TITLE BAR */}
       <div className="flex flex-wrap items-center justify-between gap-4 pb-2 border-b border-purple-900/40">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-600/40 border border-purple-400/40">
+          <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-600 via-indigo-600 to-purple-800 flex items-center justify-center text-white shadow-lg shadow-purple-600/30 border border-purple-400/40">
             <Sparkles className="w-5 h-5 text-amber-300" />
           </div>
           <div>
@@ -326,12 +330,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight font-sans">
                 CRYPTO PREDICTION CENTER
               </h1>
-              <span className="px-2 py-0.5 rounded-lg bg-purple-950 text-purple-300 border border-purple-800/40 text-[10px] font-bold">
-                FLAGSHIP
+              <span className="px-2 py-0.5 rounded-lg bg-purple-950/90 text-purple-300 border border-purple-800/50 text-[10px] font-bold tracking-wider">
+                QUANTITATIVE COMMAND
               </span>
             </div>
             <p className="text-xs text-purple-300/70 font-sans">
-              AI-Powered Market Analysis • Real-Time Signals • Cross-Venue Data
+              AI Quantitative Intelligence • Real-Time Order Flow • Cross-Venue Execution
             </p>
           </div>
         </div>
@@ -339,6 +343,22 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         {/* Global Motion Controls & Interactive Testing Bar */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           
+          {/* Real Feed Health Status Indicator */}
+          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#0d0722] border border-purple-800/40 text-[11px] font-mono">
+            <span className={`w-2 h-2 rounded-full ${
+              dataHealthStatus === 'LIVE'
+                ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]'
+                : dataHealthStatus === 'STALE'
+                ? 'bg-amber-400 animate-pulse'
+                : 'bg-rose-500 animate-ping'
+            }`} />
+            <span className={
+              dataHealthStatus === 'LIVE' ? 'text-emerald-400 font-bold' : dataHealthStatus === 'STALE' ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'
+            }>
+              {dataHealthStatus === 'LIVE' ? 'FEED LIVE' : dataHealthStatus === 'STALE' ? 'FEED DELAYED' : 'RECONNECTING'}
+            </span>
+          </div>
+
           {/* Sound Toggle */}
           <button
             onClick={() => setAudioMuted(!audioMuted)}
@@ -375,32 +395,21 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             className={`p-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-purple-300 hover:text-white transition-all cursor-pointer ${
               isRefreshing ? 'animate-spin' : ''
             }`}
-            title="Refresh Terminal Data"
+            title="Refresh Canonical Data"
           >
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* 2. PRIMARY QUESTION HERO BOX: "WHAT DOES VIXY THINK?" */}
-      {/* 3-Second Comprehension Answer Banner with Restrained Lock Motion */}
+      {/* 2. PRIMARY QUESTION HERO BOX: "WHAT IS VIXY THINKING?" */}
       <motion.div
-        animate={{
-          borderColor: lockBeamActive
-            ? 'rgba(16, 185, 129, 0.8)'
-            : computedCycleState === 'LOCKED'
-            ? 'rgba(16, 185, 129, 0.4)'
-            : computedCycleState === 'CONFIRMING'
-            ? 'rgba(245, 158, 11, 0.4)'
-            : 'rgba(147, 51, 234, 0.5)',
-          boxShadow: lockBeamActive
-            ? '0 0 45px rgba(16, 185, 129, 0.25)'
-            : '0 0 35px rgba(147, 51, 234, 0.12)'
+        style={{
+          background: `radial-gradient(circle at 15% 25%, ${auraGlowColor} 0%, rgba(11, 6, 29, 0.95) 75%)`,
         }}
-        transition={{ duration: 0.5 }}
-        className="p-4 sm:p-6 rounded-3xl bg-[#0b061d] border-2 relative overflow-hidden space-y-4 sm:space-y-5"
+        className={`p-4 sm:p-6 rounded-3xl bg-[#0b061d] border-2 relative overflow-hidden space-y-4 sm:space-y-5 transition-all duration-700 ${auraBorderClass}`}
       >
-        {/* Horizontal Laser Border Sweep on Lock Confirmation */}
+        {/* Subtle Horizontal Laser Border Sweep on Lock Confirmation */}
         <AnimatePresence>
           {lockBeamActive && (
             <motion.div
@@ -413,34 +422,19 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           )}
         </AnimatePresence>
 
-        {/* Subtle Background Radial Glow */}
-        <motion.div
-          animate={{
-            scale: lockBeamActive ? [1, 1.15, 1] : 1,
-            opacity: computedCycleState === 'LOCKED' ? 0.22 : 0.15
-          }}
-          transition={{ duration: 0.6 }}
-          className={`absolute -top-24 -left-24 w-96 h-96 rounded-full blur-3xl pointer-events-none ${
-            isUp
-              ? 'bg-emerald-500'
-              : isDown
-              ? 'bg-rose-500'
-              : 'bg-amber-500'
-          }`}
-        />
-
-        {/* Top Primary Answer Header */}
+        {/* Top Header: Identity & Lifecycle Stage */}
         <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4 relative z-10 border-b border-purple-900/40 pb-3.5 sm:pb-4">
           <div className="flex items-center gap-3">
             <span className={`w-2.5 h-2.5 rounded-full ${
               computedCycleState === 'LOCKED'
-                ? 'bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400'
+                ? 'bg-emerald-400 shadow-[0_0_8px_#10B981]'
                 : computedCycleState === 'CONFIRMING'
                 ? 'bg-amber-400 animate-ping'
-                : 'bg-blue-400 animate-pulse'
+                : 'bg-purple-400 animate-pulse'
             }`} />
             
             <span className="text-xs font-black text-purple-200 uppercase tracking-widest font-sans flex items-center gap-2 whitespace-nowrap">
+              <Lock className={`w-3.5 h-3.5 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
               <span>VIXY BIAS // 15-MINUTE CYCLE</span>
             </span>
           </div>
@@ -448,13 +442,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Time Remaining & Dynamic State Pill */}
           <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
             
-            {/* Cycle Progress Bar / Countdown */}
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#130b32] border border-purple-800/40 text-xs whitespace-nowrap">
+            {/* Cycle Expiration Countdown Clock */}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#130b32] border border-purple-800/40 text-xs whitespace-nowrap shadow-inner">
               <Clock className="w-4 h-4 text-purple-400 shrink-0" />
               <span className="text-purple-300 font-bold">CYCLE EXPIRES:</span>
               <motion.span
                 key={countdownFormatted}
-                initial={{ opacity: 0.6, scale: 0.98 }}
+                initial={{ opacity: 0.7, scale: 0.98 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.2 }}
                 className="text-emerald-400 font-black font-mono text-sm"
@@ -464,32 +458,32 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <span className="text-[10px] text-purple-400">REMAINING</span>
             </div>
 
-            {/* STATE BADGE TRANSITION: CALIBRATING -> BUILDING -> CONFIRMING -> LOCKED -> SKIP */}
+            {/* STATE BADGE TRANSITION: Clear Quantitative State Language */}
             <AnimatePresence mode="wait">
-              {computedCycleState === 'CALIBRATING' && (
+              {computedCycleState === 'ANALYZING' && (
                 <motion.div
-                  key="calibrating"
-                  initial={{ opacity: 0, x: 10 }}
+                  key="analyzing"
+                  initial={{ opacity: 0, x: 8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.25 }}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/80 border border-purple-700/50 text-xs font-bold text-purple-300 whitespace-nowrap"
                 >
                   <Activity className="w-3.5 h-3.5 text-purple-400 animate-spin" />
-                  <span>VIXY ANALYZING (CALIBRATING)...</span>
+                  <span>VIXY IS ANALYZING...</span>
                 </motion.div>
               )}
 
               {computedCycleState === 'BUILDING' && (
                 <motion.div
                   key="building"
-                  initial={{ opacity: 0, x: 10 }}
+                  initial={{ opacity: 0, x: 8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.3 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/80 border border-blue-700/50 text-xs font-bold text-blue-300 whitespace-nowrap"
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-cyan-950/80 border border-cyan-700/50 text-xs font-bold text-cyan-300 whitespace-nowrap"
                 >
-                  <Activity className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
+                  <Activity className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
                   <span>BUILDING CONVICTION...</span>
                 </motion.div>
               )}
@@ -497,42 +491,71 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               {computedCycleState === 'CONFIRMING' && (
                 <motion.div
                   key="confirming"
-                  initial={{ opacity: 0, x: 10 }}
+                  initial={{ opacity: 0, x: 8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, x: -8 }}
+                  transition={{ duration: 0.25 }}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-700/50 text-xs font-bold text-amber-300 whitespace-nowrap"
                 >
                   <Lock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                  <span>CONFIRMING GATES...</span>
+                  <span>CONFIRMING BIAS...</span>
                 </motion.div>
               )}
 
               {computedCycleState === 'LOCKED' && (
                 <motion.div
                   key="locked"
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.3, type: 'spring', stiffness: 300, damping: 20 }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-xs font-bold text-emerald-300 shadow-md shadow-emerald-950/50 whitespace-nowrap"
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-black shadow-md whitespace-nowrap ${
+                    isUp
+                      ? 'bg-emerald-950/90 border-emerald-500/60 text-emerald-300 shadow-emerald-950/50'
+                      : 'bg-rose-950/90 border-rose-500/60 text-rose-300 shadow-rose-950/50'
+                  }`}
                 >
-                  <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>LOCKED — {rawDirection === 'UP' || (rawDirection as any) === 'YES' ? 'UP' : 'DOWN'} // AUTHORITATIVE</span>
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>🔒 VIXY LOCKED — {isUp ? 'UP' : 'DOWN'}</span>
+                </motion.div>
+              )}
+
+              {computedCycleState === 'PROTECTED' && (
+                <motion.div
+                  key="protected"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-950/90 border border-blue-500/60 text-xs font-bold text-blue-300 whitespace-nowrap"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+                  <span>PROTECTION ACTIVE</span>
                 </motion.div>
               )}
 
               {computedCycleState === 'SKIP' && (
                 <motion.div
                   key="skip"
-                  initial={{ opacity: 0, scale: 0.9 }}
+                  initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.3 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-amber-950/90 border border-amber-600/60 text-xs font-bold text-amber-300 shadow-md whitespace-nowrap"
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />
-                  <span>VIXY SKIP // CRITERIA NOT MET</span>
+                  <span>VIXY SKIP // CAPITAL PROTECTED</span>
+                </motion.div>
+              )}
+
+              {computedCycleState === 'SETTLED' && (
+                <motion.div
+                  key="settled"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-purple-950/90 border border-purple-600/60 text-xs font-bold text-purple-300 whitespace-nowrap"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>15M CYCLE SETTLED</span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -542,7 +565,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         {/* Big Bold VIXY Prediction Stat Block */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10">
           
-          {/* Card 1: VIXY Bias & Smooth Confidence Transition */}
+          {/* Card 1: Dominant VIXY Directional Bias & Calibrated Conviction */}
           <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 flex items-center justify-between gap-3 shadow-inner relative overflow-hidden">
             <div className="space-y-1">
               <div className="text-[10px] text-purple-400 font-bold uppercase tracking-wider">
@@ -569,18 +592,18 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     {biasLabel}
                   </div>
                   
-                  {/* Confidence Transition display */}
+                  {/* Calibrated Confidence readout */}
                   <div className="text-[11px] text-slate-300 font-bold mt-1 flex items-center gap-1">
                     <motion.span
                       key={displayConfidence}
-                      initial={{ opacity: 0.4, y: -4 }}
+                      initial={{ opacity: 0.5, y: -2 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.3 }}
-                      className="text-emerald-400 font-mono font-black"
+                      className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-amber-400'}`}
                     >
                       {displayConfidence}%
                     </motion.span>
-                    <span className="text-emerald-400">CONFIDENCE</span>
+                    <span className="text-purple-300/80">CONVICTION</span>
                   </div>
                 </div>
               </div>
@@ -670,15 +693,27 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </div>
           </motion.div>
 
-          {/* Card 3: Lock Quality Rating */}
-          <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 space-y-2 shadow-inner">
+          {/* Card 3: Lock Quality Rating (Distinct from Confidence) */}
+          <div className="p-4 rounded-2xl bg-[#120930] border border-purple-800/40 space-y-2 shadow-inner relative">
             <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
-              <span>LOCK QUALITY</span>
+              <div className="flex items-center gap-1.5">
+                <Lock className={`w-3 h-3 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
+                <span>LOCK QUALITY</span>
+                <button
+                  onClick={() => setShowLockQualityTooltip(!showLockQualityTooltip)}
+                  className="text-purple-400 hover:text-purple-200 transition-colors"
+                  title="What is Lock Quality?"
+                >
+                  <HelpCircle className="w-3 h-3" />
+                </button>
+              </div>
               <span className="text-emerald-400 font-black">{lockQualityScore} / 100</span>
             </div>
+
             <div className="text-xl font-black text-white font-sans">
-              {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 60 ? 'STRONG LOCK' : 'MODERATE LOCK'}
+              {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 60 ? 'STRONG LOCK' : 'BUILDING EVIDENCE'}
             </div>
+
             {/* Animated Progress Bar */}
             <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-800/30">
               <motion.div
@@ -688,6 +723,23 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 transition={{ duration: 0.8, ease: 'easeOut' }}
               />
             </div>
+
+            {/* Lock Quality Explanation Tooltip */}
+            <AnimatePresence>
+              {showLockQualityTooltip && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 6 }}
+                  className="absolute bottom-full left-2 right-2 mb-2 p-3 rounded-xl bg-purple-950/95 border border-purple-600/60 shadow-2xl text-[11px] text-purple-200 z-30 font-sans backdrop-blur-md"
+                >
+                  <div className="font-bold text-white mb-1">Confidence vs Lock Quality:</div>
+                  <p className="leading-snug">
+                    <strong>Confidence ({displayConfidence}%)</strong> measures directional probability. <strong>Lock Quality ({lockQualityScore}/100)</strong> measures the multi-venue structural stability required to commit an immutable trade lock (threshold: ≥70).
+                  </p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Card 4: Reversal Risk & Downstream Protection Status */}
@@ -713,23 +765,50 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </>
               ) : (
                 <>
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-slate-400">Protection Standby</span>
+                  <Shield className="w-3.5 h-3.5 text-purple-400" />
+                  <span className="text-purple-300/80">Guardian Standby</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {/* 15m Cycle Progress Line Strip */}
+        {/* 3. CONTEXTUAL INTELLIGENCE STRIP: "WHAT IS HAPPENING?" */}
+        <div className="p-3 sm:p-3.5 rounded-2xl bg-[#120930]/90 border border-purple-800/30 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner">
+          <div className="flex items-center gap-2.5 text-purple-200 font-sans flex-1 min-w-[240px]">
+            <BrainCircuit className="w-4 h-4 text-purple-400 shrink-0" />
+            <span className="text-xs text-purple-200/90 leading-snug">
+              {dynamicContextExplanation}
+            </span>
+          </div>
+
+          <button
+            onClick={() => setShowExplanationModal(true)}
+            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold underline underline-offset-2 flex items-center gap-1 cursor-pointer shrink-0 transition-colors"
+          >
+            <span>What does this mean?</span>
+            <ChevronRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        {/* 4. 15M CYCLE TIMELINE & DECISION PROGRESS */}
         <div className="space-y-1.5 pt-1">
           <div className="flex items-center justify-between text-[10px] font-bold text-purple-300">
-            <span>CYCLE WINDOW PROGRESS</span>
-            <span className="text-emerald-400">{cycleProgressPct.toFixed(1)}% COMPLETED</span>
+            <span className="flex items-center gap-1.5">
+              <span>CYCLE WINDOW PROGRESS</span>
+              <span className="text-purple-400/60">• 15M DURATION</span>
+            </span>
+            <span className="text-emerald-400 font-mono font-black">{cycleProgressPct.toFixed(1)}% COMPLETED</span>
           </div>
-          <div className="w-full h-1.5 rounded-full bg-purple-950 overflow-hidden border border-purple-800/30">
+          <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-800/30">
             <motion.div
-              className="h-full bg-gradient-to-r from-purple-600 via-indigo-400 to-emerald-400"
+              className={`h-full ${
+                isActuallyLocked
+                  ? isUp
+                    ? 'bg-gradient-to-r from-purple-600 via-cyan-400 to-emerald-400'
+                    : 'bg-gradient-to-r from-purple-600 via-amber-400 to-rose-400'
+                  : 'bg-gradient-to-r from-purple-700 via-indigo-500 to-cyan-400'
+              }`}
               animate={{ width: `${cycleProgressPct}%` }}
               transition={{ duration: 1, ease: 'linear' }}
             />
@@ -737,7 +816,63 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         </div>
       </motion.div>
 
-      {/* 3. MAIN DOMINANT CHART SECTION & SUB-PANELS GRID */}
+      {/* FIRST-TIME USER EXPLANATION MODAL */}
+      <AnimatePresence>
+        {showExplanationModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="w-full max-w-lg p-6 rounded-3xl bg-[#0e0724] border border-purple-600/50 shadow-2xl space-y-4 text-slate-200 font-sans"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-purple-800/40">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-5 h-5 text-amber-300" />
+                  <h3 className="text-lg font-black text-white">How VIXY 15M Decisions Work</h3>
+                </div>
+                <button
+                  onClick={() => setShowExplanationModal(false)}
+                  className="p-1 rounded-lg text-purple-400 hover:text-white transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 text-xs leading-relaxed text-purple-200/90">
+                <div className="p-3 rounded-xl bg-[#150a36] border border-purple-800/30">
+                  <div className="font-bold text-white mb-0.5">1. Continuous Multi-Venue Analysis</div>
+                  <p>VIXY ingests live ticks and order book deltas across Binance, Coinbase, and Kalshi, calculating directional conviction throughout the 15-minute window.</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#150a36] border border-purple-800/30">
+                  <div className="font-bold text-white mb-0.5">2. Conviction vs Lock Quality</div>
+                  <p><strong>Conviction</strong> is the model&apos;s probability assessment. <strong>Lock Quality</strong> is the stability and structural validation required before committing an immutable trade lock.</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-[#150a36] border border-purple-800/30">
+                  <div className="font-bold text-white mb-0.5">3. Immutable Lock & Capital Protection</div>
+                  <p>Once Locked, VIXY cannot change its prediction. If an adverse strike breach occurs, autonomous VIXY Protection alerts you to preserve capital.</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowExplanationModal(false)}
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 font-bold text-white text-xs transition-colors"
+              >
+                Got It
+              </button>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 5. MAIN DOMINANT CHART SECTION & SUB-PANELS GRID */}
       <div className="space-y-6">
         
         {/* Main Interactive Prediction Chart (Full Width) */}
@@ -758,7 +893,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 <div className="flex items-center p-1 rounded-xl bg-[#120930] border border-purple-800/40 text-xs">
                   <button
                     onClick={() => setChartMode('CANDLE')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       chartMode === 'CANDLE'
                         ? 'bg-purple-600 text-white shadow-sm'
                         : 'text-purple-300 hover:text-white'
@@ -768,7 +903,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </button>
                   <button
                     onClick={() => setChartMode('RIBBON')}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       chartMode === 'RIBBON'
                         ? 'bg-purple-600 text-white shadow-sm'
                         : 'text-purple-300 hover:text-white'
@@ -784,7 +919,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     <button
                       key={tf}
                       onClick={() => setSelectedTimeframe(tf as any)}
-                      className={`px-2 py-0.5 rounded-lg transition-all ${
+                      className={`px-2 py-0.5 rounded-lg transition-all cursor-pointer ${
                         selectedTimeframe === tf
                           ? 'bg-purple-950 text-amber-300 border border-purple-700/50'
                           : 'text-purple-300/80 hover:text-white'
@@ -852,9 +987,18 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </span>
               </div>
 
-              <div className="flex items-center gap-2 text-emerald-400 font-bold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>15M PREDICTION LOCK ACTIVE</span>
+              <div className="flex items-center gap-2 font-bold">
+                {!isActuallyLocked ? (
+                  <span className="flex items-center gap-1.5 text-purple-300">
+                    <Lock className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
+                    <span>15M ENGINE WATCH ACTIVE</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-emerald-400">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>15M PREDICTION LOCK ACTIVE</span>
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -936,7 +1080,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         </div>
       </div>
 
-      {/* 4. RECENT 15-MINUTE CYCLE SETTLEMENT STRIP */}
+      {/* 6. RECENT 15-MINUTE CYCLE SETTLEMENT STRIP */}
       <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 shadow-xl space-y-3">
         <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
           <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
