@@ -21,6 +21,8 @@ import {
 } from '../ui/vixyV2Primitives';
 import { Canonical15mDecision } from '../../types/canonicalDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
+import { computeEvidenceVectors } from '../../utils/evidenceVectors';
+import { getReversalRiskAssessment } from '../../utils/reversalRisk';
 
 interface ContextualRightRailProps {
   decision?: Canonical15mDecision;
@@ -57,17 +59,15 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
     return formatCountdownMmSs(secondsRemaining);
   }, [secondsRemaining]);
 
-  // Signal factors (using decision evidence or fallback defaults based on canonical data)
-  const factors = (decision as any)?.evidence?.subScores || [
-    { name: 'Momentum', score: 8.7 },
-    { name: 'Trend', score: 8.2 },
-    { name: 'Order Flow', score: 8.1 },
-    { name: 'Volume', score: 7.8 },
-    { name: 'Sentiment', score: 7.2 },
-    { name: 'Volatility', score: 6.9 },
-  ];
+  // Genuine computed evidence vectors from real market data
+  const evidenceSummary = useMemo(() => {
+    return computeEvidenceVectors(decision);
+  }, [decision]);
 
-  const reversalRisk = decision?.reversalRisk || 28;
+  const reversalRisk = decision?.reversalRisk ?? 28;
+  const reversalAssessment = useMemo(() => {
+    return getReversalRiskAssessment(reversalRisk);
+  }, [reversalRisk]);
 
   return (
     <aside className={`w-[320px] shrink-0 space-y-3.5 font-mono select-none ${className}`}>
@@ -137,28 +137,41 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
           <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold pb-1.5 border-b border-purple-900/30">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>6 / 6 SIGNALS ALIGNED</span>
+              <span>{evidenceSummary.signalsAlignedHeader}</span>
             </span>
-            <span className="text-slate-400 font-mono text-[9.5px]">CONVICTION 8.2/10</span>
+            <span className="text-slate-400 font-mono text-[9.5px]">{evidenceSummary.convictionHeaderText}</span>
           </div>
 
           <div className="space-y-2 pt-0.5">
-            {factors.map((factor: any, idx: number) => {
-              const name = factor.name || factor.label || `Factor ${idx + 1}`;
-              const score = typeof factor.score === 'number' ? factor.score : 8.0;
-              const percent = Math.min(100, (score / 10) * 100);
-              const detail = factor.detail || factor.caption || `${name} alignment vector aligned with 15M cycle bias.`;
+            {evidenceSummary.vectors.map((factor, idx) => {
+              const name = factor.name;
+              const isAvailable = factor.score !== null && !factor.isStaleOrMissing;
+              const percent = factor.percent;
+              const displayScore = isAvailable ? `${factor.score?.toFixed(1)} / 10` : factor.displayScore;
+              const detail = factor.detail;
 
               return (
                 <div key={idx} className="space-y-0.5">
                   <div className="flex items-center justify-between text-[10.5px]">
                     <span className="text-slate-200 font-bold">{name}</span>
-                    <span className="text-emerald-400 font-black font-mono">{score.toFixed(1)} / 10</span>
+                    <span className={`font-black font-mono ${
+                      isAvailable
+                        ? factor.aligned ? 'text-emerald-400' : 'text-amber-400'
+                        : 'text-slate-500'
+                    }`}>
+                      {displayScore}
+                    </span>
                   </div>
                   <div className="h-1.5 w-full bg-[#080512] rounded-full overflow-hidden border border-purple-900/30">
                     <div
-                      className="h-full bg-gradient-to-r from-purple-500 to-emerald-400 transition-all duration-300 rounded-full"
-                      style={{ width: `${percent}%` }}
+                      className={`h-full transition-all duration-300 rounded-full ${
+                        isAvailable
+                          ? factor.aligned
+                            ? 'bg-gradient-to-r from-purple-500 to-emerald-400'
+                            : 'bg-gradient-to-r from-purple-900 to-amber-500'
+                          : 'bg-slate-800'
+                      }`}
+                      style={{ width: `${isAvailable ? percent : 0}%` }}
                     />
                   </div>
                   <div className="text-[9px] text-purple-300/70 truncate">{detail}</div>
@@ -170,9 +183,9 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
           <div className="pt-2 border-t border-purple-900/30 flex items-center justify-between text-[10px] font-bold text-emerald-400">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-              <span>100% SIGNAL CONVICTION</span>
+              <span>{evidenceSummary.convictionPercentText}</span>
             </span>
-            <span className="text-purple-300 font-mono text-[9.5px]">8.2 / 10 COMPOSITE</span>
+            <span className="text-purple-300 font-mono text-[9.5px]">{evidenceSummary.compositeFooterText}</span>
           </div>
         </div>
       </V2Panel>
@@ -201,24 +214,30 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between bg-[#080512] p-2.5 rounded-xl border border-purple-900/40">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="p-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-emerald-400 shrink-0">
+              <div className={`p-1.5 rounded-lg border shrink-0 ${reversalAssessment.cardClass}`}>
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="text-[11px] font-bold text-emerald-400 uppercase leading-none">ACTIVE</div>
+                <div className={`text-[11px] font-bold uppercase leading-none ${reversalAssessment.colorClass}`}>
+                  {reversalAssessment.tier === 'HIGH' ? 'HAZARD ELEVATED' : 'ACTIVE'}
+                </div>
                 <div className="text-[9.5px] text-slate-400 mt-0.5">Reversal Risk</div>
               </div>
             </div>
 
             <div className="text-right shrink-0">
-              <div className="text-sm font-black text-slate-100 font-mono">{reversalRisk}%</div>
-              <div className="text-[8.5px] text-emerald-400 font-bold uppercase">LOW RISK</div>
+              <div className="text-sm font-black text-slate-100 font-mono">{reversalAssessment.score}%</div>
+              <div className={`text-[8.5px] font-bold uppercase ${reversalAssessment.colorClass}`}>
+                {reversalAssessment.label}
+              </div>
             </div>
           </div>
 
           <div className="p-2 rounded-lg bg-[#080512] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono">
             <span className="text-slate-400">SHIELD STATUS:</span>
-            <span className="text-emerald-400 font-bold">STABLE (0 DIVERGENCE)</span>
+            <span className={`font-bold ${reversalAssessment.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
+              {reversalAssessment.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
+            </span>
           </div>
         </div>
       </V2Panel>

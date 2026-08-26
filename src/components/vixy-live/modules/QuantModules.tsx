@@ -1,5 +1,6 @@
 import React from 'react';
 import { VixyModuleProps } from '../types';
+import { computeEvidenceVectors } from '../../../utils/evidenceVectors';
 
 // Helper to extract factor by group or name from canonical15m evidence factors
 function getFactor(canonical15m: any, groupName: string) {
@@ -293,34 +294,31 @@ export const NewsModule: React.FC<VixyModuleProps> = () => {
 // 22. SIGNAL MATRIX MODULE
 export const SignalMatrixModule: React.FC<VixyModuleProps> = ({ canonical15m }) => {
   const dir = canonical15m.direction || 'UP';
-  const factors = [
-    { label: 'Momentum Vector', val: '8.7', status: 'ALIGNED', ok: true },
-    { label: 'Taker Buy Delta', val: '+$28.4M', status: 'STRONG', ok: true },
-    { label: 'Strike Position', val: '+$42.50', status: 'ABOVE', ok: true },
-    { label: 'Cross-Venue Sync', val: '58% YES', status: 'CONFIRMED', ok: true },
-    { label: 'Bandwidth Squeeze', val: '2.1%', status: 'EXPANDING', ok: true },
-    { label: 'Reversal Risk', val: '22%', status: 'LOW HAZARD', ok: true },
-  ];
+  const summary = computeEvidenceVectors(canonical15m);
 
   return (
     <div className="p-3.5 h-full flex flex-col justify-between font-mono bg-[#0b0e14]">
       <div className="flex justify-between items-center text-[10px] text-slate-500 font-sans font-bold uppercase">
         <span>SIGNAL CONFLUENCE MATRIX</span>
-        <span className="text-emerald-400 font-bold">{canonical15m.evidenceAlignment ?? 8}/10 ALIGNED</span>
+        <span className="text-emerald-400 font-bold">{summary.signalsAlignedHeader}</span>
       </div>
 
       <div className="grid grid-cols-2 gap-1.5 py-1">
-        {factors.map((f, i) => (
+        {summary.vectors.map((f, i) => (
           <div key={i} className="p-1.5 rounded bg-[#0e121a] border border-slate-800/80 flex items-center justify-between text-[10px]">
-            <span className="text-slate-400 font-sans truncate">{f.label}</span>
-            <span className="text-emerald-400 font-bold ml-1 shrink-0">{f.val}</span>
+            <span className="text-slate-400 font-sans truncate">{f.name}</span>
+            <span className={`font-bold ml-1 shrink-0 ${f.score !== null ? (f.aligned ? 'text-emerald-400' : 'text-amber-400') : 'text-slate-500'}`}>
+              {f.score !== null ? `${f.score.toFixed(1)}/10` : f.displayScore}
+            </span>
           </div>
         ))}
       </div>
 
       <div className="text-[10px] text-slate-500 font-sans border-t border-slate-800/60 pt-1.5 flex justify-between">
         <span>SYSTEM VERDICT</span>
-        <span className="text-emerald-400 font-mono font-bold">HIGH CONVICTION {dir}</span>
+        <span className="text-emerald-400 font-mono font-bold">
+          {summary.convictionPct >= 70 ? 'HIGH CONVICTION' : 'MODERATE CONVICTION'} {dir}
+        </span>
       </div>
     </div>
   );

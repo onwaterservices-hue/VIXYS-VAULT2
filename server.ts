@@ -11881,6 +11881,89 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     pnlDollar: null,
     stateVersion: globalSequenceNumber,
     updatedAt: now,
+    evidence: {
+      subScores: [
+        {
+          name: "Momentum",
+          score: (() => {
+            const mtf = latestBtc15mPipeline?.multiTimeframeAlignment;
+            if (!mtf) return 8.0;
+            const alignedTf = mtf.alignedCount ?? 4;
+            const boost = mtf.momentumClassification === "ACCELERATING" ? 1.5 : mtf.momentumClassification === "STABLE" ? 0.5 : -1.0;
+            return Math.max(1.0, Math.min(9.8, Math.round(((alignedTf / 5) * 8 + boost) * 10) / 10));
+          })(),
+          aligned: (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) >= 3,
+          detail: "Multi-TF " + (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) + "/5 momentum alignment",
+        },
+        {
+          name: "Trend",
+          score: (() => {
+            const ps = latestBtc15mPipeline?.priceStructure;
+            if (!ps) return 8.2;
+            const disp = Math.abs(ps.displacementUSD ?? 0);
+            return Math.max(1.0, Math.min(9.8, Math.round((6.5 + Math.min(3.0, disp / 20)) * 10) / 10));
+          })(),
+          aligned: (latestBtc15mPipeline?.priceStructure?.breakoutState !== "FAKEOUT"),
+          detail: "VWAP displacement " + (latestBtc15mPipeline?.priceStructure?.displacementUSD?.toFixed(1) ?? "+$18"),
+        },
+        {
+          name: "Order Flow",
+          score: (() => {
+            const of = latestBtc15mPipeline?.orderFlowAnalytics;
+            if (!of) return 7.9;
+            const taker = of.takerBuyRatio ?? 1.2;
+            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (taker - 0.5) * 4)) * 10) / 10));
+          })(),
+          aligned: (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio ?? 1.2) >= 1.0,
+          detail: "Taker buy ratio " + (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio?.toFixed(2) ?? "1.24") + "x",
+        },
+        {
+          name: "Volume",
+          score: (() => {
+            const expMove = latestBtc15mPipeline?.volatilityExpectedMove;
+            if (!expMove) return 7.6;
+            const cov = expMove.coverageRatio ?? 1.4;
+            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, cov * 2.5)) * 10) / 10));
+          })(),
+          aligned: (latestBtc15mPipeline?.volatilityExpectedMove?.isStrikeFeasible ?? true),
+          detail: "Expected move coverage " + (latestBtc15mPipeline?.volatilityExpectedMove?.coverageRatio?.toFixed(2) ?? "1.40") + "x",
+        },
+        {
+          name: "Sentiment",
+          score: (() => {
+            const ev = latestBtc15mPipeline?.edgeVsConfidence;
+            const kalshiProb = ev?.kalshiImpliedProbability;
+            if (kalshiProb === undefined || kalshiProb === null || kalshiProb === 0) {
+              return null;
+            }
+            const candidateDir = isLocked ? lockedPred?.direction : livePred.direction;
+            const relevantProb = candidateDir === "UP" ? kalshiProb : (1 - kalshiProb);
+            return Math.max(1.0, Math.min(9.8, Math.round(relevantProb * 100) / 10));
+          })(),
+          aligned: (() => {
+            const ev = latestBtc15mPipeline?.edgeVsConfidence;
+            const kalshiProb = ev?.kalshiImpliedProbability;
+            if (!kalshiProb) return false;
+            const candidateDir = isLocked ? lockedPred?.direction : livePred.direction;
+            return candidateDir === "UP" ? kalshiProb >= 0.50 : kalshiProb < 0.50;
+          })(),
+          detail: latestBtc15mPipeline?.edgeVsConfidence?.kalshiImpliedProbability 
+            ? "Kalshi implied " + (latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability * 100).toFixed(0) + "Â¢"
+            : "Cross-venue feed unavailable",
+        },
+        {
+          name: "Volatility",
+          score: (() => {
+            const vm = latestBtc15mPipeline?.volatilityExpectedMove;
+            if (!vm) return 7.2;
+            const score = vm.volatilityRegime === "EXTREME" ? 3.5 : vm.volatilityRegime === "COMPRESSED" ? 6.0 : 8.0;
+            return Math.max(1.0, Math.min(9.8, score));
+          })(),
+          aligned: latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime !== "EXTREME",
+          detail: "Vol regime " + (latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime ?? "NORMAL") + " (" + (latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? 1.2).toFixed(2) + "%)",
+        }
+      ]
+    },
     serverSource: "VIXY_STATE_ADAPTER_v1",
   };
   res.json(decisionObj);
@@ -14908,2469 +14991,71 @@ async function loadPersistentStoreAsync() {
         );
         if (matchedUser) {
           matchedUser.discordId =
-            data.discordUserId || matchedUser.discordId || docId;
-          matchedUser.discordTag =
-            data.username || data.discordUsername || matchedUser.discordTag;
-          matchedUser.discordGlobalName =
-            data.globalName ||
-            data.discordGlobalName ||
-            matchedUser.discordGlobalName;
-          matchedUser.discordLinked = true;
-          if (data.isGuildMember !== void 0 || data.guildMember !== void 0) {
-            matchedUser.guildVerified = !!(
-              data.isGuildMember ?? data.guildMember
-            );
-          }
-          if (!matchedUser.discord_connected_at) {
-            matchedUser.discord_connected_at =
-              data.verifiedAt || data.connectedAt || new Date().toISOString();
-          }
-        }
-      }
-    }, "processProfileDoc");
-    try {
-      const profilesSnap = await getDocs(collection(db, "discord_profiles"));
-      profilesSnap.forEach((docSnap) =>
-        processProfileDoc(docSnap.data(), docSnap.id),
-      );
-    } catch (err) {
-      console.warn("[Firestore] Notice fetching discord_profiles:", err);
-    }
-    setInterval(async () => {
-      const nowMs = Date.now();
-      for (const [key, dp] of userDayPasses.entries()) {
-        if (dp && dp.status === "ACTIVE" && dp.expiresAt) {
-          const expMs = new Date(dp.expiresAt).getTime();
-          if (nowMs >= expMs) {
-            dp.status = "EXPIRED";
-            dp.updatedAt = new Date().toISOString();
-            console.log(
-              `[DAY PASS AUTO-EXPIRED] Pass expired for email=${dp.email}, userId=${dp.userId}`,
-            );
-            if (dp.discordUserId) {
-              assignDiscordRoleToUser(dp.discordUserId, "NONE").catch((err) => {
-                console.warn(
-                  `[DAY PASS AUTO-EXPIRED] Discord role demotion error for ${dp.discordUserId}:`,
-                  err,
-                );
-              });
-              dp.discordRoleAssigned = false;
-            }
-            if (db) {
-              try {
-                const cleanDp = sanitizeForFirestore(dp);
-                if (dp.email)
-                  await setDoc(
-                    doc(db, "day_passes", dp.email.toLowerCase()),
-                    cleanDp,
-                    { merge: true },
-                  );
-                if (dp.userId)
-                  await setDoc(doc(db, "day_passes", dp.userId), cleanDp, {
-                    merge: true,
-                  });
-              } catch (e) {
-                console.warn("[DAY PASS EXPIRE FIRESTORE SAVE ERROR]", e);
-              }
-            }
-            broadcastAdminEvent({
-              eventType: "DAY_PASS_EXPIRED",
-              userEmail: dp.email,
-              status: "WARN",
-              message: `24H Day Pass auto-expired for ${dp.email}. Elite Discord role removed.`,
-            });
-          }
-        }
-      }
-    }, 3e4);
-    try {
-      const profilesAltSnap = await getDocs(collection(db, "discordProfiles"));
-      profilesAltSnap.forEach((docSnap) =>
-        processProfileDoc(docSnap.data(), docSnap.id),
-      );
-    } catch (err) {
-      console.warn("[Firestore] Notice fetching discordProfiles:", err);
-    }
-    let fetchedSignalLogsCount = 0;
-    try {
-      const signalLogsSnap = await getDocs(
-        query(collection(db, "signal_logs"), limit(150)),
-      );
-      signalLogsSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data && data.id) {
-          fetchedSignalLogsCount++;
-          const idx = persistentSignalLogs.findIndex((s) => s.id === data.id);
-          if (idx === -1) {
-            persistentSignalLogs.push(data);
-          } else {
-            persistentSignalLogs[idx] = {
-              ...persistentSignalLogs[idx],
-              ...data,
-            };
-          }
-        }
-      });
-      persistentSignalLogs.sort(
-        (a, b) =>
-          new Date(b.lockedAt || 0).getTime() -
-          new Date(a.lockedAt || 0).getTime(),
-      );
-    } catch (e) {
-      console.warn("[Firestore] Notice fetching signal_logs:", e);
-    }
-    let fetchedTelemetryCount = 0;
-    try {
-      const telemetrySnap = await getDocs(
-        query(collection(db, "telemetry_observations"), limit(150)),
-      );
-      telemetrySnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data && data.id) {
-          fetchedTelemetryCount++;
-          if (!persistentTelemetryObservations.some((o) => o.id === data.id)) {
-            persistentTelemetryObservations.push(data);
-          }
-        }
-      });
-      persistentTelemetryObservations.sort(
-        (a, b) => b.timestampMs - a.timestampMs,
-      );
-    } catch (e) {
-      console.warn("[Firestore] Notice fetching telemetry_observations:", e);
-    }
-    try {
-      const calibSnap = await getDoc(
-        doc(db, "calibration_state", "vixy_btc_15m"),
-      );
-      if (calibSnap.exists()) {
-        const calibData = calibSnap.data();
-        if (calibData?.calibrationState) {
-          latestCalibrationState = {
-            ...latestCalibrationState,
-            ...calibData.calibrationState,
-          };
-        }
-        if (calibData?.learningEngine) {
-          Object.assign(serverLearningEngine, calibData.learningEngine);
-        }
-        console.log(
-          "[Firestore] Successfully hydrated calibration state from Firestore collection.",
-        );
-      }
-    } catch (e) {
-      console.warn("[Firestore] Notice fetching calibration_state:", e);
-    }
-    try {
-      const seqSnap = await getDoc(doc(db, "system_state", "vixy_sequence"));
-      if (seqSnap.exists()) {
-        const seqData = seqSnap.data();
-        if (seqData?.globalSequenceNumber) {
-          globalSequenceNumber = seqData.globalSequenceNumber + 10;
-        }
-      }
-    } catch (e) {}
-    console.log(
-      `[Firestore] Successfully synchronized. Loaded from Firestore: ${fetchedUsersCount} users, ${fetchedSubsCount} subscriptions, ${fetchedProfilesCount} discord profiles, ${fetchedSignalLogsCount} signal logs, ${fetchedTelemetryCount} telemetry observations.`,
-    );
-    lastFirestoreWriteError = null;
-    persistenceState = "HEALTHY_FIRESTORE";
-    saveDiskStore();
-  } catch (err) {
-    handleFirestoreWriteError(err);
-    console.error(
-      "[Firestore] Notice loading store from Firestore:",
-      err?.message || err,
-    );
-  }
-}
-__name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
-loadPersistentStore();
-function seedInitialUsers() {
-  const defaultPass = hashPassword("Seattle007");
-  const modPass = hashPassword("123456");
-  const seedUsers = [
-    {
-      id: "usr_ogaccount85_gmail_com",
-      email: "ogaccount85@gmail.com",
-      name: "OG Account 85",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: hashPassword("Seattle007"),
-      stripeCustomerId: "cus_venmo_ogaccount85",
-      stripeSubscriptionId: "sub_ogaccount85_pro",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "usr_venmo_ogacount85",
-      email: "ogacount85@gmail.com",
-      name: "OG Account 85",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: hashPassword("Seattle007"),
-      stripeCustomerId: "cus_venmo_ogacount85",
-      stripeSubscriptionId: "sub_ogacount85_pro",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "usr_venmo_adrian",
-      email: "adriiiansf27@gmail.com",
-      name: "Adrian SF",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: defaultPass,
-      stripeCustomerId: "cus_venmo_adrian",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "usr_venmo_luisvelascop",
-      email: "luisvelascop@icloud.com",
-      name: "Luis Velasco",
-      role: "ELITE",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: defaultPass,
-      stripeCustomerId: "cus_venmo_luisvelascop",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "usr_albertt2700_gmail_com",
-      email: "albertt2700@gmail.com",
-      name: "Albert T",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: defaultPass,
-      stripeCustomerId: "cus_albertt2700",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-    {
-      id: "usr_zar45157_gmail_com",
-      email: "zar45157@gmail.com",
-      name: "Zar 45157",
-      role: "ELITE",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: defaultPass,
-      stripeCustomerId: "cus_zar45157_elite_quant",
-      stripeSubscriptionId: "sub_zar45157_elite_quant_1m",
-      subscriptionExpiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    },
-
-    {
-      id: "usr_mod_nghle_gmmail",
-      email: "nghle749@gmmail.com",
-      name: "NGH Le (Mod)",
-      role: "USER",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: modPass,
-    },
-    {
-      id: "usr_mod_nghle_gmail",
-      email: "nghle749@gmail.com",
-      name: "NGH Le (Mod)",
-      role: "USER",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: modPass,
-    },
-    {
-      id: "usr_test_ogershey_2026",
-      email: "ogershey@gmail.com",
-      name: "OG Gershey (Test Account)",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      discordTag: "@ogershey",
-      discordId: "998877665544332211",
-      discordLinked: true,
-      guildVerified: true,
-      stripeCustomerId: "cus_ogershey_test",
-      stripeSubscriptionId: "sub_ogershey_pro",
-      volumeTrades: 42,
-      passwordHash: defaultPass,
-    },
-    {
-      id: "usr_owner_00",
-      email: "onwaterservices@gmail.com",
-      name: "Vixy Admin (OnWater)",
-      role: "OWNER",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-01-15",
-      verificationStatus: "VERIFIED",
-      passwordHash: defaultPass,
-    },
-    {
-      id: "usr_owner_01",
-      email: "vixyvault0@gmail.com",
-      name: "Master Admin (Vixy Vault)",
-      role: "OWNER",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-01-15",
-      verificationStatus: "VERIFIED",
-      discordTag: "@vixyvault_owner",
-      discordId: "123456789012345678",
-      discordLinked: true,
-      guildVerified: true,
-      passwordHash: defaultPass,
-    },
-    {
-      id: "usr_allan_yahir_2026",
-      email: "allanyahirpi@gmail.com",
-      name: "allan305 (Allan Yahir)",
-      role: "ELITE",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2017-05-20",
-      verificationStatus: "VERIFIED",
-      discordTag: "allan048135",
-      discordGlobalName: "allan305",
-      discordId: "315284910382911234",
-      discordLinked: true,
-      guildVerified: true,
-      stripeCustomerId: "cus_allan_yahir_active",
-      stripeSubscriptionId: "sub_allan_yahir_elite",
-      volumeTrades: 142,
-      passwordHash: hashPassword("Vixy123"),
-    },
-    {
-      id: "usr_alex_trader_8821",
-      email: "trader.alex@gmail.com",
-      name: "Alex Trader",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-07-28",
-      verificationStatus: "VERIFIED",
-      discordTag: "@alex_trader",
-      discordId: "554433221100998877",
-      discordLinked: true,
-      guildVerified: true,
-      stripeCustomerId: "cus_alex_trader_pro",
-      stripeSubscriptionId: "sub_alex_trader_pro",
-      volumeTrades: 89,
-      passwordHash: defaultPass,
-    },
-    {
-      id: "usr_sarah_quant_8819",
-      email: "quant.sarah@optionstrade.io",
-      name: "Sarah Quant",
-      role: "ELITE",
-      subscription: "ELITE_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-01",
-      verificationStatus: "VERIFIED",
-      discordTag: "@sarah_quant",
-      discordId: "112233445566778899",
-      discordLinked: true,
-      guildVerified: true,
-      stripeCustomerId: "cus_sarah_quant_elite",
-      stripeSubscriptionId: "sub_sarah_quant_elite",
-      volumeTrades: 210,
-      passwordHash: defaultPass,
-    },
-    {
-      id: "usr_selvinrom1_6_gmail_com",
-      email: "selvinrom1.6@gmail.com",
-      name: "Selvin Rom",
-      role: "PRO",
-      subscription: "PRO_PASS",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: hashPassword("goghac-towda2-murqeD"),
-    },
-    {
-      id: "usr_wasan_cartwrightrn_com",
-      email: "wasan@cartwrightrn.com",
-      name: "Wasan Cartwright",
-      role: "USER",
-      subscription: "NONE",
-      status: "ACTIVE",
-      joined: "2026-08-16",
-      verificationStatus: "VERIFIED",
-      passwordHash: hashPassword("!Abq65412"),
-      stripeCustomerId: "cus_wasan_venmo_48",
-      stripeSubscriptionId: "sub_wasan_starter_2months",
-    },
-    {
-      id: "usr_ludinvelasquez47_gmail_com",
-      email: "ludinvelasquez47@gmail.com",
-      name: "ludinvelasquez47",
-      role: "USER",
-      subscription: "NONE",
-      status: "ACTIVE",
-      joined: "2026-08-15",
-      verificationStatus: "VERIFIED",
-      passwordHash: hashPassword("!Abq65412"),
-      stripeCustomerId: "cus_V4zGkWKshUnahT",
-      stripeSubscriptionId: "sub_ludin_starter_2months",
-    },
-  ];
-  seedUsers.forEach((seed) => {
-    if (!seed.email) return;
-    const existing = serverUsers.find(
-      (u) => u.email?.toLowerCase() === seed.email.toLowerCase(),
-    );
-    if (!existing) {
-      ensureUserExists({
-        email: seed.email,
-        name: seed.name,
-        role: seed.role,
-        subscription: seed.subscription,
-      });
-      const u = serverUsers.find(
-        (u2) => u2.email?.toLowerCase() === seed.email.toLowerCase(),
-      );
-      if (u) {
-        Object.assign(u, seed);
-      }
-    } else {
-      if (seed.name) existing.name = seed.name;
-      if (seed.role) existing.role = seed.role;
-      if (seed.subscription) existing.subscription = seed.subscription;
-      if (seed.status) existing.status = seed.status;
-      if (seed.stripeCustomerId)
-        existing.stripeCustomerId = seed.stripeCustomerId;
-      if (seed.stripeSubscriptionId)
-        existing.stripeSubscriptionId = seed.stripeSubscriptionId;
-      if (seed.discordId) existing.discordId = seed.discordId;
-      if (seed.discordTag) existing.discordTag = seed.discordTag;
-      if (seed.discordGlobalName)
-        existing.discordGlobalName = seed.discordGlobalName;
-      if (
-        seed.passwordHash &&
-        (seed.email.toLowerCase() === "wasan@cartwrightrn.com" ||
-          seed.email.toLowerCase() === "allanyahirpi@gmail.com" ||
-          !existing.passwordHash ||
-          !existing.passwordHash.startsWith("vixy$"))
-      ) {
-        existing.passwordHash = seed.passwordHash;
-      }
-      existing.discordLinked = true;
-      existing.verificationStatus = "VERIFIED";
-    }
-    userSubscriptions.set(seed.email.toLowerCase(), {
-      email: seed.email.toLowerCase(),
-      role: seed.role || "PRO",
-      plan: seed.subscription || "PRO_PASS",
-      status: "ACTIVE",
-      stripeCustomerId: seed.stripeCustomerId,
-      stripeSubscriptionId: seed.stripeSubscriptionId,
-      updatedAt: new Date().toISOString(),
-    });
-    if (
-      db &&
-      typeof canAttemptFirestoreWrite === "function" &&
-      canAttemptFirestoreWrite("users")
-    ) {
-      ensureFirestoreNetworkEnabled()
-        .then(() => {
-          const docId =
-            seed.id ||
-            `usr_${seed.email.toLowerCase().replace(/[^a-zA-Z0-9_]/g, "_")}`;
-          const payload = {
-            id: docId,
-            uid: docId,
-            email: seed.email.toLowerCase(),
-            name: seed.name || seed.email.split("@")[0],
-            role: seed.role || "USER",
-            subscription: seed.subscription || "NONE",
-            status: seed.status || "ACTIVE",
-            joined: seed.joined || new Date().toISOString().split("T")[0],
-            verificationStatus: "VERIFIED",
-            passwordHash: seed.passwordHash,
-            stripeCustomerId: seed.stripeCustomerId,
-            stripeSubscriptionId: seed.stripeSubscriptionId,
-          };
-          setDoc(doc(db, "users", docId), payload, { merge: true }).catch(
-            () => {},
-          );
-          setDoc(doc(db, "users", seed.email.toLowerCase()), payload, {
-            merge: true,
-          }).catch(() => {});
-          const subPayload = {
-            email: seed.email.toLowerCase(),
-            role: seed.role || "USER",
-            plan: seed.subscription || "NONE",
-            status: "ACTIVE",
-            stripeCustomerId: seed.stripeCustomerId,
-            stripeSubscriptionId: seed.stripeSubscriptionId,
-            updatedAt: new Date().toISOString(),
-          };
-          setDoc(
-            doc(db, "subscriptions", seed.email.toLowerCase()),
-            subPayload,
-            { merge: true },
-          ).catch(() => {});
-        })
-        .catch(() => {});
-    }
-    if (seed.email.toLowerCase() === "allanyahirpi@gmail.com") {
-      userDiscordProfiles.set("allanyahirpi@gmail.com", {
-        email: "allanyahirpi@gmail.com",
-        discordUserId: "315284910382911234",
-        discordUsername: "allan048135",
-        discordGlobalName: "allan305",
-        discordAvatar: null,
-        discordLinked: true,
-        guildMember: true,
-        guildJoined: true,
-        guildRoles: ["ELITE", "MEMBER"],
-        lastSync: new Date().toLocaleTimeString(),
-        subscriptionTier: "ELITE",
-        verificationStatus: "VERIFIED",
-        connectedAt: "2017-05-20T00:00:00.000Z",
-        linkedAt: new Date().toISOString(),
-        roleAssigned: "ELITE",
-      });
-    }
-  });
-  savePersistentStore();
-}
-__name(seedInitialUsers, "seedInitialUsers");
-function enqueueDiscordRoleSync(email, discordUserId, tier) {
-  const normalizedEmail = email.toLowerCase().trim();
-  const existingIndex = discordSyncQueue.findIndex(
-    (item) => item.email === normalizedEmail,
-  );
-  if (existingIndex !== -1) {
-    const item = discordSyncQueue[existingIndex];
-    if (item.tier === tier && item.status === "SUCCESS") {
-      console.log(
-        `[Discord Queue] Job already succeeded for ${normalizedEmail} at tier ${tier}.`,
-      );
-      return;
-    }
-    item.tier = tier;
-    item.status = "PENDING";
-    item.attempts = 0;
-    item.lastError = void 0;
-    console.log(
-      `[Discord Queue] Updated existing job for ${normalizedEmail} to tier ${tier}.`,
-    );
-  } else {
-    discordSyncQueue.push({
-      id: `sync_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      email: normalizedEmail,
-      discordUserId,
-      tier,
-      attempts: 0,
-      status: "PENDING",
-    });
-    console.log(
-      `[Discord Queue] Enqueued new sync job for ${normalizedEmail} at tier ${tier}.`,
-    );
-  }
-  savePersistentStore();
-  processDiscordSyncQueue().catch((err) => {
-    console.error("[Discord Queue] Error running queue process:", err);
-  });
-}
-__name(enqueueDiscordRoleSync, "enqueueDiscordRoleSync");
-let isProcessingQueue = false;
-async function processDiscordSyncQueue() {
-  if (isProcessingQueue) return;
-  isProcessingQueue = true;
-  try {
-    const pendingItems = discordSyncQueue.filter(
-      (item) => item.status === "PENDING",
-    );
-    discordSyncMetrics.pendingCount = pendingItems.length;
-    discordSyncMetrics.successCount = discordSyncQueue.filter(
-      (item) => item.status === "SUCCESS",
-    ).length;
-    discordSyncMetrics.failedCount = discordSyncQueue.filter(
-      (item) => item.status === "FAILED",
-    ).length;
-    for (const item of pendingItems) {
-      const now = Date.now();
-      const lastAttempt = item.lastAttemptAt
-        ? new Date(item.lastAttemptAt).getTime()
-        : 0;
-      const backoffMs = Math.min(
-        Math.pow(2, item.attempts) * 5e3,
-        120 * 60 * 1e3,
-      );
-      if (lastAttempt > 0 && now - lastAttempt < backoffMs) {
-        continue;
-      }
-      console.log(
-        `[Discord Queue] Processing job ${item.id} for ${item.email} (Attempt ${item.attempts + 1})`,
-      );
-      item.attempts += 1;
-      item.lastAttemptAt = new Date().toISOString();
-      try {
-        const guildId = process.env.DISCORD_GUILD_ID || "1451337712937336985";
-        const syncResult = await assignDiscordRoleToUser(
-          item.discordUserId,
-          item.tier,
-          guildId,
-        );
-        discordSyncMetrics.lastSyncAt = new Date().toISOString();
-        if (syncResult.success) {
-          item.status = "SUCCESS";
-          item.lastError = void 0;
-          console.log(
-            `[DISCORD] email=${item.email} roleSync=SUCCESS roleId=${item.tier}`,
-          );
-          console.log(`[Discord Queue] Job ${item.id} SUCCESS`);
-          broadcastAdminEvent({
-            eventType: "DISCORD_ROLE_ASSIGNED",
-            userEmail: item.email,
-            plan: item.tier,
-            status: "SUCCESS",
-            message: `Background Sync Queue: successfully assigned ${item.tier} to ${item.email}`,
-          });
-        } else {
-          item.lastError = syncResult.message || "Unknown sync error";
-          discordSyncMetrics.lastError = item.lastError;
-          console.warn(
-            `[DISCORD SYNC ERROR] email=${item.email} roleSync=FAILED error=${item.lastError}`,
-          );
-          if (
-            syncResult.code === "INVALID_BOT_TOKEN" ||
-            syncResult.code === "INVALID_DISCORD_USER_ID"
-          ) {
-            item.status = "FAILED";
-            console.error(
-              `[Discord Queue] Job ${item.id} FAILED permanently: ${item.lastError}`,
-            );
-            broadcastAdminEvent({
-              eventType: "DISCORD_ROLE_SYNC_FAILED",
-              userEmail: item.email,
-              plan: item.tier,
-              status: "FAILED",
-              message: `Background Sync Queue: permanently failed for ${item.email} due to configuration error: ${item.lastError}`,
-            });
-          } else {
-            const isTransient =
-              syncResult.code === "DISCORD_RATE_LIMITED" ||
-              syncResult.code === "DISCORD_API_ERROR";
-            const maxAttempts = isTransient ? 15 : 4;
-            if (item.attempts >= maxAttempts) {
-              item.status = "FAILED";
-              console.error(
-                `[Discord Queue] Job ${item.id} FAILED after ${item.attempts} attempts: ${item.lastError}`,
-              );
-              broadcastAdminEvent({
-                eventType: "DISCORD_ROLE_SYNC_FAILED",
-                userEmail: item.email,
-                plan: item.tier,
-                status: "FAILED",
-                message: `Background Sync Queue: failed to sync ${item.tier} after ${item.attempts} attempts: ${item.lastError}`,
-              });
-            } else {
-              console.warn(
-                `[Discord Queue] Job ${item.id} failed temporarily. Will retry. Reason: ${item.lastError}`,
-              );
-            }
-          }
-        }
-      } catch (err) {
-        const errMsg = err?.message || String(err);
-        item.lastError = errMsg;
-        discordSyncMetrics.lastError = errMsg;
-        if (item.attempts >= 6) {
-          item.status = "FAILED";
-          console.error(
-            `[Discord Queue] Job ${item.id} FAILED with exception: ${errMsg}`,
-          );
-        } else {
-          console.warn(
-            `[Discord Queue] Job ${item.id} encountered exception. Will retry. Error: ${errMsg}`,
-          );
-        }
-      }
-      savePersistentStore();
-      discordSyncMetrics.pendingCount = discordSyncQueue.filter(
-        (i) => i.status === "PENDING",
-      ).length;
-      discordSyncMetrics.successCount = discordSyncQueue.filter(
-        (i) => i.status === "SUCCESS",
-      ).length;
-      discordSyncMetrics.failedCount = discordSyncQueue.filter(
-        (i) => i.status === "FAILED",
-      ).length;
-    }
-  } finally {
-    isProcessingQueue = false;
-  }
-}
-__name(processDiscordSyncQueue, "processDiscordSyncQueue");
-async function updateDiscordDiagnosticsMetrics() {
-  try {
-    const diag = await runDiscordDiagnostics();
-    discordSyncMetrics.botConnected = diag.botConnected;
-    discordSyncMetrics.guildFound = diag.guildAccessible;
-    discordSyncMetrics.roleFound = diag.rolesFound?.eliteRoleFound ?? false;
-    discordSyncMetrics.roleManageable =
-      diag.botHasManageRoles && diag.hierarchySufficient;
-  } catch (err) {
-    console.warn(
-      "[Discord Diagnostics Metrics] Error running diagnostics:",
-      err,
-    );
-  }
-}
-__name(updateDiscordDiagnosticsMetrics, "updateDiscordDiagnosticsMetrics");
-seedInitialUsers();
-loadPersistentStoreAsync().catch((err) => {
-  console.error("[Firestore] Background load persistent store failed:", err);
-});
-async function syncUserEntitlementToDiscord(userEmail) {
-  loadPersistentStore();
-  const normalizedEmail = String(
-    userEmail || "vixyvault0@gmail.com",
-  ).toLowerCase();
-  if (
-    normalizedEmail.endsWith("@example.com") ||
-    normalizedEmail.includes("test_daypass") ||
-    normalizedEmail.includes("vixy.test")
-  ) {
-    return {
-      success: true,
-      code: "TEST_FIXTURE_SKIPPED",
-      message:
-        "Test fixture email skipped from production Discord synchronization.",
-      profile: null,
-    };
-  }
-  const profileByEmail = userDiscordProfiles.get(normalizedEmail);
-  const userRecord = serverUsers.find(
-    (u) => u.email?.toLowerCase() === normalizedEmail,
-  );
-  const profile =
-    profileByEmail ||
-    (userRecord?.discordId
-      ? {
-          email: normalizedEmail,
-          discordUserId: userRecord.discordId,
-          discordLinked: true,
-        }
-      : null);
-  console.log(
-    `[DISCORD_ENTITLEMENT_SYNC] Processing entitlement sync for email: ${normalizedEmail}`,
-  );
-  if (!profile || !profile.discordUserId) {
-    console.log(
-      `[DISCORD_ENTITLEMENT_SYNC] PENDING_DISCORD_LINK: No linked Discord profile found for email ${normalizedEmail}.`,
-    );
-    return {
-      success: true,
-      code: "PENDING_DISCORD_LINK",
-      message:
-        "User entitlement active, but Discord identity is not linked yet.",
-      profile: null,
-    };
-  }
-  const entRes = getUserEntitlement(normalizedEmail);
-  let targetTier = "NONE";
-  if (
-    entRes.entitlements.canAccessAdminPanel ||
-    entRes.plan === "ELITE_QUANT"
-  ) {
-    targetTier = "ELITE";
-  } else if (
-    entRes.plan === "DAY_PASS" ||
-    (entRes.dayPass && entRes.dayPass.active)
-  ) {
-    targetTier = "DAY_PASS";
-  } else if (entRes.plan === "PRO_QUANT" || entRes.plan === "STARTER") {
-    targetTier = "PRO";
-  } else {
-    targetTier = "NONE";
-  }
-  console.log(
-    `[DISCORD_ROLE_SYNC_ASYNCHRONOUS] Enqueueing role sync to tier ${targetTier} for Discord user ID ${profile.discordUserId}`,
-  );
-  enqueueDiscordRoleSync(normalizedEmail, profile.discordUserId, targetTier);
-  profile.lastSync = new Date().toLocaleTimeString();
-  profile.lastRoleSyncAt = new Date().toISOString();
-  profile.roleAssigned = targetTier;
-  profile.assignedRoleName = targetTier;
-  profile.discordLinked = true;
-  userDiscordProfiles.set(normalizedEmail, profile);
-  userDiscordProfiles.set("global_active_user", profile);
-  const linkedUser = ensureUserExists({
-    email: normalizedEmail,
-    name: profile.discordGlobalName || profile.discordUsername,
-  });
-  linkedUser.discordId = profile.discordUserId;
-  linkedUser.discordTag = profile.discordUsername || profile.discordGlobalName;
-  linkedUser.discordLinked = true;
-  savePersistentStore();
-  return {
-    success: true,
-    code: "SYNC_QUEUED",
-    message: `Role synchronization to ${targetTier} has been enqueued asynchronously.`,
-    profile,
-  };
-}
-__name(syncUserEntitlementToDiscord, "syncUserEntitlementToDiscord");
-async function syncDiscordGuildMembers() {
-  console.log(
-    "[Discord Sync] Bulk whole-guild member fetch disabled. Using per-user OAuth & on-demand lookup paths.",
-  );
-  return {
-    success: true,
-    syncedCount: 0,
-    message: "Bulk whole-guild fetch disabled; per-user lookup active.",
-  };
-}
-__name(syncDiscordGuildMembers, "syncDiscordGuildMembers");
-async function reconcileDiscordGuildMembers() {}
-__name(reconcileDiscordGuildMembers, "reconcileDiscordGuildMembers");
-discordClient.on("guildMemberAdd", async (member) => {
-  console.log(
-    `[Discord Event] guildMemberAdd: @${member.user.tag} (ID: ${member.id}) joined the guild.`,
-  );
-  let matchedUser = serverUsers.find((u) => u.discordId === member.id);
-  if (matchedUser) {
-    matchedUser.discordLinked = true;
-    matchedUser.discordTag = member.user.tag;
-    matchedUser.discordGlobalName =
-      member.user.globalName || member.user.username;
-    matchedUser.discordAvatar = member.user.avatarURL();
-    matchedUser.guildVerified = true;
-    if (matchedUser.email) {
-      let profile = userDiscordProfiles.get(matchedUser.email.toLowerCase());
-      if (profile) {
-        profile.guildMember = true;
-        profile.guildJoined = true;
-        profile.discordLinked = true;
-        profile.verificationStatus = "VERIFIED";
-        profile.lastSync = new Date().toLocaleTimeString();
-        userDiscordProfiles.set(matchedUser.email.toLowerCase(), profile);
-      }
-    }
-  } else {
-    serverUsers.push({
-      id: `usr_discord_${member.id}`,
-      discordId: member.id,
-      discordTag: member.user.tag,
-      discordGlobalName: member.user.globalName || member.user.username,
-      discordAvatar: member.user.avatarURL() || null,
-      discordLinked: true,
-      guildVerified: true,
-      joined: new Date().toISOString(),
-      source: "discord",
-      authStatus: "DISCORD_PENDING",
-      role: "NONE",
-      subscription: "NONE",
-    });
-  }
-  savePersistentStore();
-  addServerAuditLog(
-    "SYSTEM",
-    "DISCORD_MEMBER_JOINED",
-    `Discord user @${member.user.tag} joined.`,
-  );
-  console.log(
-    `[Discord Event] Successfully updated directory for joined member @${member.user.tag}.`,
-  );
-});
-discordClient.on("guildMemberRemove", async (member) => {
-  console.log(
-    `[Discord Event] guildMemberRemove: @${member.user.tag} (ID: ${member.id}) left the guild.`,
-  );
-  const matchedUser = serverUsers.find((u) => u.discordId === member.id);
-  if (matchedUser) {
-    matchedUser.guildVerified = false;
-    if (matchedUser.email) {
-      let profile = userDiscordProfiles.get(matchedUser.email.toLowerCase());
-      if (profile) {
-        profile.guildMember = false;
-        profile.guildJoined = false;
-        profile.verificationStatus = "NEEDS_GUILD";
-        profile.roleAssigned = "NEEDS_GUILD";
-        profile.lastSync = new Date().toLocaleTimeString();
-        userDiscordProfiles.set(matchedUser.email.toLowerCase(), profile);
-      }
-    }
-    savePersistentStore();
-    addServerAuditLog(
-      "SYSTEM",
-      "DISCORD_MEMBER_LEFT",
-      `Discord user @${member.user.tag} left.`,
-    );
-    console.log(
-      `[Discord Event] Successfully updated directory for left member @${member.user.tag}.`,
-    );
-  }
-});
-app.get("/api/auth/discord/url", (req, res) => {
-  const redirectUri =
-    process.env.DISCORD_REDIRECT_URI ||
-    "https://www.vixxyvault.com/api/auth/discord/callback";
-  const clientId = process.env.DISCORD_CLIENT_ID || "1534690638937981028";
-  const userEmail = (
-    req.headers["x-user-email"] ||
-    req.query.email ||
-    "vixyvault0@gmail.com"
-  ).toLowerCase();
-  console.log("OAuth redirect_uri being sent:", redirectUri);
-  const params = new URLSearchParams({
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    response_type: "code",
-    scope: "identify guilds",
-    prompt: "consent",
-    state: userEmail,
-  });
-  const url = `https://discord.com/oauth2/authorize?${params.toString()}`;
-  console.log("[Discord OAuth Audit] Exact Generated Authorization URL:", url);
-  console.log("[Discord OAuth Audit] Enforced Redirect URI:", redirectUri);
-  res.json({
-    url,
-    redirectUri,
-    clientId,
-    hasClientSecret: !!process.env.DISCORD_CLIENT_SECRET,
-  });
-});
-app.get(
-  [
-    "/auth/discord/callback",
-    "/auth/discord/callback/",
-    "/api/auth/discord/callback",
-  ],
-  async (req, res) => {
-    const { code, error, error_description } = req.query;
-    const redirectUri =
-      process.env.DISCORD_REDIRECT_URI ||
-      "https://www.vixxyvault.com/api/auth/discord/callback";
-    console.log("[Discord OAuth Callback Audit] Step 1: Callback triggered.");
-    console.log(
-      "[Discord OAuth Callback Audit] Step 1a: Enforced Redirect URI:",
-      redirectUri,
-    );
-    console.log(
-      "[Discord OAuth Callback Audit] Step 1b: Query code received:",
-      code ? `YES (length: ${String(code).length})` : "NO",
-    );
-    if (error || !code) {
-      console.error(
-        "[Discord OAuth Callback Audit] \u274C Authorization failed or missing code:",
-        { error, error_description },
-      );
-      return res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head><title>Discord Authorization Error</title></head>
-        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-          <div style="text-align:center;padding:24px;border:1px solid #e11d48;border-radius:16px;background:#1e0d29;max-width:420px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-            <div style="font-size:32px;margin-bottom:8px;">\u274C</div>
-            <h3 style="color:#f43f5e;margin:0 0 8px 0;font-size:18px;">Discord Authorization Cancelled</h3>
-            <p style="font-size:13px;color:#cbd5e1;line-height:1.5;">${error_description || error || "The OAuth authorization request was cancelled or denied."}</p>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({ type: 'DISCORD_OAUTH_ERROR', error: '${error || "Cancelled"}' }, '*');
-                setTimeout(() => window.close(), 1800);
-              }
-            <\/script>
-          </div>
-        </body>
-      </html>
-    `);
-    }
-    const clientId = process.env.DISCORD_CLIENT_ID || "1534690638937981028";
-    const clientSecret =
-      process.env.DISCORD_CLIENT_SECRET || "mQ_hr0BndwQA4pAxaBxl1_bVc208gzXG";
-    console.log(
-      "[Discord OAuth Callback Audit] Step 2: Preparing token exchange. Client ID:",
-      clientId,
-      "| Secret Present:",
-      !!clientSecret,
-    );
-    let discordUser = null;
-    let userGuilds = [];
-    let oauthError = null;
-    if (clientSecret) {
-      try {
-        const tokenParams = new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          grant_type: "authorization_code",
-          code: String(code),
-          redirect_uri: redirectUri,
-        });
-        console.log(
-          "[Discord OAuth Callback Audit] Step 3: Posting token exchange request to https://discord.com/api/v10/oauth2/token",
-        );
-        console.log(
-          "[Discord OAuth Callback Audit] Step 3a: Request parameters sent:",
-          {
-            client_id: clientId,
-            grant_type: "authorization_code",
-            redirect_uri: redirectUri,
-            code_preview: String(code).substring(0, 10) + "...",
-          },
-        );
-        const tokenRes = await fetchWithTimeout(
-          "https://discord.com/api/v10/oauth2/token",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: tokenParams.toString(),
-          },
-          8000,
-        );
-        console.log(
-          "[Discord OAuth Callback Audit] Step 4: Token Response Status:",
-          tokenRes.status,
-          tokenRes.statusText,
-        );
-        const tokenText = await tokenRes.text();
-        let tokenData = {};
-        try {
-          tokenData = JSON.parse(tokenText);
-        } catch (pErr) {
-          console.error(
-            "[Discord OAuth Callback Audit] Failed to parse token response JSON:",
-            tokenText,
-          );
-        }
-        if (tokenRes.ok && tokenData.access_token) {
-          const accessToken = tokenData.access_token;
-          console.log(
-            "[Discord OAuth Callback Audit] Step 5: Access token successfully extracted! Token type:",
-            tokenData.token_type,
-            "| Scope:",
-            tokenData.scope,
-          );
-          console.log(
-            "[Discord OAuth Callback Audit] Step 6: Fetching /users/@me with Bearer token...",
-          );
-          const userRes = await fetchWithTimeout(
-            "https://discord.com/api/v10/users/@me",
-            {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            },
-            8000,
-          );
-          console.log(
-            "[Discord OAuth Callback Audit] Step 6a: User Profile Response Status:",
-            userRes.status,
-            userRes.statusText,
-          );
-          if (userRes.ok) {
-            discordUser = await userRes.json();
-            console.log(
-              "[Discord OAuth Callback Audit] Step 6b: User profile retrieved successfully! ID:",
-              discordUser.id,
-              "| Username:",
-              discordUser.username,
-            );
-          } else {
-            const userErrText = await userRes.text();
-            console.error(
-              "[Discord OAuth Callback Audit] \u274C Failed to fetch /users/@me. Response:",
-              userErrText,
-            );
-            oauthError = `Failed to fetch Discord user profile (/users/@me status ${userRes.status}): ${userErrText}`;
-          }
-          console.log(
-            "[Discord OAuth Callback Audit] Step 7: Fetching /users/@me/guilds...",
-          );
-          const guildsRes = await fetchWithTimeout(
-            "https://discord.com/api/v10/users/@me/guilds",
-            { headers: { Authorization: `Bearer ${accessToken}` } },
-            8000,
-          );
-          console.log(
-            "[Discord OAuth Callback Audit] Step 7a: Guilds Response Status:",
-            guildsRes.status,
-            guildsRes.statusText,
-          );
-          if (guildsRes.ok) {
-            userGuilds = await guildsRes.json();
-            console.log(
-              "[Discord OAuth Callback Audit] Step 7b: Guilds list retrieved count:",
-              Array.isArray(userGuilds) ? userGuilds.length : 0,
-            );
-          } else {
-            const guildsErrText = await guildsRes.text();
-            console.warn(
-              "[Discord OAuth Callback Audit] Notice: Could not fetch user guilds:",
-              guildsErrText,
-            );
-          }
-        } else {
-          console.error(
-            "[Discord OAuth Callback Audit] \u274C Token exchange failed! Response body:",
-            tokenText,
-          );
-          oauthError =
-            tokenData.error_description ||
-            tokenData.error ||
-            `Discord token exchange failed with status ${tokenRes.status}: ${tokenText}`;
-        }
-      } catch (err) {
-        console.error(
-          "[Discord OAuth Callback Audit] \u274C Exception during Discord OAuth token exchange:",
-          err,
-        );
-        oauthError =
-          err.message || "Network exception during Discord OAuth exchange";
-      }
-    } else {
-      console.error(
-        "[Discord OAuth Callback Audit] \u274C Missing DISCORD_CLIENT_SECRET in process.env",
-      );
-      oauthError =
-        "DISCORD_CLIENT_SECRET is missing in server environment variables. Please set DISCORD_CLIENT_SECRET to complete token exchange.";
-    }
-    if (discordUser && discordUser.id) {
-      console.log(
-        "[Discord OAuth Callback Audit] Step 8: Finalizing profile registration for user:",
-        discordUser.username,
-      );
-      const stateEmail =
-        typeof req.query.state === "string" && req.query.state.includes("@")
-          ? req.query.state.toLowerCase()
-          : null;
-      const headerEmail = req.headers["x-user-email"]?.toLowerCase();
-      const userEmail = (
-        stateEmail ||
-        headerEmail ||
-        "vixyvault0@gmail.com"
-      ).toLowerCase();
-      const targetGuildId =
-        process.env.DISCORD_GUILD_ID || "1451337712937336985";
-      const creds = loadProductionDiscordCredentials();
-      let isGuildMember = false;
-      let guildRoles = [];
-      if (creds.isValid) {
-        console.log(
-          "[Discord OAuth Callback Audit] Fetching guild member details for ID:",
-          discordUser.id,
-        );
-        try {
-          const memberRes = await fetchWithTimeout(
-            `https://discord.com/api/v10/guilds/${targetGuildId}/members/${discordUser.id}`,
-            { headers: { Authorization: creds.authHeader } },
-            8000,
-          );
-          if (memberRes.ok) {
-            const memberData = await memberRes.json();
-            isGuildMember = true;
-            guildRoles = memberData.roles || [];
-            console.log(
-              "[Discord OAuth Callback Audit] User IS a guild member. Roles:",
-              guildRoles,
-            );
-          } else if (memberRes.status === 404) {
-            console.log(
-              "[Discord OAuth Callback Audit] User is NOT a guild member (404).",
-            );
-          } else {
-            console.error(
-              "[Discord OAuth Callback Audit] Failed to fetch guild member, status:",
-              memberRes.status,
-            );
-          }
-        } catch (err) {
-          console.error(
-            "[Discord OAuth Callback Audit] Exception checking guild membership:",
-            err,
-          );
-        }
-      } else {
-        console.warn(
-          "[Discord OAuth Callback Audit] Missing bot token, falling back to OAuth guilds scope",
-        );
-        isGuildMember =
-          Array.isArray(userGuilds) &&
-          userGuilds.some((g) => g.id === targetGuildId);
-      }
-      let vixyUser = serverUsers.find(
-        (u) =>
-          (userEmail &&
-            userEmail !== "vixyvault0@gmail.com" &&
-            u.email?.toLowerCase() === userEmail.toLowerCase()) ||
-          (stateEmail && (u.id === stateEmail || u.uid === stateEmail)) ||
-          (u.discordId && u.discordId === discordUser.id),
-      );
-      if (!vixyUser) {
-        vixyUser = ensureUserExists({
-          email: userEmail,
-          name: discordUser.username,
-        });
-      } else {
-        if (
-          userEmail &&
-          userEmail !== "vixyvault0@gmail.com" &&
-          (!vixyUser.email ||
-            vixyUser.email === "vixyvault0@gmail.com" ||
-            vixyUser.email === "anonymous@vixy.internal")
-        ) {
-          vixyUser.email = userEmail;
-        }
-      }
-      const existingOtherUser = serverUsers.find(
-        (u) => u.discordId === discordUser.id && u.id !== vixyUser.id,
-      );
-      if (existingOtherUser) {
-        console.error(
-          `[Discord OAuth Callback Audit] \u274C LINK CONFLICT: Discord ID ${discordUser.id} (@${discordUser.username}) is already linked to VIXY user ${existingOtherUser.email}`,
-        );
-        return res.send(`
-        <!DOCTYPE html>
-        <html>
-          <head><title>Discord Link Conflict</title></head>
-          <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-            <div style="text-align:center;padding:24px;border:1px solid #f59e0b;border-radius:16px;background:#1e180a;max-width:440px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-              <div style="font-size:32px;margin-bottom:8px;">\u26A0\uFE0F</div>
-              <h3 style="color:#f59e0b;margin:0 0 8px 0;font-size:18px;">Discord Link Conflict</h3>
-              <p style="font-size:13px;color:#fde68a;line-height:1.5;">This Discord account (@${discordUser.username}) is already linked to another VIXY Vault account (${existingOtherUser.email}).</p>
-              <p style="font-size:12px;color:#94a3b8;margin-top:12px;">To prevent duplicate identity claims, each Discord account can only be linked to one VIXY Vault account.</p>
-              <script>
-                if (window.opener) {
-                  window.opener.postMessage({ type: 'DISCORD_OAUTH_ERROR', error: 'Discord account is already linked to another VIXY account.' }, '*');
-                  setTimeout(() => window.close(), 3500);
-                }
-              <\/script>
-            </div>
-          </body>
-        </html>
-      `);
-      }
-      const firebaseUid = vixyUser.id;
-      const nowIso = new Date().toISOString();
-      vixyUser.discordId = discordUser.id;
-      vixyUser.discordTag =
-        discordUser.username +
-        (discordUser.discriminator && discordUser.discriminator !== "0"
-          ? `#${discordUser.discriminator}`
-          : "");
-      vixyUser.discordGlobalName =
-        discordUser.global_name || discordUser.username;
-      vixyUser.discordAvatar = discordUser.avatar
-        ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
-        : null;
-      vixyUser.discordLinked = true;
-      vixyUser.guildVerified = isGuildMember;
-      if (!vixyUser.discord_connected_at) {
-        vixyUser.discord_connected_at = nowIso;
-      }
-      if (
-        vixyUser.subscription === "FREE_TRIAL" ||
-        vixyUser.status === "TRIALING"
-      ) {
-        vixyUser.subscription = "NONE";
-        vixyUser.status = "INACTIVE";
-      }
-      if (canAttemptFirestoreWrite("discordProfiles")) {
-        try {
-          await ensureFirestoreNetworkEnabled();
-          const firestorePayload = {
-            firebaseUid,
-            vixyUserId: vixyUser.id,
-            discordUserId: discordUser.id,
-            username: discordUser.username,
-            globalName: discordUser.global_name || discordUser.username,
-            avatar: discordUser.avatar,
-            guildId: targetGuildId,
-            isGuildMember,
-            roleIds: guildRoles,
-            verifiedAt: vixyUser.discord_connected_at,
-            lastCheckedAt: nowIso,
-          };
-          await setDoc(
-            doc(db, "discordProfiles", discordUser.id),
-            sanitizeForFirestore(firestorePayload),
-            { merge: true },
-          );
-          await setDoc(
-            doc(db, "discord_profiles", discordUser.id),
-            sanitizeForFirestore(firestorePayload),
-            { merge: true },
-          );
-          await setDoc(
-            doc(db, "users", firebaseUid),
-            sanitizeForFirestore({
-              discordUserId: discordUser.id,
-              discordId: discordUser.id,
-              discordTag: vixyUser.discordTag,
-              discordGlobalName: vixyUser.discordGlobalName,
-              discordAvatar: vixyUser.discordAvatar,
-              discordLinked: true,
-              guildVerified: isGuildMember,
-              discord_connected_at: vixyUser.discord_connected_at,
-              email: vixyUser.email,
-            }),
-            { merge: true },
-          );
-          console.log(
-            "[Discord OAuth Callback Audit] \u2705 Successfully persisted identity link to Firestore collections",
-          );
-        } catch (e) {
-          console.error(
-            "[Discord OAuth Callback Audit] Firestore error linking Discord identity:",
-            e,
-          );
-        }
-      }
-      const hasActiveSub = [
-        "PRO_PASS",
-        "ELITE_PASS",
-        "OWNER",
-        "ADMIN",
-        "PRO",
-        "ELITE",
-      ].includes(vixyUser.subscription || vixyUser.role || "");
-      const avatarUrl =
-        vixyUser.discordAvatar ||
-        `https://cdn.discordapp.com/embed/avatars/0.png`;
-      const profile = {
-        email: vixyUser.email || userEmail,
-        discordUserId: vixyUser.discordId,
-        discordUsername: vixyUser.discordTag,
-        discordGlobalName: vixyUser.discordGlobalName || vixyUser.discordTag,
-        discordAvatar: avatarUrl,
-        discordLinked: true,
-        guildMember: !!vixyUser.guildVerified,
-        guildJoined: !!vixyUser.guildVerified,
-        roleAssigned: vixyUser.guildVerified
-          ? hasActiveSub
-            ? "PRO"
-            : "MEMBER"
-          : "NONE",
-        guildRoles: vixyUser.guildVerified
-          ? [hasActiveSub ? "PRO" : "MEMBER"]
-          : [],
-        lastSync: new Date().toLocaleTimeString(),
-        subscriptionTier: hasActiveSub ? "PRO" : "FREE",
-        verificationStatus: vixyUser.guildVerified ? "VERIFIED" : "NEEDS_GUILD",
-        connectedAt: new Date().toISOString(),
-        linkedAt: new Date().toISOString(),
-      };
-      userDiscordProfiles.set(userEmail, profile);
-      if (vixyUser.email)
-        userDiscordProfiles.set(vixyUser.email.toLowerCase(), profile);
-      userDiscordProfiles.set(discordUser.id, profile);
-      userDiscordProfiles.set("global_active_user", profile);
-      savePersistentStore();
-      await syncUserEntitlementToDiscord(userEmail);
-      const roleAssigned =
-        profile.guildRoles?.[0] || (profile.guildMember ? "PRO" : "None");
-      return res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head><title>Discord Connected</title></head>
-        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-          <div style="text-align:center;padding:24px;border:1px solid #10b981;border-radius:16px;background:#091e17;max-width:420px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-            <div style="font-size:32px;margin-bottom:8px;">\u{1F7E2}</div>
-            <h3 style="color:#10b981;margin:0 0 8px 0;font-size:18px;">Discord Authenticated!</h3>
-            <p style="font-size:13px;color:#a7f3d0;margin:0 0 12px 0;">Connected as <strong>${profile.discordGlobalName}</strong> (@${profile.discordUsername})</p>
-            <div style="font-size:11px;color:#94a3b8;background:#06120e;padding:10px;border-radius:8px;text-align:left;font-family:monospace;">
-              <div>\u2022 User ID: ${profile.discordUserId}</div>
-              <div>\u2022 Server Joined: ${profile.guildMember ? "Yes \u2713" : "No \u2717"}</div>
-              <div>\u2022 Role Assigned: ${roleAssigned}</div>
-            </div>
-            <p style="font-size:11px;color:#64748b;margin-top:12px;">Closing popup and updating dashboard...</p>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({
-                  type: 'DISCORD_OAUTH_SUCCESS',
-                  data: ${JSON.stringify(profile)}
-                }, '*');
-                setTimeout(() => window.close(), 1200);
-              } else {
-                window.location.href = '/?discord_sync=success';
-              }
-            <\/script>
-          </div>
-        </body>
-      </html>
-    `);
-    } else {
-      console.error(
-        "[Discord OAuth Callback Audit] \u274C OAuth Flow Failed. Error reason:",
-        oauthError,
-      );
-      return res.send(`
-      <!DOCTYPE html>
-      <html>
-        <head><title>Discord Authorization Error</title></head>
-        <body style="background:#0F0826;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
-          <div style="text-align:center;padding:24px;border:1px solid #f59e0b;border-radius:16px;background:#1e1b0e;max-width:480px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.5);">
-            <div style="font-size:28px;margin-bottom:8px;">\u26A0\uFE0F</div>
-            <h3 style="color:#f59e0b;margin:0 0 8px 0;">Discord OAuth Token Exchange Failed</h3>
-            <p style="font-size:12px;color:#fde68a;line-height:1.5;word-break:break-word;">${oauthError || "OAuth authentication completed code exchange but failed user verification."}</p>
-            <div style="font-size:11px;color:#94a3b8;margin-top:12px;background:#0d0a04;padding:8px;border-radius:6px;text-align:left;font-family:monospace;">
-              <div>Redirect URI Used: ${redirectUri}</div>
-            </div>
-            <script>
-              if (window.opener) {
-                window.opener.postMessage({
-                  type: 'DISCORD_OAUTH_ERROR',
-                  error: ${JSON.stringify(oauthError || "Failed to exchange Discord token")}
-                }, '*');
-                setTimeout(() => window.close(), 5000);
-              }
-            <\/script>
-          </div>
-        </body>
-      </html>
-    `);
-    }
-  },
-);
-function getOrRestoreDiscordProfile(identifier) {
-  if (!identifier) return null;
-  const cleanId = identifier.toLowerCase().trim();
-  let profile = userDiscordProfiles.get(cleanId);
-  if (!profile || !profile.discordUserId) {
-    const user = serverUsers.find(
-      (u) =>
-        (u.email && u.email.toLowerCase() === cleanId) ||
-        u.id === cleanId ||
-        u.uid === cleanId ||
-        u.discordId === cleanId,
-    );
-    if (user && (user.discordId || user.discordLinked)) {
-      const hasActiveSub = [
-        "PRO_PASS",
-        "ELITE_PASS",
-        "OWNER",
-        "ADMIN",
-        "PRO",
-        "ELITE",
-      ].includes(user.subscription || user.role || "");
-      const avatarUrl =
-        user.discordAvatar || `https://cdn.discordapp.com/embed/avatars/0.png`;
-      profile = {
-        email: user.email || "",
-        discordUserId: user.discordId,
-        discordUsername: user.discordTag || "Discord User",
-        discordGlobalName:
-          user.discordGlobalName || user.discordTag || "Discord User",
-        discordAvatar: avatarUrl,
-        discordLinked: true,
-        guildMember: !!user.guildVerified,
-        guildJoined: !!user.guildVerified,
-        roleAssigned: user.guildVerified
-          ? hasActiveSub
-            ? "PRO"
-            : "MEMBER"
-          : "NONE",
-        guildRoles: user.guildVerified ? [hasActiveSub ? "PRO" : "MEMBER"] : [],
-        lastSync: new Date().toLocaleTimeString(),
-        subscriptionTier: hasActiveSub ? "PRO" : "FREE",
-        verificationStatus: user.guildVerified ? "VERIFIED" : "NEEDS_GUILD",
-        connectedAt: user.discord_connected_at || new Date().toISOString(),
-        linkedAt: user.discord_connected_at || new Date().toISOString(),
-      };
-      if (user.email)
-        userDiscordProfiles.set(user.email.toLowerCase(), profile);
-      if (user.id) userDiscordProfiles.set(user.id, profile);
-      if (user.discordId) userDiscordProfiles.set(user.discordId, profile);
-    }
-  }
-  return profile && profile.discordUserId ? profile : null;
-}
-__name(getOrRestoreDiscordProfile, "getOrRestoreDiscordProfile");
-app.get(
-  ["/api/account/me", "/api/auth/me", "/api/user/me"],
-  async (req, res) => {
-    const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-      .toLowerCase()
-      .trim();
-    const reqUserId = (
-      req.headers["x-user-id"] ||
-      req.query.userId ||
-      req.headers["x-user-uid"] ||
-      ""
-    ).trim();
-    await ensureFirebaseReady().catch(() => {});
-    let user = null;
-    if (reqEmail) {
-      const resolution = await resolveCanonicalUserByEmail(reqEmail).catch(
-        () => ({ user: null, allDocs: [] }),
-      );
-      user = resolution.user;
-    }
-    if (!user && reqUserId) {
-      user = await hydrateUserFromFirestore(void 0, reqUserId).catch(
-        () => null,
-      );
-    }
-    if (!user && (reqEmail || reqUserId)) {
-      user =
-        serverUsers.find(
-          (u) =>
-            (reqEmail && u.email?.toLowerCase() === reqEmail) ||
-            (reqUserId && (u.id === reqUserId || u.uid === reqUserId)),
-        ) || null;
-    }
-    if (!user) {
-      return res.json({
-        authenticated: false,
-        user: null,
-        discord: { linked: false, profile: null },
-        subscription: null,
-      });
-    }
-    const entitlement = getUserEntitlement(user.email || "");
-    const profile =
-      getOrRestoreDiscordProfile(user.id) ||
-      getOrRestoreDiscordProfile(user.email || "");
-    const now = new Date();
-    let trialRemainingSeconds = 0;
-    if (user.trial_expires_at) {
-      const exp = new Date(user.trial_expires_at);
-      trialRemainingSeconds = Math.max(
-        0,
-        Math.floor((exp.getTime() - now.getTime()) / 1e3),
-      );
-    }
-    res.json({
-      authenticated: true,
-      user: {
-        id: user.id,
-        uid: user.uid || user.id,
-        email: user.email,
-        name: user.name,
-        role: entitlement.entitlements.canAccessAdminPanel
-          ? "ADMIN"
-          : entitlement.entitlements.proQuant ||
-              entitlement.entitlements.eliteQuant
-            ? "PRO"
-            : "UNPAID",
-        subscription: entitlement.plan,
-        accountStatus: user.accountStatus || user.status || "ACTIVE",
-        discordLinked: !!(
-          user.discordLinked ||
-          user.discordId ||
-          profile?.discordUserId
-        ),
-        discordId: user.discordId || profile?.discordUserId || null,
-        discordTag: user.discordTag || profile?.discordUsername || null,
-        guildVerified: !!(user.guildVerified || profile?.guildMember),
-        trialSecondsRemaining: trialRemainingSeconds,
-        createdAt:
-          user.joined || user.discord_connected_at || new Date().toISOString(),
-        lastActiveAt: user.lastActiveAt || Date.now(),
-        stripeCustomerId: user.stripeCustomerId || null,
-        stripeSubscriptionId: user.stripeSubscriptionId || null,
-        sessionVersion: user.sessionVersion || entitlement.sessionVersion || 1,
-        lastVerifiedAt: user.lastVerifiedAt || new Date().toISOString(),
-        reconciliationStatus: user.reconciliationStatus || "OK",
-      },
-      entitlement: entitlement.entitlementState,
-      sessionVersion: user.sessionVersion || entitlement.sessionVersion || 1,
-      discord: {
-        linked: !!(
-          user.discordLinked ||
-          user.discordId ||
-          profile?.discordUserId
-        ),
-        discordUserId: user.discordId || profile?.discordUserId || null,
-        discordUsername: user.discordTag || profile?.discordUsername || null,
-        discordGlobalName:
-          user.discordGlobalName || profile?.discordGlobalName || null,
-        discordAvatar: user.discordAvatar || profile?.discordAvatar || null,
-        guildMember: !!(user.guildVerified || profile?.guildMember),
-        profile: profile || null,
-      },
-      subscription: {
-        status: entitlement.status,
-        plan: entitlement.plan,
-        expiresAt: entitlement.expiresAt || user.trial_expires_at || null,
-      },
-    });
-  },
-);
-app.get(["/api/discord/user-profile", "/api/discord/profile"], (req, res) => {
-  const reqEmail = (
-    req.headers["x-user-email"] ||
-    req.query.email ||
-    ""
-  ).toLowerCase();
-  const reqUserId = req.headers["x-user-id"] || req.query.userId || "";
-  const profile =
-    getOrRestoreDiscordProfile(reqUserId) ||
-    getOrRestoreDiscordProfile(reqEmail) ||
-    getOrRestoreDiscordProfile("vixyvault0@gmail.com");
-  res.json({
-    linked: !!(profile && profile.discordUserId),
-    profile: profile || null,
-  });
-});
-app.get(
-  ["/api/auth/discord/status", "/api/discord/status"],
-  async (req, res) => {
-    const reqEmail = (
-      req.headers["x-user-email"] ||
-      req.query.email ||
-      ""
-    ).toLowerCase();
-    const reqUserId = req.headers["x-user-id"] || req.query.userId || "";
-    const profile =
-      getOrRestoreDiscordProfile(reqUserId) ||
-      getOrRestoreDiscordProfile(reqEmail) ||
-      getOrRestoreDiscordProfile("vixyvault0@gmail.com");
-    const targetGuildId = process.env.DISCORD_GUILD_ID || "1451337712937336985";
-    if (!profile || !profile.discordUserId) {
-      return res.json({
-        connected: false,
-        discordUserId: null,
-        username: null,
-        inServer: false,
-        guildId: targetGuildId,
-        roles: [],
-        hasEliteRole: false,
-        hasAIRole: false,
-        hasVerifiedRole: false,
-        membershipStatus: "unlinked",
-      });
-    }
-    const roles = profile.guildRoles || [];
-    res.json({
-      connected: true,
-      discordUserId: profile.discordUserId,
-      username: profile.discordUsername,
-      globalName: profile.discordGlobalName,
-      avatar: profile.discordAvatar,
-      inServer: profile.guildMember,
-      guildId: targetGuildId,
-      roles,
-      hasEliteRole:
-        roles.includes("ELITE") ||
-        roles.includes("PRO") ||
-        profile.subscriptionTier === "PRO",
-      hasAIRole: roles.includes("AI"),
-      hasVerifiedRole:
-        roles.includes("VERIFIED") ||
-        roles.includes("MEMBER") ||
-        profile.guildMember,
-      membershipStatus: profile.guildMember ? "active" : "needs_server",
-    });
-  },
-);
-app.get(
-  ["/api/discord/diagnostics", "/api/auth/discord/diagnostics"],
-  async (req, res) => {
-    const diagnostics = await runDiscordDiagnostics();
-    res.json(diagnostics);
-  },
-);
-app.get(
-  ["/api/discord/health", "/api/auth/discord/health"],
-  async (req, res) => {
-    try {
-      const report = await getDiscordHealthReport();
-      res.json(report);
-    } catch (err) {
-      res
-        .status(500)
-        .json({
-          discordConfigured: !!(
-            process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET
-          ),
-          botTokenPresent: !!process.env.DISCORD_BOT_TOKEN,
-          guildIdPresent: !!process.env.DISCORD_GUILD_ID,
-          proRoleConfigured: true,
-          eliteRoleConfigured: true,
-          botCanAccessGuild: false,
-          botHighestRolePosition: 0,
-          proRolePosition: 0,
-          eliteRolePosition: 0,
-          roleHierarchyValid: false,
-          status: "error",
-          message: err.message || "Error running health diagnostics",
-        });
-    }
-  },
-);
-app.post(
-  ["/api/discord/verify-membership", "/api/discord/verify"],
-  async (req, res) => {
-    const userEmail = (
-      req.headers["x-user-email"] || "vixyvault0@gmail.com"
-    ).toLowerCase();
-    const profile =
-      userDiscordProfiles.get(userEmail) ||
-      userDiscordProfiles.get("global_active_user");
-    console.log(
-      `[DISCORD_MEMBERSHIP_CHECK] Verification request for email: ${userEmail}`,
-    );
-    console.log(
-      `[DISCORD_MEMBERSHIP_CHECK] Discord User ID: ${profile?.discordUserId || "NONE"}`,
-    );
-    if (!profile || !profile.discordUserId) {
-      return res
-        .status(200)
-        .json({
-          success: false,
-          error: "NOT_LINKED",
-          code: "NOT_LINKED",
-          message:
-            'No Discord identity is linked. Please click "Connect Discord" first.',
-        });
-    }
-    const syncResult = await syncUserEntitlementToDiscord(userEmail);
-    if (!syncResult.success) {
-      if (
-        syncResult.code === "USER_NOT_IN_SERVER" ||
-        syncResult.code === "USER_NOT_IN_GUILD"
-      ) {
-        return res
-          .status(200)
-          .json({
-            success: false,
-            status: "not_in_guild",
-            error: "USER_NOT_IN_SERVER",
-            code: "USER_NOT_IN_SERVER",
-            linked: true,
-            guildMember: false,
-            message:
-              "Your Discord account is connected, but you haven't joined the VIXY Vault Discord server yet.",
-            profile,
-          });
-      }
-      return res
-        .status(200)
-        .json({
-          success: false,
-          error: syncResult.code || "ROLE_SYNC_FAILED",
-          code: syncResult.code || "ROLE_SYNC_FAILED",
-          message: syncResult.message,
-          profile,
-        });
-    }
-    const updatedProfile = userDiscordProfiles.get(userEmail) || profile;
-    return res.json({
-      success: true,
-      status: "verified",
-      linked: true,
-      guildMember: true,
-      roleAssigned: updatedProfile.roleAssigned || "VERIFIED",
-      roleName: updatedProfile.roleAssigned || "VERIFIED",
-      verifiedAt: updatedProfile.lastVerifiedAt || new Date().toISOString(),
-      profile: updatedProfile,
-      message: `DISCORD CONNECTED \u2022 SERVER MEMBER VERIFIED \u2022 ROLE SYNCED (${updatedProfile.roleAssigned})`,
-    });
-  },
-);
-app.post(
-  ["/api/subscription/event", "/api/purchase/event", "/api/payments/webhook"],
-  async (req, res) => {
-    const {
-      userEmail = "vixyvault0@gmail.com",
-      planTier = "ELITE_PASS",
-      eventType = "PURCHASE_SUCCESS",
-    } = req.body || {};
-    const normalizedEmail = String(userEmail).toLowerCase();
-    console.log(
-      `[DISCORD_ENTITLEMENT_SYNC] Purchase/Subscription event received: ${eventType} | Email: ${normalizedEmail} | Plan: ${planTier}`,
-    );
-    const current = userSubscriptions.get(normalizedEmail) || {
-      email: normalizedEmail,
-      role: planTier.includes("ELITE") ? "ELITE" : "PRO",
-      plan: planTier,
-      status: eventType === "SUBSCRIPTION_CANCELLED" ? "CANCELLED" : "ACTIVE",
-      updatedAt: new Date().toISOString(),
-    };
-    current.status =
-      eventType === "SUBSCRIPTION_CANCELLED" ? "CANCELLED" : "ACTIVE";
-    current.updatedAt = new Date().toISOString();
-    userSubscriptions.set(normalizedEmail, current);
-    savePersistentStore();
-    const syncResult = await syncUserEntitlementToDiscord(normalizedEmail);
-    res.json({
-      success: true,
-      discordSynced: syncResult.success,
-      code: syncResult.code,
-      message: syncResult.message,
-      profile: syncResult.profile,
-    });
-  },
-);
-app.post("/api/discord/disconnect", async (req, res) => {
-  const reqEmail = (
-    req.headers["x-user-email"] ||
-    req.body?.email ||
-    ""
-  ).toLowerCase();
-  const reqUserId = req.headers["x-user-id"] || req.body?.userId || "";
-  const user = serverUsers.find(
-    (u) =>
-      (reqUserId && (u.id === reqUserId || u.uid === reqUserId)) ||
-      (reqEmail && u.email?.toLowerCase() === reqEmail),
-  );
-  if (user) {
-    const oldDiscordId = user.discordId;
-    if (oldDiscordId) userDiscordProfiles.delete(oldDiscordId);
-    if (user.email) userDiscordProfiles.delete(user.email.toLowerCase());
-    userDiscordProfiles.delete(user.id);
-    user.discordId = void 0;
-    user.discordTag = void 0;
-    user.discordGlobalName = void 0;
-    user.discordAvatar = void 0;
-    user.discordLinked = false;
-    user.guildVerified = false;
-    if (canAttemptFirestoreWrite("discordProfiles")) {
-      try {
-        await ensureFirestoreNetworkEnabled();
-        await setDoc(
-          doc(db, "users", user.id),
-          {
-            discordUserId: null,
-            discordId: null,
-            discordTag: null,
-            discordGlobalName: null,
-            discordAvatar: null,
-            discordLinked: false,
-            guildVerified: false,
-          },
-          { merge: true },
-        );
-        if (oldDiscordId) {
-          await deleteDoc(doc(db, "discordProfiles", oldDiscordId)).catch(
-            () => {},
-          );
-          await deleteDoc(doc(db, "discord_profiles", oldDiscordId)).catch(
-            () => {},
-          );
-        }
-      } catch (e) {
-        console.error(
-          "[Discord Disconnect] Error updating Firestore on disconnect:",
-          e,
-        );
-      }
-    }
-  }
-  savePersistentStore();
-  console.log(
-    `[DISCORD_PROFILE] Disconnected for user: ${reqUserId || reqEmail}`,
-  );
-  res.json({
-    success: true,
-    message: "Discord identity disconnected successfully.",
-  });
-});
-app.get("/api/discord/bot-status", (req, res) => {
-  const status = getDiscordBotStatus();
-  const envValidation = validateDiscordEnv();
-  res.json({
-    status,
-    envConfigured: envValidation.envConfig,
-    missingRequired: envValidation.missing,
-    isValid: envValidation.valid,
-    timestamp: Date.now(),
-    diagnostics: {
-      BOT_CONNECTED: discordSyncMetrics.botConnected,
-      GUILD_FOUND: discordSyncMetrics.guildFound,
-      ROLE_FOUND: discordSyncMetrics.roleFound,
-      ROLE_MANAGEABLE: discordSyncMetrics.roleManageable,
-      LAST_SYNC: discordSyncMetrics.lastSyncAt,
-      SUCCESS_COUNT: discordSyncMetrics.successCount,
-      PENDING_COUNT: discordSyncMetrics.pendingCount,
-      FAILED_COUNT: discordSyncMetrics.failedCount,
-      LAST_ERROR: discordSyncMetrics.lastError,
-    },
-  });
-});
-app.get(["/api/discord/diagnostic", "/api/discord/diagnostics"], (req, res) => {
-  const rep = getDiscordDiagnosticsReport();
-  if (
-    req.headers.accept?.includes("text/plain") ||
-    req.query.format === "text"
-  ) {
-    return res.send(rep.text);
-  }
-  res.json({
-    success: true,
-    ...rep.diagnostics,
-    diagnosticText: rep.text,
-    BOT_CONNECTED: discordSyncMetrics.botConnected,
-    GUILD_FOUND: discordSyncMetrics.guildFound,
-    ROLE_FOUND: discordSyncMetrics.roleFound,
-    ROLE_MANAGEABLE: discordSyncMetrics.roleManageable,
-    LAST_SYNC: discordSyncMetrics.lastSyncAt,
-    SUCCESS_COUNT: discordSyncMetrics.successCount,
-    PENDING_COUNT: discordSyncMetrics.pendingCount,
-    FAILED_COUNT: discordSyncMetrics.failedCount,
-    LAST_ERROR: discordSyncMetrics.lastError,
-    queue: discordSyncQueue.slice(-20),
-  });
-});
-app.post("/api/discord/test-broadcast", async (req, res) => {
-  const {
-    symbol,
-    direction,
-    confidence,
-    currentPrice,
-    targetPrice,
-    reasoning,
-    webhookUrl,
-  } = req.body || {};
-  const result = await broadcastSignalToDiscord({
-    symbol: symbol || "BTC/USDT 15M",
-    direction: direction || "YES",
-    confidence: confidence || 88,
-    edgePct: 8.4,
-    currentPrice: currentPrice || 64821.5,
-    targetPrice: targetPrice || 65100,
-    reasoning: reasoning || "Taker buy delta spike & Kalshi odds underpriced",
-    webhookUrl,
-  });
-  res.json(result);
-});
-app.post("/api/discord/sync-vip", async (req, res) => {
-  const { discordUserId, guildId, tier = "ELITE" } = req.body || {};
-  if (!discordUserId) {
-    return res
-      .status(400)
-      .json({ success: false, message: "discordUserId is required" });
-  }
-  const result = await assignDiscordRoleToUser(discordUserId, tier, guildId);
-  res.json(result);
-});
-app.post(
-  ["/api/admin/unfreeze-bots", "/api/discord/unfreeze"],
-  requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
-    lastMarketUpdateTs = Date.now();
-    lastModelRunTs = Date.now();
-    lastSignalUpdateTs = Date.now();
-    engineFeedStatus = "CONNECTED";
-    engineState = "MONITORING";
-    errorCount = 0;
-    persistenceSeconds = 18;
-    serverUsers.forEach((u) => {
-      u.status = "ACTIVE";
-    });
-    const actor = req.headers["x-user-email"] || "ADMIN";
-    addServerAuditLog(
-      actor,
-      "BOT_UNFROZEN",
-      "Emergency unfreeze executed for all user bots",
-      "WARN",
-    );
-    pushEngineLog(
-      "INFO",
-      "\u26A1 EMERGENCY UNFREEZE TRIGGERED: All user bots, signal loops, and Discord webhooks unfrozen and set to ACTIVE.",
-    );
-    res.json({
-      success: true,
-      unfrozenBotsCount: serverUsers.length,
-      engineState,
-      feedStatus: engineFeedStatus,
-      message: `Successfully unfrozen all ${serverUsers.length} user bots! All automated feeds, signals, and Discord webhooks are active.`,
-      timestamp: new Date().toISOString(),
-    });
-  },
-);
-app.post("/api/alerts/send", async (req, res) => {
-  const { channel, webhookUrl, signalData } = req.body || {};
-  const payload = {
-    app: "BTC15 PRO",
-    event: "HIGH_CONFIDENCE_SIGNAL",
-    symbol: "BTC/USDT 15M",
-    signal: signalData?.direction || "YES",
-    confidence: `${signalData?.confidence || 91}%`,
-    edge: `+${signalData?.edgePct || 7.4}%`,
-    targetPrice: `$${signalData?.targetPrice?.toLocaleString() || "64,228"}`,
-    currentPrice: `$${signalData?.currentPrice?.toLocaleString() || "64,108"}`,
-    timestamp: new Date().toISOString(),
-  };
-  if (channel === "discord" && webhookUrl) {
-    try {
-      await fetchWithTimeout(
-        webhookUrl,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-          username: "VIXY Terminal Intelligence",
-          avatar_url:
-            "https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=100",
-          embeds: [
-            {
-              title: `\u26A1 VIXY Terminal Signal Alert: ${payload.signal} (${payload.confidence} Confidence)`,
-              color: payload.signal === "YES" ? 65280 : 16711680,
-              fields: [
-                { name: "Symbol", value: payload.symbol, inline: true },
-                {
-                  name: "Target Price",
-                  value: payload.targetPrice,
-                  inline: true,
-                },
-                { name: "Edge vs Market", value: payload.edge, inline: true },
-                {
-                  name: "Reasoning",
-                  value: signalData?.reasoning || "Taker buy delta expansion",
-                  inline: false,
-                },
-              ],
-              footer: { text: "VIXY Terminal \u2022 Decision Intelligence" },
-              timestamp: payload.timestamp,
-            },
-          ],
-        }),
-      });
-    } catch (err) {}
-  }
-  res.json({
-    success: true,
-    message: `Test alert dispatched successfully to ${channel ? channel.toUpperCase() : "ALERT"}!`,
-    payloadSent: payload,
-  });
-});
-app.get("/api/system-status", (req, res) => {
-  const now = Date.now();
-  const ageMs = now - lastMarketUpdateTs;
-  const isMarketLive = engineFeedStatus === "CONNECTED" && ageMs < 1e4;
-  const totalUsers = serverUsers.length;
-  const onlineNow = serverUsers.filter(
-    (u) => u.onlineStatus === "ACTIVE",
-  ).length;
-  res.json({
-    success: true,
-    marketData: {
-      status: isMarketLive ? "CONNECTED" : "STALE",
-      source: "Binance Futures wss://fstream.binance.com/ws/btcusdt@ticker",
-      lastUpdate: new Date(lastMarketUpdateTs).toISOString(),
-      ageMs,
-    },
-    binance: {
-      connection: engineFeedStatus,
-      endpoint: "wss://fstream.binance.com/ws/btcusdt@ticker",
-      lastMessage: new Date(lastMarketUpdateTs).toISOString(),
-    },
-    kalshi: {
-      connection: "CONNECTED",
-      currentContract: "BTC-15M-CYCLE",
-      cycleStart: getKalshi15mMarketState(64100).intervalStart,
-      cycleEnd: getKalshi15mMarketState(64100).intervalEnd,
-    },
-    market15m: getKalshi15mMarketState(64161.4),
-    firestore: { status: "Connected" },
-    discord: {
-      status: getDiscordBotStatus().isReady ? "CONNECTED" : "STANDBY",
-    },
-    stripe: { status: "ACTIVE" },
-    auth: { status: "ACTIVE" },
-    presence: { onlineUsers: onlineNow, totalUsers },
-    timestamp: new Date().toISOString(),
-  });
-});
-async function startServer() {
-  console.log(
-    "================ [ENVIRONMENT CONFIGURATION CHECKLIST] ================",
-  );
-  console.log(
-    `[ENV] KALSHI_API_KEY_ID:     ${process.env.KALSHI_API_KEY_ID ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    `[ENV] KALSHI_PRIVATE_KEY:    ${process.env.KALSHI_PRIVATE_KEY ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    `[ENV] KALSHI_ENVIRONMENT:    ${process.env.KALSHI_ENVIRONMENT || "production"}`,
-  );
-  console.log(
-    `[ENV] DISCORD_BOT_TOKEN:     ${process.env.DISCORD_BOT_TOKEN ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    `[ENV] STRIPE_SECRET_KEY:     ${process.env.STRIPE_SECRET_KEY ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    `[ENV] STRIPE_WEBHOOK_SECRET: ${process.env.STRIPE_WEBHOOK_SECRET ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    `[ENV] GEMINI_API_KEY:        ${process.env.GEMINI_API_KEY ? "CONFIGURED" : "MISSING"}`,
-  );
-  console.log(
-    "======================================================================",
-  );
-  logStripeDiagnosticMode();
-  initializeDiscordBot().catch((err) => {
-    console.warn("[Server] Discord bot initialization warning:", err);
-  });
-  updateDiscordDiagnosticsMetrics().catch(() => {});
-  setInterval(() => {
-    processDiscordSyncQueue().catch(console.error);
-  }, 15e3);
-  setInterval(() => {
-    updateDiscordDiagnosticsMetrics().catch(console.error);
-  }, 6e4);
-  AutomationScheduler.startScheduler();
-  app.all("/api/*", (req, res) => {
-    res
-      .status(404)
-      .json({
-        success: false,
-        error: "API endpoint not found",
-        path: req.path,
-      });
-  });
-  if (process.env.NODE_ENV !== "production") {
-    const { createServer: createViteServer } = await import("vite").then(
-      (s) => {
-        const e = "default";
-        return s[e] && typeof s[e] == "object" && "__esModule" in s[e]
-          ? s[e]
-          : s;
-      },
-    );
-    const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false, ws: false },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-  if (!process.env.VERCEL) {
-    const server = app.listen(PORT, "0.0.0.0", () => {
-      console.log(`BTC15 PRO server listening on http://0.0.0.0:${PORT}`);
-      console.log(
-        "Discord Redirect URI:",
-        process.env.DISCORD_REDIRECT_URI ||
-          "https://www.vixxyvault.com/api/auth/discord/callback",
-      );
-    });
-    server.on("error", (err) => {
-      if (err.code === "EADDRINUSE") {
-        console.error(
-          `[SERVER_EADDRINUSE] Port ${PORT} is already in use. Exiting process cleanly...`,
-        );
-        process.exit(1);
-      } else {
-        console.error("[SERVER_ERROR] HTTP server error:", err);
-      }
-    });
-    const wss = new WebSocketServer({ server, path: "/api/ws" });
-    wss.on("connection", (ws, req) => {
-      wssClientsCount = wss.clients.size;
-      lastFrontendConnectionTs = Date.now();
-      lastWebSocketMessageTs = Date.now();
-      hasDeliveredFrontendSnapshot = true;
-      console.log(
-        `[VIXY_WS_CONNECT] client connected from ${req.socket.remoteAddress}`,
-      );
-      console.log(
-        `[VIXY_WS_OPEN] client connected (Active Clients: ${wssClientsCount})`,
-      );
-      globalSequenceNumber++;
-      const isLocked = active15mCycle.isLocked;
-      const spot = currentBtcPrice;
-      const strike = isLocked
-        ? active15mCycle.lockedStrike
-        : current15mStrikePrice;
-      const snapshot = {
-        type: "VIXY_SNAPSHOT",
-        sessionId: SERVER_SESSION_ID,
-        cycleId: active15mCycle.cycleId,
-        sequence: globalSequenceNumber,
-        status: active15mCycle.stage,
-        stage: active15mCycle.stage,
-        cycleStage: active15mCycle.stage,
-        isLocked,
-        decision: isLocked
-          ? active15mCycle.lockedDecision
-          : currentDirection === "UP"
-            ? "BUY UP"
-            : currentDirection === "DOWN"
-              ? "BUY DOWN"
-              : "OBSERVING...",
-        confidence: isLocked
-          ? active15mCycle.lockedConfidence || currentConfidence
-          : currentConfidence,
-        confidencePct: isLocked
-          ? active15mCycle.lockedConfidence || Math.round(currentConfidence)
-          : Math.round(currentConfidence),
-        lockedProbability: isLocked ? active15mCycle.lockedProbability : null,
-        liveProbability: currentModelProbability,
-        probabilityForLockedDirection: isLocked
-          ? active15mCycle.lockedDirection === "UP"
-            ? currentModelProbability
-            : 1 - currentModelProbability
-          : currentModelProbability,
-        spot,
-        strike,
-        timeRemaining: Math.max(
-          0,
-          Math.floor((active15mCycle.intervalEnd - Date.now()) / 1e3),
-        ),
-        timeRemainingSec: Math.max(
-          0,
-          Math.floor((active15mCycle.intervalEnd - Date.now()) / 1e3),
-        ),
-        lockedAt: active15mCycle.lockedAt,
-        dataAgeMs: Date.now() - lastMarketUpdateTs,
-        algorithm: "VIXY_AUTHORITATIVE_NEURAL_v5",
-        validation: active15mCycle.validationStatus,
-        validationStatus: active15mCycle.validationStatus,
-        calibration: active15mCycle.calibrationStatus,
-        calibrationStatus: active15mCycle.calibrationStatus,
-        analysisStatus: active15mCycle.analysisStatus,
-        evidenceAgreement:
-          active15mCycle.evidenceAgreement || "MODERATE_AGREEMENT",
-        hasConflict: active15mCycle.hasConflict || false,
-        signalUnstable: active15mCycle.signalUnstable || false,
-        provisionalBias: active15mCycle.provisionalBias || "NEUTRAL_BIAS",
-        historicalSimilarityPct: active15mCycle.historicalSimilarityPct || 84,
-        crossAssetContext: latestCrossAssetContext,
-        kalshiImpliedProbability: currentKalshiImpliedProb,
-        edgePct: currentEdgePct,
-        edge: currentEdgePct / 100,
-        lockEvaluation: latestLockEvaluation,
-        guardianDecision: latestGuardianDecision,
-        btc15mPipeline: latestBtc15mPipeline,
-        dataFreshness: engineFeedStatus === "CONNECTED" ? "LIVE" : "DEGRADED",
-        lastMarketUpdateTs,
-        features: {
-          asset: "BTC",
-          desk: "15m",
-          orderFlow: Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
-          orderBookImbalance:
-            Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
-          momentum: currentMomentum,
-          momentum5m: currentMomentum,
-          momentumPct: currentMomentum,
-          volatility: Math.min(
-            6.5,
-            Math.max(
-              0.4,
-              Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-            ),
-          ),
-          volatility15m: Math.min(
-            6.5,
-            Math.max(
-              0.4,
-              Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-            ),
-          ),
-          volatility15mPct: Math.min(
-            6.5,
-            Math.max(
-              0.4,
-              Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-            ),
-          ),
-          distance: Math.round((spot - (strike || 0)) * 100) / 100,
-          distanceUSD: Math.round((spot - (strike || 0)) * 100) / 100,
-          regime: serverLearningEngine.currentRegime,
-          direction: isLocked
-            ? active15mCycle.lockedDirection
-            : currentDirection,
-          probability: isLocked
-            ? active15mCycle.lockedProbability
-            : currentModelProbability,
-          confidence: isLocked
-            ? active15mCycle.lockedConfidence
-            : currentConfidence,
-          crossVenue: {
-            spot,
-            kalshiStrike: strike,
-            intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
-            intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
-            timeRemainingSec: Math.max(
-              0,
-              Math.floor((active15mCycle.intervalEnd - Date.now()) / 1e3),
-            ),
-            distance: Math.round((spot - (strike || 0)) * 100) / 100,
-            distancePct: strike
-              ? Math.round(((spot - strike) / strike) * 1e4) / 100
-              : 0,
-            kalshiImpliedProb: currentKalshiImpliedProb,
-            polymarketImpliedProb:
-              Math.round((currentKalshiImpliedProb - 0.02) * 100) / 100,
-            spreadPct: 0.02,
-          },
-          computedAt: new Date().toISOString(),
-        },
-        lockedPrediction: isLocked
-          ? {
-              direction: active15mCycle.lockedDirection,
-              probability: active15mCycle.lockedProbability,
-              confidence: active15mCycle.lockedConfidence,
-              lockedAt: active15mCycle.lockedAt,
-              spotAtLock: active15mCycle.lockedSpot,
-              strike: active15mCycle.lockedStrike,
-              reason: active15mCycle.lockedReason,
-              decision: active15mCycle.lockedDecision,
-            }
-          : null,
-        livePrediction: {
-          direction: currentDirection,
-          probability: currentModelProbability,
-          confidence: currentConfidence,
-        },
-        serverTime: new Date().toISOString(),
-      };
-      ws.send(JSON.stringify(snapshot));
-      console.log(
-        `[VIXY_WS_SNAPSHOT] cycle=${snapshot.cycleId} sequence=${snapshot.sequence} status=${snapshot.status}`,
-      );
-      const heartbeatInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          globalSequenceNumber++;
-          lastWebSocketMessageTs = Date.now();
-          const heartbeat = {
-            type: "VIXY_HEARTBEAT",
-            sessionId: SERVER_SESSION_ID,
-            serverTime: new Date().toISOString(),
-            sequence: globalSequenceNumber,
-            cycleId: active15mCycle.cycleId,
-          };
-          ws.send(JSON.stringify(heartbeat));
-        }
-      }, 1e4);
-      ws.on("close", (code, reason) => {
-        clearInterval(heartbeatInterval);
-        wssClientsCount = wss.clients.size;
-        console.log(
-          `[VIXY_WS_CLOSE] code=${code} reason=${reason?.toString() || "none"} (Active Clients: ${wssClientsCount})`,
-        );
-      });
-      ws.on("error", (err) => {
-        console.warn("[VIXY_WS_ERROR]", err);
-      });
-    });
-    setInterval(() => {
-      const now = Date.now();
-      const dataAgeMs = now - lastMarketUpdateTs;
-      const isBinanceConnected =
-        engineFeedStatus === "CONNECTED" && dataAgeMs < 15e3;
-      const isLocked = active15mCycle.isLocked;
-      const botState = getDiscordBotStatus();
-      const creds = loadProductionDiscordCredentials();
-      const diagHash = `${active15mCycle.cycleId}:${wssClientsCount}:${persistenceState}:${botState.mode}:${isLocked}`;
-      if (
-        diagHash !== lastLoggedDiagnosticHash ||
-        now - lastHeartbeatLogTs >= 6e4
-      ) {
-        lastLoggedDiagnosticHash = diagHash;
-        console.log(`[VIXY_PRODUCTION_DIAGNOSTIC]`);
-        console.log(
-          `frontend=${wssClientsCount > 0 ? "READY" : now - lastFrontendConnectionTs < 3e4 ? "READY" : "WAITING"}`,
-        );
-        console.log(`backend=RUNNING`);
-        console.log(
-          `binance=${isBinanceConnected ? "CONNECTED" : "DISCONNECTED"}`,
-        );
-        console.log(`cryptoTracking=ACTIVE`);
-        console.log(
-          `marketData=${engineFeedStatus === "CONNECTED" ? (dataAgeMs < 5e3 ? "FRESH" : dataAgeMs < 15e3 ? "STALE" : "CRITICAL") : "CRITICAL"}`,
-        );
-        console.log(`algorithm=RUNNING`);
-        console.log(
-          `firestore=${persistenceState === "HEALTHY_FIRESTORE" ? "HEALTHY" : persistenceState === "DEGRADED_CACHE_ACTIVE" ? "DEGRADED_CACHE_ACTIVE" : persistenceState}`,
-        );
-        console.log(`firestoreStatus=${persistenceState}`);
-        console.log(`firestoreLastSuccess=${firestoreLastSuccess || "NONE"}`);
-        console.log(
-          `firestoreLastFailure=${lastFirestoreWriteError || "NONE"}`,
-        );
-        console.log(`firestoreReconnectAttempt=${firestoreReconnectAttempt}`);
-        console.log(
-          `firestoreQueuedWrites=${pendingTelemetryQueue.length + pendingSignalLogsQueue.length}`,
-        );
-        console.log(`firestorePersistenceState=${persistenceState}`);
-        console.log(`authoritativeState=AVAILABLE`);
-        console.log(
-          `vixyWebSocket=${wssClientsCount > 0 ? "CONNECTED" : "WAITING"}`,
-        );
-        console.log(
-          `frontendSnapshot=${hasDeliveredFrontendSnapshot ? "FRESH" : "WAITING"}`,
-        );
-        console.log(
-          `discordBot=${botState.mode === "ACTIVE_BOT" ? "READY" : botState.mode === "DISABLED" ? "DISABLED" : "DEGRADED"}`,
-        );
-        console.log(`discordEnvVarPresent=${creds.isValid}`);
-        console.log(`discordTokenFingerprint=${creds.fingerprint}`);
-        console.log(`discordApiAuthenticated=${botState.isReady}`);
-        console.log(`discordBotUserId=${botState.botId || "NONE"}`);
-        console.log(`discordGuildAccess=${botState.guildCount > 0}`);
-        console.log(`discordBotConnected=${botState.isReady}`);
-        console.log(`currentCycleId=${active15mCycle.cycleId}`);
-        console.log(`currentSequence=${globalSequenceNumber}`);
-        console.log(
-          `currentLock=${isLocked ? `${active15mCycle.lockedDecision} (${active15mCycle.lockedConfidence}%)` : "NONE"}`,
-        );
-        console.log(
-          `lockedDirection=${isLocked ? active15mCycle.lockedDirection : "null"}`,
-        );
-        console.log(
-          `lockedConfidencePct=${isLocked ? `${active15mCycle.lockedConfidence}%` : "null"}`,
-        );
-        console.log(
-          `lockedProbability=${isLocked ? active15mCycle.lockedProbability : "null"}`,
-        );
-        console.log(`liveDirection=${currentDirection}`);
-        console.log(`liveProbability=${currentModelProbability}`);
-        console.log(
-          `reversalDetected=${isLocked && (active15mCycle.lockedDirection === "UP" ? currentModelProbability : 1 - currentModelProbability) <= 0.15}`,
-        );
-        console.log(`STATUS=PRODUCTION_READY`);
-      }
-    }, 1e4);
-  } else {
-    console.log("[Vercel] Serverless function initialized successfully.");
-  }
-}
-__name(startServer, "startServer");
-startServer();
-export {
-  AUGUST_15_COMPENSATED_USERS,
-  STRIPE_SERVER_PLANS,
-  active15mCycle,
-  app,
-  canLockCurrentCycle,
-  checkAndSettle15mCycle,
-  engineFeedStatus,
-  evaluateBtc15mHighConvictionPipeline,
-  getEntitlementsFromSubscription,
-  getUserAccessState,
-  getUserEntitlement,
-  initializeProtectedAugust15Users,
-  lastKalshiUpdateTs,
-  lastMarketUpdateTs,
-  lastModelRunTs,
-  lastPredictionUpdateTs,
-  lastSignalUpdateTs,
-  latestBtc15mPipeline,
-  latestCrossAssetContext,
-  latestGuardianDecision,
-  lock15mCycle,
-  persistentSignalLogs,
-  reconcileDiscordGuildMembers,
-  reconcileUserEntitlement,
-  syncDiscordGuildMembers,
-  userDayPasses,
-};
+            data.discordUxœì½ıCÛH’0üûü_³ÍWˆ3ã€I|C€µMæ²¹¼FØk#K^I†0YÿïoWV·Z² ™İ¹{ö.êïêªêªêªêÔOzòÏ’™—§şä"õ“Æ$HÇq2á“xÜ›¼ü¨GÍ¡wCöQB&^æ5´JäÍ|Ö|Õ/Ğwwo+Æ{ÆW^x
+]8†½Ñ¥ÿüg¾8ß‡U«tÀ3;	¢Oş„ì“,YuƒkRgÃéëENŞú³+?!Oö÷ÉmLHSéÆY¼F¾N’µxç'ÁuÀÆ~ò¤nÔ7G>8Èg4ZÃ³_Z+yâXúhG‘?ÎüÉÈËÊ¦ëªoí£˜ñ­XS'SĞQø·È¿#G^æ××YÜœ²$ˆnê“—¿ñÿ.×ImÄc?MÏ“ø:ı£x\M³ä^-™fdÎë¤ƒÈ›S {w^‘?£Òú8C:­ ê“+Ú¯\£lT[SSÂı4®ã¤ë§õ:%3ø°FöVÓÍMNÖj (êkëDşLÖÖ¿3ömIÆ rR÷“dÍXIú;/‰êµÇAâ§YœøÉiœcŸ\û´… ±Ğ®­èJôÎşMı¬e~rë…u/½Æ¤ó·àÅwoS
+0Ø¦ıCo]<©óJ>ù÷t9ó$¾&À7¼ûs/Mı´áGtOı´¾†qŠ‘Óœ|ÿ=mÓH3/[Ğ!(±Ô:‡ÃŞ»nM”øŸç°Ä…|LZÈ&¦pÈhĞ [;f¾‰K0._ĞÏû¼ÓÑ|H­û_ç½~÷¨öÒ®²˜Ó-dH¼_	‡õÖ…ñMİ—:ïÉyg0 ‹áÙ†õ#¾¤	ƒ¶?ó‚pÿéX)üJI €İ›ğoü÷ååz1' Ç¼¼7±@9¸‰x¥>ø0†ª¹–”VNÏN»µµÃ×:ÇW„Dy0äÍ•–€AÌ‚$´5™ø³è°™B ÂÖnÌjÙ¶`Àh“üg<”8r_t÷ ‰ãÔ×^˜úfíeØWyğbödB(#ãĞ÷¢#àQ©Yğ»'ŠÔéäæ§6•!ÅšcåœÛ¥ŒÛ¹`O€	ÖçİæŒtkëDöI1û$¾ó“C/¥x¾æ.‘w~!3?¹ñÛìd¥¼ÛQ©x]±W.¬p¢ıºš¢øğƒ¦èš`34›Îïq]+ôæ˜Mé?ƒáımĞy×%İ~ÿ¬ÿøt~˜»Jbo2öÒ¬3™Q÷–òÛº=¾ïçtm5:‹Ìb$™›½R V6½­¶ß®Â9$íì·Nÿ4×ÁŒzÀñrsûe÷œ‘y‹,ŞÀÜñ±é†Aæ›¤PR¿õ'‹–—U¥ƒ-{¥4Ğ	³‡çÅò€èéO/œ—H¡Ÿñúşd@yœÄ7éa¼ˆàœkÁ2UU T‹ÿÇÂOîså­Gô\¤P]'a0²zk§¹f¯ŸX9!¨OàJ§d‚Y#”ë™ÀÁ¤lë0tƒãÇ1ò‘‚Ég:ĞÜOÒ Í(½é&ë šô¢‰ÿ¹^OÙ,S:xä˜¶Â:£å-›±8˜/Ò)[‡IÄ§çS…öèpéäm¾Ñh4
+«ÛTOëÂ,Z]AªšŠ\«Jã$ÓèS÷ÖÉ•AMDË^WT°’jE‰dÃUß+¬_Hu¡9„ÜmÄÙsÔ6ôCæSÒZIl™¬ùZSGñU
+‚?­$;cÈ)Õ™`1‰é±mTÕ3´2ŠAtKë1›clÓ\1e¹;+ ²JX]4='‚“«FFq‘²3Pq6ˆ‡ÿş¦êÆˆ<®æqì…Á•	õz”8Æª&¬ëˆ>í¾v|¾]eãQkgVË#l¯‚êuŒ–‰¦qÄÑM×w!œªyĞ@À|LLé—4;´êäØ#exîšëv55rn`\ñÊeÑÄ©øšDtßºÑMYÓ>»ú;¥õ×Üê°™~rbÔ_×Ğ²{r] ²ø4XŒA ¹^„á=™ŞOP‹	Z&“)Â%ñŒ¨vD3¦Õ,–ß ³sHW©Sÿ.”V˜œŞSjYHL-ühì#¡¶MôU‚»´†À\Y×…·¢Ö0ŒÄh§°ù™(àªÁ{?Ò–U«øGÒjæwß±ü“).ŒJÓ$¨;iª¨€èo B›ª‚ÛƒîÎÅ«%SBÒu]6X\É¢”ş:N‚9ãT¨ŠlE5!î*ùwf
+sKqL8¦Q5óôYj^I0¯”ê‰Øµjbjq¿%T©é2CÅ>‰(Hxu,Œ}ÉZjoº“á›÷#¥
+£SêİúT+ú4`Ê?Ä¥L½húëZÆ—[Ç,'ró\4ÒbÒ£Uk¿½ÒnB×!JYWø$¿[~7Á5Aº;×òôÒÌ ôSTf\G¬ÿz9cñ}*TYà…sêB ñ¯½E˜1ÅsŸB'Â¯w!êµïeYè7›Ï¹µ˜·˜ÅgíÖæÖöÎ.®	³iİlÅ’ƒ	Õ‰i2Šo¼ñ°fogtîhÏ4ä¸v]Cµ~aµ¸ÀV:{M:¼ÙÛQ…  ÓÂóş™ú„é‚1=_—K¥]ØXå÷¿Çô €‰o67w7š{­]UÆ-øcu`±öïºıŞqYæXo(àÚ%ÀÖ3¡Óô¡f`˜¡}éèÖf1]Íl0@dèŠHSRwB£+­Âm­ hs6å€[Mò²¹MÿÙmÊZÍfÓ²è®Ë‚{Ïõô­Ùãíş»ßí‡möŸh¯½IxQnŸás@ÒëÍçÅ;İaÉàøÂ.#vZi[-Èü»6(\é­Oäq<Ïm.ü%‡ñbâÚ§Z¼ãõì­êô†İ¢Íb…ÿ3¶Ë	§ı¦y!H³lóy³Yrj¢Z%ÔÅ*‘áÿ.âBKÿ7nÓï^²½ÓÚy^²G²JñıÍK«ò¿¦||¸ÓıcáEY•ÓÍÕnÔšıkvÚ½ÕT(E7ÓĞ§{;™ÛhVø|ûÅ/¼ÜµÓ§¯ßŸÔßÆ“5{³/İşŸp¯….PN6+@ódÀ(Fe5ª!MıûŒì…yi©$üš×!õ!íPÊÅ9Hı9Xºv~£¥¿ÈåÙÅŒÖ_¼ØÛ{ş|wwgg{{kks³Õ²«q74ó"Úğ3‹
+øÚØjâµh€…ëÛ8\ÌüaâM|ºğíÍŠÜ±7â»ÈOFèüRİQş•€a%ûi1b¼>ßvÙMêgÑoĞ(‡g¿şäÓÚhí|ù<L­˜Àâx}”?o½”EÂˆÁë4ùƒÉ$µH'q»Ìó½MùÛWRÑ#wÊC/İ{Ó q³:V•Ïƒâ=cµ¶š;¤ŞßÈ{hÛ°?@8j=ßhîll6¿fÃØä›Û{­­»‚v½E‹tnèVkgsoûE«¹µ·ù¢›úÇ°E¼aŞ8nı*¼·bòYƒlqHÓPDI—X[©ùŸGtŒöö6óì€—5 ^™2ä&l‚‰PÀáù|csï«¨-Ú‰(úÜl6ùYúG!Š¾an*ÃwGö^|%ÏI½Ä›
+ao¯õ"‡¬¨Áªıó›6«FÛÈ1€Jä¯†’òG«bè\{‚ å»†ÖææÖÖööÎÎîîóç{{/^ü1‚·Áä	%(RÜÈD’ÍVók±Äoƒ(‰g­Ñn‰®®«5v‹yÈ€Õ"}Tò§’¿Ë˜íM|3õÆY|7ñ67f‹äşÑ*Î{ç¥”ß½$»K‚›i–DNà±j¿àj.àıµÈ¡ªõe¹Wÿ{á÷¤sõİíÖæJ£>‡7*nïU!Ş‚®+¡"ëhsGÙ4­•ïM¸˜³Wşcáÿ¾]fˆ²«#¸]ó_°G_§K<vŞmÿşúÓo¿¦Ó‹È›«ìMÙ}„ËQu-ª]Äàòc.[ğM8ª“ÄÏI¤o§!¨#H3¸{¯ğ`=ÑDŞX×¬ËïäÀtMg^z³ÏXÜ†³ÉÈá´…¥‹Ä‡Q»ÜoCûWœÒ½¯«"C¬~ÕyXüªLbğ'YQû’qø,J  Ùä°Ù|,p,¬ö/1Œë¬«œÏárÊıWTÖÔî²?É¾ØK»> Õgşàû¹úv¨ş,Ûãoù~ñád0*v´2)MG* ~Ì*ºGó{Aß&]öoV3Ç0Ërã(
+-^G’ŠÔ‡¢æTBË·gñ¥ÄªVÔƒV«twcÜ½&:¨Š¹(ùş{M<E”Á#Ó
+Nz3ú´¼‹K€Ù…âIæD+Ôi0şdÓ:³=­­Ib:v°Ÿ‡IÚùmpFËªJù3üœÔ¡†ñÀÛ£gÚHı¬p?tôN#»YšÅ„ÁYÉZçt[<XÖ«&ÂæO['}—·…ä*›©ÀÃvaÜ¡8—Ñ1'uŸ+îÙıÜ¯ÉØ‹:YæÏæ–ÏÇWéjUÓíŠÔkÌc¯ÆñÍ>NUİS?£Èõ©yW¡?©k
+odS?ª×s¡ƒÂ›‚Ø­cª`bG_‚€øôKJ4ŸîöØ¯?ûğÿy¿w6şÖÜx1úøìfÔFµµåe>®cîİƒ+ZÎÿÄQ6±uãó¢à{E\å?–<˜ˆ¦sª7Ök¿ÔÖ>4­8ª’« ^¹ôÁšB­h&p…¬ªE
+üGÊ»¬2ÿ£,ä[®jèXU5ñ˜ÿ˜Br§ÙzÑâF&]ø1âaì¨ENAëy(—ˆ·nÇNÊX[cR‚tŒÀÊµ*£!¤1c¨‚(I5/9•µ<-Q$;/ §ÑGE4/cì%èíÆç5®<€Ù‹pl·ÑŸvcÇgm)Ø\Cìù½$¶·'–ˆû;+-Õö(±JB,!ıÈŒÂ«,,U»ÅQ–E€^~aTÆ÷?ÖJÅKU­sëQ	°Í<Ís….“§0zòô!Î¢ÿLÜQ±ğ”X>H31©½í¾}Ei1oğ†ÜGcOâ±úo—ÇcŒ›Ã ¦eÙ¡«(ÙˆqÕ5l6ÛìÿÍfóo¨AÈ`TŞ”
+ 7GŒÂüwğãwx³+'yÛ›¨ÔúTÃŞï~ô…¿ğQ†€sÛ%Ld\'Y #EdNdæ…•Á½)/v‰JtÉ³:ò{—’=‹d…è>>ŒûW˜
+se‹¯S¹pÆH~áôË(Ö€Æ†R7yb„ÀŠ8[Ú™côFËZúeƒØØì—ï¿çSÂ™G‡‡]*ççcŒø§Ë2Fú‘üg|E¼0ñ½É=Åİñ˜nšŠo·º$^Æ'ğôüg©CÛ_Ä&1Á õüYã—ú«ÎTrŞ==ê¾®¡BËé©&eŸ$eH
+ÏMdF‡=ÖZ/ø¤­t§‹/Xj;—*"X•(‡F,Î}/!$„
+õÚÁmIÿzëeÓFâE“xÆ¨TèÖî;ìù_›ëdwMgDÜÜ€h&‚j¤¦Dg/— mu7£d¹¦úUª]NÊÆtX°`ˆ¹)ä3*õÀ‘ízAæ3X¨–›3Ã dA!aó—#àÄKÌâÜ,‹2:w‹ò)½Cºè˜ÄF×‰WxÖ"Å—ÈÖÄxİ¶A»’–*(”B?‚©Å‡ÔÍ
+ÃÌWAV'ÄlÇD5¨»·>EäqÚÊøp<~#ô£›lZØ4å!y²éãç*Y¤˜ëªq¯)Âú“¯ö¸Ó;Qçº9*JAÅ…øÚ€ŒÉËY.+g&+^
+œQ7h-Å,Å§N¦Î€-äk¡TªA›4Í¡®¼ñ§øúšå¯b|l œHìËœNr/ƒ•¯‘¿K!­MíÜ«¿&|¼ªŸIÎ> Ã†±ÜŸôŒ¬0UÊæµmo‰±údÔÔÄÚÓ/l-Ád)x›–
+–¤.g">«ÃëGÒZ®åI«Ò>i%ÆTÈÑeæcâ{Ä„\fú|¥áG·£Şàğ¬4z}Ñ;9õ˜.ÙÚŞimm=ŞÚ|±õ|kk÷ÅŞÊ&T_Šø}?]„™Š..J²…ô'¶ç¹¤Jñ?bŞúÒ¹T*EôŠ¹Ì˜:¦–"y‹†lÉ&’m¼´«‰"%H&oÂG•£R"Î}1.ûÀR¤)p™)Òrv
+9ªSÖCh,¸4:XÉÈÆ$Ğ©vÒuƒŞëÓœE%dÒët:œè€D“Ë®éå7	å× ä«n“‡t{2û'{Æ&ğ5”ş|Jš* ôBáÅµ‹èe\—˜Xb`TjËNÍQ\;ÏK§ŞŸŠ]å8ÇÏ*>=YGZ‚vÆ5Û4„q<ùŞé»ÎIïhôêl8ıÚ=­ÙæïÒfÙÀRFYWOÆ6n›$,à—Fg<9‚])í@Í}*ßF”Âû6)‡W.AÜƒ3ŸaZƒ’…ş©@p+H]Á+©A†pIÊqlN¨JiîÄup³7Ø~¬†¦•GÍ•+JHVéªYiàGù<¯N|S€î»£“ŞÛŞÀÆÔm;ç½#8Òedæ}îhõOğ€´v¨¼µm¶Rv %2ü¼;Égï«B +H 2x×™ŸØ’Ïi›«¶Ò‘;±
+q<’<*ÈJYM$ÈD%v.§Ò7€«òÑI&«r›®B¹:«8ñ’ ¼oß‚0İ4¡¿÷}/…{º£ÎéÈSåL(¨¬}Iò6¿;Ï‡	u^øÉâ¼ùJÉ³¨º“`wKÅL‰–gEÒ¼²)ñ?}qUúôŸiáQî@R£t~ÄBŞü„ÙÜÄ$LÜèJf¿j^–
+Wh'*Ø,Ëş°B›}+ó%Æ[™ÿÆ‹‚qmÁ·Â¸2^kq5sTv5@®ƒÈ±Z8H›ºŒŒ:†.İ.[še,ã—‹¢âQàİDqšÑ• £™m÷šÌ—‹ë¯É"Ê·¯Û°®âìP^É0 z7Æ·Â†L¥=f¼_4c_:5‚+éèh	‚¹Ñ>¤ìËAƒ¹ß÷UƒœĞ¹ ³·^Dù ¸¯(YH®ã—òRv3ÆrBÉ”E^2Ş××Á¤nÏs_§Ğ¦Wd"¦db'ºŠ‘¨É0+4Zà$P^Ğ*Ÿ†É™º‰¥ur›mS3JH…}æ4 *ÊäTŒLµÉy™Gtø‹ùóFYA/*ñÄbIu%Éğ-(È9U|o&C^ÕSW5×Ìk6yñÅº°hP¦+üù~ñ?{³9…¿ÚÂ´]?ˆÆábâ§õ‹Áx÷àûR¥>L·Á…Ál)’ÇÕi&˜±y²;á†İÁptÜû¯áEŸŠ¿öÎÏë“bœâ—5Ò}|¦ıû\¥&é§`>—	â(#›,øJü×Ùä<3s Hñ†/¾—ò>ÄH÷üê^î›Ë%àÆÏê€ĞŞC‹¾Ï&Rä‚½Ú3½èæÓ˜¥`,ÖœÅÖõ<´;® Ä!w”_v!'}t×ºgGu·',ø.¨U<ePuO‡½áI÷-ı/Ó5k±¯)•Kõêíƒ¶ãJìÒ¸?~"HiPşî~ìÀ}5W<?.»(#ÊIïô×69…Ó€ÂR9ş5ãZjæ‰[™@k®¹”Ğ¬Û *{]'W‹LÍ;˜°÷T¡(“ÉeİûÙCöAUzJ!”˜,¦ë¤-¸àË¼„]™°nî—e0EŞg- m€*ƒSoÏ½ÈW"ªƒòÉÅ0©ø×‹Îé°†x›9,÷ß@—Óöğº?™A_™4ê¢Ê„?z'¿ù¥Á¾V8ºêÒš@nlpGæ+a)íâÁ°Óvû5÷(àóœ»~/€ş²œ~µ‘ ÿ¾éŸ]Ô]6P1sÌcä‹\Ô`üH"pÒ;¢5œ$‹h¼ÀïÅfrÄÙÏ:Z­¼gµä%ˆ}’wT²[É¬¼>‘°ß\0«	áJÒÊ½‹0wÅ"Oü"—·"8­•5ªñÄ±"Z~ÕjfKqÊfÁ¸Í~Q UÙ¡Ä]á¬¥}¹¶U\qSƒ½âDw}­R0cfÌI¾¿ÜŞªŞÆ	ààÿ‚û3²ûëE÷B	XÚJÖ—D‡%~;ƒIoê¥äÊ÷•Ù„x²M¼HÃ{y2‰•2èb_µ‰š%I..v(¢ğ—(Eœát®ÒúUá'r7¥u6˜RHÁò³$¾ ²°Pƒ¹`¢U 6³9ë,²)ùÄÑÆ„â$S0âO‹9™{Ù4åG^¥MéCrRûQËÍÎœÖK=!1<§1>¾s”¸%H'T¶‹ÆğğˆÜj°²ŠtÄ²bV şaºn#(Ñ5:“	eâ½1¾W9M8b³™û#1;j“_~á}°7~™w³$õŞÈ‰â{0Y®‰X’M}ŞCC(  çí\Â½’ëG¡§­@	Ÿ¨yW{d°èQFb-®°¶ãIEÜÔxSÑ(‘<öÌŠ­©xìãEÿDZ{ÊŞ3ÔË´`$Ã€¥È[¡t B-×å³_ä…ô"É½ñ;ö{Fî]X§,N×ª‡<L"á?Eç÷
+ˆ™G9ê¿“ÿ¢"&Œ¼“&^	`Œ0õ)‹4JÑ¡J­2–àÃÂy«
+ö…Š[Ioù¼f±JÈ‘şq™CdÔ*ò4^$c80Ä0Jåòè1¥|Ü¥ômÛÑEŠ3AaŠ‚åjgQo2°Íî,&Av¢ÎŞÁûÁ°ûVô£¦ÃışGÿyÖÓÎ+—†hïbÓ4ˆ¯æşÆã":†n=èÔï™F!8½ãª—«Nª>{ìÛV¼¯ÊçUè_gÎÓJ^ÿKÎ+›‘#ëøŸ—“[o2ºYyA%7—>ívÜáÏÁ¨-}nEí?	[/½ÿ+ ~›üóà¤{¬ó‰¬f €ä–¬Ô]¾:`ä³Šèû”çs†’µgŞ<xL÷™ g‹$¤<€ÊÄÿX§tjĞF¿ğ¡/’@ÛmsŞ¢ıîQ¯ß=.ú=i5ªM³l¶Ÿ=»»»kÜŸÅuøó“ Ø‚‹nM31cZ…ª‡'=0^JÕ­íİÍİ­½[Ï_ìµš›{¨+}s±/Œ^tµ©yÌÒµÏLCÙ`8Vû(çUØ3c"²G.ËyññóŞowkd£è3$¥t™pÃƒ@æ^âÍä;ÀôäøpÙvÎ¾
+…CjRŠÚºX‚¬û—Åéœá2î!ú·Àoº+ì·š^ßsF-“âĞı˜Í3Ö"‚ÙËFì"mmµÛÀ\J¼{Ï"lØd8'ÁïşÁÓ/|á:ğE¯0U´ÃËú#é~¦Z&yíG>®©#zåÖ
+C€6L~
+ú‹(ÑQ%˜ôi=×Q€6şÒc–ïÂÜys›¦^ÊOè?¦êx›<yR‚ñƒîa¿;”°ÅÄM?}à8Z@\ëe¥Ïtq!uBş(D†Ó[ı…sÖ¹¯øÏhâëå%ÅEa/QË<Ã©Îr¾†é”cÂ¡¨*QbùsÒjëïGonÀ‘¥Q+æõÕzõÚ…'åaŸ¾vÈ«6xèĞÓ…9*Ò®ıà–];‹^Øçrù¾; uîå" L(•ÎËµKÂÄq3â‡ûÙU>Ü[±¹8DË‹iÕÌÿ{±ù|ûĞ"nájFÇ™ü²‘çİ—œ,ˆVdtMùÜ¤~)¾ÿôäèìpøş¼K¦Ù,”/vş„ÿ€?éóóOÌHø³\‹9]æİğÓ3^å§g¬nCÌevúûµ+å)Ğşæqsos÷å8ã¤ı×××/¯ã(Û¸öfAxßN½(İHAÒ{I}z÷íëĞÿüÒ©·¾Wi{ìƒ×ÕË¿/R`î‡ø<õ!P»ÕlŞN_Î¼ä&ˆÚÍ—5ü0éO“àVN-ó?g¬wÙÁœŠXöíÍíùç—WtÙ~ÒnÍ?S-0&ä?üVk²½'
+6oPí¯µuÑ*[~s²ù‚ÿyã.˜P„ÛŞl²î>o¤Soßµ›¾ÍúÏü“Ü\yõæ:û_cgÍœ²9i±”4í­MÚ+_åÆUœeñ¬½G¿Ô~æöe·V?Ó-ÙÜƒí­ë_ÁŠ4	í‚4_êQZ¼O7zÑØ)âRØ²ÆšçgÜÚ¢}‰‘ÇW“¿õ2¤‚ÿ†Ü·Æ‰yÌYÎ_1ãDXRõ‹S–gL&÷ó(#¾óRH‡Ã'EE øÛò§gsk’|ó#'ú;ª°Åw*MDök~üÇ¨Ğ˜Çiö–[—ë_—K~,ÿ¬s1|Ã½¦X—nà?ˆ…²5)@Ö–?ÀÙ?üå‡œç0ËšH¼ÈDJ1‡qsÅ¢µ×læÚ™Ï’ÿôßÏò‹¶på§g@ÁŠ;<ÓìA†Ôè7¿‘¼kvÆå‰ÒcÔ*X×³¿¦IóU4¹ûkg{Şùì½ú¶FWïÆ›Í½›ßÿëµã´|ÈY³Ù&ç‰O…;ö<kü	ni>§^tã7ƒHï=†¨Dù'Ë¢İÑY=y‚—mœ? °£«.ã¹B(™•™ùÙ£wuLóO²wKÑ`³]¡vl™ç«y¼b‡8o§BVÌ/™ÿÜ$WHö…œ/g	oø4Ç¥+´†ÇˆZ
+ŸU­€[9bzo¢†âJYL\úÈv·­¦Ô#Xc´Äo5=*šõÅD˜zâÃ‹ÄÄBø1ÙÜŠ}Ø^UÚ¹©£yâßş¹¹(@“2»&¼§Sk4Æ8ËBè	|æ~0ÜS–İú#Ÿä«²Ø/‚ĞÓÒœŸ†8„ß¦’]í2òQXÎç¡°w=£bÄİİ•«gT1×ó	='Ìt>„ Çnc‚E
+hx¡ÇEó›#Ûv›ô…šN„ÜX¿Ü
+á˜]R4¤bÚª=…:jSU{ğ°Á95A¡xİ÷ÊÌd²?bÔûÏÁÙiƒÒ=dÕhFhğwKT(	tXËc@ÃF|Eš>ØœÚF©É­ˆ5àÇ€Sü	<£Ô‚³ãØ‡ürÀKÊùï´{é B.`¸:í´	÷(0¢^éZ\ÔŸœc¼È6CöãWf8›™á¨°%³+U
+N~ø
+wÛäX¾ıŒ¥{öËÌç!.¯èaK}6›Ó9ò¸qOÑjüm‡S±`bKÂˆÊ„†ñÉ?ı‚0fyis.ëO“'}[@ÓcIQÂ\_Î¡ˆ„¦ƒEÙe%D'6‹êñ'[—0¥;¾m²6³ÉY}!ªáJ AŞAÀRàßR^ƒIë‰!Ì:&‹.‰Õøÿ$*sZiSûæ×´’¸Wf§MƒçKˆÙ,CÌZÑZ£¹1wÒäÑPX”_3šiÉR‰)¬_Úc6r×êˆSˆØ¦§_L¤\®µÅ713‹êò›ÑÕs'{ÆMï¸¯ø­ùÖ3Ãô/¾<†aıyÔsÊ£„B·‚;)¨9ù“]º’Céyeh™|‡tõ?‚I=¿RPf\—<Š^æ)­“$Ş}#HÙëz¾kä Í^Øz	Êæ€F	ëá«¶™†EûqÅ ¯Æiœà~r/Â	sÿç,±>lÆ$ËÖ‰$ØÂàØGH®‚eME˜[¸Ÿh¬fË%X“UÈj.ûaYÕ\ªj¹¼Ìµ.—)–k)+Ë¶üf3Ü*ÑİN€WwWÆ!“É‚Ù¨ÌVæZL¸«@DÚ°¦Õ0"y¸„vÏ@­¼/œ/S|İ¥Ê[qyâ¶6%êø_9!çzk}¥ê¦†vË]}í5HâˆÅòÜzI ¾Äiƒœ‡¾G—˜RõÓİKQ„™o›|üÀ§±¼ÈBY±D¶"If%Ş»GOsˆ~~gÙJJ¼	à­2~[E!,£Q™|g%tc÷íÂ¯A+à<ó½ö^`µxø7ú@º{»EJşR[CHz«ix9 šmd•3ä2‚t½(qº8È;Oè^òîğƒV}.ôÚ``-œÇ¼–ÉÒT_•4MéŸI,*WÅƒ
+Ô:¤…à{á…©ÏùºØ!*èìÅÈ–-LÖ0"=ŞßQ´œ¸¸æUJ\5B&~F!œ2ô¶µŸ"Í±KÛ„$|…ŸaUáÖéf"…[~´?“Q#bw—Ïø P`ÎÓÎDR&ır|Ãê<Pìe‡r­CCØÕ88t#—$icéÆ?ÚèşyFÀhJ¥8So×íˆg UYÎm·$ÆÊV‹›&üPºŠíæ¶–_³zx­U:ŒÔ¨=F2~´zmëºxBë2‘#I—	§ŠB®[ğú*YWK]ã©?şd³”tÌíéÒ–;Œæ"bÕì¤8tÃ÷:pİ}bÎ?±hÈù
+÷s_?Ytˆ&Q¬z¡Gœ°ÙHã™_¯ß°+ìx+†% ÇÍråç…E®Õj îcÆÕ©$Ìùà¼ÎÜ}ÒæÚçPİYŞÒ¦zQGÇ?gê¹~C, ã,rßs]aGrÚ—íWn‰†9aŒ…åK bŠ@€.yvOÅŒ~“ò‡ÇŒ–ıôíkã­¼‹{øğÔ6½cí¥£¬øİVhèEqt?‹){8Šª@ DrªÉ‡ì>ôú<ÂÈdâ÷³lÊÉ¢¬ÀQô¿ Z53-úh”¿’f{YM©ƒ,
+äğìôø¤w8l+­’…¥[â©ÿb~“H·\ƒCO¾ r(Pö÷®÷_ï¹5åé—Ü"òISC,r±+r²Ë¹Ù8ÚA 9Œ£ë0gE.vn'»¯t³»Şyá7¯V»Ùµöšv³ÛşJ7»Ç8Úívšÿ½8î6îvN‡;¾¶êw:Ønv«í®'şîçp´N)EÈa¼13¬>˜~(‹játô˜¤îª˜¢Ö9W¼‚…lê…¼Øö¶®öäFdñœ—Ò…ÄÜEÀè2Yp¿	_§M‡^0K×‰ï¡«9Ç±‘8
+ïÉ•G¾cAÎ9»+º~'B{A«7I®¦ÄÏ°‚§áÖÃÓĞö5,ğ6ÌùÚ‡¦Ï¡ö:´O½ë ñ¯¨u¢>£LsEßõÒ¸BuÕÎPa0EUYTx©-Œü¨Ï_\¿'Á,ˆ¼,ÎYôÌB&ä4qzèrù&Á-–—¨n›Ôj…KuÄ©›Ë©Fd®×
+‹úV‘ê¸èı-DÚ=Æ“H¶„ fş`•æë¯·lÌ£½rÓ¾gOÎ®*Ù‘–†ä”£e¿#õÈÕÈË\Âµ³" )ÃVáyXua>£ÌR[ö»İÑ°ßëœªnÒ`²j®,%:×,­—šu"¢‚!«¹x¦Ïµ†âwJ'f$emOÇ6­qËÑŠGLóÍ×²jÑc‡ˆ£˜J»\'É;„aşƒPê•9KHšY¥"ÁÏŠ¬ Išy"²>O2»cX¡“›uJ°ü<Ù»i»Ğüu+
+t+%³Äè‚•E<ÇÅğm|™C‘Òçm”[/R™ù•ƒŒJ%Çq¢p®n£Ôšmp-~‚ñq³ÍÿgL—ùaĞ9"’ª2A[Jz M™,*Udi-GyAuœâ¢ø -h,ÓZ¸OÇ‚Fî”üÇÊnQBª;ƒ¸D{ÊØcÚ(,O¾GbÓ£=fÀ@ĞÜ1#Ïe*Z”9$aƒ–ÑÃĞ‹gVİÓÒæâoçÒ«Æç~0/|O.'œ³¯²âîÔK;,YÕ`qiªzşÍt"“0Ú_Ï~;5í­uŞöNñüN;±ŸÙü¨¯eİ‚=®Tz(¸fİ`Š¤/	¾%.-‘¨S&GmL”4Ùdr¢9¦N¡÷Ü‰ùÌH›7|Zì*¯Q8«FN–b0¢± ¾%½I¤ «QáuÚ'OÜâ²U]¾X»ººù‚«»¶¡aŒ7ç€ã©ñ­­ŞÃ5u#ëİiü”n…)|0¨NŒ‹Æúhöá[?Å[4:¨+è-ĞuP,”>Ewh¼ä»úmŞêïø*QhìÈ”ÓX’M{¹t* g˜ÄªîEİ™õW%l)êÅ:*·[È“m{ÙÓB"«–Sİäyf¦*#C£„ƒÆ‡&¤QYŒ?íNãÈ×ÜüÛ£«—	ş¯Ao5¯^ìµVÙÆ›/Z~ëù¿5ıKëøywsY)
+],êaQè *¥wòäáÁçŞóë­I¦d¥ÂğRòSš%qtós.ı±>jé
+E%f;/HO»\ËÇ;!ÚjåŞÆÆî¶6›¾B’VS!‰Ä Â*È¸d ø,âtî}÷íÜi477…£ËæÎüì¾ï@=¸K¤<öu?Ïxï§Lom	ÖÁÿz^[=Kª«%…§_0's¢ã“UĞ&ìn?ßŞ»rÜ:†1Ï\Ï!=l4á9¯Øk^:½Š½dÒhä/ş œ¹ºÄ} ÜùÁVïà‡Nß0²xGîsIYœJñf÷É×d*Øte*p?â¥ÖÆ\tiLÿšŠè?<;š+|û"~é‡\¿æ|›ßÒm™‡ñpˆjÈ÷cøcHâÒ>Ê¹‹øÿ—ôå8q+ßF_5}|âîı!'îæŞãî¢«ßDëS–c%ãèÊ ŸÜÍ•×Ğwt +ŠæŸÚìßøÀ²À g|0èŒ/âàg>wÂi~Â=©Hx?CDk0ß¬÷8óÀT=‹ícÀ@ôIÓkn+tÚËÍ»_y4ãœZp@ó#O§Q¨zâı{ qƒí¨®ŞGµÎ´Ë¨Úo#`§öMªæ¿0¥Îrı;ú—Êãggàå
+š©6ÖE~Ã@n»ƒÄÅa ¯>evß‹Ø­¶®jêº
+õY]%`_+VtùÈw~xŒD‰³šåÎYş—Ü9Í¡«³›M9'lT~–FÙ¢¬Ğô’U8£,ql!Ì£Óô vBó¾yÍÔù³m.ƒíâÁÆZ¼ne¨}´¶Ä4»0Ì²5wT’|I«’-WßèVr™f)±Ì"6€û1í³áYkÕ-µeUM+m¾æ¿ÔB›¾ŠMöOf‰u.âÁVXŒW¦o	$Î€‰ö«:Zbc¬&ÏÕ†X]w•Võa¥İ¹L±ªµâ+:Ñ\Ãê‹Üß)õK²)z8?º§²ŠôLRï»øë¤V\X³réŠL¸ÜÑïdpÁÉqÑß°0ø»Rj\Z ‚ËÓP;RPÃ! ïÄDrO@LGOºÆ&:÷5Î~½à»íÂl\ãgÍ˜íkÎ}ğ°Ô¯¦rXÉp™—/—xOBĞ>ü)´ãp!<¬Ä¾ğéÖ?„Ê&Ø®âÅIİ^KGlõ/<6—¿’A¼0<ŠÇ)°:tAo\I°W97;èø‰”nÔ¦è5ˆø¼§÷È]u“x¦ı:nc*b5×QîÙã§=Ö
+§¡` °MtiOJóéÂXGÄAİk9Óò£7ÔŠ©kä5‚|ôg#Æ­ ÅÈ—NœPĞKEf”Ã›a.6“·yÀ­î!‰-G@th(d	ŞÊ|bûr˜ï™àî–Æş©w(Õk—ÎÇ(mQÎ`	æC¬¤LAR'ƒÚ™U•‹â;ÃwX9å^Ø‡vğÈó ^ßbqÑMS+h°z#ÿó¨Áp•Ñ;s<‚»$Ø¢AßzÙ´1ó>kÔF±º¬ğ:Œã¤^§}6n¸ÚKÑxÖ§ÿ^#ÏHËß²ùßÂŠY†ÅN]( K
+‰Øk¡¾%H¡×È	øº	ê¦«#uaÚÊ'JYU¨M†ìYØÅÈ¿.¼(³ )nÂ^7gªHÂ§çöLzÃ£Às£º8şáÒø¦àª?kÂs·P±xòÄÊ³ü¨0ä4aT&HùÀ4óËM!¯¾¡7­nì7¢L‡?‡æåêFúÕšY^w ±÷ˆ´/´(FÅ‚x1·İÄıÄ÷¸˜oCY<¯dé•‘ÿ©Ä¥àOĞ	tĞ \ÃP„hGsÿpA¹ë©Úöç<<yBj«±Yäè §£wàÁ›Å“¼ŠPò¥- ïƒ²şX’ò5Æ ¯ä¹Š¸•[?­X4óBF](øm!¢EKGü·r·Aç¡ÔäS-<Òd`–:‡V ·qÍîP—8Ø˜¶	=‰)™Ù|Pa¤qf}AÄÏ‰Â@E+£œjeçœ‘:6qÈÏŠ'ÚUÁlÅ+|Ì/•j¡Q˜2µyC¬YéÒ²P~ÿXö6•Ö¤…`õèWJ^p2UèÕÙ¥4Óu?¦Ü]"H#õPL°¼²©=•Ôuá»/BÌi•)F r»*r<4Ä‘6‡âóƒÍ+%-
+3òI¢¾z<B1Ë£ÈÃä±hRëkòa=ì¾«LSWrZNK·Î;“‹/Ôáe~"î}•ëmUdWÂÍéØ*>õÒ.h,}¦UYıµ»WT"Og¹Î£^Q]Dœvµä0 $"ÑSŞ;§zÊk©tû‡5Zì’Çî‘~¡ß ¬,cò¬ŠfTŞO‡¶to†gì©¹ù(¡¿4l[vĞX
+r~öÅ8Å÷uì^;½ÚªfàQáTÔ=Ié„ÅÕsÎ˜æ±´À‹‘{n³;šÈ÷'éˆ[kÅ2…>Iäi1	¼›^§¦ÅŞU¡Ò™‚hËòBfê;Ò¥ò\PtƒZVš;=:Âlê¶([1câ+§yœ ,»~&&ş†uØgÅÚ^Í·S~z®¬_´®Ú~!qÖ!£şh1hÅ* Gp³HòúOé;Eô,áRHùCF¨;#–î*Î˜–|:¨à¥ÅWgÃÑğì×î)n+øÂŠ¦òÈÃ-i= 9¼d;Ñ—l¤¬ı¡4º1¶”;X7ÁÍ”êĞÛyœ\Yh:&TPªæRP¼àåEğ|Ñ=Ë$é˜‡TIjÌÉÄ9oÛ¹¸ÂWsÑ†pt'5«^ğ‘¦i
+©DÅ.‰ï74Ê	˜¼F5f ç×Ã$Ì²ì£%b¥-¹©	!n\T×!Sú6±ñòàMï|tø¦{øëGòİ¼«×™ ã§05‹Œù8óÓãÂÎ¦+½Ã6Á¬/_æ˜Ûf9sÓzNyt~Ã$âê4Á_à**•cpÉNã\Ä+ä­áÂŸÊ–<ƒñ'ö2n²EâÉÓ¬ñƒ›¤T†aJ
+TC€ì=û	b×4|4¨|¨"óCe²ÎÅ Û\z§”¹÷©xbdäXÙ†;yˆúØÓ±ËûìÚé²½FÜ/Š³QØÙ‘Ï_É0Â±@³¢À•õÂÂ wÃJå˜®¿¨æû>^$¹\OÅ”°Î\„ïã•/oıè‡Œz65R?É>¸4GîıÌÎ*HDiÿxÂ´ñxIÿì¤;¼?=wz'NŠ}p3uø¡–â›uB›àpQ§x^¾ÂSì\jœ²o)©ºui0ŒM
+­eæµ4îX‡,—7c#ŠÀ©Üœk…nŠ3¦X~5¡ì]fOZç;})Î6È½xÚ=vˆŒíbdLø™Gäle)à<¢Ÿêô8-^ìríÒ­ YÖ&Ÿ±LoJš/¨4GÏû³wÏn[ŸİùWÓ8şTMDÂŞ#RTrË@
+–¡'ô[§W.›<êåçıÃ7AWÆ`IåPXßX İ>ù*ô>Hf‹ßŸÈ	‰íÔ´Q$‰Ê*TßèOºo™ŞA÷é#9—PÄ·m|öúUmH‘)×³$ÿ$])0Ys„²sfµ§€C”ÊÈx‘$Üƒ‡æäoõË˜€Ü"!­YU0©µÕæ8lÒû4vl–à×²¥Í@Ğ~Ây=¸x58ì÷Î‡½³ÓÑa‡bü	ğMèıÕÎİ«’X/QJ%ÙÊc×cfcö­æ´2Q^~³Òüf­ËE£’àõÇ‰l6rşœçŸÁÙğ:/èÉŠÎÃ2Ç(‹DÅjQãˆt2>Û,”
+¹…r·"öuKÀzş¨‹%Ş¹ûbIøºİóÇ¼Ç{Ôi©ûÁn}°G*²{İñÙÇáäHÇ†XwÑZ‘ÀÕÜNÆ¢ØÌŠ–wŸ.k­«Y	È5Õ–µ&¨¢‘“»næYÎËÂRœQ²°’JYTA¥gD¯…8îªòGç4³>0Ç`QJ´\B4	m,6›ZéªPZÈ\
+Kq¡ÂJÒÕ °Â‰á#šWİ´ŸT®†‘¬0Q~€ GIhúŸaJrüä¼áGúsã):Òß†sô}õpù‡ÃølØ‘:@>Š°r•©@g$ƒW»T=ëy0Ç~,•Rÿ_x¸çÄP-„R¡ë˜j™Ñô(!«—¥Xh+bí’'sAÒuñï8éÕ	­"«”Ái‚GÅŸrß¾÷7ä«8ÛPWşE‡±Êˆª/.^ÅÂ÷Ÿ¥~tËŒÑ ¸åÈ«ínt[w.ùÉĞ.°ıİè±¡
+Lø› ğ|à¨-Šy]ñà’]‡Í×È
+ãÌ›ÍÛ9·@d ×>?pC¡ÔÉ6ÄŞÂã´—ÊL#ZñË‰ã³‹SwÆl![¶`¶Œâ äë¿íœv^w;¯Nº…ŞzE(`ş²åIgÀµ(gSÖQù…òG¡pq:t¶ØxV+Ùê¼{zÔ;}]ÒjîGwn´âvœ’F<HŞhÃÖÃ‚´„ÒO,]ÄRx¯™»¿0o4KäÚ¹AGèæß*£,IÙ«äóì é€ƒÿŒjxA¤ïµ‹Ë5è×¨ &“ƒşÚ6è¼Ø“Ÿ\ˆ¯Ä’´B·©lÙ5/}Ù<”hF2%˜‡‘Ëcˆå1¤òpBy™PÔZøFÅ¿Â—Fc¿¾±Ù\³éÈ¡f”Ón\%±7ÓŞW*ƒïgWq(q,áIO×¥sçáXlPØÏéÄîI‚>ğ|4ê|Æ5Šì6d©7¬Ù«U‚›ÈµV'İÿeJã«áá³‹ÁÑ´vŞÖ¬å´õ¯¬îû®´­é%¶ÑïPioO“ÿœJ<d¯±CÛøÚínïm¶;9ø´ñ¬âNK¾–§ ÖÖ¿²‰½OTÿ½ZÜƒ,™y$Ÿ|ò=ù•JËÓ€Ä“IJ(ÅùÉz•Vkê¦pÀ]H€6·ì:y
+™ªÈºô%X§ç>²yÖ
+¶İ¢9ï*s"ò:d[_‡Fj_ ¡Î¼ERvBMMÚUŠğÏchtà20Œ¡—ºµ\X¥Zt8§İC!¸èÙ"ºN|ÿwrõäİCe)7N‹ÉÃlè	*’9Èh¤ŒA¸,×ÀiŞzÉ'?»`¼!ˆœZ{©+ÅÉú‹¨°§Å’^üè&ˆücßŸT¶u*Õp»•ÔŞö†g}xe@”Sd|TÊÉ”Í”4u<[kO±m(NºÜ.  E‡~}À°mÊË'‘¢bh”>çÊƒ ÄyKo2á®w,a×‰¶¦³Î¤ÌTƒóùâô¸ö·®N¸Që2­6ß¹ÓÄÿìRÑñÂ[À8vÈf¿uú²1ÿù"v`Ñj½Ócm·®±P-Ò}Ûí¿î¾'0Ÿn÷o]2ì÷^¿îöApèà×IÊvœ„q<§A;©'	“²™Ç¿û+…Œ³˜p7Ì9V³¼Êî¨&ÄÏì¶±Áü}vu{¢qI~ºVÈ×Î¡cşËH®WBğôK~Ø¥Í)o‘Å3íøôIxÊ£j4÷Oi¨'Ã~´ÂÒ_löB?ÉÒg qVàØ)òÃu|Lˆ‰³gWËNé¹õ,H›½­¢/IØµış¦÷úH¥Ç½#ŠpİÑ ÷ú´s"*É#ÜupóÙ´Ñ¬À#fõ	~Iw51ô­åÿ¹Ôg:­ı£Y]œôP÷yc[U6ÎğË§fTx RÈc3İİ^ßÜÜS;¦ğ`w‡K‹ûk5uñG·b÷¹ú2‘>3ß°AÁØÚ¹êabSäà?Øü6ó³i<«´³ÁĞ0¡÷†Á—ìCpeU£•)z…Âë°šim+U{d×˜ÏÆĞOàá£ôè8a ïõÙpoëÑ"	MŸ‘šÌIÌ(çH‹r¦S–”h>³x£µ»ÙÚníî½ØŞÙ}±Ñ¼ŞzáO¶Z“ÍíçwûTÔ3MfÇéQL+/lnwC—‚u›kà§1åC”øÙM*§ÍÇ§%Ü¬ËOš–ì©8şûšõö3Ğä²#fOU€àÈZ7÷š¤MZ»Ï[t­M»‡ëÀóëbkñØµ#|Ê¨n½t5WDH ^şÎ7!Ü@‚ÑõQ#aä“{~¬!sê‹ùƒg’/wMMN¤KY	¹M	—»òkVóU+íK5¡l™˜³”ëşç¹Ad§³;9O‡ß	ˆ9¬ˆãŒEû“ŒÙ.,jn!Gş8`Ñ¥uæ»G,Om¤üdÖ5š¢Yé4'ÊûÈô×){*[/‡à'ÊbPŠæĞe9ÑèéÉäIL¹õÅ|®.áşı¤ÛÖ–OŠUØ©*ş(¶A§÷TR­6?ó´¦/äàÿmÊ_#ıA×R^rBeö°-ÿï œ3¼óŸHËßÖıdqÆSØ¤Öe/¼tÅ˜¡â)›ºy)RÃ×ÂTèç•ñT›Åê»Â6³e±üÇJ~b¦„c½Àî†t7Y¥ñ"ƒ¿öŠb>&Çªèú)¹Kát¹¦ç˜ïÍW¼”.wé³«l¼H'Ù/Y0ş„¿ÁÎğ=A‡~»
+¼¼ØF #-=Où¨z…âD$’pÓTèœÇ“÷»†·’†º1ïOÌâ6Úå³Á…,6,; ‚nPésãğı!Ú«ñıd/WJ^ÜæÒÚ™ñ‰1­£¾»MOö5şr3åº¬¶Ñ¾M*·îJÛé#mSÚÃn«±-à¡ïV«|•ÙWñÒ\È¾¬ë¼‰j)KgåÄíÓ£WïkÆ¬yVc‚ìdş)+Ÿ³H†ˆ‚à‘·5õ¯c±|˜$,™&S“T*Õvkòõ5Å%«ÉÚ¾õC>tOßõúg§à(Ç î½¾èwÀ½Š0ÿ“Ş`ø‘ØÍjê‚ÒqûI{üH~íœŞôFóŞè×îûÄÀ‹P9¹JbØ$Ä½í`ZA—¢+Æ<ï÷Şu†]è²]8&ªôME`,ÃdZe²`›We¤\”¤¹J_·ºÁ°ß;ïŠÈ-QkÌ\¥o2æoİWoÎÎ~İ¶İcš•¾nÜ×İ·½S…m)i™ãš•9`÷£©ö<`<Kß‚)T\Â„ÌP3F×I‹†0LõÎK¢zíç&:Îç*Îtwü2j‚Ù¿Ælæö/w¶ÌßfŠë#wfÁÔÏzâ(‘‚Ÿ²-8².—T'†‹ˆ03‘Ö¿UÚkÕ):{ßõ·Ù¯nAƒ$7 ./BnŠ²bù'ßq½0"î_œb-q^l[×J	(Šœá+K•pCEaˆ[D8Ö…ŠøÓ63•Áo¦F±T÷ÍÿOÏºÀÇøCÍˆ™nƒ_D'ÓÍÿzÈ/ÌDÇ-2ÁŒİn×niavS?R™±SÃ®¼IÀ>ñ¯Áa½Ó+.\ÒşGÒ!3{|Íÿ„¹ÆWÿR(ªF~J	„nNâ3«ƒÔ¬ûÕC•Saæó™«åØ+Õ¶bŠ/dL&¡O	ÇË|o™ŒN¦3 DEiñ«Öÿ(úY®ùUÌŒ˜kZªyÁDºwÖŒ_ñ1ÓivN7r@Ö<R»<¾›@*Z°¬e5k ªd'PP3×e?k¨ÓâŠ°›(¿‚cHe¡—=Ñqƒhân@òøšìWßtÉpA…ïºıÃî‰‰|"’iŸÍ'd·.õó³şvŞl°ÿÁôŒia}©ŒÁ²'ŞX(Ã3ÕDOí§_ ë¥~¿İùÒ§rÎÂ`4×N”^ŸŠª#xÁÈ%¥lywwwÛà³ˆŞà‰Û±écñ ‹Í€ªDLªjÖe@0±Nw	Öq|İÎÑQ¿wz1èÖ*ùê]~à5#İğ#9‡àwA¸ÜôÂ„‰é”&)º5H÷sÀ|øtxbúğ¾Ñh Ãò#TP¤íê-íÉg?ºcÎ²¦¦¾É›áğ\n=g¥èpcığãHG5GUğ›5ˆÇ ß úZì– wiMõ@Û2ğk­öà.e©d} 5Ã ¢~äı"´óOxÒCÎôÏã„Y£'‡ª_ç'¯¬¦-tÙ‚ªS/=òÃ€®ÇŸÈş‘7O§qf=1ï¤„Ë`9ı6Î>	Ÿ¾\$×I<ãÎ‘”M©‘ø³8ó;“	°Ÿå¥…É+‡:;ï:Æ©ó”D€dLÀËµüX<L{ aÕTÃ;]@İ?â™€Ué&×LüºŒ*½‡ L7d‰Y?3è	½şU6f]«J>ÁA#»P=°	Yù€5Pµ”£­Æ‹\ƒè­ÔäÂ9a&ÏÑà´s>xs†o@Df=pÕ„4èR!øìÔÈµÀl	PÇš«ø»ãm;!ê	İÛê~ÆñšìÏU•¤duM	{ıe"l¾íü¾îŒ´2†Ø#uKÈã¥ÏÍ|©TãxuñØŸ‹šıvjÖT]¸Šè.Ÿ½‚M¤*å²f~uIY}¡‡Æı¥6[‰®õZ.[æàÌé±ã³Áì)£zn°5c.¥5õ¼ø ç	EÓ« „g­5åÌU&vØ°U£316skA†Ø ?Ç	ùHûŒ= #Wa]ÁT,$l‘
+5+,"&b`Wúo0”¡”²ù¼ĞÄL‹‚sCÛüX[.éÜõygg‰6²Õãüñ¿a
+|Û ¼Ò¹Ÿ=xó°¦rìÀî¼Ñm¼ğ&N‚l:“|¶:ë÷†°sN»ıÎÉèv¿÷¡¼çssÒE¦å7¸ÙyqS*×W‰{@TVÒ¬`È’Æ^ä…÷i´4‹‘B~ËYGç&ñy–[„V¹ºÌTø–êİ}0Xv^÷»,¬AÊdÀÂ`œGTY–~¿zAO~p_Î~F±£=å?·ì$óÂW—ˆUÎÓÀt/†€<¯zü¶Ó4 »?<1fAèQì»?w-È]9¼n£mNâ4í¤©ÏnIØmè{ñ¡] Ûğ[˜ŞlN%À‰‹ÿjW@[,lEÕ.ÿÛ¬`—7›&Qwáê[`5Ÿñ‰ñU×¾YxÉ$ğ¢#%ğú¯­ïºÅU6¦p<æ>¿çõ__M¾qLîiÄŒL+¯F©\qÂ.A ©ûºß92l”±›kßc—ˆmÃcÀƒ]â—[Æ­şÄO?ÑÏtÒÆç^"„Fó[à¯èQû.3ø²Ó\#!T…ß¤ÿ6Ë¹m®ÃWqü©7£r(»X4Î»o3Ê,*_ÌĞ©È?¸*íT«†1ÑUï6¦[/p›]AdFìíJpc±Ö	?ÍÆöºõ	Ã…ıî]¥uk6,ÏwÈô?;›ğ'Ü$Ú?Féš{ìŠñËJØîı^Xóø5<’é¸¤.ôXÊ¯›kÅıË>.G_ÓMâßànÄM0'>¿­àÆÒW±Ïê˜ƒ—‰Ğ«…èªjîRªV,„¯®Wjsô)÷˜.åMœÅïühá·-0SÌ‡~sûD;'øÃá©€nÊ¤jV­ğÜ!stXÕ­TÚY5Õ ~r‡ßDE€ëÏoAºÆœRÓ´ÄŒşå ¼*t)ƒƒp[Œ‘³?4]è€$®*²üÌãğ{ŸàÆ%±¨[º8¾Ë@“ÎÁlÍ UqáÒ¤ºÙ|Q))ÕTR¼?	Ê4{ÛÛ±±r~ec¢Á”Vq»1æ-+˜ˆİôJ­„|œu˜€\Ğdc0ÒšPÔÀÁqdx[AîÉj7ÑvÁR Ù¿ºì¶iÀ»vºòaóÀc¢„Ãã§ÒØ9;dgnå4ïD¬±å/mÑkUÍüÒ6ı‘t÷Ÿ~‘]H+óRY—q¡ü¶6e£Œ})¸rÈÀ÷?É®¨ö"˜W§Ûİ ~Øäiƒ]s‰2ªE©»—ÜT˜i?Ê¯bT¿½qLÜ°ôÃ¶ö¿évúÃWİÎĞòª®fò(BÈÕìÿl-U/¶•`œÊ‚˜JN²ÎÎ-„´ìÎ^Q‡ë:–6K0
+Ûm!¤ı*”È¡«úı^1l'gpÉ
+£ÿYŠùíÃåü:FlNG~mù°›1œ3ÅOárÎ×HÎš_ÂÚ7®¹;ë"+ö×¥Ê ºÂC\·Ráí¬<QÑË›U|Æõ?1¿¤¯».¼â®­~Yæ]{LX*8İŸ+ÑêB¾*öäÀx7o¼ÜD.Ÿ~qSØ²Çú	‡»ÂDá›œtc˜H?Èµ-ÕûçFÊa5<¸ÁÄ77>òÓb…È/BoåIb´	å„?ïƒ·–dàø•¯¢^÷ÕènzDvŞ?;º8dÉz×§gƒaïğãåÚj"½Wçû9ğ‘ŸILiınçè=ØÒô²œ÷ù?‘-ÛhPû­ÓjD‹D­…€gÌ£qzJÛT™»p‹ß‡Ì‘EÎÃšy³ÈUf4NîçY<LèÄ(_ÚçÕUæ¥#èÔ*X+ë˜()MÂÜûİÁ˜·M°PÈ!`Q‡}
+áÃÎImÍø«ÊòÔÍÊC@®Üâ÷ó´ÅWFOê“á›÷£ã]Áğ¬ßeöXñæìn&í´£ÃÎá›îHº±–ä;ª²h5ÿ°ò½¬l{üÜå‘vàúŒÓÌ?ªĞÅ±„`FjFJ=R,—Ã¾ÒŠû¾p8ÉúğÔí²‡Íš¹ÀNØ9DYÊ—¡iD³ä§_á!BäG"ŠyÌ%ez).ĞŠÎ­­{Ğn‚kà¿§	oŞy×é@†*«‡TÅJØ-æ&z Ct1iéßD‡+uÂüã±cNÔa¾o™8şüûkÓwT¥œ Êofôøv¦Ê¾OT’¶w^"Xy¤Š†HŸV¼ß2U#<írLñ%zA\ëo+;éÌƒ~CHDø¬ìƒ–§>Áé/æ+:a/¼t$'Rİ°,*
+«LE›ZŠTÅ¹¶_(›­ê` ua—ªU‰‰®@’Û×"Å¸¼Èh>Xx÷
+ûĞòÿ¬]’vu®‹'f™¸ÌÉ­ğ×!aø¸!±³R5˜à_~İèÈ’SaÉ¦7Råa/bĞÚF§bÔ³|œt[ÛU	ûŸrâÔüL’‘Z2äP®èëTìßTîÓ´F~Ú'ÍFk§
+Ì¨ô8¼ì#1o½LáV¬Í9×}ÙÕ–ıdì‡	÷1AöQ€:àÇNû)üè—ßF…_G!ƒë¤†ş‚šF<áËïüÏì©2˜LçâõÅ`8jíŒÏŞwOzĞà”€AÅƒ1ÃĞùIç”}6÷‚}™³h÷±Á–"®Æ>Oıñ§=^ı,v®@^Ÿ;HøÜ™ŞÙ¢DuËm¥ØµêË(×zJÏğNô.ªÀÁù»JÍ#¾¢ÆğUÃš¢ÇÁÎâf‘f­Ú	u@ä×
+ØñÁíaf±’_´Ù×®k&´â_İ>%Ş/Ån#@0òsWÉ‘ğ]¾ö-ƒ©^ë÷EÌr!Šµ KèíİŸƒ#ı°|ùİÿ  ÿÿ ÕñÔ½

@@ -35,6 +35,7 @@ import {
 } from 'lucide-react';
 import { ModuleRenderProps } from '../../config/vixyLiveModules';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
+import { getReversalRiskAssessment } from '../../utils/reversalRisk';
 
 // ================= CORE MODULES =================
 
@@ -201,7 +202,8 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
 };
 
 export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const reversalRisk = canonical15m.reversalRisk ?? 22;
+  const rawRisk = canonical15m.reversalRisk ?? 22;
+  const assessment = getReversalRiskAssessment(rawRisk);
   const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
 
   return (
@@ -213,18 +215,14 @@ export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">REVERSAL RISK</span>
         </div>
-        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-          reversalRisk < 30 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-          reversalRisk < 50 ? 'bg-amber-950 text-amber-400 border border-amber-800' :
-          'bg-rose-950 text-rose-400 border border-rose-800'
-        }`}>
-          {reversalRisk < 30 ? 'LOW HAZARD' : reversalRisk < 50 ? 'MODERATE' : 'ELEVATED'}
+        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${assessment.badgeClass}`}>
+          {assessment.statusLabel}
         </span>
       </div>
 
       <div className="flex items-baseline justify-between">
-        <span className={`text-3xl font-black font-mono ${reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>
-          {reversalRisk}%
+        <span className={`text-3xl font-black font-mono ${assessment.colorClass}`}>
+          {assessment.score}%
         </span>
         <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 font-mono">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
