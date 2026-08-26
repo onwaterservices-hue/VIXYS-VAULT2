@@ -27,6 +27,9 @@ export default defineConfig(() => {
           manualChunks(id) {
             if (id.includes('node_modules')) {
               if (id.includes('lucide-react')) return 'vendor-lucide';
+              if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) return 'vendor-react';
+              if (id.includes('firebase')) return 'vendor-firebase';
+              if (id.includes('lightweight-charts')) return 'vendor-lwcharts';
               if (id.includes('recharts') || id.includes('d3')) return 'vendor-charts';
               if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
               if (id.includes('stripe')) return 'vendor-stripe';
