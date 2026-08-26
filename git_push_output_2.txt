@@ -1,0 +1,38 @@
+$ git remote -v
+origin	git@github.com:onwaterservices-hue/VIXYS-VAULT2.git (fetch)
+origin	git@github.com:onwaterservices-hue/VIXYS-VAULT2.git (push)
+$ git remote add origin git@github.com:onwaterservices-hue/VIXYS-VAULT2.git || git remote set-url origin git@github.com:onwaterservices-hue/VIXYS-VAULT2.git
+error: remote origin already exists.
+$ git remote -v
+origin	git@github.com:onwaterservices-hue/VIXYS-VAULT2.git (fetch)
+origin	git@github.com:onwaterservices-hue/VIXYS-VAULT2.git (push)
+$ ls -la ~/.ssh/
+total 0
+drwxr-xr-x 1 root root  40 Aug 26 19:06 .
+drwx------ 1 root root 140 Aug 26 19:06 ..
+$ cat ~/.ssh/vixy_deploy_key.pub 2>/dev/null || (ssh-keygen -t ed25519 -C "vixy-hotfix" -f ~/.ssh/vixy_deploy_key -N "" && cat ~/.ssh/vixy_deploy_key.pub)
+Generating public/private ed25519 key pair.
+Your identification has been saved in /root/.ssh/vixy_deploy_key
+Your public key has been saved in /root/.ssh/vixy_deploy_key.pub
+The key fingerprint is:
+SHA256:KDpmoZb1su/oJboRh0+LPXJ51uCkN03eePYVKjN61YQ vixy-hotfix
+The key's randomart image is:
++--[ED25519 256]--+
+|                 |
+|                 |
+|            .    |
+|  .    .   E .   |
+| o.+.o..S   o.   |
+| .XoB.* o  ....  |
+|.*=@ O = B.. .   |
+|.o=.@ . +.= .    |
+| oo+oo ..  .     |
++----[SHA256]-----+
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHcgdvRuIyAbJ/T8kUCMHxo5igpWCem32M7XOLuiv3YS vixy-hotfix
+$ git push origin main
+Warning: Permanently added 'github.com' (ED25519) to the list of known hosts.
+git@github.com: Permission denied (publickey).
+fatal: Could not read from remote repository.
+
+Please make sure you have the correct access rights
+and the repository exists.
