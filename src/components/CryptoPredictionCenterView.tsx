@@ -34,7 +34,8 @@ import {
   Play,
   HelpCircle,
   Shield,
-  Gauge
+  Gauge,
+  X
 } from 'lucide-react';
 import { BTCTicker, Candle } from '../types';
 import { fetchBTCTicker, fetchCryptoTicker, fetchCryptoKlines } from '../services/api';
@@ -43,6 +44,11 @@ import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cy
 import { getReversalRiskAssessment } from '../utils/reversalRisk';
 import { CandleChart } from './CandleChart';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
+import { calculateMarketRegime, MarketRegimeAssessment } from '../utils/marketRegime';
+import { OrderbookHeatmapRadar } from './prediction-center/OrderbookHeatmapRadar';
+import { NeuralDecompositionMatrix } from './prediction-center/NeuralDecompositionMatrix';
+import { ScenarioSimulatorMatrix } from './prediction-center/ScenarioSimulatorMatrix';
+import { AutonomousExecutionGuard } from './prediction-center/AutonomousExecutionGuard';
 
 interface CryptoPredictionCenterViewProps {
   ticker?: BTCTicker;
@@ -114,6 +120,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [audioMuted, setAudioMuted] = useState<boolean>(true);
   const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
   const [showLockQualityTooltip, setShowLockQualityTooltip] = useState<boolean>(false);
+  const [showWhyNotModal, setShowWhyNotModal] = useState<boolean>(false);
+  const [showMarketRegimeModal, setShowMarketRegimeModal] = useState<boolean>(false);
 
   // Motion & Dynamic State Trackers
   const prevSpotPriceRef = useRef<number>(64591.20);
@@ -434,6 +442,18 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     }
   };
 
+  // Dynamic Real-Time Market Regime Assessment
+  const marketRegimeAssessment: MarketRegimeAssessment = useMemo(() => {
+    return calculateMarketRegime(
+      chartCandles,
+      spotPrice,
+      spotChange,
+      displayReversalRisk,
+      displayConfidence,
+      canonicalDecision?.direction || (isUp ? 'UP' : isDown ? 'DOWN' : 'SKIP')
+    );
+  }, [chartCandles, spotPrice, spotChange, displayReversalRisk, displayConfidence, canonicalDecision?.direction, isUp, isDown]);
+
   // Recent 15M Cycle Settlement Strip
   const recentCycles = useMemo(() => [
     { id: '#48291', dir: 'UP', conf: displayConfidence, price: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, status: 'ACTIVE', pnl: '+2.4%' },
@@ -475,21 +495,21 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         {/* Global Motion Controls & Interactive Testing Bar */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3 ml-auto">
           
-          {/* Real Feed Health Status Indicator */}
-          <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-[#0d0722] border border-purple-800/40 text-[11px] font-mono">
-            <span className={`w-2 h-2 rounded-full ${
-              dataHealthStatus === 'LIVE'
-                ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.6)]'
-                : dataHealthStatus === 'STALE'
-                ? 'bg-amber-400 animate-pulse'
-                : 'bg-rose-500 animate-ping'
-            }`} />
-            <span className={
-              dataHealthStatus === 'LIVE' ? 'text-emerald-400 font-bold' : dataHealthStatus === 'STALE' ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'
-            }>
-              {dataHealthStatus === 'LIVE' ? 'FEED LIVE' : dataHealthStatus === 'STALE' ? 'FEED DELAYED' : 'RECONNECTING'}
+          {/* Market State Indicator (Requirement 13) */}
+          <button
+            onClick={() => setShowMarketRegimeModal(true)}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-bold font-sans cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${marketRegimeAssessment.badgeClass}`}
+            title="Click to inspect real-time Market Regime telemetry"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] opacity-75 font-mono">REGIME:</span>
+              <span className="font-black tracking-wide">{marketRegimeAssessment.label}</span>
+            </div>
+            <span className="text-[9px] font-mono px-1 rounded bg-black/30 border border-white/10">
+              {marketRegimeAssessment.confidence}%
             </span>
-          </div>
+          </button>
 
           {/* Sound Toggle */}
           <button
@@ -531,6 +551,58 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           >
             <RefreshCw className="w-4 h-4" />
           </button>
+        </div>
+      </div>
+
+      {/* 1.5 SUBTLE DATA HEALTH SYSTEM BAR (Requirement 14) */}
+      <div className="px-4 py-2.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 shadow-sm flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono text-purple-300/80">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6">
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-400/60 font-sans font-bold">SYSTEM</span>
+            <span className="flex items-center gap-1 text-emerald-400 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> ONLINE
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-400/60 font-sans font-bold">MARKET FEED</span>
+            <span className="flex items-center gap-1 text-emerald-400 font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" /> LIVE
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-400/60 font-sans font-bold">VENUES</span>
+            <span className="text-cyan-300 font-bold">4 / 4 SYNCED</span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <span className="text-purple-400/60 font-sans font-bold">VIXY ENGINE</span>
+            <span className="text-purple-200 font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" /> ACTIVE
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 hidden md:flex">
+            <span className="text-purple-400/60 font-sans font-bold">TELEMETRY</span>
+            <span className="text-emerald-400 font-bold">RECORDING</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 ml-auto text-[10px]">
+          <div className="flex items-center gap-1 text-purple-300">
+            <span className="text-purple-400/60 font-sans">LATENCY:</span>
+            <span className="text-emerald-400 font-bold">0.8s</span>
+          </div>
+
+          {computedCycleState === 'SKIP' && (
+            <button
+              onClick={() => setShowWhyNotModal(true)}
+              className="px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold font-sans text-[10px] hover:bg-amber-500/30 transition-colors cursor-pointer"
+            >
+              Why did VIXY Skip?
+            </button>
+          )}
         </div>
       </div>
 
@@ -1337,9 +1409,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       {/* 5. MAIN DOMINANT CHART SECTION & SUB-PANELS GRID */}
       <div className="space-y-6">
         
-        {/* Main Interactive Prediction Chart (Full Width) */}
-        <div className="space-y-6">
-          <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 shadow-2xl space-y-4">
+        {/* Main Chart + Orderbook Microstructure Dual Column on Desktop */}
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          
+          {/* Main Interactive Prediction Chart (8 cols on XL) */}
+          <div className="xl:col-span-8 p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 shadow-2xl space-y-4">
             
             {/* Chart Toolbar Controls */}
             <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-purple-900/40">
@@ -1467,81 +1541,125 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </div>
           </div>
 
-          {/* VIXY READ & EVIDENCE DEEP EXPLORATION */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            
-            {/* VIXY READ (AI Rationale Narrative) */}
-            <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
-              <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
-                <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
-                  <BrainCircuit className="w-4 h-4 text-purple-400" />
-                  <span>VIXY READ // AI RATIONALE</span>
-                </div>
-                <span className="text-[10px] text-purple-400 font-bold">15M ENGINE</span>
-              </div>
+          {/* Right Column: Orderbook Heatmap & Liquidity Radar (4 cols on XL) */}
+          <div className="xl:col-span-4">
+            <OrderbookHeatmapRadar
+              spotPrice={spotPrice}
+              strikePrice={targetPrice}
+              asset={selectedAsset}
+              isUp={isUp}
+              conviction={displayConfidence}
+            />
+          </div>
 
-              <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
-                {(canonicalDecision as any)?.aiExplanation ||
-                  'Strong momentum and improving order flow are supporting the current bullish structure. Buy-side taker absorption on Binance combined with Kalshi order book imbalance indicates high probability of continuation above $64,500.'}
-              </p>
+        </div>
 
-              <div className="p-3 rounded-2xl bg-[#120930] border border-purple-800/30 space-y-1 text-xs">
-                <div className="text-[10px] text-amber-300 font-bold">PRIMARY HYPOTHESIS</div>
-                <div className="text-white font-medium">
-                  Buyers absorbing ask volume at strike support ($64,495), maintaining momentum vector +14.2.
-                </div>
+        {/* VIXY READ & EVIDENCE DEEP EXPLORATION */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          
+          {/* VIXY READ (AI Rationale Narrative) */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
+              <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
+                <BrainCircuit className="w-4 h-4 text-purple-400" />
+                <span>VIXY READ // AI RATIONALE</span>
               </div>
+              <span className="text-[10px] text-purple-400 font-bold">15M ENGINE</span>
             </div>
 
-            {/* CROSS-VENUE EVIDENCE MATRIX WITH SMOOTH SYNC HIGHLIGHTS */}
-            <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
-              <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
-                <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
-                  <Layers className="w-4 h-4 text-cyan-400" />
-                  <span>CROSS-VENUE EVIDENCE</span>
-                </div>
-                <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  <span>SYNCHRONIZED (4/4)</span>
-                </span>
-              </div>
+            <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
+              {(canonicalDecision as any)?.aiExplanation ||
+                'Strong momentum and improving order flow are supporting the current bullish structure. Buy-side taker absorption on Binance combined with Kalshi order book imbalance indicates high probability of continuation above $64,500.'}
+            </p>
 
-              <div className="space-y-2 text-xs">
-                <motion.div
-                  whileHover={{ x: 2 }}
-                  className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-                >
-                  <span className="text-purple-300">Binance Spot Taker Delta</span>
-                  <span className="text-emerald-400 font-black">+$28.4M BUY</span>
-                </motion.div>
-
-                <motion.div
-                  whileHover={{ x: 2 }}
-                  className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-                >
-                  <span className="text-purple-300">Coinbase Premium Index</span>
-                  <span className="text-emerald-400 font-black">+$12.50</span>
-                </motion.div>
-
-                <motion.div
-                  whileHover={{ x: 2 }}
-                  className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-                >
-                  <span className="text-purple-300">Kalshi 15M YES Probability</span>
-                  <span className="text-white font-black">57% YES</span>
-                </motion.div>
-
-                <motion.div
-                  whileHover={{ x: 2 }}
-                  className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-                >
-                  <span className="text-purple-300">Polymarket 15M Odds</span>
-                  <span className="text-white font-black">59% YES</span>
-                </motion.div>
+            <div className="p-3 rounded-2xl bg-[#120930] border border-purple-800/30 space-y-1 text-xs">
+              <div className="text-[10px] text-amber-300 font-bold">PRIMARY HYPOTHESIS</div>
+              <div className="text-white font-medium">
+                Buyers absorbing ask volume at strike support ($64,495), maintaining momentum vector +14.2.
               </div>
             </div>
           </div>
+
+          {/* CROSS-VENUE EVIDENCE MATRIX WITH SMOOTH SYNC HIGHLIGHTS */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
+            <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
+              <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
+                <Layers className="w-4 h-4 text-cyan-400" />
+                <span>CROSS-VENUE EVIDENCE</span>
+              </div>
+              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>SYNCHRONIZED (4/4)</span>
+              </span>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <motion.div
+                whileHover={{ x: 2 }}
+                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
+              >
+                <span className="text-purple-300">Binance Spot Taker Delta</span>
+                <span className="text-emerald-400 font-black">+$28.4M BUY</span>
+              </motion.div>
+
+              <motion.div
+                whileHover={{ x: 2 }}
+                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
+              >
+                <span className="text-purple-300">Coinbase Premium Index</span>
+                <span className="text-emerald-400 font-black">+$12.50</span>
+              </motion.div>
+
+              <motion.div
+                whileHover={{ x: 2 }}
+                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
+              >
+                <span className="text-purple-300">Kalshi 15M YES Probability</span>
+                <span className="text-white font-black">57% YES</span>
+              </motion.div>
+
+              <motion.div
+                whileHover={{ x: 2 }}
+                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
+              >
+                <span className="text-purple-300">Polymarket 15M Odds</span>
+                <span className="text-white font-black">59% YES</span>
+              </motion.div>
+            </div>
+          </div>
         </div>
+
+        {/* NEURAL SIGNAL DECOMPOSITION MATRIX (6 Factors Attribution) */}
+        <NeuralDecompositionMatrix
+          conviction={displayConfidence}
+          isUp={isUp}
+          lockQuality={lockQualityScore}
+          reversalRisk={displayReversalRisk}
+        />
+
+        {/* QUANTITATIVE SCENARIOS & AUTONOMOUS EXECUTION 2-COLUMN GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ScenarioSimulatorMatrix
+            spotPrice={spotPrice}
+            strikePrice={targetPrice}
+            asset={selectedAsset}
+            baseConviction={displayConfidence}
+            baseLockQuality={lockQualityScore}
+            baseReversalRisk={displayReversalRisk}
+            isUp={isUp}
+          />
+
+          <AutonomousExecutionGuard
+            spotPrice={spotPrice}
+            strikePrice={targetPrice}
+            conviction={displayConfidence}
+            reversalRisk={displayReversalRisk}
+            isActuallyLocked={isActuallyLocked}
+            asset={selectedAsset}
+            isUp={isUp}
+          />
+        </div>
+
       </div>
 
       {/* 6. RECENT 15-MINUTE CYCLE SETTLEMENT STRIP */}
@@ -1597,6 +1715,163 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           ))}
         </div>
       </div>
+
+      {/* MARKET REGIME TELEMETRY MODAL */}
+      <AnimatePresence>
+        {showMarketRegimeModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-lg p-6 rounded-3xl bg-[#0d0722] border border-purple-700/60 shadow-2xl space-y-5 text-slate-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-purple-800/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-purple-900/50 border border-purple-500/40 text-purple-300">
+                    <Activity className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white font-sans">MARKET REGIME TELEMETRY</h3>
+                    <p className="text-xs text-purple-300/70 font-sans">Real-time dynamic regime classification</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowMarketRegimeModal(false)}
+                  className="p-1.5 rounded-lg bg-purple-950/60 border border-purple-800/40 text-purple-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className={`p-4 rounded-2xl border ${marketRegimeAssessment.badgeClass} flex items-center justify-between`}>
+                <div>
+                  <div className="text-[10px] uppercase font-bold opacity-75">CURRENT REGIME</div>
+                  <div className="text-xl font-black font-sans">{marketRegimeAssessment.label}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] uppercase font-bold opacity-75">CONFIDENCE</div>
+                  <div className="text-xl font-black font-mono">{marketRegimeAssessment.confidence}%</div>
+                </div>
+              </div>
+
+              <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
+                {marketRegimeAssessment.description}
+              </p>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <div className="text-[10px] text-purple-400 font-bold">VOLATILITY RATIO</div>
+                  <div className="text-sm font-black text-white font-mono mt-0.5">
+                    {marketRegimeAssessment.metrics.volatilityRatio.toFixed(2)}x
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <div className="text-[10px] text-purple-400 font-bold">MOMENTUM SCORE</div>
+                  <div className="text-sm font-black text-emerald-400 font-mono mt-0.5">
+                    {marketRegimeAssessment.metrics.momentumScore > 0 ? '+' : ''}
+                    {marketRegimeAssessment.metrics.momentumScore.toFixed(1)}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <div className="text-[10px] text-purple-400 font-bold">CVD DELTA</div>
+                  <div className="text-sm font-black text-white font-mono mt-0.5">
+                    {marketRegimeAssessment.metrics.cvdDelta}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <div className="text-[10px] text-purple-400 font-bold">FLOW AGREEMENT</div>
+                  <div className="text-sm font-black text-emerald-400 font-mono mt-0.5">
+                    {marketRegimeAssessment.metrics.flowAgreement}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowMarketRegimeModal(false)}
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-sans transition-all cursor-pointer shadow-lg shadow-purple-600/30"
+              >
+                CLOSE TELEMETRY
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* "WHY NOT?" SKIP EXPLAINABILITY MODAL */}
+      <AnimatePresence>
+        {showWhyNotModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="w-full max-w-lg p-6 rounded-3xl bg-[#0d0722] border border-purple-700/60 shadow-2xl space-y-5 text-slate-200"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-purple-800/40">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-300">
+                    <ShieldAlert className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white font-sans">WHY DID VIXY SKIP?</h3>
+                    <p className="text-xs text-purple-300/70 font-sans">Quantitative Capital Preservation Rationale</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowWhyNotModal(false)}
+                  className="p-1.5 rounded-lg bg-purple-950/60 border border-purple-800/40 text-purple-300 hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 space-y-2">
+                <div className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">PRIMARY BLOCKER</div>
+                <div className="text-sm font-bold text-white">
+                  Cross-Venue Dispersion & Reversal Risk Threshold Exceeded
+                </div>
+                <p className="text-xs text-amber-200/80 leading-relaxed font-sans">
+                  The quantitative decision engine detected conflicting directional order flow between Binance spot taker volume and Kalshi 15M probability, pushing reversal risk to {displayReversalRisk}% (above the 25% safety ceiling).
+                </p>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="text-[11px] font-bold text-purple-300 font-sans">SAFETY METRIC AUDIT</div>
+                
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <span className="text-purple-300">Lock Quality Score</span>
+                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: 70)</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <span className="text-purple-300">Reversal Risk</span>
+                  <span className="font-bold text-rose-400 font-mono">{displayReversalRisk}% (Max allowed: 25%)</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                  <span className="text-purple-300">Signal Confluence</span>
+                  <span className="font-bold text-amber-400 font-mono">3 of 6 factors aligned</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-[#12082b] border border-purple-800/40 text-[11px] text-purple-300/90 font-sans flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Capital Protection Guarantee:</strong> VIXY will never force a prediction in ambiguous or high-entropy regimes. Skipping preserves 100% of capital for high-conviction setups.
+                </span>
+              </div>
+
+              <button
+                onClick={() => setShowWhyNotModal(false)}
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold font-sans transition-all cursor-pointer shadow-lg shadow-purple-600/30"
+              >
+                ACKNOWLEDGE & CLOSE
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

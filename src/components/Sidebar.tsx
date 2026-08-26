@@ -72,12 +72,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: "Command Center",
           icon: LayoutDashboard,
           badge: "LIVE",
+          badgeType: "live",
         },
         {
           id: "terminal",
           label: "Crypto Prediction Center",
           icon: Sparkles,
-          badge: "FLAGSHIP",
+          badge: "LIVE",
+          badgeType: "flagship",
           isFlagship: true,
         },
         {
@@ -85,6 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: "VIXY LIVE",
           icon: Flame,
           badge: "CUSTOM",
+          badgeType: "custom",
         },
       ],
     },
@@ -130,6 +133,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           label: "VIXY Locks",
           icon: BarChart2,
           badge: "LEDGER",
+          badgeType: "ledger",
           isLockLayer: true,
         },
       ],
@@ -143,13 +147,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           icon: Award,
         },
         { id: "journal", label: "Trade Journal", icon: BookOpen },
-        { id: "replay", label: "Replay Center", icon: Clock },
+        { id: "replay", label: "Replay Center", icon: Clock, badge: "15M" },
       ],
     },
     {
       title: "ACCOUNT",
       items: [
-        { id: "alerts", label: "Alerts", icon: Bell },
+        { id: "alerts", label: "Alerts", icon: Bell, badge: "3", badgeType: "alert" },
         { id: "pricing", label: "Membership Terminal", icon: CreditCard, badge: hasActiveAccess ? "ACTIVE" : "PRO" },
         { id: "settings", label: "Settings", icon: Settings },
       ],
@@ -311,13 +315,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                       {item.badge && (
                         <span
-                          className={`px-1.5 py-0.2 rounded text-[9px] font-mono font-bold border ${
-                            isActive
+                          className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border flex items-center gap-1 ${
+                            item.badgeType === "live"
+                              ? "bg-emerald-950/80 text-emerald-300 border-emerald-500/40 shadow-[0_0_8px_rgba(16,185,129,0.2)]"
+                              : item.badgeType === "flagship"
+                              ? "bg-purple-900/80 text-purple-200 border-purple-400/50 shadow-[0_0_8px_rgba(168,85,247,0.25)]"
+                              : item.badgeType === "alert"
+                              ? "bg-rose-950/80 text-rose-300 border-rose-500/40 font-black"
+                              : item.badgeType === "ledger"
+                              ? "bg-cyan-950/80 text-cyan-300 border-cyan-500/40"
+                              : isActive
                               ? "bg-purple-950 text-purple-300 border-purple-500/50"
                               : "bg-[#0a0618] text-slate-400 border-purple-900/30"
                           }`}
                         >
-                          {item.badge}
+                          {item.badgeType === "live" && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          )}
+                          {item.badgeType === "flagship" && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+                          )}
+                          <span>{item.badge}</span>
                         </span>
                       )}
                     </a>
