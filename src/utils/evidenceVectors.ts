@@ -37,7 +37,6 @@ export interface ComputedEvidenceSummary {
   convictionHeaderText: string;
   convictionPercentText: string;
   compositeFooterText: string;
-  dynamicExplanation: string;
 }
 
 /**
@@ -499,33 +498,6 @@ export function computeEvidenceVectors(
   const compositeDisplay = compositeScore !== null ? compositeScore.toFixed(1) : '—';
   const convictionPct = totalValidCount > 0 ? Math.round((alignedCount / totalValidCount) * 100) : 0;
 
-  
-  // Generate dynamic explanation
-  let dynamicExplanation = "";
-  if (totalValidCount === 0) {
-    dynamicExplanation = "Insufficient market data to establish a structural bias at this time.";
-  } else {
-    const sortedVectors = [...validVectors].sort((a, b) => (b.score || 0) - (a.score || 0));
-    const topFactors = sortedVectors.slice(0, 2).map(v => v.name.toLowerCase()).join(" and ");
-    const biasStr = dir === 'UP' ? 'bullish' : dir === 'DOWN' ? 'bearish' : 'neutral';
-    
-    let baseSentence = `Strong ${topFactors} ${topFactors.includes('and') ? 'are' : 'is'} supporting the current ${biasStr} structure.`;
-    if (dir === 'NEUTRAL') {
-      baseSentence = `Mixed ${topFactors} ${topFactors.includes('and') ? 'are' : 'is'} driving a structurally neutral bias.`;
-    }
-
-    let alignmentSentence = "";
-    if (alignedCount === totalValidCount && totalValidCount > 0) {
-      alignmentSentence = " Full cross-venue alignment remains highly favorable.";
-    } else if (alignedCount >= Math.ceil(totalValidCount / 2)) {
-      alignmentSentence = " Alignment remains favorable, though some factors remain divergent.";
-    } else {
-      alignmentSentence = ` However, with only ${alignedCount} of ${totalValidCount} signals aligned, conflicting structural factors indicate caution.`;
-    }
-    
-    dynamicExplanation = `${baseSentence}${alignmentSentence}`;
-  }
-
   return {
     vectors,
     alignedCount,
@@ -538,7 +510,5 @@ export function computeEvidenceVectors(
     convictionHeaderText: `CONVICTION ${compositeDisplay}/10`,
     convictionPercentText: `${convictionPct}% SIGNAL CONVICTION`,
     compositeFooterText: `${compositeDisplay} / 10 COMPOSITE`,
-    dynamicExplanation,
   };
-
 }

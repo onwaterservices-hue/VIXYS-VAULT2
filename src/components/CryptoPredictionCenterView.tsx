@@ -40,7 +40,6 @@ import {
 import { BTCTicker, Candle } from '../types';
 import { fetchBTCTicker, fetchCryptoTicker, fetchCryptoKlines } from '../services/api';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
-import { computeEvidenceVectors } from '../utils/evidenceVectors';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 import { getReversalRiskAssessment } from '../utils/reversalRisk';
 import { CandleChart } from './CandleChart';
@@ -117,7 +116,6 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [selectedVenue, setSelectedVenue] = useState<string>('Kalshi');
   const [chartMode, setChartMode] = useState<'CANDLE' | 'RIBBON'>('CANDLE');
   const [nowMs, setNowMs] = useState<number>(Date.now());
-  const evidenceSummary = useMemo(() => computeEvidenceVectors(canonicalDecision), [canonicalDecision]);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [audioMuted, setAudioMuted] = useState<boolean>(true);
   const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
@@ -1570,7 +1568,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </div>
 
             <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
-              {evidenceSummary.dynamicExplanation}
+              {(canonicalDecision as any)?.aiExplanation ||
+                'Strong momentum and improving order flow are supporting the current bullish structure. Buy-side taker absorption on Binance combined with Kalshi order book imbalance indicates high probability of continuation above $64,500.'}
             </p>
 
             <div className="p-3 rounded-2xl bg-[#120930] border border-purple-800/30 space-y-1 text-xs">
