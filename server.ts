@@ -14967,204 +14967,13 @@ function loadPersistentStore() {
               ? "DEGRADED_LOCAL_FALLBACK"
               : "LOCAL_DISK_ONLY";
             console.warn(
-              `[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache on boot. retryAt=${firestoreRetryAt}`,
-            );
-            if (db && !firestoreNetworkDisabled) {
-              firestoreNetworkDisabled = true;
-              disableNetwork(db).catch((err) =>
-                console.error(
-                  "[FIRESTORE_CIRCUIT] Error disabling network stream on boot:",
-                  err,
-                ),
-              );
-            }
-          } else {
-            firestoreRetryAtMs = 0;
-            firestoreRetryAt = null;
-            if (db) persistenceState = "HEALTHY_FIRESTORE";
-          }
-        }
-      }
-      if (Array.isArray(data.discordSyncQueue)) {
-        discordSyncQueue.length = 0;
-        data.discordSyncQueue.forEach((item) => {
-          discordSyncQueue.push(item);
-        });
-      }
-      if (data.discordSyncMetrics) {
-        discordSyncMetrics = {
-          ...discordSyncMetrics,
-          ...data.discordSyncMetrics,
-        };
-      }
-      if (data.calibrationState && typeof data.calibrationState === "object") {
-        latestCalibrationState = {
-          ...latestCalibrationState,
-          ...data.calibrationState,
-        };
-      }
-      if (data.learningEngine && typeof data.learningEngine === "object") {
-        Object.assign(serverLearningEngine, data.learningEngine);
-      }
-      if (data.maintenanceState && typeof data.maintenanceState === "object") {
-        productionMaintenanceState = {
-          ...productionMaintenanceState,
-          ...data.maintenanceState,
-        };
-      }
-      console.log(
-        `[Store] Loaded ${serverUsers.length} users, ${userDiscordProfiles.size} Discord profiles, ${userSubscriptions.size} subscriptions, ${persistentSignalLogs.length} signal logs & ${persistentTelemetryObservations.length} telemetry observations from disk store.`,
-      );
-    }
-  } catch (err) {
-    console.warn("[Store] Notice loading store from disk:", err);
-  }
-}
-__name(loadPersistentStore, "loadPersistentStore");
-async function loadPersistentStoreAsync() {
-  if (!db) {
-    console.warn(
-      "[Firestore] Firestore is not initialized. Skipping Firestore sync.",
-    );
-    return;
-  }
-  if (!canAttemptFirestoreWrite("loadPersistentStoreAsync")) {
-    console.warn(
-      "[Firestore] Circuit is OPEN. Skipping Firestore sync on boot.",
-    );
-    return;
-  }
-  try {
-    console.log("[Firestore] Synchronizing state with Firestore...");
-    const usersSnap = await getDocs(collection(db, "users"));
-    let fetchedUsersCount = 0;
-    for (const docSnap of usersSnap.docs) {
-      const data = docSnap.data();
-      if (data && (data.id || data.email || docSnap.id)) {
-        fetchedUsersCount++;
-        const cleanEmail = (data.email || "").toLowerCase().trim();
-        if (
-          cleanEmail !== "vixyvault0@gmail.com" &&
-          (data.role === "OWNER" || data.role === "ADMIN")
-        ) {
-          data.role = "USER";
-          try {
-            await setDoc(
-              doc(db, "users", docSnap.id),
-              { role: "USER" },
-              { merge: true },
-            );
-          } catch (e) {}
-        }
-        const matchByUid =
-          data.uid &&
-          serverUsers.find((u) => u.uid === data.uid || u.id === data.uid);
-        const matchByEmail =
-          cleanEmail &&
-          serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
-        const existing = matchByUid || matchByEmail;
-        if (!existing) {
-          serverUsers.push(data);
-        } else {
-          for (const [k, v] of Object.entries(data)) {
-            if (k === "passwordHash") {
-              if (
-                v &&
-                typeof v === "string" &&
-                v.length > 0 &&
-                v !== "AuthManaged2026!"
-              ) {
-                if (
-                  !existing.passwordHash ||
-                  !existing.passwordHash.startsWith("vixy$") ||
-                  v.startsWith("vixy$")
-                ) {
-                  existing.passwordHash = v;
-                }
-              }
-            } else if (v !== void 0 && v !== null) {
-              existing[k] = v;
-            }
-          }
-        }
-      }
-    }
-    sanitizeAndNormalizeServerUsers();
-    const subsSnap = await getDocs(collection(db, "subscriptions"));
-    let fetchedSubsCount = 0;
-    subsSnap.forEach((docSnap) => {
-      const data = docSnap.data();
-      if (data && docSnap.id) {
-        fetchedSubsCount++;
-        userSubscriptions.set(docSnap.id, data);
-      }
-    });
-    try {
-      const dayPassesSnap = await getDocs(collection(db, "day_passes"));
-      dayPassesSnap.forEach((docSnap) => {
-        const data = docSnap.data();
-        if (data && docSnap.id) {
-          userDayPasses.set(docSnap.id, data);
-          if (data.email) userDayPasses.set(data.email.toLowerCase(), data);
-          if (data.userId) userDayPasses.set(data.userId, data);
-        }
-      });
-    } catch (dpErr) {
-      console.warn("[Firestore] Error loading day_passes collection:", dpErr);
-    }
-    let fetchedProfilesCount = 0;
-    const processProfileDoc = __name((data, docId) => {
-      if (data && docId) {
-        fetchedProfilesCount++;
-        const profileObj = {
-          email: data.email || data.userEmail || "",
-          discordUserId: data.discordUserId || docId,
-          discordUsername:
-            data.username || data.discordUsername || "Discord User",
-          discordGlobalName:
-            data.globalName ||
-            data.discordGlobalName ||
-            data.username ||
-            "Discord User",
-          discordAvatar: data.avatar
-            ? data.avatar.startsWith("http")
-              ? data.avatar
-              : `https://cdn.discordapp.com/avatars/${docId}/${data.avatar}.png`
-            : null,
-        };
-        serverUsers.set(docId, profileObj);
-      }
-    });
-    const profilesSnap = await getDocs(collection(db, "users"));
-    profilesSnap.forEach((docSnap) => {
-      processProfileDoc(docSnap.data(), docSnap.id);
-    });
-    console.log(`[Store] Loaded ${fetchedProfilesCount} users from Firestore`);
-  } catch (err) {
-    console.error("[Firestore] Boot sync error:", err);
-  }
-}
-
-async function startServer() {
-  const port = 3000;
-  if (process.env.NODE_ENV !== "production") {
-    const { createServer } = await import("vite");
-    const viteServer = await createServer({
-      server: { middlewareMode: true, hmr: false },
-      appType: "spa",
-    });
-    app.use(viteServer.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Server listening on port ${port}`);
-  });
-}
-
-startServer();
+              `[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache on booxœœýOã8öwþ
+¡Qz[eÐ®t?€ºs,tw pnt!0‰ÛzI“¬í–aØþï÷ží$¶“öØ-Iüžß·ß‡UBSâõDÞf\0©JÁnÌÒæq¸GœßàØûä3gOäÃ²ßìœ0õRŠç3.éSÎ²yó¶²“Œˆ+v gl‘Ý I©JqÌ„ÑÏ>!iYÈ2g	ÀKwÀ„D_=¿Oo¯nÆ§ç7§wç·÷dŒØ–/æ¤0‰T‚Ñ%)òT–ê(öNÝåA¸oã|mË%L:ãR‚‰wâ F±Êó>7HÅ„äR±"eSEäèóøäâöó‹DîÞVÆú­~"Í!èkÂ¥~ÆU4û¥¥È¦¯Eúï[±ëÿ˜ä¬˜«…¯U/™dVŠ1E§sÅ–èuÏVôj%µ%¼iÞ]Bv—`GžÊ-b[(Hì²O’
+Ã ¡ŸO‹µÙ*]Jsþ$¨âeaÜçM½V¬œ‘~øhŽ-Ÿ~g©Š\Er JuÚA•éÇëS(dýurFE'l\ÌyÑQ&€nSåJ/%TJ>/bÉÄš‰oë°ÞöXR^ÀÉ ÍÙäêÀ·IV‰2[¥h‘ËÎ–ÐÐÛqûŒŠ°ÃØu
+ÌËy› ¿N1SÜ“‹’foÞŒÝîà!íYÜ~ˆ/g&`¯E9ã9“‰äßÙ†ØUTU/×ØÓÕ“L¯P¡WºkˆØ$!5×Ñü¢œ·Ì¥^" ¶$<ä[–³%æ¸«'”šõ>UCIé€ÉL”K<¾˜ÅAó¤©f6Ð\¢Ë	1åÄ8¨6ßÄNÕf›”Š§„£M²e•ë€¦¼ÙÛì=<tÉbÄ¾nUÆ=Cõ¬F°“JÈd¶*tL¬Äˆœ»û˜×{„¶zB¥«Ä=i^	—¤(áWNðw–%dúÌ«
+õjÑWbžµ´
++Q­)-N¤ÚJ5;¿È½qŸ–Zþhðn™O¹HW\¡ÄW×ãÉV1ëú¼S\ŒŸ/ž¦æ…(þÝ¸í‡ÕàÀiŒ,u¤¢Ì™´‚óM_(;gê¬Leœ–yÎ´+¡ü‚×5&(ovçL‘ƒÐc™>§åªPm-„ŠGbÃ!+SMrQÃ,E§JYDH@Áâë¬7)¯Nu˜ÙLÎãùóO“Þ$—\Ù½<óJwGÐ~h+«ažBª-ÆšÎÈ2h¨FÑ QåEùÂÄ)•,†/Á—±SQ:'ç9Äö1Ñ®ù·×5]åêð_s\MÒr&ÎÃR€[Mn¾ú2ßD†-àäìò|š­~‹ê “èn
+$Ü†¨¡úg\.µËÃfŒéz~èZ7ìß2=²<É¦_21l’C°×Z¶4ëvpµ¿–ˆôËëDÁ(Ô‹žqÝJ1ãEÇ+Ý…­4*šµÙ_%Áâ ËÜ†K¿ãß)€²O~xiæ-©{öržð‘kÜ•ËÎýz.®\ºëD•Ý®³ÛÙ;'ûëó¬ïñ`Û†ò¤àL*áì„b<›® óñ$ûLå"êÎXÁi2¿µoQó³=ÎÚ…a4Œú×u·þ39ì…›ƒz²R‹KZÐ9Ë~<üñŸûQ8udÝ"-!ÅW[ðÒ»qHàBÉ/ÀcBÀV½û×}¨Ý‘®GxBúÅ‘u8Êú3_÷ÛÆ
+šÃXs]BT¢µ­uq´ëÊPóÿú|ßåêM™[¦9ó_Rl¾³“"›”b©û‚iÝ±Wô°­{WÍóú¿¾Ú‡McPújâíÔgó¦7øýÅ’ç¤Þn]k„pËZOKËTÜÒ1F0RÔS¦[(jI_¯!@ØûìØ•FoŒF|»­ó.û¼ÇBÆg5çÝ6pIšÄ<èÛÞ@ý¬½‹R9Ï¶R3à&Îë†¿.Y5nÛýNÃï4„æZ¨îù[¯ÖaØùzÇÎqrB¼Ÿ‚07‚!*eRZˆ@°³ƒVM7¨¹ãÜÀkç}!í1ívkvvƒ²Œ¥Ú/GaWXÛxÜvtnb/6î´Ž¼;³f[KpQÿ.Ô÷ÈK\K52[´$õ8Š‹}Rý–—O4Ÿôs˜7À°0¸ü~Ûåˆéÿ¯h'0©RaFõ‡Gà“ñJÔB©ªS¡>m%DÈyÄ=òèãÇ4+jÅhUa+ýÑl‘Þ´—6øÒ’Ú$U1ÜóÉa1ê¹‚ð["›-ðh¶·%ezùw&*wëîìØ9t±Ÿ ½Ný¸#e=:voTúŸ½S1WMjy47;nÌýµ—~×Ì»Þ9„:`L·wÖÆ¥À<ôÓá¡NE˜N¬E ]'“«³ñÃxòÓÑµ—T‘+¡‚‰$dÃ T©½Å—È Û(ÅüYW,zìÒˆkÿ˜:Â¡‡gYÎ /³Ë2³ÓÏ,– œQì–šIBùšY˜ dEía«†aNˆ[þIKXZO8º­ÐW]S}A]Á#ù½äEc¨ô%Ã8‰)
+Ø°o•@¼?à[–ÎÀAƒˆŽ£€ÿbÁþ”ÂP¡‹[‘ý
+Q·ÌkJÀf ö-Y¨eÞÄÿÆÂža‘ë{—}ø‡‰þCŽ'/š­gÌ>,wB:TÞð±±!ÿ‡[Ç{ÿ  ÿÿ I ­†
