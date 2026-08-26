@@ -37,7 +37,7 @@ import {
   Gauge
 } from 'lucide-react';
 import { BTCTicker, Candle } from '../types';
-import { fetchBTCTicker, fetchCryptoKlines } from '../services/api';
+import { fetchBTCTicker, fetchCryptoTicker, fetchCryptoKlines } from '../services/api';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 import { getReversalRiskAssessment } from '../utils/reversalRisk';
@@ -137,24 +137,31 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     }
   }, [canonicalDecision]);
 
-  // Poll BTCTicker for fresh spot price & compute price tick deltas
+  // Poll live ticker for the currently selectedAsset (BTC, ETH, SOL, etc.)
   useEffect(() => {
+    let isMounted = true;
     const updateTicker = async () => {
       try {
-        const t = await fetchBTCTicker();
-        if (t && t.price) {
+        const t = await fetchCryptoTicker(selectedAsset);
+        if (!isMounted) return;
+        if (t && typeof t.price === 'number' && !isNaN(t.price)) {
           const newPrice = t.price;
           const oldPrice = prevSpotPriceRef.current;
-          if (newPrice !== oldPrice) {
+          if (newPrice !== oldPrice && oldPrice > 0) {
             const diff = newPrice - oldPrice;
             setPriceFlash(diff >= 0 ? 'UP' : 'DOWN');
-            setPriceTickDelta(`${diff >= 0 ? '+' : ''}$${Math.abs(diff).toFixed(2)}`);
+            const precision = selectedAsset === 'XRP' || selectedAsset === 'DOGE' ? 4 : 2;
+            setPriceTickDelta(`${diff >= 0 ? '+' : ''}$${Math.abs(diff).toFixed(precision)}`);
             prevSpotPriceRef.current = newPrice;
 
             setTimeout(() => {
-              setPriceFlash('NONE');
-              setPriceTickDelta(null);
+              if (isMounted) {
+                setPriceFlash('NONE');
+                setPriceTickDelta(null);
+              }
             }, 700);
+          } else {
+            prevSpotPriceRef.current = newPrice;
           }
           setLiveTicker(t);
         }
@@ -164,8 +171,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     };
     updateTicker();
     const interval = setInterval(updateTicker, 2500);
-    return () => clearInterval(interval);
-  }, []);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [selectedAsset]);
 
   // Fetch candles when asset or timeframe changes
   useEffect(() => {
@@ -204,9 +214,128 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     return Math.min(100, Math.max(0, (elapsed / 900) * 100));
   }, [cycleSecondsRemaining]);
 
-  // Spot Price & Direction Calculations
-  const spotPrice = liveTicker?.price || (canonicalDecision as any)?.spotPrice || 64591.20;
+  // Spot Price & Direction Calculations for active selected asset
+  const spotPrice = liveTicker?.price || (canonicalDecision as any)?.spotPrice || (selectedAsset === 'ETH' ? 3480 : selectedAsset === 'SOL' ? 185 : 64591.20);
   const spotChange = liveTicker?.change24h || 1.85;
+
+  // Ask / Target Strike Reference Price for the selected crypto
+  const targetPrice = useMemo(() => {
+    if (selectedAsset === 'BTC' && canonicalDecision?.openStrike && canonicalDecision.openStrike > 0) {
+      return canonicalDecision.openStrike;
+    }
+    if (chartCandles && chartCandles.length > 0) {
+      const currentCandle = chartCandles[chartCandles.length - 1];
+      if (currentCandle && typeof currentCandle.open === 'number' && currentCandle.open > 0) {
+        return currentCandle.open;
+      }
+      const firstCandle = chartCandles[0];
+      if (firstCandle && typeof firstCandle.open === 'number' && firstCandle.open > 0) {
+        return firstCandle.open;
+      }
+    }
+    if (spotChange !== 0 && spotPrice > 0) {
+      return spotPrice / (1 + spotChange / 100);
+    }
+    return spotPrice;
+  }, [selectedAsset, canonicalDecision?.openStrike, chartCandles, spotPrice, spotChange]);
+
+  // Active state: above target line = GREEN (UP), below target line = RED (DOWN)
+  const isAboveTarget = useMemo(() => {
+    return spotPrice >= targetPrice;
+  }, [spotPrice, targetPrice]);
+
+  // Dynamic Real Live Sparkline Vector Computation for the selected crypto
+  const sparklineData = useMemo(() => {
+    // Extract recent close prices from candles
+    const recentCandles = chartCandles.slice(-16);
+    const prices: number[] = recentCandles
+      .map((c) => Number(c.close))
+      .filter((p) => typeof p === 'number' && !isNaN(p) && isFinite(p) && p > 0);
+
+    // Append latest live spot price as real-time terminal tick
+    if (typeof spotPrice === 'number' && !isNaN(spotPrice) && isFinite(spotPrice) && spotPrice > 0) {
+      if (prices.length === 0 || prices[prices.length - 1] !== spotPrice) {
+        prices.push(spotPrice);
+      }
+    }
+
+    const svgWidth = 64;
+    const svgHeight = 24;
+    const paddingX = 2;
+    const usableWidth = svgWidth - paddingX * 2; // 60
+    const paddingY = 3;
+    const usableHeight = svgHeight - paddingY * 2; // 18
+
+    // Safe fallback if data is still hydrating
+    if (prices.length < 2) {
+      const isUpFallback = spotChange >= 0;
+      return {
+        points: prices,
+        pathD: isUpFallback ? "M 2 18 Q 18 16 30 8 T 62 4" : "M 2 6 Q 18 10 30 16 T 62 20",
+        areaD: isUpFallback ? "M 2 18 Q 18 16 30 8 T 62 4 L 62 24 L 2 24 Z" : "M 2 6 Q 18 10 30 16 T 62 20 L 62 24 L 2 24 Z",
+        lastX: 62,
+        lastY: isUpFallback ? 4 : 20,
+        targetY: 12,
+        isAboveTarget: isUpFallback,
+        targetPrice,
+      };
+    }
+
+    const allValues = [...prices, targetPrice].filter(
+      (v) => typeof v === 'number' && !isNaN(v) && isFinite(v)
+    );
+    const minVal = Math.min(...allValues);
+    const maxVal = Math.max(...allValues);
+    const rawRange = maxVal - minVal;
+    const range = rawRange > 0 ? rawRange : (spotPrice * 0.002 || 1);
+
+    // Generous vertical padding (12%) so curve never clips against borders
+    const paddedMin = minVal - range * 0.12;
+    const paddedMax = maxVal + range * 0.12;
+    const paddedRange = paddedMax - paddedMin || 1;
+
+    const coords = prices.map((price, i) => {
+      const x = paddingX + (i / Math.max(1, prices.length - 1)) * usableWidth;
+      const normalizedY = (price - paddedMin) / paddedRange;
+      const y = (svgHeight - paddingY) - normalizedY * usableHeight;
+      return {
+        x: Math.max(paddingX, Math.min(svgWidth - paddingX, Number(x.toFixed(2)))),
+        y: Math.max(paddingY, Math.min(svgHeight - paddingY, Number(y.toFixed(2)))),
+      };
+    });
+
+    // Smooth bezier curve path
+    let pathD = `M ${coords[0].x} ${coords[0].y}`;
+    for (let i = 1; i < coords.length; i++) {
+      const prev = coords[i - 1];
+      const curr = coords[i];
+      const midX = (prev.x + curr.x) / 2;
+      pathD += ` C ${midX} ${prev.y}, ${midX} ${curr.y}, ${curr.x} ${curr.y}`;
+    }
+
+    // Shaded area under sparkline
+    const lastCoord = coords[coords.length - 1];
+    const firstCoord = coords[0];
+    const areaD = `${pathD} L ${lastCoord.x} ${svgHeight} L ${firstCoord.x} ${svgHeight} Z`;
+
+    // Target / Ask reference line horizontal coordinate
+    const normalizedTarget = (targetPrice - paddedMin) / paddedRange;
+    const targetY = Math.max(
+      paddingY,
+      Math.min(svgHeight - paddingY, Number(((svgHeight - paddingY) - normalizedTarget * usableHeight).toFixed(2)))
+    );
+
+    return {
+      points: prices,
+      pathD,
+      areaD,
+      lastX: lastCoord.x,
+      lastY: lastCoord.y,
+      targetY,
+      isAboveTarget: spotPrice >= targetPrice,
+      targetPrice,
+    };
+  }, [chartCandles, spotPrice, targetPrice, spotChange]);
 
   const rawDirection = (canonicalDecision as any)?.direction || 'UP';
   const isUp = rawDirection === 'YES' || rawDirection === 'UP';
@@ -571,27 +700,36 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           </div>
         </div>
 
-        {/* Big Bold 4-Card Quantitative Grid — VIXY Vault Obsidian Surfaces */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4 items-stretch relative z-10">
+        {/* Big Bold 4-Card Quantitative Grid — VIXY Vault Obsidian Surfaces with Atmospheric Edge-Lighting */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-3.5 items-stretch relative z-10">
           
           {/* Card 1: Dominant VIXY Directional Bias (Hero Metric) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#14082c]/95 via-[#0d0620]/95 to-[#060312] border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_20px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] relative overflow-hidden flex flex-col justify-between transition-all duration-300 min-w-0">
+          <div
+            style={{
+              background: isUp
+                ? 'radial-gradient(ellipse at 85% 15%, rgba(16, 185, 129, 0.13) 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)'
+                : isDown
+                ? 'radial-gradient(ellipse at 85% 15%, rgba(244, 63, 94, 0.13) 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)'
+                : 'radial-gradient(ellipse at 85% 15%, rgba(168, 85, 247, 0.12) 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)',
+            }}
+            className="p-3.5 sm:p-4 rounded-2xl border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_24px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.09),inset_0_0_20px_rgba(147,51,234,0.05)] relative overflow-hidden flex flex-col justify-between transition-all duration-300 min-w-0 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/40 before:to-transparent before:pointer-events-none"
+          >
             {/* Subtle matrix dots background */}
             <div className="absolute inset-0 opacity-15 pointer-events-none bg-[radial-gradient(#8b5cf6_1px,transparent_1px)] [background-size:14px_14px]" />
             
-            <div className="space-y-3 relative z-10">
+            <div className="space-y-2.5 relative z-10">
               <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>VIXY BIAS</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   {isEarlyLockQualified && !isActuallyLocked && (
-                    <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse whitespace-nowrap">
                       ⚡ EARLY LOCK READY
                     </span>
                   )}
-                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase whitespace-nowrap ${
                     isUp ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30' : isDown ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30' : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
                   }`}>
                     15M CORE
@@ -599,49 +737,40 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 sm:gap-3">
-                <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   {isUp ? (
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.25)] shrink-0">
-                      <ArrowUpRight className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={2.5} />
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.25)] shrink-0">
+                      <ArrowUpRight className="w-5 h-5" strokeWidth={2.5} />
                     </div>
                   ) : isDown ? (
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.25)] shrink-0">
-                      <ArrowDownRight className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={2.5} />
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(244,63,94,0.25)] shrink-0">
+                      <ArrowDownRight className="w-5 h-5" strokeWidth={2.5} />
                     </div>
                   ) : (
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-purple-500/15 text-purple-300 border border-purple-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)] shrink-0">
-                      <Radio className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" />
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/15 text-purple-300 border border-purple-500/40 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.2)] shrink-0">
+                      <Radio className="w-4 h-4 animate-pulse" />
                     </div>
                   )}
 
                   <div className="min-w-0">
-                    <div
-                      className={`font-black font-sans leading-none tracking-tight truncate ${
-                        isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'
-                      }`}
-                      style={{ fontSize: 'clamp(1.25rem, 5vw, 1.875rem)' }}
-                    >
+                    <div className={`text-lg sm:text-xl font-black font-sans leading-none tracking-tight whitespace-nowrap ${
+                      isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'
+                    }`}>
                       {biasLabel}
                     </div>
                     
-                    <div className="text-[11px] font-bold mt-1 text-slate-300 flex items-center gap-1 whitespace-nowrap">
-                      <motion.span
-                        key={displayConfidence}
-                        initial={{ opacity: 0.6 }}
-                        animate={{ opacity: 1 }}
-                        className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}
-                        style={{ fontSize: 'clamp(0.8rem, 3.2vw, 0.95rem)' }}
-                      >
+                    <div className="text-[10px] font-bold mt-1 text-slate-300 flex items-center gap-1 whitespace-nowrap">
+                      <span className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
                         {displayConfidence}%
-                      </motion.span>
-                      <span className="text-purple-300/70 font-sans text-[10px]">CONVICTION</span>
+                      </span>
+                      <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">CONVICTION</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Circular Gauge Score */}
-                <div className="relative w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center shrink-0 p-0.5">
+                <div className="relative w-11 h-11 flex items-center justify-center shrink-0">
                   <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
                     <path
                       className="text-purple-950/90"
@@ -662,26 +791,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                   </svg>
-                  <motion.span
-                    key={displayConfidence}
-                    initial={{ opacity: 0, scale: 0.8 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="absolute font-black text-white font-mono text-center"
-                    style={{ fontSize: 'clamp(0.65rem, 2.6vw, 0.75rem)' }}
-                  >
+                  <span className="absolute font-black text-white font-mono text-[10px] text-center">
                     {displayConfidence}%
-                  </motion.span>
+                  </span>
                 </div>
               </div>
             </div>
 
             {/* Bottom Alignment Tag */}
-            <div className="mt-3 pt-2.5 border-t border-purple-900/30 flex items-center justify-between text-[10px] relative z-10">
+            <div className="mt-3 pt-2 border-t border-purple-900/30 flex items-center justify-between text-[10px] relative z-10">
               <div className="flex items-center gap-1.5 text-purple-300/80 font-bold whitespace-nowrap">
-                <Activity className="w-3 h-3 text-emerald-400" />
-                <span>MARKET ALIGNMENT</span>
+                <Activity className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span className="text-[9px] sm:text-[10px]">MARKET ALIGNMENT</span>
               </div>
-              <span className="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold font-mono text-[9px] tracking-wide uppercase whitespace-nowrap shadow-[0_0_8px_rgba(16,185,129,0.15)]">
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold font-mono text-[9px] tracking-wide uppercase whitespace-nowrap shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
                 STRONG
               </span>
             </div>
@@ -689,17 +812,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           {/* Card 2: Current Spot Price (Live Ticker & Sparkline) */}
           <motion.div
+            style={{
+              background: 'radial-gradient(ellipse at 50% 0%, rgba(147, 51, 234, 0.12) 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)',
+            }}
             animate={{
               borderColor: priceFlash === 'UP'
-                ? 'rgba(16, 185, 129, 0.6)'
+                ? 'rgba(16, 185, 129, 0.65)'
                 : priceFlash === 'DOWN'
-                ? 'rgba(244, 63, 94, 0.6)'
-                : 'rgba(126, 34, 206, 0.45)',
+                ? 'rgba(244, 63, 94, 0.65)'
+                : 'rgba(126, 34, 206, 0.5)',
             }}
             transition={{ duration: 0.3 }}
-            className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#14082c]/95 via-[#0d0620]/95 to-[#060312] border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_20px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] relative overflow-hidden flex flex-col justify-between transition-all duration-300 min-w-0"
+            className="p-3.5 sm:p-4 rounded-2xl border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_24px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.09),inset_0_0_20px_rgba(147,51,234,0.05)] relative overflow-hidden flex flex-col justify-between transition-all duration-300 min-w-0 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/40 before:to-transparent before:pointer-events-none"
           >
-            <div className="space-y-2">
+            <div className="space-y-2 relative z-10">
               <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider">
                 <span className="whitespace-nowrap">PRICE ({selectedAsset}/USDT)</span>
                 
@@ -710,7 +836,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       initial={{ opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
-                      className={`px-1.5 py-0.2 rounded font-mono font-black text-[9px] whitespace-nowrap ${
+                      className={`px-1.5 py-0.5 rounded font-mono font-black text-[9px] whitespace-nowrap shrink-0 ${
                         priceFlash === 'UP' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                       }`}
                     >
@@ -720,39 +846,86 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </AnimatePresence>
               </div>
 
-              <div
-                className="font-black text-white font-mono tracking-tight leading-none truncate whitespace-nowrap"
-                style={{ fontSize: 'clamp(1.15rem, 5.2vw, 1.875rem)' }}
-              >
+              <div className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight leading-none whitespace-nowrap">
                 ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-0.5">
-                <div className="flex items-center gap-2 text-xs font-bold font-mono min-w-0">
-                  <span className={`px-2 py-0.5 rounded-lg flex items-center gap-1 font-black whitespace-nowrap ${
-                    spotChange >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                  }`}>
-                    <span>{spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}%</span>
-                    {spotChange >= 0 ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
+              <div className="flex items-center justify-between gap-1 pt-0.5">
+                <span className={`px-1.5 py-0.5 rounded-md flex items-center gap-0.5 font-black text-[10px] font-mono whitespace-nowrap shrink-0 ${
+                  spotChange >= 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                }`}>
+                  <span>{spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}%</span>
+                  {spotChange >= 0 ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                </span>
+                
+                <div className="text-[9px] text-purple-300/70 font-sans flex items-center gap-1 leading-tight whitespace-nowrap shrink-0">
+                  <span>• BINANCE</span>
+                  <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FEED
                   </span>
-                  
-                  <div className="text-[10px] text-purple-300/70 font-sans flex flex-col leading-tight whitespace-nowrap">
-                    <span>• BINANCE</span>
-                    <span className="flex items-center gap-1 text-emerald-400 font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FEED
-                    </span>
-                  </div>
                 </div>
 
                 {/* Mini Live Vector Sparkline */}
-                <div className="w-14 sm:w-16 h-7 sm:h-8 shrink-0">
-                  <svg className="w-full h-full" viewBox="0 0 64 24" fill="none">
+                <div 
+                  className="w-12 sm:w-14 h-5 sm:h-6 shrink-0 relative"
+                  title={`Live ${selectedAsset} Trend | Price: $${spotPrice.toFixed(2)} | Target: $${targetPrice.toFixed(2)} (${sparklineData.isAboveTarget ? 'ABOVE TARGET / UP' : 'BELOW TARGET / DOWN'})`}
+                >
+                  <svg className="w-full h-full overflow-visible" viewBox="0 0 64 24" fill="none">
+                    <defs>
+                      <linearGradient id={`spark-green-grad-${selectedAsset}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0.0" />
+                      </linearGradient>
+                      <linearGradient id={`spark-red-grad-${selectedAsset}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.35" />
+                        <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
+                      </linearGradient>
+                    </defs>
+
+                    {/* Ask / Target Reference Dashed Baseline */}
+                    <line
+                      x1="2"
+                      y1={sparklineData.targetY}
+                      x2="62"
+                      y2={sparklineData.targetY}
+                      stroke="rgba(192, 132, 252, 0.45)"
+                      strokeDasharray="2,2"
+                      strokeWidth="0.75"
+                    />
+
+                    {/* Shaded Area Under Curve */}
+                    {sparklineData.areaD && (
+                      <path
+                        d={sparklineData.areaD}
+                        fill={sparklineData.isAboveTarget ? `url(#spark-green-grad-${selectedAsset})` : `url(#spark-red-grad-${selectedAsset})`}
+                      />
+                    )}
+
+                    {/* Dynamic Real Crypto Price Line (Green if above target, Red if below target) */}
                     <path
-                      d={spotChange >= 0 ? "M 2 18 Q 18 16 30 8 T 62 4" : "M 2 6 Q 18 10 30 16 T 62 20"}
-                      stroke={spotChange >= 0 ? "#10b981" : "#f43f5e"}
-                      strokeWidth="2.5"
+                      d={sparklineData.pathD}
+                      stroke={sparklineData.isAboveTarget ? "#10b981" : "#f43f5e"}
+                      strokeWidth="2.2"
                       strokeLinecap="round"
+                      strokeLinejoin="round"
                       fill="none"
+                    />
+
+                    {/* Pulsing Live Endpoint Beacon */}
+                    <circle
+                      cx={sparklineData.lastX}
+                      cy={sparklineData.lastY}
+                      r="2.2"
+                      fill={sparklineData.isAboveTarget ? "#10b981" : "#f43f5e"}
+                    />
+                    <circle
+                      cx={sparklineData.lastX}
+                      cy={sparklineData.lastY}
+                      r="4"
+                      fill="none"
+                      stroke={sparklineData.isAboveTarget ? "#10b981" : "#f43f5e"}
+                      strokeWidth="1"
+                      className="animate-ping opacity-60"
                     />
                   </svg>
                 </div>
@@ -760,22 +933,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </div>
 
             {/* Bottom 24H Range Strip */}
-            <div className="mt-3 pt-2.5 border-t border-purple-900/30 grid grid-cols-2 gap-2 text-[10px] font-mono">
+            <div className="mt-3 pt-2 border-t border-purple-900/30 grid grid-cols-2 gap-2 text-[10px] font-mono relative z-10">
               <div className="min-w-0">
                 <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">24H HIGH</span>
-                <span
-                  className="font-bold text-white whitespace-nowrap truncate block"
-                  style={{ fontSize: 'clamp(0.65rem, 2.6vw, 0.75rem)' }}
-                >
+                <span className="font-bold text-white text-[10px] whitespace-nowrap block">
                   ${(spotPrice * 1.018).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="border-l border-purple-900/40 pl-2 min-w-0">
                 <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">24H LOW</span>
-                <span
-                  className="font-bold text-white whitespace-nowrap truncate block"
-                  style={{ fontSize: 'clamp(0.65rem, 2.6vw, 0.75rem)' }}
-                >
+                <span className="font-bold text-white text-[10px] whitespace-nowrap block">
                   ${(spotPrice * 0.982).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
@@ -783,8 +950,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           </motion.div>
 
           {/* Card 3: Lock Quality (Distinct from Conviction) */}
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#14082c]/95 via-[#0d0620]/95 to-[#060312] border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_20px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] relative flex flex-col justify-between transition-all duration-300 min-w-0">
-            <div className="space-y-2">
+          <div
+            style={{
+              background: 'radial-gradient(ellipse at 85% 15%, rgba(16, 185, 129, 0.11) 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)',
+            }}
+            className="p-3.5 sm:p-4 rounded-2xl border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_24px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.09),inset_0_0_20px_rgba(16,185,129,0.04)] relative flex flex-col justify-between transition-all duration-300 min-w-0 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-emerald-400/35 before:to-transparent before:pointer-events-none"
+          >
+            <div className="space-y-2 relative z-10">
               <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider gap-1">
                 <div className="flex items-center gap-1.5 whitespace-nowrap">
                   <Lock className={`w-3 h-3 ${!isActuallyLocked ? 'text-purple-400 animate-pulse' : 'text-emerald-400'}`} />
@@ -797,18 +969,15 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     <HelpCircle className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <span className="text-emerald-400 font-black font-mono text-xs whitespace-nowrap shrink-0">{lockQualityScore} / 100</span>
+                <span className="text-emerald-400 font-black font-mono text-[11px] whitespace-nowrap shrink-0">{lockQualityScore} / 100</span>
               </div>
 
-              <div
-                className="font-black text-white font-sans tracking-tight leading-snug break-words"
-                style={{ fontSize: 'clamp(0.95rem, 4vw, 1.25rem)' }}
-              >
+              <div className="text-base sm:text-lg font-black text-white font-sans tracking-tight leading-tight">
                 {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
               </div>
 
               {/* High Precision Gradient Progress Bar */}
-              <div className="w-full h-2.5 rounded-full bg-[#180d38] overflow-hidden border border-purple-800/40 p-0.5">
+              <div className="w-full h-2 rounded-full bg-[#180d38] overflow-hidden border border-purple-800/40 p-0.5">
                 <motion.div
                   className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
                   initial={{ width: '0%' }}
@@ -839,10 +1008,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </AnimatePresence>
 
             {/* Bottom Requirement Details */}
-            <div className="mt-3 pt-2.5 border-t border-purple-900/30 flex flex-col gap-0.5 text-[10px] font-sans">
-              <span className="text-purple-200/90 font-medium whitespace-nowrap truncate">Strong evidence across venues</span>
-              <span className="text-purple-400/80 font-mono text-[9px] whitespace-nowrap">
-                {lockQualityScore >= 78 ? '⚡ Early Lock Ready (≥78)' : lockQualityScore >= 70 ? 'Threshold Met (≥70)' : 'Requires 70+ to lock'}
+            <div className="mt-3 pt-2 border-t border-purple-900/30 flex items-center justify-between text-[9px] font-sans relative z-10 gap-1">
+              <span className="text-purple-200/90 font-medium whitespace-nowrap">Cross-venue evidence</span>
+              <span className="text-purple-400/90 font-mono text-[9px] whitespace-nowrap shrink-0">
+                {lockQualityScore >= 78 ? '⚡ Ready (≥78)' : lockQualityScore >= 70 ? 'Qualified (≥70)' : 'Req. 70+ to lock'}
               </span>
             </div>
           </div>
@@ -850,35 +1019,43 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Card 4: Reversal Risk & Protection Status */}
           {(() => {
             const riskAssessment = getReversalRiskAssessment(displayReversalRisk);
+            const riskGlow = riskAssessment.tier === 'LOW'
+              ? 'rgba(16, 185, 129, 0.1)'
+              : riskAssessment.tier === 'MODERATE'
+              ? 'rgba(245, 158, 11, 0.1)'
+              : 'rgba(244, 63, 94, 0.12)';
+            
             return (
-              <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#14082c]/95 via-[#0d0620]/95 to-[#060312] border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_20px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] relative flex flex-col justify-between transition-all duration-300 min-w-0">
-                <div className="space-y-2">
+              <div
+                style={{
+                  background: `radial-gradient(ellipse at 85% 15%, ${riskGlow} 0%, rgba(20, 8, 44, 0.95) 45%, rgba(6, 3, 18, 0.98) 100%)`,
+                }}
+                className="p-3.5 sm:p-4 rounded-2xl border border-purple-700/50 hover:border-purple-500/70 shadow-[0_4px_24px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.09)] relative flex flex-col justify-between transition-all duration-300 min-w-0 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/35 before:to-transparent before:pointer-events-none"
+              >
+                <div className="space-y-2 relative z-10">
                   <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider gap-1">
                     <div className="flex items-center gap-1.5 whitespace-nowrap">
                       <Shield className="w-3.5 h-3.5 text-purple-400" />
                       <span>REVERSAL RISK</span>
                     </div>
-                    <span className={`px-2 py-0.5 rounded-md font-extrabold text-[9px] tracking-wider uppercase whitespace-nowrap ${riskAssessment.badgeClass}`}>
+                    <span className={`px-1.5 py-0.5 rounded font-extrabold text-[9px] tracking-wider uppercase whitespace-nowrap shrink-0 ${riskAssessment.badgeClass}`}>
                       {riskAssessment.shortLabel}
                     </span>
                   </div>
 
-                  <div
-                    className={`font-black font-mono tracking-tight leading-none ${riskAssessment.colorClass}`}
-                    style={{ fontSize: 'clamp(1.15rem, 5.2vw, 1.875rem)' }}
-                  >
+                  <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight leading-none ${riskAssessment.colorClass}`}>
                     {riskAssessment.score}%
                   </div>
 
-                  <div className="text-[11px] font-bold flex items-center gap-1.5 whitespace-nowrap">
+                  <div className="text-[10px] font-bold flex items-center gap-1.5 whitespace-nowrap">
                     {isActuallyLocked ? (
                       <>
-                        <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                         <span className="text-emerald-300">VIXY Protection Active</span>
                       </>
                     ) : (
                       <>
-                        <Shield className="w-4 h-4 text-purple-400 shrink-0" />
+                        <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0" />
                         <span className="text-purple-300/80">Guardian Standby</span>
                       </>
                     )}
@@ -886,8 +1063,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </div>
 
                 {/* Segmented Risk Slider (LOW / MODERATE / HIGH) */}
-                <div className="mt-3 pt-2.5 border-t border-purple-900/30 space-y-1.5">
-                  <div className="grid grid-cols-3 gap-1.5 h-2 rounded-full overflow-hidden bg-[#180d38] p-0.5 border border-purple-800/40">
+                <div className="mt-3 pt-2 border-t border-purple-900/30 space-y-1 relative z-10">
+                  <div className="grid grid-cols-3 gap-1.5 h-1.5 rounded-full overflow-hidden bg-[#180d38] p-0.5 border border-purple-800/40">
                     <div className={`h-full rounded-full transition-all ${
                       riskAssessment.tier === 'LOW' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-emerald-950/40'
                     }`} />
@@ -899,7 +1076,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     }`} />
                   </div>
                   
-                  <div className="flex items-center justify-between text-[9px] font-bold text-purple-400/80 font-mono uppercase px-0.5">
+                  <div className="flex items-center justify-between text-[8px] font-bold text-purple-400/80 font-mono uppercase px-0.5">
                     <span className={riskAssessment.tier === 'LOW' ? 'text-emerald-400 font-black' : ''}>LOW</span>
                     <span className={riskAssessment.tier === 'MODERATE' ? 'text-amber-400 font-black' : ''}>MODERATE</span>
                     <span className={riskAssessment.tier === 'HIGH' ? 'text-rose-400 font-black' : ''}>HIGH</span>
@@ -911,7 +1088,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         </div>
 
         {/* 3. CONTEXTUAL INTELLIGENCE STRIP: "WHAT IS HAPPENING?" */}
-        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#14082c]/90 via-[#0e0622]/90 to-[#070314] border border-purple-700/50 flex flex-wrap items-center justify-between gap-3 text-xs shadow-inner relative z-10">
+        <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#14082c]/95 via-[#0e0622]/95 to-[#070314] border border-purple-700/50 flex flex-wrap items-center justify-between gap-3 text-xs shadow-[0_4px_20px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_18px_rgba(168,85,247,0.05)] relative z-10 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/35 before:to-transparent before:pointer-events-none">
           <div className="flex items-center gap-3 text-purple-200 font-sans flex-1 min-w-[260px]">
             <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-300 shrink-0 shadow-[0_0_10px_rgba(168,85,247,0.2)]">
               <BrainCircuit className="w-4 h-4 text-purple-300" />
@@ -966,7 +1143,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           const isLockedEarly = isActuallyLocked && elapsedSec < 720;
 
           return (
-            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#12072c]/95 via-[#0b051b]/95 to-[#060212] border border-purple-800/50 shadow-[0_4px_25px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.08)] relative overflow-hidden space-y-3.5">
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#12072c]/95 via-[#0b051b]/95 to-[#060212] border border-purple-800/50 shadow-[0_4px_25px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.09),inset_0_0_24px_rgba(168,85,247,0.04)] relative overflow-hidden space-y-3.5 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-cyan-400/35 before:to-transparent before:pointer-events-none">
               {/* Subtle matrix overlay */}
               <div className="absolute inset-0 bg-[radial-gradient(#8b5cf6_1px,transparent_1px)] [background-size:16px_16px] opacity-10 pointer-events-none" />
 
@@ -1232,11 +1409,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     <CandleChart
                       candles={chartCandles}
                       currentPrice={spotPrice}
+                      targetPrice={targetPrice}
                       timeframe={selectedTimeframe}
                       predictedDirection={isUp ? 'UP' : 'DOWN'}
                       modelSignal={{
                         direction: isUp ? 'UP' : 'DOWN',
                         confidence: displayConfidence,
+                        targetPrice: targetPrice,
                       }}
                       venue={selectedVenue}
                     />
@@ -1366,8 +1545,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       </div>
 
       {/* 6. RECENT 15-MINUTE CYCLE SETTLEMENT STRIP */}
-      <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 shadow-xl space-y-3">
-        <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
+      <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#100727]/95 via-[#0b051b]/95 to-[#060212] border border-purple-800/40 shadow-[0_4px_25px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.07)] space-y-3 relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/30 before:to-transparent before:pointer-events-none">
+        <div className="flex items-center justify-between pb-2 border-b border-purple-900/40 relative z-10">
           <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
             <Award className="w-4 h-4 text-amber-400" />
             <span>RECENT VIXY LOCK SETTLEMENTS</span>
@@ -1378,17 +1557,17 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3 relative z-10">
           {recentCycles.map((c, idx) => (
             <motion.div
               key={idx}
               whileHover={{ y: -2 }}
-              className={`p-3 rounded-2xl border transition-all ${
+              className={`p-3 rounded-2xl border transition-all relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-white/10 before:to-transparent ${
                 c.status === 'ACTIVE'
-                  ? 'bg-purple-900/30 border-purple-500/50 text-white shadow-md shadow-purple-900/20'
+                  ? 'bg-purple-900/30 border-purple-500/50 text-white shadow-[0_2px_12px_rgba(168,85,247,0.2),inset_0_1px_0_rgba(255,255,255,0.08)]'
                   : c.status === 'WIN'
-                  ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
-                  : 'bg-amber-950/20 border-amber-500/30 text-amber-200'
+                  ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200 shadow-[0_2px_12px_rgba(16,185,129,0.15),inset_0_1px_0_rgba(255,255,255,0.06)]'
+                  : 'bg-amber-950/20 border-amber-500/30 text-amber-200 shadow-[0_2px_12px_rgba(245,158,11,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]'
               }`}
             >
               <div className="flex items-center justify-between text-[10px] font-bold">
