@@ -15008,19 +15008,23 @@ async function loadPersistentStoreAsync() {
 async function startServer() {
   const port = 3000;
   if (process.env.NODE_ENV !== "production") {
-    const vite = await import("vite");
-    vite.createServer({ server: { middlewareMode: true }, appType: "spa" })
-      .then((viteServer) => {
-        app.use(viteServer.middlewares);
-        app.listen(port, "0.0.0.0", () => console.log(`Server listening on port ${port}`));
-      });
-  } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    const { createServer } = await import("vite");
+    const viteServer = await createServer({
+      server: { middlewareMode: true, hmr: false },
+      appType: "spa",
     });
-    app.listen(port, "0.0.0.0", () => console.log(`Server listening on port ${port}`));
+    app.use(viteServer.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
   }
+
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server listening on port ${port}`);
+  });
 }
+
 startServer();
