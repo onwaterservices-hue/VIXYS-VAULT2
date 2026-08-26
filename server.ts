@@ -4263,6 +4263,33 @@ async function getUserAccessState(email, uid) {
     } catch (fallbackErr) {
       console.warn("[DAY PASS FALLBACK] Firestore lookup failed:", fallbackErr);
     }
+
+    if (
+      entitlement.status !== "active" &&
+      entitlement.status !== "trialing" &&
+      db
+    ) {
+      try {
+        const subSnap = await getDoc(doc(db, "subscriptions", cleanEmail));
+        if (subSnap.exists()) {
+          const subData = subSnap.data() as any;
+          if (
+            subData &&
+            (subData.status === "ACTIVE" ||
+              subData.status === "active" ||
+              subData.status === "trialing")
+          ) {
+            userSubscriptions.set(cleanEmail, subData);
+            entitlement = getUserEntitlement(cleanEmail);
+            console.log(
+              `[SUBSCRIPTION FALLBACK] Recovered subscription for ${cleanEmail} from Firestore (in-memory cache had missed it).`,
+            );
+          }
+        }
+      } catch (fallbackSubErr) {
+        console.warn("[SUBSCRIPTION FALLBACK] Firestore lookup failed:", fallbackSubErr);
+      }
+    }
   }
 
   return {
@@ -4837,15 +4864,128 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
       message: "No active session",
     });
   }
-  const user = serverUsers.find(
+  let user = serverUsers.find(
     (u) =>
       (reqEmail && u.email?.toLowerCase() === reqEmail) ||
       (reqUserId && (u.id === reqUserId || u.uid === reqUserId)),
   );
-  const dp =
+
+  // Firestore fallback if in-memory serverUsers missed (e.g. cold start / serverless instance)
+  if (!user && db) {
+    try {
+      if (reqUserId) {
+        const userDocSnap = await getDoc(doc(db, "users", reqUserId));
+        if (userDocSnap.exists()) {
+          const uData = userDocSnap.data() as any;
+          if (uData) {
+            user = {
+              id: userDocSnap.id,
+              uid: uData.uid || userDocSnap.id,
+              email: uData.email || reqEmail,
+              name: uData.name || (uData.email ? uData.email.split("@")[0] : "User"),
+              role: uData.role || "USER",
+              subscription: uData.subscription || "NONE",
+              status: uData.status || "ACTIVE",
+              verificationStatus: uData.verificationStatus || "VERIFIED",
+              discordLinked: Boolean(uData.discordLinked),
+              discordId: uData.discordId || uData.discordUserId,
+              discordTag: uData.discordTag || uData.discordUsername,
+              joined: uData.joined || new Date().toISOString().split("T")[0],
+            };
+            const matchIdx = serverUsers.findIndex(
+              (u) => (user.id && (u.id === user.id || u.uid === user.id)) || (user.email && u.email?.toLowerCase() === user.email.toLowerCase()),
+            );
+            if (matchIdx !== -1) {
+              serverUsers[matchIdx] = { ...serverUsers[matchIdx], ...user };
+            } else {
+              serverUsers.push(user);
+            }
+            console.log(
+              `[USER FALLBACK] Recovered user profile for ${user.email || user.id} from Firestore by UID (in-memory cache had missed it).`,
+            );
+          }
+        }
+      }
+      if (!user && reqEmail && reqEmail.includes("@")) {
+        const q = query(collection(db, "users"), where("email", "==", reqEmail), limit(1));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          const docSnap = snap.docs[0];
+          const uData = docSnap.data() as any;
+          if (uData) {
+            user = {
+              id: docSnap.id,
+              uid: uData.uid || docSnap.id,
+              email: uData.email || reqEmail,
+              name: uData.name || reqEmail.split("@")[0],
+              role: uData.role || "USER",
+              subscription: uData.subscription || "NONE",
+              status: uData.status || "ACTIVE",
+              verificationStatus: uData.verificationStatus || "VERIFIED",
+              discordLinked: Boolean(uData.discordLinked),
+              discordId: uData.discordId || uData.discordUserId,
+              discordTag: uData.discordTag || uData.discordUsername,
+              joined: uData.joined || new Date().toISOString().split("T")[0],
+            };
+            const matchIdx = serverUsers.findIndex(
+              (u) => (user.id && (u.id === user.id || u.uid === user.id)) || (user.email && u.email?.toLowerCase() === user.email.toLowerCase()),
+            );
+            if (matchIdx !== -1) {
+              serverUsers[matchIdx] = { ...serverUsers[matchIdx], ...user };
+            } else {
+              serverUsers.push(user);
+            }
+            console.log(
+              `[USER FALLBACK] Recovered user profile for ${reqEmail} from Firestore by Email (in-memory cache had missed it).`,
+            );
+          }
+        }
+      }
+    } catch (fallbackErr) {
+      console.warn("[USER FALLBACK] Firestore lookup failed:", fallbackErr);
+    }
+  }
+
+  let dp =
     userDayPasses.get(reqEmail) ||
     (reqUserId ? userDayPasses.get(reqUserId) : void 0);
-  const sub = userSubscriptions.get(reqEmail);
+  if (!dp && reqEmail && reqEmail.includes("@") && db) {
+    try {
+      const dpSnap = await getDoc(doc(db, "day_passes", reqEmail));
+      if (dpSnap.exists()) {
+        const dpData = dpSnap.data() as any;
+        if (dpData) {
+          userDayPasses.set(reqEmail, dpData);
+          if (dpData.userId) userDayPasses.set(dpData.userId, dpData);
+          dp = dpData;
+          console.log(
+            `[DAY PASS FALLBACK] Recovered day pass for ${reqEmail} from Firestore (in-memory cache had missed it).`,
+          );
+        }
+      }
+    } catch (dpFallbackErr) {
+      console.warn("[DAY PASS FALLBACK] Firestore lookup failed:", dpFallbackErr);
+    }
+  }
+
+  let sub = reqEmail ? userSubscriptions.get(reqEmail) : void 0;
+  if (!sub && reqEmail && reqEmail.includes("@") && db) {
+    try {
+      const subSnap = await getDoc(doc(db, "subscriptions", reqEmail));
+      if (subSnap.exists()) {
+        const subData = subSnap.data() as any;
+        if (subData) {
+          userSubscriptions.set(reqEmail, subData);
+          sub = subData;
+          console.log(
+            `[SUBSCRIPTION FALLBACK] Recovered subscription for ${reqEmail} from Firestore (in-memory cache had missed it).`,
+          );
+        }
+      }
+    } catch (subFallbackErr) {
+      console.warn("[SUBSCRIPTION FALLBACK] Firestore lookup failed:", subFallbackErr);
+    }
+  }
   const discordProfile = userDiscordProfiles.get(reqEmail);
   const resolvedUser = user || {
     id: reqUserId || `usr_${reqEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
