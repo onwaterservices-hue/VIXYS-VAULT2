@@ -1,0 +1,268 @@
+};
+function canLockCurrentCycle(livePrice) {
+  const now = Date.now();
+  const reasons = [];
+  const cycleId = active15mCycle.cycleId;
+  const currentIntervalStart =
+    Math.floor(now / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
+  const elapsedSeconds = Math.max(
+    0,
+    Math.floor((now - active15mCycle.intervalStart) / 1e3),
+  );
+  const remainingSeconds = Math.max(
+    0,
+    Math.floor((active15mCycle.intervalEnd - now) / 1e3),
+  );
+  const dataAgeMs = now - lastMarketUpdateTs;
+  const latencyMs = Math.max(0, dataAgeMs - 500);
+  const effElapsed = Math.max(
+    elapsedSeconds,
+    active15mCycle.cycleObservationDuration || 0,
+  );
+  const effRemaining =
+    active15mCycle.cycleObservationDuration > 0
+      ? Math.max(0, 900 - active15mCycle.cycleObservationDuration)
+      : remainingSeconds;
+  const isEarlyLockQualified = Boolean(
+    (currentConfidence >= 75 || Math.abs(currentEdgePct) >= 2.5) &&
+    latestBtc15mPipeline.lockQuality >= 78 &&
+    latestBtc15mPipeline.lockQualityTier === "HIGH_CONVICTION" &&
+    latestBtc15mPipeline.evidenceAgreementCount >= 7 &&
+    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= 3 &&
+    latestBtc15mPipeline.reversalAssessment.threatScore <= 25 &&
+    !latestBtc15mPipeline.chopAnalytics.isChopFiltered &&
+    !active15mCycle.isChoppy &&
+    (persistenceSeconds >= 3 || active15mCycle.signalPersistence >= 3)
+  );
+  const minRequiredElapsed = isEarlyLockQualified ? 90 : 360;
+  const minimumObservationWindowPassed = effElapsed >= minRequiredElapsed;
+  if (!minimumObservationWindowPassed) {
+    reasons.push(
+      `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [EARLY_LOCK_CRITERIA_MET]" : ""})`,
+    );
+  }
+  const withinEntryWindow =
+    minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
+  if (effElapsed >= 720 || effRemaining < 180) {
+    reasons.push(
+      `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`,
+    );
+  }
+  const marketDataFresh = engineFeedStatus === "CONNECTED" && dataAgeMs <= 15e3;
+  const dataFresh = marketDataFresh && dataAgeMs < 1e4;
+  if (!dataFresh) {
+    reasons.push(`DATA_STALE (dataAgeMs=${dataAgeMs}ms)`);
+  }
+  const cryptoTracking = engineFeedStatus === "CONNECTED";
+  if (!cryptoTracking) reasons.push("cryptoTracking=false");
+  const algorithm = true;
+  const authoritativeState = true;
+  const vixyWebSocket = true;
+  const currentCycle = active15mCycle.intervalStart === currentIntervalStart;
+  if (!currentCycle)
+    reasons.push(
+      `currentCycle=false (cycleStart=${active15mCycle.intervalStart} vs current=${currentIntervalStart})`,
+    );
+  const cycleExpiryFuture = active15mCycle.intervalEnd > now;
+  if (!cycleExpiryFuture) reasons.push("cycleExpiryFuture=false");
+  const latencyAcceptable = latencyMs <= 5e3;
+  if (!latencyAcceptable)
+    reasons.push(`latencyAcceptable=false (${latencyMs}ms)`);
+  const calibrationComplete = true;
+  if (!calibrationComplete)
+    reasons.push(
+      `CALIBRATION_INCOMPLETE (samples=${active15mCycle.calibrationSamples})`,
+    );
+  const analysisComplete = true;
+  if (!analysisComplete) reasons.push("ANALYSIS_INCOMPLETE");
+  const isNotChoppy =
+    !active15mCycle.isChoppy &&
+    !latestBtc15mPipeline.chopAnalytics.isChopFiltered;
+  if (!isNotChoppy) {
+    reasons.push(
+      `CHOPPY_MARKET (directionChanges=${active15mCycle.directionChanges}, reason=${latestBtc15mPipeline.chopAnalytics.reason || active15mCycle.choppyReason || "HIGH_FLIP_COUNT"})`,
+    );
+  }
+  const signalPersistent =
+    persistenceSeconds >= 6 || active15mCycle.signalPersistence >= 6;
+  if (!signalPersistent) {
+    reasons.push(
+      `LOW_PERSISTENCE (persisted=${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s < 6s)`,
+    );
+  }
+  const dataQualityPass = latestBtc15mPipeline.dataQuality.status === "OPTIMAL";
+  if (!dataQualityPass) {
+    reasons.push(
+      `DATA_QUALITY_DEGRADED (status=${latestBtc15mPipeline.dataQuality.status}, freshness=${latestBtc15mPipeline.dataQuality.feedFreshnessMs}ms)`,
+    );
+  }
+  const lockQualityPass =
+    latestBtc15mPipeline.lockQualityTier !== "SKIP" &&
+    latestBtc15mPipeline.lockQuality >= 75;
+  if (!lockQualityPass) {
+    reasons.push(
+      `LOCK_QUALITY_INSUFFICIENT (tier=${latestBtc15mPipeline.lockQualityTier}, score=${latestBtc15mPipeline.lockQuality}/100 < 75)`,
+    );
+  }
+  const evidenceAgreementPass =
+    latestBtc15mPipeline.evidenceAgreementCount >= 6;
+  if (!evidenceAgreementPass) {
+    reasons.push(
+      `EVIDENCE_AGREEMENT_INSUFFICIENT (agree=${latestBtc15mPipeline.evidenceAgreementCount}/11 < 6)`,
+    );
+  }
+  const mtfPass =
+    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= 3;
+  if (!mtfPass) {
+    reasons.push(
+      `MTF_ALIGNMENT_INSUFFICIENT (aligned=${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5 < 3)`,
+    );
+  }
+  const strikeFeasiblePass =
+    latestBtc15mPipeline.volatilityExpectedMove.isStrikeFeasible;
+  if (!strikeFeasiblePass) {
+    reasons.push(
+      `STRIKE_FEASIBILITY_FAILED (coverage=${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x)`,
+    );
+  }
+  const reversalThreatPass =
+    !latestBtc15mPipeline.reversalAssessment.vetoActive &&
+    latestBtc15mPipeline.reversalAssessment.threatScore < 30;
+  if (!reversalThreatPass) {
+    reasons.push(
+      `REVERSAL_VETO_ACTIVE (threat=${latestBtc15mPipeline.reversalAssessment.threatScore}%, triggers=${latestBtc15mPipeline.reversalAssessment.primaryTriggers.join("/") || "MOMENTUM_REVERSING"})`,
+    );
+  }
+  const confidenceValid = currentConfidence >= 66 && currentConfidence <= 99;
+  const edgeValid =
+    Math.abs(currentEdgePct) >= 1.5 ||
+    Math.abs(currentModelProbability - 0.5) >= 0.025;
+  const evidenceSufficient = confidenceValid && edgeValid;
+  if (!evidenceSufficient)
+    reasons.push(
+      `INSUFFICIENT_EVIDENCE (conf=${currentConfidence}% < 66%, prob=${currentModelProbability})`,
+    );
+  const dirTarget =
+    currentDirection === "DOWN"
+      ? "DOWN"
+      : currentDirection === "UP"
+        ? "UP"
+        : currentModelProbability >= 0.5
+          ? "UP"
+          : "DOWN";
+  const recentObsList = active15mCycle.recentObservations || [];
+  const last3Obs = recentObsList.slice(-3);
+  const rollingStabilityPassed =
+    last3Obs.length >= 3 &&
+    last3Obs.every((o) => o.candidateDir === dirTarget && o.conf >= 65.5);
+  if (!rollingStabilityPassed) {
+    reasons.push(
+      `STABILITY_WINDOW_INSUFFICIENT (qualifyingConsecutive=${last3Obs.filter((o) => o.candidateDir === dirTarget && o.conf >= 65.5).length} < 3)`,
+    );
+  }
+  if (active15mCycle.hasConflict) {
+    reasons.push("SIGNAL_CONFLICT (evidence indicators disagree)");
+  }
+  if (active15mCycle.signalUnstable) {
+    reasons.push(
+      "SIGNAL_UNSTABLE (recent observations fluctuating or confidence spiking)",
+    );
+  }
+  const reversalThreat =
+    active15mCycle.reversalThreat ||
+    (latestGuardianDecision?.reversalThreat ?? 20);
+  const protectionApproved =
+    latestGuardianDecision?.action !== "EXIT" &&
+    latestGuardianDecision?.action !== "PROTECT" &&
+    reversalThreat < 30;
+  if (!protectionApproved) {
+    reasons.push(
+      `PROTECTION_VETO (action=${latestGuardianDecision?.action}, reversalThreat=${reversalThreat}% >= 30%)`,
+    );
+  }
+  const crossAssetSevereDivergence =
+    latestCrossAssetContext.state === "BTC_DIVERGENCE" &&
+    latestCrossAssetContext.riskPenalty >= 8 &&
+    latestCrossAssetContext.directionalAgreementRatio === 0;
+  if (crossAssetSevereDivergence) {
+    reasons.push("CROSS_ASSET_SEVERE_DIVERGENCE");
+  }
+  const predictionComputedFromCurrentCycle = Boolean(
+    active15mCycle.cycleId && currentCycle && cycleExpiryFuture,
+  );
+  if (!predictionComputedFromCurrentCycle)
+    reasons.push("PREDICTION_CYCLE_MISMATCH");
+  const validationPassed = Boolean(
+    minimumObservationWindowPassed &&
+    withinEntryWindow &&
+    dataFresh &&
+    cryptoTracking &&
+    algorithm &&
+    authoritativeState &&
+    vixyWebSocket &&
+    currentCycle &&
+    cycleExpiryFuture &&
+    latencyAcceptable &&
+    calibrationComplete &&
+    analysisComplete &&
+    isNotChoppy &&
+    signalPersistent &&
+    dataQualityPass &&
+    lockQualityPass &&
+    evidenceAgreementPass &&
+    mtfPass &&
+    strikeFeasiblePass &&
+    reversalThreatPass &&
+    evidenceSufficient &&
+    rollingStabilityPassed &&
+    !active15mCycle.hasConflict &&
+    !active15mCycle.signalUnstable &&
+    protectionApproved &&
+    !crossAssetSevereDivergence &&
+    predictionComputedFromCurrentCycle,
+  );
+  const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
+  if (alreadyLocked) reasons.push("ALREADY_LOCKED");
+  const allowed = !alreadyLocked && validationPassed;
+  const dir =
+    currentDirection === "DOWN"
+      ? "DOWN"
+      : currentDirection === "UP"
+        ? "UP"
+        : currentModelProbability >= 0.5
+          ? "UP"
+          : "DOWN";
+  active15mCycle.lockEligibility = {
+    eligible: allowed,
+    reason: reasons[0] || "QUALIFIED_ENTRY_WINDOW",
+    elapsedSeconds,
+    remainingSeconds,
+    minimumElapsedSeconds: 360,
+    preferredWindow: elapsedSeconds >= 360 && elapsedSeconds <= 600,
+  };
+  return {
+    allowed,
+    cycleId,
+    calibrationComplete,
+    analysisComplete,
+    validationPassed,
+    dataFresh,
+    cryptoTracking,
+    algorithm,
+    authoritativeState,
+    vixyWebSocket,
+    currentCycle,
+    cycleExpiryFuture,
+    dataAgeMs,
+    latencyMs,
+    evidenceSufficient,
+    predictionComputedFromCurrentCycle,
+    predictionDirection: dir,
+    predictionProbability: currentModelProbability,
+    predictionConfidence: currentConfidence,
+    reasons: reasons.length > 0 ? reasons : ["READY_TO_LOCK"],
+  };
+}
+__name(canLockCurrentCycle, "canLockCurrentCycle");
+async function lock15mCycle(cycleId, livePrice, forcedReason) {
+  if (active15mCycle.cycleId !== cycleId) {

@@ -1,3 +1,4 @@
+import { loadPersistentStore as loadPersistentStoreExt, loadPersistentStoreAsync as loadPersistentStoreAsyncExt } from "./src/services/persistentStoreLoaders";
 import {
   encryptString,
   decryptString,
@@ -14801,173 +14802,66 @@ function ensureUserExists(input, options) {
   return user;
 }
 __name(ensureUserExists, "ensureUserExists");
+
+
 function loadPersistentStore() {
-  try {
-    if (fs.existsSync(STORE_FILE_PATH)) {
-      const raw = fs.readFileSync(STORE_FILE_PATH, "utf-8");
-      const data = JSON.parse(raw);
-      if (Array.isArray(data.users) && data.users.length > 0) {
-        data.users.forEach((savedUser) => {
-          if (!savedUser) return;
-          const matchByUid =
-            savedUser.uid &&
-            serverUsers.find(
-              (u) => u.uid === savedUser.uid || u.id === savedUser.uid,
-            );
-          const matchByEmail =
-            savedUser.email &&
-            serverUsers.find(
-              (u) => u.email?.toLowerCase() === savedUser.email.toLowerCase(),
-            );
-          const existing = matchByUid || matchByEmail;
-          if (!existing) {
-            serverUsers.push(savedUser);
-          } else {
-            if (
-              savedUser.passwordHash &&
-              savedUser.passwordHash !== "AuthManaged2026!" &&
-              savedUser.passwordHash.length > 0
-            ) {
-              existing.passwordHash = savedUser.passwordHash;
-            }
-            if (savedUser.uid && !existing.uid) existing.uid = savedUser.uid;
-            if (savedUser.stripeCustomerId && !existing.stripeCustomerId)
-              existing.stripeCustomerId = savedUser.stripeCustomerId;
-            if (
-              savedUser.stripeSubscriptionId &&
-              !existing.stripeSubscriptionId
-            )
-              existing.stripeSubscriptionId = savedUser.stripeSubscriptionId;
-            if (savedUser.discordId && !existing.discordId)
-              existing.discordId = savedUser.discordId;
-            if (savedUser.discordTag && !existing.discordTag)
-              existing.discordTag = savedUser.discordTag;
-            if (savedUser.discordLinked && !existing.discordLinked)
-              existing.discordLinked = savedUser.discordLinked;
-            if (savedUser.joined && !existing.joined)
-              existing.joined = savedUser.joined;
-            if (savedUser.verificationStatus && !existing.verificationStatus)
-              existing.verificationStatus = savedUser.verificationStatus;
-            if (savedUser.hardwareFingerprint && !existing.hardwareFingerprint)
-              existing.hardwareFingerprint = savedUser.hardwareFingerprint;
-            if (savedUser.ipHash && !existing.ipHash)
-              existing.ipHash = savedUser.ipHash;
-            if (savedUser.status && !existing.status)
-              existing.status = savedUser.status;
-            if (
-              savedUser.volumeTrades !== void 0 &&
-              existing.volumeTrades === void 0
-            )
-              existing.volumeTrades = savedUser.volumeTrades;
-          }
-        });
-      }
-      if (data.profiles && typeof data.profiles === "object") {
-        Object.entries(data.profiles).forEach(([k, v]) => {
-          userDiscordProfiles.set(k, v);
-        });
-      }
-      if (data.subscriptions && typeof data.subscriptions === "object") {
-        Object.entries(data.subscriptions).forEach(([k, v]) => {
-          userSubscriptions.set(k, v);
-        });
-      }
-      if (data.dayPasses && typeof data.dayPasses === "object") {
-        Object.entries(data.dayPasses).forEach(([k, v]) => {
-          userDayPasses.set(k, v);
-        });
-      }
-      if (Array.isArray(data.signalLogs) && data.signalLogs.length > 0) {
-        data.signalLogs.forEach((savedLog) => {
-          if (!savedLog || !savedLog.id) return;
-          if (savedLog.status === "RESOLVED") {
-            const start = savedLog.intervalStart
-              ? new Date(savedLog.intervalStart).getTime()
-              : 0;
-            const lock = savedLog.lockedAt
-              ? new Date(savedLog.lockedAt).getTime()
-              : 0;
-            const elapsed =
-              start && lock ? Math.floor((lock - start) / 1e3) : 400;
-            const spot = savedLog.spotAtLock || savedLog.entryPrice || 0;
-            const strike = savedLog.targetStrike || savedLog.strike || 0;
-            const dist = spot && strike ? Math.abs(spot - strike) : 100;
-            const isGoodTiming = elapsed >= 360 && elapsed <= 720;
-            const isGoodDistance = dist >= 15;
-            const prob =
-              savedLog.lockedProbability || savedLog.probability || 0.68;
-            const probDelta = Math.abs(prob - 0.5);
-            let calibratedConf = 50;
-            if (isGoodTiming || isGoodDistance) {
-              const confVal =
-                68.5 +
-                probDelta * 8 -
-                (savedLog.reversalRisk ? savedLog.reversalRisk * 0.05 : 0);
-              calibratedConf = Math.min(73, Math.max(66, Math.round(confVal)));
-            } else {
-              const confVal = 41.8 + probDelta * 5;
-              calibratedConf = Math.min(45, Math.max(40, Math.round(confVal)));
-            }
-            savedLog.confidence = calibratedConf;
-            savedLog.confidencePct = calibratedConf;
-            const wasCorrect =
-              savedLog.wasCorrect === true ||
-              String(savedLog.wasCorrect) === "true";
-            savedLog.brierScore =
-              Math.round(
-                Math.pow(calibratedConf / 100 - (wasCorrect ? 1 : 0), 2) * 1e3,
-              ) / 1e3;
-          }
-          const existingIdx = persistentSignalLogs.findIndex(
-            (s) => s.id === savedLog.id,
-          );
-          if (existingIdx === -1) {
-            persistentSignalLogs.push(savedLog);
-          } else {
-            persistentSignalLogs[existingIdx] = {
-              ...persistentSignalLogs[existingIdx],
-              ...savedLog,
-            };
-          }
-        });
-        persistentSignalLogs.sort(
-          (a, b) =>
-            new Date(b.lockedAt || 0).getTime() -
-            new Date(a.lockedAt || 0).getTime(),
-        );
-      }
-      if (
-        Array.isArray(data.telemetryObservations) &&
-        data.telemetryObservations.length > 0
-      ) {
-        data.telemetryObservations.forEach((obs) => {
-          if (!obs || !obs.id) return;
-          if (!persistentTelemetryObservations.some((o) => o.id === obs.id)) {
-            persistentTelemetryObservations.push(obs);
-          }
-        });
-        persistentTelemetryObservations.sort(
-          (a, b) => b.timestampMs - a.timestampMs,
-        );
-      }
-      if (data.circuitState && typeof data.circuitState === "object") {
-        const cs = data.circuitState;
-        if (
-          cs.firestoreRetryAtMs &&
-          typeof cs.firestoreRetryAtMs === "number"
-        ) {
-          if (cs.firestoreRetryAtMs > Date.now()) {
-            firestoreRetryAtMs = cs.firestoreRetryAtMs;
-            firestoreRetryAt =
-              cs.firestoreRetryAt || new Date(firestoreRetryAtMs).toISOString();
-            firestoreBackoffMs = cs.firestoreBackoffMs || 15 * 60 * 1e3;
-            lastFirestoreWriteError =
-              cs.lastFirestoreWriteError || "RESOURCE_EXHAUSTED";
-            persistenceState = db
-              ? "DEGRADED_LOCAL_FAxœœYmoã6ş_ÁÁB¾Ú Ü‡îÖ›¸»A'']‹Àa$ÚV#K*I;›Mıß;CRIÉ©ïR`m“Ã™á¼<3ÃÇ‡g¿Äù;!Áøêl8_L]MÆ¿§I\ä¢ÈXôLyz‡¾şrq3šŞ^İŒfg7gw·÷äóKÂ©d	¹ºMHœòxJòÈ}bœ	{dÎ‹IRñDb/)ròX2"œIş2”ƒ£×yÊ™g7ziûĞw¤÷\5Ó9	“Gòî9¬ON˜|.øÓy*ècÆ’yõôßEIDò5;õÈ½mˆA\/Š©Œ—aÈ8ï‘ÁO}c<Ø/¸o=üº,8Bj#-Í$×Áv`ÄUe¬“ ßÁ$µ—{ş’g¼­õkKX&˜g*ß—Lt|ú&Päë,ërS”Œ‹TH–Çlª"b@‚Ï£áøöóï³Ú"N$6:VßªOä9äœ¾D©PŸaB%À~qÁ“éKÿwÍÖ¬gûßßŒ2–/äÒ½U'›h^ğE§§’­Ğë­ZäåZ,5iÃx[·ïà‹»;¦±Ø¡¶ÙmñQÔÁ¡ïtËi¨¶;µ‹i–>Bv§E®İù&_JVÌI÷ş` -ÿ`±ì‹d°)äY‹Ü¿L7]×…|Ñû\'c ja£|‘æ­Ëx»»®r¥–"*DºÈCÁø†ñ±s´ßÅow¬hšCfĞ:7<½Zû»4+y‘¬c´Èeëˆoèİ´]ÆöUxÃØfÅ¢À‡¯SDŠ{2.hx{ôªívÂäâ–¬ñW6ñË¹Øk^ÌÓŒ‰H¤ßÙ–˜U¼ªZ®¨§ëGó´ÄU´Â^CÂ„ä\G³q±h„µD@mAŞ9Ä·,c+Ä¸«GÔšjÕ9Yí’ÂÚ¶*ÂÈ¨®f&Ğ\[¢Ê	ÑåD;È)¿Ae¶I!Ó˜r4Á¡X6" 2`Pœ·ÛƒÙ,§+"õuse<Ó'AÇj '© d óu®b‚tP‘"Ôzbì"®w(mî	•®*÷¤şJRAòB’4Oe
-ü%™>¥e‰÷jÈPVd
-±´
-kë;bš%@m)ë“_8`oØuK¥ĞÛ[ç3ÓÉ€ÆØÙìT³nfŞRãÃ•‹ùáÈCh^ò"O¿kcÚ>§P£jÈÆÀpG.R'Ì4§%ä7}¦ ì‚Éó"a\dS®„ò^W”py}:c’Ì„KTë\6µ*	µ„¤ˆÀ¢ZX‹V•2„ ÀÁĞ+ÔkÈ« ‘Mc^š¿şÒğÆ \2õËœM§t·ıá‡¦²já1@m>R|F@Í5z‘,ÆÅ3ãgT°~ñtZÕµ³0Ïbvˆ@»I¿½lè:“Ç?/p5Š‹U 7±h‘Üª±ùêËdtÔ7l6†ç—“ Wu[T‹˜wS`a7DMUÚåB¹Üo6Á˜¶çû¶uıîğ• Ğ#“lÛû+Æ@€M²¿í´–¢ÁÍÚ\å¯}|¹ƒ(ø÷_Ã¢c\»RÌÓ<	ÃµêÂÖŠÍZŸƒ¯#o±ç‹nÂ¥Ûñ{* ‚ìƒ^JxÃª%}LÂØf Ím½Üà<¬Î¸ábë¥ºN¼²İu¶;{+³¿>õÉæÛ44€“<eBsñg'TãIÇp	Œ'Ég*–A{Æò²Iÿm\‹ê?Óãl4[và†Aá¦êÖ"Çû:Q‡k¹¼¤9]°äÇãÿsè¾m]whKHmñÈ¾-xioÚ œKñ <Tr¶ê<¿é"mtÊÒ­æ€lüQÖùÚ¿M¬ 9´57D%ZÛXG»¶•ü¯O÷m©Î”¹cšÓÿ
-ŠíÀw6Ì“IÁWª/˜6Ñ:EÛº½jÓÿuÕ>l½ÒW1o¦>ƒ›Îà÷?–<zÛu­VÂ.k--“aÃGOŞHQM™v¡¨4}¹† aûÙ¨g¥"¯F\o[g/ûìc!m‡óJòÛ6°Yj`îu¯w]Ô~‹r¹HvrÓÛ-uœWU“rÔ´û­†ßjõ³PÕó7^!Ã°ó×üN­t²B¼Ÿ¼0×‚!*fBˆ…ª{Rİ^Ùòªç®‹®Xv¤µÛ43´A½ñæQå¿¬Œ;jZ9»õ0/wÊü'Îã^3=%ø¦ûI'bÕ"q«ÖÁ;¢4©æP\ìÒêSV<ÒlÒ-aQoúÁ–÷ém*KMgóUÂˆJ¹1U?ì§6-¥,[¥éÃNFøØü€gÄÉû÷q’W£e‰=ô{}D¼?zU^Úâ—†Õ6*óÅÃË«PÇÛƒ
-ÿÅ@Ãæfy 5f´à§ƒ«ÊÇ’Nq^áÛ…ÕÕËÆ~P­•›U‡,À¶ùü^·€ tAÛ™ê¢ãJüÿ Í»…p_âì)ºı¸ÔGí·#ı€Rkõ ßOŞx“Ñ¯úÎE>Âà¯_Ô¦ÿã?«¨lÒyI1N/8¢ó¿@›ÈDŸ@[¾‰&Wç£Ùhò›îs›§»ÀÖPÂœsF¥ià*Uø¤+€Í¥dî®òŠØæV®Ô³Æ	‚i’d\Ê.‹ÄÌ„}²\ÁæœbYÏ‡ç·ĞâÃ\)Jj¨
-Ä È®°‘5Œ…ñ„5¾˜ºÍkªíKøˆş(Ò¼6Tüœ`¤bNÈÀÃ¾•iğU%…è6|z¤XüürögŸ v’p•úyòDNØ¯8\˜Ù·h)WY…[ZD¦^£BôĞGê?”hIrÛxFŸÃLR¡rôŠ[²ğ/ÈP“¢5¿nÎFcõ¿ÈÜ`ú2»}º¸šèèqbRqk¡WTºoï#j™Í„ÍñMINş  ÿÿ ô§V
+  const result = loadPersistentStoreExt({
+    fs, STORE_FILE_PATH, db, disableNetwork,
+    serverUsers, userDiscordProfiles, userSubscriptions, userDayPasses,
+    persistentSignalLogs, persistentTelemetryObservations,
+    firestoreRetryAtMs, firestoreRetryAt, firestoreBackoffMs,
+    lastFirestoreWriteError, persistenceState, firestoreNetworkDisabled,
+    discordSyncQueue, discordSyncMetrics, latestCalibrationState,
+    serverLearningEngine, productionMaintenanceState
+  });
+  if (result) {
+    firestoreRetryAtMs = result.firestoreRetryAtMs;
+    firestoreRetryAt = result.firestoreRetryAt;
+    firestoreBackoffMs = result.firestoreBackoffMs;
+    lastFirestoreWriteError = result.lastFirestoreWriteError;
+    persistenceState = result.persistenceState;
+    firestoreNetworkDisabled = result.firestoreNetworkDisabled;
+    discordSyncMetrics = result.discordSyncMetrics;
+    latestCalibrationState = result.latestCalibrationState;
+    productionMaintenanceState = result.productionMaintenanceState;
+  }
+}
+__name(loadPersistentStore, "loadPersistentStore");
+
+async function loadPersistentStoreAsync() {
+  return loadPersistentStoreAsyncExt({
+    db, canAttemptFirestoreWrite, getDocs, collection, setDoc, doc,
+    serverUsers, sanitizeAndNormalizeServerUsers, userSubscriptions,
+    userDayPasses, userDiscordProfiles
+  });
+}
+__name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
+
+async function startServer() {
+  const port = 3000;
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer } = await import("vite");
+    const viteServer = await createServer({
+      server: { middlewareMode: true, hmr: false },
+      appType: "spa",
+    });
+    app.use(viteServer.middlewares);
+  } else {
+    const distPath = require("path").join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(require("path").join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+if (!process.env.VERCEL && !process.env.NOW_REGION) {
+  startServer();
+}
+
+export { app, startServer };
+export default app;

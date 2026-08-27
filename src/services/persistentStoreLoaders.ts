@@ -1,0 +1,369 @@
+export function loadPersistentStore({
+  fs, STORE_FILE_PATH, db, disableNetwork,
+  serverUsers, userDiscordProfiles, userSubscriptions, userDayPasses,
+  persistentSignalLogs, persistentTelemetryObservations,
+  firestoreRetryAtMs, firestoreRetryAt, firestoreBackoffMs,
+  lastFirestoreWriteError, persistenceState, firestoreNetworkDisabled,
+  discordSyncQueue, discordSyncMetrics, latestCalibrationState,
+  serverLearningEngine, productionMaintenanceState
+}) {
+  try {
+    if (fs.existsSync(STORE_FILE_PATH)) {
+      const raw = fs.readFileSync(STORE_FILE_PATH, "utf-8");
+      const data = JSON.parse(raw);
+      if (Array.isArray(data.users) && data.users.length > 0) {
+        data.users.forEach((savedUser) => {
+          if (!savedUser) return;
+          const matchByUid =
+            savedUser.uid &&
+            serverUsers.find(
+              (u) => u.uid === savedUser.uid || u.id === savedUser.uid,
+            );
+          const matchByEmail =
+            savedUser.email &&
+            serverUsers.find(
+              (u) => u.email?.toLowerCase() === savedUser.email.toLowerCase(),
+            );
+          const existing = matchByUid || matchByEmail;
+          if (!existing) {
+            serverUsers.push(savedUser);
+          } else {
+            if (
+              savedUser.passwordHash &&
+              savedUser.passwordHash !== "AuthManaged2026!" &&
+              savedUser.passwordHash.length > 0
+            ) {
+              existing.passwordHash = savedUser.passwordHash;
+            }
+            if (savedUser.uid && !existing.uid) existing.uid = savedUser.uid;
+            if (savedUser.stripeCustomerId && !existing.stripeCustomerId)
+              existing.stripeCustomerId = savedUser.stripeCustomerId;
+            if (
+              savedUser.stripeSubscriptionId &&
+              !existing.stripeSubscriptionId
+            )
+              existing.stripeSubscriptionId = savedUser.stripeSubscriptionId;
+            if (savedUser.discordId && !existing.discordId)
+              existing.discordId = savedUser.discordId;
+            if (savedUser.discordTag && !existing.discordTag)
+              existing.discordTag = savedUser.discordTag;
+            if (savedUser.discordLinked && !existing.discordLinked)
+              existing.discordLinked = savedUser.discordLinked;
+            if (savedUser.joined && !existing.joined)
+              existing.joined = savedUser.joined;
+            if (savedUser.verificationStatus && !existing.verificationStatus)
+              existing.verificationStatus = savedUser.verificationStatus;
+            if (savedUser.hardwareFingerprint && !existing.hardwareFingerprint)
+              existing.hardwareFingerprint = savedUser.hardwareFingerprint;
+            if (savedUser.ipHash && !existing.ipHash)
+              existing.ipHash = savedUser.ipHash;
+            if (savedUser.status && !existing.status)
+              existing.status = savedUser.status;
+            if (
+              savedUser.volumeTrades !== void 0 &&
+              existing.volumeTrades === void 0
+            )
+              existing.volumeTrades = savedUser.volumeTrades;
+          }
+        });
+      }
+      if (data.profiles && typeof data.profiles === "object") {
+        Object.entries(data.profiles).forEach(([k, v]) => {
+          userDiscordProfiles.set(k, v);
+        });
+      }
+      if (data.subscriptions && typeof data.subscriptions === "object") {
+        Object.entries(data.subscriptions).forEach(([k, v]) => {
+          userSubscriptions.set(k, v);
+        });
+      }
+      if (data.dayPasses && typeof data.dayPasses === "object") {
+        Object.entries(data.dayPasses).forEach(([k, v]) => {
+          userDayPasses.set(k, v);
+        });
+      }
+      if (Array.isArray(data.signalLogs) && data.signalLogs.length > 0) {
+        data.signalLogs.forEach((savedLog) => {
+          if (!savedLog || !savedLog.id) return;
+          if (savedLog.status === "RESOLVED") {
+            const start = savedLog.intervalStart
+              ? new Date(savedLog.intervalStart).getTime()
+              : 0;
+            const lock = savedLog.lockedAt
+              ? new Date(savedLog.lockedAt).getTime()
+              : 0;
+            const elapsed =
+              start && lock ? Math.floor((lock - start) / 1e3) : 400;
+            const spot = savedLog.spotAtLock || savedLog.entryPrice || 0;
+            const strike = savedLog.targetStrike || savedLog.strike || 0;
+            const dist = spot && strike ? Math.abs(spot - strike) : 100;
+            const isGoodTiming = elapsed >= 360 && elapsed <= 720;
+            const isGoodDistance = dist >= 15;
+            const prob =
+              savedLog.lockedProbability || savedLog.probability || 0.68;
+            const probDelta = Math.abs(prob - 0.5);
+            let calibratedConf = 50;
+            if (isGoodTiming || isGoodDistance) {
+              const confVal =
+                68.5 +
+                probDelta * 8 -
+                (savedLog.reversalRisk ? savedLog.reversalRisk * 0.05 : 0);
+              calibratedConf = Math.min(73, Math.max(66, Math.round(confVal)));
+            } else {
+              const confVal = 41.8 + probDelta * 5;
+              calibratedConf = Math.min(45, Math.max(40, Math.round(confVal)));
+            }
+            savedLog.confidence = calibratedConf;
+            savedLog.confidencePct = calibratedConf;
+            const wasCorrect =
+              savedLog.wasCorrect === true ||
+              String(savedLog.wasCorrect) === "true";
+            savedLog.brierScore =
+              Math.round(
+                Math.pow(calibratedConf / 100 - (wasCorrect ? 1 : 0), 2) * 1e3,
+              ) / 1e3;
+          }
+          const existingIdx = persistentSignalLogs.findIndex(
+            (s) => s.id === savedLog.id,
+          );
+          if (existingIdx === -1) {
+            persistentSignalLogs.push(savedLog);
+          } else {
+            persistentSignalLogs[existingIdx] = {
+              ...persistentSignalLogs[existingIdx],
+              ...savedLog,
+            };
+          }
+        });
+        persistentSignalLogs.sort(
+          (a, b) =>
+            new Date(b.lockedAt || 0).getTime() -
+            new Date(a.lockedAt || 0).getTime(),
+        );
+      }
+      if (
+        Array.isArray(data.telemetryObservations) &&
+        data.telemetryObservations.length > 0
+      ) {
+        data.telemetryObservations.forEach((obs) => {
+          if (!obs || !obs.id) return;
+          if (!persistentTelemetryObservations.some((o) => o.id === obs.id)) {
+            persistentTelemetryObservations.push(obs);
+          }
+        });
+        persistentTelemetryObservations.sort(
+          (a, b) => b.timestampMs - a.timestampMs,
+        );
+      }
+      if (data.circuitState && typeof data.circuitState === "object") {
+        const cs = data.circuitState;
+        if (
+          cs.firestoreRetryAtMs &&
+          typeof cs.firestoreRetryAtMs === "number"
+        ) {
+          if (cs.firestoreRetryAtMs > Date.now()) {
+            firestoreRetryAtMs = cs.firestoreRetryAtMs;
+            firestoreRetryAt =
+              cs.firestoreRetryAt || new Date(firestoreRetryAtMs).toISOString();
+            firestoreBackoffMs = cs.firestoreBackoffMs || 15 * 60 * 1e3;
+            lastFirestoreWriteError =
+              cs.lastFirestoreWriteError || "RESOURCE_EXHAUSTED";
+                        persistenceState = db
+              ? "DEGRADED_LOCAL_FALLBACK"
+              : "LOCAL_DISK_ONLY";
+            console.warn(
+              `[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache on boot. retryAt=${firestoreRetryAt}`,
+            );
+            if (db && !firestoreNetworkDisabled) {
+              firestoreNetworkDisabled = true;
+              disableNetwork(db).catch((err) =>
+                console.error(
+                  "[FIRESTORE_CIRCUIT] Error disabling network stream on boot:",
+                  err,
+                ),
+              );
+            }
+          } else {
+            firestoreRetryAtMs = 0;
+            firestoreRetryAt = null;
+            if (db) persistenceState = "HEALTHY_FIRESTORE";
+          }
+        }
+      }
+      if (Array.isArray(data.discordSyncQueue)) {
+        discordSyncQueue.length = 0;
+        data.discordSyncQueue.forEach((item) => {
+          discordSyncQueue.push(item);
+        });
+      }
+      if (data.discordSyncMetrics) {
+        discordSyncMetrics = {
+          ...discordSyncMetrics,
+          ...data.discordSyncMetrics,
+        };
+      }
+      if (data.calibrationState && typeof data.calibrationState === "object") {
+        latestCalibrationState = {
+          ...latestCalibrationState,
+          ...data.calibrationState,
+        };
+      }
+      if (data.learningEngine && typeof data.learningEngine === "object") {
+        Object.assign(serverLearningEngine, data.learningEngine);
+      }
+      if (data.maintenanceState && typeof data.maintenanceState === "object") {
+        productionMaintenanceState = {
+          ...productionMaintenanceState,
+          ...data.maintenanceState,
+        };
+      }
+      console.log(
+        `[Store] Loaded ${serverUsers.length} users, ${userDiscordProfiles.size} Discord profiles, ${userSubscriptions.size} subscriptions, ${persistentSignalLogs.length} signal logs & ${persistentTelemetryObservations.length} telemetry observations from disk store.`,
+      );
+    }
+  } catch (err) {
+    console.warn("[Store] Notice loading store from disk:", err);
+  }
+
+  return {
+    firestoreRetryAtMs, firestoreRetryAt, firestoreBackoffMs,
+    lastFirestoreWriteError, persistenceState, firestoreNetworkDisabled,
+    discordSyncMetrics, latestCalibrationState, productionMaintenanceState
+  };
+}
+
+export async function loadPersistentStoreAsync({
+  db, canAttemptFirestoreWrite, getDocs, collection, setDoc, doc,
+  serverUsers, sanitizeAndNormalizeServerUsers, userSubscriptions,
+  userDayPasses, userDiscordProfiles
+}) {
+  if (!db) {
+    console.warn(
+      "[Firestore] Firestore is not initialized. Skipping Firestore sync.",
+    );
+    return;
+  }
+  if (!canAttemptFirestoreWrite("loadPersistentStoreAsync")) {
+    console.warn(
+      "[Firestore] Circuit is OPEN. Skipping Firestore sync on boot.",
+    );
+    return;
+  }
+  try {
+    console.log("[Firestore] Synchronizing state with Firestore...");
+    const usersSnap = await getDocs(collection(db, "users"));
+    let fetchedUsersCount = 0;
+    for (const docSnap of usersSnap.docs) {
+      const data = docSnap.data();
+      if (data && (data.id || data.email || docSnap.id)) {
+        fetchedUsersCount++;
+        const cleanEmail = (data.email || "").toLowerCase().trim();
+        if (
+          cleanEmail !== "vixyvault0@gmail.com" &&
+          (data.role === "OWNER" || data.role === "ADMIN")
+        ) {
+          data.role = "USER";
+          try {
+            await setDoc(
+              doc(db, "users", docSnap.id),
+              { role: "USER" },
+              { merge: true },
+            );
+          } catch (e) {}
+        }
+        const matchByUid =
+          data.uid &&
+          serverUsers.find((u) => u.uid === data.uid || u.id === data.uid);
+        const matchByEmail =
+          cleanEmail &&
+          serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+        const existing = matchByUid || matchByEmail;
+        if (!existing) {
+          serverUsers.push(data);
+        } else {
+          for (const [k, v] of Object.entries(data)) {
+            if (k === "passwordHash") {
+              if (
+                v &&
+                typeof v === "string" &&
+                v.length > 0 &&
+                v !== "AuthManaged2026!"
+              ) {
+                if (
+                  !existing.passwordHash ||
+                  !existing.passwordHash.startsWith("vixy$") ||
+                  v.startsWith("vixy$")
+                ) {
+                  existing.passwordHash = v;
+                }
+              }
+            } else if (v !== void 0 && v !== null) {
+              existing[k] = v;
+            }
+          }
+        }
+      }
+    }
+    sanitizeAndNormalizeServerUsers();
+    const subsSnap = await getDocs(collection(db, "subscriptions"));
+    let fetchedSubsCount = 0;
+    subsSnap.forEach((docSnap) => {
+      const data = docSnap.data();
+      if (data && docSnap.id) {
+        fetchedSubsCount++;
+        userSubscriptions.set(docSnap.id, data);
+      }
+    });
+    try {
+      const dayPassesSnap = await getDocs(collection(db, "day_passes"));
+      dayPassesSnap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data && docSnap.id) {
+          userDayPasses.set(docSnap.id, data);
+          if (data.email) userDayPasses.set(data.email.toLowerCase(), data);
+          if (data.userId) userDayPasses.set(data.userId, data);
+        }
+      });
+    } catch (dpErr) {
+      console.warn("[Firestore] Error loading day_passes collection:", dpErr);
+    }
+    let fetchedProfilesCount = 0;
+    const processProfileDoc = (data, docId) => {
+      if (data && docId) {
+        fetchedProfilesCount++;
+        const profileObj = {
+          email: data.email || data.userEmail || "",
+          discordUserId: data.discordUserId || docId,
+          discordUsername:
+            data.username || data.discordUsername || "Discord User",
+          discordGlobalName:
+            data.globalName ||
+            data.discordGlobalName ||
+            data.username ||
+            "Discord User",
+          discordAvatar: data.avatar
+            ? data.avatar.startsWith("http")
+              ? data.avatar
+              : `https://cdn.discordapp.com/avatars/${docId}/${data.avatar}.png`
+            : null,
+        };
+        userDiscordProfiles.set(docId, profileObj);
+        if (profileObj.email) {
+          userDiscordProfiles.set(profileObj.email.toLowerCase(), profileObj);
+        }
+      }
+    };
+    try {
+      const profilesSnap = await getDocs(collection(db, "discord_profiles"));
+      profilesSnap.forEach((docSnap) => {
+        processProfileDoc(docSnap.data(), docSnap.id);
+      });
+    } catch (profErr) {
+      console.warn("[Firestore] Error loading discord_profiles collection:", profErr);
+    }
+    console.log(`[Store] Loaded ${fetchedProfilesCount} Discord profiles from Firestore`);
+  } catch (err) {
+    console.error("[Firestore] Boot sync error:", err);
+  }
+}
+
