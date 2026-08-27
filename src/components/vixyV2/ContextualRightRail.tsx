@@ -194,8 +194,7 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
       <V2Panel title="VIXY READ" icon={Activity} padding="sm">
         <div className="space-y-2">
           <p className="text-[11px] font-sans text-slate-300 leading-relaxed">
-            {(decision as any)?.aiExplanation ||
-              'Strong momentum and improving order flow are supporting the current bullish structure. Cross-venue alignment remains favorable while volatility remains controlled.'}
+            {evidenceSummary.dynamicExplanation}
           </p>
           {onOpenPredictionCenter && (
             <button
