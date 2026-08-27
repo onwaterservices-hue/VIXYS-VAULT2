@@ -260,7 +260,7 @@ export default function App() {
           const res = await fetch(`/api/entitlements?email=${encodeURIComponent(authState.user.email)}&userId=${encodeURIComponent(curUserId)}`);
           if (res.ok) {
             const ent = await res.json();
-            if (ent.dayPass?.active || ent.status === 'active' || ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'PRO_QUANT' || ent.plan === 'PRO' || ent.plan === 'STARTER' || ent.plan === 'DAY_PASS') {
+            if (ent.dayPass?.active || ent.status === 'active' || ent.status === 'trialing' || ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.plan === 'PRO_QUANT' || ent.plan === 'PRO' || ent.plan === 'STARTER' || ent.plan === 'DAY_PASS') {
               clearInterval(pollInterval);
               setPaymentVerificationText('PAYMENT VERIFIED');
               
@@ -360,7 +360,7 @@ export default function App() {
 
           const isSubActive =
             canonicalAccess?.access === true ||
-            mergedEnt.status === 'active' ||
+            mergedEnt.status === 'active' || mergedEnt.status === 'trialing' ||
             mergedEnt.dayPass?.active;
 
           setSubscription({
@@ -396,7 +396,7 @@ export default function App() {
         } else if (
           rawRole === 'PRO' || rawRole === 'STARTER' || rawPlan.includes('PRO') || rawPlan.includes('STARTER') ||
           canonicalAccess?.access === true || mergedEnt?.entitlements?.proQuant || mergedEnt?.entitlements?.starter ||
-          isDayPassActive || mergedEnt?.status === 'active'
+          isDayPassActive || mergedEnt?.status === 'active' || mergedEnt?.status === 'trialing'
         ) {
           computedRole = 'PRO';
         } else {
@@ -407,7 +407,7 @@ export default function App() {
         const hasAccess =
           canonicalAccess?.access === true ||
           isStaff ||
-          (computedRole !== 'UNPAID' && (mergedEnt?.status === 'active' || isDayPassActive));
+          (computedRole !== 'UNPAID' && (mergedEnt?.status === 'active' || mergedEnt?.status === 'trialing' || isDayPassActive));
 
         setUserRole(computedRole);
         setTerminalAccessGranted(Boolean(hasAccess));
