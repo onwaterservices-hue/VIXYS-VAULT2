@@ -1,11 +1,48 @@
-import re
+with open('server.ts', 'r', encoding='utf-8', errors='ignore') as f:
+    lines = f.readlines()
 
-with open('server.ts', 'r') as f:
-    code = f.read()
+out_lines = lines[:14968]
+out_lines.append("            console.warn(`[FIRESTORE_CIRCUIT] Hydrated OPEN circuit breaker state from disk cache`);\n")
+out_lines.append("          }\n")
+out_lines.append("        }\n")
+out_lines.append("      }\n")
+out_lines.append("    }\n")
+out_lines.append("  } catch (err) {\n")
+out_lines.append("    console.error('[Firestore] Boot sync error:', err);\n")
+out_lines.append("  }\n")
+out_lines.append("}\n\n")
 
-code = code.replace("let currentConfidence = 88.5;", "let currentConfidence = 88.5;\nlet currentBullVolumePct = 50;\nlet currentMomentum = 0;")
-code = code.replace("const bullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 1.5)));", "const bullVolumePct = Math.min(90, Math.max(20, Math.round(55 + change24h * 1.5)));\n    currentBullVolumePct = bullVolumePct;\n    currentMomentum = change24h;")
+out_lines.append("""
+async function startServer() {
+  const port = 3000;
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer } = await import("vite");
+    const viteServer = await createServer({
+      server: { middlewareMode: true, hmr: false },
+      appType: "spa",
+    });
+    app.use(viteServer.middlewares);
+  } else {
+    const path = await import("path");
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
 
-with open('server.ts', 'w') as f:
-    f.write(code)
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
 
+if (!process.env.VERCEL && !process.env.NOW_REGION) {
+  startServer();
+}
+
+export { app, startServer };
+export default app;
+""")
+
+with open('server.ts', 'w', encoding='utf-8') as f:
+    f.writelines(out_lines)
