@@ -1,5 +1,8 @@
 // @ts-ignore
-import { app } from '../dist/server.cjs';
+const server = require('../dist/server.cjs');
+const app = server.default || server.app || server;
 
-export default app;
+export default function handler(req: any, res: any) {
+  return app(req, res);
+}
 

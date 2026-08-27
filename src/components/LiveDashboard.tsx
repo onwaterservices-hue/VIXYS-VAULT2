@@ -709,7 +709,7 @@ export const LiveDashboard: React.FC<LiveDashboardProps> = ({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} />
+              <VixyAiStatusCard onOpenPricing={onOpenPricing} userRole={userRole} ticker={ticker} />
               <AIBrainMemoryVault asset={selectedAsset} desk={timeframe.toLowerCase()} />
             </div>
           </div>

@@ -673,6 +673,16 @@ export default function App() {
             }
           });
           setSpotPrices((prev) => ({ ...prev, ...map }));
+
+          const currentLive = map[selectedAsset];
+          if (currentLive) {
+            setTicker((prev) => ({
+              ...prev,
+              price: currentLive.price,
+              change24h: currentLive.change24h,
+              timestamp: Date.now(),
+            }));
+          }
         }
       } catch (e) {
         // Ignore
@@ -680,24 +690,61 @@ export default function App() {
     };
 
     updateAllPrices();
-    const interval = setInterval(updateAllPrices, 15000);
+    const interval = setInterval(updateAllPrices, 5000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [selectedAsset]);
 
-  // When selectedAsset changes, sync Ticker
+  // When selectedAsset changes, sync Ticker from live feed or cached spot price
   useEffect(() => {
+    let isMounted = true;
     const config = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;
+    const cachedSpot = spotPrices[selectedAsset];
+    
     setTicker({
-      price: config.price,
-      change24h: config.change24h,
+      price: cachedSpot?.price || config.price,
+      change24h: cachedSpot?.change24h ?? config.change24h,
       high24h: config.high24h,
       low24h: config.low24h,
       volume24h: 28410.5,
       timestamp: Date.now(),
     });
+
+    fetchCryptoTicker(selectedAsset).then((data) => {
+      if (isMounted && data && data.price) {
+        setTicker(data);
+        setSpotPrices((prev) => ({
+          ...prev,
+          [selectedAsset]: { price: data.price, change24h: data.change24h },
+        }));
+      }
+    }).catch(() => {});
+
+    // Live Stream Connection
+    const cleanupWs = connectLiveCryptoStream(
+      selectedAsset,
+      (update) => {
+        if (isMounted) {
+          setTicker((prev) => ({ ...prev, ...update }));
+          if (update.price) {
+            setSpotPrices((prev) => ({
+              ...prev,
+              [selectedAsset]: {
+                price: update.price!,
+                change24h: update.change24h ?? prev[selectedAsset]?.change24h ?? 0,
+              },
+            }));
+          }
+        }
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      cleanupWs();
+    };
   }, [selectedAsset]);
 
   // Live Candles State
@@ -1141,6 +1188,7 @@ export default function App() {
         selectedVenue={selectedVenues[0] || 'Kalshi'}
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
+        spotPrices={spotPrices}
       />
 
       {/* Main Layout Container (Sidebar + Content Area) */}
@@ -1366,6 +1414,7 @@ export default function App() {
                       onToggleFavorite={handleToggleFavorite}
                       onOpenSearch={() => setIsSearchOpen(true)}
                       onOpenCompare={() => setActiveTab('compare')}
+                      spotPrices={spotPrices}
                     />
                   )}
 

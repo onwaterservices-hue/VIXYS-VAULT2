@@ -24,17 +24,26 @@ interface VixyAiStatusCardProps {
   onOpenPricing?: () => void;
   userRole?: 'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER' | string;
   className?: string;
+  ticker?: { price?: number; change24h?: number };
 }
 
 export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
   onOpenPricing,
   userRole = 'UNPAID',
   className = '',
+  ticker,
 }) => {
   const isPro = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const [activeTab, setActiveTab] = useState<'STATUS' | 'PULSE' | 'BREAKING' | 'WHALE' | 'LESSON' | 'RECAP'>('STATUS');
   const [activeLessonIndex, setActiveLessonIndex] = useState(0);
   const [secondsToScan, setSecondsToScan] = useState(842); // 14 mins 02s
+
+  const spot = ticker?.price || 78800;
+  const entryFormatted = `$${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const stopLossFormatted = `$${(spot * 0.9945).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (-0.55%)`;
+  const tp1Formatted = `$${(spot * 1.011).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const tp2Formatted = `$${(spot * 1.018).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  const resTargetFormatted = `$${(Math.ceil(spot / 500) * 500).toLocaleString()}`;
 
   const lessons = [
     {
@@ -286,7 +295,7 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
               <div className="bg-[#0e0624] p-3 rounded-xl border border-purple-900/40 space-y-1">
                 <span className="text-[10px] text-purple-300/60 uppercase block font-bold">Market Rationale:</span>
                 <p className="text-xs text-slate-200 font-sans">
-                  Institutional buyers continue accumulating beneath support. Key resistance cluster identified at $64,800.
+                  Institutional buyers continue accumulating beneath support. Key resistance cluster identified near {resTargetFormatted}.
                 </p>
               </div>
             </div>
@@ -311,19 +320,19 @@ export const VixyAiStatusCard: React.FC<VixyAiStatusCardProps> = ({
                 <div className="flex items-center justify-between bg-[#12072e] px-3 py-1.5 rounded border border-purple-800/40">
                   <span>Full Entry Price:</span>
                   <span className={isPro ? 'text-emerald-400 font-bold font-mono' : 'text-amber-400 font-bold flex items-center gap-1'}>
-                    {isPro ? '$64,161.40 (Taker Cushion Zone)' : <><Lock className="w-3 h-3" /> Locked</>}
+                    {isPro ? `${entryFormatted} (Taker Cushion Zone)` : <><Lock className="w-3 h-3" /> Locked</>}
                   </span>
                 </div>
                 <div className="flex items-center justify-between bg-[#12072e] px-3 py-1.5 rounded border border-purple-800/40">
                   <span>Stop Loss Target:</span>
                   <span className={isPro ? 'text-rose-400 font-bold font-mono' : 'text-amber-400 font-bold flex items-center gap-1'}>
-                    {isPro ? '$63,820.00 (-0.53%)' : <><Lock className="w-3 h-3" /> Locked</>}
+                    {isPro ? stopLossFormatted : <><Lock className="w-3 h-3" /> Locked</>}
                   </span>
                 </div>
                 <div className="flex items-center justify-between bg-[#12072e] px-3 py-1.5 rounded border border-purple-800/40">
                   <span>Profit Targets (TP1 / TP2):</span>
                   <span className={isPro ? 'text-emerald-300 font-bold font-mono' : 'text-amber-400 font-bold flex items-center gap-1'}>
-                    {isPro ? '$64,850 / $65,400 (+1.8%)' : <><Lock className="w-3 h-3" /> Locked</>}
+                    {isPro ? `${tp1Formatted} / ${tp2Formatted} (+1.8%)` : <><Lock className="w-3 h-3" /> Locked</>}
                   </span>
                 </div>
                 <div className="flex items-center justify-between bg-[#12072e] px-3 py-1.5 rounded border border-purple-800/40">

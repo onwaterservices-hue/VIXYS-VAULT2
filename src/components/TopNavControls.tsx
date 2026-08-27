@@ -13,6 +13,7 @@ interface TopNavControlsProps {
   onToggleFavorite: (symbol: string) => void;
   onOpenSearch: () => void;
   onOpenCompare?: () => void;
+  spotPrices?: Record<string, { price: number; change24h: number }>;
 }
 
 export const TopNavControls: React.FC<TopNavControlsProps> = ({
@@ -26,6 +27,7 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
   onToggleFavorite,
   onOpenSearch,
   onOpenCompare,
+  spotPrices,
 }) => {
   const assets = Object.values(ASSET_DATABASE);
   const activeConfig = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;
@@ -75,20 +77,27 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                 </div>
 
                 {/* Name & Price */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white">{asset.symbol}</span>
-                  <span className="text-xs font-mono font-bold text-slate-200">
-                    ${asset.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </span>
-                  <span
-                    className={`text-[10px] font-mono font-bold ${
-                      asset.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
-                    }`}
-                  >
-                    {asset.change24h >= 0 ? '+' : ''}
-                    {asset.change24h.toFixed(2)}%
-                  </span>
-                </div>
+                {(() => {
+                  const liveData = spotPrices?.[asset.symbol];
+                  const displayPrice = liveData?.price ?? asset.price;
+                  const displayChange = liveData?.change24h ?? asset.change24h;
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white">{asset.symbol}</span>
+                      <span className="text-xs font-mono font-bold text-slate-200">
+                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                      <span
+                        className={`text-[10px] font-mono font-bold ${
+                          displayChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                        }`}
+                      >
+                        {displayChange >= 0 ? '+' : ''}
+                        {displayChange.toFixed(2)}%
+                      </span>
+                    </div>
+                  );
+                })()}
 
                 {/* Star Favorite Button */}
                 <button

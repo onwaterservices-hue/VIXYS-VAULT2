@@ -58,6 +58,7 @@ interface HeaderProps {
   selectedVenue?: string;
   onOpenSearch?: () => void;
   onOpenMobileMenu?: () => void;
+  spotPrices?: Record<string, { price: number; change24h: number }>;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -76,6 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedAsset = 'BTC',
   onOpenSearch,
   onOpenMobileMenu,
+  spotPrices,
 }) => {
   const [utcTime, setUtcTime] = useState<string>('');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
@@ -136,14 +138,17 @@ export const Header: React.FC<HeaderProps> = ({
     dayPassInfo
   });
 
-  const btcPrice = ticker.price || 64591.20;
-  const btcChange = ticker.change24h || 1.85;
+  const btcPrice = spotPrices?.BTC?.price || ticker.price || 64591.20;
+  const btcChange = spotPrices?.BTC?.change24h ?? ticker.change24h ?? 1.85;
 
-  // Static/Live top tickers for ETH and SOL calculated dynamically relative to BTC ticker ratio
-  const ethPrice = Math.round((btcPrice * 0.0435) * 100) / 100;
-  const solPrice = Math.round((btcPrice * 0.00245) * 100) / 100;
+  const ethPrice = spotPrices?.ETH?.price ?? Math.round((btcPrice * 0.0435) * 100) / 100;
+  const ethChange = spotPrices?.ETH?.change24h ?? 2.43;
+  const solPrice = spotPrices?.SOL?.price ?? Math.round((btcPrice * 0.00245) * 100) / 100;
+  const solChange = spotPrices?.SOL?.change24h ?? 3.12;
 
   const isBtcPositive = btcChange >= 0;
+  const isEthPositive = ethChange >= 0;
+  const isSolPositive = solChange >= 0;
 
   // Filter notifications by category
   const filteredNotifications = useMemo(() => {
@@ -221,8 +226,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <span className="text-slate-400 font-sans">ETH</span>
             <span className="text-white font-mono font-bold">${ethPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">
-              +2.43%
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${isEthPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
+              {isEthPositive ? '+' : ''}{ethChange.toFixed(2)}%
             </span>
           </div>
 
@@ -233,8 +238,8 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
             <span className="text-slate-400 font-sans">SOL</span>
             <span className="text-white font-mono font-bold">${solPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">
-              +3.12%
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${isSolPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
+              {isSolPositive ? '+' : ''}{solChange.toFixed(2)}%
             </span>
           </div>
 
