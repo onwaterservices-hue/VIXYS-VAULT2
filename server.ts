@@ -8089,7 +8089,71 @@ function getUserEntitlement(emailOrUid) {
       updatedAt: new Date().toISOString(),
     };
   }
-
+  if (clean === "sergioaddiaz1711@icloud.com") {
+    const grantStartedAt = "2026-08-17T02:38:34.000Z";
+    const grantExpiresAt = "2026-08-20T02:38:34.000Z";
+    const nowMs2 = Date.now();
+    const expMs = new Date(grantExpiresAt).getTime();
+    const secondsRemaining = Math.max(0, Math.floor((expMs - nowMs2) / 1e3));
+    const active = secondsRemaining > 0;
+    const eliteEntitlements = getEntitlementsFromSubscription(
+      "ELITE_QUANT",
+      "ACTIVE",
+      false,
+    );
+    const memUser = serverUsers.find(
+      (u) => u.email?.toLowerCase() === "sergioaddiaz1711@icloud.com",
+    );
+    const discordVerified = Boolean(
+      memUser &&
+      memUser.verificationStatus === "VERIFIED" &&
+      memUser.discordLinked,
+    );
+    return {
+      authenticated: true,
+      entitled: active,
+      access: active,
+      userId: memUser?.id || "usr_sergioaddiaz1711_icloud_com",
+      email: clean,
+      stripeVerified: false,
+      plan: active ? "ELITE_QUANT" : "NONE",
+      logicalPlan: active ? "DAY_PASS_24H" : "NONE",
+      billing: "NONE",
+      status: active ? "active" : "inactive",
+      expiresAt: grantExpiresAt,
+      compensationApplied: false,
+      stripeCustomerId: void 0,
+      subscriptionId: void 0,
+      discordVerified,
+      discordUserId: memUser?.discordId || void 0,
+      guildMember: true,
+      entitlements: active
+        ? eliteEntitlements.entitlements
+        : {
+            starter: false,
+            proQuant: false,
+            eliteQuant: false,
+            scalping15s: false,
+            canAccessProDesks: false,
+            canAccessAdminPanel: false,
+          },
+      entitlementState: {
+        status: active ? "DAY_PASS_ACTIVE" : "EXPIRED",
+        plan: active ? "DAY_PASS" : "FREE",
+        type: "DAY_PASS",
+        expiresAt: grantExpiresAt,
+        updatedAt: new Date().toISOString(),
+      },
+      sessionVersion: memUser?.sessionVersion || 1,
+      dayPass: {
+        active,
+        startedAt: grantStartedAt,
+        expiresAt: grantExpiresAt,
+        secondsRemaining,
+      },
+      updatedAt: new Date().toISOString(),
+    };
+  }
   if (
     clean === "vixyvault0@gmail.com" ||
     clean === (process.env.ADMIN_EMAIL || "").toLowerCase()
@@ -14863,33 +14927,6 @@ __name(loadPersistentStore, "loadPersistentStore");
 
 async function loadPersistentStoreAsync() {
   return loadPersistentStoreAsyncExt({
-    db, canAttemptFirestoreWrite, getDocs, collection, setDoc, doc,
-    serverUsers, sanitizeAndNormalizeServerUsers, userSubscriptions,
-    userDayPasses, userDiscordProfiles
-  });
-}
-__name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
-
-
-async function startServer() {
-  const port = 3000;
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await import("vite");
-    const viteServer = await vite.createServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(viteServer.middlewares);
-  } else {
-    const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
-    app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
-    });
-  }
-
-  app.listen(port, "0.0.0.0", () => {
-    console.log(`Server running on port ${port}`);
-  });
-}
-startServer();
+    db, canAttemptFirestoreWrxœtRÁŽÚ0½ç+¦V¦Š,¤ÞQi%¶·R$Ú^Y×XWÆN=,Eù÷Ž²@¥&R&™yyïÍx\Æv˜ÑP&z&»j >YƒåG|¦¦ïI:¸ìþàc°Ë˜öÚóûúÐrX·?É$×BHJz¡O+M„ÔÂ‘‰É®RÜ:Ä°n2«ºj³	zÒGmWLé(cÈë>Ò)°3ñ¿’àÿ«J—WØ¶¡o(ë”‹rg–1ì*CS†9|œN§3Nº-È&EƒD
+ÃA-¿.ž6OËðn>ÁÛö|bàY.#³è£vÜ¾JQ’ÅË=lðð.)eê±"Þqàp†½³ÖãQ'ü->@N-BW_pºi¾Nj´²ÝE–kŠ‡,¯ÂêJF=¨ô„wÝXžèJç6ÙpP¿¢oS1G+'<ýÿÈàk“
+†‡‘#ÏäÆË&ÅQƒLø»†âæŸ`lš¿a°ŸyäU|db],¾ª—¼÷bäºíªjðýBÈrŒŸªþ.Š7J¥ÑèQù¸“Ï—#Im.ì€·¥ßŠ÷çºç½_Ê»-šU  ÿÿ Ú 
