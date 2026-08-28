@@ -2618,7 +2618,7 @@ let current15mStrikePrice = 64100;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
 // ============================================================================
-// âš ï¸ VIXY LOCK - CRITICAL PRODUCTION INFRASTRUCTURE âš ï¸
+// [!WARN!] VIXY LOCK - CRITICAL PRODUCTION INFRASTRUCTURE [!WARN!]
 // ============================================================================
 // The `active15mCycle` object below is the STRICT AUTHORITATIVE SOURCE OF TRUTH
 // for the live VIXY LOCK state machine.
@@ -3241,7 +3241,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
 }
 __name(lock15mCycle, "lock15mCycle");
 // ----------------------------------------------------------------------------
-// âš ï¸ VIXY LOCK SETTLEMENT & SHADOW CALIBRATION âš ï¸
+// [!WARN!] VIXY LOCK SETTLEMENT & SHADOW CALIBRATION [!WARN!]
 // ----------------------------------------------------------------------------
 // 1. This function is authoritative for lock settlement and persistent outcome generation.
 // 2. The shadow calibration block executes here. It MUST ONLY observe the settled result.
@@ -4901,17 +4901,14 @@ app.post("/api/auth/register", async (req, res) => {
   const entitlement = getUserEntitlement(cleanEmail);
   return res.json({ success: true, user: serverSession, entitlement });
 });
-app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
-  const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-    .toLowerCase()
-    .trim();
+app.get("/api/auth/me", async (req, res) => {
+  const reqEmail = (
+    (req.query.email || req.headers["x-user-email"]) as string || ""
+  ).trim().toLowerCase();
   const reqUserId = (
-    req.headers["x-user-id"] ||
-    req.headers["x-user-uid"] ||
-    req.query.userId ||
-    req.query.uid ||
-    ""
+    (req.query.userId || req.query.uid || req.headers["x-user-id"]) as string || ""
   ).trim();
+
   if (!reqEmail && !reqUserId) {
     return res.json({
       authenticated: false,
@@ -4919,6 +4916,7 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
       message: "No active session",
     });
   }
+
   let user = serverUsers.find(
     (u) =>
       (reqEmail && u.email?.toLowerCase() === reqEmail) ||
@@ -4955,12 +4953,10 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
             } else {
               serverUsers.push(user);
             }
-            console.log(
-              `[USER FALLBACK] Recovered user profile for ${user.email || user.id} from Firestore by UID (in-memory cache had missed it).`,
-            );
           }
         }
       }
+
       if (!user && reqEmail && reqEmail.includes("@")) {
         const q = query(collection(db, "users"), where("email", "==", reqEmail), limit(1));
         const snap = await getDocs(q);
@@ -4982,17 +4978,14 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
               discordTag: uData.discordTag || uData.discordUsername,
               joined: uData.joined || new Date().toISOString().split("T")[0],
             };
-            const matchIdx = serverUsers.findIndex(
+            const matchIdx2 = serverUsers.findIndex(
               (u) => (user.id && (u.id === user.id || u.uid === user.id)) || (user.email && u.email?.toLowerCase() === user.email.toLowerCase()),
             );
-            if (matchIdx !== -1) {
-              serverUsers[matchIdx] = { ...serverUsers[matchIdx], ...user };
+            if (matchIdx2 !== -1) {
+              serverUsers[matchIdx2] = { ...serverUsers[matchIdx2], ...user };
             } else {
               serverUsers.push(user);
             }
-            console.log(
-              `[USER FALLBACK] Recovered user profile for ${reqEmail} from Firestore by Email (in-memory cache had missed it).`,
-            );
           }
         }
       }
@@ -5013,9 +5006,6 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
           userDayPasses.set(reqEmail, dpData);
           if (dpData.userId) userDayPasses.set(dpData.userId, dpData);
           dp = dpData;
-          console.log(
-            `[DAY PASS FALLBACK] Recovered day pass for ${reqEmail} from Firestore (in-memory cache had missed it).`,
-          );
         }
       }
     } catch (dpFallbackErr) {
@@ -5032,21 +5022,20 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
         if (subData) {
           userSubscriptions.set(reqEmail, subData);
           sub = subData;
-          console.log(
-            `[SUBSCRIPTION FALLBACK] Recovered subscription for ${reqEmail} from Firestore (in-memory cache had missed it).`,
-          );
         }
       }
     } catch (subFallbackErr) {
       console.warn("[SUBSCRIPTION FALLBACK] Firestore lookup failed:", subFallbackErr);
     }
   }
+
   const discordProfile = userDiscordProfiles.get(reqEmail);
+
   const resolvedUser = user || {
     id: reqUserId || `usr_${reqEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
     uid: reqUserId || `usr_${reqEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
     email: reqEmail,
-    name: reqEmail.split("@")[0],
+    name: reqEmail ? reqEmail.split("@")[0] : "Guest",
     role: sub?.role || (dp?.status === "ACTIVE" ? "PRO" : "USER"),
     subscription: sub?.plan || (dp?.status === "ACTIVE" ? "PRO_PASS" : "NONE"),
     status: "ACTIVE",
@@ -5055,12 +5044,14 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
     discordId: discordProfile?.discordUserId,
     discordTag: discordProfile?.discordUsername,
   };
+
   res.json({
     authenticated: true,
     user: resolvedUser,
     discord: discordProfile || null,
   });
 });
+
 app.post(
   "/api/admin/users/create",
   requireRole(["OWNER", "ADMIN"]),
@@ -14930,6 +14921,28 @@ __name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
 
 async function startServer() {
   const port = 3000;
-  if (process.enxœ\RMOÃ0½÷Wx9L)ª"Î›Ê
-B‚4SÔx[P¿HÒnhêÇY[­ĞJ­b?¿çg§éê!Ù&éfq¬6•j2§«’…p€¬*­ƒ3d¥Ãw4-è y”Ú.êÊ8ÎZí…ËI‰ğ<åà==€½$Qh¥r<Jƒ¯•Â8Ó`‡‚’;™[„.jd]üÔa¶–¬vƒ:åDc‘_õÅ•Ø^@ §›TÚº7éÔkM?ñUé’Ó82´VdGÅÃ˜±2xªÇX'ÎøÈN`{¤İ°¸Áï|ßÁ8 :‹¥zÔ9ò«øÈDººTxWäläíİvA¯©_ZÁoÅåõ‚!ï³ÊQäÕ÷Åôí‚@ï€ÏF§X¶b“¬ï“˜ÏáO8]}n×ÉÓó*í¯6nØeÏD£ h‘ÔR4ÍC·“
-w²É‡,ƒ_   ÿÿ ¹PÆ
+  if (process.env.NODE_ENV !== "production") {
+    const { createServer } = await import("vite");
+    const viteServer = await createServer({
+      server: { middlewareMode: true, hmr: false },
+      appType: "spa",
+    });
+    app.use(viteServer.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server listening on port ${port}`);
+  });
+}
+
+if (!process.env.VERCEL && !process.env.NOW_REGION) {
+  startServer();
+}
+
+export { app, startServer };
+export defaulxœ*QH,(°æ   ÿÿ 	h
