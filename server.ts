@@ -10051,6 +10051,49 @@ app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+async function findCanonicalUserRecord({ email, stripeCustomerId, vixyUserId }) {
+  if (!db) return null;
+  try {
+    if (vixyUserId) {
+      const directSnap = await getDoc(doc(db, "users", vixyUserId));
+      if (directSnap.exists()) {
+        const data = directSnap.data() || {};
+        return { id: directSnap.id, uid: data.uid || directSnap.id, ...data };
+      }
+    }
+    if (stripeCustomerId) {
+      const custQ = query(
+        collection(db, "users"),
+        where("stripeCustomerId", "==", stripeCustomerId),
+      );
+      const custSnap = await getDocs(custQ);
+      if (!custSnap.empty) {
+        const docSnap = custSnap.docs[0];
+        const data = docSnap.data() || {};
+        return { id: docSnap.id, uid: data.uid || docSnap.id, ...data };
+      }
+    }
+    if (email) {
+      const emailQ = query(
+        collection(db, "users"),
+        where("email", "==", email),
+      );
+      const emailSnap = await getDocs(emailQ);
+      if (!emailSnap.empty) {
+        const docSnap = emailSnap.docs[0];
+        const data = docSnap.data() || {};
+        return { id: docSnap.id, uid: data.uid || docSnap.id, ...data };
+      }
+    }
+  } catch (lookupErr) {
+    console.warn(
+      "[WEBHOOK IDENTITY LOOKUP] Firestore canonical user lookup failed, falling back to synthesized identity:",
+      lookupErr?.message || lookupErr,
+    );
+  }
+  return null;
+}
+__name(findCanonicalUserRecord, "findCanonicalUserRecord");
 async function updateSubscriptionInFirestore(email, updateData) {
   const cleanEmail = email.toLowerCase().trim();
   if (!cleanEmail) return;
@@ -10087,9 +10130,23 @@ async function updateSubscriptionInFirestore(email, updateData) {
   if (updateData.status) currentSub.status = updateData.status;
   currentSub.updatedAt = new Date().toISOString();
   userSubscriptions.set(cleanEmail, currentSub);
-  const existingUser = serverUsers.find(
+  let existingUser = serverUsers.find(
     (u) => u.email?.toLowerCase() === cleanEmail,
   );
+  if (!existingUser) {
+    const canonicalUser = await findCanonicalUserRecord({
+      email: cleanEmail,
+      stripeCustomerId: updateData.stripeCustomerId,
+      vixyUserId: updateData.vixyUserId,
+    });
+    if (canonicalUser) {
+      existingUser = canonicalUser;
+      serverUsers.unshift(existingUser);
+      console.log(
+        `[WEBHOOK IDENTITY LOOKUP] Resolved ${cleanEmail} to existing Firestore user ${existingUser.id} via durable lookup (not present in this instance's memory).`,
+      );
+    }
+  }
   if (existingUser) {
     if (updateData.stripeCustomerId)
       existingUser.stripeCustomerId = updateData.stripeCustomerId;
