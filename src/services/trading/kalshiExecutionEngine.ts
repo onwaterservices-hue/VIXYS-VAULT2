@@ -212,7 +212,7 @@ export async function testKalshiHandshake(
   }
 
   const baseUrl = environment === 'paper'
-    ? 'https://demo-api.kalshi.co/trade-api/v2'
+    ? 'https://demo-api.kalshi.com/trade-api/v2'
     : 'https://api.elections.kalshi.com/trade-api/v2';
 
   const path = '/trade-api/v2/portfolio/balance';
@@ -348,7 +348,7 @@ export async function submitKalshiOrder(params: {
   }
 
   const baseUrl = params.environment === 'paper'
-    ? 'https://demo-api.kalshi.co/trade-api/v2'
+    ? 'https://demo-api.kalshi.com/trade-api/v2'
     : 'https://api.elections.kalshi.com/trade-api/v2';
 
   const path = '/trade-api/v2/portfolio/orders';
@@ -457,7 +457,7 @@ export async function fetchKalshiMarketPrice(
   side: 'yes' | 'no'
 ): Promise<number | null> {
   const baseUrl = environment === 'paper'
-    ? 'https://demo-api.kalshi.co/trade-api/v2'
+    ? 'https://demo-api.kalshi.com/trade-api/v2'
     : 'https://api.elections.kalshi.com/trade-api/v2';
   
   const path = `/markets/${marketTicker}/orderbook`;
@@ -502,8 +502,7 @@ export async function executeAutoTradesForSignal(
 
   const signalId = signal.id || signal.cycleId || `sig_${Date.now()}`;
   const asset = (signal.asset || 'BTC').toUpperCase();
-  const direction = signal.direction;
-  if (direction !== 'UP' && direction !== 'DOWN') { return summary; }
+  const direction = signal.direction === 'UP' ? 'UP' : 'DOWN';
   const confidence = Math.round(signal.confidence || 0);
 
   const seriesTickerMap: Record<string, string> = {
@@ -538,7 +537,6 @@ export async function executeAutoTradesForSignal(
 
   if (enabledUsers.length === 0) {
     for (const [userId, userState] of userKalshiStateMap.entries()) {
-    if (direction !== 'UP' && direction !== 'DOWN') { continue; }
       if (userState.autoTradeConfig?.enabled) {
         enabledUsers.push(userState);
       }
@@ -651,7 +649,7 @@ export async function executeAutoTradesForSignal(
       return { status: 'failed', reason: 'unsafe_price' };
     }
 
-    const requestedStakeUSD = config.maxStakePerTradeUSD || 25;
+    const requestedStakeUSD = Math.max(1, config.maxStakePerTradeUSD || 25);
     const maxDailyExposureUSD = Math.max(requestedStakeUSD, config.maxDailyExposureUSD || 100);
     const currentDailyExposure = await getDailyExposureForUser(userId, firestoreDb);
 
@@ -715,7 +713,7 @@ export async function executeAutoTradesForSignal(
     if (orderResult.success) {
       config.consecutiveFailures = 0;
       config.autoDisabledReason = null;
-      recordAuditLog({ userId, userEmail: userState.userEmail, signalId, asset, direction, confidence, threshold: userThreshold, stakeUSD: actualOrderCost, action: 'ORDER_PLACED', status: 'SUCCESS', rawResponse: orderResult.rawResponse, details: `Successfully placed ${contractCount}x ${side.toUpperCase()} contracts on Kalshi (${targetSeries}) at ${verifiedMarketPrice} for ${actualOrderCost}`, contractCount, verifiedMarketPrice, clientOrderId }, firestoreDb);
+      recordAuditLog({ userId, userEmail: userState.userEmail, signalId, asset, direction, confidence, threshold: userThreshold, stakeUSD: actualOrderCost, action: 'ORDER_PLACED', status: 'SUCCESS', rawResponse: orderResult.rawResponse, details: `Successfully placed ${contractCount}x ${side.toUpperCase()} contracts on Kalshi (${targetSeries}) at $${verifiedMarketPrice} for $${actualOrderCost}` }, firestoreDb);
       
       if (firestoreDb) {
         try {

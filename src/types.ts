@@ -279,9 +279,6 @@ export interface AutoTradeAuditLog {
   status: 'SUCCESS' | 'BLOCKED' | 'FAILED' | 'SKIPPED';
   rawResponse: any;
   details: string;
-  contractCount?: number;
-  verifiedMarketPrice?: number;
-  clientOrderId?: string;
 }
 
 export interface ExchangeCredential {

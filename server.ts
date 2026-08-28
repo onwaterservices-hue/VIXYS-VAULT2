@@ -379,13 +379,6 @@ app.delete("/api/kalshi/keys", async (req, res) => {
   });
 });
 
-app.get("/api/internal/dump-creds", async (req, res) => {
-  try {
-    const docs = await getDocs(collection(db, "kalshi_credentials"));
-    res.json({ size: docs.size, data: docs.docs.map(d => ({id: d.id, data: d.data()})) });
-  } catch(e) { res.status(500).json({e: e.message}); }
-});
-
 app.post("/api/kalshi/test-handshake", async (req, res) => {
   const user = resolveRequestUser(req);
   if (!user || !isEliteOrAdmin(user)) {
@@ -14927,6 +14920,16 @@ __name(loadPersistentStore, "loadPersistentStore");
 
 async function loadPersistentStoreAsync() {
   return loadPersistentStoreAsyncExt({
-    db, canAttemptFirestoreWrxœtRÁŽÚ0½ç+¦V¦Š,¤ÞQi%¶·R$Ú^Y×XWÆN=,Eù÷Ž²@¥&R&™yyïÍx\Æv˜ÑP&z&»j >YƒåG|¦¦ïI:¸ìþàc°Ë˜öÚóûúÐrX·?É$×BHJz¡O+M„ÔÂ‘‰É®RÜ:Ä°n2«ºj³	zÒGmWLé(cÈë>Ò)°3ñ¿’àÿ«J—WØ¶¡o(ë”‹rg–1ì*CS†9|œN§3Nº-È&EƒD
-ÃA-¿.ž6OËðn>ÁÛö|bàY.#³è£vÜ¾JQ’ÅË=lðð.)eê±"Þqàp†½³ÖãQ'ü->@N-BW_pºi¾Nj´²ÝE–kŠ‡,¯ÂêJF=¨ô„wÝXžèJç6ÙpP¿¢oS1G+'<ýÿÈàk“
-†‡‘#ÏäÆË&ÅQƒLø»†âæŸ`lš¿a°ŸyäU|db],¾ª—¼÷bäºíªjðýBÈrŒŸªþ.Š7J¥ÑèQù¸“Ï—#Im.ì€·¥ßŠ÷çºç½_Ê»-šU  ÿÿ Ú 
+    db, canAttemptFirestoreWrite, getDocs, collection, setDoc, doc,
+    serverUsers, sanitizeAndNormalizeServerUsers, userSubscriptions,
+    userDayPasses, userDiscordProfiles
+  });
+}
+__name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
+
+
+async function startServer() {
+  const port = 3000;
+  if (process.enxœ\RMOÃ0½÷Wx9L)ª"Î›Ê
+B‚4ŽSÔx[P¿HÒnhêÇY[­ÐJ­b?¿çg§éê!Ù&éfq¬6•j2§«’…p€ž¬*­ƒ3d¥Ãw4-è y”Ú.êÊ8ÎZí…ËI‰ð<åà==€½$Qh¥r<Jƒ¯•Â8Ó`‡‚’;™[„.jd]üÔa¶–¬vƒ:åDc‘_õÅ•Ø^@ §›TÚº7éÔkM?ñUé’Ó82´VdGÅÃ˜±2xªÇX'ÎøÈN`{¤Ý°¸Áï|ßÁ8 :‹¥zÔ9ò«øÈDººTxWäläíÝvA¯©_ZÁoÅåõ‚!ï³ÊQäÕž÷Åôí‚@ï€ÏF§X¶b“¬ï“˜ÏáO8]}n×ÉÓó*í¯6nØeÏD£ h‘ÔR4ÍC·“
+w²É‡,ƒ_   ÿÿ ¹PÆ
