@@ -10474,7 +10474,7 @@ timestamp: ${new Date().toISOString()}`);
           );
           break;
         }
-        const plan = (session.metadata?.plan || "PRO").toUpperCase();
+        let plan = (session.metadata?.plan || "PRO").toUpperCase();
         const referralCode = session.metadata?.referralCode || "DIRECT";
         const vixyUserId =
           session.metadata?.vixyUserId || session.metadata?.userId || "";
@@ -10496,6 +10496,11 @@ timestamp: ${new Date().toISOString()}`);
             const subDetails = await stripe.subscriptions.retrieve(stripeSubId);
             currentPeriodStart = subDetails.current_period_start;
             currentPeriodEnd = subDetails.current_period_end;
+            const stripePriceIdForPlan = subDetails.items?.data?.[0]?.price?.id;
+            const priceResolvedPlan = getPlanFromPriceId(stripePriceIdForPlan);
+            if (priceResolvedPlan && priceResolvedPlan !== "NONE") {
+              plan = priceResolvedPlan;
+            }
           } catch (subFetchErr) {
             console.warn(
               "[STRIPE WEBHOOK] Failed to fetch subscription period details:",
