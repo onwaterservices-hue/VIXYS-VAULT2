@@ -8832,7 +8832,46 @@ async function reconcileUserEntitlement(identity) {
           }
         }
       }
-      if (cleanEmail) {
+      let resolvedViaCustomerId = false;
+      if (cleanStripeCustId) {
+        try {
+          const directSubs = await stripe.subscriptions.list({
+            customer: cleanStripeCustId,
+            limit: 5,
+          });
+          const directActiveSub = directSubs.data.find(
+            (s) =>
+              s.status === "active" ||
+              s.status === "trialing" ||
+              s.status === "past_due",
+          );
+          if (directActiveSub) {
+            const directPriceId = directActiveSub.items?.data?.[0]?.price?.id;
+            const directPlan = getPlanFromPriceId(directPriceId);
+            if (cleanEmail) {
+              await updateSubscriptionInFirestore(cleanEmail, {
+                stripeCustomerId: cleanStripeCustId,
+                stripeSubscriptionId: directActiveSub.id,
+                stripePriceId: directPriceId,
+                plan: directPlan,
+                status: "ACTIVE",
+                currentPeriodStart: directActiveSub.current_period_start,
+                currentPeriodEnd: directActiveSub.current_period_end,
+                cancelAtPeriodEnd: directActiveSub.cancel_at_period_end,
+                lastStripeEventId: `reconcile_custid_${directActiveSub.id}`,
+              });
+              syncUserEntitlementToDiscord(cleanEmail).catch(() => {});
+            }
+            resolvedViaCustomerId = true;
+          }
+        } catch (custIdErr) {
+          console.warn(
+            "[RECONCILE ENTITLEMENT] Direct Stripe Customer ID lookup failed, falling back to email-based lookup:",
+            custIdErr?.message || custIdErr,
+          );
+        }
+      }
+      if (cleanEmail && !resolvedViaCustomerId) {
         const customers = await stripe.customers.list({
           email: cleanEmail,
           limit: 5,
@@ -9082,9 +9121,14 @@ app.get(
     if (reqEmail || reqUserId) {
       hydrationRes = await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => null);
     }
+    const knownStripeCustomerId =
+      hydrationRes && !(hydrationRes as any)._degraded
+        ? (hydrationRes as any).stripeCustomerId
+        : undefined;
     const entitlement = await reconcileUserEntitlement({
       email: reqEmail,
       userId: reqUserId,
+      stripeCustomerId: knownStripeCustomerId,
     });
     const isDegraded = Boolean(
       (hydrationRes && (hydrationRes as any)._degraded) ||
@@ -9162,11 +9206,16 @@ app.post(
     if (cleanEmail || cleanUid) {
       hydrationRes = await hydrateUserFromFirestore(cleanEmail, cleanUid).catch(() => null);
     }
+    const knownStripeCustomerId =
+      hydrationRes && !(hydrationRes as any)._degraded
+        ? (hydrationRes as any).stripeCustomerId
+        : undefined;
     const entitlement = await reconcileUserEntitlement({
       email: cleanEmail,
       userId: cleanUid,
       discordUserId,
       stripeSessionId: sessionId,
+      stripeCustomerId: knownStripeCustomerId,
     });
     const isDegraded = Boolean(
       (hydrationRes && (hydrationRes as any)._degraded) ||
@@ -9227,9 +9276,15 @@ app.get("/api/auth/diagnostic", async (req, res) => {
   }
   const cleanEmail = reqEmail;
   const cleanUid = reqUserId;
+  const diagnosticKnownUser = serverUsers.find(
+    (u) =>
+      (cleanEmail && u.email?.toLowerCase() === cleanEmail) ||
+      (cleanUid && (u.id === cleanUid || u.uid === cleanUid)),
+  );
   const entitlement = await reconcileUserEntitlement({
     email: cleanEmail,
     userId: cleanUid,
+    stripeCustomerId: diagnosticKnownUser?.stripeCustomerId,
   });
   let user = serverUsers.find(
     (u) =>
