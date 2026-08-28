@@ -154,8 +154,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     const assets = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 'SUI', 'BNB'];
     return assets.map(asset => {
       const assetLogs = resolvedLog.filter(s => {
-        const ticker = s.ticker || (s.market ? (s.market.includes(asset) ? asset : 'BTC') : 'BTC');
-        return ticker.toUpperCase() === asset;
+        const tickerStr = s.ticker || s.market || 'BTC';
+        const baseAsset = tickerStr.split('/')[0].toUpperCase();
+        return baseAsset === asset;
       });
       const settled = assetLogs.filter(s => s.status === 'RESOLVED');
       const wins = settled.filter(s => s.wasCorrect).length;

@@ -275,10 +275,13 @@ export interface AutoTradeAuditLog {
   confidence: number;
   threshold: number;
   stakeUSD: number;
-  action: 'ORDER_PLACED' | 'BLOCKED_BY_CAP' | 'FAILED' | 'KILL_SWITCH_TRIGGERED' | 'SKIPPED_THRESHOLD' | 'HANDSHAKE_TEST';
+  action: 'ORDER_PLACED' | 'BLOCKED_BY_CAP' | 'FAILED' | 'KILL_SWITCH_TRIGGERED' | 'SKIPPED_THRESHOLD' | 'HANDSHAKE_TEST' | 'BLOCKED' | 'SIGNAL_EXPIRED';
   status: 'SUCCESS' | 'BLOCKED' | 'FAILED' | 'SKIPPED';
   rawResponse: any;
   details: string;
+  contractCount?: number;
+  verifiedMarketPrice?: number;
+  clientOrderId?: string;
 }
 
 export interface ExchangeCredential {

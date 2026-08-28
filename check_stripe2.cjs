@@ -3,12 +3,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 async function run() {
   try {
-    const subs = await stripe.subscriptions.list({
+    const sessions = await stripe.checkout.sessions.list({
       customer: "cus_V9Z40FVLmQ1LFd",
     });
-    console.log("Subscriptions found:", subs.data.length);
-    subs.data.forEach(s => {
-      console.log(`Sub: ${s.id} | Status: ${s.status} | Price: ${s.items.data[0].price.id}`);
+    console.log("Sessions found:", sessions.data.length);
+    sessions.data.forEach(s => {
+      console.log(`Session: ${s.id} | Status: ${s.status} | Mode: ${s.mode}`);
     });
   } catch (err) {
     console.error(err);

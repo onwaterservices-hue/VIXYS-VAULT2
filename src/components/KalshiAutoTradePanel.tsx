@@ -261,6 +261,7 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
   };
 
   const toggleMarketInclusion = (market: string) => {
+    if (market !== 'BTC') return; // Enforce BTC-only UI selection
     setConfig((prev) => {
       const current = prev.supportedMarkets || ['BTC'];
       const exists = current.includes(market);
@@ -614,16 +615,21 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
                 <label className="text-cyan-300/70 text-[10px] block mb-1.5">Supported Crypto Markets</label>
                 <div className="flex flex-wrap gap-2">
                   {['BTC', 'ETH', 'SOL', 'XRP'].map((asset) => {
-                    const active = (config.supportedMarkets || ['BTC']).includes(asset);
+                    const isSupported = asset === 'BTC';
+                    const active = isSupported && (config.supportedMarkets || ['BTC']).includes(asset);
                     return (
                       <button
                         key={asset}
                         type="button"
+                        disabled={!isSupported}
                         onClick={() => toggleMarketInclusion(asset)}
+                        title={isSupported ? '' : 'Auto-trading for this asset is blocked until multi-coin VIXY cycle architecture is supported'}
                         className={`px-3 py-1 rounded-lg text-xs font-bold border transition-all ${
                           active
                             ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/60 shadow-sm shadow-cyan-500/20'
-                            : 'bg-[#0B061A] text-cyan-400/40 border-cyan-900/40 hover:text-cyan-300'
+                            : isSupported
+                            ? 'bg-[#0B061A] text-cyan-400/40 border-cyan-900/40 hover:text-cyan-300'
+                            : 'bg-[#05030c] text-cyan-900/40 border-cyan-900/20 cursor-not-allowed opacity-50'
                         }`}
                       >
                         {asset}/USD 15M

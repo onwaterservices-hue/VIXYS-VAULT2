@@ -3,12 +3,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
 async function run() {
   try {
-    const subs = await stripe.subscriptions.list({
+    const pis = await stripe.paymentIntents.list({
       customer: "cus_V9Z40FVLmQ1LFd",
     });
-    console.log("Subscriptions found:", subs.data.length);
-    subs.data.forEach(s => {
-      console.log(`Sub: ${s.id} | Status: ${s.status} | Price: ${s.items.data[0].price.id}`);
+    console.log("Payment Intents found:", pis.data.length);
+    pis.data.forEach(pi => {
+      console.log(`PI: ${pi.id} | Status: ${pi.status} | Amount: ${pi.amount}`);
     });
   } catch (err) {
     console.error(err);

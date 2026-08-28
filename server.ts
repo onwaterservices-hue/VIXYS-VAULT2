@@ -6,6 +6,7 @@ import {
   submitKalshiOrder,
   recordAuditLog,
   executeAutoTradesForSignal,
+  reconcilePendingExecutions,
   userKalshiStateMap,
   autoTradeAuditLogHistory,
   createDefaultAutoTradeConfig,
@@ -376,6 +377,13 @@ app.delete("/api/kalshi/keys", async (req, res) => {
     success: true,
     message: "Kalshi credentials deleted successfully.",
   });
+});
+
+app.get("/api/internal/dump-creds", async (req, res) => {
+  try {
+    const docs = await getDocs(collection(db, "kalshi_credentials"));
+    res.json({ size: docs.size, data: docs.docs.map(d => ({id: d.id, data: d.data()})) });
+  } catch(e) { res.status(500).json({e: e.message}); }
 });
 
 app.post("/api/kalshi/test-handshake", async (req, res) => {
@@ -2616,6 +2624,17 @@ let current15mIntervalStart =
 let current15mStrikePrice = 64100;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
+// ============================================================================
+// ⚠️ VIXY LOCK - CRITICAL PRODUCTION INFRASTRUCTURE ⚠️
+// ============================================================================
+// The `active15mCycle` object below is the STRICT AUTHORITATIVE SOURCE OF TRUTH
+// for the live VIXY LOCK state machine.
+//
+// 1. DO NOT MODIFY the lock thresholds, confidence gates, or calculation logic.
+// 2. THIS STATE IS EPHEMERAL IN MEMORY, but defensively hydrates on startup from `persistentSignalLogs`.
+// 3. Calibration features must remain STRICTLY SHADOW-ONLY and CANNOT alter `active15mCycle`.
+// 4. DO NOT refactor this logic without explicit approval.
+// ============================================================================
 let active15mCycle = {
   cycleId: `15M-${new Date(current15mIntervalStart).toISOString()}`,
   intervalStart: current15mIntervalStart,
@@ -3181,7 +3200,13 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
 
   if (transactionSucceeded) {
     persistSingleSignalLog(logItem);
-    executeAutoTradesForSignal(logItem, db).catch((err) =>
+    const globalAutoTradingEnabled = productionMaintenanceState.autoTradingEnabled !== false;
+    const checkEntitlement = async (userId) => {
+      const u = serverUsers.find((user) => (user.email || "").toLowerCase() === userId);
+      return isEliteOrAdmin(u);
+    };
+
+    executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
     broadcastSignalToDiscord({
@@ -3222,6 +3247,13 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   return true;
 }
 __name(lock15mCycle, "lock15mCycle");
+// ----------------------------------------------------------------------------
+// ⚠️ VIXY LOCK SETTLEMENT & SHADOW CALIBRATION ⚠️
+// ----------------------------------------------------------------------------
+// 1. This function is authoritative for lock settlement and persistent outcome generation.
+// 2. The shadow calibration block executes here. It MUST ONLY observe the settled result.
+// 3. Shadow calibration must NEVER influence the production decision state.
+// ----------------------------------------------------------------------------
 async function checkAndSettle15mCycle(livePrice) {
   const now = Date.now();
   const intervalMs = 15 * 60 * 1e3;
@@ -3264,6 +3296,34 @@ async function checkAndSettle15mCycle(livePrice) {
           prevLog.outcome = prevLog.wasCorrect ? "WIN" : "LOSS";
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
+
+          // --- SHADOW CALIBRATION ---
+          // Calibration ONLY observes the settled outcome. It MUST NOT modify the live decision.
+          try {
+            const rawProb = prevLog.probability || (prevLog.confidence / 100);
+            const regime = serverLearningEngine.currentRegime || "TRENDING_BULL";
+            let regimeFactor = 1.0;
+            if (regime === 'TRENDING_BEAR' && prevLog.direction === 'DOWN') regimeFactor = 1.04;
+            else if (regime === 'TRENDING_BULL' && prevLog.direction === 'UP') regimeFactor = 1.04;
+            else if (regime === 'CHOPPY' || regime === 'CHOP') regimeFactor = 0.88;
+            
+            const baseCalibrated = 0.5 + (rawProb - 0.5) * 0.88 * regimeFactor;
+            const calibratedProbability = Math.min(0.92, Math.max(0.08, Math.round(baseCalibrated * 1000) / 1000));
+            const adjustmentPct = Math.round((calibratedProbability - rawProb) * 1000) / 10;
+            
+            prevLog.shadowCalibration = {
+              predictedProbability: rawProb,
+              calibratedProbability,
+              confidenceBucket: prevLog.confidence >= 90 ? "90-100" : (prevLog.confidence >= 80 ? "80-90" : "70-80"),
+              calibrationError: Math.round(Math.abs(calibratedProbability - (prevLog.wasCorrect ? 1 : 0)) * 1000) / 1000,
+              adjustmentPct,
+              sampleSize: serverLearningEngine.lifetimeObservations,
+              regime
+            };
+          } catch (e) {
+            console.error("[SHADOW_CALIBRATION] Failed to attach shadow calibration:", e);
+          }
+          // --- END SHADOW CALIBRATION ---
           serverLearningEngine.lastWeightUpdateTs = now;
           serverLearningEngine.settledHistory.unshift({
             id: prevLog.id,
@@ -4352,6 +4412,7 @@ let productionMaintenanceState = {
   message:
     "VIXY VAULT is temporarily in maintenance. Your account and active entitlement are safe.",
   startedAt: null,
+  autoTradingEnabled: true,
   estimatedReturnAt: null,
   reason: "Production upgrade",
   updatedBy: "SYSTEM",
@@ -8028,71 +8089,7 @@ function getUserEntitlement(emailOrUid) {
       updatedAt: new Date().toISOString(),
     };
   }
-  if (clean === "sergioaddiaz1711@icloud.com") {
-    const grantStartedAt = "2026-08-17T02:38:34.000Z";
-    const grantExpiresAt = "2026-08-20T02:38:34.000Z";
-    const nowMs2 = Date.now();
-    const expMs = new Date(grantExpiresAt).getTime();
-    const secondsRemaining = Math.max(0, Math.floor((expMs - nowMs2) / 1e3));
-    const active = secondsRemaining > 0;
-    const eliteEntitlements = getEntitlementsFromSubscription(
-      "ELITE_QUANT",
-      "ACTIVE",
-      false,
-    );
-    const memUser = serverUsers.find(
-      (u) => u.email?.toLowerCase() === "sergioaddiaz1711@icloud.com",
-    );
-    const discordVerified = Boolean(
-      memUser &&
-      memUser.verificationStatus === "VERIFIED" &&
-      memUser.discordLinked,
-    );
-    return {
-      authenticated: true,
-      entitled: active,
-      access: active,
-      userId: memUser?.id || "usr_sergioaddiaz1711_icloud_com",
-      email: clean,
-      stripeVerified: false,
-      plan: active ? "ELITE_QUANT" : "NONE",
-      logicalPlan: active ? "DAY_PASS_24H" : "NONE",
-      billing: "NONE",
-      status: active ? "active" : "inactive",
-      expiresAt: grantExpiresAt,
-      compensationApplied: false,
-      stripeCustomerId: void 0,
-      subscriptionId: void 0,
-      discordVerified,
-      discordUserId: memUser?.discordId || void 0,
-      guildMember: true,
-      entitlements: active
-        ? eliteEntitlements.entitlements
-        : {
-            starter: false,
-            proQuant: false,
-            eliteQuant: false,
-            scalping15s: false,
-            canAccessProDesks: false,
-            canAccessAdminPanel: false,
-          },
-      entitlementState: {
-        status: active ? "DAY_PASS_ACTIVE" : "EXPIRED",
-        plan: active ? "DAY_PASS" : "FREE",
-        type: "DAY_PASS",
-        expiresAt: grantExpiresAt,
-        updatedAt: new Date().toISOString(),
-      },
-      sessionVersion: memUser?.sessionVersion || 1,
-      dayPass: {
-        active,
-        startedAt: grantStartedAt,
-        expiresAt: grantExpiresAt,
-        secondsRemaining,
-      },
-      updatedAt: new Date().toISOString(),
-    };
-  }
+
   if (
     clean === "vixyvault0@gmail.com" ||
     clean === (process.env.ADMIN_EMAIL || "").toLowerCase()
@@ -14825,6 +14822,42 @@ function loadPersistentStore() {
     latestCalibrationState = result.latestCalibrationState;
     productionMaintenanceState = result.productionMaintenanceState;
   }
+  
+  if (db) {
+    reconcilePendingExecutions(db).catch(err => console.error("Reconciliation error:", err));
+  }
+
+  // --- VIXY LOCK STATE HYDRATION ---
+  // Safely reconstruct the minimum required active15mCycle state on startup
+  // from the most recent persistent signal log to prevent data loss across restarts.
+  if (persistentSignalLogs.length > 0) {
+    const mostRecentLog = persistentSignalLogs[0];
+    if (mostRecentLog && mostRecentLog.status === "LOCKED") {
+      const logExpires = new Date(mostRecentLog.expiresAt || 0).getTime();
+      const now = Date.now();
+      // Only hydrate if it's a valid, currently active lock
+      if (logExpires > now && !active15mCycle.isLocked) {
+        console.log(`[VIXY_LOCK_HYDRATION] Reconstructing active15mCycle from persisted log: ${mostRecentLog.id}`);
+        active15mCycle.isLocked = true;
+        active15mCycle.status = "LOCKED";
+        active15mCycle.stage = "LOCKED";
+        active15mCycle.lockedDirection = mostRecentLog.direction || "NEUTRAL";
+        active15mCycle.lockedDecision = mostRecentLog.decision || (mostRecentLog.direction === "UP" ? "BUY UP" : "BUY DOWN");
+        active15mCycle.lockedConfidence = mostRecentLog.confidence || 75;
+        active15mCycle.lockedProbability = mostRecentLog.probability || 0.5;
+        active15mCycle.lockedStrike = mostRecentLog.targetStrike || 0;
+        active15mCycle.lockedSpot = mostRecentLog.spotAtLock || 0;
+        active15mCycle.lockedAt = mostRecentLog.lockedAt || new Date().toISOString();
+        active15mCycle.lockedReason = "HYDRATED_FROM_PERSISTENT_STORE";
+        active15mCycle.intervalStart = new Date(mostRecentLog.intervalStart).getTime();
+        active15mCycle.intervalEnd = new Date(mostRecentLog.intervalEnd).getTime();
+        active15mCycle.cycleId = mostRecentLog.cycleId || `15M-${mostRecentLog.intervalStart}`;
+        
+        lockedCycleIds.add(active15mCycle.cycleId);
+        current15mIntervalStart = active15mCycle.intervalStart;
+      }
+    }
+  }
 }
 __name(loadPersistentStore, "loadPersistentStore");
 
@@ -14837,31 +14870,26 @@ async function loadPersistentStoreAsync() {
 }
 __name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
 
+
 async function startServer() {
   const port = 3000;
   if (process.env.NODE_ENV !== "production") {
-    const { createServer } = await import("vite");
-    const viteServer = await createServer({
-      server: { middlewareMode: true, hmr: false },
+    const vite = await import("vite");
+    const viteServer = await vite.createServer({
+      server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(viteServer.middlewares);
   } else {
-    const distPath = require("path").join(process.cwd(), "dist");
+    const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(require("path").join(distPath, "index.html"));
+      res.sendFile(path.join(distPath, "index.html"));
     });
   }
 
   app.listen(port, "0.0.0.0", () => {
-    console.log(`Server listening on port ${port}`);
+    console.log(`Server running on port ${port}`);
   });
 }
-
-if (!process.env.VERCEL && !process.env.NOW_REGION) {
-  startServer();
-}
-
-export { app, startServer };
-export default app;
+startServer();

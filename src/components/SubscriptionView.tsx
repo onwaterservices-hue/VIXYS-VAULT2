@@ -602,65 +602,71 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       )}
 
       {/* Active Subscription & Membership Terminal Header */}
-      <div className="vixy-card p-6 flex flex-wrap items-center justify-between gap-4 font-mono bg-gradient-to-r from-purple-950/40 via-purple-900/20 to-black/60 border border-purple-500/30">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-purple-500/20 rounded-2xl border border-purple-500/40 text-purple-300 shadow-inner">
-            <CreditCard className="w-6 h-6" />
+      <div className="vixy-card p-6 sm:p-8 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-6 font-mono bg-[#030108] border border-purple-500/20 shadow-2xl relative overflow-hidden">
+        {/* Subtle vault background effect */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-purple-900/10 via-transparent to-transparent pointer-events-none"></div>
+        <div className="absolute -top-[1px] left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-purple-500/50 to-transparent"></div>
+        
+        <div className="flex items-start sm:items-center gap-5 z-10 w-full xl:w-auto">
+          <div className="p-4 bg-purple-900/20 rounded-xl border border-purple-500/30 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.15)] shrink-0 hidden sm:block">
+            <ShieldCheck className="w-8 h-8" />
           </div>
-          <div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="text-purple-300/60">Membership Status:</span>
-              <span className="font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                {subscription.plan || 'PRO'} ACTIVE
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[10px] tracking-widest text-purple-300/60 uppercase">
+              <span>Access Status</span>
+              <span className={`font-bold px-2 py-0.5 rounded-sm flex items-center gap-1.5 ${subscription.status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${subscription.status === 'active' ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
+                {subscription.status === 'active' ? 'SYSTEM ACTIVE' : 'EXPIRED'}
               </span>
             </div>
-            <h2 className="text-lg font-black text-white mt-0.5 flex items-center gap-2">
-              VIXY AI {subscription.plan || 'PRO'} Membership Terminal
+            <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-2 uppercase tracking-wide">
+              VIXY VAULT // {subscription.plan || 'PRO'}
             </h2>
-            <p className="text-purple-300/70 text-xs font-sans mt-0.5">
-              Account: {authState?.user?.email || 'Logged in trader'} • Renews / Expires: <span className="text-white font-mono font-bold">{subscription.renewalDate || 'Active'}</span>
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 text-purple-300/70 text-xs font-sans">
+              <span className="flex items-center gap-1.5">
+                <CreditCard className="w-3.5 h-3.5 opacity-70" />
+                {authState?.user?.email || 'Logged in trader'}
+              </span>
+              <span className="hidden sm:inline opacity-30">•</span>
+              <span className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 opacity-70" />
+                Membership Window: <span className="text-white font-mono font-bold tracking-tight">{subscription.renewalDate || 'Active'}</span>
+              </span>
+            </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            onClick={handleExtendMonth}
-            disabled={isExtendingMonth}
-            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-black text-xs transition-all border border-emerald-400/50 shadow-lg shadow-emerald-950/50 flex items-center gap-2 cursor-pointer active:scale-95"
-            title="Add 1 Month (+30 Days) to active subscription"
-          >
-            {isExtendingMonth ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-emerald-100" />
-                <span>Extending Membership...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-emerald-200" />
-                <span>Extend Membership (+1 Month)</span>
-              </>
-            )}
-          </button>
-
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto z-10 pt-2 xl:pt-0">
           {onOpenTerminal && (
             <button
               onClick={onOpenTerminal}
-              className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all border border-purple-400/40 shadow-lg shadow-purple-900/30 flex items-center gap-2 cursor-pointer active:scale-95"
+              className="px-5 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all shadow-[0_0_20px_rgba(147,75,253,0.2)] flex justify-center items-center gap-2 cursor-pointer border border-purple-400/30 uppercase tracking-wide flex-grow sm:flex-grow-0"
             >
               <Zap className="w-4 h-4 text-amber-300" />
-              <span>Launch Production Terminal →</span>
+              <span>Launch Terminal</span>
             </button>
           )}
+
+          <a
+            href={getDirectStripeUrl(subscription.plan === 'ELITE' || subscription.plan === 'STARTER' ? subscription.plan : 'PRO')}
+            className="px-5 py-3 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white font-bold text-xs transition-all shadow-[0_0_20px_rgba(16,185,129,0.2)] flex justify-center items-center gap-2 cursor-pointer border border-emerald-400/30 uppercase tracking-wide flex-grow sm:flex-grow-0"
+            title="Renew or continue your membership via Stripe Checkout"
+          >
+            <Sparkles className="w-4 h-4 text-emerald-100" />
+            <span>Renew Membership</span>
+          </a>
 
           <button
             onClick={handleOpenCustomerPortal}
             disabled={isOpeningPortal}
-            className="px-3.5 py-2.5 rounded-xl bg-purple-950/60 hover:bg-purple-900/80 text-purple-200 font-bold text-xs transition-all border border-purple-500/30 shadow flex items-center gap-2"
+            className="px-4 py-3 rounded-lg bg-[#0a0518] hover:bg-[#130a2a] text-purple-300 font-bold text-[11px] transition-all border border-purple-500/30 flex justify-center items-center gap-2 uppercase tracking-wide flex-grow sm:flex-grow-0"
+            title="Manage your subscription through Stripe's secure portal"
           >
             <CreditCard className="w-3.5 h-3.5 text-purple-400" />
-            {isOpeningPortal ? 'Launching...' : 'Stripe Portal'}
+            <div className="flex flex-col items-start leading-none gap-0.5">
+              <span>▣ Manage Billing</span>
+              <span className="text-[9px] opacity-60 font-sans normal-case">Stripe-secured portal</span>
+            </div>
           </button>
         </div>
       </div>

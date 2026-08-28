@@ -1,0 +1,111 @@
+[
+  {
+    "target": "jessehuber54@gmail.com",
+    "status": "PASS",
+    "userId": "usr_jessehuber54",
+    "custId": "cus_V7c2Ft3P6dFZmL",
+    "subId": "sub_1U7Mo6CYsvFDvgUJMBAo5GoB",
+    "priceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE",
+    "before": {
+      "id": "usr_jessehuber54",
+      "grantSource": "STRIPE_BACKFILL",
+      "createdAt": "2026-08-22T21:50:28.000Z",
+      "stripeCustomerId": "cus_V7c2Ft3P6dFZmL",
+      "subscription": "PRO_PASS",
+      "role": "PRO",
+      "status": "ACTIVE",
+      "email": "jessehuber54@gmail.com",
+      "stripeChargeId": "ch_3U7Mo4CYsvFDvgUJ0pnNp5Lj",
+      "updatedAt": "2026-08-26T04:10:18.969Z"
+    },
+    "after": {
+      "grantSource": "STRIPE_BACKFILL",
+      "createdAt": "2026-08-22T21:50:28.000Z",
+      "stripeCustomerId": "cus_V7c2Ft3P6dFZmL",
+      "subscription": "STARTER_PASS",
+      "role": "USER",
+      "status": "ACTIVE",
+      "email": "jessehuber54@gmail.com",
+      "id": "usr_jessehuber54",
+      "stripeChargeId": "ch_3U7Mo4CYsvFDvgUJ0pnNp5Lj",
+      "updatedAt": "2026-08-28T04:40:11.084Z",
+      "accountStatus": "ACTIVE",
+      "plan": "STARTER_PASS",
+      "stripePriceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE",
+      "stripeSubscriptionId": "sub_1U7Mo6CYsvFDvgUJMBAo5GoB"
+    },
+    "timestamp": "2026-08-28T04:40:11.084Z"
+  },
+  {
+    "target": "oreoromp@gmail.com",
+    "status": "PASS",
+    "userId": "usr_oreoromp",
+    "custId": "cus_V7RAMTHpoysxxV",
+    "subId": "sub_1U7CIOCYsvFDvgUJykwxFJ8a",
+    "priceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE",
+    "before": {
+      "id": "usr_oreoromp",
+      "grantSource": "STRIPE_BACKFILL",
+      "status": "ACTIVE",
+      "stripeChargeId": "ch_3U7DS7CYsvFDvgUJ0VGWrylF",
+      "updatedAt": "2026-08-26T04:10:18.969Z",
+      "subscription": "DAY_PASS",
+      "createdAt": "2026-08-22T11:51:12.000Z",
+      "email": "oreoromp@gmail.com",
+      "stripeCustomerId": "cus_V7RAMTHpoysxxV",
+      "role": "USER"
+    },
+    "after": {
+      "grantSource": "STRIPE_BACKFILL",
+      "status": "ACTIVE",
+      "stripeChargeId": "ch_3U7DS7CYsvFDvgUJ0VGWrylF",
+      "updatedAt": "2026-08-28T04:40:12.120Z",
+      "subscription": "STARTER_PASS",
+      "createdAt": "2026-08-22T11:51:12.000Z",
+      "email": "oreoromp@gmail.com",
+      "stripeCustomerId": "cus_V7RAMTHpoysxxV",
+      "role": "USER",
+      "id": "usr_oreoromp",
+      "accountStatus": "ACTIVE",
+      "plan": "STARTER_PASS",
+      "stripePriceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE",
+      "stripeSubscriptionId": "sub_1U7CIOCYsvFDvgUJykwxFJ8a"
+    },
+    "timestamp": "2026-08-28T04:40:12.120Z"
+  },
+  {
+    "target": "joel116569@gmail.com",
+    "status": "BLOCKED",
+    "reason": "CustId mismatch"
+  },
+  {
+    "target": "joel116569@gmail.com",
+    "status": "PASS",
+    "userId": "usr_joel116569",
+    "loginEmail": "joel116569@gmail.com",
+    "stripeCustomerId": "cus_V4Uke7Z46s4E8H",
+    "stripeSubscriptionId": "sub_1U4LkhCYsvFDvgUJ5qBS90US",
+    "stripePriceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE",
+    "detectedPlan": "STARTER",
+    "previousEntitlementState": {
+      "userId": "usr_joel116569",
+      "email": "joel116569@gmail.com",
+      "role": "USER",
+      "subscription": "DAY_PASS",
+      "stripeCustomerId": "N/A",
+      "grantSource": "STRIPE_BACKFILL",
+      "status": "ACTIVE"
+    },
+    "newEntitlementState": {
+      "subscription": "STARTER_PASS",
+      "role": "USER",
+      "status": "ACTIVE",
+      "stripeCustomerId": "cus_V4Uke7Z46s4E8H",
+      "stripeSubscriptionId": "sub_1U4LkhCYsvFDvgUJ5qBS90US",
+      "stripePriceId": "price_1Tz7MWCYsvFDvgUJCLaiMRWE"
+    },
+    "timestamp": "2026-08-28T04:45:26.947Z",
+    "recoveryReason": "Webhook failure orphan reconciliation — verified exact Stripe/VIXY identity match after live Stripe customer-ID verification.",
+    "operationStatus": "SUCCESS"
+  }
+]
