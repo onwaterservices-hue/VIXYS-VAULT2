@@ -14893,3 +14893,5 @@ async function startServer() {
   });
 }
 startServer();
+
+export { app };
