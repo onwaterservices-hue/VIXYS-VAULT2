@@ -23,6 +23,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import crypto from "crypto";
+async function syncUserEntitlementToDiscord() {
+  console.warn("[vixy] syncUserEntitlementToDiscord stub - Discord entitlement sync temporarily disabled");
+  return undefined;
+}
+
 function hashPassword(password) {
   if (!password) return "";
   const salt = crypto.randomBytes(16).toString("hex");
@@ -10469,7 +10474,7 @@ timestamp: ${new Date().toISOString()}`);
           );
           break;
         }
-        const plan = (session.metadata?.plan || "PRO").toUpperCase();
+        let plan = (session.metadata?.plan || "PRO").toUpperCase();
         const referralCode = session.metadata?.referralCode || "DIRECT";
         const vixyUserId =
           session.metadata?.vixyUserId || session.metadata?.userId || "";
@@ -10491,6 +10496,11 @@ timestamp: ${new Date().toISOString()}`);
             const subDetails = await stripe.subscriptions.retrieve(stripeSubId);
             currentPeriodStart = subDetails.current_period_start;
             currentPeriodEnd = subDetails.current_period_end;
+            const stripePriceIdForPlan = subDetails.items?.data?.[0]?.price?.id;
+            const priceResolvedPlan = getPlanFromPriceId(stripePriceIdForPlan);
+            if (priceResolvedPlan && priceResolvedPlan !== "NONE") {
+              plan = priceResolvedPlan;
+            }
           } catch (subFetchErr) {
             console.warn(
               "[STRIPE WEBHOOK] Failed to fetch subscription period details:",
@@ -14884,7 +14894,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const __spaIndexPath = path.join(distPath, "index.html"); if (fs.existsSync(__spaIndexPath)) { res.sendFile(__spaIndexPath); } else { res.status(404).json({ error: "not_found" }); }
     });
   }
 
