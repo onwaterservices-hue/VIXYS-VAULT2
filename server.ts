@@ -172,32 +172,10 @@ app.use((req, res, next) => {
   }
 });
 function resolveRequestUser(req) {
-  const email = String(
-    req.headers["x-user-email"] || req.body?.email || req.query?.email || "",
-  )
-    .toLowerCase()
-    .trim();
-  const uid = String(
-    req.headers["x-user-id"] ||
-      req.headers["x-user-uid"] ||
-      req.query?.userId ||
-      req.query?.uid ||
-      "",
-  ).trim();
-  let user = null;
-  if (uid) {
-    user = serverUsers.find((u) => u.id === uid || u.uid === uid);
-  }
-  if (!user && email) {
-    user = serverUsers.find((u) => u.email?.toLowerCase() === email);
-  }
-  if (!user && (email || uid)) {
-    user = ensureUserExists({
-      uid: uid || undefined,
-      email: email || undefined,
-    });
-  }
-  return user;
+  // Identity now comes only from the verified session (see authenticateSession
+  // in the PR #5 auth module) -- never from client-supplied headers/query.
+  const auth = authenticateSession(req);
+  return auth ? auth.user : null;
 }
 __name(resolveRequestUser, "resolveRequestUser");
 
@@ -9287,17 +9265,15 @@ app.get(
     "/api/user/entitlement",
   ],
   async (req, res) => {
-    const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-      .toLowerCase()
-      .trim();
-    const reqUserId = (
-      req.headers["x-user-id"] ||
-      req.headers["x-user-uid"] ||
-      req.query.userId ||
-      req.query.uid ||
-      ""
-    ).trim();
-    const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
+    const auth = authenticateSession(req);
+    if (!auth) {
+      return res.status(401).json({
+        error: "AUTHENTICATION_REQUIRED",
+        message: "Sign in to view entitlement status.",
+      });
+    }
+    const reqEmail = auth.email;
+    const reqUserId = auth.uid;
     let hydrationRes = null;
     if (reqEmail || reqUserId) {
       hydrationRes = await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => null);
@@ -10102,13 +10078,15 @@ app.get("/api/admin/test-entitlement-suite", async (req, res) => {
   });
 });
 app.get("/api/user/subscription", (req, res) => {
-  const userEmail = (
-    req.headers["x-user-email"] ||
-    req.query.email ||
-    "vixyvault0@gmail.com"
-  ).toLowerCase();
-  const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
-  ensureUserExists(userEmail, { role: userRoleHeader });
+  const auth = authenticateSession(req);
+  if (!auth) {
+    return res.status(401).json({
+      authenticated: false,
+      error: "AUTHENTICATION_REQUIRED",
+      message: "Sign in to view subscription status.",
+    });
+  }
+  const userEmail = auth.email;
   const entitlement = getUserEntitlement(userEmail);
   const existing = userSubscriptions.get(userEmail);
   res.json({
