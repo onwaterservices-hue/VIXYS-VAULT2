@@ -4183,7 +4183,37 @@ app.use((req, res, next) => {
 app.get(
   "/api/admin/users",
   requireRole(["OWNER", "ADMIN", "SUPPORT"]),
-  (req, res) => {
+  async (req, res) => {
+    if (db) {
+      try {
+        const usersSnap = await getDocs(collection(db, "users"));
+        usersSnap.forEach((docSnap) => {
+          const userData = docSnap.data();
+          if (!userData) return;
+          const matchedEmail = (userData.email || "").toLowerCase();
+          const existingMemUser =
+            (matchedEmail && serverUsers.find((u) => u.email?.toLowerCase() === matchedEmail)) ||
+            serverUsers.find((u) => u.id === docSnap.id || u.uid === userData.uid);
+          if (existingMemUser) {
+            if (userData.subscription) existingMemUser.subscription = userData.subscription;
+            if (userData.status) existingMemUser.status = userData.status;
+            if (userData.role) existingMemUser.role = userData.role;
+            if (userData.stripeCustomerId) existingMemUser.stripeCustomerId = userData.stripeCustomerId;
+            if (userData.stripeSubscriptionId) existingMemUser.stripeSubscriptionId = userData.stripeSubscriptionId;
+            if (userData.discordId) existingMemUser.discordId = userData.discordId;
+          } else if (matchedEmail || userData.uid) {
+            ensureUserExists({
+              uid: userData.uid || docSnap.id,
+              email: matchedEmail,
+              role: userData.role,
+              subscription: userData.subscription,
+            });
+          }
+        });
+      } catch (hydrateErr) {
+        console.warn("[ADMIN USERS] Firestore hydration failed, showing in-memory cache only:", hydrateErr?.message || hydrateErr);
+      }
+    }
     userSubscriptions.forEach((sub, email) => {
       if (email && email !== "global_active_user") {
         ensureUserExists({ email, role: sub.role, subscription: sub.plan });
