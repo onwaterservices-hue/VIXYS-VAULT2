@@ -23,6 +23,11 @@ import { WebSocketServer, WebSocket } from "ws";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import crypto from "crypto";
+async function syncUserEntitlementToDiscord() {
+  console.warn("[vixy] syncUserEntitlementToDiscord stub - Discord entitlement sync temporarily disabled");
+  return undefined;
+}
+
 function hashPassword(password) {
   if (!password) return "";
   const salt = crypto.randomBytes(16).toString("hex");
@@ -14884,7 +14889,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
-      res.sendFile(path.join(distPath, "index.html"));
+      const __spaIndexPath = path.join(distPath, "index.html"); if (fs.existsSync(__spaIndexPath)) { res.sendFile(__spaIndexPath); } else { res.status(404).json({ error: "not_found" }); }
     });
   }
 
