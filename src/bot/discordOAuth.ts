@@ -56,7 +56,7 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
       });
     } catch (err) {
       console.error("[Discord OAuth] Failed to persist state:", err && err.message);
-      return res.status(503).json({ error: "OAUTH_STATE_STORAGE_FAILED" });
+      return res.status(503).json({ error: "OAUTH_STATE_STORAGE_FAILED", debugCode: err && err.code, debugMessage: err && err.message });
     }
 
     const params = new URLSearchParams({
