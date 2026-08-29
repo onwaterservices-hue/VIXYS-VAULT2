@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { AlertSettings } from '../types';
 import {
-  getDiscordAuthUrlApi,
+  getDiscordAuthUrlSecure,
   getDiscordUserProfileApi,
   getAccountMeApi,
   verifyDiscordMembershipApi,
@@ -182,7 +182,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     }, 15000);
 
     try {
-      const authData = await getDiscordAuthUrlApi(settings?.emailAddress);
+      const authData = await getDiscordAuthUrlSecure();
       if (authData && authData.url) {
         const width = 600;
         const height = 700;
