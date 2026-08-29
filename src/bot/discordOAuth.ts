@@ -28,8 +28,9 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
  * popup -- never redirects itself, since the frontend needs the URL
  * as JSON to open a popup window.
  */
-export function createDiscordConnectHandler(db, authenticateSession) {
+export function createDiscordConnectHandler(getDb, authenticateSession) {
   return async (req, res) => {
+    const db = getDb();
     const auth = authenticateSession(req);
     if (!auth || !auth.user || !auth.user.email) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
@@ -73,8 +74,9 @@ export function createDiscordConnectHandler(db, authenticateSession) {
  * from the validated, single-use OAuth state bound to the VIXY user at
  * /connect time, never from a client-supplied param.
  */
-export function createDiscordCallbackHandler(db, resolveEntitlementTier, assignDiscordRoleToUser) {
+export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser) {
   return async (req, res) => {
+    const db = getDb();
     const code = req.query.code;
     const state = req.query.state;
     const fail = (reason) => res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
@@ -221,8 +223,9 @@ export function createDiscordCallbackHandler(db, resolveEntitlementTier, assignD
 }
 
 /** GET /api/discord/status -- authenticated status check for the frontend. */
-export function createDiscordLinkStatusHandler(db, authenticateSession) {
+export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
   return async (req, res) => {
+    const db = getDb();
     const auth = authenticateSession(req);
     if (!auth || !auth.user || !auth.user.email) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
@@ -241,20 +244,15 @@ export function createDiscordLinkStatusHandler(db, authenticateSession) {
       });
     } catch (err) {
       console.error("[Discord OAuth] Status check error:", err && err.message);
-      // TEMPORARY diagnostic detail (error code/message only, never secrets) --
-      // remove once the root cause is confirmed and fixed.
-      return res.status(500).json({
-        error: "STATUS_CHECK_FAILED",
-        debugCode: err && err.code,
-        debugMessage: err && err.message,
-      });
+      return res.status(500).json({ error: "STATUS_CHECK_FAILED" });
     }
   };
 }
 
 /** POST /api/discord/unlink -- authenticated, explicit unlink before reconnect. */
-export function createDiscordUnlinkHandler(db, authenticateSession) {
+export function createDiscordUnlinkHandler(getDb, authenticateSession) {
   return async (req, res) => {
+    const db = getDb();
     const auth = authenticateSession(req);
     if (!auth || !auth.user || !auth.user.email) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
