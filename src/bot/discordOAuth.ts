@@ -12,6 +12,17 @@ import { doc, getDoc, setDoc, runTransaction } from "firebase/firestore";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DISCORD_API = "https://discord.com/api/v10";
 
+// Bounds any promise (e.g. a Firestore SDK call) to a fixed wall-clock
+// time so a hung network/connection issue fails cleanly with a clear
+// error instead of hanging the request forever.
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error("TIMEOUT:" + label)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -48,15 +59,20 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
     const state = crypto.randomBytes(32).toString("hex");
     const now = Date.now();
     try {
-      await setDoc(doc(db, "discord_oauth_states", state), {
-        vixyEmail: auth.user.email.toLowerCase(),
-        createdAt: new Date(now).toISOString(),
-        expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
-        used: false,
-      });
+      await withTimeout(
+        setDoc(doc(db, "discord_oauth_states", state), {
+          vixyEmail: auth.user.email.toLowerCase(),
+          createdAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
+          used: false,
+        }),
+        8000,
+        "oauth_state_write",
+      );
     } catch (err) {
       console.error("[Discord OAuth] Failed to persist state:", err && err.message);
-      return res.status(503).json({ error: "OAUTH_STATE_STORAGE_FAILED" });
+      const timedOut = !!(err && String(err.message).startsWith("TIMEOUT:"));
+      return res.status(503).json({ error: timedOut ? "OAUTH_STATE_STORAGE_TIMEOUT" : "OAUTH_STATE_STORAGE_FAILED" });
     }
 
     const params = new URLSearchParams({
