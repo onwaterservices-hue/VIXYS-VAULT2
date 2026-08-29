@@ -112,6 +112,12 @@ import {
   discordClient,
   loadProductionDiscordCredentials,
 } from "./src/bot";
+import {
+  createDiscordConnectHandler,
+  createDiscordCallbackHandler,
+  createDiscordLinkStatusHandler,
+  createDiscordUnlinkHandler,
+} from "./src/bot/discordOAuth";
 import { AutomationScheduler } from "./src/bot/services/automationScheduler";
 process.on("unhandledRejection", (reason) => {
   const errStr = String(reason?.message || reason);
@@ -839,7 +845,7 @@ function clearSessionCookie(res) {
 }
 __name(clearSessionCookie, "clearSessionCookie");
 
-function authenticateSession(req) {
+export function authenticateSession(req) {
   const cookies = parseCookieHeader(req);
   const payload = verifySession(cookies[SESSION_COOKIE_NAME]);
   if (!payload) return null;
@@ -4971,6 +4977,51 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ success: true });
 });
 
+// ---- Discord OAuth connection (real identity linking) ----
+function resolveDiscordEntitlementTier(email, discordUserId) {
+  const dayPass = discordUserId ? userDayPasses.get(discordUserId) : null;
+  if (dayPass && dayPass.expiresAt && new Date(dayPass.expiresAt) > new Date()) {
+    return "DAY_PASS";
+  }
+  const lowerEmail = (email || "").toLowerCase();
+  const foundUser = serverUsers.find(
+    (u) => (u.email || "").toLowerCase() === lowerEmail,
+  );
+  const sub = userSubscriptions.get(lowerEmail) || {
+    role: foundUser && foundUser.role,
+    plan: foundUser && foundUser.subscription,
+  };
+  if (sub.role === "ELITE" || (sub.plan && sub.plan.includes("ELITE"))) {
+    return "ELITE";
+  }
+  if (sub.role === "PRO" || (sub.plan && sub.plan.includes("PRO"))) {
+    return "PRO";
+  }
+  return "VERIFIED";
+}
+__name(resolveDiscordEntitlementTier, "resolveDiscordEntitlementTier");
+
+app.get(
+  "/api/discord/connect",
+  createDiscordConnectHandler(db, authenticateSession),
+);
+app.get(
+  "/api/discord/callback",
+  createDiscordCallbackHandler(
+    db,
+    resolveDiscordEntitlementTier,
+    assignDiscordRoleToUser,
+  ),
+);
+app.get(
+  "/api/discord/status",
+  createDiscordLinkStatusHandler(db, authenticateSession),
+);
+app.post(
+  "/api/discord/unlink",
+  createDiscordUnlinkHandler(db, authenticateSession),
+);
+
 // ================= EXTEND MEMBERSHIP ROUTE =================
 app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
   try {
@@ -6563,7 +6614,7 @@ app.post(
         activeEmail.toLowerCase(),
       ) || {
         email: activeEmail.toLowerCase(),
-        discordUserId: user.discordId || "315284910382911234",
+        discordUserId: user.discordId || null,
         discordUsername: user.discordTag || "discord_user",
         discordGlobalName: user.discordGlobalName || user.name,
         discordAvatar: null,
