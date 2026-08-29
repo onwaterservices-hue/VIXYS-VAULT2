@@ -5044,6 +5044,110 @@ app.post(
   createDiscordUnlinkHandler(() => db, authenticateSession),
 );
 
+// Live guild-membership check via the existing bot token -- never trusts a
+// stored flag, always re-checks against Discord directly so a user who
+// joined after linking (or left) always sees their real current status.
+async function checkLiveGuildMembership(discordUserId) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(
+        "https://discord.com/api/v10/guilds/" +
+          process.env.DISCORD_GUILD_ID +
+          "/members/" +
+          discordUserId,
+        {
+          headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+          signal: controller.signal,
+        },
+      );
+      return res.ok;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    console.error("[Discord] Live guild membership check failed:", err?.message || err);
+    return false;
+  }
+}
+__name(checkLiveGuildMembership, "checkLiveGuildMembership");
+
+// Backs the existing (previously unimplemented) account-status widget.
+// Reuses the same session auth and Firestore link data as the rest of the
+// Discord OAuth system -- no separate/duplicate identity source.
+app.get("/api/account/me", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.user || !auth.user.email) {
+    return res.json({ authenticated: false });
+  }
+  const vixyEmail = auth.user.email.toLowerCase();
+  let discord = { linked: false };
+  try {
+    if (db) {
+      const snap = await getDoc(doc(db, "discord_links", vixyEmail));
+      if (snap.exists() && snap.data().status === "CONNECTED") {
+        const d = snap.data();
+        const guildMember = await checkLiveGuildMembership(d.discordUserId);
+        discord = {
+          linked: true,
+          discordUserId: d.discordUserId,
+          discordUsername: d.discordUsername,
+          discordGlobalName: d.discordUsername,
+          guildMember,
+        };
+      }
+    }
+  } catch (err) {
+    console.error("[Account] Discord link lookup failed:", err?.message || err);
+  }
+  return res.json({ authenticated: true, discord });
+});
+
+// Backs the existing (previously unimplemented) "Verify Membership" button.
+// Re-checks guild membership live and, if the user is now a member,
+// re-runs the existing role-sync exactly as the OAuth callback does --
+// same entitlement resolution, same idempotent assignDiscordRoleToUser.
+app.post("/api/discord/verify-membership", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.user || !auth.user.email) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  const vixyEmail = auth.user.email.toLowerCase();
+  if (!db) {
+    return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+  }
+  try {
+    const snap = await getDoc(doc(db, "discord_links", vixyEmail));
+    if (!snap.exists() || snap.data().status !== "CONNECTED") {
+      return res.status(400).json({ error: "NOT_LINKED" });
+    }
+    const discordUserId = snap.data().discordUserId;
+    const guildMember = await checkLiveGuildMembership(discordUserId);
+    if (guildMember) {
+      try {
+        const tier = resolveDiscordEntitlementTier(vixyEmail, discordUserId);
+        await assignDiscordRoleToUser(discordUserId, tier);
+      } catch (err) {
+        console.error("[Discord] Role sync during verify-membership failed:", err?.message || err);
+      }
+    }
+    return res.json({
+      authenticated: true,
+      discord: {
+        linked: true,
+        discordUserId,
+        discordUsername: snap.data().discordUsername,
+        discordGlobalName: snap.data().discordUsername,
+        guildMember,
+      },
+    });
+  } catch (err) {
+    console.error("[Discord] Verify membership failed:", err?.message || err);
+    return res.status(500).json({ error: "VERIFY_MEMBERSHIP_FAILED" });
+  }
+});
+
 // ================= EXTEND MEMBERSHIP ROUTE =================
 app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
   try {
