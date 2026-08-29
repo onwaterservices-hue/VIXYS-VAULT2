@@ -5028,7 +5028,7 @@ app.get("/api/_debug/firebase-status", (req, res) => {
   });
 });
 app.get(
-  "/api/discord/callback",
+  "/api/auth/discord/callback",
   createDiscordCallbackHandler(
     () => db,
     resolveDiscordEntitlementTier,
