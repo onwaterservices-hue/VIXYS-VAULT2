@@ -1222,14 +1222,28 @@ __name(shouldBroadcastCycle, "shouldBroadcastCycle");
 // broadcast atomically in Firestore -- only the instance whose transaction
 // creates the claim doc first is allowed to send. A doc per 15m cycleId is
 // naturally bounded (~96/day) so no separate TTL/cleanup job is needed.
+// Bounded reclaim window: a claim stuck in SENDING longer than this is assumed
+// dead (crashed instance, hung request) and may be atomically reclaimed by a
+// later attempt for the SAME cycleId. A claim marked SENT is terminal and is
+// never reclaimed, so a successful delivery can never be duplicated.
+const BROADCAST_CLAIM_STALE_MS = 5 * 60 * 1000;
+
 async function claimBroadcastAtomically(cycleId) {
   if (!cycleId || !db) return true; // no Firestore configured -- fall back to in-memory guard only
   try {
     return await runTransaction(db, async (tx) => {
       const ref = doc(db, "discord_broadcast_claims", String(cycleId));
       const snap = await tx.get(ref);
-      if (snap.exists()) return false;
-      tx.set(ref, { claimedAt: new Date().toISOString(), cycleId: String(cycleId) });
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        if (data.status === "SENDING" || data.status === "SENT") {
+          const claimedAtMs = data.claimedAt ? new Date(data.claimedAt).getTime() : 0;
+          const isStale = !claimedAtMs || Date.now() - claimedAtMs > BROADCAST_CLAIM_STALE_MS;
+          if (data.status === "SENT" || !isStale) return false;
+          // stale SENDING claim: safe to reclaim and retry
+        }
+      }
+      tx.set(ref, { status: "SENDING", claimedAt: new Date().toISOString(), cycleId: String(cycleId) });
       return true;
     });
   } catch (err) {
@@ -1238,6 +1252,22 @@ async function claimBroadcastAtomically(cycleId) {
   }
 }
 __name(claimBroadcastAtomically, "claimBroadcastAtomically");
+
+// Records the terminal (SENT) or recoverable (FAILED) outcome of a claimed
+// broadcast, so a stale FAILED/SENDING claim can be reclaimed later while a
+// SENT claim can never be resent.
+async function markBroadcastOutcome(cycleId, status) {
+  if (!cycleId || !db) return;
+  try {
+    await runTransaction(db, async (tx) => {
+      const ref = doc(db, "discord_broadcast_claims", String(cycleId));
+      tx.set(ref, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    });
+  } catch (err) {
+    console.error("[Discord] Failed to record broadcast outcome:", err?.message || err);
+  }
+}
+__name(markBroadcastOutcome, "markBroadcastOutcome");
 async function updateCrossAssetFeeds() {
   const now = Date.now();
   if (currentBtcPrice && currentBtcPrice > 0) {
@@ -3408,8 +3438,12 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
           reasoning:
             finalReason ||
             "High-conviction taker delta absorption detected.",
-        }).catch((err) =>
-          console.error("[Discord] Automated broadcast failed:", err),
+        }).then(
+          () => markBroadcastOutcome(cycleId, "SENT"),
+          (err) => {
+            console.error("[Discord] Automated broadcast failed:", err);
+            markBroadcastOutcome(cycleId, "FAILED");
+          },
         );
       }).catch((err) =>
         console.error("[Discord] Broadcast claim error:", err),
