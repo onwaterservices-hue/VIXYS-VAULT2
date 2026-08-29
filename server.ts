@@ -5012,6 +5012,21 @@ app.get(
   "/api/discord/connect",
   createDiscordConnectHandler(() => db, authenticateSession),
 );
+// TEMPORARY diagnostic only -- presence/identity booleans, never secrets.
+// Remove once Hypothesis B (backend Firestore auth) is resolved.
+app.get("/api/_debug/firebase-status", (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || auth.user.role !== "OWNER") {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  return res.json({
+    hasFirebaseApp: !!firebaseAppInstance,
+    hasDb: !!db,
+    hasAuthInstance: !!backendAuthInstance,
+    authCurrentUserUid: (backendAuthInstance && backendAuthInstance.currentUser && backendAuthInstance.currentUser.uid) || null,
+    authCurrentUserEmail: (backendAuthInstance && backendAuthInstance.currentUser && backendAuthInstance.currentUser.email) || null,
+  });
+});
 app.get(
   "/api/discord/callback",
   createDiscordCallbackHandler(
