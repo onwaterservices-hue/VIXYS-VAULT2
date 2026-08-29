@@ -12,6 +12,16 @@ import { doc, getDoc, setDoc, runTransaction } from "firebase/firestore";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DISCORD_API = "https://discord.com/api/v10";
 
+// Derives the callback URL from the incoming request's own host instead of
+// a single fixed env var, so this works correctly on whichever domain is
+// actually running (Preview or Production) -- as long as that exact URL
+// is registered in the Discord application's OAuth2 redirect list.
+function getRedirectUri(req) {
+  const proto = String(req.headers["x-forwarded-proto"] || req.protocol || "https").split(",")[0];
+  const host = req.get("host");
+  return proto + "://" + host + "/api/auth/discord/callback";
+}
+
 // Bounds any promise (e.g. a Firestore SDK call) to a fixed wall-clock
 // time so a hung network/connection issue fails cleanly with a clear
 // error instead of hanging the request forever.
@@ -50,9 +60,8 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
       return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     }
     const clientId = process.env.DISCORD_CLIENT_ID;
-    const redirectUri = process.env.DISCORD_REDIRECT_URI;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-    if (!clientId || !redirectUri || !clientSecret) {
+    if (!clientId || !clientSecret) {
       return res.status(503).json({ error: "DISCORD_OAUTH_NOT_CONFIGURED" });
     }
 
@@ -77,7 +86,7 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
 
     const params = new URLSearchParams({
       client_id: clientId,
-      redirect_uri: redirectUri,
+      redirect_uri: getRedirectUri(req),
       response_type: "code",
       scope: "identify",
       state,
@@ -137,7 +146,7 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
           client_secret: process.env.DISCORD_CLIENT_SECRET,
           grant_type: "authorization_code",
           code: String(code),
-          redirect_uri: process.env.DISCORD_REDIRECT_URI,
+          redirect_uri: getRedirectUri(req),
         }),
       });
       if (!tokenRes.ok) {
