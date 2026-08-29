@@ -1070,6 +1070,20 @@ let latestCrossAssetContext = {
   lastUpdated: new Date().toISOString(),
   assets: {},
 };
+// Bounded, in-process idempotency guard: prevents the same committed
+// lock cycle from broadcasting to Discord more than once if this code path
+// is re-entered for the same cycleId (retry, race, re-entrant call). Capped
+// at 200 entries with FIFO eviction so it cannot grow unbounded.
+const recentlyBroadcastCycleIds = new Set();
+function shouldBroadcastCycle(cycleId) {
+  if (!cycleId || recentlyBroadcastCycleIds.has(cycleId)) return false;
+  recentlyBroadcastCycleIds.add(cycleId);
+  if (recentlyBroadcastCycleIds.size > 200) {
+    recentlyBroadcastCycleIds.delete(recentlyBroadcastCycleIds.values().next().value);
+  }
+  return true;
+}
+__name(shouldBroadcastCycle, "shouldBroadcastCycle");
 async function updateCrossAssetFeeds() {
   const now = Date.now();
   if (currentBtcPrice && currentBtcPrice > 0) {
@@ -3214,19 +3228,23 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
-    broadcastSignalToDiscord({
-      symbol: "BTC/USDT 15M",
-      direction: finalDir === "UP" ? "YES" : "NO",
-      confidence: finalConf,
-      edgePct: currentEdgePct,
-      currentPrice: finalSpot,
-      targetPrice: finalStrike,
-      reasoning:
-        finalReason ||
-        "High-conviction taker delta absorption detected.",
-    }).catch((err) =>
-      console.error("[Discord] Automated broadcast failed:", err),
-    );
+    if (shouldBroadcastCycle(cycleId)) {
+      broadcastSignalToDiscord({
+        symbol: "BTC/USDT 15M",
+        direction: finalDir === "UP" ? "YES" : "NO",
+        confidence: finalConf,
+        edgePct: currentEdgePct,
+        currentPrice: finalSpot,
+        targetPrice: finalStrike,
+        reasoning:
+          finalReason ||
+          "High-conviction taker delta absorption detected.",
+      }).catch((err) =>
+        console.error("[Discord] Automated broadcast failed:", err),
+      );
+    } else {
+      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
+    }
   }
 
   const remainingSeconds = Math.max(
