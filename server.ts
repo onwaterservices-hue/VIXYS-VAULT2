@@ -119,6 +119,13 @@ import {
   createDiscordUnlinkHandler,
 } from "./src/bot/discordOAuth";
 import { AutomationScheduler } from "./src/bot/services/automationScheduler";
+// Statically imported so esbuild embeds this config directly into the
+// bundled dist/server.cjs -- a runtime fs.readFileSync(process.cwd() + ...)
+// depends on this exact file being present at that path in the deployed
+// serverless filesystem, which is not guaranteed. These are Firebase web
+// app config values (apiKey, projectId, etc.), not secrets by Firebase's
+// own design -- security lives in Firestore Rules, not in hiding these.
+import firebaseAppletConfig from "./firebase-applet-config.json";
 process.on("unhandledRejection", (reason) => {
   const errStr = String(reason?.message || reason);
   if (
@@ -14267,13 +14274,25 @@ const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];
 async function initializeBackendFirebase() {
   try {
-    const firebaseConfigPath = path.join(
-      process.cwd(),
-      "firebase-applet-config.json",
-    );
-    if (fs.existsSync(firebaseConfigPath)) {
-      const firebaseConfigRaw = fs.readFileSync(firebaseConfigPath, "utf-8");
-      const firebaseConfig = JSON.parse(firebaseConfigRaw);
+    // Statically imported config (see top-of-file import) instead of a
+    // runtime fs.readFileSync -- guarantees the config is present in the
+    // bundled output regardless of the deployed function's working
+    // directory. Falls back to the old file-read only if the static
+    // import somehow came back empty, so behavior for any other consumer
+    // of this function is unchanged.
+    const firebaseConfig =
+      firebaseAppletConfig && firebaseAppletConfig.projectId
+        ? firebaseAppletConfig
+        : (() => {
+            const firebaseConfigPath = path.join(
+              process.cwd(),
+              "firebase-applet-config.json",
+            );
+            return fs.existsSync(firebaseConfigPath)
+              ? JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"))
+              : null;
+          })();
+    if (firebaseConfig) {
       if (!firebaseAppInstance) {
         firebaseAppInstance = initializeApp(firebaseConfig);
       }
