@@ -35,6 +35,9 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
     if (!auth || !auth.user || !auth.user.email) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
+    if (!db) {
+      return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+    }
     const clientId = process.env.DISCORD_CLIENT_ID;
     const redirectUri = process.env.DISCORD_REDIRECT_URI;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
@@ -81,6 +84,9 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     const state = req.query.state;
     const fail = (reason) => res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
 
+    if (!db) {
+      return fail("service_unavailable");
+    }
     if (!code || !state || typeof state !== "string") {
       return fail("missing_params");
     }
@@ -231,6 +237,9 @@ export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
     const vixyEmail = auth.user.email.toLowerCase();
+    if (!db) {
+      return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+    }
     try {
       const snap = await getDoc(doc(db, "discord_links", vixyEmail));
       if (!snap.exists()) {
@@ -244,12 +253,7 @@ export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
       });
     } catch (err) {
       console.error("[Discord OAuth] Status check error:", err && err.message);
-      return res.status(500).json({
-        error: "STATUS_CHECK_FAILED",
-        debugCode: err && err.code,
-        debugMessage: err && err.message,
-        debugStack: err && err.stack ? String(err.stack).split("\n").slice(0,4) : null,
-      });
+      return res.status(500).json({ error: "STATUS_CHECK_FAILED" });
     }
   };
 }
@@ -263,6 +267,9 @@ export function createDiscordUnlinkHandler(getDb, authenticateSession) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
     const vixyEmail = auth.user.email.toLowerCase();
+    if (!db) {
+      return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+    }
     try {
       await runTransaction(db, async (tx) => {
         const forwardRef = doc(db, "discord_links", vixyEmail);
