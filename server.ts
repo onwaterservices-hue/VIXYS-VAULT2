@@ -1151,6 +1151,8 @@ async function updateCrossAssetFeeds() {
   alts.forEach((sym) => {
     const item = trackedCrossAssets[sym];
     const isFresh = now - item.lastUpdated < 3e4;
+    const hasEverFetched = item.priceBuffer.length > 0;
+    const feedStatus = !hasEverFetched ? "WARMING" : isFresh ? "LIVE" : "STALE";
     if (isFresh && item.price > 0) {
       totalValidAlts++;
       const itemReturns = item.priceBuffer.map((p, idx, arr) =>
@@ -1171,12 +1173,20 @@ async function updateCrossAssetFeeds() {
       totalWeight += w;
       assetMap[sym] = {
         symbol: sym,
+        status: feedStatus,
         price: item.price,
         return15m: item.return15m,
         momentum: item.momentum,
         correlationToBtc: empiricalCorr,
         agreesWithBtc: agrees,
         weight: w,
+      };
+    } else {
+      assetMap[sym] = {
+        symbol: sym,
+        status: feedStatus,
+        price: hasEverFetched ? item.price : null,
+        lastUpdated: hasEverFetched ? item.lastUpdated : null,
       };
     }
   });
