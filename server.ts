@@ -172,32 +172,10 @@ app.use((req, res, next) => {
   }
 });
 function resolveRequestUser(req) {
-  const email = String(
-    req.headers["x-user-email"] || req.body?.email || req.query?.email || "",
-  )
-    .toLowerCase()
-    .trim();
-  const uid = String(
-    req.headers["x-user-id"] ||
-      req.headers["x-user-uid"] ||
-      req.query?.userId ||
-      req.query?.uid ||
-      "",
-  ).trim();
-  let user = null;
-  if (uid) {
-    user = serverUsers.find((u) => u.id === uid || u.uid === uid);
-  }
-  if (!user && email) {
-    user = serverUsers.find((u) => u.email?.toLowerCase() === email);
-  }
-  if (!user && (email || uid)) {
-    user = ensureUserExists({
-      uid: uid || undefined,
-      email: email || undefined,
-    });
-  }
-  return user;
+  // Identity now comes only from the verified session (see authenticateSession
+  // in the PR #5 auth module) -- never from client-supplied headers/query.
+  const auth = authenticateSession(req);
+  return auth ? auth.user : null;
 }
 __name(resolveRequestUser, "resolveRequestUser");
 
@@ -724,6 +702,205 @@ function isMasterAdminEmail(email) {
   );
 }
 __name(isMasterAdminEmail, "isMasterAdminEmail");
+
+// =====================================================================
+// REAL SESSION AUTHENTICATION (replaces header-trust admin auth)
+//
+// Previously every "requireRole" check trusted client-supplied
+// x-user-email / x-user-role / x-user-id headers with no verification
+// at all -- anyone could set those headers directly and get admin
+// access. This block adds an actual server-verified session:
+//
+//   POST /api/auth/login (password check, unchanged)
+//     -> signSession() issues an HMAC-signed, short-lived credential
+//     -> sent to the browser as an HttpOnly + Secure + SameSite cookie
+//        (never exposed to page JS, so it cannot be read/forged by XSS
+//        or by editing localStorage/React state)
+//   Every subsequent request
+//     -> authenticateSession() verifies the cookie's signature + expiry
+//        + token version + environment (aud), using a secret that is
+//        NEVER hardcoded and NEVER falls back to a default -- if
+//        SESSION_SIGNING_SECRET is not configured, verification fails
+//        closed (rejects) rather than silently trusting the client.
+//     -> the verified payload proves *identity* (uid) only. Role is
+//        looked up fresh from the authoritative user store on every
+//        request, so a role change takes effect immediately instead of
+//        waiting for a stale role embedded in a token.
+// =====================================================================
+const SESSION_COOKIE_NAME = "vixy_session";
+const SESSION_TOKEN_VERSION = 1; // bump to invalidate all outstanding sessions
+const SESSION_TTL_SECONDS = 60 * 60 * 4; // 4h admin session lifetime
+
+function getSessionSecret() {
+  const secret = process.env.SESSION_SIGNING_SECRET;
+  if (!secret || secret.length < 16) return null;
+  return secret;
+}
+__name(getSessionSecret, "getSessionSecret");
+
+function getSessionAudience() {
+  return process.env.VERCEL_ENV || process.env.NODE_ENV || "development";
+}
+__name(getSessionAudience, "getSessionAudience");
+
+function base64url(input) {
+  return Buffer.from(input)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+__name(base64url, "base64url");
+
+function signSession(payload) {
+  const secret = getSessionSecret();
+  if (!secret) return null;
+  const body = base64url(JSON.stringify(payload));
+  const sig = crypto.createHmac("sha256", secret).update(body).digest();
+  return `${body}.${base64url(sig)}`;
+}
+__name(signSession, "signSession");
+
+function verifySession(token) {
+  const secret = getSessionSecret();
+  if (!secret || !token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [body, sig] = parts;
+  const expectedSig = base64url(
+    crypto.createHmac("sha256", secret).update(body).digest(),
+  );
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expectedSig);
+  if (
+    sigBuf.length !== expectedBuf.length ||
+    !crypto.timingSafeEqual(sigBuf, expectedBuf)
+  ) {
+    return null;
+  }
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(body, "base64").toString("utf-8"));
+  } catch {
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  if (payload.ver !== SESSION_TOKEN_VERSION) return null;
+  if (payload.aud !== getSessionAudience()) return null;
+  if (!payload.exp || Date.now() >= payload.exp) return null;
+  if (!payload.uid) return null;
+  return payload;
+}
+__name(verifySession, "verifySession");
+
+function parseCookieHeader(req) {
+  const raw = req.headers["cookie"];
+  const out = {};
+  if (!raw) return out;
+  raw.split(";").forEach((pair) => {
+    const idx = pair.indexOf("=");
+    if (idx === -1) return;
+    const k = pair.slice(0, idx).trim();
+    const v = pair.slice(idx + 1).trim();
+    if (k) out[k] = decodeURIComponent(v);
+  });
+  return out;
+}
+__name(parseCookieHeader, "parseCookieHeader");
+
+function issueSessionCookie(res, user) {
+  const now = Date.now();
+  const payload = {
+    uid: user.id || user.uid,
+    email: (user.email || "").toLowerCase(),
+    iat: now,
+    exp: now + SESSION_TTL_SECONDS * 1000,
+    ver: SESSION_TOKEN_VERSION,
+    aud: getSessionAudience(),
+  };
+  const token = signSession(payload);
+  if (!token) {
+    console.error("[AUTH] SESSION_SIGNING_SECRET is not configured -- refusing to issue a session cookie.");
+    return false;
+  }
+  res.cookie(SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "strict",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS * 1000,
+  });
+  return true;
+}
+__name(issueSessionCookie, "issueSessionCookie");
+
+function clearSessionCookie(res) {
+  res.clearCookie(SESSION_COOKIE_NAME, { path: "/" });
+}
+__name(clearSessionCookie, "clearSessionCookie");
+
+function authenticateSession(req) {
+  const cookies = parseCookieHeader(req);
+  const payload = verifySession(cookies[SESSION_COOKIE_NAME]);
+  if (!payload) return null;
+  sanitizeAndNormalizeServerUsers();
+  let userObj = serverUsers.find(
+    (u) => u.id === payload.uid || u.uid === payload.uid,
+  );
+  if (!userObj && payload.email) {
+    userObj = serverUsers.find(
+      (u) => u.email?.toLowerCase() === payload.email,
+    );
+  }
+  if (!userObj) return null;
+  const email = (userObj.email || "").toLowerCase();
+  const sub = typeof userSubscriptions !== "undefined" ? userSubscriptions.get(email) : void 0;
+  const freshRole = (sub?.role || userObj.role || "FREE").toUpperCase();
+  return {
+    uid: payload.uid,
+    email,
+    role: isMasterAdminEmail(email) ? "OWNER" : freshRole,
+    user: userObj,
+  };
+}
+__name(authenticateSession, "authenticateSession");
+
+const requireRole = __name((allowedRoles) => {
+  return (req, res, next) => {
+    const auth = authenticateSession(req);
+    if (!auth) {
+      return res.status(401).json({
+        error: "AUTHENTICATION_REQUIRED",
+        message: "A valid, signed-in session is required for this endpoint.",
+      });
+    }
+    req.authUser = auth;
+    if (
+      allowedRoles.includes(auth.role) ||
+      ["OWNER", "ADMIN"].includes(auth.role)
+    ) {
+      return next();
+    }
+    return res.status(403).json({
+      error: "ADMIN_REQUIRED",
+      message: `Your account (${auth.email}) does not have the required role. Required: [${allowedRoles.join(", ")}].`,
+    });
+  };
+}, "requireRole");
+
+function toAdminUserDTO(u) {
+  if (!u) return u;
+  return {
+    id: u.id, uid: u.uid, email: u.email, name: u.name, role: u.role,
+    subscription: u.subscription, status: u.status, verificationStatus: u.verificationStatus,
+    stripeCustomerId: u.stripeCustomerId, stripeSubscriptionId: u.stripeSubscriptionId,
+    discordId: u.discordId, discordTag: u.discordTag, discordLinked: u.discordLinked,
+    dayPass: u.dayPass, onlineStatus: u.onlineStatus, lastActiveAt: u.lastActiveAt,
+    lastSeenAt: u.lastSeenAt, joined: u.joined, volumeTrades: u.volumeTrades,
+    referralCodeUsed: u.referralCodeUsed,
+  };
+}
+__name(toAdminUserDTO, "toAdminUserDTO");
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === "undefined") return;
   const defaultPasswordHash = hashPassword("Seattle007");
@@ -812,54 +989,7 @@ function sanitizeAndNormalizeServerUsers() {
   }
 }
 __name(sanitizeAndNormalizeServerUsers, "sanitizeAndNormalizeServerUsers");
-const requireRole = __name((allowedRoles) => {
-  return (req, res, next) => {
-    sanitizeAndNormalizeServerUsers();
-    const userRole = (req.headers["x-user-role"] || "FREE").toUpperCase();
-    const userEmail = (
-      req.headers["x-user-email"] ||
-      (req.body && req.body.userEmail) ||
-      (req.query && req.query.email) ||
-      ""
-    ).toLowerCase();
-    const configuredAdminId = (process.env.ADMIN_USER_ID || "").toLowerCase();
-    if (
-      isMasterAdminEmail(userEmail) ||
-      (configuredAdminId &&
-        (userEmail === configuredAdminId ||
-          req.headers["x-user-id"] === configuredAdminId))
-    ) {
-      return next();
-    }
-    const sub =
-      typeof userSubscriptions !== "undefined"
-        ? userSubscriptions.get(userEmail)
-        : void 0;
-    const userObj =
-      typeof serverUsers !== "undefined"
-        ? serverUsers.find((u) => u.email?.toLowerCase() === userEmail)
-        : void 0;
-    let effectiveRole = (sub?.role || userObj?.role || "FREE").toUpperCase();
-    if (
-      !["OWNER", "ADMIN", "SUPPORT"].includes(userRole) &&
-      effectiveRole === "FREE"
-    ) {
-      effectiveRole = userRole;
-    }
-    if (
-      allowedRoles.includes(effectiveRole) ||
-      ["OWNER", "ADMIN"].includes(effectiveRole)
-    ) {
-      return next();
-    }
-    return res
-      .status(403)
-      .json({
-        error: "ADMIN_REQUIRED",
-        message: `Administrator authorization failed. Your current account (${userEmail || "Unauthenticated"}) is not configured as an administrator. Required role: [${allowedRoles.join(", ")}].`,
-      });
-  };
-}, "requireRole");
+// [removed] old header-trust requireRole -- replaced above near isMasterAdminEmail with a real session-verified implementation
 function logStripeDiagnosticMode() {
   const secretKey = (process.env.STRIPE_SECRET_KEY || "")
     .replace(/^["']|["']$/g, "")
@@ -1070,6 +1200,74 @@ let latestCrossAssetContext = {
   lastUpdated: new Date().toISOString(),
   assets: {},
 };
+// Bounded, in-process idempotency guard: prevents the same committed
+// lock cycle from broadcasting to Discord more than once if this code path
+// is re-entered for the same cycleId (retry, race, re-entrant call). Capped
+// at 200 entries with FIFO eviction so it cannot grow unbounded.
+const recentlyBroadcastCycleIds = new Set();
+function shouldBroadcastCycle(cycleId) {
+  if (!cycleId || recentlyBroadcastCycleIds.has(cycleId)) return false;
+  recentlyBroadcastCycleIds.add(cycleId);
+  if (recentlyBroadcastCycleIds.size > 200) {
+    recentlyBroadcastCycleIds.delete(recentlyBroadcastCycleIds.values().next().value);
+  }
+  return true;
+}
+__name(shouldBroadcastCycle, "shouldBroadcastCycle");
+
+// Cross-instance guard: the in-memory Set above only protects a single
+// Vercel instance. Since the actual signal delivery is a stateless webhook
+// POST (no persistent Gateway connection), multiple concurrent instances
+// can each pass the in-memory check independently. This claims the
+// broadcast atomically in Firestore -- only the instance whose transaction
+// creates the claim doc first is allowed to send. A doc per 15m cycleId is
+// naturally bounded (~96/day) so no separate TTL/cleanup job is needed.
+// Bounded reclaim window: a claim stuck in SENDING longer than this is assumed
+// dead (crashed instance, hung request) and may be atomically reclaimed by a
+// later attempt for the SAME cycleId. A claim marked SENT is terminal and is
+// never reclaimed, so a successful delivery can never be duplicated.
+const BROADCAST_CLAIM_STALE_MS = 5 * 60 * 1000;
+
+async function claimBroadcastAtomically(cycleId) {
+  if (!cycleId || !db) return true; // no Firestore configured -- fall back to in-memory guard only
+  try {
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, "discord_broadcast_claims", String(cycleId));
+      const snap = await tx.get(ref);
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        if (data.status === "SENDING" || data.status === "SENT") {
+          const claimedAtMs = data.claimedAt ? new Date(data.claimedAt).getTime() : 0;
+          const isStale = !claimedAtMs || Date.now() - claimedAtMs > BROADCAST_CLAIM_STALE_MS;
+          if (data.status === "SENT" || !isStale) return false;
+          // stale SENDING claim: safe to reclaim and retry
+        }
+      }
+      tx.set(ref, { status: "SENDING", claimedAt: new Date().toISOString(), cycleId: String(cycleId) });
+      return true;
+    });
+  } catch (err) {
+    console.error("[Discord] Firestore broadcast claim failed, falling back to in-memory guard only:", err?.message || err);
+    return true; // fail open on infra error so a transient Firestore issue never permanently suppresses a legitimate signal
+  }
+}
+__name(claimBroadcastAtomically, "claimBroadcastAtomically");
+
+// Records the terminal (SENT) or recoverable (FAILED) outcome of a claimed
+// broadcast, so a stale FAILED/SENDING claim can be reclaimed later while a
+// SENT claim can never be resent.
+async function markBroadcastOutcome(cycleId, status) {
+  if (!cycleId || !db) return;
+  try {
+    await runTransaction(db, async (tx) => {
+      const ref = doc(db, "discord_broadcast_claims", String(cycleId));
+      tx.set(ref, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    });
+  } catch (err) {
+    console.error("[Discord] Failed to record broadcast outcome:", err?.message || err);
+  }
+}
+__name(markBroadcastOutcome, "markBroadcastOutcome");
 async function updateCrossAssetFeeds() {
   const now = Date.now();
   if (currentBtcPrice && currentBtcPrice > 0) {
@@ -1151,6 +1349,8 @@ async function updateCrossAssetFeeds() {
   alts.forEach((sym) => {
     const item = trackedCrossAssets[sym];
     const isFresh = now - item.lastUpdated < 3e4;
+    const hasEverFetched = item.priceBuffer.length > 0;
+    const feedStatus = !hasEverFetched ? "WARMING" : isFresh ? "LIVE" : "STALE";
     if (isFresh && item.price > 0) {
       totalValidAlts++;
       const itemReturns = item.priceBuffer.map((p, idx, arr) =>
@@ -1171,12 +1371,20 @@ async function updateCrossAssetFeeds() {
       totalWeight += w;
       assetMap[sym] = {
         symbol: sym,
+        status: feedStatus,
         price: item.price,
         return15m: item.return15m,
         momentum: item.momentum,
         correlationToBtc: empiricalCorr,
         agreesWithBtc: agrees,
         weight: w,
+      };
+    } else {
+      assetMap[sym] = {
+        symbol: sym,
+        status: feedStatus,
+        price: hasEverFetched ? item.price : null,
+        lastUpdated: hasEverFetched ? item.lastUpdated : null,
       };
     }
   });
@@ -3214,19 +3422,35 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
-    broadcastSignalToDiscord({
-      symbol: "BTC/USDT 15M",
-      direction: finalDir === "UP" ? "YES" : "NO",
-      confidence: finalConf,
-      edgePct: currentEdgePct,
-      currentPrice: finalSpot,
-      targetPrice: finalStrike,
-      reasoning:
-        finalReason ||
-        "High-conviction taker delta absorption detected.",
-    }).catch((err) =>
-      console.error("[Discord] Automated broadcast failed:", err),
-    );
+    if (shouldBroadcastCycle(cycleId)) {
+      claimBroadcastAtomically(cycleId).then((claimed) => {
+        if (!claimed) {
+          console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
+          return;
+        }
+        broadcastSignalToDiscord({
+          symbol: "BTC/USDT 15M",
+          direction: finalDir === "UP" ? "YES" : "NO",
+          confidence: finalConf,
+          edgePct: currentEdgePct,
+          currentPrice: finalSpot,
+          targetPrice: finalStrike,
+          reasoning:
+            finalReason ||
+            "High-conviction taker delta absorption detected.",
+        }).then(
+          () => markBroadcastOutcome(cycleId, "SENT"),
+          (err) => {
+            console.error("[Discord] Automated broadcast failed:", err);
+            markBroadcastOutcome(cycleId, "FAILED");
+          },
+        );
+      }).catch((err) =>
+        console.error("[Discord] Broadcast claim error:", err),
+      );
+    } else {
+      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
+    }
   }
 
   const remainingSeconds = Math.max(
@@ -4184,6 +4408,7 @@ app.get(
   "/api/admin/users",
   requireRole(["OWNER", "ADMIN", "SUPPORT"]),
   async (req, res) => {
+    let firestoreHealthy = !db ? null : true; // null = no Firestore configured, true/false = attempted
     if (db) {
       try {
         const usersSnap = await getDocs(collection(db, "users"));
@@ -4211,6 +4436,7 @@ app.get(
           }
         });
       } catch (hydrateErr) {
+        firestoreHealthy = false;
         console.warn("[ADMIN USERS] Firestore hydration failed, showing in-memory cache only:", hydrateErr?.message || hydrateErr);
       }
     }
@@ -4308,8 +4534,14 @@ app.get(
     const discordConnected = serverUsers.filter(
       (u) => u.discordLinked || u.discordId,
     ).length;
+    const adminUsersStatus =
+      firestoreHealthy === false
+        ? "DEGRADED"
+        : totalUsers === 0
+          ? "EMPTY"
+          : "HEALTHY";
     res.json({
-      users: serverUsers,
+      users: serverUsers.map(toAdminUserDTO),
       totalRealUsers: totalUsers,
       totalDocuments,
       canonicalUsers,
@@ -4320,8 +4552,14 @@ app.get(
       activeTrials,
       paidUsers,
       discordConnected,
-      isDatabaseAuthoritative: true,
-      dataSource: "PERSISTENT_STORE",
+      status: adminUsersStatus,
+      isDatabaseAuthoritative: firestoreHealthy !== false,
+      dataSource:
+        firestoreHealthy === false
+          ? "MEMORY_CACHE_DEGRADED"
+          : firestoreHealthy === true
+            ? "FIRESTORE"
+            : "MEMORY_ONLY_NO_FIRESTORE_CONFIGURED",
       timestamp: new Date().toISOString(),
     });
   },
@@ -4533,9 +4771,9 @@ app.post(
     });
   },
 );
-app.get("/api/admin/dump-users", (req, res) => {
+app.get("/api/admin/dump-users", requireRole(["OWNER", "ADMIN"]), (req, res) => {
   res.json({
-    users: serverUsers,
+    users: serverUsers.map(toAdminUserDTO),
     dayPasses: Array.from(userDayPasses.entries()),
     subscriptions: Array.from(userSubscriptions.entries()),
   });
@@ -4716,9 +4954,21 @@ app.post("/api/auth/login", async (req, res) => {
   console.log(
     `[AUTH LOGIN SUCCESS] email=${cleanEmail} userId=${user.id || user.uid}`,
   );
-  const serverSession = { ...user, passwordHash: void 0 };
+  const sessionIssued = issueSessionCookie(res, user);
+  if (!sessionIssued) {
+    return res.status(500).json({
+      success: false,
+      error: "SESSION_UNAVAILABLE",
+      message: "Login succeeded but a secure session could not be issued. Contact support.",
+    });
+  }
   const entitlement = getUserEntitlement(cleanEmail);
-  res.json({ success: true, user: serverSession, entitlement });
+  res.json({ success: true, user: toAdminUserDTO(user), entitlement });
+});
+
+app.post("/api/auth/logout", (req, res) => {
+  clearSessionCookie(res);
+  res.json({ success: true });
 });
 
 // ================= EXTEND MEMBERSHIP ROUTE =================
@@ -4826,7 +5076,7 @@ app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req
   }
 });
 
-app.post("/api/admin/strip-pwd", async (req, res) => {
+app.post("/api/admin/strip-pwd", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   const { email } = req.body;
   const user = serverUsers.find((u) => u.email === email);
   if (user) {
@@ -5152,7 +5402,12 @@ app.post(
       uid: newUserId,
       email: cleanEmail,
       name: name?.trim() || cleanEmail.split("@")[0],
-      role: role === "ADMIN" || role === "OWNER" ? role : "USER",
+      role:
+        role === "OWNER"
+          ? (req.authUser?.role === "OWNER" ? "OWNER" : "USER")
+          : role === "ADMIN"
+            ? "ADMIN"
+            : "USER",
       subscription: ["DAY_PASS", "STARTER", "ELITE_PASS", "PRO_PASS", "NONE"].includes(tier) ? tier : "NONE",
       passwordHash:
         password && String(password).trim()
@@ -5174,7 +5429,7 @@ app.post(
     }
     res.json({
       success: true,
-      user: newUser,
+      user: toAdminUserDTO(newUser),
       message: `Account for ${cleanEmail} created successfully with assigned password and ${verificationStatus} badge.`,
     });
   },
@@ -5234,7 +5489,7 @@ app.post(
     res.json({
       success: true,
       removedCount,
-      remainingUsers: serverUsers,
+      remainingUsers: serverUsers.map(toAdminUserDTO),
       message: `Successfully wiped ${removedCount} beta/test users. Only Master Admin accounts remain.`,
     });
   },
@@ -5309,27 +5564,19 @@ app.post(
   },
 );
 app.get("/api/admin/me", (req, res) => {
-  const userEmail = (
-    req.headers["x-user-email"] ||
-    req.query.email ||
-    process.env.ADMIN_EMAIL ||
-    "vixyvault0@gmail.com"
-  ).toLowerCase();
-  const configuredAdminEmail = (
-    process.env.ADMIN_EMAIL || "vixyvault0@gmail.com"
-  ).toLowerCase();
-  const configuredAdminId = (process.env.ADMIN_USER_ID || "").toLowerCase();
-  const sub = userSubscriptions.get(userEmail);
-  const userObj = serverUsers.find((u) => u.email?.toLowerCase() === userEmail);
-  const role =
-    sub?.role ||
-    userObj?.role ||
-    (userEmail === configuredAdminEmail ? "OWNER" : "FREE");
-  const isAdmin =
-    userEmail === configuredAdminEmail ||
-    userEmail === "vixyvault0@gmail.com" ||
-    (configuredAdminId && userEmail === configuredAdminId) ||
-    ["OWNER", "ADMIN", "SUPPORT"].includes(role.toUpperCase());
+  const auth = authenticateSession(req);
+  if (!auth) {
+    // No identity was proven -- this must NEVER default to the master
+    // admin. An unauthenticated caller is simply not an admin.
+    return res.status(401).json({
+      authenticated: false,
+      isAdmin: false,
+      error: "AUTHENTICATION_REQUIRED",
+      message: "Sign in to view administrator status.",
+    });
+  }
+  const sub = userSubscriptions.get(auth.email);
+  const isAdmin = ["OWNER", "ADMIN", "SUPPORT"].includes(auth.role);
   if (!isAdmin) {
     return res
       .status(403)
@@ -5338,16 +5585,16 @@ app.get("/api/admin/me", (req, res) => {
         isAdmin: false,
         error: "ADMIN_REQUIRED",
         message: "This account does not have administrator privileges.",
-        user: { email: userEmail, role },
+        user: { email: auth.email, role: auth.role },
       });
   }
   res.json({
     authenticated: true,
     isAdmin: true,
     user: {
-      email: userEmail,
-      role: role.toUpperCase(),
-      subscription: sub?.plan || "ELITE_PASS",
+      email: auth.email,
+      role: auth.role,
+      subscription: sub?.plan || auth.user?.subscription || "ELITE_PASS",
     },
   });
 });
@@ -6196,6 +6443,12 @@ app.post(
           error: "INVALID_ROLE",
           message: `Role must be one of ${validRoles.join(", ")}`,
         });
+    }
+    if (newRole === "OWNER" && req.authUser?.role !== "OWNER") {
+      return res.status(403).json({
+        error: "OWNER_GRANT_FORBIDDEN",
+        message: "Only an existing OWNER may grant the OWNER role.",
+      });
     }
     const user = serverUsers.find(
       (u) =>
@@ -9106,17 +9359,15 @@ app.get(
     "/api/user/entitlement",
   ],
   async (req, res) => {
-    const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-      .toLowerCase()
-      .trim();
-    const reqUserId = (
-      req.headers["x-user-id"] ||
-      req.headers["x-user-uid"] ||
-      req.query.userId ||
-      req.query.uid ||
-      ""
-    ).trim();
-    const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
+    const auth = authenticateSession(req);
+    if (!auth) {
+      return res.status(401).json({
+        error: "AUTHENTICATION_REQUIRED",
+        message: "Sign in to view entitlement status.",
+      });
+    }
+    const reqEmail = auth.email;
+    const reqUserId = auth.uid;
     let hydrationRes = null;
     if (reqEmail || reqUserId) {
       hydrationRes = await hydrateUserFromFirestore(reqEmail, reqUserId).catch(() => null);
@@ -9921,13 +10172,15 @@ app.get("/api/admin/test-entitlement-suite", async (req, res) => {
   });
 });
 app.get("/api/user/subscription", (req, res) => {
-  const userEmail = (
-    req.headers["x-user-email"] ||
-    req.query.email ||
-    "vixyvault0@gmail.com"
-  ).toLowerCase();
-  const userRoleHeader = (req.headers["x-user-role"] || "").toUpperCase();
-  ensureUserExists(userEmail, { role: userRoleHeader });
+  const auth = authenticateSession(req);
+  if (!auth) {
+    return res.status(401).json({
+      authenticated: false,
+      error: "AUTHENTICATION_REQUIRED",
+      message: "Sign in to view subscription status.",
+    });
+  }
+  const userEmail = auth.email;
   const entitlement = getUserEntitlement(userEmail);
   const existing = userSubscriptions.get(userEmail);
   res.json({
