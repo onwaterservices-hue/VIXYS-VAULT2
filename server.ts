@@ -1200,6 +1200,44 @@ let latestCrossAssetContext = {
   lastUpdated: new Date().toISOString(),
   assets: {},
 };
+// Bounded, in-process idempotency guard: prevents the same committed
+// lock cycle from broadcasting to Discord more than once if this code path
+// is re-entered for the same cycleId (retry, race, re-entrant call). Capped
+// at 200 entries with FIFO eviction so it cannot grow unbounded.
+const recentlyBroadcastCycleIds = new Set();
+function shouldBroadcastCycle(cycleId) {
+  if (!cycleId || recentlyBroadcastCycleIds.has(cycleId)) return false;
+  recentlyBroadcastCycleIds.add(cycleId);
+  if (recentlyBroadcastCycleIds.size > 200) {
+    recentlyBroadcastCycleIds.delete(recentlyBroadcastCycleIds.values().next().value);
+  }
+  return true;
+}
+__name(shouldBroadcastCycle, "shouldBroadcastCycle");
+
+// Cross-instance guard: the in-memory Set above only protects a single
+// Vercel instance. Since the actual signal delivery is a stateless webhook
+// POST (no persistent Gateway connection), multiple concurrent instances
+// can each pass the in-memory check independently. This claims the
+// broadcast atomically in Firestore -- only the instance whose transaction
+// creates the claim doc first is allowed to send. A doc per 15m cycleId is
+// naturally bounded (~96/day) so no separate TTL/cleanup job is needed.
+async function claimBroadcastAtomically(cycleId) {
+  if (!cycleId || !db) return true; // no Firestore configured -- fall back to in-memory guard only
+  try {
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, "discord_broadcast_claims", String(cycleId));
+      const snap = await tx.get(ref);
+      if (snap.exists()) return false;
+      tx.set(ref, { claimedAt: new Date().toISOString(), cycleId: String(cycleId) });
+      return true;
+    });
+  } catch (err) {
+    console.error("[Discord] Firestore broadcast claim failed, falling back to in-memory guard only:", err?.message || err);
+    return true; // fail open on infra error so a transient Firestore issue never permanently suppresses a legitimate signal
+  }
+}
+__name(claimBroadcastAtomically, "claimBroadcastAtomically");
 async function updateCrossAssetFeeds() {
   const now = Date.now();
   if (currentBtcPrice && currentBtcPrice > 0) {
@@ -3354,19 +3392,31 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
-    broadcastSignalToDiscord({
-      symbol: "BTC/USDT 15M",
-      direction: finalDir === "UP" ? "YES" : "NO",
-      confidence: finalConf,
-      edgePct: currentEdgePct,
-      currentPrice: finalSpot,
-      targetPrice: finalStrike,
-      reasoning:
-        finalReason ||
-        "High-conviction taker delta absorption detected.",
-    }).catch((err) =>
-      console.error("[Discord] Automated broadcast failed:", err),
-    );
+    if (shouldBroadcastCycle(cycleId)) {
+      claimBroadcastAtomically(cycleId).then((claimed) => {
+        if (!claimed) {
+          console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
+          return;
+        }
+        broadcastSignalToDiscord({
+          symbol: "BTC/USDT 15M",
+          direction: finalDir === "UP" ? "YES" : "NO",
+          confidence: finalConf,
+          edgePct: currentEdgePct,
+          currentPrice: finalSpot,
+          targetPrice: finalStrike,
+          reasoning:
+            finalReason ||
+            "High-conviction taker delta absorption detected.",
+        }).catch((err) =>
+          console.error("[Discord] Automated broadcast failed:", err),
+        );
+      }).catch((err) =>
+        console.error("[Discord] Broadcast claim error:", err),
+      );
+    } else {
+      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
+    }
   }
 
   const remainingSeconds = Math.max(
