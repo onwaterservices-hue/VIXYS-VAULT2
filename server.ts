@@ -5003,23 +5003,23 @@ __name(resolveDiscordEntitlementTier, "resolveDiscordEntitlementTier");
 
 app.get(
   "/api/discord/connect",
-  createDiscordConnectHandler(db, authenticateSession),
+  createDiscordConnectHandler(() => db, authenticateSession),
 );
 app.get(
   "/api/discord/callback",
   createDiscordCallbackHandler(
-    db,
+    () => db,
     resolveDiscordEntitlementTier,
     assignDiscordRoleToUser,
   ),
 );
 app.get(
   "/api/discord/status",
-  createDiscordLinkStatusHandler(db, authenticateSession),
+  createDiscordLinkStatusHandler(() => db, authenticateSession),
 );
 app.post(
   "/api/discord/unlink",
-  createDiscordUnlinkHandler(db, authenticateSession),
+  createDiscordUnlinkHandler(() => db, authenticateSession),
 );
 
 // ================= EXTEND MEMBERSHIP ROUTE =================
