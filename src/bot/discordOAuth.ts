@@ -241,7 +241,13 @@ export function createDiscordLinkStatusHandler(db, authenticateSession) {
       });
     } catch (err) {
       console.error("[Discord OAuth] Status check error:", err && err.message);
-      return res.status(500).json({ error: "STATUS_CHECK_FAILED" });
+      // TEMPORARY diagnostic detail (error code/message only, never secrets) --
+      // remove once the root cause is confirmed and fixed.
+      return res.status(500).json({
+        error: "STATUS_CHECK_FAILED",
+        debugCode: err && err.code,
+        debugMessage: err && err.message,
+      });
     }
   };
 }
