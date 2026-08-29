@@ -244,7 +244,12 @@ export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
       });
     } catch (err) {
       console.error("[Discord OAuth] Status check error:", err && err.message);
-      return res.status(500).json({ error: "STATUS_CHECK_FAILED" });
+      return res.status(500).json({
+        error: "STATUS_CHECK_FAILED",
+        debugCode: err && err.code,
+        debugMessage: err && err.message,
+        debugStack: err && err.stack ? String(err.stack).split("\n").slice(0,4) : null,
+      });
     }
   };
 }
