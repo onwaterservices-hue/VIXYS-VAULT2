@@ -174,8 +174,7 @@ const serverJournalEntries = [
   },
 ];
 const app = express();
-app.set("trust proxy", 1);
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 app.use((req, res, next) => {
   if (
     req.originalUrl === "/api/stripe/webhook" ||
@@ -748,10 +747,7 @@ const SESSION_TTL_SECONDS = 60 * 60 * 4; // 4h admin session lifetime
 
 function getSessionSecret() {
   const secret = process.env.SESSION_SIGNING_SECRET;
-  if (!secret || secret.length < 16) {
-    console.error("[AUTH] FATAL: SESSION_SIGNING_SECRET is missing or too short.");
-    return null;
-  }
+  if (!secret || secret.length < 16) return null;
   return secret;
 }
 __name(getSessionSecret, "getSessionSecret");
@@ -1034,23 +1030,7 @@ publishableKeyPresent: ${Boolean(pubKey)}
 webhookSecretPresent: ${Boolean(webhookSecret)}`);
 }
 __name(logStripeDiagnosticMode, "logStripeDiagnosticMode");
-app.get("/api/cron/engine-tick", async (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ success: false, message: "Unauthorized cron invocation" });
-  }
-
-  try {
-    await executeEngineTick();
-    res.json({ success: true, cycleId: currentEngineCycleId, timestamp: Date.now() });
-  } catch (err) {
-    console.error("[CRON] Engine tick failed:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 app.get("/api/health", (req, res) => {
-
   res.json({
     status: "ok",
     timestamp: Date.now(),
@@ -2372,7 +2352,7 @@ __name(
   evaluateBtc15mHighConvictionPipeline,
   "evaluateBtc15mHighConvictionPipeline",
 );
-export async function executeEngineTick() {
+setInterval(async () => {
   try {
     currentEngineCycleId += 1;
     const now = Date.now();
@@ -2852,7 +2832,7 @@ export async function executeEngineTick() {
       `Engine background cycle warning: ${err.message || err}`,
     );
   }
-}
+}, 3e3);
 const serverUsers = [];
 app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
   const email = String(
@@ -3216,6 +3196,41 @@ function canLockCurrentCycle(livePrice) {
   };
 }
 __name(canLockCurrentCycle, "canLockCurrentCycle");
+async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, reason) {
+  if (!shouldBroadcastCycle(cycleId)) {
+    return;
+  }
+  console.log(`[Discord] Broadcast gate reached for cycle ${cycleId}`);
+  try {
+    const claimed = await claimBroadcastAtomically(cycleId);
+    if (!claimed) {
+      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
+      return;
+    }
+    let result = null;
+    try {
+      result = await broadcastSignalToDiscord({
+        symbol: "BTC/USDT 15M",
+        direction: dir === "UP" ? "YES" : "NO",
+        cycleId,
+        confidence: conf,
+        edgePct: currentEdgePct,
+        currentPrice: spot,
+        targetPrice: strike,
+        reasoning: reason || "High-conviction taker delta absorption detected.",
+      });
+    } catch (err) {
+      console.error("[Discord] Automated broadcast failed:", err);
+    }
+    const ok = !!(result && result.success);
+    console.log(`[Discord] Broadcast result for ${cycleId}: ${ok ? "SENT" : "FAILED"} (${result && result.message ? result.message : "no detail"})`);
+    await markBroadcastOutcome(cycleId, ok ? "SENT" : "FAILED");
+  } catch (err) {
+    console.error("[Discord] Broadcast claim error:", err);
+  }
+}
+__name(attemptDiscordSignalBroadcast, "attemptDiscordSignalBroadcast");
+
 async function lock15mCycle(cycleId, livePrice, forcedReason) {
   if (active15mCycle.cycleId !== cycleId) {
     console.warn(
@@ -3445,7 +3460,10 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     cycleId,
   };
 
+  await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
+
   if (transactionSucceeded) {
+    try {
     persistSingleSignalLog(logItem);
     const globalAutoTradingEnabled = productionMaintenanceState.autoTradingEnabled !== false;
     const checkEntitlement = async (userId) => {
@@ -3456,53 +3474,12 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
+    } catch (postLockErr) {
+      console.error("[VIXY] post-lock persist/trade error (non-fatal, broadcast unaffected):", postLockErr);
+    }
   }
 
-  // Broadcasting is intentionally OUTSIDE the transactionSucceeded gate above.
-  // transactionSucceeded is only true for the single invocation that first
-  // creates this cycle's lock document -- every later poll for the same
-  // already-locked cycle sees the doc exists and would skip this entirely,
-  // permanently losing the one chance to broadcast if anything upstream
-  // failed. finalDir/finalConf/finalSpot/finalStrike/finalReason are valid
-  // either way (reconstructed from Firestore when !transactionSucceeded), so
-  // broadcasting can safely run on every poll -- shouldBroadcastCycle and
-  // claimBroadcastAtomically below are the real duplicate-delivery guard.
-  if (shouldBroadcastCycle(cycleId)) {
-      // Previously this whole chain was fire-and-forget (.then() without
-      // await), which let Vercel tear down the function's execution
-      // environment before the claim+send ever completed -- silently, with
-      // no error logged. Now properly awaited end-to-end so this always
-      // finishes before lock15mCycle itself returns.
-      try {
-        const claimed = await claimBroadcastAtomically(cycleId);
-        if (!claimed) {
-          console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
-        } else {
-          try {
-            await broadcastSignalToDiscord({
-              symbol: "BTC/USDT 15M",
-              direction: finalDir === "UP" ? "YES" : "NO",
-              cycleId,
-              confidence: finalConf,
-              edgePct: currentEdgePct,
-              currentPrice: finalSpot,
-              targetPrice: finalStrike,
-              reasoning:
-                finalReason ||
-                "High-conviction taker delta absorption detected.",
-            });
-            await markBroadcastOutcome(cycleId, "SENT");
-          } catch (err) {
-            console.error("[Discord] Automated broadcast failed:", err);
-            await markBroadcastOutcome(cycleId, "FAILED");
-          }
-        }
-      } catch (err) {
-        console.error("[Discord] Broadcast claim error:", err);
-      }
-    } else {
-      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
-    }
+
 
   const remainingSeconds = Math.max(
     0,
@@ -4247,6 +4224,16 @@ async function checkAndSettle15mCycle(livePrice) {
       }
       persistSingleSignalLog(skippedLog);
     }
+  }
+  if (active15mCycle && active15mCycle.isLocked && active15mCycle.lockedSnapshot && active15mCycle.cycleId) {
+    await attemptDiscordSignalBroadcast(
+      active15mCycle.cycleId,
+      active15mCycle.lockedSnapshot.direction,
+      active15mCycle.lockedSnapshot.confidence,
+      active15mCycle.lockedSnapshot.spot,
+      active15mCycle.lockedSnapshot.strike,
+      "AUTHORITATIVE_LOCK_SYNC",
+    );
   }
   active15mCycle.sequence = globalSequenceNumber;
   console.log(
@@ -12652,11 +12639,7 @@ app.get("/api/vixy/state", async (req, res) => {
   }
 
   globalSequenceNumber++;
-  const _nowMs = Date.now();
-  if (_nowMs - (lastMarketUpdateTs || 0) > 4000) {
-    await executeEngineTick();
-  }
-  const now = new Date(Date.now()).toISOString();
+  const now = new Date().toISOString();
   const spot = currentBtcPrice;
   const market15mState = getKalshi15mMarketState(spot);
   const isLocked = active15mCycle.isLocked;
@@ -12842,11 +12825,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   }
 
   globalSequenceNumber++;
-  const _nowMs2 = Date.now();
-  if (_nowMs2 - (lastMarketUpdateTs || 0) > 4000) {
-    await executeEngineTick();
-  }
-  const now = new Date(Date.now()).toISOString();
+  const now = new Date().toISOString();
   const spot = currentBtcPrice;
   const market15mState = getKalshi15mMarketState(spot);
   const isLocked = active15mCycle.isLocked;
@@ -13201,10 +13180,6 @@ app.get(
 
     const asset = (req.query.asset || "BTC").toUpperCase();
     const desk = req.query.desk || "15m";
-    const _now = Date.now();
-    if (_now - lastMarketUpdateTs > 4000) {
-      await executeEngineTick();
-    }
     const now = Date.now();
     const dataAgeMs = now - lastMarketUpdateTs;
     let computedFeedStatus = "OFFLINE";
@@ -14712,34 +14687,1194 @@ app.delete("/api/journal/:id", (req, res) => {
   }
   res.json({ success: true });
 });
-app.get("/api/leaderboard", (reqxœì}}Û8rğÿşˆº¿-u++v6Ù½ÊçÍ)¶Ò¸ç·µålÓ<yZ„mn$RKRv|9÷Îàu ‚”œ»öú–şzk`0Ì`¼ì²İŸØ—Æ¦yVVlYòâ(^°]öåaJáç-/ş%_Y<eU‘ò²•£xzEÜ´f,½bÑÕü=ïã_É‡®ªe¬V…c¨:Y{˜®í™š,óùÅÛİİeeYLò»Œ“­íbì%ë¼M?ß³£¸¬xÁ†É<Í\ˆûøó2ÎªÉ7_t§ır–Ny´ù¼ûğÑ¢PåU<;Íf¶å‹8á¥S~—f´@Pş³¤A_wÍ¾Û…™-²ÙÅù>ûË_ØÖN[9,¶ÙŞ1Äçı|YMó9—”ùåà¸Ót€ø™–İ³ô3—y\ mÙÉå¯|ZõoãÙ’—‘ê¦+ë—yQEQÜc—bı/í,6Yl~(ày¼ˆ¢e¥ÉgéE/âìÓ ‹Ùwl»G¸ù`éñA…3.‘ y©Ôfyv?Ï—%$):ş2N®¹í&À,È GÃóñèŒ÷€XÀŸ/†Çc6>îÎL_géŸy"8`i'‹Ë¤a€ªgqEué¬ÔOlÆ;Š«›~‘/³("â©Øe¿cÛüû.”oo1ÂF·¹}S4fÀìoâòÆâÑÙúÜaß™ŸÓâ~Qådô§0½Šc£¨SŞÄÏ^üĞéÒúå"úÈPò;ÖÙ$¬â'é5/«¨sÃ?»r_mõØö]‰ìCWğˆ ş¯eE_DÆÄÿ‹ş5‡ŸÆ‹ôi™^ƒÚ,³xQŞäUÙé±¨à¿õAFz4€öşCÍyYÆÈWËt–¤Ù5²şUšğlÊÙMZVyqßï÷;Îğñl¦†Ÿyö´äU5ã+F3,—Ó)Œ8 æ]r9é_óK}ïäXlo<9Ç‡££Ññx²÷f´÷'ÅrÓ>ıÄalÿ^È1¡à¹úÏ3^æ××<#/Ø÷ÏT)Ì³ˆËøÛÇÕëÇœŸœƒüÎ®#±zŠVîï§å4/’Ó"¿J¡wØ¶}dÀ	r~ŸM^ò%ˆ ìÎÆŒ;UGÆ™–JÀ_æÕ^e MpWñ¬Ä¸Æ%x›ùŒ‡Êâ.¾œqRÌÃ+˜ér6Ã2Eó=è£RÛgÁ3\jZtÃZ‚}Š"/tWjV—H(‘?¯Ò‚_Æ%.@ù†Ö_Æ°pY2\V7ÁzİşXı=OK ñx@ÈŠü—"­ø–ói¹e!Îå,¯–3vEWª@	6	:ÔĞ¶õ‚n‚ë,VâP ¿ºo¿ qöÃ–”iÜğÈı°¢3óëÂ(óê./>³";$îd¼(aã~>¯bAÎáÉŞğp²pş§ÉÉñá»×ß¡¥gx@x³,êk©ĞJşVŸ/*w­^ƒĞ „µÒ<ã@¸-ûY~‡{KƒşÂ/Ïs` êH
-ª àM\îóY
-VOtßçJÎÕWVŠˆı4¾Îò²J§(ç‘(dï~:ãµ‡€ÖQ¥0İ ÌÕ%¨ “½ƒ8KyVÉı(+¤ Q›rÌg|«M¥‰q.D>t\R¸„}Ï®–™ (K³T(éWr¾Vû,’ö' lÍ§O2F:©~ÏÒùL`"¡®YTrªv±™_m¢T ] ˜*NX~ÅbİOS‚½É®Ê>¨PrÆQ±ÍMm1X7!Zİpİ{Z²°ĞúÃ
-İÓ%<de°ßË
-ÔÈ5¨À2$Œ‡$|1ËïBÏøK†› è£ûH`ÆS¡¿Øk˜[)DÌE´ÏgĞğÛ,Ä$2œºì¹ÄĞÈé²ŒÈ›üMÑÌı [ß÷ ‚]ò›ø6ù N ‹³{–C7…0!—s^èâ0a»D%ƒ?oâ¸©/µœXf-÷$v•Ñ@-p’ªüöÛ`yQäh¬$Æâx4ÕEÄu1ÆQ £S°Ù€éhºıš§Yä´ íRä(:úÓ»$êö¼Êîk3hlJNFBÇîî8?^Ë…¼Å?ƒ@+‘³¢:f]oÀ—ì_ÎOû‹¸ Ş÷3Ğ¼6quµùûN×ïh -yèF]ël¸}Y/Ox-Ù%¤+Q»‡¡Üï_#ò ş+Ô2Ø…FqEm½÷j•ŠqŒ!c¹u8Ìa•ccIšªni¥ş‹ïâ¶ˆ³ƒì—´ºÍA§³ä4.KØË	e¬À˜”[:ª~RŞƒXšÿñüÜş,™æ0UË'v	ÊqRr°÷«ÉB:y¶õìÒˆp!n°¼ ßkŠZç½¡ù¦¤-‹Qk UQ˜Â +AÆÄ%“
-ó²ç„L5½av†åÁ]\d+Q@Ân‚X•¦]ÅR=A‡:jÀ—}å‰à.¡^Dé2]ÀœV-äÊ¥\{1¿j9=±Ò°¤MµK§fí/v¿i4³°²©·´Í‹»2zÁ•Ìp…õÈñ˜ù÷_È¾ gô\P3¨¾¤íw_OµQWMçyœÁÂÂÆ•›È'-cjì i=â>P^ğ¤wÈJ3ß¼›¼>8OÎFİ~?Æ¿ÃŞÎ¼­ß„Q8	Óö"3Àl*,W0–TÔrº™™d Y'§zFÕ96¢y™%Ã_õ%sv€ƒæÄŒ	#7Ë++ÁT'†öV„ª¿b˜Ös…¨„I×bÉ Š`‚Û'ôƒ/Ñ>Z3‘%Œ¨àVH¬}ëÔ¥?k–UBãz[ç„Öcƒß²J`ş°ñ°1™`2jt>Àºj¬ë@/Æ6æ`;\W‰Ø€r\sŠ4
--‘ÄŞZ˜vìä¨Á´¥8¡à<ô&àdÖ¬&Ÿ®E Ô®Ôe\&è5jX!'®µ?z=¼8O„HŞ9†6ÚyvÛ·5ùTE´îíèlotˆ}ÓÒá/ç“ÃáÑ«ıáäõÅñŞøàäxr<<!ÜÇèƒ(ª•KÔyzn•ŠŠ¾d‘kÚwVóE§‹AiñàyÙ‡¿À¯‹”u> ^ˆëv°Nl§k¦-'õúàp49ß8L$=¥‘ñ¥oB¹³Œ‘™şÌ_ç…5·óË_-‡Â`G—‰ ßæiÂ¶ºšÕ´GMªû!Ÿ`h>Ç¿5è°(âû~ZŠÿŠ5ó[XqÊB´6ş¬âEİ
-î»Ã)ÄôV4›Îxœ™ƒ/to#Yñş¦'!Ğ±UG#\†9!¾cD²{Ã³¯ YE[*íFÉÎµ‡•;Ë™–{i1]¦ÕÉ‚gJÌYàçğàÜn„b€´œîQÒß"Ó8S3W»Gw"ìàc¡Ø_fŸ`dhk%"¸¸'k:9	Ì‡“Ø¶“Ñ¿¾^œGûnŠ3¦à‰.¯éèçe^Å*0¨â[0>]î=òñ½±p&{g{cw Úş4Úgbæ»ß|!xæî°‚bŸğöŒ’°«Mˆ0DÅjZX·¦*\ÂÖ5D±aÜá¿Ø
-ú@kS'&Ö¸ô¸‰1’ç ëµ5SEŠš"¾;*¯¡Ö×mêä•¨=±MË“««Yšq6“­ûi6-L\VÃB· ”•›b¨QÁÒş7õX§ædO³t3ÿ<å<áI^yÂÙï[ ?û'Az½Ú¢½÷¼e°§ş:H gÁ—†¤º+Ç4¦›÷l4ÜŸŸŒöFØ7_lŸƒ=…¯o*6±°WS•#2WÌ«Upºg8ÜÒÙ kyZMç"G;_ÍÛbEÕYÔ]4³ã1ºB».â/ÃÒl ºÛqÙW´¡–}ƒ±yÁc·gÏõ±›={“Z xúFtûwwíèz×ûp@ó!£¤[!B®`€¨d'7¶­+²?úgLğØŸH‡òõğğğÕpïO"$äc>h¥å,-ÕHõ%ú,QP„l´˜'§£ã& ©´+ÄüÑjˆH•X:ZkÖSİÆ©Õ82—Èa™ƒ¨ı{ÖcÛÏ(ç9£ ùÁ–|Ò¬È½qëG½R[#Š-(èÚ8šÒË|0#—ñ-‡.>‰È²c“8¶|Y—Ç¶7½wühı^Šö(XO^ÎÕôiÌ¹)¤Uç3¾Éq@İALÁÊ
-g.œš‚Oó[c€yÉ1Û¥!®%º£ÖÕ«â…-ˆêøp&r{d>jÓJB»G@E`œE >°¦qÍÖ“d‹#V›•Z~5´j¥Î·ßŠVDÿ´ÔÙğ7ˆŸyğİwnLŒ°kºì¼½ûÀ†ö”¤Ğ}áìo°p¤‹;Ôp•$.ßjjİ.»•¼ÚÏ§–Ëø‘\¢G+‚Ô<©Æ´+«vÈ+…£¶9E ‘Ô’¥ÿŞäÍ$¶ÍÈàlÎL,Cùd+ê;ÆK6i±™ô<šì1+	Û´+=ÄmJ½	×65nÉï‘î¯ô‘-¯ş¿å³·^0³  pªÜÊº>{=[–7Pê
-½>“hlşÄjhøş³æÅ¤ˆÓìT& œÚùˆ”R÷Û¤Ü
-;½£e°fã Dk’@Ğ¾©
-{‚}tU¼¸g-]<ãÏİŸ£#½¤ûWè8"ü)PôÂŒ$?à‰Ş„]K¨›‚"]ÕƒTà¡q™ŞšMä„4TJÊL<Áø¢ŠÓ±Pê¢ÍP*ôØ'~ïœ½~t4àÔxİ2b¹¼Œv¥Ó"] éV¥zX1Nßã©cpjºjÅ@´‹ÆÑ€òÂ®49!ª±·z[ˆd’RH¥ôêŞnP*lÇr ÎwğL¼¤’U“z@‰NJJË&…08st:1Ib+*›:Fa+rvr‰8Çj`Ûl°	Ìßom9ºcÏÒËB@	A3 q\ÁvÛóÊi›W ˆ:ºf\ïĞ)uHà¥İ6Ô©¼[;S˜¹çÅu™Ş×…Ñ^ïÖ6(%
-ô@ÌAäùc­7Ç$K!Ÿ¼º Ö)Àòß3#Úõ*Õ‰z?áíÊË©ã¼‚åG1‰¦’´­Aù í«ô†ç‰Dqyò;`o*şó¹FÉâš£¤lc½CØRšNOeÖA5l¿˜w¼3í+Y™ÿN	çøOÂ›N64ë¥É@'@(TÌÕqÑ YÇf{ìó÷›İ³ôŠc§+Bû±¥×@8Ë<}•Xì¥g»)ÀéõMu!H1nÄ¤h;™ç	Ÿ½EfÊ³†æÄ6”×01v8UOïš×m'ğ» zÆ¯Óyƒ\ë;0¶©ºãğFŞÂhhë‘[%D(?èû%;„‘ïÒê3éóe¥Õ˜r8ŒŸQÛ1ÆÙ0›¦§¹¼GXˆ˜şƒÌş½‘?õ Õ€Õ×7 K*§BÂÔ\ ùá´í~@«ÏÑà¨´õÙ„`ÈUYÇQisSZ”u]”«šUÿÆƒYßÑ	é™U.Â*ùí©›õ5Ôt|óßKajR<‚óÚ(5ç•:#yûp!N×ç¸\j»ˆè<,èØ`–°\YÓ;E$ÍÃ^qÎ±UKdŞËÅ²1±LMğ<ôÑš¶¢A#)Ã‰"Â†f‘†]	óRmwñŸ”Hdº@ò«Ù8‡íÆ¹¶]#ğŒ@Ã¥ğQšÆè¥|úÍÕY?M>:§ÚOÂ×-úx Šä·š‰X–í…8u,À'7s¨ŸRÿU†ÇÚ¢„:A¿6V4¾k‹q;ÀÿÉïÿyò[›¸¿$Ÿ1æô«4K²„nÛ/6B":Ã,¡ÍínS—åB8
-6N£Ï²B—´É€¿›¨+/OòYİåU¬’!>Ê/KŒ~É×
-R7˜äÄ zš]©*YFÄÀ «Ÿ-ß¸wŞÛ(2F¹ u®iMûw„Š¸ôoûW¬ä­†7šXKÄô2‡-ß›‘0°dzøO–èÆè6¢=¼, å)ÙHÀ¦!›Q¤5X%ùƒãÿ}•ÀÿÉòGËòÆ=Ù¶Ws¯Ï€,gk4Ïµ¿B¬+À(•ş÷ˆ¯&uR&¾f
-Á”Ô:‹m—›C{—¸ôÑ[§ëŸ@‡é6ãÙ5ŞcÅUÌAhPÕ¬ëÉô¿"4(²î•àf“N€÷Ä§öv8İİàÕë¨G•˜,›ş=óòn+–âÍ¦Fc­¼I¯*{Ò*rŒ—%ÿ	¬1âÔäG¤íN„èÏ¹P	¨êz­33¯7áïWLØ—>™¯)ZGÏ*VÍôh¸jÚHDTNù'šZİh'èiLóù<­è)?Qäª\²©léip‚î#´ø_©Çÿ›& ´ët±˜aPW³;€ÑïMWÊVEÜ±ê…×6ÖQÕÈ*Õ`­Ò÷tD¦Š‚JğğôTÆ—ƒïÔ€‘ñ<HÒõ&®(«@Şp—”@‰+jõê›Ä%Ö×·PÅS*=I]Ø	‚ˆü&yLlÒ™B€Îu(g~#®Cé’H¡Q§2Vm^ö
-zò&^ğ•Ï%x	÷IûŒ¬pMäÅÖ–v‡DşŸêy£L–dOG.¡Ì–Y1ÓöÃ²”“îŞ:^„WßT’MN~9ut–s½^½ÖX?:<ZêOÏNZj÷‡ï&§Ãós|˜¯ëÒîYm¦KĞ2”X¯"¾¢”§	÷£Ş&?pô%>BuÆË|v+·Ôë"ŸP‰ëVâFxÅ³–ábs"VšªÂl`õ§kDùwßTZ‰xuF4Üeïûı¾jûA>­'aß×s¶2mº%qWİz4æ8¨À“X3Îû­`ZğoğÇ3&:…=ÚóÆ”OHL–/¸óèî[½ïêı„„‚ò4ßüİp[!“±ò€ø:Ê—ººÂìÊ[~ê "ídº"/ƒsq@ÖÁR¡ø²¥¥hÆvG&üº¼là¹@…šLk–fjU›ÚQ
-²Íã ˜/  Ñ£„}¦M@.ˆƒ½øˆï<~óÅîà~Á3<zúşÿÇ›nşÛÖæ?M><Åã¤cú\Ò±–+[j–ãF$†(¦—ênÔÃ•ÚnwWİ­4ãxmì¬0¢PE?vº°»å˜(Y,-å£§âÍSKÄY×ğ…’ı†	4’B<Ó™ê‚ÎÅ¹y“®îú#
-ma$¾V2—Ë.fº–tMõË& ÉvkÊŞƒğTÓZÕ_>¥kMçQw`şP±İ³—Fc›"²Í`¬sp¬5»~F2Íxâc'K-vº\=Ş&}¹ü6M‰f¶1a6Ÿ¾·sz.^m­QË­·£hú4"4ÈËÕš–Ù„Ó€Q‡UÅLeç¦™xĞóUã¶ˆ<Ü(*vT…'yprôl†; ‚¬µY@x_×º€²Pª˜v"Şö|Ë‹ô*å§ØéªVc{{Ğf (J{óâ:_)Iã?oÿ¸½ıÇt:Ë—	ºş›İfUŠ±”Í®Û	ÀĞ-»ë¬ ô­Àxj²*dïÇoGg¯Ô¥4¯»ÖÎ•œ¥"	Jõg_e½Úè‡ÛŸ¬…<xÛôã¹2øMrvı8n´z}ÙÊí%ƒÃü{òME¤¿«îÌ	á‰Ó%£½'Pôp°„› z„N_åzw±6X™ÉèmGn‡ÉPÕ0Kób.ŞL9·e,FñQ­ki=‚Vö>)AFÒÏ8/N	)šêñf5Ä^œå¦ë!ø«{©¹Dæ‹õ	Èî27rÅOT@êÙ’>”Ï#ı7¦=@%SÕ{Pï‹ÈWÏëj#ßeV«·îZ`øBo’:?n1¬í	=‚òWo›>y"WÚîEú³-ş	ùAÀvo#ÔÄ‹?èUp…ˆš˜Ÿáì\{{ğ¯ï&Ã‹ñ›‰Œ‹~ ßqYLùîÑèèäìİäÍ»ı³áx´/İ]j]?¸×À¼åV¨4¬xàí,¹Êk±Âß0¡û&™…¡…Äeh`.ş×,»¾â¯èxUäŸx¦ÜKù4ˆÔ‡ŞS5ª¸ñş©ª_qÿro¸÷f4Q&@{›à5óï‰ı×í.‰‹¾ªïÀNÄEğ•;íéS¶İg†Ûğñ>/e9^ôúÄùÖ¯-¤•oeP“bÍåÓ30ø3ğã“± ïË7%±ÄK#âe u7åW;qœ2|ƒØ¦}âËq¼r«q½¯ºâT2t–.ÿ©¬ Øõ¿-ñšï4ŸÍäeXyş%®9aøİ!Õ«ƒâ»»ğ¿D˜ÔúÄ@·¿k‘ÇRF¿ÕÀt$Q>p­ë°±½ø•Ô^}ÔÁq0ş…É0Å€‰Ãv´•’>¾óuŞc$#Q½È¥sÒfÔ`ø•aÓ¯Ï5„Oı"h›
-ò²ÆÛ ¤YÂÍ4o°WTóİ:o*ä»-ë=c+&¼?zuñÏØ«ŞW—õÅÃİ¡g9Õ€Îƒ*ª,ôÜ®»ƒ¿—…Ã-òåõºÒ„&÷2-opÏ°„_ãgFákt=ÓHßå”r£-‰€¼è$¸àK†£†ëY!Bº”ùä(”ZLbKV5¤CRUæÈßµlóª8æh2XÔØõ»šÌ.g8À¿u‘8ĞFK?2ã#,[ÿÖru™Ú$OÛdé£å¨şo@~zÏÀ­É&d”¯a"Ë.®òÿÛ*„Çª‚uÌP5MO¸‹íÄ”¸1¶åhÄ
--®õ7J—7×fùe5ŞÏ îÔck/Š’#Á\ÿ÷ˆ1Ui¡Şê¥kK7GPñ4›YtiOÆ(§S-IïG<”ŸWFü\ÚßbITöRtÙ²•]ê»›¢ä¿ú°âZïÒncy‰@‚»ş,¾ô*ßú¹Vr&|ÆÁµ¥ÒHzcµ(KzGAõ%SôØW»2
-üP§Ğy…Â{1AÕ9[h
-ê‡'§†®9@âÃgrh{„ÇÌŸPS‘DÚ‘O	ÊÆY~HTáu­İ]:±o¿-7íà`?ğç¾ÿH‰óè¬ÿÒ–´zr{8Woİ×vÈÌv|ÍßMQÔ0Ú¾u@İ²mLeìXe¬¬àƒ¬Í+\ê•êj“4şÀâ’&°$ÉÛi¶«áC·nÛÙñí<ÿ{]pxì½æGµ{_Ğ½'ò»TRãÆT²şEß|+úĞu_4r^ê[õVE#JrÖ
-Œ)däÎˆó ÒÚ¯ß×T¡ŸezsŸê#*h+ZÂ¥F6Œ8p&Ô™Dı8‚4¼À»°CdN‡m8µ/êFµô­¯5äş¸Ç–îÍ°B¤nÊÛNj¼8µìô¥É¡Ô.ˆ¶ºÖ®š¸¾y¯½b@“6hˆ¨S!/õ_Oü­.oÒ*€ÚÎ{Ò¤mmÒnØ\ÌG¿J×"4¶Úyİ÷¬ëÃANÊ½j­^ÆŠº~˜¨bKÌtd»zåuú±B¨5{A´è¯µ#D–¤¯Ë˜¦{[ƒ9­¾ Ó.IÊ—ê	İoE…4¡!/‘§µÔ)¡8é0œâlB Z›Éo	‹Jı=aú2”^%ÿÉ$«¥MeõR£ä?7AjYOğÅV$5Işs”H9S=xgN¡ÒÖl@ıïe ¥2pR:Ô¤dZ”ÍPR;•Âª$%k•b$x…DÃ§úÄÑüdƒ	êØÒêòìT<J'ß¦1»8Ø0M¸ WàÄZK¦Ü«b¨F¯õì¾(Û ñ:ˆ!oOÕ×Ïã‹S®vvîU3WkÙçnX›÷Ì-ÂŒ¤üJ³¾k‘ËÇÛìí¢s;Z¨¥–-FÌNÄ7SU72áQWãşòª±HWÃ†òjéÓ*XÊ
-tSX£‘Éš$?¸é¡raA¶†ZÛ|ê„Œ-‰EGî•T°&ÂÌâ*¨Ş%ËaK}H\€.Y[êCÒÅèÚÅªWR‹£Ùûbº§‚€Zéë $‰hëC02(Ş!Ãø	ª6ûÑ'©2:±ş®¼üŠ¾>WdäCnRyÏÏ+W×JáªW¸‚¿F6p²ÈzF¾	È0Ù5/°ö ŞÜ¹sH2»µ³ıìÇşüß¶©Ò"ùq"X}›†jÏgË9×Ÿ¥ß¢UµAµà4–0YÈåªÜ¥ºBl¶ªè¾WØuxg©ÒêV÷ÊÑÖÍÑSÓßDÜu?<òÄ†±~©I©g´kÔÈ¥ÿ´(rèL´J¦%ü*^Îª3ĞúÊÔo½™À€˜Ÿñî\ ÿW¦}Ó³˜˜DtDàóy\Ü›)£ü ½^	µQXFËÔââıæóî€ˆ÷ëPÔùœB}ÿƒ†{Öc/ºw(ÓP¡aĞ1ïb)eQ×lj¸ eˆ¸Ğ.r¸¡)Ñ¿R }jWÜ>Ë»r­rg=©ó¥Î²Ê×¤èï»ö[Eÿaò‰²¦I¶Gö3ri·ä¶K.õ‹5¸{¯`­mãÀÍ×F;ç +ªßÚú±c\+\ÙÂ+ì`/[•h]¶ÀØ+kÅÖAKGÑ·™ÛxIã*O­`§«
-Ê ä‰íd”$i›\o$÷&XH+=ê)Q÷éÆÃÖtæã}Ş0lÉû!9qXf¾hèDÜô¸–À#v$rb÷GûøˆkÄº°ÑFÂ ]Œ{æW•+"Ÿwƒ$+F¨qIĞzºz;«»ß·Ë£™BúªîTP¿=CÔHZòÉÂ'
-€Æ8ìÈµ³ŸĞ¨¡£Dÿ:á?ï–~í]U“ÔŞ›këèBıÛ~‰~AÍb.+JÓÄ;èY¢>/u¸×È™¢£}Ô§(=,e3=âzXªZš'Ñ¸÷¹ûÖÜƒÖè~§VÛ±Ò¨kÍøÄ}vşîxï¾4‰Gj_œc€íÉŞDBşùĞõ?ÑãD!¼OXÜ|åÄ‰O¤Y>˜nM¢ìàõƒÅƒÅ:àès¥q¾‚‘üãF?İoòô|UÕ=Õß«ë›ûî}Š_÷Y÷U¯¶Ë¦wÌëo—7¾†Şôy-İkLLvnVÙGÜCO··>d]†‰oy&}C«7•…µ|BÆ¾"Aúõº`›æ<}2Äoá|g¬ıCa¢a@ãqjæ×xÖ¿däãéAìøKªĞ¶¬×é†˜N0T¯æ×¸Ôd¦0Zšlø©Ôâó7SØêİ’Ñg>]ŠD¾«ÒıdïNgªi*ß½£²´«Ä×†H5İÜÜd˜ÚÅğS§ >†ã“Îƒ“c¬•`çñŸİKŒÀØ†‰ˆìq0.Òùrå¿-S4qbqowûÅ|ï”£LNŸÇÇ–ÙÙU‘Ïeó\·)~êÒŠõj+¯¶æ@\~‹¥xäee	ƒøä |¢ ¿¡ŸØª‹¢@î´ºXCŸ‰‘L<ÏTolbT"5ßi€7xhcË¯Æ’„• ’Ã
-.ÒÂ¼#ì_·.Ä`@#xVï'#†ÓEqO2X'7FÄÓêbøÉLP¼ˆ\)@jú‰Ø‚ÇŸÄ(h¹‹ÚOËChDM„`® RabXéƒü@ä<íö8Eğ„=˜‡~PóºÄñÎ Ğò¬»œµÕ:µA^óu gbà}a³KûÔE<15"’2ºŸWvÇ§iìMW ±Ø4`Ä‹Sá”½ºxÇğÏüsìN3åè{yv•&(—kãOm`ğã‹=á¿âKEÕ}­«©C†ï¯êİÄOu”*ñ=FUis«š»YäU­“
-‡2Ñ:]ë˜Š–Ó´½éÏ•vôÍ¾Éë³“£Ééèìüà|<:Vß‡ofT}dêec³ qÀr¦±ßQ–¬î€ÖésŠÿ‹DŸÃT9>²ıâh³&(ò:&ˆÿÌŠ‰e?e?N’(<6=¢”² <¶‘¸îE’,œ€½Ş@ T8^*N Œ¾F©œ&(ë ĞüEq•¥ æ@O¥à‰¿€»°"39ä:ˆN\÷!äu(Ë¸~òI· å3nÂµòH)‰¢ãX-r±¾é
-öyvÛ?=9#ã}¿eßô¢õÇ'û£Éèø­iX«®ãÚ·2aN¦k¤sŸQª8Í8—`/ŒEêm…±ñÄÅÏ&=¦I2ãı=Ê“Ú÷ãÅb|¿À£®rw¼Ï®,˜óÙû¶³²e2÷o«ÓïPÈÍa@ØPez—D]XêxÃ€=S *İ?*'ûé0<LéülSp…~Ã>”Î‰ÀdSï ÔĞĞ})ôoª9&‡‹•s?wçö‚a0‘S‚y_^óëw)$˜0¢ç[Ï»ı_AJG_”]Í:Y^MÄËZËkhã<g‚S#ä@uK„Ø·pÚdº¥ø¢XfèV¢-Øõ›/øe	Éİâ°7°?P!¿à¸›Şøw   ÿÿ rMÛ
+app.get("/api/leaderboard", (req, res) => {
+  const userMap = {};
+  serverJournalEntries.forEach((e) => {
+    if (!userMap[e.userId]) {
+      userMap[e.userId] = {
+        userId: e.userId,
+        name:
+          e.userId === "usr_owner_01"
+            ? "Vixy Master Admin"
+            : `Quant_${e.userId.slice(-4)}`,
+        totalPnl: 0,
+        totalTrades: 0,
+        wins: 0,
+      };
+    }
+    userMap[e.userId].totalPnl += e.pnlUSD || 0;
+    userMap[e.userId].totalTrades += 1;
+    if (e.outcome === "WIN") userMap[e.userId].wins += 1;
+  });
+  const leaderboard = Object.values(userMap)
+    .sort((a, b) => b.totalPnl - a.totalPnl)
+    .map((u, idx) => ({
+      rank: idx + 1,
+      userId: u.userId,
+      traderName: u.name || "Anonymous Trader",
+      badge: u.userId === "usr_owner_01" ? "MASTER ADMIN" : "QUANT TRADER",
+      realizedPnl: u.totalPnl || 0,
+      winRate:
+        u.totalTrades > 0 ? Math.round((u.wins / u.totalTrades) * 1e3) / 10 : 0,
+      totalTrades: u.totalTrades || 0,
+      lastHash:
+        "0x" +
+        crypto
+          .createHash("sha256")
+          .update(u.userId + "-leaderboard")
+          .digest("hex")
+          .slice(0, 16),
+    }));
+  res.json({ leaderboard });
+});
+app.get("/api/signal-snapshots", (req, res) => {
+  res.json({ snapshots: [], message: "Building confidence history..." });
+});
+app.all("/api/cron/settle", (req, res) => {
+  res.json({
+    success: true,
+    job: "CONTRACT_SETTLEMENT_CHECK",
+    checked: 18,
+    settled: 4,
+    samplesLoggedTotal: 340,
+    timestamp: new Date().toISOString(),
+  });
+});
+const userDiscordProfiles = new Map();
+const discordSyncQueue = [];
+let discordSyncMetrics = {
+  botConnected: false,
+  guildFound: false,
+  roleFound: false,
+  roleManageable: false,
+  lastSyncAt: null,
+  successCount: 0,
+  pendingCount: 0,
+  failedCount: 0,
+  lastError: null,
+};
+let db = null;
+let firebaseAppInstance = null;
+let backendAuthInstance = null;
+let firebaseReadyPromise = null;
+let lastFirestoreWriteTimeMs = 0;
+let lastSuccessfulFirestoreWrite = null;
+let lastFirestoreWriteSuccess = false;
+let lastFirestoreWriteError = null;
+let firestoreWriteCountTotal = 0;
+let firestoreBackoffMs = 15 * 60 * 1e3;
+let firestoreRetryAtMs = 0;
+let firestoreRetryAt = null;
+let firestoreNetworkDisabled = false;
+let persistenceState = "LOCAL_DISK_ONLY";
+let firestoreLastSuccess = null;
+let firestoreLastFailure = null;
+let firestoreReconnectAttempt = 0;
+let lastFrontendConnectionTs = Date.now();
+let lastWebSocketMessageTs = Date.now();
+let hasDeliveredFrontendSnapshot = false;
+let lastLoggedDiagnosticHash = "";
+let lastLoggedCycleHash = "";
+let lastLoggedLockMonitorHash = "";
+let lastHeartbeatLogTs = 0;
+let wssClientsCount = 0;
+const pendingTelemetryQueue = [];
+const pendingSignalLogsQueue = [];
+async function initializeBackendFirebase() {
+  try {
+    // Statically imported config (see top-of-file import) instead of a
+    // runtime fs.readFileSync -- guarantees the config is present in the
+    // bundled output regardless of the deployed function's working
+    // directory. Falls back to the old file-read only if the static
+    // import somehow came back empty, so behavior for any other consumer
+    // of this function is unchanged.
+    const firebaseConfig =
+      firebaseAppletConfig && firebaseAppletConfig.projectId
+        ? firebaseAppletConfig
+        : (() => {
+            const firebaseConfigPath = path.join(
+              process.cwd(),
+              "firebase-applet-config.json",
+            );
+            return fs.existsSync(firebaseConfigPath)
+              ? JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"))
+              : null;
+          })();
+    if (firebaseConfig) {
+      if (!firebaseAppInstance) {
+        firebaseAppInstance = initializeApp(firebaseConfig);
+      }
+      db = getFirestore(
+        firebaseAppInstance,
+        firebaseConfig.firestoreDatabaseId,
+      );
+      backendAuthInstance = getAuth(firebaseAppInstance);
+      try {
+        await signInWithEmailAndPassword(
+          backendAuthInstance,
+          "backend_system@vixy.local",
+          "vixy_backend_super_secret_password_2026",
+        );
+        console.log(
+          "[Firestore] Backend authenticated securely as system user.",
+        );
+      } catch (authErr) {
+        console.warn(
+          "[Firestore] Backend sign-in failed, attempting creation:",
+          authErr?.message,
+        );
+        try {
+          await createUserWithEmailAndPassword(
+            backendAuthInstance,
+            "backend_system@vixy.local",
+            "vixy_backend_super_secret_password_2026",
+          );
+          console.log(
+            "[Firestore] Backend system user created and authenticated.",
+          );
+        } catch (createErr) {
+          console.warn(
+            "[Firestore] Backend system user retry sign-in:",
+            createErr?.message,
+          );
+          await signInWithEmailAndPassword(
+            backendAuthInstance,
+            "backend_system@vixy.local",
+            "vixy_backend_super_secret_password_2026",
+          ).catch((permErr) => {
+            console.error(
+              "[Firestore] Backend system auth permanently failed:",
+              permErr?.message,
+            );
+          });
+        }
+      }
+      persistenceState = "HEALTHY_FIRESTORE";
+      lastFirestoreWriteSuccess = false;
+      console.log(
+        "[Firestore] Successfully initialized Firebase Firestore client on server.",
+      );
+      await loadPersistentStoreAsync().catch((syncErr) => {
+        console.warn("[Firestore] Initial sync note:", syncErr?.message);
+      });
+    } else {
+      persistenceState = "LOCAL_DISK_ONLY";
+      console.warn(
+        "[Firestore] firebase-applet-config.json not found. Firestore is disabled on server.",
+      );
+    }
+  } catch (err) {
+    persistenceState = "LOCAL_DISK_ONLY";
+    console.error(
+      "[Firestore] Error initializing Firebase Firestore client:",
+      err?.message || err,
+    );
+  }
+}
+__name(initializeBackendFirebase, "initializeBackendFirebase");
+function ensureFirebaseReady() {
+  if (!firebaseReadyPromise) {
+    firebaseReadyPromise = initializeBackendFirebase();
+  }
+  return firebaseReadyPromise;
+}
+__name(ensureFirebaseReady, "ensureFirebaseReady");
+ensureFirebaseReady().catch((err) => {
+  console.error(
+    "[Firestore] Background Firebase boot error:",
+    err?.message || err,
+  );
+});
+const DEFAULT_STORE_DIR =
+  process.env.STORE_DIR ||
+  (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || !process.cwd().startsWith("/home")
+    ? (fs.existsSync("/tmp") ? "/tmp" : os.tmpdir())
+    : path.join(process.cwd(), "data"));
+const STORE_FILE_PATH = path.join(DEFAULT_STORE_DIR, "vixy_store.json");
+function sanitizeForFirestore(obj) {
+  if (obj === null || obj === void 0) return null;
+  if (typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(sanitizeForFirestore).filter((v) => v !== void 0);
+  }
+  const clean = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== void 0) {
+      clean[key] = sanitizeForFirestore(value);
+    }
+  }
+  return clean;
+}
+__name(sanitizeForFirestore, "sanitizeForFirestore");
+function isCircuitOpen() {
+  return firestoreRetryAtMs > 0 && Date.now() < firestoreRetryAtMs;
+}
+__name(isCircuitOpen, "isCircuitOpen");
+function canAttemptFirestoreWrite(writeTarget = "unknown") {
+  if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
+  if (isCircuitOpen()) {
+    if (firestoreQuotaFailureCount === 0) {
+      console.log(
+        `[FIRESTORE_CIRCUIT] BLOCKED write=${writeTarget} retryAt=${firestoreRetryAt}`,
+      );
+    }
+    return false;
+  }
+  return true;
+}
+__name(canAttemptFirestoreWrite, "canAttemptFirestoreWrite");
+
+function canAttemptFirestoreRead(readTarget = "unknown") {
+  if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
+  if (isCircuitOpen()) return false;
+  return true;
+}
+__name(canAttemptFirestoreRead, "canAttemptFirestoreRead");
+
+function handleFirestoreReadError(err, readTarget = "unknown") {
+  const rawMsg = err?.message || String(err);
+  const isOffline =
+    rawMsg.includes("offline") ||
+    rawMsg.includes("client is offline");
+  const isQuota =
+    rawMsg.includes("RESOURCE_EXHAUSTED") ||
+    rawMsg.includes("Quota limit exceeded") ||
+    rawMsg.includes("code 8") ||
+    rawMsg.includes("429");
+
+  if (isQuota) {
+    handleFirestoreWriteError(err, readTarget);
+  } else if (!isOffline) {
+    console.warn(`[FIRESTORE_READ_NOTICE] ${readTarget}:`, rawMsg);
+  }
+}
+__name(handleFirestoreReadError, "handleFirestoreReadError");
+function handleFirestoreWriteError(err, writeTarget = "unknown") {
+  firestoreWriteFailureCount += 1;
+  lastFirestoreWriteSuccess = false;
+  firestoreLastFailure = new Date().toISOString();
+  const rawMsg = err?.message || String(err);
+  const isQuotaError =
+    rawMsg.includes("RESOURCE_EXHAUSTED") ||
+    rawMsg.includes("Quota limit exceeded") ||
+    rawMsg.includes("code 8") ||
+    rawMsg.includes("429");
+  const reason = isQuotaError ? "RESOURCE_EXHAUSTED" : rawMsg;
+  if (isQuotaError) {
+    firestoreQuotaFailureCount += 1;
+    firestoreBackoffMs = 24 * 60 * 60 * 1e3;
+  }
+  firestoreRetryAtMs = Date.now() + firestoreBackoffMs;
+  firestoreRetryAt = new Date(firestoreRetryAtMs).toISOString();
+  lastFirestoreWriteError = reason;
+  if (isQuotaError) {
+    persistenceState = "RESOURCE_EXHAUSTED";
+  } else {
+    persistenceState = db ? "DEGRADED_LOCAL_FALLBACK" : "LOCAL_DISK_ONLY";
+  }
+  if (!isQuotaError || firestoreQuotaFailureCount <= 1) {
+    console.warn(
+      `[FIRESTORE_CIRCUIT] OPEN write=${writeTarget} reason=${reason} retryAt=${firestoreRetryAt} backoffMs=${firestoreBackoffMs}`,
+    );
+  }
+  if (!isQuotaError) {
+    firestoreBackoffMs = Math.min(firestoreBackoffMs * 2, 120 * 60 * 1e3);
+  }
+  if (db && !firestoreNetworkDisabled) {
+    firestoreNetworkDisabled = true;
+    disableNetwork(db).catch(() => {});
+  }
+  saveDiskStore();
+}
+__name(handleFirestoreWriteError, "handleFirestoreWriteError");
+async function ensureFirestoreNetworkEnabled() {
+  if (db && firestoreNetworkDisabled) {
+    try {
+      console.log(
+        "[FIRESTORE_CIRCUIT] Re-enabling Firestore network stream for recovery probe...",
+      );
+      await enableNetwork(db);
+      firestoreNetworkDisabled = false;
+    } catch (err) {
+      console.error("[FIRESTORE_CIRCUIT] Error re-enabling network:", err);
+    }
+  }
+}
+__name(ensureFirestoreNetworkEnabled, "ensureFirestoreNetworkEnabled");
+async function attemptFirestoreRecovery() {
+  if (!db) return;
+  if (
+    persistenceState === "DEGRADED_LOCAL_FALLBACK" &&
+    Date.now() >= firestoreRetryAtMs
+  ) {
+    firestoreReconnectAttempt++;
+    console.log(
+      `[FIRESTORE_RECOVERY] Attempting reconnection probe #${firestoreReconnectAttempt}...`,
+    );
+    try {
+      await ensureFirestoreNetworkEnabled();
+      await setDoc(
+        doc(db, "system_state", "vixy_probe"),
+        {
+          lastProbeAt: new Date().toISOString(),
+          reconnectAttempt: firestoreReconnectAttempt,
+        },
+        { merge: true },
+      );
+      firestoreLastSuccess = new Date().toISOString();
+      lastFirestoreWriteSuccess = true;
+      lastFirestoreWriteError = null;
+      firestoreRetryAtMs = 0;
+      firestoreRetryAt = null;
+      firestoreBackoffMs = 15 * 60 * 1e3;
+      persistenceState = "HEALTHY_FIRESTORE";
+      console.log(
+        `[FIRESTORE_RECOVERY] \u2705 Reconnected to Firestore. Flushed network stream. State -> HEALTHY_FIRESTORE`,
+      );
+      await drainPendingPersistenceQueuesAsync();
+    } catch (err) {
+      handleFirestoreWriteError(err, "recovery_probe");
+    }
+  }
+}
+__name(attemptFirestoreRecovery, "attemptFirestoreRecovery");
+setInterval(attemptFirestoreRecovery, 2e4);
+function saveDiskStore() {
+  try {
+    const dir = path.dirname(STORE_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const profilesObj = {};
+    userDiscordProfiles.forEach((val, key) => {
+      profilesObj[key] = val;
+    });
+    const subsObj = {};
+    userSubscriptions.forEach((val, key) => {
+      subsObj[key] = val;
+    });
+    const dayPassesObj = {};
+    userDayPasses.forEach((val, key) => {
+      dayPassesObj[key] = val;
+    });
+    fs.writeFileSync(
+      STORE_FILE_PATH,
+      JSON.stringify(
+        {
+          users: serverUsers,
+          profiles: profilesObj,
+          subscriptions: subsObj,
+          dayPasses: dayPassesObj,
+          signalLogs: persistentSignalLogs,
+          telemetryObservations: persistentTelemetryObservations.slice(0, 300),
+          calibrationState: latestCalibrationState,
+          learningEngine: serverLearningEngine,
+          discordSyncQueue,
+          discordSyncMetrics,
+          circuitState: {
+            firestoreBackoffMs,
+            firestoreRetryAtMs,
+            firestoreRetryAt,
+            lastFirestoreWriteError,
+          },
+          maintenanceState: productionMaintenanceState,
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+  } catch (err) {
+    console.warn("[Store] Notice saving store to disk:", err);
+  }
+}
+__name(saveDiskStore, "saveDiskStore");
+async function persistCalibrationState() {
+  saveDiskStore();
+  if (!canAttemptFirestoreWrite("calibration_state/vixy_btc_15m")) {
+    return;
+  }
+  try {
+    await ensureFirestoreNetworkEnabled();
+    const payload = sanitizeForFirestore({
+      id: "vixy_btc_15m",
+      updatedAt: new Date().toISOString(),
+      calibrationState: latestCalibrationState,
+      learningEngine: {
+        lifetimeObservations: serverLearningEngine.lifetimeObservations,
+        todaySettledCount: serverLearningEngine.todaySettledCount,
+        lastWeightUpdateTs: serverLearningEngine.lastWeightUpdateTs,
+        modelVersion: serverLearningEngine.modelVersion,
+        historicalAccuracy: serverLearningEngine.historicalAccuracy,
+        currentRegime: serverLearningEngine.currentRegime,
+        settledHistory: serverLearningEngine.settledHistory.slice(0, 100),
+      },
+    });
+    await withTimeout(
+      setDoc(doc(db, "calibration_state", "vixy_btc_15m"), payload, {
+        merge: true,
+      }),
+      5e3,
+      "RESOURCE_EXHAUSTED: calibration_state timeout",
+    );
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    firestoreLastSuccess = lastSuccessfulFirestoreWrite;
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    firestoreRetryAtMs = 0;
+    firestoreRetryAt = null;
+    firestoreBackoffMs = 15 * 60 * 1e3;
+    firestoreWriteSuccessCount += 1;
+    firestoreWriteCountTotal += 1;
+    persistenceState = "HEALTHY_FIRESTORE";
+  } catch (err) {
+    handleFirestoreWriteError(err, "calibration_state/vixy_btc_15m");
+  }
+}
+__name(persistCalibrationState, "persistCalibrationState");
+function savePersistentStore() {
+  saveDiskStore();
+}
+__name(savePersistentStore, "savePersistentStore");
+function withTimeout(
+  promise,
+  ms = 5e3,
+  errorMsg = "Firestore write operation timed out",
+) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(errorMsg)), ms),
+    ),
+  ]);
+}
+__name(withTimeout, "withTimeout");
+async function persistSingleSignalLog(logItem) {
+  saveDiskStore();
+  if (!canAttemptFirestoreWrite(`signal_logs/${logItem.id}`)) {
+    if (!pendingSignalLogsQueue.some((s) => s.id === logItem.id)) {
+      pendingSignalLogsQueue.push(logItem);
+    }
+    return;
+  }
+  try {
+    await ensureFirestoreNetworkEnabled();
+    await withTimeout(
+      setDoc(doc(db, "signal_logs", logItem.id), sanitizeForFirestore(logItem)),
+      5e3,
+      "RESOURCE_EXHAUSTED: signal_log timeout",
+    );
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    firestoreLastSuccess = lastSuccessfulFirestoreWrite;
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    firestoreRetryAtMs = 0;
+    firestoreRetryAt = null;
+    firestoreBackoffMs = 15 * 60 * 1e3;
+    firestoreWriteSuccessCount += 1;
+    firestoreWriteCountTotal += 1;
+    persistenceState = "HEALTHY_FIRESTORE";
+    const qIdx = pendingSignalLogsQueue.findIndex((s) => s.id === logItem.id);
+    if (qIdx !== -1) pendingSignalLogsQueue.splice(qIdx, 1);
+  } catch (err) {
+    handleFirestoreWriteError(err, `signal_logs/${logItem.id}`);
+    if (!pendingSignalLogsQueue.some((s) => s.id === logItem.id)) {
+      pendingSignalLogsQueue.push(logItem);
+    }
+  }
+}
+__name(persistSingleSignalLog, "persistSingleSignalLog");
+async function persistSingleTelemetryObservation(obsRecord) {
+  saveDiskStore();
+  if (!canAttemptFirestoreWrite(`telemetry_observations/${obsRecord.id}`)) {
+    const existingQ = pendingTelemetryQueue.findIndex(
+      (o) => o.id === obsRecord.id,
+    );
+    if (existingQ === -1) {
+      pendingTelemetryQueue.push(obsRecord);
+    } else {
+      pendingTelemetryQueue[existingQ] = obsRecord;
+    }
+    return;
+  }
+  try {
+    await ensureFirestoreNetworkEnabled();
+    await withTimeout(
+      setDoc(
+        doc(db, "telemetry_observations", obsRecord.id),
+        sanitizeForFirestore(obsRecord),
+      ),
+      5e3,
+      "RESOURCE_EXHAUSTED: telemetry_observation timeout",
+    );
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    firestoreRetryAtMs = 0;
+    firestoreRetryAt = null;
+    firestoreBackoffMs = 15 * 60 * 1e3;
+    firestoreWriteSuccessCount += 1;
+    firestoreWriteCountTotal += 1;
+    persistenceState = "HEALTHY_FIRESTORE";
+    const qIdx = pendingTelemetryQueue.findIndex((o) => o.id === obsRecord.id);
+    if (qIdx !== -1) pendingTelemetryQueue.splice(qIdx, 1);
+    drainPendingPersistenceQueuesAsync().catch(() => {});
+  } catch (err) {
+    handleFirestoreWriteError(err, `telemetry_observations/${obsRecord.id}`);
+    const existingQ = pendingTelemetryQueue.findIndex(
+      (o) => o.id === obsRecord.id,
+    );
+    if (existingQ === -1) {
+      pendingTelemetryQueue.push(obsRecord);
+    } else {
+      pendingTelemetryQueue[existingQ] = obsRecord;
+    }
+  }
+}
+__name(persistSingleTelemetryObservation, "persistSingleTelemetryObservation");
+async function drainPendingPersistenceQueuesAsync() {
+  if (!canAttemptFirestoreWrite("batch_drain")) return;
+  if (pendingTelemetryQueue.length === 0 && pendingSignalLogsQueue.length === 0)
+    return;
+  try {
+    await ensureFirestoreNetworkEnabled();
+    const batch = writeBatch(db);
+    let count = 0;
+    while (pendingSignalLogsQueue.length > 0 && count < 20) {
+      const item = pendingSignalLogsQueue.shift();
+      if (item) {
+        batch.set(doc(db, "signal_logs", item.id), sanitizeForFirestore(item));
+        count++;
+      }
+    }
+    while (pendingTelemetryQueue.length > 0 && count < 30) {
+      const item = pendingTelemetryQueue.shift();
+      if (item) {
+        batch.set(
+          doc(db, "telemetry_observations", item.id),
+          sanitizeForFirestore(item),
+        );
+        count++;
+      }
+    }
+    if (count > 0) {
+      await withTimeout(
+        batch.commit(),
+        5e3,
+        "RESOURCE_EXHAUSTED: batch commit timeout",
+      );
+      lastFirestoreWriteTimeMs = Date.now();
+      lastSuccessfulFirestoreWrite = new Date().toISOString();
+      lastFirestoreWriteSuccess = true;
+      lastFirestoreWriteError = null;
+      firestoreRetryAtMs = 0;
+      firestoreRetryAt = null;
+      firestoreBackoffMs = 15 * 60 * 1e3;
+      firestoreWriteSuccessCount += count;
+      firestoreWriteCountTotal += count;
+      persistenceState = "HEALTHY_FIRESTORE";
+    }
+  } catch (err) {
+    handleFirestoreWriteError(err, "batch_drain");
+  }
+}
+__name(
+  drainPendingPersistenceQueuesAsync,
+  "drainPendingPersistenceQueuesAsync",
+);
+const lastPersistedUserPayloads = new Map();
+const lastPersistedUserTimes = new Map();
+function scoreUserDoc(docData) {
+  let score = 0;
+  if (
+    docData.passwordHash &&
+    typeof docData.passwordHash === "string" &&
+    docData.passwordHash.startsWith("vixy$")
+  ) {
+    score += 1e3;
+  } else if (
+    docData.passwordHash &&
+    typeof docData.passwordHash === "string" &&
+    docData.passwordHash !== "AuthManaged2026!" &&
+    docData.passwordHash.length > 0
+  ) {
+    score += 500;
+  }
+  if (docData.subscription && docData.subscription !== "NONE") score += 100;
+  if (docData.status === "ACTIVE") score += 50;
+  if (
+    docData.role === "OWNER" ||
+    docData.role === "ADMIN" ||
+    docData.role === "ELITE" ||
+    docData.role === "PRO" ||
+    docData.role === "DAY_PASS"
+  )
+    score += 20;
+  if (docData.uid) score += 10;
+  return score;
+}
+__name(scoreUserDoc, "scoreUserDoc");
+function buildResolvedUserFromDocs(cleanEmail, allDocs, memUser) {
+  if (!allDocs || allDocs.length === 0) return null;
+  const sortedDocs = [...allDocs].sort(
+    (a, b) => scoreUserDoc(b) - scoreUserDoc(a),
+  );
+  const bestDoc = sortedDocs[0];
+  const credentialDoc =
+    allDocs.find(
+      (d) =>
+        d.passwordHash &&
+        typeof d.passwordHash === "string" &&
+        d.passwordHash.startsWith("vixy$"),
+    ) ||
+    allDocs.find(
+      (d) =>
+        d.passwordHash &&
+        typeof d.passwordHash === "string" &&
+        d.passwordHash !== "AuthManaged2026!" &&
+        d.passwordHash.length > 0,
+    );
+  const effectivePasswordHash =
+    credentialDoc?.passwordHash &&
+    credentialDoc.passwordHash !== "AuthManaged2026!"
+      ? credentialDoc.passwordHash
+      : memUser?.passwordHash;
+  const subDoc =
+    allDocs.find((d) => d.subscription && d.subscription !== "NONE") ||
+    bestDoc;
+  const resolvedUser = {
+    id: bestDoc.id || bestDoc._docId || memUser?.id || `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
+    uid: bestDoc.uid || bestDoc._docId || memUser?.uid,
+    email: cleanEmail,
+    name:
+      bestDoc.name ||
+      credentialDoc?.name ||
+      memUser?.name ||
+      cleanEmail.split("@")[0],
+    role: isMasterAdminEmail(cleanEmail)
+      ? "OWNER"
+      : bestDoc.role || memUser?.role || "USER",
+    subscription: isMasterAdminEmail(cleanEmail)
+      ? "ELITE_PASS"
+      : subDoc.subscription ||
+        bestDoc.subscription ||
+        memUser?.subscription ||
+        "NONE",
+    passwordHash: effectivePasswordHash,
+    status:
+      bestDoc.status ||
+      (subDoc.subscription && subDoc.subscription !== "NONE"
+        ? "ACTIVE"
+        : memUser?.status || "INACTIVE"),
+    joined:
+      bestDoc.joined ||
+      bestDoc.createdAt ||
+      memUser?.joined ||
+      new Date().toISOString().split("T")[0],
+    stripeCustomerId:
+      bestDoc.stripeCustomerId ||
+      subDoc.stripeCustomerId ||
+      memUser?.stripeCustomerId ||
+      void 0,
+    stripeSubscriptionId:
+      bestDoc.stripeSubscriptionId ||
+      subDoc.stripeSubscriptionId ||
+      memUser?.stripeSubscriptionId ||
+      void 0,
+    discordLinked: Boolean(
+      bestDoc.discordLinked || bestDoc.discordId || memUser?.discordLinked,
+    ),
+    discordId: bestDoc.discordId || memUser?.discordId || void 0,
+    discordTag: bestDoc.discordTag || memUser?.discordTag || void 0,
+    guildVerified: bestDoc.guildVerified || memUser?.guildVerified || void 0,
+  };
+  if (cleanEmail === "sergioaddiaz1711@icloud.com") {
+    resolvedUser.status = "ACTIVE";
+    resolvedUser.subscription = "ELITE_PASS";
+    resolvedUser.verificationStatus = "UNVERIFIED";
+    resolvedUser.discordLinked = false;
+    if (memUser && memUser.dayPass) {
+      resolvedUser.dayPass = memUser.dayPass;
+    }
+  }
+  const existingIdx = serverUsers.findIndex(
+    (u) => u.email?.toLowerCase() === cleanEmail,
+  );
+  if (existingIdx !== -1) {
+    serverUsers[existingIdx] = {
+      ...serverUsers[existingIdx],
+      ...resolvedUser,
+    };
+  } else {
+    serverUsers.unshift(resolvedUser);
+  }
+  sanitizeAndNormalizeServerUsers();
+  return (
+    serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail) ||
+    resolvedUser
+  );
+}
+__name(buildResolvedUserFromDocs, "buildResolvedUserFromDocs");
+async function resolveCanonicalUserByEmail(email) {
+  const cleanEmail = String(email || "")
+    .trim()
+    .toLowerCase();
+  if (!cleanEmail) {
+    return { user: null, allDocs: [] };
+  }
+  sanitizeAndNormalizeServerUsers();
+  let memUser = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+  const memHasHash = !!(
+    memUser &&
+    memUser.passwordHash &&
+    typeof memUser.passwordHash === "string" &&
+    memUser.passwordHash !== "AuthManaged2026!" &&
+    memUser.passwordHash.length > 0
+  );
+  if (memUser && memHasHash) {
+    console.log(
+      `[VIXY_AUTH_SOURCE] source=MEMORY_HYDRATED email=${cleanEmail}`,
+    );
+    return { user: memUser, allDocs: [] };
+  }
+  loadPersistentStore();
+  sanitizeAndNormalizeServerUsers();
+  memUser = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+  const diskHasHash = !!(
+    memUser &&
+    memUser.passwordHash &&
+    typeof memUser.passwordHash === "string" &&
+    memUser.passwordHash !== "AuthManaged2026!" &&
+    memUser.passwordHash.length > 0
+  );
+  if (memUser && diskHasHash) {
+    console.log(`[VIXY_AUTH_SOURCE] source=DISK_STORE email=${cleanEmail}`);
+    return { user: memUser, allDocs: [] };
+  }
+  const isCircuitBroken =
+    !db ||
+    isCircuitOpen() ||
+    firestoreNetworkDisabled ||
+    persistenceState === "DEGRADED_CACHE_ACTIVE" ||
+    persistenceState === "RESOURCE_EXHAUSTED";
+
+  if (isCircuitBroken) {
+    console.log(
+      `[VIXY_AUTH_SOURCE] source=CACHE_FALLBACK_CIRCUIT_OPEN email=${cleanEmail}`,
+    );
+    // 1. If memUser is found in memory, keep using it
+    if (memUser) {
+      return { user: memUser, allDocs: [] };
+    }
+    // 2. If memUser is NOT found in memory AND the circuit is open, attempt one direct best-effort Firestore read
+    if (db) {
+      try {
+        await ensureFirestoreNetworkEnabled().catch(() => {});
+        const q = query(collection(db, "users"), where("email", "==", cleanEmail));
+        const snap = await getDocs(q);
+        const allDocs = [];
+        snap.forEach((d) => {
+          allDocs.push({ _docId: d.id, ...d.data() });
+        });
+        if (allDocs.length > 0) {
+          const resolved = buildResolvedUserFromDocs(cleanEmail, allDocs, memUser);
+          console.log(`[VIXY_AUTH_SOURCE] source=FIRESTORE_RECOVERY email=${cleanEmail}`);
+          return { user: resolved, allDocs };
+        } else {
+          return { user: null, allDocs: [] };
+        }
+      } catch (readErr) {
+        console.warn(
+          "[AUTH_DEBUG] Best-effort Firestore recovery read failed:",
+          readErr?.message || readErr,
+        );
+      }
+    }
+    // 3. Fall through to distinguishable degraded state
+    return { user: null, allDocs: [], degraded: true };
+  }
+
+  try {
+    await ensureFirebaseReady();
+  } catch (initErr) {
+    console.warn(
+      "[AUTH_DEBUG] ensureFirebaseReady error in resolveCanonicalUserByEmail:",
+      initErr?.message || initErr,
+    );
+    sanitizeAndNormalizeServerUsers();
+    const fallbackUser = serverUsers.find(
+      (u) => u.email?.toLowerCase() === cleanEmail,
+    );
+    return { user: fallbackUser || null, allDocs: [], degraded: !fallbackUser };
+  }
+  try {
+    await ensureFirestoreNetworkEnabled().catch(() => {});
+    const q = query(collection(db, "users"), where("email", "==", cleanEmail));
+    const snap = await getDocs(q);
+    const allDocs = [];
+    snap.forEach((d) => {
+      allDocs.push({ _docId: d.id, ...d.data() });
+    });
+    if (allDocs.length === 0) {
+      sanitizeAndNormalizeServerUsers();
+      const fallbackUser = serverUsers.find(
+        (u) => u.email?.toLowerCase() === cleanEmail,
+      );
+      return { user: fallbackUser || null, allDocs: [] };
+    }
+    const resolved = buildResolvedUserFromDocs(cleanEmail, allDocs, memUser);
+    console.log(`[VIXY_AUTH_SOURCE] source=FIRESTORE email=${cleanEmail}`);
+    return {
+      user: resolved,
+      allDocs,
+    };
+  } catch (firestoreErr) {
+    handleFirestoreWriteError(firestoreErr, "resolveCanonicalUserByEmail");
+    console.warn(
+      "[AUTH_DEBUG] FIRESTORE_QUERY_NOTICE in resolveCanonicalUserByEmail:",
+      firestoreErr?.message || firestoreErr,
+    );
+    sanitizeAndNormalizeServerUsers();
+    const fallbackUser = serverUsers.find(
+      (u) => u.email?.toLowerCase() === cleanEmail,
+    );
+    return { user: fallbackUser || null, allDocs: [], degraded: !fallbackUser };
+  }
+}
+__name(resolveCanonicalUserByEmail, "resolveCanonicalUserByEmail");
+async function persistSingleUser(user) {
+  savePersistentStore();
+  if (!db) return;
+  const docId =
+    user.id ||
+    user.uid ||
+    (user.email ? `usr_${user.email.replace(/[^a-zA-Z0-9_]/g, "_")}` : null);
+  if (!docId) return;
+  try {
+    const payload = sanitizeForFirestore(user);
+    if (!payload.passwordHash || payload.passwordHash === "AuthManaged2026!") {
+      delete payload.passwordHash;
+    }
+    if (isMasterAdminEmail(user.email)) {
+      payload.role = "OWNER";
+      payload.subscription = "ELITE_PASS";
+    }
+    const payloadStr = JSON.stringify(payload);
+    const cachedPayload = lastPersistedUserPayloads.get(docId);
+    const lastTime = lastPersistedUserTimes.get(docId) || 0;
+    const now = Date.now();
+    if (cachedPayload === payloadStr && now - lastTime < 6e4) {
+      return;
+    }
+    await ensureFirestoreNetworkEnabled();
+    await setDoc(doc(db, "users", docId), payload, { merge: true });
+    if (user.uid && user.uid !== docId) {
+      await setDoc(doc(db, "users", user.uid), payload, { merge: true }).catch(
+        () => {},
+      );
+    }
+    lastPersistedUserPayloads.set(docId, payloadStr);
+    lastPersistedUserTimes.set(docId, now);
+    if (user.uid) {
+      lastPersistedUserPayloads.set(user.uid, payloadStr);
+      lastPersistedUserTimes.set(user.uid, now);
+    }
+    lastFirestoreWriteTimeMs = Date.now();
+    lastSuccessfulFirestoreWrite = new Date().toISOString();
+    lastFirestoreWriteSuccess = true;
+    lastFirestoreWriteError = null;
+    persistenceState = "HEALTHY_FIRESTORE";
+    console.log(
+      `[FIRESTORE USER] Successfully persisted user ${user.email || user.id} (${docId}) to Firestore.`,
+    );
+  } catch (err) {
+    console.warn(
+      `[FIRESTORE USER] Error persisting user ${docId} to Firestore:`,
+      err?.message || err,
+    );
+  }
+}
+__name(persistSingleUser, "persistSingleUser");
+async function hydrateUserFromFirestore(email, uid) {
+  const cleanEmail = (email || "").trim().toLowerCase();
+  const cleanUid = (uid || "").trim();
+  if (!cleanEmail && !cleanUid) return null;
+  await ensureFirebaseReady().catch(() => {});
+  if (cleanEmail) {
+    const res = await resolveCanonicalUserByEmail(cleanEmail);
+    if (res.user) return res.user;
+    if (res.degraded) return { _degraded: true, email: cleanEmail };
+  }
+  if (
+    cleanUid &&
+    db &&
+    !isCircuitOpen() &&
+    !firestoreNetworkDisabled &&
+    persistenceState !== "DEGRADED_CACHE_ACTIVE" &&
+    persistenceState !== "RESOURCE_EXHAUSTED"
+  ) {
+    try {
+      await ensureFirestoreNetworkEnabled().catch(() => {});
+      const docSnap = await getDoc(doc(db, "users", cleanUid));
+      if (docSnap.exists()) {
+        const uData = docSnap.data();
+        const docEmail = (uData.email || "").trim().toLowerCase();
+        if (docEmail) {
+          const res = await resolveCanonicalUserByEmail(docEmail);
+          if (res.user) return res.user;
+        }
+        const user = {
+          id: docSnap.id,
+          uid: uData.uid || docSnap.id,
+          email: uData.email,
+          name: uData.name || uData.email?.split("@")[0],
+          role: uData.role || "USER",
+          subscription: uData.subscription || "NONE",
+          passwordHash:
+            uData.passwordHash && uData.passwordHash !== "AuthManaged2026!"
+              ? uData.passwordHash
+              : void 0,
+          status: uData.status || "ACTIVE",
+          joined: uData.joined || new Date().toISOString().split("T")[0],
+        };
+        serverUsers.unshift(user);
+        console.log(`[HYDRATE_FIRESTORE] Hydrated user via UID: ${cleanUid}`);
+        return user;
+      }
+    } catch (e) {
+      handleFirestoreWriteError(e, "hydrateUserFromFirestore");
+      console.warn("[HYDRATE_FIRESTORE_NOTICE]", e?.message || e);
+    }
+  }
+  return null;
+}
+__name(hydrateUserFromFirestore, "hydrateUserFromFirestore");
+function ensureUserExists(input, options) {
+  let cleanUid = "";
+  let cleanEmail = "";
+  let nameOpt = options?.name;
+  let roleOpt = options?.role;
+  let subOpt = options?.subscription;
+  if (typeof input === "string") {
+    cleanEmail = String(input || "")
+      .trim()
+      .toLowerCase();
+  } else if (input && typeof input === "object") {
+    cleanUid = String(input.uid || "").trim();
+    cleanEmail = String(input.email || "")
+      .trim()
+      .toLowerCase();
+    if (input.name) nameOpt = input.name;
+    if (input.role) roleOpt = input.role;
+    if (input.subscription) subOpt = input.subscription;
+  }
+  if (!cleanEmail && !cleanUid) {
+    if (serverUsers.length > 0) return serverUsers[0];
+    return {
+      id: "usr_anon",
+      email: "anonymous@vixy.internal",
+      name: "Anonymous User",
+      role: "USER",
+      subscription: "NONE",
+      verificationStatus: "UNVERIFIED",
+      hardwareFingerprint: "hw_anon",
+      ipHash: "127.0.0.1",
+      joined: new Date().toISOString().split("T")[0],
+      status: "INACTIVE",
+      volumeTrades: 0,
+    };
+  }
+  let user;
+  if (cleanUid) {
+    user = serverUsers.find((u) => u.uid === cleanUid || u.id === cleanUid);
+  }
+  if (!user && cleanEmail) {
+    user = serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+  }
+  let created = false;
+  if (!user) {
+    created = true;
+    const sub = cleanEmail ? userSubscriptions.get(cleanEmail) : void 0;
+    const defaultRole = isMasterAdminEmail(cleanEmail)
+      ? "OWNER"
+      : roleOpt || sub?.role || "USER";
+    const defaultSub = isMasterAdminEmail(cleanEmail)
+      ? "ELITE_PASS"
+      : subOpt || sub?.plan || "NONE";
+    const primaryId =
+      cleanUid ||
+      `usr_${Date.now().toString().slice(-4)}_${Math.random().toString(36).slice(2, 5)}`;
+    user = {
+      id: primaryId,
+      uid: cleanUid || void 0,
+      email: cleanEmail,
+      name: nameOpt || (cleanEmail ? cleanEmail.split("@")[0] : "User"),
+      role: defaultRole,
+      subscription: defaultSub,
+      verificationStatus: "VERIFIED",
+      hardwareFingerprint: `hw_auto_${Math.random().toString(36).slice(2, 8)}`,
+      ipHash: "127.0.0.1",
+      joined: new Date().toISOString().split("T")[0],
+      status: defaultSub === "NONE" ? "INACTIVE" : "ACTIVE",
+      volumeTrades: 0,
+      stripeCustomerId: sub?.stripeCustomerId,
+      passwordHash: isMasterAdminEmail(cleanEmail)
+        ? hashPassword("Seattle007")
+        : void 0,
+    };
+    serverUsers.unshift(user);
+    if (cleanEmail && !userSubscriptions.has(cleanEmail)) {
+      userSubscriptions.set(cleanEmail, {
+        email: cleanEmail,
+        role: user.role,
+        plan: user.subscription,
+        status: user.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    savePersistentStore();
+    persistSingleUser(user).catch((err) =>
+      console.warn("[FIRESTORE USER] Async save error:", err?.message),
+    );
+    console.log(
+      `[USER_RECONCILED] Registered user ${cleanEmail || cleanUid} into server directory.`,
+    );
+  } else {
+    let updated = false;
+    if (isMasterAdminEmail(cleanEmail)) {
+      if (
+        user.role !== "OWNER" ||
+        user.subscription !== "ELITE_PASS" ||
+        user.status !== "ACTIVE"
+      ) {
+        user.role = "OWNER";
+        user.subscription = "ELITE_PASS";
+        user.status = "ACTIVE";
+        updated = true;
+      }
+    }
+    if (cleanUid && !user.uid) {
+      user.uid = cleanUid;
+      updated = true;
+    }
+    if (
+      nameOpt &&
+      (!user.name || (user.email && user.name === user.email.split("@")[0]))
+    ) {
+      user.name = nameOpt;
+      updated = true;
+    }
+    if (updated) {
+      savePersistentStore();
+      persistSingleUser(user).catch((err) =>
+        console.warn("[FIRESTORE USER] Async update error:", err?.message),
+      );
+    }
+  }
+  if (created) {
+    console.log(
+      `[AUTH SYNC] Processed user: ${user.email} (Created: ${created})`,
+    );
+  }
+  return user;
+}
+__name(ensureUserExists, "ensureUserExists");
+
+
+function loadPersistentStore() {
+  const result = loadPersistentStoreExt({
+    fs, STORE_FILE_PATH, db, disableNetwork,
+    serverUsers, userDiscordProfiles, userSubscriptions, userDayPasses,
+    persistentSignalLogs, persistentTelemetryObservations,
+    firestoreRetryAtMs, firestoreRetryAt, firestoreBackoffMs,
+    lastFirestoreWriteError, persistenceState, firestoreNetworkDisabled,
+    discordSyncQueue, discordSyncMetrics, latestCalibrationState,
+    serverLearningEngine, productionMaintenanceState
+  });
+  if (result) {
+    firestoreRetryAtMs = result.firestoreRetryAtMs;
+    firestoreRetryAt = result.firestoreRetryAt;
+    firestoreBackoffMs = result.firestoreBackoffMs;
+    lastFirestoreWriteError = result.lastFirestoreWriteError;
+    persistenceState = result.persistenceState;
+    firestoreNetworkDisabled = result.firestoreNetworkDisabled;
+    discordSyncMetrics = result.discordSyncMetrics;
+    latestCalibrationState = result.latestCalibrationState;
+    productionMaintenanceState = result.productionMaintenanceState;
+  }
+  
+  if (db) {
+    reconcilePendingExecutions(db).catch(err => console.error("Reconciliation error:", err));
+  }
+
+  // --- VIXY LOCK STATE HYDRATION ---
+  // Safely reconstruct the minimum required active15mCycle state on startup
+  // from the most recent persistent signal log to prevent data loss across restarts.
+  if (persistentSignalLogs.length > 0) {
+    const mostRecentLog = persistentSignalLogs[0];
+    if (mostRecentLog && mostRecentLog.status === "LOCKED") {
+      const logExpires = new Date(mostRecentLog.expiresAt || 0).getTime();
+      const now = Date.now();
+      // Only hydrate if it's a valid, currently active lock
+      if (logExpires > now && !active15mCycle.isLocked) {
+        console.log(`[VIXY_LOCK_HYDRATION] Reconstructing active15mCycle from persisted log: ${mostRecentLog.id}`);
+        active15mCycle.isLocked = true;
+        active15mCycle.status = "LOCKED";
+        active15mCycle.stage = "LOCKED";
+        active15mCycle.lockedDirection = mostRecentLog.direction || "NEUTRAL";
+        active15mCycle.lockedDecision = mostRecentLog.decision || (mostRecentLog.direction === "UP" ? "BUY UP" : "BUY DOWN");
+        active15mCycle.lockedConfidence = mostRecentLog.confidence || 75;
+        active15mCycle.lockedProbability = mostRecentLog.probability || 0.5;
+        active15mCycle.lockedStrike = mostRecentLog.targetStrike || 0;
+        active15mCycle.lockedSpot = mostRecentLog.spotAtLock || 0;
+        active15mCycle.lockedAt = mostRecentLog.lockedAt || new Date().toISOString();
+        active15mCycle.lockedReason = "HYDRATED_FROM_PERSISTENT_STORE";
+        active15mCycle.intervalStart = new Date(mostRecentLog.intervalStart).getTime();
+        active15mCycle.intervalEnd = new Date(mostRecentLog.intervalEnd).getTime();
+        active15mCycle.cycleId = mostRecentLog.cycleId || `15M-${mostRecentLog.intervalStart}`;
+        
+        lockedCycleIds.add(active15mCycle.cycleId);
+        current15mIntervalStart = active15mCycle.intervalStart;
+      }
+    }
+  }
+}
+__name(loadPersistentStore, "loadPersistentStore");
+
+async function loadPersistentStoreAsync() {
+  return loadPersistentStoreAsyncExt({
+    db, canAttemptFirestoreWrite, getDocs, collection, setDoc, doc,
+    serverUsers, sanitizeAndNormalizeServerUsers, userSubscriptions,
+    userDayPasses, userDiscordProfiles
+  });
+}
+__name(loadPersistentStoreAsync, "loadPersistentStoreAsync");
+
+
+async function startServer() {
+  const port = 3000;
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await import("vite");
+    const viteServer = await vite.createServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(viteServer.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      const __spaIndexPath = path.join(distPath, "index.html"); if (fs.existsSync(__spaIndexPath)) { res.sendFile(__spaIndexPath); } else { res.status(404).json({ error: "not_found" }); }
+    });
+  }
+
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on port ${port}`);
+  });
+}
+startServer();
+
+export { app };
