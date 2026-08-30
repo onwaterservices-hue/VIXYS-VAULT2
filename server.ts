@@ -5042,21 +5042,7 @@ app.get(
   "/api/discord/connect",
   createDiscordConnectHandler(() => db, authenticateSession),
 );
-// TEMPORARY diagnostic only -- presence/identity booleans, never secrets.
-// Remove once Hypothesis B (backend Firestore auth) is resolved.
-app.get("/api/_debug/firebase-status", (req, res) => {
-  const auth = authenticateSession(req);
-  if (!auth || auth.user.role !== "OWNER") {
-    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
-  }
-  return res.json({
-    hasFirebaseApp: !!firebaseAppInstance,
-    hasDb: !!db,
-    hasAuthInstance: !!backendAuthInstance,
-    authCurrentUserUid: (backendAuthInstance && backendAuthInstance.currentUser && backendAuthInstance.currentUser.uid) || null,
-    authCurrentUserEmail: (backendAuthInstance && backendAuthInstance.currentUser && backendAuthInstance.currentUser.email) || null,
-  });
-});
+
 app.get(
   "/api/auth/discord/callback",
   createDiscordCallbackHandler(
@@ -5155,10 +5141,8 @@ async function sendHourlyMarketDigestOnce() {
         },
       );
       sendOk = res.ok;
-      var __debugStatus = res.status;
-      var __debugBody = sendOk ? null : await res.text();
       if (!sendOk) {
-        console.error("[HourlyMarket] Discord send failed, status:", res.status);
+        console.error("[HourlyMarket] Discord send failed, status:", res.status, await res.text());
       }
     } finally {
       clearTimeout(timeout);
@@ -5170,7 +5154,7 @@ async function sendHourlyMarketDigestOnce() {
       { merge: true },
     ).catch(() => {});
 
-    return { sent: sendOk, debugStatus: typeof __debugStatus !== "undefined" ? __debugStatus : null, debugBody: typeof __debugBody !== "undefined" ? __debugBody : null };
+    return { sent: sendOk };
   } catch (err) {
     console.error("[HourlyMarket] Digest failed:", err?.message || err);
     await setDoc(
@@ -5243,17 +5227,6 @@ app.get("/api/account/me", async (req, res) => {
           discordGlobalName: d.discordUsername,
           guildMember,
         };
-      } else {
-        // TEMPORARY: surface the last OAuth failure reason (if any) so a
-        // failed connection attempt is diagnosable without catching a
-        // transient popup redirect. No secrets, just a short reason code.
-        try {
-          const debugSnap = await getDoc(doc(db, "discord_oauth_debug", vixyEmail));
-          if (debugSnap.exists()) {
-            discord.lastAttemptError = debugSnap.data().lastError;
-            discord.lastAttemptAt = debugSnap.data().at;
-          }
-        } catch (e) {}
       }
     }
   } catch (err) {
