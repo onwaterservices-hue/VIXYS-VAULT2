@@ -102,7 +102,7 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
  * from the validated, single-use OAuth state bound to the VIXY user at
  * /connect time, never from a client-supplied param.
  */
-export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser) {
+export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser, syncLegacyUserRecord) {
   return async (req, res) => {
     const db = getDb();
     const code = req.query.code;
@@ -240,6 +240,18 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     }
     if (!linkOutcome || !linkOutcome.ok) {
       return fail((linkOutcome && linkOutcome.reason) || "link_failed");
+    }
+
+    // Keep the existing (older) terminal-access gate in sync: it reads
+    // user.discordId/discordTag/discordLinked, a separate field from the
+    // new discord_links collection above. Without this, a real, verified
+    // OAuth connection would not unlock anything in the existing gate.
+    if (typeof syncLegacyUserRecord === "function") {
+      try {
+        await syncLegacyUserRecord(vixyEmail, discordUserId, discordUsername);
+      } catch (err) {
+        console.error("[Discord OAuth] Legacy user record sync failed:", err && err.message);
+      }
     }
 
     try {
