@@ -112,6 +112,7 @@ import {
   discordClient,
   loadProductionDiscordCredentials,
 } from "./src/bot";
+import { fetchLiveMarketOverview } from "./src/bot/services/marketData";
 import {
   createDiscordConnectHandler,
   createDiscordCallbackHandler,
@@ -5073,6 +5074,120 @@ app.post(
   "/api/discord/unlink",
   createDiscordUnlinkHandler(() => db, authenticateSession),
 );
+
+// ---- Hourly Market Intelligence digest (real data only) ----
+// Uses only genuinely live fields from fetchLiveMarketOverview (price,
+// 24h change, high/low, volume, market cap) -- deliberately excludes
+// that function's fabricated confidence/whale-pressure/reasoning fields,
+// which are hardcoded or simple formulas dressed up as analysis.
+async function sendHourlyMarketDigestOnce() {
+  if (!db) {
+    console.error("[HourlyMarket] Firestore unavailable, skipping this hour.");
+    return { sent: false, reason: "NO_DB" };
+  }
+  const hourKey = new Date().toISOString().slice(0, 13); // e.g. 2026-08-30T14
+  const claimRef = doc(db, "discord_hourly_market_claims", hourKey);
+
+  const claimed = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(claimRef);
+    if (snap.exists() && (snap.data().status === "SENT" || snap.data().status === "SENDING")) {
+      return false;
+    }
+    tx.set(claimRef, { status: "SENDING", claimedAt: new Date().toISOString() });
+    return true;
+  }).catch((err) => {
+    console.error("[HourlyMarket] Claim failed:", err?.message || err);
+    return false;
+  });
+
+  if (!claimed) {
+    return { sent: false, reason: "ALREADY_CLAIMED" };
+  }
+
+  try {
+    const [btc, eth, sol] = await Promise.all([
+      fetchLiveMarketOverview("BTC"),
+      fetchLiveMarketOverview("ETH"),
+      fetchLiveMarketOverview("SOL"),
+    ]);
+
+    const fmtPrice = (p) => "$" + p.toLocaleString("en-US", { maximumFractionDigits: p < 10 ? 4 : 2 });
+    const fmtChange = (c) => (c >= 0 ? "+" : "") + c.toFixed(2) + "%";
+    const rows = [btc, eth, sol]
+      .map((m) => `**${m.symbol}**  ${fmtPrice(m.price)}  (${fmtChange(m.change24h)})`)
+      .join("\n");
+
+    const embed = {
+      title: "\uD83D\uDCC8 VIXY Hourly Market Report",
+      color: btc.change24h >= 0 ? 0x2ecc71 : 0xe74c3c,
+      fields: [
+        { name: "Market Overview (24h)", value: rows, inline: false },
+        {
+          name: "BTC Range (24h)",
+          value: `High ${fmtPrice(btc.high24h)} \u2022 Low ${fmtPrice(btc.low24h)}`,
+          inline: false,
+        },
+        {
+          name: "BTC Volume (24h)",
+          value: btc.volume24h.toLocaleString("en-US", { maximumFractionDigits: 0 }) + " BTC",
+          inline: true,
+        },
+      ],
+      footer: { text: "VIXY Vault \u2022 Live Market Data (Binance/Coinbase)" },
+      timestamp: new Date().toISOString(),
+    };
+
+    const channelId = process.env.DISCORD_CHANNEL_HOURLY_MARKET || "1534726888092733534";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let sendOk = false;
+    try {
+      const res = await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ embeds: [embed] }),
+          signal: controller.signal,
+        },
+      );
+      sendOk = res.ok;
+      if (!sendOk) {
+        console.error("[HourlyMarket] Discord send failed, status:", res.status);
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await setDoc(
+      claimRef,
+      { status: sendOk ? "SENT" : "FAILED", finishedAt: new Date().toISOString() },
+      { merge: true },
+    ).catch(() => {});
+
+    return { sent: sendOk };
+  } catch (err) {
+    console.error("[HourlyMarket] Digest failed:", err?.message || err);
+    await setDoc(
+      claimRef,
+      { status: "FAILED", error: String(err?.message || err), finishedAt: new Date().toISOString() },
+      { merge: true },
+    ).catch(() => {});
+    return { sent: false, reason: "ERROR" };
+  }
+}
+__name(sendHourlyMarketDigestOnce, "sendHourlyMarketDigestOnce");
+
+// Triggered by Vercel Cron (see vercel.json) once per hour. Also safely
+// callable manually -- idempotent per UTC hour via the Firestore claim
+// above, so repeated/concurrent calls within the same hour are no-ops.
+app.get("/api/cron/hourly-market", async (req, res) => {
+  const result = await sendHourlyMarketDigestOnce();
+  return res.json(result);
+});
 
 // Live guild-membership check via the existing bot token -- never trusts a
 // stored flag, always re-checks against Discord directly so a user who
