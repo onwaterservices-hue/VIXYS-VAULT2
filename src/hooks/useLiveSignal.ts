@@ -13,11 +13,6 @@ const intervals = new Map<string, any>();
 const isFetching = new Map<string, boolean>();
 
 let latestSequence = 0;
-let currentServerSessionId: string | null = null;
-let wsGlobalInstance: WebSocket | null = null;
-let reconnectAttempt = 0;
-let isWsConnecting = false;
-
 const getCacheKey = (asset: string, desk: string) => {
   const effAsset = (asset || 'BTC').toUpperCase();
   const effDesk = (desk || '15m').toLowerCase();
@@ -34,21 +29,24 @@ const notifySubscribers = (key: string) => {
 const updateSignalFromAuthoritative = (snapshot: any) => {
   if (!snapshot) return;
 
-  // Reconcile server epoch/session if server was restarted
-  if (snapshot.sessionId && snapshot.sessionId !== currentServerSessionId) {
-    console.log(`[VIXY_EPOCH_SYNC] Server session changed from ${currentServerSessionId} to ${snapshot.sessionId}. Reconciling sequence tracker.`);
-    currentServerSessionId = snapshot.sessionId;
-    latestSequence = typeof snapshot.sequence === 'number' ? snapshot.sequence : 0;
-  } else if (snapshot.sequence !== undefined) {
-    if (snapshot.sequence <= latestSequence && latestSequence > 0) {
-      console.warn(`[VIXY_WS_SEQUENCE_DROP] incoming=${snapshot.sequence} lastAccepted=${latestSequence} reason=${snapshot.sequence === latestSequence ? 'DUPLICATE' : 'OUT_OF_ORDER'}`);
-      return;
-    }
-    latestSequence = snapshot.sequence;
-  }
-
   const key = 'BTC:15m';
   let state = states.get(key) || { signal: null, status: null, isRateLimited: false };
+
+  if (snapshot.status === 'STALE') {
+    state.signal = {
+      ...(state.signal || {}),
+      status: 'STALE',
+      feedStatus: 'STALE',
+      dataFreshness: 'STALE',
+      stage: 'STALE'
+    } as any;
+    states.set(key, state);
+    notifySubscribers(key);
+    notifySubscribers('BTC:1h');
+    notifySubscribers('ETH:15m');
+    notifySubscribers('SOL:15m');
+    return;
+  }
 
   if (snapshot.cycleId && state.signal?.cycleId) {
     const incTime = new Date(snapshot.cycleId.replace('15M-' , '')).getTime();
@@ -185,73 +183,6 @@ const updateSignalFromAuthoritative = (snapshot: any) => {
   notifySubscribers('ETH:15m');
   notifySubscribers('SOL:15m');
 };
-const connectVixyWebSocket = () => {
-  if (wsGlobalInstance || isWsConnecting) return;
-  isWsConnecting = true;
-
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/api/ws`;
-
-  console.log(`[VIXY_WS_CONNECT] connecting to ${wsUrl}`);
-  const ws = new WebSocket(wsUrl);
-  wsGlobalInstance = ws;
-
-  ws.onopen = async () => {
-    isWsConnecting = false;
-    reconnectAttempt = 0;
-    console.log(`[VIXY_WS_OPEN] connection established`);
-
-    try {
-      const httpState = await fetchVixyStateApi();
-      if (httpState) {
-        console.log(`[VIXY_STATE_SOURCE] source=HTTP_SNAPSHOT cycle=${httpState.cycleId} sequence=${httpState.sequence}`);
-        updateSignalFromAuthoritative(httpState);
-      }
-    } catch (e) {
-      console.warn('[VIXY_STATE_SOURCE] failed to fetch fallback http snapshot', e);
-    }
-  };
-
-  ws.onmessage = (event) => {
-    try {
-      const msg = JSON.parse(event.data);
-      if (msg.type === 'VIXY_SNAPSHOT') {
-        console.log(`[VIXY_WS_SNAPSHOT] cycle=${msg.cycleId} sequence=${msg.sequence} status=${msg.status}`);
-        updateSignalFromAuthoritative(msg);
-      } else if (msg.type === 'VIXY_HEARTBEAT') {
-        console.log(`[VIXY_WS_HEARTBEAT] sequence=${msg.sequence} cycle=${msg.cycleId || 'active'}`);
-      }
-    } catch (err) {
-      console.warn('[VIXY_WS_ERROR] message parse error', err);
-    }
-  };
-
-  ws.onclose = (event) => {
-    isWsConnecting = false;
-    wsGlobalInstance = null;
-    console.log(`[VIXY_WS_CLOSE] code=${event.code} reason=${event.reason || 'none'}`);
-
-    reconnectAttempt++;
-    const delay = Math.min(30000, Math.pow(2, Math.min(reconnectAttempt, 5)) * 1000);
-    console.log(`[VIXY_WS_RECONNECT] attempt=${reconnectAttempt} scheduling reconnect in ${delay}ms`);
-
-    setTimeout(async () => {
-      try {
-        const httpState = await fetchVixyStateApi();
-        if (httpState) {
-          console.log(`[VIXY_STATE_SOURCE] source=HTTP_SNAPSHOT_RECONNECT cycle=${httpState.cycleId} sequence=${httpState.sequence}`);
-          updateSignalFromAuthoritative(httpState);
-        }
-      } catch (_) {}
-      connectVixyWebSocket();
-    }, delay);
-  };
-
-  ws.onerror = (err) => {
-    isWsConnecting = false;
-    console.warn('[VIXY_WS_ERROR]', err);
-  };
-};
 
 const poll = async (asset: string, desk: string) => {
   const key = getCacheKey(asset, desk);
@@ -312,8 +243,6 @@ export const useLiveSignal = (asset: string, desk: string) => {
   const [data, setData] = useState<SharedSignalState>(() => states.get(key) || { signal: null, status: null, isRateLimited: false });
 
   useEffect(() => {
-    connectVixyWebSocket();
-
     if (!subscribers.has(key)) {
       subscribers.set(key, new Set());
     }

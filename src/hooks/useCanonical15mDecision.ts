@@ -97,6 +97,13 @@ export function useCanonical15mDecision(): {
   const fetchFromServer = async () => {
     try {
       const data = await safeFetchJson<Canonical15mDecision>(`/api/vixy/15m/current?_t=${Date.now()}`);
+      
+      if (data && (data as any).status === 'STALE') {
+        setDataHealthStatus('STALE');
+        setFeedError((data as any).message || 'Stale market data');
+        return;
+      }
+
       if (data && data.decisionId) {
         applySafeUpdate(data, 'REST_API');
       } else if (!decision?.decisionId) {

@@ -568,8 +568,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           <div className="flex items-center gap-1.5">
             <span className="text-purple-400/60 font-sans font-bold">MARKET FEED</span>
-            <span className="flex items-center gap-1 text-emerald-400 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" /> LIVE
+            <span className={`flex items-center gap-1 font-bold ${dataHealthStatus === 'LIVE' ? 'text-emerald-400' : 'text-amber-400'}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${dataHealthStatus === 'LIVE' ? 'bg-emerald-400 shadow-[0_0_6px_#10b981]' : 'bg-amber-400'}`} /> {dataHealthStatus === 'LIVE' ? 'LIVE' : dataHealthStatus}
             </span>
           </div>
 
@@ -644,11 +644,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-black shadow-[0_0_12px_rgba(16,185,129,0.2)]">
+            <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-mono font-black ${dataHealthStatus === 'LIVE' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_12px_rgba(16,185,129,0.2)]' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'}`}>
               <span className={`w-2 h-2 rounded-full ${
-                dataHealthStatus === 'LIVE' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-amber-400'
+                dataHealthStatus === 'LIVE' ? 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-amber-400 animate-pulse shadow-[0_0_8px_#fbbf24]'
               }`} />
-              <span>{dataHealthStatus === 'LIVE' ? 'LIVE' : 'DELAYED'}</span>
+              <span>{dataHealthStatus === 'LIVE' ? 'LIVE' : dataHealthStatus}</span>
             </div>
           </div>
 

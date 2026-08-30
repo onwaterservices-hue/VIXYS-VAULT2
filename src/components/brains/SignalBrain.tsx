@@ -288,8 +288,8 @@ export const SignalBrain: React.FC<SignalBrainProps> = ({
 
   // Authoritative Direction & Probability
   const hasValidRawData = Boolean(rawApiData && (rawApiData.cycleId || rawApiData.direction || rawApiData.desk || rawApiData.currentPrice));
-  const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || liveAgeSeconds > 60;
-  const isOfflineOrStale = isActualOffline && !hasValidRawData;
+  const isActualOffline = feedStatus === 'OFFLINE' || feedStatus === 'STALE' || feedStatus === 'DISCONNECTED' || rawApiData?.dataFreshness === 'OFFLINE' || rawApiData?.dataFreshness === 'STALE' || rawApiData?.status === 'STALE' || liveAgeSeconds > 60;
+  const isOfflineOrStale = isActualOffline || rawApiData?.status === 'STALE';
 
   let displayDecisionText = 'ANALYZING';
   if (isOfflineOrStale) {

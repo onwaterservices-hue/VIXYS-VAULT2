@@ -1632,6 +1632,7 @@ export default function App() {
         <SystemStatusBar
           secondsRemaining={canonical15m.decision?.secondsRemaining}
           cycleEnd={canonical15m.decision?.cycleEnd}
+          dataHealthStatus={canonical15m.dataHealthStatus}
         />
       )}
 
