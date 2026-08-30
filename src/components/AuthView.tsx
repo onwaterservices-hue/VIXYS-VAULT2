@@ -39,6 +39,28 @@ export const AuthView: React.FC<AuthViewProps> = ({
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const handleForgotPassword = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!email || !email.trim()) {
+      setErrorMsg('Enter your email above first, then click "Forgot password?".');
+      return;
+    }
+    setLoading(true);
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setSuccessMsg('If an account exists with that email, a password reset link has been sent.');
+    } catch {
+      setErrorMsg('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -353,6 +375,15 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-purple-300/70 font-semibold">Password</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-purple-300/60 hover:text-purple-200 text-xs font-medium underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-purple-300/50 absolute left-3.5 top-3" />
