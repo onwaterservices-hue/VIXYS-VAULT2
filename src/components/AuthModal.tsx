@@ -64,6 +64,28 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
+  const handleForgotPassword = async () => {
+    setErrorMsg('');
+    setSuccessMsg('');
+    if (!email || !email.trim()) {
+      setErrorMsg('Enter your email above first, then click "Forgot password?".');
+      return;
+    }
+    setLoading(true);
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      });
+      setSuccessMsg('If an account exists with that email, a password reset link has been sent.');
+    } catch {
+      setErrorMsg('Something went wrong. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -348,6 +370,15 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-purple-200 block font-bold text-[11px] uppercase tracking-wider">Password</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-purple-300/60 hover:text-purple-200 text-[11px] font-medium underline"
+                    >
+                      Forgot password?
+                    </button>
+                  )}
                 </div>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-purple-400 absolute left-3.5 top-3" />
