@@ -3437,31 +3437,38 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       console.error("[Kalshi Execution Error]:", err),
     );
     if (shouldBroadcastCycle(cycleId)) {
-      claimBroadcastAtomically(cycleId).then((claimed) => {
+      // Previously this whole chain was fire-and-forget (.then() without
+      // await), which let Vercel tear down the function's execution
+      // environment before the claim+send ever completed -- silently, with
+      // no error logged. Now properly awaited end-to-end so this always
+      // finishes before lock15mCycle itself returns.
+      try {
+        const claimed = await claimBroadcastAtomically(cycleId);
         if (!claimed) {
           console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
-          return;
-        }
-        broadcastSignalToDiscord({
-          symbol: "BTC/USDT 15M",
-          direction: finalDir === "UP" ? "YES" : "NO",
-          confidence: finalConf,
-          edgePct: currentEdgePct,
-          currentPrice: finalSpot,
-          targetPrice: finalStrike,
-          reasoning:
-            finalReason ||
-            "High-conviction taker delta absorption detected.",
-        }).then(
-          () => markBroadcastOutcome(cycleId, "SENT"),
-          (err) => {
+        } else {
+          try {
+            await broadcastSignalToDiscord({
+              symbol: "BTC/USDT 15M",
+              direction: finalDir === "UP" ? "YES" : "NO",
+              cycleId,
+              confidence: finalConf,
+              edgePct: currentEdgePct,
+              currentPrice: finalSpot,
+              targetPrice: finalStrike,
+              reasoning:
+                finalReason ||
+                "High-conviction taker delta absorption detected.",
+            });
+            await markBroadcastOutcome(cycleId, "SENT");
+          } catch (err) {
             console.error("[Discord] Automated broadcast failed:", err);
-            markBroadcastOutcome(cycleId, "FAILED");
-          },
-        );
-      }).catch((err) =>
-        console.error("[Discord] Broadcast claim error:", err),
-      );
+            await markBroadcastOutcome(cycleId, "FAILED");
+          }
+        }
+      } catch (err) {
+        console.error("[Discord] Broadcast claim error:", err);
+      }
     } else {
       console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
     }
