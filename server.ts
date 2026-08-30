@@ -5068,6 +5068,240 @@ app.post(
   createDiscordUnlinkHandler(() => db, authenticateSession),
 );
 
+// ---- Password Reset Flow ----
+// Rate-limited (max 3 requests per email per hour), single-use tokens
+// stored in Firestore with a 30-minute expiry. Uses the existing
+// hashPassword()/resolveCanonicalUserByEmail()/persistSingleUser()
+// helpers so a reset writes the password exactly the same way
+// registration does. Sends via Resend REST API directly (no new
+// dependency). Always returns a generic response regardless of
+// whether the email is registered, to avoid leaking account existence.
+
+function renderResetPasswordPage({ token, error, notice }) {
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Reset Password \u2014 VIXY Vault</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{background:#0a0a12;color:#e5e5f0;font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:16px;box-sizing:border-box;}
+.card{background:#13131f;border:1px solid #2a2a40;border-radius:12px;padding:32px;width:100%;max-width:400px;}
+h1{font-size:20px;margin:0 0 16px;}
+input{width:100%;box-sizing:border-box;padding:12px;margin:8px 0;background:#0a0a12;border:1px solid #2a2a40;border-radius:8px;color:#fff;font-size:15px;}
+button{width:100%;padding:12px;margin-top:8px;background:linear-gradient(135deg,#7c3aed,#4f46e5);border:none;border-radius:8px;color:#fff;font-size:15px;font-weight:600;cursor:pointer;}
+button:disabled{opacity:0.6;cursor:not-allowed;}
+.error{background:#3a1a1a;border:1px solid #7a2a2a;color:#f5b5b5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px;}
+.notice{background:#1a2a1f;border:1px solid #2a5a3a;color:#b5f5c5;padding:12px;border-radius:8px;margin-bottom:16px;font-size:14px;}
+a{color:#a78bfa;}
+#result{margin-top:12px;font-size:14px;}
+</style></head>
+<body><div class="card">
+<h1>Set a new password</h1>
+${error ? `<div class="error">${error}</div>` : ''}
+${notice ? `<div class="notice">${notice}</div>` : ''}
+${token ? `
+<form id="resetForm">
+<input type="password" id="password" placeholder="New password (min 8 characters)" minlength="8" required>
+<button type="submit" id="submitBtn">Set Password</button>
+</form>
+<div id="result"></div>
+<script>
+document.getElementById('resetForm').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  var btn = document.getElementById('submitBtn');
+  var result = document.getElementById('result');
+  btn.disabled = true;
+  btn.textContent = 'Updating...';
+  result.textContent = '';
+  try {
+    var res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: ${JSON.stringify(token)}, password: document.getElementById('password').value })
+    });
+    var data = await res.json();
+    if (data.success) {
+      document.getElementById('resetForm').style.display = 'none';
+      result.innerHTML = '<div class="notice">Password updated. <a href="https://www.vixxyvault.com">Return to VIXY Vault</a> to sign in.</div>';
+    } else {
+      result.innerHTML = '<div class="error">' + (data.message || 'Something went wrong.') + '</div>';
+      btn.disabled = false;
+      btn.textContent = 'Set Password';
+    }
+  } catch (err) {
+    result.innerHTML = '<div class="error">Network error. Please try again.</div>';
+    btn.disabled = false;
+    btn.textContent = 'Set Password';
+  }
+});
+</script>
+` : ''}
+</div></body></html>`;
+}
+__name(renderResetPasswordPage, "renderResetPasswordPage");
+
+const PASSWORD_RESET_WINDOW_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_MAX_PER_WINDOW = 3;
+const PASSWORD_RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
+
+async function checkPasswordResetRateLimit(cleanEmail) {
+  if (!db) return true; // fail open only if Firestore is entirely unconfigured
+  try {
+    return await runTransaction(db, async (tx) => {
+      const ref = doc(db, "password_reset_rate_limits", cleanEmail);
+      const snap = await tx.get(ref);
+      const now = Date.now();
+      if (snap.exists()) {
+        const data = snap.data() || {};
+        const windowStart = data.windowStart || 0;
+        const count = data.count || 0;
+        if (now - windowStart < PASSWORD_RESET_WINDOW_MS) {
+          if (count >= PASSWORD_RESET_MAX_PER_WINDOW) return false;
+          tx.set(ref, { windowStart, count: count + 1 }, { merge: true });
+          return true;
+        }
+      }
+      tx.set(ref, { windowStart: now, count: 1 }, { merge: true });
+      return true;
+    });
+  } catch (err) {
+    console.warn("[PasswordReset] Rate limit check failed, allowing request:", err?.message || err);
+    return true; // fail open on infra error, same pattern as the Discord broadcast claim
+  }
+}
+__name(checkPasswordResetRateLimit, "checkPasswordResetRateLimit");
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body || {};
+  const genericResponse = {
+    success: true,
+    message: "If an account exists with that email, a password reset link has been sent.",
+  };
+  if (!email || typeof email !== "string") {
+    return res.json(genericResponse);
+  }
+  const cleanEmail = email.trim().toLowerCase();
+
+  const allowed = await checkPasswordResetRateLimit(cleanEmail);
+  if (!allowed) {
+    console.log(`[PasswordReset] Rate limit exceeded for ${cleanEmail}`);
+    return res.json(genericResponse); // never reveal rate-limit state to the caller
+  }
+
+  try {
+    const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null }));
+    const existing = resolution.user || serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+
+    if (existing && db) {
+      const token = crypto.randomBytes(32).toString("hex");
+      const expiresAt = Date.now() + PASSWORD_RESET_TOKEN_TTL_MS;
+      await setDoc(doc(db, "password_reset_tokens", token), {
+        email: cleanEmail,
+        expiresAt,
+        used: false,
+        createdAt: new Date().toISOString(),
+      });
+      const resetUrl = `https://www.vixxyvault.com/api/auth/reset-password?token=${token}`;
+      if (process.env.RESEND_API_KEY) {
+        try {
+          const emailRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: "VIXY Vault <onboarding@resend.dev>",
+              to: cleanEmail,
+              subject: "Reset your VIXY Vault password",
+              html: `<p>Someone requested a password reset for your VIXY Vault account.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`,
+            }),
+          });
+          if (!emailRes.ok) {
+            console.error("[PasswordReset] Resend API error, status:", emailRes.status, await emailRes.text());
+          }
+        } catch (emailErr) {
+          console.error("[PasswordReset] Email send failed:", emailErr?.message || emailErr);
+        }
+      } else {
+        console.warn("[PasswordReset] RESEND_API_KEY not configured, cannot send email.");
+      }
+    } else {
+      console.log(`[PasswordReset] No account found for ${cleanEmail}, returning generic response.`);
+    }
+  } catch (err) {
+    console.error("[PasswordReset] Forgot-password error:", err?.message || err);
+  }
+
+  return res.json(genericResponse);
+});
+
+app.get("/api/auth/reset-password", async (req, res) => {
+  const token = String(req.query.token || "");
+  res.set("Content-Type", "text/html");
+  if (!token || !db) {
+    return res.status(400).send(renderResetPasswordPage({ error: "This reset link is invalid." }));
+  }
+  try {
+    const snap = await getDoc(doc(db, "password_reset_tokens", token));
+    if (!snap.exists()) {
+      return res.status(400).send(renderResetPasswordPage({ error: "This reset link is invalid or has already been used." }));
+    }
+    const data = snap.data() || {};
+    if (data.used) {
+      return res.status(400).send(renderResetPasswordPage({ error: "This reset link has already been used." }));
+    }
+    if (Date.now() > (data.expiresAt || 0)) {
+      return res.status(400).send(renderResetPasswordPage({ error: "This reset link has expired. Please request a new one." }));
+    }
+    return res.send(renderResetPasswordPage({ token }));
+  } catch (err) {
+    console.error("[PasswordReset] Reset-password GET error:", err?.message || err);
+    return res.status(500).send(renderResetPasswordPage({ error: "Something went wrong. Please try again." }));
+  }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+  const { token, password } = req.body || {};
+  if (!token || !password) {
+    return res.status(400).json({ success: false, message: "Missing token or password." });
+  }
+  if (typeof password !== "string" || password.length < 8) {
+    return res.status(400).json({ success: false, message: "Password must be at least 8 characters." });
+  }
+  if (!db) {
+    return res.status(500).json({ success: false, message: "Service temporarily unavailable." });
+  }
+  try {
+    const tokenRef = doc(db, "password_reset_tokens", token);
+    const snap = await getDoc(tokenRef);
+    if (!snap.exists()) {
+      return res.status(400).json({ success: false, message: "This reset link is invalid or has already been used." });
+    }
+    const data = snap.data() || {};
+    if (data.used || Date.now() > (data.expiresAt || 0)) {
+      return res.status(400).json({ success: false, message: "This reset link is no longer valid. Please request a new one." });
+    }
+    const cleanEmail = data.email;
+    const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(() => ({ user: null }));
+    const existing = resolution.user || serverUsers.find((u) => u.email?.toLowerCase() === cleanEmail);
+    if (!existing) {
+      return res.status(400).json({ success: false, message: "Account not found." });
+    }
+    existing.passwordHash = hashPassword(password);
+    savePersistentStore();
+    try {
+      await persistSingleUser(existing);
+    } catch (err) {
+      console.warn("[PasswordReset] Firestore user sync failed:", err?.message || err);
+    }
+    await setDoc(tokenRef, { used: true, usedAt: new Date().toISOString() }, { merge: true });
+    console.log(`[PasswordReset] Password successfully reset for ${cleanEmail}`);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("[PasswordReset] Reset-password POST error:", err?.message || err);
+    return res.status(500).json({ success: false, message: "Something went wrong. Please try again." });
+  }
+});
+
 // ---- Hourly Market Intelligence digest (real data only) ----
 // Uses only genuinely live fields from fetchLiveMarketOverview (price,
 // 24h change, high/low, volume, market cap) -- deliberately excludes
