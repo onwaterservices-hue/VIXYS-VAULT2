@@ -5126,6 +5126,17 @@ app.get("/api/account/me", async (req, res) => {
           discordGlobalName: d.discordUsername,
           guildMember,
         };
+      } else {
+        // TEMPORARY: surface the last OAuth failure reason (if any) so a
+        // failed connection attempt is diagnosable without catching a
+        // transient popup redirect. No secrets, just a short reason code.
+        try {
+          const debugSnap = await getDoc(doc(db, "discord_oauth_debug", vixyEmail));
+          if (debugSnap.exists()) {
+            discord.lastAttemptError = debugSnap.data().lastError;
+            discord.lastAttemptAt = debugSnap.data().at;
+          }
+        } catch (e) {}
       }
     }
   } catch (err) {
