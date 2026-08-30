@@ -4985,6 +4985,35 @@ app.post("/api/auth/logout", (req, res) => {
 });
 
 // ---- Discord OAuth connection (real identity linking) ----
+// Updates the OLDER terminal-access gate fields (discordId/discordTag/
+// discordLinked on the user record) that entitlement.js and several view
+// components already check. Updates the live in-memory record immediately
+// (takes effect this process right away) and best-effort persists to the
+// user's own existing Firestore document -- never creates a new/guessed
+// document if we can't find their real one, to avoid an orphaned record.
+async function syncLegacyUserRecord(email, discordUserId, discordUsername) {
+  const lowerEmail = (email || "").toLowerCase();
+  const foundUser = serverUsers.find(
+    (u) => (u.email || "").toLowerCase() === lowerEmail,
+  );
+  if (!foundUser) return;
+  foundUser.discordId = discordUserId;
+  foundUser.discordTag = discordUsername;
+  foundUser.discordLinked = true;
+  const docId = foundUser.id || foundUser.uid;
+  if (!db || !docId) return;
+  try {
+    await setDoc(
+      doc(db, "users", docId),
+      { discordId: discordUserId, discordTag: discordUsername, discordLinked: true },
+      { merge: true },
+    );
+  } catch (err) {
+    console.error("[Discord OAuth] Failed to persist legacy user record:", err?.message || err);
+  }
+}
+__name(syncLegacyUserRecord, "syncLegacyUserRecord");
+
 function resolveDiscordEntitlementTier(email, discordUserId) {
   const dayPass = discordUserId ? userDayPasses.get(discordUserId) : null;
   if (dayPass && dayPass.expiresAt && new Date(dayPass.expiresAt) > new Date()) {
@@ -5033,6 +5062,7 @@ app.get(
     () => db,
     resolveDiscordEntitlementTier,
     assignDiscordRoleToUser,
+    syncLegacyUserRecord,
   ),
 );
 app.get(
