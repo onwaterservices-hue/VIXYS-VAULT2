@@ -622,6 +622,16 @@ export async function getStripeHealthApi() {
   }>('/api/stripe/health', { cache: 'no-store' });
 }
 
+// Secure replacement: identity comes from the authenticated session
+// cookie only. Never pass email/userId from the client.
+export async function getDiscordAuthUrlSecure() {
+  const res = await fetch('/api/discord/connect', { credentials: 'include' });
+  if (!res.ok) {
+    throw new Error('Failed to start Discord connection (status ' + res.status + ')');
+  }
+  return res.json();
+}
+
 export async function getDiscordAuthUrlApi(userEmail?: string, userId?: string) {
   const params = new URLSearchParams();
   if (userEmail) params.append('email', userEmail.toLowerCase());

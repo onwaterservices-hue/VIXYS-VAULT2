@@ -112,7 +112,21 @@ import {
   discordClient,
   loadProductionDiscordCredentials,
 } from "./src/bot";
+import { fetchLiveMarketOverview } from "./src/bot/services/marketData";
+import {
+  createDiscordConnectHandler,
+  createDiscordCallbackHandler,
+  createDiscordLinkStatusHandler,
+  createDiscordUnlinkHandler,
+} from "./src/bot/discordOAuth";
 import { AutomationScheduler } from "./src/bot/services/automationScheduler";
+// Statically imported so esbuild embeds this config directly into the
+// bundled dist/server.cjs -- a runtime fs.readFileSync(process.cwd() + ...)
+// depends on this exact file being present at that path in the deployed
+// serverless filesystem, which is not guaranteed. These are Firebase web
+// app config values (apiKey, projectId, etc.), not secrets by Firebase's
+// own design -- security lives in Firestore Rules, not in hiding these.
+import firebaseAppletConfig from "./firebase-applet-config.json";
 process.on("unhandledRejection", (reason) => {
   const errStr = String(reason?.message || reason);
   if (
@@ -839,7 +853,7 @@ function clearSessionCookie(res) {
 }
 __name(clearSessionCookie, "clearSessionCookie");
 
-function authenticateSession(req) {
+export function authenticateSession(req) {
   const cookies = parseCookieHeader(req);
   const payload = verifySession(cookies[SESSION_COOKIE_NAME]);
   if (!payload) return null;
@@ -4971,6 +4985,300 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ success: true });
 });
 
+// ---- Discord OAuth connection (real identity linking) ----
+// Updates the OLDER terminal-access gate fields (discordId/discordTag/
+// discordLinked on the user record) that entitlement.js and several view
+// components already check. Updates the live in-memory record immediately
+// (takes effect this process right away) and best-effort persists to the
+// user's own existing Firestore document -- never creates a new/guessed
+// document if we can't find their real one, to avoid an orphaned record.
+async function syncLegacyUserRecord(email, discordUserId, discordUsername) {
+  const lowerEmail = (email || "").toLowerCase();
+  const foundUser = serverUsers.find(
+    (u) => (u.email || "").toLowerCase() === lowerEmail,
+  );
+  if (!foundUser) return;
+  foundUser.discordId = discordUserId;
+  foundUser.discordTag = discordUsername;
+  foundUser.discordLinked = true;
+  const docId = foundUser.id || foundUser.uid;
+  if (!db || !docId) return;
+  try {
+    await setDoc(
+      doc(db, "users", docId),
+      { discordId: discordUserId, discordTag: discordUsername, discordLinked: true },
+      { merge: true },
+    );
+  } catch (err) {
+    console.error("[Discord OAuth] Failed to persist legacy user record:", err?.message || err);
+  }
+}
+__name(syncLegacyUserRecord, "syncLegacyUserRecord");
+
+function resolveDiscordEntitlementTier(email, discordUserId) {
+  const dayPass = discordUserId ? userDayPasses.get(discordUserId) : null;
+  if (dayPass && dayPass.expiresAt && new Date(dayPass.expiresAt) > new Date()) {
+    return "DAY_PASS";
+  }
+  const lowerEmail = (email || "").toLowerCase();
+  const foundUser = serverUsers.find(
+    (u) => (u.email || "").toLowerCase() === lowerEmail,
+  );
+  const sub = userSubscriptions.get(lowerEmail) || {
+    role: foundUser && foundUser.role,
+    plan: foundUser && foundUser.subscription,
+  };
+  if (sub.role === "ELITE" || (sub.plan && sub.plan.includes("ELITE"))) {
+    return "ELITE";
+  }
+  if (sub.role === "PRO" || (sub.plan && sub.plan.includes("PRO"))) {
+    return "PRO";
+  }
+  return "VERIFIED";
+}
+__name(resolveDiscordEntitlementTier, "resolveDiscordEntitlementTier");
+
+app.get(
+  "/api/discord/connect",
+  createDiscordConnectHandler(() => db, authenticateSession),
+);
+
+app.get(
+  "/api/auth/discord/callback",
+  createDiscordCallbackHandler(
+    () => db,
+    resolveDiscordEntitlementTier,
+    assignDiscordRoleToUser,
+    syncLegacyUserRecord,
+  ),
+);
+app.get(
+  "/api/discord/status",
+  createDiscordLinkStatusHandler(() => db, authenticateSession),
+);
+app.post(
+  "/api/discord/unlink",
+  createDiscordUnlinkHandler(() => db, authenticateSession),
+);
+
+// ---- Hourly Market Intelligence digest (real data only) ----
+// Uses only genuinely live fields from fetchLiveMarketOverview (price,
+// 24h change, high/low, volume, market cap) -- deliberately excludes
+// that function's fabricated confidence/whale-pressure/reasoning fields,
+// which are hardcoded or simple formulas dressed up as analysis.
+async function sendHourlyMarketDigestOnce() {
+  if (!db) {
+    console.error("[HourlyMarket] Firestore unavailable, skipping this hour.");
+    return { sent: false, reason: "NO_DB" };
+  }
+  const hourKey = new Date().toISOString().slice(0, 13); // e.g. 2026-08-30T14
+  const claimRef = doc(db, "discord_hourly_market_claims", hourKey);
+
+  const claimed = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(claimRef);
+    if (snap.exists() && (snap.data().status === "SENT" || snap.data().status === "SENDING")) {
+      return false;
+    }
+    tx.set(claimRef, { status: "SENDING", claimedAt: new Date().toISOString() });
+    return true;
+  }).catch((err) => {
+    console.error("[HourlyMarket] Claim failed:", err?.message || err);
+    return false;
+  });
+
+  if (!claimed) {
+    return { sent: false, reason: "ALREADY_CLAIMED" };
+  }
+
+  try {
+    const [btc, eth, sol] = await Promise.all([
+      fetchLiveMarketOverview("BTC"),
+      fetchLiveMarketOverview("ETH"),
+      fetchLiveMarketOverview("SOL"),
+    ]);
+
+    const fmtPrice = (p) => "$" + p.toLocaleString("en-US", { maximumFractionDigits: p < 10 ? 4 : 2 });
+    const fmtChange = (c) => (c >= 0 ? "+" : "") + c.toFixed(2) + "%";
+    const rows = [btc, eth, sol]
+      .map((m) => `**${m.symbol}**  ${fmtPrice(m.price)}  (${fmtChange(m.change24h)})`)
+      .join("\n");
+
+    const embed = {
+      title: "\uD83D\uDCC8 VIXY Hourly Market Report",
+      color: btc.change24h >= 0 ? 0x2ecc71 : 0xe74c3c,
+      fields: [
+        { name: "Market Overview (24h)", value: rows, inline: false },
+        {
+          name: "BTC Range (24h)",
+          value: `High ${fmtPrice(btc.high24h)} \u2022 Low ${fmtPrice(btc.low24h)}`,
+          inline: false,
+        },
+        {
+          name: "BTC Volume (24h)",
+          value: btc.volume24h.toLocaleString("en-US", { maximumFractionDigits: 0 }) + " BTC",
+          inline: true,
+        },
+      ],
+      footer: { text: "VIXY Vault \u2022 Live Market Data (Binance/Coinbase)" },
+      timestamp: new Date().toISOString(),
+    };
+
+    const channelId = process.env.DISCORD_CHANNEL_HOURLY_MARKET || "1534726888092733534";
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    let sendOk = false;
+    try {
+      const res = await fetch(
+        `https://discord.com/api/v10/channels/${channelId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ embeds: [embed] }),
+          signal: controller.signal,
+        },
+      );
+      sendOk = res.ok;
+      if (!sendOk) {
+        console.error("[HourlyMarket] Discord send failed, status:", res.status, await res.text());
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    await setDoc(
+      claimRef,
+      { status: sendOk ? "SENT" : "FAILED", finishedAt: new Date().toISOString() },
+      { merge: true },
+    ).catch(() => {});
+
+    return { sent: sendOk };
+  } catch (err) {
+    console.error("[HourlyMarket] Digest failed:", err?.message || err);
+    await setDoc(
+      claimRef,
+      { status: "FAILED", error: String(err?.message || err), finishedAt: new Date().toISOString() },
+      { merge: true },
+    ).catch(() => {});
+    return { sent: false, reason: "ERROR" };
+  }
+}
+__name(sendHourlyMarketDigestOnce, "sendHourlyMarketDigestOnce");
+
+// Triggered by Vercel Cron (see vercel.json) once per hour. Also safely
+// callable manually -- idempotent per UTC hour via the Firestore claim
+// above, so repeated/concurrent calls within the same hour are no-ops.
+app.get("/api/cron/hourly-market", async (req, res) => {
+  const result = await sendHourlyMarketDigestOnce();
+  return res.json(result);
+});
+
+// Live guild-membership check via the existing bot token -- never trusts a
+// stored flag, always re-checks against Discord directly so a user who
+// joined after linking (or left) always sees their real current status.
+async function checkLiveGuildMembership(discordUserId) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(
+        "https://discord.com/api/v10/guilds/" +
+          process.env.DISCORD_GUILD_ID +
+          "/members/" +
+          discordUserId,
+        {
+          headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+          signal: controller.signal,
+        },
+      );
+      return res.ok;
+    } finally {
+      clearTimeout(timeout);
+    }
+  } catch (err) {
+    console.error("[Discord] Live guild membership check failed:", err?.message || err);
+    return false;
+  }
+}
+__name(checkLiveGuildMembership, "checkLiveGuildMembership");
+
+// Backs the existing (previously unimplemented) account-status widget.
+// Reuses the same session auth and Firestore link data as the rest of the
+// Discord OAuth system -- no separate/duplicate identity source.
+app.get("/api/account/me", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.user || !auth.user.email) {
+    return res.json({ authenticated: false });
+  }
+  const vixyEmail = auth.user.email.toLowerCase();
+  let discord = { linked: false };
+  try {
+    if (db) {
+      const snap = await getDoc(doc(db, "discord_links", vixyEmail));
+      if (snap.exists() && snap.data().status === "CONNECTED") {
+        const d = snap.data();
+        const guildMember = await checkLiveGuildMembership(d.discordUserId);
+        discord = {
+          linked: true,
+          discordUserId: d.discordUserId,
+          discordUsername: d.discordUsername,
+          discordGlobalName: d.discordUsername,
+          guildMember,
+        };
+      }
+    }
+  } catch (err) {
+    console.error("[Account] Discord link lookup failed:", err?.message || err);
+  }
+  return res.json({ authenticated: true, discord });
+});
+
+// Backs the existing (previously unimplemented) "Verify Membership" button.
+// Re-checks guild membership live and, if the user is now a member,
+// re-runs the existing role-sync exactly as the OAuth callback does --
+// same entitlement resolution, same idempotent assignDiscordRoleToUser.
+app.post("/api/discord/verify-membership", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.user || !auth.user.email) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  const vixyEmail = auth.user.email.toLowerCase();
+  if (!db) {
+    return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
+  }
+  try {
+    const snap = await getDoc(doc(db, "discord_links", vixyEmail));
+    if (!snap.exists() || snap.data().status !== "CONNECTED") {
+      return res.status(400).json({ error: "NOT_LINKED" });
+    }
+    const discordUserId = snap.data().discordUserId;
+    const guildMember = await checkLiveGuildMembership(discordUserId);
+    if (guildMember) {
+      try {
+        const tier = resolveDiscordEntitlementTier(vixyEmail, discordUserId);
+        await assignDiscordRoleToUser(discordUserId, tier);
+      } catch (err) {
+        console.error("[Discord] Role sync during verify-membership failed:", err?.message || err);
+      }
+    }
+    return res.json({
+      authenticated: true,
+      discord: {
+        linked: true,
+        discordUserId,
+        discordUsername: snap.data().discordUsername,
+        discordGlobalName: snap.data().discordUsername,
+        guildMember,
+      },
+    });
+  } catch (err) {
+    console.error("[Discord] Verify membership failed:", err?.message || err);
+    return res.status(500).json({ error: "VERIFY_MEMBERSHIP_FAILED" });
+  }
+});
+
 // ================= EXTEND MEMBERSHIP ROUTE =================
 app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
   try {
@@ -6563,7 +6871,7 @@ app.post(
         activeEmail.toLowerCase(),
       ) || {
         email: activeEmail.toLowerCase(),
-        discordUserId: user.discordId || "315284910382911234",
+        discordUserId: user.discordId || null,
         discordUsername: user.discordTag || "discord_user",
         discordGlobalName: user.discordGlobalName || user.name,
         discordAvatar: null,
@@ -14216,13 +14524,25 @@ const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];
 async function initializeBackendFirebase() {
   try {
-    const firebaseConfigPath = path.join(
-      process.cwd(),
-      "firebase-applet-config.json",
-    );
-    if (fs.existsSync(firebaseConfigPath)) {
-      const firebaseConfigRaw = fs.readFileSync(firebaseConfigPath, "utf-8");
-      const firebaseConfig = JSON.parse(firebaseConfigRaw);
+    // Statically imported config (see top-of-file import) instead of a
+    // runtime fs.readFileSync -- guarantees the config is present in the
+    // bundled output regardless of the deployed function's working
+    // directory. Falls back to the old file-read only if the static
+    // import somehow came back empty, so behavior for any other consumer
+    // of this function is unchanged.
+    const firebaseConfig =
+      firebaseAppletConfig && firebaseAppletConfig.projectId
+        ? firebaseAppletConfig
+        : (() => {
+            const firebaseConfigPath = path.join(
+              process.cwd(),
+              "firebase-applet-config.json",
+            );
+            return fs.existsSync(firebaseConfigPath)
+              ? JSON.parse(fs.readFileSync(firebaseConfigPath, "utf-8"))
+              : null;
+          })();
+    if (firebaseConfig) {
       if (!firebaseAppInstance) {
         firebaseAppInstance = initializeApp(firebaseConfig);
       }

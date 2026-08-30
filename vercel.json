@@ -9,6 +9,10 @@
     {
       "path": "/api/cron/settle",
       "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/hourly-market",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [
