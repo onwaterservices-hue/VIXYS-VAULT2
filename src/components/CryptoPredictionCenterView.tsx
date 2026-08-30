@@ -378,7 +378,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     if (st === 'PROTECTED') return 'PROTECTED';
     if (st === 'CONFIRMING') return 'CONFIRMING';
 
-    const secondsRemaining = canonicalDecision?.timeRemainingSec ?? (900 - (Math.floor(nowMs / 1000) % 900));
+    const secondsRemaining = cycleSecondsRemaining;
     const elapsed = Math.max(0, 900 - secondsRemaining);
     if (elapsed < 120) return 'ANALYZING';
     if (elapsed < 360) return 'BUILDING';
@@ -1197,7 +1197,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
         {/* 4. VIXY VAULT 15-MINUTE CYCLE LIFECYCLE TIMELINE (RESTORED WITH VAULT CRAFT) */}
         {(() => {
-          const secondsRemaining = canonicalDecision?.timeRemainingSec ?? (900 - (Math.floor(nowMs / 1000) % 900));
+          const secondsRemaining = cycleSecondsRemaining;
           const elapsedSec = Math.max(0, Math.min(900, 900 - secondsRemaining));
           const progressPct = Math.min(100, Math.max(0, (elapsedSec / 900) * 100));
           const elapsedMin = Math.floor(elapsedSec / 60);

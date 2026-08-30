@@ -49,10 +49,15 @@ export function useCanonical15mDecision(): {
   const [decision, setDecision] = useState<Canonical15mDecision>(() => createInitial15mDecision());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [localUpdatedAt, setLocalUpdatedAt] = useState<number>(Date.now());
+
   const [dataHealthStatus, setDataHealthStatus] = useState<FeedHealthStatus>('LIVE');
   const [feedError, setFeedError] = useState<string | null>(null);
   const currentVersionRef = useRef<number>(0);
   const currentDecisionIdRef = useRef<string>('');
+
+
+
+
 
   // Heartbeat checker to detect stale feeds (> 12 seconds with no update)
   useEffect(() => {

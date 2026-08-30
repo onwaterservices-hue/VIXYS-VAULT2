@@ -5,9 +5,10 @@
 
 export function calculateCycleSecondsRemaining(
   durationSec: number = 900,
-  cycleEndMs?: number,
+  cycleEndInput?: number | string,
   nowMs: number = Date.now()
 ): number {
+  const cycleEndMs = typeof cycleEndInput === 'string' ? new Date(cycleEndInput).getTime() : cycleEndInput;
   if (cycleEndMs && cycleEndMs > nowMs) {
     const diff = Math.max(0, Math.floor((cycleEndMs - nowMs) / 1000));
     // If cycleEnd diff is within a valid cycle window (<= durationSec + 30), use it
