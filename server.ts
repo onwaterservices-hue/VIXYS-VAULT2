@@ -5185,7 +5185,7 @@ app.post("/api/discord/verify-membership", async (req, res) => {
     });
   } catch (err) {
     console.error("[Discord] Verify membership failed:", err?.message || err);
-    return res.status(500).json({ error: "VERIFY_MEMBERSHIP_FAILED" });
+    return res.status(500).json({ error: "VERIFY_MEMBERSHIP_FAILED", debugMessage: err && err.message });
   }
 });
 
