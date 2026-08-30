@@ -306,7 +306,10 @@ export async function broadcastSignalToDiscord(signalData: {
 
   const embed = createVipSignalEmbed(marketData);
 
-  const channelId = '1535025646852636853';
+  // Prefer an explicit, admin-configured destination for automated signals.
+    // Falls back to the existing hardcoded channel if the env var isn't set
+    // yet, so this does not regress current behavior.
+    const channelId = process.env.DISCORD_BOT_SIGNALS_CHANNEL_ID || '1535025646852636853';
 
   if (discordClient && discordClient.isReady()) {
     try {
