@@ -3445,6 +3445,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
         broadcastSignalToDiscord({
           symbol: "BTC/USDT 15M",
           direction: finalDir === "UP" ? "YES" : "NO",
+          cycleId,
           confidence: finalConf,
           edgePct: currentEdgePct,
           currentPrice: finalSpot,
