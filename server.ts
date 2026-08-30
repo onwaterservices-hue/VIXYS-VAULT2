@@ -3216,6 +3216,41 @@ function canLockCurrentCycle(livePrice) {
   };
 }
 __name(canLockCurrentCycle, "canLockCurrentCycle");
+async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, reason) {
+  if (!shouldBroadcastCycle(cycleId)) {
+    return;
+  }
+  console.log(`[Discord] Broadcast gate reached for cycle ${cycleId}`);
+  try {
+    const claimed = await claimBroadcastAtomically(cycleId);
+    if (!claimed) {
+      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
+      return;
+    }
+    let result = null;
+    try {
+      result = await broadcastSignalToDiscord({
+        symbol: "BTC/USDT 15M",
+        direction: dir === "UP" ? "YES" : "NO",
+        cycleId,
+        confidence: conf,
+        edgePct: currentEdgePct,
+        currentPrice: spot,
+        targetPrice: strike,
+        reasoning: reason || "High-conviction taker delta absorption detected.",
+      });
+    } catch (err) {
+      console.error("[Discord] Automated broadcast failed:", err);
+    }
+    const ok = !!(result && result.success);
+    console.log(`[Discord] Broadcast result for ${cycleId}: ${ok ? "SENT" : "FAILED"} (${result && result.message ? result.message : "no detail"})`);
+    await markBroadcastOutcome(cycleId, ok ? "SENT" : "FAILED");
+  } catch (err) {
+    console.error("[Discord] Broadcast claim error:", err);
+  }
+}
+__name(attemptDiscordSignalBroadcast, "attemptDiscordSignalBroadcast");
+
 async function lock15mCycle(cycleId, livePrice, forcedReason) {
   if (active15mCycle.cycleId !== cycleId) {
     console.warn(
@@ -3445,7 +3480,10 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     cycleId,
   };
 
+  await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
+
   if (transactionSucceeded) {
+    try {
     persistSingleSignalLog(logItem);
     const globalAutoTradingEnabled = productionMaintenanceState.autoTradingEnabled !== false;
     const checkEntitlement = async (userId) => {
@@ -3456,53 +3494,12 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
+    } catch (postLockErr) {
+      console.error("[VIXY] post-lock persist/trade error (non-fatal, broadcast unaffected):", postLockErr);
+    }
   }
 
-  // Broadcasting is intentionally OUTSIDE the transactionSucceeded gate above.
-  // transactionSucceeded is only true for the single invocation that first
-  // creates this cycle's lock document -- every later poll for the same
-  // already-locked cycle sees the doc exists and would skip this entirely,
-  // permanently losing the one chance to broadcast if anything upstream
-  // failed. finalDir/finalConf/finalSpot/finalStrike/finalReason are valid
-  // either way (reconstructed from Firestore when !transactionSucceeded), so
-  // broadcasting can safely run on every poll -- shouldBroadcastCycle and
-  // claimBroadcastAtomically below are the real duplicate-delivery guard.
-  if (shouldBroadcastCycle(cycleId)) {
-      // Previously this whole chain was fire-and-forget (.then() without
-      // await), which let Vercel tear down the function's execution
-      // environment before the claim+send ever completed -- silently, with
-      // no error logged. Now properly awaited end-to-end so this always
-      // finishes before lock15mCycle itself returns.
-      try {
-        const claimed = await claimBroadcastAtomically(cycleId);
-        if (!claimed) {
-          console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
-        } else {
-          try {
-            await broadcastSignalToDiscord({
-              symbol: "BTC/USDT 15M",
-              direction: finalDir === "UP" ? "YES" : "NO",
-              cycleId,
-              confidence: finalConf,
-              edgePct: currentEdgePct,
-              currentPrice: finalSpot,
-              targetPrice: finalStrike,
-              reasoning:
-                finalReason ||
-                "High-conviction taker delta absorption detected.",
-            });
-            await markBroadcastOutcome(cycleId, "SENT");
-          } catch (err) {
-            console.error("[Discord] Automated broadcast failed:", err);
-            await markBroadcastOutcome(cycleId, "FAILED");
-          }
-        }
-      } catch (err) {
-        console.error("[Discord] Broadcast claim error:", err);
-      }
-    } else {
-      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
-    }
+
 
   const remainingSeconds = Math.max(
     0,
@@ -4247,6 +4244,16 @@ async function checkAndSettle15mCycle(livePrice) {
       }
       persistSingleSignalLog(skippedLog);
     }
+  }
+  if (active15mCycle && active15mCycle.isLocked && active15mCycle.lockedSnapshot && active15mCycle.cycleId) {
+    await attemptDiscordSignalBroadcast(
+      active15mCycle.cycleId,
+      active15mCycle.lockedSnapshot.direction,
+      active15mCycle.lockedSnapshot.confidence,
+      active15mCycle.lockedSnapshot.spot,
+      active15mCycle.lockedSnapshot.strike,
+      "AUTHORITATIVE_LOCK_SYNC",
+    );
   }
   active15mCycle.sequence = globalSequenceNumber;
   console.log(
