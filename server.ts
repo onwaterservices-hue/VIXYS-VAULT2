@@ -3436,7 +3436,18 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     executeAutoTradesForSignal(logItem, db, globalAutoTradingEnabled, checkEntitlement).catch((err) =>
       console.error("[Kalshi Execution Error]:", err),
     );
-    if (shouldBroadcastCycle(cycleId)) {
+  }
+
+  // Broadcasting is intentionally OUTSIDE the transactionSucceeded gate above.
+  // transactionSucceeded is only true for the single invocation that first
+  // creates this cycle's lock document -- every later poll for the same
+  // already-locked cycle sees the doc exists and would skip this entirely,
+  // permanently losing the one chance to broadcast if anything upstream
+  // failed. finalDir/finalConf/finalSpot/finalStrike/finalReason are valid
+  // either way (reconstructed from Firestore when !transactionSucceeded), so
+  // broadcasting can safely run on every poll -- shouldBroadcastCycle and
+  // claimBroadcastAtomically below are the real duplicate-delivery guard.
+  if (shouldBroadcastCycle(cycleId)) {
       // Previously this whole chain was fire-and-forget (.then() without
       // await), which let Vercel tear down the function's execution
       // environment before the claim+send ever completed -- silently, with
@@ -3472,7 +3483,6 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     } else {
       console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId}`);
     }
-  }
 
   const remainingSeconds = Math.max(
     0,
