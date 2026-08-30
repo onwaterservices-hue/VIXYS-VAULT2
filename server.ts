@@ -5155,6 +5155,8 @@ async function sendHourlyMarketDigestOnce() {
         },
       );
       sendOk = res.ok;
+      var __debugStatus = res.status;
+      var __debugBody = sendOk ? null : await res.text();
       if (!sendOk) {
         console.error("[HourlyMarket] Discord send failed, status:", res.status);
       }
@@ -5168,7 +5170,7 @@ async function sendHourlyMarketDigestOnce() {
       { merge: true },
     ).catch(() => {});
 
-    return { sent: sendOk };
+    return { sent: sendOk, debugStatus: typeof __debugStatus !== "undefined" ? __debugStatus : null, debugBody: typeof __debugBody !== "undefined" ? __debugBody : null };
   } catch (err) {
     console.error("[HourlyMarket] Digest failed:", err?.message || err);
     await setDoc(
