@@ -275,6 +275,10 @@ export async function broadcastSignalToDiscord(signalData: {
   targetPrice: number;
   reasoning: string;
   webhookUrl?: string;
+  // Authoritative VIXY cycle identity (active15mCycle.cycleId), threaded
+  // through so Discord always references the same decision as the
+  // website/engine. Optional so existing callers do not break.
+  cycleId?: string;
 }): Promise<{ success: boolean; method: string; message: string }> {
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
   
@@ -305,6 +309,18 @@ export async function broadcastSignalToDiscord(signalData: {
   };
 
   const embed = createVipSignalEmbed(marketData);
+
+  // Stamp the authoritative VIXY cycle ID so this message is traceable
+  // back to the exact same decision shown on the website. Handles both a
+  // plain embed object and a discord.js EmbedBuilder instance.
+  if (signalData.cycleId) {
+    const footerText = `Event: ${signalData.cycleId}`;
+    if (typeof (embed as any).setFooter === 'function') {
+      (embed as any).setFooter({ text: footerText });
+    } else {
+      (embed as any).footer = { text: footerText };
+    }
+  }
 
   // Prefer an explicit, admin-configured destination for automated signals.
   // Falls back to the existing hardcoded channel if the env var isn't set
