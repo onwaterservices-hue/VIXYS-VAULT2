@@ -67,20 +67,36 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
 
     const state = crypto.randomBytes(32).toString("hex");
     const now = Date.now();
-    try {
-      await withTimeout(
-        setDoc(doc(db, "discord_oauth_states", state), {
-          vixyEmail: auth.user.email.toLowerCase(),
-          createdAt: new Date(now).toISOString(),
-          expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
-          used: false,
-        }),
-        8000,
-        "oauth_state_write",
-      );
-    } catch (err) {
-      console.error("[Discord OAuth] Failed to persist state:", err && err.message);
-      const timedOut = !!(err && String(err.message).startsWith("TIMEOUT:"));
+    const stateDoc = {
+      vixyEmail: auth.user.email.toLowerCase(),
+      createdAt: new Date(now).toISOString(),
+      expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
+      used: false,
+    };
+    // Bounded retry (max 2 attempts total, never unbounded): a cold
+    // Firestore connection can occasionally take longer than one timeout
+    // window to establish. One retry lets a single click succeed instead
+    // of requiring the user to click twice.
+    let stateWriteError = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await withTimeout(
+          setDoc(doc(db, "discord_oauth_states", state), stateDoc),
+          8000,
+          "oauth_state_write",
+        );
+        stateWriteError = null;
+        break;
+      } catch (err) {
+        stateWriteError = err;
+        console.error(
+          "[Discord OAuth] State write attempt " + attempt + " failed:",
+          err && err.message,
+        );
+      }
+    }
+    if (stateWriteError) {
+      const timedOut = !!(stateWriteError && String(stateWriteError.message).startsWith("TIMEOUT:"));
       return res.status(503).json({ error: timedOut ? "OAUTH_STATE_STORAGE_TIMEOUT" : "OAUTH_STATE_STORAGE_FAILED" });
     }
 
