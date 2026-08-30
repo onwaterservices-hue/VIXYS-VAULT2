@@ -123,7 +123,20 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     const db = getDb();
     const code = req.query.code;
     const state = req.query.state;
-    const fail = (reason) => res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
+    // Records the failure reason server-side (keyed by email once known) so
+    // it can be inspected via /api/account/me afterwards -- the redirect
+    // query param alone is easy to miss in a popup-based flow.
+    let vixyEmailForDebug = null;
+    const fail = (reason) => {
+      if (db && vixyEmailForDebug) {
+        setDoc(
+          doc(db, "discord_oauth_debug", vixyEmailForDebug),
+          { lastError: String(reason), at: new Date().toISOString() },
+          { merge: true },
+        ).catch(() => {});
+      }
+      return res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
+    };
 
     if (!db) {
       return fail("service_unavailable");
@@ -151,6 +164,7 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     if (!vixyEmail) {
       return fail("invalid_or_expired_state");
     }
+    vixyEmailForDebug = vixyEmail;
 
     let accessToken;
     try {
