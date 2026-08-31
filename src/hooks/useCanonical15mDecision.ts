@@ -26,7 +26,11 @@ export function getNormalizedLifecycleState(decision: Canonical15mDecision): Nor
 
   const secondsRemaining = decision.timeRemainingSec ?? 900;
   const elapsed = Math.max(0, 900 - secondsRemaining);
-  if (elapsed < 120) {
+  // Must match the backend's minimum observation window (MIN_OBSERVATION_SECONDS = 360
+  // in canLockCurrentCycle). This previously used 120s, so the terminal announced
+  // "BUILDING" from 2:00 while the engine was still calibrating and structurally unable
+  // to lock until 6:00 — the displayed lifecycle disagreed with the real one.
+  if (elapsed < 360) {
     return 'CALIBRATING';
   }
   return 'BUILDING';

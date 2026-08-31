@@ -110,8 +110,16 @@ export const InstitutionalIntelRadar: React.FC<InstitutionalIntelRadarProps> = (
             </div>
           </div>
 
+          {/*
+            This tile is fed by the GUARDIAN pipeline (guardianDecision.reversalThreat via
+            SignalBrain), which is a different model from the canonical 15M decision's
+            `reversalRisk` shown in the hub hero and the contextual right rail. Both were
+            previously labelled just "RISK"/"Reversal Risk", so the two figures read as a
+            contradiction (e.g. 35% Moderate in the hero vs 15% Low here) when they are in
+            fact two distinct measurements. Labelled by source rather than forced to match.
+          */}
           <div className="hud-stat-card hud-corners border border-purple-900/50">
-            <div className="hud-stat-label">RISK</div>
+            <div className="hud-stat-label">GUARDIAN RISK</div>
             <div className={`font-black text-[10px] ${riskLabel === 'CRITICAL' ? 'text-rose-400' : riskLabel === 'ELEVATED' ? 'text-amber-400' : 'text-cyan-300'}`}>
               {riskLabel}
             </div>

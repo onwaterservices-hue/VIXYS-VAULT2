@@ -2966,11 +2966,25 @@ function canLockCurrentCycle(livePrice) {
     !active15mCycle.isChoppy &&
     (persistenceSeconds >= 3 || active15mCycle.signalPersistence >= 3)
   );
-  const minRequiredElapsed = isEarlyLockQualified ? 90 : 360;
+  // HARD 6-MINUTE OBSERVATION FLOOR.
+  //
+  // This was previously `isEarlyLockQualified ? 90 : 360`, which let a cycle meeting the
+  // high-conviction criteria above commit a lock 90 seconds in. That is the origin of the
+  // signal published roughly a minute into a cycle: the gate passed at 0:01:30, the lock
+  // committed, and attemptDiscordSignalBroadcast correctly fired immediately afterwards.
+  // The Discord publisher was never at fault — it faithfully broadcast a decision the
+  // engine had genuinely (but too early) committed.
+  //
+  // The intended lifecycle is 0:00-6:00 CALIBRATING with no lock permitted at any
+  // conviction level, so 360s is now an unconditional floor. isEarlyLockQualified is
+  // retained below purely as a QUALITY descriptor for the entry-reason label
+  // (EARLY_QUALIFIED_ENTRY vs QUALIFIED_AUTHORITATIVE_ENTRY); it no longer shortens time.
+  const MIN_OBSERVATION_SECONDS = 360;
+  const minRequiredElapsed = MIN_OBSERVATION_SECONDS;
   const minimumObservationWindowPassed = effElapsed >= minRequiredElapsed;
   if (!minimumObservationWindowPassed) {
     reasons.push(
-      `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [EARLY_LOCK_CRITERIA_MET]" : ""})`,
+      `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [HIGH_CONVICTION_BUT_PRE_WINDOW]" : ""})`,
     );
   }
   const withinEntryWindow =
@@ -3261,10 +3275,19 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     elapsedSeconds,
     active15mCycle.cycleObservationDuration || 0,
   );
-  if (effElapsed < 180 || effElapsed >= 750) {
+  // DEFENSE IN DEPTH: hard time-window enforcement at the commit point.
+  //
+  // This previously logged "outside standard window, proceeding with lock" and then
+  // committed anyway, so it could not stop an early lock. canLockCurrentCycle() below is
+  // the primary gate, but lock15mCycle is the only function that actually mutates
+  // active15mCycle into a locked state, so it now enforces the boundary itself rather
+  // than trusting its caller. Lifecycle: lock legal only within 6:00-12:00.
+  if (effElapsed < 360 || effElapsed >= 720) {
     console.warn(
-      `[VIXY_LOCK_GATE_NOTICE] elapsed=${effElapsed}s outside standard window, proceeding with lock.`,
+      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-720s ` +
+      `confirmation window for cycle ${cycleId}. Lock refused.`,
     );
+    return false;
   }
   if (
     active15mCycle.isLocked ||
@@ -14777,6 +14800,12 @@ let db = null;
 let firebaseAppInstance = null;
 let backendAuthInstance = null;
 let firebaseReadyPromise = null;
+// Tracks whether the backend has actually completed its Firebase Auth sign-in as
+// backend_system@vixy.local. `db` is assigned BEFORE that sign-in is awaited, so without
+// this flag any write issued during the boot window goes out with request.auth == null and
+// is rejected by every isBackendSystem() rule in firestore.rules — the production
+// PERMISSION_DENIED errors. Writes are gated on this below and queued until it flips.
+let backendAuthReady = false;
 let lastFirestoreWriteTimeMs = 0;
 let lastSuccessfulFirestoreWrite = null;
 let lastFirestoreWriteSuccess = false;
@@ -14835,6 +14864,7 @@ async function initializeBackendFirebase() {
           "backend_system@vixy.local",
           "vixy_backend_super_secret_password_2026",
         );
+        backendAuthReady = true;
         console.log(
           "[Firestore] Backend authenticated securely as system user.",
         );
@@ -14849,6 +14879,7 @@ async function initializeBackendFirebase() {
             "backend_system@vixy.local",
             "vixy_backend_super_secret_password_2026",
           );
+          backendAuthReady = true;
           console.log(
             "[Firestore] Backend system user created and authenticated.",
           );
@@ -14861,7 +14892,9 @@ async function initializeBackendFirebase() {
             backendAuthInstance,
             "backend_system@vixy.local",
             "vixy_backend_super_secret_password_2026",
-          ).catch((permErr) => {
+          ).then(() => {
+            backendAuthReady = true;
+          }).catch((permErr) => {
             console.error(
               "[Firestore] Backend system auth permanently failed:",
               permErr?.message,
@@ -14932,6 +14965,16 @@ function isCircuitOpen() {
 __name(isCircuitOpen, "isCircuitOpen");
 function canAttemptFirestoreWrite(writeTarget = "unknown") {
   if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
+  // Auth-readiness gate. Without this, writes issued between `db` being assigned and the
+  // backend_system sign-in resolving are unauthenticated and fail with PERMISSION_DENIED.
+  // Returning false here routes them into the existing pending queues instead, so they are
+  // retried once authentication is established rather than lost.
+  if (!backendAuthReady) {
+    console.log(
+      `[FIRESTORE_AUTH_PENDING] Deferred write=${writeTarget} until backend system auth completes.`,
+    );
+    return false;
+  }
   if (isCircuitOpen()) {
     if (firestoreQuotaFailureCount === 0) {
       console.log(
