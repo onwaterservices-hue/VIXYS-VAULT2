@@ -64,50 +64,64 @@ function initAdmin(): AdminFirestore | null {
   initAttempted = true;
 
   try {
-    // Required lazily so bundling the frontend never pulls in firebase-admin.
-    const admin = require('firebase-admin');
+    // firebase-admin v14 is modular: the root `require("firebase-admin")` does NOT
+    // expose `admin.credential.cert` (that was the v11-style namespaced API and is why
+    // init previously failed with "Cannot read properties of undefined (reading 'cert')").
+    // Use the subpath modules. Required lazily so bundling the frontend never pulls in
+    // firebase-admin.
+    const { initializeApp, cert, applicationDefault, getApps } = require('firebase-admin/app');
+    const { getFirestore } = require('firebase-admin/firestore');
 
-    const existing = admin.apps || [];
-    if (existing.length > 0 && existing[0]) {
-      adminDbInstance = admin.firestore();
-      credentialSource = 'EXISTING_APP';
-      return adminDbInstance;
-    }
-
-    const projectId = process.env.FIREBASE_PROJECT_ID || undefined;
+    const projectId = process.env.FIREBASE_PROJECT_ID || 'btc15-pro--prediction-terminal';
     const inlineJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
     const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || '';
 
-    let serviceAccount: Record<string, unknown> | null = null;
-    if (inlineJson) {
-      serviceAccount = decodeServiceAccount(inlineJson);
-      credentialSource = 'FIREBASE_SERVICE_ACCOUNT_JSON';
-    } else if (credPath) {
-      serviceAccount = JSON.parse(readFileSync(credPath, 'utf8'));
-      credentialSource = 'GOOGLE_APPLICATION_CREDENTIALS';
-    }
+    // The app uses a NAMED Firestore database, not (default). getFirestore() with no
+    // databaseId would talk to (default) — which does not exist for this project — so
+    // every read/write would fail. Target the named database explicitly.
+    const databaseId =
+      process.env.FIREBASE_FIRESTORE_DATABASE_ID ||
+      'ai-studio-btc15pro15minbtc-5ffd95f2-2d75-456b-8811-6d9cbc0c1c72';
 
-    if (serviceAccount) {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount as any),
-        projectId: (serviceAccount as any).project_id || projectId,
-      });
+    const existing = getApps();
+    let app: any;
+    if (existing.length > 0 && existing[0]) {
+      app = existing[0];
+      credentialSource = 'EXISTING_APP';
     } else {
-      // ADC: succeeds on GCP with an attached service account, throws locally.
-      admin.initializeApp({ credential: admin.credential.applicationDefault(), projectId });
-      credentialSource = 'APPLICATION_DEFAULT';
+      let serviceAccount: Record<string, unknown> | null = null;
+      if (inlineJson) {
+        serviceAccount = decodeServiceAccount(inlineJson);
+        credentialSource = 'FIREBASE_SERVICE_ACCOUNT_JSON';
+      } else if (credPath) {
+        serviceAccount = JSON.parse(readFileSync(credPath, 'utf8'));
+        credentialSource = 'GOOGLE_APPLICATION_CREDENTIALS';
+      }
+      if (serviceAccount) {
+        app = initializeApp({
+          credential: cert(serviceAccount as any),
+          projectId: (serviceAccount as any).project_id || projectId,
+        });
+      } else {
+        // ADC: succeeds on GCP with an attached service account, throws locally.
+        app = initializeApp({ credential: applicationDefault(), projectId });
+        credentialSource = 'APPLICATION_DEFAULT';
+      }
     }
 
-    adminDbInstance = admin.firestore();
-    console.log(`[FirebaseAdmin] Trusted server identity initialized via ${credentialSource}.`);
+    // getFirestore(app, databaseId) targets the named database.
+    adminDbInstance = getFirestore(app, databaseId);
+    console.log(
+      `[FirebaseAdmin] Trusted server identity initialized via ${credentialSource} ` +
+      `(database=${databaseId}).`
+    );
     return adminDbInstance;
   } catch (err: any) {
     initError = err?.message || String(err);
     credentialSource = 'NONE';
     console.warn(
-      '[FirebaseAdmin] No service-account credential available. Falling back to the ' +
-      'legacy client-SDK backend identity if BACKEND_SYSTEM_EMAIL/PASSWORD are configured. ' +
-      'Set FIREBASE_SERVICE_ACCOUNT_JSON to use the trusted server path.'
+      '[FirebaseAdmin] Admin SDK init failed (' + initError + '). Falling back to the ' +
+      'legacy client-SDK backend identity if BACKEND_SYSTEM_EMAIL/PASSWORD are configured.'
     );
     return null;
   }
