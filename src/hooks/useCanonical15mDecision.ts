@@ -122,6 +122,27 @@ export function useCanonical15mDecision(): {
     }
   };
 
+  // Browsers throttle (or fully pause) setInterval in background tabs, so a
+  // user who switches away and returns can come back to a card still showing
+  // the last-polled cycle -- e.g. frozen on an old LOCKED confidence -- until
+  // they manually refresh. Re-fetch immediately whenever the tab becomes
+  // visible again (and on window focus) so the terminal self-heals. This only
+  // triggers the same fetchFromServer() the interval already uses; it does not
+  // change polling cadence, decision handling, or any engine logic.
+  useEffect(() => {
+    const refetchIfVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        fetchFromServer();
+      }
+    };
+    document.addEventListener('visibilitychange', refetchIfVisible);
+    window.addEventListener('focus', refetchIfVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', refetchIfVisible);
+      window.removeEventListener('focus', refetchIfVisible);
+    };
+  }, []);
+
   useEffect(() => {
     fetchFromServer();
     const interval = setInterval(fetchFromServer, 3000);
