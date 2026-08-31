@@ -4225,14 +4225,20 @@ async function checkAndSettle15mCycle(livePrice) {
       persistSingleSignalLog(skippedLog);
     }
   }
-  if (active15mCycle && active15mCycle.isLocked && active15mCycle.lockedSnapshot && active15mCycle.cycleId) {
+  // lockedSnapshot is only populated by lock15mCycle within the SAME warm
+  // serverless instance. A cold instance that merely reads an already-locked
+  // cycle from Firestore has lockedSnapshot === undefined, so gating on it
+  // meant this sync path never fired in production. lockedPrediction is the
+  // authoritative, Firestore-backed record and survives cold starts.
+  const lockedSrc = active15mCycle && (active15mCycle.lockedSnapshot || active15mCycle.lockedPrediction);
+  if (active15mCycle && active15mCycle.isLocked && lockedSrc && active15mCycle.cycleId) {
     await attemptDiscordSignalBroadcast(
       active15mCycle.cycleId,
-      active15mCycle.lockedSnapshot.direction,
-      active15mCycle.lockedSnapshot.confidence,
-      active15mCycle.lockedSnapshot.spot,
-      active15mCycle.lockedSnapshot.strike,
-      "AUTHORITATIVE_LOCK_SYNC",
+      lockedSrc.direction,
+      lockedSrc.confidence,
+      lockedSrc.spot ?? lockedSrc.spotAtLock,
+      lockedSrc.strike,
+      lockedSrc.reason || "AUTHORITATIVE_LOCK_SYNC",
     );
   }
   active15mCycle.sequence = globalSequenceNumber;
