@@ -279,7 +279,13 @@ export async function broadcastSignalToDiscord(signalData: {
   // through so Discord always references the same decision as the
   // website/engine. Optional so existing callers do not break.
   cycleId?: string;
+  // Delivery tier. 'FREE' renders the teaser embed (no entry/SL/TP) and routes
+  // to the free bot-signals channel. 'ELITE' renders the full VIP execution
+  // embed and routes to premium-signals. Defaults to ELITE so any existing
+  // caller that omits it keeps its previous behavior.
+  tier?: 'FREE' | 'ELITE';
 }): Promise<{ success: boolean; method: string; message: string }> {
+  const tier = signalData.tier === 'FREE' ? 'FREE' : 'ELITE';
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
   
   // Construct marketData directly from the actual authoritative lock data
@@ -308,7 +314,9 @@ export async function broadcastSignalToDiscord(signalData: {
     },
   };
 
-  const embed = createVipSignalEmbed(marketData);
+  const embed = tier === 'FREE'
+    ? createFreeSignalEmbed(marketData)
+    : createVipSignalEmbed(marketData);
 
   // Stamp the authoritative VIXY cycle ID so this message is traceable
   // back to the exact same decision shown on the website. Handles both a
@@ -325,7 +333,9 @@ export async function broadcastSignalToDiscord(signalData: {
   // Prefer an explicit, admin-configured destination for automated signals.
   // Falls back to the existing hardcoded channel if the env var isn't set
   // yet, so this does not regress current behavior.
-  const channelId = process.env.DISCORD_BOT_SIGNALS_CHANNEL_ID || '1535025646852636853';
+  const FREE_SIGNALS_CHANNEL_ID = process.env.DISCORD_BOT_SIGNALS_CHANNEL_ID || '1535065476311289897';
+  const ELITE_SIGNALS_CHANNEL_ID = process.env.DISCORD_PREMIUM_SIGNALS_CHANNEL_ID || '1535025646852636853';
+  const channelId = tier === 'FREE' ? FREE_SIGNALS_CHANNEL_ID : ELITE_SIGNALS_CHANNEL_ID;
 
   if (discordClient && discordClient.isReady()) {
     try {
@@ -376,7 +386,7 @@ export async function broadcastSignalToDiscord(signalData: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: 'VIXY VIP Intelligence Core',
+          username: tier === 'FREE' ? 'VIXY AI Signal Scanner' : 'VIXY VIP Intelligence Core',
           avatar_url: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=200&q=80',
           embeds: [embed.toJSON()],
         }),
