@@ -60,8 +60,11 @@ describe('dedup', () => {
   });
 
   it('buckets order flow per minute', () => {
-    expect(dedupKeys.orderFlow('btcusdt', T0)).toBe(dedupKeys.orderFlow('BTCUSDT', T0 + 59_000));
-    expect(dedupKeys.orderFlow('BTCUSDT', T0)).not.toBe(dedupKeys.orderFlow('BTCUSDT', T0 + 61_000));
+    // Anchor to a minute boundary: T0 itself is 20s into its minute, so
+    // T0 + 59s would legitimately land in the next bucket.
+    const minuteStart = Math.floor(T0 / 60_000) * 60_000;
+    expect(dedupKeys.orderFlow('btcusdt', minuteStart)).toBe(dedupKeys.orderFlow('BTCUSDT', minuteStart + 59_000));
+    expect(dedupKeys.orderFlow('BTCUSDT', minuteStart)).not.toBe(dedupKeys.orderFlow('BTCUSDT', minuteStart + 60_000));
   });
 
   it('normalizes tracking params so one article is one key', () => {
