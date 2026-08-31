@@ -57,9 +57,18 @@ export function createVipSignalEmbed(data: MarketOverview) {
       { name: '🎯 ENTRY', value: `\`$${entry.toLocaleString()}\``, inline: true },
       { name: '🛑 STOP LOSS', value: `\`$${stop.toLocaleString()}\``, inline: true },
       { name: '🏁 TARGET PROFIT', value: `\`$${target.toLocaleString()}\``, inline: true },
-      { name: '🌊 Whale Delta', value: `\`+1,820 BTC Taker Buying\``, inline: true },
-      { name: '📊 Implied Edge', value: `\`+8.4% vs Kalshi Odds\``, inline: true },
-      { name: '🎯 Brier Score', value: `\`0.168 (Optimal)\``, inline: true },
+      // These three fields were previously hardcoded string literals
+      // ("+1,820 BTC Taker Buying", "+8.4% vs Kalshi Odds", "0.168 (Optimal)")
+      // and were therefore identical on every signal regardless of market
+      // conditions. They are now rendered ONLY when the caller supplies a real,
+      // non-zero engine value; when the underlying metric is unavailable the
+      // field is omitted entirely rather than showing a fabricated number.
+      ...(data.prediction.whalePressureScore
+        ? [{ name: '🌊 Whale Pressure', value: `\`${data.prediction.whalePressureScore}\``, inline: true }]
+        : []),
+      ...(data.prediction.brierScore
+        ? [{ name: '🎯 Brier Score', value: `\`${data.prediction.brierScore.toFixed(3)}\``, inline: true }]
+        : []),
       { name: '🧠 Institutional Reasoning', value: data.prediction.reasoning, inline: false }
     )
     .setFooter({ text: 'VIXY AI Core VIP Channel • Confidential Member Signal' })
