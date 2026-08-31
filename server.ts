@@ -1244,7 +1244,30 @@ __name(shouldBroadcastCycle, "shouldBroadcastCycle");
 const BROADCAST_CLAIM_STALE_MS = 5 * 60 * 1000;
 
 async function claimBroadcastAtomically(cycleId) {
-  if (!cycleId || !db) return true; // no Firestore configured -- fall back to in-memory guard only
+  // FAIL CLOSED. An infrastructure failure is never permission to publish.
+  //
+  // This previously returned true whenever Firestore was unconfigured or the claim
+  // transaction threw, on the reasoning that a transient Firestore fault should not
+  // suppress a legitimate signal. In production that inverted the guarantee: the
+  // discord_broadcast_claims collection had no rule in firestore.rules and so was
+  // hard-denied by the catch-all, meaning the transaction ALWAYS threw and the claim
+  // ALWAYS fell through to true. Cross-instance protection was therefore never active,
+  // and only the per-instance in-memory Set stood between a cycle and a duplicate
+  // broadcast from a second Vercel instance.
+  //
+  // A missed signal is recoverable; a duplicate or forged signal sent to paying
+  // subscribers is not. Every failure path below now blocks the broadcast.
+  if (!cycleId) {
+    console.error("[Discord] Broadcast blocked: no cycleId supplied for claim.");
+    return false;
+  }
+  if (!db) {
+    console.error(
+      "[Discord] Broadcast blocked: Firestore unavailable, cannot establish a durable " +
+      "cross-instance claim.",
+    );
+    return false;
+  }
   try {
     return await runTransaction(db, async (tx) => {
       const ref = doc(db, "discord_broadcast_claims", String(cycleId));
@@ -1262,8 +1285,12 @@ async function claimBroadcastAtomically(cycleId) {
       return true;
     });
   } catch (err) {
-    console.error("[Discord] Firestore broadcast claim failed, falling back to in-memory guard only:", err?.message || err);
-    return true; // fail open on infra error so a transient Firestore issue never permanently suppresses a legitimate signal
+    // Includes PERMISSION_DENIED, transaction contention and network faults. All block.
+    console.error(
+      "[Discord] Broadcast blocked: claim acquisition failed:",
+      err?.message || err,
+    );
+    return false;
   }
 }
 __name(claimBroadcastAtomically, "claimBroadcastAtomically");
@@ -5224,8 +5251,14 @@ async function checkPasswordResetRateLimit(cleanEmail) {
       return true;
     });
   } catch (err) {
+    // Deliberately fails OPEN, unlike the Discord broadcast claim which now fails closed.
+    // The tradeoff differs: blocking a legitimate password reset locks a paying user out
+    // of their account, whereas an unclaimed Discord broadcast merely delays a signal.
+    // Note this limiter was inert in production regardless, because
+    // password_reset_rate_limits had no rule in firestore.rules and every transaction was
+    // denied; adding that rule is what actually activates it.
     console.warn("[PasswordReset] Rate limit check failed, allowing request:", err?.message || err);
-    return true; // fail open on infra error, same pattern as the Discord broadcast claim
+    return true;
   }
 }
 __name(checkPasswordResetRateLimit, "checkPasswordResetRateLimit");
