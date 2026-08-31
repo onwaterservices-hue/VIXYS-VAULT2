@@ -11,7 +11,9 @@
     "clean": "rm -rf dist build",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
@@ -46,6 +48,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "tsx": "^4.23.12"
+    "tsx": "^4.23.12",
+    "vitest": "^2.1.9"
   }
 }
