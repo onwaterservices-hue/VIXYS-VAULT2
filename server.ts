@@ -3015,8 +3015,13 @@ function canLockCurrentCycle(livePrice) {
       `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [HIGH_CONVICTION_BUT_PRE_WINDOW]" : ""})`,
     );
   }
+  // Close of the entry window. This previously allowed effElapsed < 780 while the
+  // ENTRY_WINDOW_EXPIRED reason fired at >= 720, so between 12:00 and 13:00 the gate
+  // pushed an "expired" reason yet still returned allowed=true (caught by the runtime
+  // invariant test at elapsed=721s). Aligned to 720s to match the reason, the intended
+  // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
-    minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
+    minimumObservationWindowPassed && effElapsed < 720 && effRemaining >= 120;
   if (effElapsed >= 720 || effRemaining < 180) {
     reasons.push(
       `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`,
