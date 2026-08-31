@@ -2492,7 +2492,8 @@ __name(
   evaluateBtc15mHighConvictionPipeline,
   "evaluateBtc15mHighConvictionPipeline",
 );
-setInterval(async () => {
+let engineHydrated = false;
+async function runMarketEngineTick() {
   try {
     currentEngineCycleId += 1;
     const now = Date.now();
@@ -2972,7 +2973,18 @@ setInterval(async () => {
       `Engine background cycle warning: ${err.message || err}`,
     );
   }
-}, 3e3);
+}
+// Mark this instance hydrated once a tick has run, so read handlers can tell a
+// warm instance (real live values) from a cold serverless boot still holding the
+// seed defaults (spot 64161.4, evidence 0, etc.) that users saw flicker in.
+async function runMarketEngineTickTracked() {
+  await runMarketEngineTick();
+  engineHydrated = true;
+}
+setInterval(runMarketEngineTickTracked, 3e3);
+// Run one tick immediately on cold boot so the very first request does not serve
+// seed placeholders while waiting for the 3s interval to fire for the first time.
+runMarketEngineTickTracked().catch(() => {});
 const serverUsers = [];
 app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
   const email = String(
@@ -12767,6 +12779,15 @@ async function persistGlobalSequence() {
 __name(persistGlobalSequence, "persistGlobalSequence");
 setInterval(persistGlobalSequence, 15e3);
 app.get("/api/vixy/state", async (req, res) => {
+  // COLD-INSTANCE HYDRATION GUARD.
+  // On Vercel the market setInterval only runs while a lambda is warm, so a request
+  // landing on a freshly cold-booted instance would otherwise serve seed placeholders
+  // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
+  // users perceived as the terminal "freezing". Run one real tick first, but only when
+  // this instance has not hydrated yet, so warm requests pay no latency.
+  if (!engineHydrated || currentBtcPrice === 64161.4) {
+    try { await runMarketEngineTickTracked(); } catch {}
+  }
   const currentCycleIdForStateSync = active15mCycle.cycleId;
   if (currentCycleIdForStateSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
     try {
@@ -12953,6 +12974,15 @@ app.get("/api/vixy/state", async (req, res) => {
   res.json(statePayload);
 });
 app.get("/api/vixy/15m/current", async (req, res) => {
+  // COLD-INSTANCE HYDRATION GUARD.
+  // On Vercel the market setInterval only runs while a lambda is warm, so a request
+  // landing on a freshly cold-booted instance would otherwise serve seed placeholders
+  // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
+  // users perceived as the terminal "freezing". Run one real tick first, but only when
+  // this instance has not hydrated yet, so warm requests pay no latency.
+  if (!engineHydrated || currentBtcPrice === 64161.4) {
+    try { await runMarketEngineTickTracked(); } catch {}
+  }
   const currentCycleIdForCurrentSync = active15mCycle.cycleId;
   if (currentCycleIdForCurrentSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
     try {
@@ -13307,6 +13337,11 @@ app.get("/api/vixy/15m/current", async (req, res) => {
 app.get(
   ["/api/signal", "/api/signal/latest", "/api/live-engine"],
   async (req, res) => {
+    // COLD-INSTANCE HYDRATION GUARD (see /api/vixy/15m/current). Prevents this
+    // instance serving seed placeholders on a cold serverless boot.
+    if (!engineHydrated || currentBtcPrice === 64161.4) {
+      try { await runMarketEngineTickTracked(); } catch {}
+    }
     const currentCycleIdForSignalSync = active15mCycle.cycleId;
     if (currentCycleIdForSignalSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
       try {
