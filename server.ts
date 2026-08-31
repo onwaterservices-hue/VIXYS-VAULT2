@@ -3197,36 +3197,50 @@ function canLockCurrentCycle(livePrice) {
 }
 __name(canLockCurrentCycle, "canLockCurrentCycle");
 async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, reason) {
-  if (!shouldBroadcastCycle(cycleId)) {
-    return;
-  }
-  console.log(`[Discord] Broadcast gate reached for cycle ${cycleId}`);
-  try {
-    const claimed = await claimBroadcastAtomically(cycleId);
-    if (!claimed) {
-      console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} (claimed by another instance)`);
-      return;
+  // FREE and ELITE are delivered independently. Each tier has its own claim key
+  // (`${cycleId}#FREE` / `${cycleId}#ELITE`) so one tier failing or already
+  // being claimed can never suppress the other. The canonical decision inputs
+  // (cycleId/dir/conf/spot/strike/reason) are identical for both, so the two
+  // messages always describe the exact same VIXY lock.
+  const tiers = [
+    { tier: "FREE", label: "FREE" },
+    { tier: "ELITE", label: "ELITE" },
+  ];
+
+  for (const { tier, label } of tiers) {
+    const claimKey = `${cycleId}#${label}`;
+    if (!shouldBroadcastCycle(claimKey)) {
+      continue;
     }
-    let result = null;
+    console.log(`[Discord] Broadcast gate reached for cycle ${cycleId} tier=${label}`);
     try {
-      result = await broadcastSignalToDiscord({
-        symbol: "BTC/USDT 15M",
-        direction: dir === "UP" ? "YES" : "NO",
-        cycleId,
-        confidence: conf,
-        edgePct: currentEdgePct,
-        currentPrice: spot,
-        targetPrice: strike,
-        reasoning: reason || "High-conviction taker delta absorption detected.",
-      });
+      const claimed = await claimBroadcastAtomically(claimKey);
+      if (!claimed) {
+        console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} tier=${label} (claimed by another instance)`);
+        continue;
+      }
+      let result = null;
+      try {
+        result = await broadcastSignalToDiscord({
+          symbol: "BTC/USDT 15M",
+          direction: dir === "UP" ? "YES" : "NO",
+          cycleId,
+          confidence: conf,
+          edgePct: currentEdgePct,
+          currentPrice: spot,
+          targetPrice: strike,
+          reasoning: reason || "High-conviction taker delta absorption detected.",
+          tier,
+        });
+      } catch (err) {
+        console.error(`[Discord] Automated broadcast failed (tier=${label}):`, err);
+      }
+      const ok = !!(result && result.success);
+      console.log(`[Discord] Broadcast result for ${cycleId} tier=${label}: ${ok ? "SENT" : "FAILED"} (${result && result.message ? result.message : "no detail"})`);
+      await markBroadcastOutcome(claimKey, ok ? "SENT" : "FAILED");
     } catch (err) {
-      console.error("[Discord] Automated broadcast failed:", err);
+      console.error(`[Discord] Broadcast claim error (tier=${label}):`, err);
     }
-    const ok = !!(result && result.success);
-    console.log(`[Discord] Broadcast result for ${cycleId}: ${ok ? "SENT" : "FAILED"} (${result && result.message ? result.message : "no detail"})`);
-    await markBroadcastOutcome(cycleId, ok ? "SENT" : "FAILED");
-  } catch (err) {
-    console.error("[Discord] Broadcast claim error:", err);
   }
 }
 __name(attemptDiscordSignalBroadcast, "attemptDiscordSignalBroadcast");
