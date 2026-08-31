@@ -14898,16 +14898,28 @@ async function initializeBackendFirebase() {
       );
 
       // --- TRUSTED BACKEND IDENTITY ------------------------------------------------
-      // Preferred path: Firebase Admin SDK service account. It authenticates as a
-      // service account and bypasses security rules, which is the correct trust model
-      // for a trusted server and removes the need for any shared backend password.
+      // IMPORTANT (transitional semantics): backendAuthReady means "guarded CLIENT-SDK
+      // writes can succeed". Until the Admin datapath migration lands
+      // (docs/admin-datapath-migration.md), every Firestore data operation in this file
+      // still runs through the client SDK, whose auth context is the signed-in
+      // backend user — NOT the Admin service account. An earlier revision set
+      // backendAuthReady = true whenever adminDb existed, which would have let a
+      // deployment configured ONLY with FIREBASE_SERVICE_ACCOUNT_JSON attempt
+      // unauthenticated client writes (PERMISSION_DENIED on every guarded collection,
+      // and a silenced fail-closed Discord claim). The client sign-in below therefore
+      // always runs when BACKEND_SYSTEM_EMAIL/PASSWORD are configured; adminDb is
+      // reported as standing by for the migration but does not, by itself, mark the
+      // client datapath ready.
       if (adminDb) {
-        backendAuthReady = true;
         console.log(
-          "[Firestore] Trusted server identity active via Firebase Admin SDK service account.",
+          "[Firestore] Admin SDK service-account identity initialized (standing by; " +
+          "client-SDK datapath still requires BACKEND_SYSTEM_EMAIL/PASSWORD until the " +
+          "datapath migration lands).",
         );
-      } else {
-        // Transitional fallback: the legacy client-SDK backend user.
+      }
+      {
+        // Legacy client-SDK backend user — currently the identity that authorizes the
+        // actual datapath.
         //
         // SECURITY: this credential was previously hardcoded in this file and is
         // therefore present in git history and must be treated as COMPROMISED and
@@ -14921,9 +14933,9 @@ async function initializeBackendFirebase() {
 
         if (!backendEmail || !backendPassword) {
           console.error(
-            "[Firestore] No trusted backend identity configured. Set FIREBASE_SERVICE_ACCOUNT_JSON " +
-            "(preferred) or BACKEND_SYSTEM_EMAIL/BACKEND_SYSTEM_PASSWORD. Firestore writes are " +
-            "deferred until an identity is available.",
+            "[Firestore] No client-datapath backend credential configured. Set " +
+            "BACKEND_SYSTEM_EMAIL/BACKEND_SYSTEM_PASSWORD (required until the Admin " +
+            "datapath migration). Firestore writes are deferred until then.",
           );
         } else {
           backendAuthInstance = getAuth(firebaseAppInstance);
