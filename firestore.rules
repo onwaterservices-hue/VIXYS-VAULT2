@@ -1,49 +1,130 @@
 rules_version = '2';
+
+// ============================================================================
+// VIXY VAULT — PRODUCTION FIRESTORE SECURITY RULES
+//
+// !! PREPARED, NOT DEPLOYED. Deploying is a production security change.
+//
+// TWO CLASSES OF DEFECT ARE CORRECTED HERE
+//
+// 1. WORLD-WRITABLE PRODUCTION COLLECTIONS
+//    The previous revision carried:
+//        match /active_cycle_lock/{lockId} { allow read: if true; allow write: if true; }
+//        match /signal_logs/{signalId}     { allow read: if true; allow write: if true; }
+//    active_cycle_lock/current_15m is the canonical 15M decision; signal_logs is the
+//    settled outcome history. Any anonymous caller could forge either. This is not
+//    theoretical: server.ts has three LOCK_SYNC routes (/api/vixy/state,
+//    /api/vixy/15m/current, /api/signal) that adopt a lock found in Firestore as
+//    authoritative and set active15mCycle.isLocked = true from it. A forged document
+//    would therefore be ingested by the engine as a real committed decision.
+//
+// 2. COLLECTIONS THE BACKEND WRITES THAT HAD NO RULE AT ALL
+//    These fell through to the catch-all `match /{document=**} { allow read, write: if false; }`
+//    and were hard-denied even for the authenticated backend, so the features that
+//    depend on them have been silently failing in production:
+//        discord_broadcast_claims      -> Discord publish idempotency
+//        discord_hourly_market_claims  -> hourly digest idempotency
+//        discord_links                 -> Discord account-link persistence
+//        password_reset_tokens         -> password reset flow
+//        password_reset_rate_limits    -> reset rate limiting
+//        auto_trade_logs               -> Kalshi auto-trade audit trail
+//    The Discord one matters most: claimBroadcastAtomically() catches the denial and
+//    returns true (fail-open), leaving only a per-instance in-memory guard. On Vercel's
+//    multi-instance serverless runtime that permits duplicate broadcasts of one cycle.
+//
+// TRUST MODEL
+// -----------
+// Writes below are gated on isBackendSystem() rather than a flat `false` so that BOTH
+// server identities work: the Firebase Admin SDK service account bypasses rules
+// entirely, and the transitional client-SDK backend user satisfies isBackendSystem().
+// That means this file can be deployed independently of the Admin SDK rollout without
+// breaking the canonical engine's writes.
+//
+// NOTE: the backend credential that satisfies isBackendSystem() was previously hardcoded
+// in server.ts and remains in git history. It must be rotated. Until it is, treat
+// isBackendSystem() as a control that a repository reader could still satisfy.
+// ============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isBackendSystem() {
       return request.auth != null && request.auth.token.email == 'backend_system@vixy.local';
+    }
+
+    function isSelf(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
 
     match /{document=**} {
       allow read, write: if false;
     }
 
-    match /_connection_check/{docId} { allow read, write: if true; }
-    match /test/{docId} { allow read, write: if true; }
-
+    // --- Canonical engine state -------------------------------------------------
+    // Public read: the 15M decision is product surface the web client reads directly.
+    // Write closed to the trusted backend. THIS IS THE SECURITY FIX.
     match /active_cycle_lock/{lockId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isBackendSystem();
     }
     match /signal_logs/{signalId} {
       allow read: if true;
-      allow write: if true;
+      allow write: if isBackendSystem();
     }
 
+    // --- Idempotency claims (previously unruled -> hard-denied) ------------------
+    // Server-only both ways: a client able to read or forge these could suppress or
+    // duplicate a Discord broadcast.
+    match /discord_broadcast_claims/{claimId} { allow read, write: if isBackendSystem(); }
+    match /discord_hourly_market_claims/{claimId} { allow read, write: if isBackendSystem(); }
+
+    // --- Discord linking (previously unruled -> link persistence failing) --------
+    match /discord_links/{linkId} { allow read, write: if isBackendSystem(); }
+    match /discordProfiles/{profileId} { allow read, write: if isBackendSystem(); }
+    match /discord_profiles/{profileId} { allow read, write: if isBackendSystem(); }
+
+    // --- Password reset (previously unruled -> reset flow failing) ---------------
+    // Server-only. Tokens must never be client-readable or the reset flow is bypassable.
+    match /password_reset_tokens/{tokenId} { allow read, write: if isBackendSystem(); }
+    match /password_reset_rate_limits/{limitId} { allow read, write: if isBackendSystem(); }
+
+    // --- Identity, entitlement, billing -----------------------------------------
     match /users/{userId} {
-      allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId);
-      match /journalEntries/{entryId} { allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId); }
-      match /workspaces/{workspaceId} { allow read, write: if isBackendSystem() || (request.auth != null && request.auth.uid == userId); }
+      allow read, write: if isBackendSystem() || isSelf(userId);
+      match /journalEntries/{entryId} { allow read, write: if isBackendSystem() || isSelf(userId); }
+      match /workspaces/{workspaceId} { allow read, write: if isBackendSystem() || isSelf(userId); }
     }
     match /tickets/{ticketId} { allow read, write: if isBackendSystem(); }
-    match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
-    match /telemetry_observations/{obsId} { allow read, write: if isBackendSystem(); }
     match /day_passes/{docId} { allow read, write: if isBackendSystem(); }
     match /subscriptions/{subId} { allow read, write: if isBackendSystem(); }
     match /webhook_events/{eventId} { allow read, write: if isBackendSystem(); }
     match /stripe_events/{eventId} { allow read, write: if isBackendSystem(); }
     match /pending_entitlements/{email} { allow read, write: if isBackendSystem(); }
-    match /discordProfiles/{profileId} { allow read, write: if isBackendSystem(); }
-    match /discord_profiles/{profileId} { allow read, write: if isBackendSystem(); }
-    match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
-    match /calibration_state/{stateId} { allow read, write: if isBackendSystem(); }
-    match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }
+
+    // --- Engine telemetry / learning --------------------------------------------
+    match /telemetry_observations/{obsId} { allow read, write: if isBackendSystem(); }
     match /decision_outcomes/{outcomeId} { allow read, write: if isBackendSystem(); }
+    match /calibration_state/{stateId} { allow read, write: if isBackendSystem(); }
     match /regime_memory_bank/{memoryId} { allow read, write: if isBackendSystem(); }
     match /algorithm_performance_history/{historyId} { allow read, write: if isBackendSystem(); }
+    match /vixy_engine_heartbeat/{docId} { allow read, write: if isBackendSystem(); }
+    match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
+    match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
+    match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }
+
+    // --- Trading credentials -----------------------------------------------------
+    // Encrypted Kalshi keys. Never client-reachable under any circumstance.
     match /kalshi_credentials/{userId} { allow read, write: if isBackendSystem(); }
     match /auto_trade_configs/{userId} { allow read, write: if isBackendSystem(); }
-    match /vixy_engine_heartbeat/{docId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_logs/{logId} { allow read, write: if isBackendSystem(); }
+
+    // --- Boot probe ---------------------------------------------------------------
+    // The client calls getDocFromServer(doc(db,'test','connection')) on boot, which is a
+    // READ. The previous revision allowed unauthenticated WRITE here and on
+    // _connection_check; read-only is sufficient.
+    match /test/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
   }
 }

@@ -84,6 +84,7 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
+import { adminDb, getAdminStatus } from "./src/lib/firebaseAdmin";
 import {
   getFirestore,
   collection,
@@ -14857,51 +14858,60 @@ async function initializeBackendFirebase() {
         firebaseAppInstance,
         firebaseConfig.firestoreDatabaseId,
       );
-      backendAuthInstance = getAuth(firebaseAppInstance);
-      try {
-        await signInWithEmailAndPassword(
-          backendAuthInstance,
-          "backend_system@vixy.local",
-          "vixy_backend_super_secret_password_2026",
-        );
+
+      // --- TRUSTED BACKEND IDENTITY ------------------------------------------------
+      // Preferred path: Firebase Admin SDK service account. It authenticates as a
+      // service account and bypasses security rules, which is the correct trust model
+      // for a trusted server and removes the need for any shared backend password.
+      if (adminDb) {
         backendAuthReady = true;
         console.log(
-          "[Firestore] Backend authenticated securely as system user.",
+          "[Firestore] Trusted server identity active via Firebase Admin SDK service account.",
         );
-      } catch (authErr) {
-        console.warn(
-          "[Firestore] Backend sign-in failed, attempting creation:",
-          authErr?.message,
-        );
-        try {
-          await createUserWithEmailAndPassword(
-            backendAuthInstance,
-            "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
+      } else {
+        // Transitional fallback: the legacy client-SDK backend user.
+        //
+        // SECURITY: this credential was previously hardcoded in this file and is
+        // therefore present in git history and must be treated as COMPROMISED and
+        // rotated. It is now read from the environment with NO default, so the
+        // repository no longer carries a working credential. If the variables are
+        // absent, backendAuthReady stays false and canAttemptFirestoreWrite() defers
+        // writes into the pending queues instead of emitting unauthenticated writes
+        // that fail with PERMISSION_DENIED.
+        const backendEmail = process.env.BACKEND_SYSTEM_EMAIL || "";
+        const backendPassword = process.env.BACKEND_SYSTEM_PASSWORD || "";
+
+        if (!backendEmail || !backendPassword) {
+          console.error(
+            "[Firestore] No trusted backend identity configured. Set FIREBASE_SERVICE_ACCOUNT_JSON " +
+            "(preferred) or BACKEND_SYSTEM_EMAIL/BACKEND_SYSTEM_PASSWORD. Firestore writes are " +
+            "deferred until an identity is available.",
           );
-          backendAuthReady = true;
-          console.log(
-            "[Firestore] Backend system user created and authenticated.",
-          );
-        } catch (createErr) {
-          console.warn(
-            "[Firestore] Backend system user retry sign-in:",
-            createErr?.message,
-          );
-          await signInWithEmailAndPassword(
-            backendAuthInstance,
-            "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
-          ).then(() => {
-            backendAuthReady = true;
-          }).catch((permErr) => {
-            console.error(
-              "[Firestore] Backend system auth permanently failed:",
-              permErr?.message,
+        } else {
+          backendAuthInstance = getAuth(firebaseAppInstance);
+          try {
+            await signInWithEmailAndPassword(
+              backendAuthInstance,
+              backendEmail,
+              backendPassword,
             );
-          });
+            backendAuthReady = true;
+            console.log(
+              "[Firestore] Backend authenticated via legacy client-SDK system user. " +
+              "Migrate to FIREBASE_SERVICE_ACCOUNT_JSON.",
+            );
+          } catch (authErr) {
+            // Deliberately no createUserWithEmailAndPassword fallback. The previous code
+            // would provision the backend account on demand, which meant a wrong or
+            // rotated credential silently minted a NEW account rather than failing.
+            console.error(
+              "[Firestore] Backend system auth failed:",
+              authErr?.message,
+            );
+          }
         }
       }
+
       persistenceState = "HEALTHY_FIRESTORE";
       lastFirestoreWriteSuccess = false;
       console.log(
