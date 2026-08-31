@@ -84,6 +84,7 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { initializeApp } from "firebase/app";
+import { adminDb, getAdminStatus } from "./src/lib/firebaseAdmin";
 import {
   getFirestore,
   collection,
@@ -1243,7 +1244,30 @@ __name(shouldBroadcastCycle, "shouldBroadcastCycle");
 const BROADCAST_CLAIM_STALE_MS = 5 * 60 * 1000;
 
 async function claimBroadcastAtomically(cycleId) {
-  if (!cycleId || !db) return true; // no Firestore configured -- fall back to in-memory guard only
+  // FAIL CLOSED. An infrastructure failure is never permission to publish.
+  //
+  // This previously returned true whenever Firestore was unconfigured or the claim
+  // transaction threw, on the reasoning that a transient Firestore fault should not
+  // suppress a legitimate signal. In production that inverted the guarantee: the
+  // discord_broadcast_claims collection had no rule in firestore.rules and so was
+  // hard-denied by the catch-all, meaning the transaction ALWAYS threw and the claim
+  // ALWAYS fell through to true. Cross-instance protection was therefore never active,
+  // and only the per-instance in-memory Set stood between a cycle and a duplicate
+  // broadcast from a second Vercel instance.
+  //
+  // A missed signal is recoverable; a duplicate or forged signal sent to paying
+  // subscribers is not. Every failure path below now blocks the broadcast.
+  if (!cycleId) {
+    console.error("[Discord] Broadcast blocked: no cycleId supplied for claim.");
+    return false;
+  }
+  if (!db) {
+    console.error(
+      "[Discord] Broadcast blocked: Firestore unavailable, cannot establish a durable " +
+      "cross-instance claim.",
+    );
+    return false;
+  }
   try {
     return await runTransaction(db, async (tx) => {
       const ref = doc(db, "discord_broadcast_claims", String(cycleId));
@@ -1261,8 +1285,12 @@ async function claimBroadcastAtomically(cycleId) {
       return true;
     });
   } catch (err) {
-    console.error("[Discord] Firestore broadcast claim failed, falling back to in-memory guard only:", err?.message || err);
-    return true; // fail open on infra error so a transient Firestore issue never permanently suppresses a legitimate signal
+    // Includes PERMISSION_DENIED, transaction contention and network faults. All block.
+    console.error(
+      "[Discord] Broadcast blocked: claim acquisition failed:",
+      err?.message || err,
+    );
+    return false;
   }
 }
 __name(claimBroadcastAtomically, "claimBroadcastAtomically");
@@ -2966,15 +2994,34 @@ function canLockCurrentCycle(livePrice) {
     !active15mCycle.isChoppy &&
     (persistenceSeconds >= 3 || active15mCycle.signalPersistence >= 3)
   );
-  const minRequiredElapsed = isEarlyLockQualified ? 90 : 360;
+  // HARD 6-MINUTE OBSERVATION FLOOR.
+  //
+  // This was previously `isEarlyLockQualified ? 90 : 360`, which let a cycle meeting the
+  // high-conviction criteria above commit a lock 90 seconds in. That is the origin of the
+  // signal published roughly a minute into a cycle: the gate passed at 0:01:30, the lock
+  // committed, and attemptDiscordSignalBroadcast correctly fired immediately afterwards.
+  // The Discord publisher was never at fault — it faithfully broadcast a decision the
+  // engine had genuinely (but too early) committed.
+  //
+  // The intended lifecycle is 0:00-6:00 CALIBRATING with no lock permitted at any
+  // conviction level, so 360s is now an unconditional floor. isEarlyLockQualified is
+  // retained below purely as a QUALITY descriptor for the entry-reason label
+  // (EARLY_QUALIFIED_ENTRY vs QUALIFIED_AUTHORITATIVE_ENTRY); it no longer shortens time.
+  const MIN_OBSERVATION_SECONDS = 360;
+  const minRequiredElapsed = MIN_OBSERVATION_SECONDS;
   const minimumObservationWindowPassed = effElapsed >= minRequiredElapsed;
   if (!minimumObservationWindowPassed) {
     reasons.push(
-      `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [EARLY_LOCK_CRITERIA_MET]" : ""})`,
+      `OBSERVATION_TIME_INSUFFICIENT (elapsed=${effElapsed}s < ${minRequiredElapsed}s${isEarlyLockQualified ? " [HIGH_CONVICTION_BUT_PRE_WINDOW]" : ""})`,
     );
   }
+  // Close of the entry window. This previously allowed effElapsed < 780 while the
+  // ENTRY_WINDOW_EXPIRED reason fired at >= 720, so between 12:00 and 13:00 the gate
+  // pushed an "expired" reason yet still returned allowed=true (caught by the runtime
+  // invariant test at elapsed=721s). Aligned to 720s to match the reason, the intended
+  // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
-    minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
+    minimumObservationWindowPassed && effElapsed < 720 && effRemaining >= 120;
   if (effElapsed >= 720 || effRemaining < 180) {
     reasons.push(
       `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`,
@@ -3261,10 +3308,19 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     elapsedSeconds,
     active15mCycle.cycleObservationDuration || 0,
   );
-  if (effElapsed < 180 || effElapsed >= 750) {
+  // DEFENSE IN DEPTH: hard time-window enforcement at the commit point.
+  //
+  // This previously logged "outside standard window, proceeding with lock" and then
+  // committed anyway, so it could not stop an early lock. canLockCurrentCycle() below is
+  // the primary gate, but lock15mCycle is the only function that actually mutates
+  // active15mCycle into a locked state, so it now enforces the boundary itself rather
+  // than trusting its caller. Lifecycle: lock legal only within 6:00-12:00.
+  if (effElapsed < 360 || effElapsed >= 720) {
     console.warn(
-      `[VIXY_LOCK_GATE_NOTICE] elapsed=${effElapsed}s outside standard window, proceeding with lock.`,
+      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-720s ` +
+      `confirmation window for cycle ${cycleId}. Lock refused.`,
     );
+    return false;
   }
   if (
     active15mCycle.isLocked ||
@@ -5200,8 +5256,14 @@ async function checkPasswordResetRateLimit(cleanEmail) {
       return true;
     });
   } catch (err) {
+    // Deliberately fails OPEN, unlike the Discord broadcast claim which now fails closed.
+    // The tradeoff differs: blocking a legitimate password reset locks a paying user out
+    // of their account, whereas an unclaimed Discord broadcast merely delays a signal.
+    // Note this limiter was inert in production regardless, because
+    // password_reset_rate_limits had no rule in firestore.rules and every transaction was
+    // denied; adding that rule is what actually activates it.
     console.warn("[PasswordReset] Rate limit check failed, allowing request:", err?.message || err);
-    return true; // fail open on infra error, same pattern as the Discord broadcast claim
+    return true;
   }
 }
 __name(checkPasswordResetRateLimit, "checkPasswordResetRateLimit");
@@ -14777,6 +14839,12 @@ let db = null;
 let firebaseAppInstance = null;
 let backendAuthInstance = null;
 let firebaseReadyPromise = null;
+// Tracks whether the backend has actually completed its Firebase Auth sign-in as
+// backend_system@vixy.local. `db` is assigned BEFORE that sign-in is awaited, so without
+// this flag any write issued during the boot window goes out with request.auth == null and
+// is rejected by every isBackendSystem() rule in firestore.rules — the production
+// PERMISSION_DENIED errors. Writes are gated on this below and queued until it flips.
+let backendAuthReady = false;
 let lastFirestoreWriteTimeMs = 0;
 let lastSuccessfulFirestoreWrite = null;
 let lastFirestoreWriteSuccess = false;
@@ -14828,47 +14896,72 @@ async function initializeBackendFirebase() {
         firebaseAppInstance,
         firebaseConfig.firestoreDatabaseId,
       );
-      backendAuthInstance = getAuth(firebaseAppInstance);
-      try {
-        await signInWithEmailAndPassword(
-          backendAuthInstance,
-          "backend_system@vixy.local",
-          "vixy_backend_super_secret_password_2026",
-        );
+
+      // --- TRUSTED BACKEND IDENTITY ------------------------------------------------
+      // IMPORTANT (transitional semantics): backendAuthReady means "guarded CLIENT-SDK
+      // writes can succeed". Until the Admin datapath migration lands
+      // (docs/admin-datapath-migration.md), every Firestore data operation in this file
+      // still runs through the client SDK, whose auth context is the signed-in
+      // backend user — NOT the Admin service account. An earlier revision set
+      // backendAuthReady = true whenever adminDb existed, which would have let a
+      // deployment configured ONLY with FIREBASE_SERVICE_ACCOUNT_JSON attempt
+      // unauthenticated client writes (PERMISSION_DENIED on every guarded collection,
+      // and a silenced fail-closed Discord claim). The client sign-in below therefore
+      // always runs when BACKEND_SYSTEM_EMAIL/PASSWORD are configured; adminDb is
+      // reported as standing by for the migration but does not, by itself, mark the
+      // client datapath ready.
+      if (adminDb) {
         console.log(
-          "[Firestore] Backend authenticated securely as system user.",
+          "[Firestore] Admin SDK service-account identity initialized (standing by; " +
+          "client-SDK datapath still requires BACKEND_SYSTEM_EMAIL/PASSWORD until the " +
+          "datapath migration lands).",
         );
-      } catch (authErr) {
-        console.warn(
-          "[Firestore] Backend sign-in failed, attempting creation:",
-          authErr?.message,
-        );
-        try {
-          await createUserWithEmailAndPassword(
-            backendAuthInstance,
-            "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
+      }
+      {
+        // Legacy client-SDK backend user — currently the identity that authorizes the
+        // actual datapath.
+        //
+        // SECURITY: this credential was previously hardcoded in this file and is
+        // therefore present in git history and must be treated as COMPROMISED and
+        // rotated. It is now read from the environment with NO default, so the
+        // repository no longer carries a working credential. If the variables are
+        // absent, backendAuthReady stays false and canAttemptFirestoreWrite() defers
+        // writes into the pending queues instead of emitting unauthenticated writes
+        // that fail with PERMISSION_DENIED.
+        const backendEmail = process.env.BACKEND_SYSTEM_EMAIL || "";
+        const backendPassword = process.env.BACKEND_SYSTEM_PASSWORD || "";
+
+        if (!backendEmail || !backendPassword) {
+          console.error(
+            "[Firestore] No client-datapath backend credential configured. Set " +
+            "BACKEND_SYSTEM_EMAIL/BACKEND_SYSTEM_PASSWORD (required until the Admin " +
+            "datapath migration). Firestore writes are deferred until then.",
           );
-          console.log(
-            "[Firestore] Backend system user created and authenticated.",
-          );
-        } catch (createErr) {
-          console.warn(
-            "[Firestore] Backend system user retry sign-in:",
-            createErr?.message,
-          );
-          await signInWithEmailAndPassword(
-            backendAuthInstance,
-            "backend_system@vixy.local",
-            "vixy_backend_super_secret_password_2026",
-          ).catch((permErr) => {
-            console.error(
-              "[Firestore] Backend system auth permanently failed:",
-              permErr?.message,
+        } else {
+          backendAuthInstance = getAuth(firebaseAppInstance);
+          try {
+            await signInWithEmailAndPassword(
+              backendAuthInstance,
+              backendEmail,
+              backendPassword,
             );
-          });
+            backendAuthReady = true;
+            console.log(
+              "[Firestore] Backend authenticated via legacy client-SDK system user. " +
+              "Migrate to FIREBASE_SERVICE_ACCOUNT_JSON.",
+            );
+          } catch (authErr) {
+            // Deliberately no createUserWithEmailAndPassword fallback. The previous code
+            // would provision the backend account on demand, which meant a wrong or
+            // rotated credential silently minted a NEW account rather than failing.
+            console.error(
+              "[Firestore] Backend system auth failed:",
+              authErr?.message,
+            );
+          }
         }
       }
+
       persistenceState = "HEALTHY_FIRESTORE";
       lastFirestoreWriteSuccess = false;
       console.log(
@@ -14932,6 +15025,16 @@ function isCircuitOpen() {
 __name(isCircuitOpen, "isCircuitOpen");
 function canAttemptFirestoreWrite(writeTarget = "unknown") {
   if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
+  // Auth-readiness gate. Without this, writes issued between `db` being assigned and the
+  // backend_system sign-in resolving are unauthenticated and fail with PERMISSION_DENIED.
+  // Returning false here routes them into the existing pending queues instead, so they are
+  // retried once authentication is established rather than lost.
+  if (!backendAuthReady) {
+    console.log(
+      `[FIRESTORE_AUTH_PENDING] Deferred write=${writeTarget} until backend system auth completes.`,
+    );
+    return false;
+  }
   if (isCircuitOpen()) {
     if (firestoreQuotaFailureCount === 0) {
       console.log(
