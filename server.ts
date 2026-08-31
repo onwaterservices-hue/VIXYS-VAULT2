@@ -1135,11 +1135,20 @@ webhookSecretPresent: ${Boolean(webhookSecret)}`);
 }
 __name(logStripeDiagnosticMode, "logStripeDiagnosticMode");
 app.get("/api/health", (req, res) => {
+  const admin = getAdminStatus();
   res.json({
     status: "ok",
     timestamp: Date.now(),
     geminiConnected: !!ai,
     stripeConnected: !!process.env.STRIPE_SECRET_KEY,
+    firebaseAdmin: {
+      available: admin.available,
+      credentialSource: admin.credentialSource,
+      error: admin.error,
+      envPresent: !!process.env.FIREBASE_SERVICE_ACCOUNT_JSON,
+      envLen: (process.env.FIREBASE_SERVICE_ACCOUNT_JSON || "").length,
+    },
+    backendAuthReady: typeof backendAuthReady !== "undefined" ? backendAuthReady : null,
   });
 });
 let currentEngineCycleId = 287;
