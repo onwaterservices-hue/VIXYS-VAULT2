@@ -87,20 +87,123 @@ import { initializeApp } from "firebase/app";
 import { adminDb, getAdminStatus } from "./src/lib/firebaseAdmin";
 import {
   getFirestore,
-  collection,
-  doc,
-  getDocs,
-  setDoc,
-  getDoc,
-  deleteDoc,
-  writeBatch,
+  collection as _clientCollection,
+  doc as _clientDoc,
+  getDocs as _clientGetDocs,
+  setDoc as _clientSetDoc,
+  getDoc as _clientGetDoc,
+  deleteDoc as _clientDeleteDoc,
+  writeBatch as _clientWriteBatch,
   disableNetwork,
   enableNetwork,
-  query,
-  limit,
-  where,
-  runTransaction,
+  query as _clientQuery,
+  limit as _clientLimit,
+  where as _clientWhere,
+  runTransaction as _clientRunTransaction,
 } from "firebase/firestore";
+
+/**
+ * ADMIN-AWARE FIRESTORE DATAPATH SHIM
+ * ===================================
+ * The production backend authenticated to Firestore via the Firebase CLIENT SDK
+ * (signInWithEmailAndPassword). In the Vercel serverless runtime that sign-in fails
+ * with auth/network-request-failed, so once security rules are enforced every
+ * backend write is rejected with PERMISSION_DENIED. The correct trust model for a
+ * server is the Admin SDK authenticating as a service account, which bypasses rules.
+ *
+ * Rather than edit ~150 call sites, the Firestore functional API used across this file
+ * (doc, collection, getDoc, getDocs, setDoc, deleteDoc, query, where, limit,
+ * runTransaction, writeBatch) is redefined below. When a service-account credential is
+ * present (adminDb != null) these route to the Admin SDK; otherwise they fall through
+ * to the original client behaviour, so nothing changes until FIREBASE_SERVICE_ACCOUNT_JSON
+ * is provisioned. All document/collection paths in this file are two-segment.
+ *
+ * Snapshot shapes are normalized to the client SDK's API (exists() is a method here,
+ * a property on Admin) so existing call sites read identically.
+ */
+const _adminActive = !!adminDb;
+
+function _wrapDocSnap(s: any) {
+  return { id: s.id, exists: () => s.exists, data: () => s.data(), ref: s.ref };
+}
+function _wrapQuerySnap(s: any) {
+  const docs = s.docs.map(_wrapDocSnap);
+  return {
+    size: s.size,
+    empty: s.empty,
+    docs,
+    forEach: (cb: (d: any) => void) => docs.forEach(cb),
+  };
+}
+
+function collection(dbRef: any, name: string): any {
+  return _adminActive ? adminDb.collection(name) : _clientCollection(dbRef, name);
+}
+function doc(dbRef: any, ...segments: string[]): any {
+  if (!_adminActive) return (_clientDoc as any)(dbRef, ...segments);
+  let ref: any = adminDb.collection(segments[0]).doc(segments[1]);
+  for (let i = 2; i < segments.length; i += 2) {
+    ref = ref.collection(segments[i]).doc(segments[i + 1]);
+  }
+  return ref;
+}
+function where(field: string, op: any, value: any): any {
+  return _adminActive ? { __vixyWhere: [field, op, value] } : _clientWhere(field, op, value);
+}
+function limit(n: number): any {
+  return _adminActive ? { __vixyLimit: n } : _clientLimit(n);
+}
+function query(collOrRef: any, ...constraints: any[]): any {
+  if (!_adminActive) return (_clientQuery as any)(collOrRef, ...constraints);
+  let q: any = collOrRef;
+  for (const c of constraints) {
+    if (c && c.__vixyWhere) q = q.where(c.__vixyWhere[0], c.__vixyWhere[1], c.__vixyWhere[2]);
+    else if (c && typeof c.__vixyLimit === "number") q = q.limit(c.__vixyLimit);
+  }
+  return q;
+}
+async function getDocs(qOrColl: any): Promise<any> {
+  if (!_adminActive) return (_clientGetDocs as any)(qOrColl);
+  const snap = await qOrColl.get();
+  return _wrapQuerySnap(snap);
+}
+async function getDoc(ref: any): Promise<any> {
+  if (!_adminActive) return (_clientGetDoc as any)(ref);
+  const snap = await ref.get();
+  return _wrapDocSnap(snap);
+}
+async function setDoc(ref: any, data: any, options?: any): Promise<void> {
+  if (!_adminActive) return (_clientSetDoc as any)(ref, data, options);
+  await (options && options.merge ? ref.set(data, { merge: true }) : ref.set(data));
+}
+async function deleteDoc(ref: any): Promise<void> {
+  if (!_adminActive) return (_clientDeleteDoc as any)(ref);
+  await ref.delete();
+}
+function writeBatch(dbRef: any): any {
+  if (!_adminActive) return (_clientWriteBatch as any)(dbRef);
+  const b = adminDb.batch();
+  return {
+    set: (ref: any, data: any, options?: any) =>
+      options && options.merge ? b.set(ref, data, { merge: true }) : b.set(ref, data),
+    update: (ref: any, data: any) => b.update(ref, data),
+    delete: (ref: any) => b.delete(ref),
+    commit: () => b.commit(),
+  };
+}
+async function runTransaction(dbRef: any, updateFn: (tx: any) => Promise<any>): Promise<any> {
+  if (!_adminActive) return (_clientRunTransaction as any)(dbRef, updateFn);
+  return adminDb.runTransaction(async (t: any) => {
+    const wrappedTx = {
+      get: async (ref: any) => _wrapDocSnap(await t.get(ref)),
+      set: (ref: any, data: any, options?: any) =>
+        options && options.merge ? t.set(ref, data, { merge: true }) : t.set(ref, data),
+      update: (ref: any, data: any) => t.update(ref, data),
+      delete: (ref: any) => t.delete(ref),
+    };
+    return updateFn(wrappedTx);
+  });
+}
 import {
   initializeDiscordBot,
   getDiscordBotStatus,
@@ -14911,13 +15014,16 @@ async function initializeBackendFirebase() {
       // reported as standing by for the migration but does not, by itself, mark the
       // client datapath ready.
       if (adminDb) {
+        // Admin datapath is active: the Firestore functional API in this file routes
+        // through the Admin SDK service account (see the shim near the imports), which
+        // bypasses security rules. No client-SDK sign-in is needed, so mark the write
+        // gate ready and skip the (serverless-flaky) client auth entirely.
+        backendAuthReady = true;
         console.log(
-          "[Firestore] Admin SDK service-account identity initialized (standing by; " +
-          "client-SDK datapath still requires BACKEND_SYSTEM_EMAIL/PASSWORD until the " +
-          "datapath migration lands).",
+          "[Firestore] Trusted server datapath active via Firebase Admin SDK service account.",
         );
       }
-      {
+      if (!adminDb) {
         // Legacy client-SDK backend user — currently the identity that authorizes the
         // actual datapath.
         //
