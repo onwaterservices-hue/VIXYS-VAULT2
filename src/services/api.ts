@@ -622,45 +622,77 @@ export async function getStripeHealthApi() {
   }>('/api/stripe/health', { cache: 'no-store' });
 }
 
-// Secure replacement: identity comes from the authenticated session
-// cookie only. Never pass email/userId from the client.
-export async function getDiscordAuthUrlSecure() {
-  const res = await fetch('/api/discord/connect', { credentials: 'include' });
+// The ONLY way to start a Discord link. Identity comes from the authenticated
+// session cookie; email/userId are never accepted from the client.
+//
+// This replaces getDiscordAuthUrlApi(), which called `/api/auth/discord/url` --
+// a route that does not exist on the server (verified in production: 404
+// {"error":"not_found"}). safeFetchJson swallows the 404 and returns null, so
+// every caller fell into `throw new Error('Failed to load Discord OAuth
+// endpoint.')`. That was the user-facing failure: the OAuth flow could never
+// start from the onboarding modal, the status widget, or alert settings.
+//
+// The removed function also took the VIXY identity as a client-supplied
+// `?email=` / `x-user-email`, which is the account-confusion vector this flow
+// must not have: anyone could have begun a link naming another account's email.
+// The session cookie is the only trustworthy binding, so the parameterised
+// variant is deliberately gone rather than merely repointed.
+//
+// Throws on any non-2xx so callers surface a real reason instead of a generic
+// "failed to load" -- 401 means "sign in first", 503 means the server has no
+// Discord OAuth credentials configured.
+export async function getDiscordAuthUrlSecure(): Promise<{ url: string }> {
+  const res = await fetch('/api/discord/connect', {
+    credentials: 'include',
+    cache: 'no-store',
+  });
   if (!res.ok) {
-    throw new Error('Failed to start Discord connection (status ' + res.status + ')');
+    let code = '';
+    try {
+      code = (await res.json())?.error || '';
+    } catch {
+      /* non-JSON error body */
+    }
+    if (res.status === 401) {
+      throw new Error('Sign in to VIXY Vault before connecting Discord.');
+    }
+    if (code === 'DISCORD_OAUTH_NOT_CONFIGURED') {
+      throw new Error('Discord OAuth is not configured on the server.');
+    }
+    if (res.status === 503) {
+      throw new Error('Discord linking is temporarily unavailable. Please retry shortly.');
+    }
+    throw new Error(`Could not start Discord connection (status ${res.status}${code ? `: ${code}` : ''}).`);
   }
   return res.json();
 }
 
-export async function getDiscordAuthUrlApi(userEmail?: string, userId?: string) {
-  const params = new URLSearchParams();
-  if (userEmail) params.append('email', userEmail.toLowerCase());
-  if (userId) params.append('userId', userId);
-  const query = params.toString() ? `?${params.toString()}` : '';
-
-  const headers: Record<string, string> = {};
-  if (userEmail) headers['x-user-email'] = userEmail.toLowerCase();
-  if (userId) headers['x-user-id'] = userId;
-
-  const data = await safeFetchJson<{ url: string; redirectUri: string; clientId: string; hasClientSecret: boolean }>(`/api/auth/discord/url${query}`, {
-    headers,
-  });
-  return data;
-}
-
-export async function getDiscordUserProfileApi(userEmail?: string, userId?: string) {
-  const params = new URLSearchParams();
-  if (userEmail) params.append('email', userEmail.toLowerCase());
-  if (userId) params.append('userId', userId);
-  const query = params.toString() ? `?${params.toString()}` : '';
-
-  const headers: Record<string, string> = {};
-  if (userEmail) headers['x-user-email'] = userEmail.toLowerCase();
-  if (userId) headers['x-user-id'] = userId;
-
-  const data = await safeFetchJson<{ linked: boolean; profile: any }>(`/api/discord/user-profile${query}`, {
-    headers,
-  });
+// Canonical Discord link state for the signed-in account.
+//
+// The server resolves identity from the session cookie, so no email/userId is
+// sent: passing one would let a caller request another account's Discord
+// identity. The parameters are kept in the signature (ignored) purely so the
+// existing callsites in App.tsx and CommunityAccessNode continue to compile;
+// they no longer influence which account is read.
+//
+// Returns null only when the request itself failed. `linked: false` is a real
+// answer meaning "this account has no Discord link", and callers must treat a
+// null (transport failure) differently from a confirmed unlinked state rather
+// than rendering both as "not connected".
+export async function getDiscordUserProfileApi(_userEmail?: string, _userId?: string) {
+  const data = await safeFetchJson<{
+    linked: boolean;
+    profile: {
+      discordUserId: string | null;
+      discordUsername: string | null;
+      guildMember: boolean;
+      entitlementTier: string | null;
+      entitlementResolved: boolean;
+      guildRoles: string[];
+      verificationStatus: 'VERIFIED' | 'PENDING_GUILD';
+      lastSync: string;
+    } | null;
+  }>('/api/discord/user-profile', { credentials: 'include' });
   return data;
 }
 
@@ -681,18 +713,40 @@ export async function verifyDiscordMembershipApi(discordUserId?: string, userEma
   }
 }
 
-export async function disconnectDiscordApi(userEmail?: string, userId?: string) {
+// Unlink the signed-in account's Discord identity.
+//
+// This posted to `/api/discord/disconnect`, which does not exist -- the
+// implemented route is POST /api/discord/unlink. The same path mismatch that
+// broke the OAuth start also broke unlink: the request 404'd, the old catch
+// reported a generic failure, and the link was never actually removed. Unlink
+// and therefore relink could not work.
+//
+// Identity comes from the session cookie; a client-supplied email must not be
+// able to sever another account's Discord link. The parameters are retained
+// (ignored) so the existing callsite keeps compiling.
+//
+// A non-2xx now surfaces truthfully instead of being reported as a soft
+// failure, so the UI cannot show an unlink that did not happen.
+export async function disconnectDiscordApi(_userEmail?: string, _userId?: string) {
   try {
-    const res = await fetch('/api/discord/disconnect', {
+    const res = await fetch('/api/discord/unlink', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
-        ...(userId ? { 'x-user-id': userId } : {}),
-      },
-      body: JSON.stringify({ email: userEmail, userId }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
     });
-    return await safeParseJson(res);
+    const parsed = await safeParseJson(res);
+    if (!res.ok) {
+      return {
+        success: false,
+        message:
+          res.status === 401
+            ? 'Sign in to VIXY Vault before unlinking Discord.'
+            : `Failed to unlink Discord (status ${res.status}).`,
+        ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      };
+    }
+    return parsed;
   } catch {
     return { success: false, message: 'Failed to disconnect' };
   }

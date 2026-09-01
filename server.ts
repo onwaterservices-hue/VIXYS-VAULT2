@@ -84,10 +84,32 @@ async function syncUserEntitlementToDiscord(email) {
       console.log(`[Discord Sync] ${clean} has no linked Discord account; nothing to sync.`);
       return { synced: false, reason: "NOT_LINKED" };
     }
-    const tier = resolveDiscordEntitlementTier(clean, discordUserId);
+    const resolved = await resolveDiscordEntitlementTierAuthoritative(
+      clean,
+      discordUserId,
+    );
+    const tier = resolved.tier;
+    // Refuse to strip a paid role on an answer this instance cannot stand
+    // behind. A cold lambda's empty cache reads as "NONE", which would demote a
+    // paying member to the free Verified role; skipping leaves the existing
+    // role untouched until a resolution we can trust. Upgrades are unaffected
+    // because a paid tier is always authoritative.
+    if (tier === "NONE" && !resolved.authoritative) {
+      console.warn(
+        `[Discord Sync] ${clean} -> discord=${discordUserId} SKIPPED demotion: ` +
+        `entitlement unresolved (${resolved.reason}). Existing role left intact.`,
+      );
+      return {
+        synced: false,
+        reason: "ENTITLEMENT_UNRESOLVED",
+        detail: resolved.reason,
+        discordUserId,
+      };
+    }
     const result = await assignDiscordRoleToUser(discordUserId, tier);
     console.log(
       `[Discord Sync] ${clean} -> discord=${discordUserId} tier=${tier} ` +
+      `(${resolved.reason}) ` +
       `result=${result && result.success ? "OK" : "FAILED"} (${result && result.code})`,
     );
     return {
@@ -5396,6 +5418,79 @@ function resolveDiscordEntitlementTier(email, discordUserId) {
 }
 __name(resolveDiscordEntitlementTier, "resolveDiscordEntitlementTier");
 
+/**
+ * Cold-start-safe entitlement resolution for Discord role sync.
+ *
+ * resolveDiscordEntitlementTier() above is synchronous and reads only
+ * in-memory state (userSubscriptions, userDayPasses, serverUsers). On Vercel
+ * those maps are EMPTY on every cold instance, so it returns "NONE" for a
+ * paying customer -- and "NONE" makes assignDiscordRoleToUser REMOVE the paid
+ * role and drop them to the free Verified role. A paying member could therefore
+ * be silently demoted in Discord by nothing more than which lambda happened to
+ * serve a Stripe webhook or an OAuth callback.
+ *
+ * This wrapper distinguishes the two very different meanings of "NONE":
+ *   - genuinely unentitled (authoritative -> safe to demote)
+ *   - unknown because this instance has not loaded the user yet, or Firestore
+ *     is degraded (NOT authoritative -> must not demote)
+ *
+ * It hydrates from Firestore before believing a negative, and reports whether
+ * the answer can be trusted. Callers must not remove a role on a
+ * non-authoritative result. Note this can only ever WITHHOLD a downgrade: a
+ * paid tier still requires a positive entitlement, so it cannot over-grant.
+ */
+async function resolveDiscordEntitlementTierAuthoritative(email, discordUserId) {
+  const clean = (email || "").toLowerCase();
+  if (!clean) return { tier: "NONE", authoritative: false, reason: "NO_EMAIL" };
+
+  // A positive entitlement already in memory is trustworthy as-is: nothing
+  // fabricates a paid tier, so it can only have come from a real record.
+  const memTier = resolveDiscordEntitlementTier(clean, discordUserId);
+  if (memTier !== "NONE") {
+    return { tier: memTier, authoritative: true, reason: "IN_MEMORY" };
+  }
+
+  // "NONE" from a cache that has never seen this user proves nothing.
+  const knownLocally =
+    userSubscriptions.has(clean) ||
+    userDayPasses.has(clean) ||
+    serverUsers.some((u) => (u.email || "").toLowerCase() === clean);
+  if (knownLocally) {
+    return { tier: "NONE", authoritative: true, reason: "KNOWN_UNENTITLED" };
+  }
+
+  let hydrated = null;
+  try {
+    hydrated = await hydrateUserFromFirestore(clean, null);
+  } catch {
+    hydrated = null;
+  }
+
+  // Firestore explicitly reported degraded/unavailable -- cannot conclude.
+  if (hydrated && hydrated._degraded) {
+    return { tier: "NONE", authoritative: false, reason: "FIRESTORE_DEGRADED" };
+  }
+
+  // A null result is ambiguous: hydrateUserFromFirestore returns null both for
+  // "no such user" and for a swallowed read error. Refusing to demote on
+  // ambiguity is the safe side of that ambiguity -- a stale paid role costs the
+  // business far less than stripping a paying customer's access, and the next
+  // successful sync corrects it.
+  if (!hydrated) {
+    return { tier: "NONE", authoritative: false, reason: "UNRESOLVED_USER" };
+  }
+
+  return {
+    tier: resolveDiscordEntitlementTier(clean, discordUserId),
+    authoritative: true,
+    reason: "HYDRATED",
+  };
+}
+__name(
+  resolveDiscordEntitlementTierAuthoritative,
+  "resolveDiscordEntitlementTierAuthoritative",
+);
+
 // Discord OAuth persistence runs on THIS file's Admin-aware Firestore shim
 // rather than on a client-SDK import inside the OAuth module. src/bot/discordOAuth.ts
 // used to import doc/getDoc/setDoc/runTransaction directly from "firebase/firestore",
@@ -5424,7 +5519,10 @@ app.get(
   "/api/auth/discord/callback",
   createDiscordCallbackHandler(
     () => db,
-    resolveDiscordEntitlementTier,
+    // Cold-start-safe: returns { tier, authoritative, reason } so the callback
+    // can refuse to demote a paying member when this instance's caches are
+    // empty. The synchronous resolver would answer "NONE" on any cold lambda.
+    resolveDiscordEntitlementTierAuthoritative,
     assignDiscordRoleToUser,
     syncLegacyUserRecord,
     discordFirestore,
@@ -5438,6 +5536,136 @@ app.post(
   "/api/discord/unlink",
   createDiscordUnlinkHandler(() => db, authenticateSession, discordFirestore),
 );
+
+// GET /api/discord/health -- configuration presence, never values.
+//
+// The Discord integration depends on several environment variables, and there
+// was no way to tell from outside whether production actually had them: the
+// OAuth credential check in /api/discord/connect sits behind the auth check, so
+// a signed-out probe always returns 401 and the real blocker (a missing
+// DISCORD_CLIENT_ID/SECRET would return 503 DISCORD_OAUTH_NOT_CONFIGURED) stays
+// invisible. Diagnosing this needed a signed-in session, which is exactly the
+// wrong requirement for a deployment smoke check.
+//
+// Reports booleans only -- presence, length and derived readiness -- following
+// the same pattern as /api/stripe/health's stripe_secret_key_present. No token,
+// secret, ID or role ID value is ever returned, so this cannot leak credentials.
+app.get("/api/discord/health", (req, res) => {
+  const present = (v) => !!(v && String(v).trim());
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  return res.json({
+    status: "ok",
+    oauth: {
+      clientIdPresent: present(clientId),
+      clientSecretPresent: present(clientSecret),
+      // The single condition /api/discord/connect requires beyond a session.
+      oauthConfigured: present(clientId) && present(clientSecret),
+    },
+    bot: {
+      botTokenPresent: present(botToken),
+      botTokenLength: present(botToken) ? String(botToken).trim().length : 0,
+      guildIdPresent: present(guildId),
+    },
+    roles: {
+      elitePresent: present(
+        process.env.DISCORD_ELITE_ROLE_ID ||
+          process.env.DISCORD_ROLE_ELITE ||
+          process.env.DISCORD_VIP_ROLE_ID,
+      ),
+      dayPassPresent: present(
+        process.env.DISCORD_24H_ROLE_ID ||
+          process.env.DISCORD_ROLE_DAY_PASS ||
+          process.env.DISCORD_DAY_PASS_ROLE_ID,
+      ),
+      verifiedPresent: present(
+        process.env.DISCORD_VERIFIED_ROLE_ID ||
+          process.env.DISCORD_ROLE_VERIFIED ||
+          process.env.DISCORD_FREE_ROLE_ID,
+      ),
+    },
+    persistence: {
+      // Whether a Discord link can actually be written on this instance.
+      firestoreReady: discordFirestore.ready(db),
+      adminDatapathActive: !!_adminActive,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /api/discord/user-profile -- the canonical link state the UI polls.
+//
+// This route did not exist. App.tsx and CommunityAccessNode call it on load and
+// on every refresh to decide whether the account is linked, and production logs
+// show it 404ing continuously -- so the terminal could never learn that a user
+// WAS linked and permanently rendered "NOT LINKED / NOT CONNECTED", even after a
+// successful OAuth round trip. That is why linking never appeared to persist
+// across refreshes.
+//
+// Identity comes from the session cookie, never from a client-supplied email:
+// this returns another account's Discord identity if it trusts a query param.
+// The link itself is read from the durable `discord_links` Firestore document
+// (the same source of truth as /api/discord/status), never from process memory,
+// so it survives cold starts and instance churn.
+app.get("/api/discord/user-profile", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.user || !auth.user.email) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED", linked: false, profile: null });
+  }
+  const vixyEmail = auth.user.email.toLowerCase();
+  if (!discordFirestore.ready(db)) {
+    return res.status(503).json({ error: "SERVICE_UNAVAILABLE", linked: false, profile: null });
+  }
+  try {
+    const snap = await getDoc(doc(db, "discord_links", vixyEmail));
+    if (!snap.exists() || snap.data().status !== "CONNECTED") {
+      return res.json({ linked: false, profile: null });
+    }
+    const d = snap.data();
+    const discordUserId = d.discordUserId || null;
+
+    // Guild membership is re-checked live against Discord rather than trusting a
+    // stored flag, so leaving the server is reflected immediately.
+    let guildMember = false;
+    if (discordUserId) {
+      guildMember = await checkLiveGuildMembership(discordUserId).catch(() => false);
+    }
+
+    // Report a tier only when it can be resolved authoritatively. On a cold
+    // instance an unresolved entitlement would otherwise read as "no plan" and
+    // the UI would tell a paying member they are unentitled.
+    const resolved = await resolveDiscordEntitlementTierAuthoritative(
+      vixyEmail,
+      discordUserId,
+    );
+
+    return res.json({
+      linked: true,
+      profile: {
+        discordUserId,
+        discordUsername: d.discordUsername || null,
+        guildMember,
+        entitlementTier: resolved.authoritative ? resolved.tier : null,
+        entitlementResolved: resolved.authoritative,
+        entitlementReason: resolved.reason,
+        guildRoles: [],
+        // Consumed by App.tsx / CommunityAccessNode to derive syncStatus.
+        // VERIFIED requires actual guild membership -- a link alone is not
+        // verification, so an unlinked-from-guild user reads as NEEDS_GUILD
+        // rather than being shown as healthy.
+        verificationStatus: guildMember ? "VERIFIED" : "PENDING_GUILD",
+        lastSync: new Date().toISOString(),
+        connectedAt: d.connectedAt || null,
+        updatedAt: d.updatedAt || null,
+      },
+    });
+  } catch (err) {
+    console.error("[Discord] user-profile lookup failed:", err?.message || err);
+    return res.status(500).json({ error: "PROFILE_LOOKUP_FAILED", linked: false, profile: null });
+  }
+});
 
 // ---- Password Reset Flow ----
 // Rate-limited (max 3 requests per email per hour), single-use tokens

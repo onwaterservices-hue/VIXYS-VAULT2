@@ -309,8 +309,27 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     }
 
     try {
-      const tier = await resolveEntitlementTier(vixyEmail, discordUserId);
-      await assignDiscordRoleToUser(discordUserId, tier);
+      // resolveEntitlementTier may return a bare tier string (legacy) or
+      // { tier, authoritative, reason } from the cold-start-safe resolver.
+      // Both shapes are accepted so this module stays usable either way.
+      const resolved = await resolveEntitlementTier(vixyEmail, discordUserId);
+      const tier = typeof resolved === "string" ? resolved : resolved && resolved.tier;
+      const authoritative =
+        typeof resolved === "string" ? true : !!(resolved && resolved.authoritative);
+
+      // Never strip a paid role because THIS instance could not resolve the
+      // entitlement. A cold lambda's empty cache reads as "NONE", which would
+      // demote a paying member mid-link. Linking still succeeds; the role is
+      // left as-is until a sync that can be trusted.
+      if (tier === "NONE" && !authoritative) {
+        console.warn(
+          "[Discord OAuth] Role sync skipped: entitlement unresolved" +
+            ((resolved && resolved.reason) ? ` (${resolved.reason})` : "") +
+            ". Existing role preserved.",
+        );
+      } else if (tier) {
+        await assignDiscordRoleToUser(discordUserId, tier);
+      }
     } catch (err) {
       console.error("[Discord OAuth] Role sync error (connection still succeeded):", err && err.message);
     }

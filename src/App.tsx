@@ -754,7 +754,27 @@ export default function App() {
   const [alertSettings, setAlertSettings] = useState<AlertSettings>(() => {
     try {
       const saved = localStorage.getItem('vixy_alert_settings');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // localStorage is a cache for USER PREFERENCES only -- never a source of
+        // truth about the Discord relationship. Gating reads
+        // `discordLinked && guildMember`, so restoring those from local state
+        // would let a stale entry (or a hand-edited one -- localStorage is
+        // user-writable) unlock gated views with no backend confirmation, and
+        // would keep claiming "Connected" after an unlink or on another account.
+        // These fields are cleared on every boot and repopulated only by the
+        // authenticated /api/discord/user-profile response in syncProfile().
+        return {
+          ...parsed,
+          discordLinked: false,
+          guildMember: false,
+          serverJoined: false,
+          discordUserId: undefined,
+          discordUsername: undefined,
+          roleAssigned: 'None',
+          syncStatus: 'PENDING',
+        };
+      }
     } catch (e) {
       console.error(e);
     }
