@@ -174,6 +174,33 @@ check('guild membership comes from the backend profile, not a local guess',
   /guildMember:\s*res\.profile\.guildMember/.test(modal));
 
 // ---------------------------------------------------------------------------
+// 7b. localStorage must never assert the Discord relationship.
+//     Gating reads `discordLinked && guildMember`, and localStorage is
+//     user-writable, so restoring those fields would let a stale or hand-edited
+//     entry unlock gated views with no backend confirmation.
+// ---------------------------------------------------------------------------
+console.log('\n[7b] localStorage cannot grant Discord-gated access');
+const app = R('src/App.tsx');
+const restoreBlock = app.slice(
+  app.indexOf("localStorage.getItem('vixy_alert_settings')"),
+  app.indexOf("localStorage.getItem('vixy_alert_settings')") + 1400,
+);
+check('the restore path exists and is guarded', restoreBlock.length > 0);
+for (const f of ['discordLinked', 'guildMember', 'serverJoined']) {
+  check(`restored settings force ${f} to false`,
+    new RegExp(`${f}:\\s*false`).test(restoreBlock), restoreBlock.slice(0, 80));
+}
+check('restored settings drop the cached Discord identity',
+  /discordUserId:\s*undefined/.test(restoreBlock) && /discordUsername:\s*undefined/.test(restoreBlock));
+check('a bare spread of the cached object is not returned',
+  !/if \(saved\) return JSON\.parse\(saved\);/.test(app));
+// Gating itself must still require BOTH signals (historical bug #3).
+for (const f of ['src/components/OneHourDeskView.tsx','src/components/ExplainabilityVaultView.tsx','src/components/LiveDashboard.tsx']) {
+  check(`${f.split('/').pop()} requires discordLinked AND guildMember`,
+    /discordLinked[\s\S]{0,60}&&[\s\S]{0,60}guildMember/.test(R(f)));
+}
+
+// ---------------------------------------------------------------------------
 // 8. Stripe webhook integrity must not have been disturbed.
 // ---------------------------------------------------------------------------
 console.log('\n[8] Stripe webhook signature path untouched');
