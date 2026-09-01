@@ -57,7 +57,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   dataSource = 'live',
   authState,
 }) => {
-  const { decision: canonical15m } = useCanonical15mDecision();
+  const { decision: canonical15m, dataHealthStatus } = useCanonical15mDecision();
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
@@ -254,10 +254,27 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="px-2 py-0.5 rounded bg-purple-900/60 border border-purple-500/30 text-[10px] text-cyan-300 font-bold">
                   BTC 15M
                 </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-500/40 text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  LIVE
-                </span>
+                {/* Feed health. This was previously hardcoded to a green pulsing
+                    "LIVE" pill, so the terminal kept advertising a live feed
+                    with the backend unreachable and the numbers beside it
+                    frozen. Same pill, now driven by the canonical hook. */}
+                {(() => {
+                  const live = dataHealthStatus === 'LIVE';
+                  const stale = dataHealthStatus === 'STALE';
+                  const label = live ? 'LIVE' : stale ? 'STALE' : 'OFFLINE';
+                  const tone = live
+                    ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400'
+                    : stale
+                      ? 'bg-amber-950/80 border-amber-500/40 text-amber-400'
+                      : 'bg-rose-950/80 border-rose-500/40 text-rose-400';
+                  const dot = live ? 'bg-emerald-400 animate-pulse' : stale ? 'bg-amber-400' : 'bg-rose-400';
+                  return (
+                    <span className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 ${tone}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                      {label}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 

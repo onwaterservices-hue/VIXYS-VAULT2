@@ -52,6 +52,20 @@ export type Canonical15mState =
   | 'PROTECTED'
   | 'SETTLED';
 
+// The engine's real 15M lifecycle, as advanced by runMarketEngineTick in
+// server.ts. This is a superset of Canonical15mState: several of these stages
+// (OBSERVING, CALIBRATING, ANALYZING, QUALIFYING, LOCKING) all map to the
+// single canonical state 'WATCH', which is why the stage must be transported
+// separately instead of inferred from the clock.
+export type EngineStage =
+  | 'OBSERVING'
+  | 'CALIBRATING'
+  | 'ANALYZING'
+  | 'QUALIFYING'
+  | 'LOCKING'
+  | 'LOCKED'
+  | 'NO_TRADE';
+
 export type Canonical15mDirection = 'UP' | 'DOWN' | 'NEUTRAL' | 'SKIP';
 export type Canonical15mSettlement = 'PENDING' | 'SETTLED';
 export type Canonical15mOutcome = 'WIN' | 'LOSS' | 'SKIPPED' | null;
@@ -199,9 +213,22 @@ export interface Canonical15mDecision {
   pnlDollar: number | null;
   
   // 7. Versioning & Monotonicity
-  stateVersion: number;       // Monotonically increasing version counter
+  // NOTE: stateVersion is a per-instance counter and is NOT safe to compare
+  // across serverless instances (it resets to 0 on a cold boot). Use
+  // serverTimeMs for ordering and engineTickTs for liveness.
+  stateVersion: number;       // Per-instance counter; not globally monotonic
   updatedAt: string;          // ISO timestamp
   serverSource: string;       // "VIXY_CANONICAL_ENGINE_v6"
+
+  // 7b. Authoritative lifecycle + freshness (emitted by /api/vixy/15m/current).
+  // engineStage is the engine's real pre-lock lifecycle stage, which the
+  // narrow Canonical15mState union cannot express. Clients must render this
+  // rather than deriving a stage from a countdown.
+  engineStage?: EngineStage;
+  qualificationStatus?: string | null;
+  qualificationReason?: string | null;
+  engineTickTs?: number | null;  // Last real engine tick (ms). Liveness signal.
+  serverTimeMs?: number;         // Server clock when this payload was built.
 
   // 8. Optional Extensions for Explainer & Telemetry
   learning?: {
