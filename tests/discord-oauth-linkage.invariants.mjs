@@ -215,7 +215,6 @@ console.log('\n[7c] Every user-facing Discord path the frontend calls exists');
 // fails the suite.
 const KNOWN_UNIMPLEMENTED = new Set([
   '/api/discord/diagnostics',
-  '/api/discord/health',
   '/api/discord/bot-status',
   '/api/discord/test-broadcast',
   '/api/discord/sync-vip',
@@ -242,6 +241,26 @@ check('unlink posts to the implemented /api/discord/unlink',
 check('unlink sends the session cookie, not a client email',
   /disconnectDiscordApi[\s\S]{0,900}credentials:\s*'include'/.test(api) &&
   !/disconnectDiscordApi[\s\S]{0,900}x-user-email/.test(api));
+
+// ---------------------------------------------------------------------------
+// 7d. The config health endpoint reports presence, never secret values.
+// ---------------------------------------------------------------------------
+console.log('\n[7d] Discord config health leaks no secrets');
+const healthBlock = server.slice(
+  server.indexOf('app.get("/api/discord/health"'),
+  server.indexOf('// GET /api/discord/user-profile'),
+);
+check('the health route exists', healthBlock.length > 0);
+check('it reports oauthConfigured', /oauthConfigured/.test(healthBlock));
+check('it reports bot token presence', /botTokenPresent/.test(healthBlock));
+check('it reports Firestore write readiness', /firestoreReady/.test(healthBlock));
+// No raw credential may appear in the response object.
+for (const secret of ['DISCORD_CLIENT_SECRET', 'DISCORD_BOT_TOKEN']) {
+  const returnsRaw = new RegExp(`:\\s*process\\.env\\.${secret}\\b`).test(healthBlock);
+  check(`${secret} is never returned as a value`, !returnsRaw);
+}
+check('only booleans/lengths are emitted for the token',
+  /botTokenLength[\s\S]{0,120}\.length/.test(healthBlock));
 
 // ---------------------------------------------------------------------------
 // 8. Stripe webhook integrity must not have been disturbed.

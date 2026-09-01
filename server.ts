@@ -5537,6 +5537,64 @@ app.post(
   createDiscordUnlinkHandler(() => db, authenticateSession, discordFirestore),
 );
 
+// GET /api/discord/health -- configuration presence, never values.
+//
+// The Discord integration depends on several environment variables, and there
+// was no way to tell from outside whether production actually had them: the
+// OAuth credential check in /api/discord/connect sits behind the auth check, so
+// a signed-out probe always returns 401 and the real blocker (a missing
+// DISCORD_CLIENT_ID/SECRET would return 503 DISCORD_OAUTH_NOT_CONFIGURED) stays
+// invisible. Diagnosing this needed a signed-in session, which is exactly the
+// wrong requirement for a deployment smoke check.
+//
+// Reports booleans only -- presence, length and derived readiness -- following
+// the same pattern as /api/stripe/health's stripe_secret_key_present. No token,
+// secret, ID or role ID value is ever returned, so this cannot leak credentials.
+app.get("/api/discord/health", (req, res) => {
+  const present = (v) => !!(v && String(v).trim());
+  const clientId = process.env.DISCORD_CLIENT_ID;
+  const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+  const botToken = process.env.DISCORD_BOT_TOKEN;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  return res.json({
+    status: "ok",
+    oauth: {
+      clientIdPresent: present(clientId),
+      clientSecretPresent: present(clientSecret),
+      // The single condition /api/discord/connect requires beyond a session.
+      oauthConfigured: present(clientId) && present(clientSecret),
+    },
+    bot: {
+      botTokenPresent: present(botToken),
+      botTokenLength: present(botToken) ? String(botToken).trim().length : 0,
+      guildIdPresent: present(guildId),
+    },
+    roles: {
+      elitePresent: present(
+        process.env.DISCORD_ELITE_ROLE_ID ||
+          process.env.DISCORD_ROLE_ELITE ||
+          process.env.DISCORD_VIP_ROLE_ID,
+      ),
+      dayPassPresent: present(
+        process.env.DISCORD_24H_ROLE_ID ||
+          process.env.DISCORD_ROLE_DAY_PASS ||
+          process.env.DISCORD_DAY_PASS_ROLE_ID,
+      ),
+      verifiedPresent: present(
+        process.env.DISCORD_VERIFIED_ROLE_ID ||
+          process.env.DISCORD_ROLE_VERIFIED ||
+          process.env.DISCORD_FREE_ROLE_ID,
+      ),
+    },
+    persistence: {
+      // Whether a Discord link can actually be written on this instance.
+      firestoreReady: discordFirestore.ready(db),
+      adminDatapathActive: !!_adminActive,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
 // GET /api/discord/user-profile -- the canonical link state the UI polls.
 //
 // This route did not exist. App.tsx and CommunityAccessNode call it on load and
