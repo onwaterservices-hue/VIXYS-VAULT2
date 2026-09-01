@@ -23,9 +23,85 @@ import { WebSocketServer, WebSocket } from "ws";
 import { GoogleGenAI } from "@google/genai";
 import Stripe from "stripe";
 import crypto from "crypto";
-async function syncUserEntitlementToDiscord() {
-  console.warn("[vixy] syncUserEntitlementToDiscord stub - Discord entitlement sync temporarily disabled");
-  return undefined;
+/**
+ * Resolve the Discord account linked to a VIXY email.
+ *
+ * `discord_links/{email}` is the authoritative record -- it is what the OAuth
+ * callback writes transactionally. The legacy `userDiscordProfiles` map is a
+ * cache hydrated from the separate `discord_profiles` collection, which the
+ * OAuth flow never writes, so anyone who linked through OAuth is absent from
+ * it. Consulting it FIRST (as the Stripe cancellation path used to) meant paid
+ * roles were never removed for those users.
+ *
+ * The old code also fell back to `userDiscordProfiles.get("global_active_user")`
+ * -- a single shared slot. Had it ever been populated, cancelling one customer
+ * would have stripped roles from whoever occupied that slot. That fallback is
+ * deliberately gone and must not come back.
+ */
+async function lookupLinkedDiscordUserId(email) {
+  const clean = (email || "").toLowerCase();
+  if (!clean) return null;
+  if (db) {
+    try {
+      const snap = await getDoc(doc(db, "discord_links", clean));
+      if (snap.exists()) {
+        const d = snap.data() || {};
+        if (d.status === "CONNECTED" && d.discordUserId) return d.discordUserId;
+      }
+    } catch (err) {
+      console.warn(
+        `[Discord] discord_links lookup failed for ${clean}:`,
+        err?.message || err,
+      );
+    }
+  }
+  // Legacy records that predate the OAuth flow, scoped to THIS email only.
+  const legacy = userDiscordProfiles.get(clean);
+  if (legacy && legacy.discordUserId) return legacy.discordUserId;
+  const user = serverUsers.find((u) => (u.email || "").toLowerCase() === clean);
+  return (user && user.discordId) || null;
+}
+__name(lookupLinkedDiscordUserId, "lookupLinkedDiscordUserId");
+
+/**
+ * Bring a user's Discord role in line with their current VIXY entitlement.
+ *
+ * Previously a stub that logged and returned undefined, which meant every
+ * customer.subscription.created / .updated event -- i.e. every upgrade,
+ * downgrade and plan change -- did nothing to Discord at all.
+ *
+ * assignDiscordRoleToUser is idempotent and already enforces one-entitlement-
+ * role-at-a-time (adding ELITE removes the day-pass role and vice versa; NONE
+ * removes both while preserving the base Verified role), so this is safe to
+ * call on every relevant event.
+ */
+async function syncUserEntitlementToDiscord(email) {
+  const clean = (email || "").toLowerCase();
+  if (!clean) return { synced: false, reason: "NO_EMAIL" };
+  try {
+    const discordUserId = await lookupLinkedDiscordUserId(clean);
+    if (!discordUserId) {
+      console.log(`[Discord Sync] ${clean} has no linked Discord account; nothing to sync.`);
+      return { synced: false, reason: "NOT_LINKED" };
+    }
+    const tier = resolveDiscordEntitlementTier(clean, discordUserId);
+    const result = await assignDiscordRoleToUser(discordUserId, tier);
+    console.log(
+      `[Discord Sync] ${clean} -> discord=${discordUserId} tier=${tier} ` +
+      `result=${result && result.success ? "OK" : "FAILED"} (${result && result.code})`,
+    );
+    return {
+      synced: !!(result && result.success),
+      tier,
+      discordUserId,
+      code: result && result.code,
+      message: result && result.message,
+    };
+  } catch (err) {
+    // Never let a Discord failure escape into the Stripe webhook path.
+    console.error(`[Discord Sync] Exception syncing ${clean}:`, err?.message || err);
+    return { synced: false, reason: "EXCEPTION", message: err?.message || String(err) };
+  }
 }
 
 function hashPassword(password) {
@@ -1332,15 +1408,31 @@ let latestCrossAssetContext = {
 // is re-entered for the same cycleId (retry, race, re-entrant call). Capped
 // at 200 entries with FIFO eviction so it cannot grow unbounded.
 const recentlyBroadcastCycleIds = new Set();
-function shouldBroadcastCycle(cycleId) {
-  if (!cycleId || recentlyBroadcastCycleIds.has(cycleId)) return false;
+// Split deliberately into a PURE check and a separate record step.
+//
+// These used to be one function that added the key to the Set as a side effect
+// of being asked "should I broadcast?". Because that question is asked BEFORE
+// claimBroadcastAtomically() runs, and that claim now fails closed on any
+// Firestore problem, a single transient Firestore fault permanently poisoned
+// this instance: the key was already recorded, so the cycle could never be
+// retried here, and the signal was silently lost for good.
+//
+// Recording now happens only once the durable Firestore claim is actually
+// held. Until then a failed attempt leaves no trace, so the next engine tick
+// can try again. Concurrent re-entry within one instance is still safe --
+// claimBroadcastAtomically is a transaction, so only one caller can ever win.
+function hasBroadcastCycle(cycleId) {
+  return !!cycleId && recentlyBroadcastCycleIds.has(cycleId);
+}
+__name(hasBroadcastCycle, "hasBroadcastCycle");
+function rememberBroadcastCycle(cycleId) {
+  if (!cycleId) return;
   recentlyBroadcastCycleIds.add(cycleId);
   if (recentlyBroadcastCycleIds.size > 200) {
     recentlyBroadcastCycleIds.delete(recentlyBroadcastCycleIds.values().next().value);
   }
-  return true;
 }
-__name(shouldBroadcastCycle, "shouldBroadcastCycle");
+__name(rememberBroadcastCycle, "rememberBroadcastCycle");
 
 // Cross-instance guard: the in-memory Set above only protects a single
 // Vercel instance. Since the actual signal delivery is a stateless webhook
@@ -3380,16 +3472,23 @@ async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, r
 
   for (const { tier, label } of tiers) {
     const claimKey = `${cycleId}#${label}`;
-    if (!shouldBroadcastCycle(claimKey)) {
+    if (hasBroadcastCycle(claimKey)) {
       continue;
     }
     console.log(`[Discord] Broadcast gate reached for cycle ${cycleId} tier=${label}`);
     try {
       const claimed = await claimBroadcastAtomically(claimKey);
       if (!claimed) {
-        console.log(`[Discord] Skipped duplicate broadcast for cycle ${cycleId} tier=${label} (claimed by another instance)`);
+        // No in-memory record is written here. The claim may have been refused
+        // because another instance legitimately owns it (correct: skip) or
+        // because Firestore was momentarily unavailable (recoverable: a later
+        // tick retries). Recording it now would make the second case permanent.
+        console.log(`[Discord] Skipped broadcast for cycle ${cycleId} tier=${label} (claimed elsewhere or claim unavailable)`);
         continue;
       }
+      // The durable claim is now held by this instance, so it is safe -- and
+      // correct -- to suppress any further in-process attempts for this key.
+      rememberBroadcastCycle(claimKey);
       let result = null;
       try {
         result = await broadcastSignalToDiscord({
@@ -5239,32 +5338,86 @@ async function syncLegacyUserRecord(email, discordUserId, discordUsername) {
 }
 __name(syncLegacyUserRecord, "syncLegacyUserRecord");
 
+// VIXY entitlement -> Discord role. There are exactly TWO paid roles, and a
+// member may hold at most one of them at a time:
+//
+//   STARTER | PROFESSIONAL | ELITE  -> "ELITE"    (VIXY ELITE)
+//   DAY_PASS                        -> "DAY_PASS" (VIXY (24hr) ELEITE'S)
+//   no active purchase              -> "NONE"     (no paid role)
+//
+// The base Verified role is NOT an entitlement -- it marks "this Discord
+// account is linked to a VIXY account" and is left in place by
+// assignDiscordRoleToUser regardless of tier.
 function resolveDiscordEntitlementTier(email, discordUserId) {
-  const dayPass = discordUserId ? userDayPasses.get(discordUserId) : null;
-  if (dayPass && dayPass.expiresAt && new Date(dayPass.expiresAt) > new Date()) {
+  const lowerEmail = (email || "").toLowerCase();
+
+  // Day pass outranks a subscription while it is live.
+  // Every WRITE path keys day passes by email (grant, revoke, on-demand
+  // expiry, checkout). This previously looked them up by discordUserId only,
+  // so it missed essentially every record and DAY_PASS was unreachable.
+  const dayPass =
+    userDayPasses.get(lowerEmail) ||
+    (discordUserId ? userDayPasses.get(discordUserId) : void 0);
+  if (
+    dayPass &&
+    String(dayPass.status || "").toUpperCase() !== "EXPIRED" &&
+    dayPass.expiresAt &&
+    new Date(dayPass.expiresAt) > new Date()
+  ) {
     return "DAY_PASS";
   }
-  const lowerEmail = (email || "").toLowerCase();
+
   const foundUser = serverUsers.find(
     (u) => (u.email || "").toLowerCase() === lowerEmail,
   );
   const sub = userSubscriptions.get(lowerEmail) || {
     role: foundUser && foundUser.role,
     plan: foundUser && foundUser.subscription,
+    status: foundUser && foundUser.status,
   };
-  if (sub.role === "ELITE" || (sub.plan && sub.plan.includes("ELITE"))) {
+
+  // An inactive subscription grants nothing, whatever plan name it carries.
+  const status = String(sub.status || "").toUpperCase();
+  if (["CANCELED", "CANCELLED", "EXPIRED", "SUSPENDED", "INACTIVE"].includes(status)) {
+    return "NONE";
+  }
+
+  // All three paid subscription tiers map to the single VIXY ELITE role.
+  // STARTER previously fell through to the default and so was indistinguishable
+  // from a free account; PROFESSIONAL is stored with role "PRO".
+  const role = String(sub.role || "").toUpperCase();
+  const plan = String(sub.plan || "").toUpperCase();
+  const PAID = ["ELITE", "PROFESSIONAL", "PRO", "STARTER"];
+  if (PAID.some((t) => role === t || plan.includes(t))) {
     return "ELITE";
   }
-  if (sub.role === "PRO" || (sub.plan && sub.plan.includes("PRO"))) {
-    return "PRO";
-  }
-  return "VERIFIED";
+
+  return "NONE";
 }
 __name(resolveDiscordEntitlementTier, "resolveDiscordEntitlementTier");
 
+// Discord OAuth persistence runs on THIS file's Admin-aware Firestore shim
+// rather than on a client-SDK import inside the OAuth module. src/bot/discordOAuth.ts
+// used to import doc/getDoc/setDoc/runTransaction directly from "firebase/firestore",
+// which the shim above cannot intercept across a module boundary -- so those
+// collections stayed on the client datapath and were the only Discord persistence
+// still gated by security rules. Passing the shimmed functions in removes that
+// split-brain: with a service account configured every Discord write now goes
+// through the Admin SDK (rules do not apply to it), and with no service account
+// it degrades to exactly the previous client behaviour.
+const discordFirestore = {
+  doc,
+  getDoc,
+  setDoc,
+  runTransaction,
+  // The Admin datapath ignores the `db` handle entirely, so a null client handle
+  // must not be read as "Firestore unavailable" when Admin is live.
+  ready: (clientDb) => _adminActive || !!clientDb,
+};
+
 app.get(
   "/api/discord/connect",
-  createDiscordConnectHandler(() => db, authenticateSession),
+  createDiscordConnectHandler(() => db, authenticateSession, discordFirestore),
 );
 
 app.get(
@@ -5274,15 +5427,16 @@ app.get(
     resolveDiscordEntitlementTier,
     assignDiscordRoleToUser,
     syncLegacyUserRecord,
+    discordFirestore,
   ),
 );
 app.get(
   "/api/discord/status",
-  createDiscordLinkStatusHandler(() => db, authenticateSession),
+  createDiscordLinkStatusHandler(() => db, authenticateSession, discordFirestore),
 );
 app.post(
   "/api/discord/unlink",
-  createDiscordUnlinkHandler(() => db, authenticateSession),
+  createDiscordUnlinkHandler(() => db, authenticateSession, discordFirestore),
 );
 
 // ---- Password Reset Flow ----
@@ -5721,12 +5875,17 @@ app.get("/api/account/me", async (req, res) => {
       if (snap.exists() && snap.data().status === "CONNECTED") {
         const d = snap.data();
         const guildMember = await checkLiveGuildMembership(d.discordUserId);
+        // The real backend-resolved entitlement. Without this the UI had no
+        // source for the user's tier and invented "PRO" from the guildMember
+        // boolean, so any free member of the server was shown as PRO.
+        const entitlementTier = resolveDiscordEntitlementTier(vixyEmail, d.discordUserId);
         discord = {
           linked: true,
           discordUserId: d.discordUserId,
           discordUsername: d.discordUsername,
           discordGlobalName: d.discordUsername,
           guildMember,
+          entitlementTier,
         };
       }
     }
@@ -5772,6 +5931,7 @@ app.post("/api/discord/verify-membership", async (req, res) => {
         discordUsername: snap.data().discordUsername,
         discordGlobalName: snap.data().discordUsername,
         guildMember,
+        entitlementTier: resolveDiscordEntitlementTier(vixyEmail, discordUserId),
       },
     });
   } catch (err) {
@@ -11940,22 +12100,27 @@ timestamp: ${new Date().toISOString()}`);
             status: "WARN",
             message: `Access revoked for ${customerEmail}`,
           });
-          const profileByEmail = userDiscordProfiles.get(customerEmail);
-          const profileGlobal = userDiscordProfiles.get("global_active_user");
-          const discordUserId =
-            profileByEmail?.discordUserId || profileGlobal?.discordUserId;
+          // Resolve via the authoritative discord_links record. This used to
+          // read userDiscordProfiles and fall back to a shared
+          // "global_active_user" slot, so OAuth-linked customers kept their
+          // paid role forever after cancelling.
+          const discordUserId = await lookupLinkedDiscordUserId(customerEmail);
           if (discordUserId) {
             assignDiscordRoleToUser(discordUserId, "NONE")
-              .then(() => {
+              .then((r) => {
                 broadcastAdminEvent({
-                  eventType: "DISCORD_ROLE_REMOVED",
+                  eventType: r && r.success ? "DISCORD_ROLE_REMOVED" : "DISCORD_ROLE_SYNC_FAILED",
                   userEmail: customerEmail,
                   discordUserId,
-                  status: "INFO",
-                  message: `Discord paid roles removed for ${discordUserId}`,
+                  status: r && r.success ? "INFO" : "WARN",
+                  message: r && r.success
+                    ? `Discord paid roles removed for ${discordUserId}`
+                    : `Failed removing Discord paid roles for ${discordUserId}: ${r && r.message}`,
                 });
               })
               .catch(() => {});
+          } else {
+            console.log(`[Discord Sync] Cancellation for ${customerEmail}: no linked Discord account.`);
           }
         }
         break;
@@ -11984,11 +12149,10 @@ timestamp: ${new Date().toISOString()}`);
             status: "WARN",
             message: `Access revoked for ${customerEmail} due to charge refund.`,
           });
-          const profile = userDiscordProfiles.get(customerEmail);
-          if (profile?.discordUserId) {
-            assignDiscordRoleToUser(profile.discordUserId, "NONE").catch(
-              () => {},
-            );
+          // Same authoritative lookup as the cancellation path above.
+          const refundDiscordUserId = await lookupLinkedDiscordUserId(customerEmail);
+          if (refundDiscordUserId) {
+            assignDiscordRoleToUser(refundDiscordUserId, "NONE").catch(() => {});
           }
         }
         break;

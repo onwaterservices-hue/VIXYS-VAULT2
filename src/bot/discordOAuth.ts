@@ -5,9 +5,29 @@
  * (authenticateSession), never from client-supplied query params.
  * All persistence uses Firestore -- no in-memory map is the source
  * of truth for the VIXY <-> Discord relationship.
+ *
+ * FIRESTORE DATAPATH (injected, not imported)
+ * ------------------------------------------
+ * This module previously imported doc/getDoc/setDoc/runTransaction straight
+ * from "firebase/firestore". server.ts defines an Admin-aware shim over those
+ * same names, but a shim declared in server.ts cannot reach another module --
+ * so Discord OAuth kept using the CLIENT SDK even in deployments where the
+ * Admin service account was active. That split-brain meant these collections
+ * were the only Discord persistence still subject to security rules, and the
+ * rules' catch-all deny (`match /{document=**} { allow read, write: if false }`)
+ * rejected discord_oauth_states and discord_links_by_discord_id outright,
+ * because neither has an explicit rule.
+ *
+ * The datapath is now passed in by server.ts, which hands over its own shimmed
+ * functions. When a service account is configured these run through the Admin
+ * SDK, which authenticates as a service account and is not subject to rules at
+ * all -- so no rule exceptions are needed. With no service account they fall
+ * through to the identical client behaviour as before, so nothing regresses.
+ *
+ * The shim normalizes Admin snapshots to the client shape (exists() is a
+ * method, not a property), so every call site below is unchanged.
  */
 import crypto from "crypto";
-import { doc, getDoc, setDoc, runTransaction } from "firebase/firestore";
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 const DISCORD_API = "https://discord.com/api/v10";
@@ -49,14 +69,16 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
  * popup -- never redirects itself, since the frontend needs the URL
  * as JSON to open a popup window.
  */
-export function createDiscordConnectHandler(getDb, authenticateSession) {
+export function createDiscordConnectHandler(getDb, authenticateSession, fx) {
+  const { doc, setDoc } = fx;
   return async (req, res) => {
     const db = getDb();
     const auth = authenticateSession(req);
     if (!auth || !auth.user || !auth.user.email) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
-    if (!db) {
+    // Admin datapath may be live even when the client handle is null.
+    if (!fx.ready(db)) {
       return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     }
     const clientId = process.env.DISCORD_CLIENT_ID;
@@ -118,7 +140,8 @@ export function createDiscordConnectHandler(getDb, authenticateSession) {
  * from the validated, single-use OAuth state bound to the VIXY user at
  * /connect time, never from a client-supplied param.
  */
-export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser, syncLegacyUserRecord) {
+export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser, syncLegacyUserRecord, fx) {
+  const { doc, setDoc, runTransaction } = fx;
   return async (req, res) => {
     const db = getDb();
     const code = req.query.code;
@@ -138,7 +161,8 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
       return res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
     };
 
-    if (!db) {
+    // Admin datapath may be live even when the client handle is null.
+    if (!fx.ready(db)) {
       return fail("service_unavailable");
     }
     if (!code || !state || typeof state !== "string") {
@@ -296,7 +320,8 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
 }
 
 /** GET /api/discord/status -- authenticated status check for the frontend. */
-export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
+export function createDiscordLinkStatusHandler(getDb, authenticateSession, fx) {
+  const { doc, getDoc } = fx;
   return async (req, res) => {
     const db = getDb();
     const auth = authenticateSession(req);
@@ -304,7 +329,8 @@ export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
     const vixyEmail = auth.user.email.toLowerCase();
-    if (!db) {
+    // Admin datapath may be live even when the client handle is null.
+    if (!fx.ready(db)) {
       return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     }
     try {
@@ -326,7 +352,8 @@ export function createDiscordLinkStatusHandler(getDb, authenticateSession) {
 }
 
 /** POST /api/discord/unlink -- authenticated, explicit unlink before reconnect. */
-export function createDiscordUnlinkHandler(getDb, authenticateSession) {
+export function createDiscordUnlinkHandler(getDb, authenticateSession, fx) {
+  const { doc, runTransaction } = fx;
   return async (req, res) => {
     const db = getDb();
     const auth = authenticateSession(req);
@@ -334,7 +361,8 @@ export function createDiscordUnlinkHandler(getDb, authenticateSession) {
       return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
     }
     const vixyEmail = auth.user.email.toLowerCase();
-    if (!db) {
+    // Admin datapath may be live even when the client handle is null.
+    if (!fx.ready(db)) {
       return res.status(503).json({ error: "SERVICE_UNAVAILABLE" });
     }
     try {

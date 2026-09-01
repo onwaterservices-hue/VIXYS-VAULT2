@@ -21,6 +21,18 @@ import {
   Shield
 } from 'lucide-react';
 import { AlertSettings } from '../types';
+
+// Backend-authoritative entitlement tier -> display label. Replaces the old
+// `guildMember ? 'PRO' : 'None'` guess, which showed PRO for any free user who
+// had merely joined the Discord server. Only the backend knows the real tier.
+const tierLabel = (tier?: string, fallback: string = 'None') => {
+  switch (String(tier || '').toUpperCase()) {
+    case 'ELITE': return 'VIXY ELITE';
+    case 'DAY_PASS': return 'VIXY (24hr) ELITE';
+    case 'NONE': return 'None';
+    default: return fallback;
+  }
+};
 import {
   getDiscordAuthUrlSecure,
   getDiscordUserProfileApi,
@@ -72,7 +84,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
           discordUsername: d.discordUsername,
           discordGlobalName: d.discordGlobalName,
           guildMember: d.guildMember,
-          guildRoles: [d.guildMember ? 'PRO' : 'MEMBER'],
+          guildRoles: [tierLabel(d.entitlementTier, d.guildMember ? 'MEMBER' : 'None')],
           verificationStatus: d.guildMember ? 'VERIFIED' : 'NEEDS_GUILD',
         };
         setProfile(prof);
@@ -83,7 +95,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             discordUsername: prof.discordUsername || prev.discordUsername,
             discordUserId: prof.discordUserId || prev.discordUserId,
             guildMember: prof.guildMember ?? prev.guildMember,
-            roleAssigned: prof.guildRoles?.[0] || (prof.guildMember ? 'PRO' : 'None'),
+            roleAssigned: tierLabel(d.entitlementTier, prof.guildRoles?.[0] || 'None'),
             lastSyncTimestamp: new Date().toLocaleTimeString(),
             syncStatus: prof.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
@@ -102,7 +114,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             discordUsername: res.profile.discordUsername,
             discordUserId: res.profile.discordUserId,
             guildMember: res.profile.guildMember,
-            roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
+            roleAssigned: tierLabel(res.profile.entitlementTier ?? (res as any).discord?.entitlementTier, res.profile.guildRoles?.[0] || 'None'),
             lastSyncTimestamp: res.profile.lastSync || new Date().toLocaleTimeString(),
             syncStatus: res.profile.verificationStatus === 'VERIFIED' ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
@@ -148,7 +160,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             discordUsername: data.discordUsername,
             discordUserId: data.discordUserId,
             guildMember: data.guildMember,
-            roleAssigned: data.guildRoles?.[0] || (data.guildMember ? 'PRO' : 'None'),
+            roleAssigned: tierLabel(data.entitlementTier, data.guildRoles?.[0] || 'None'),
             lastSyncTimestamp: data.lastSync || new Date().toLocaleTimeString(),
             syncStatus: data.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
           }));
@@ -224,7 +236,7 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             ...prev,
             discordLinked: true,
             guildMember: res.profile.guildMember,
-            roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
+            roleAssigned: tierLabel(res.profile.entitlementTier ?? (res as any).discord?.entitlementTier, res.profile.guildRoles?.[0] || 'None'),
             lastSyncTimestamp: new Date().toLocaleTimeString(),
             syncStatus: res.profile.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
           }));

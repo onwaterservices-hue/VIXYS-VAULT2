@@ -34,6 +34,18 @@
  */
 
 import { readFileSync } from 'fs';
+// Static ESM imports, not require(). This module is ESM (it uses `import` above), so
+// under the tsx/ESM dev runtime `require` is not defined and Admin init failed with
+// "require is not defined" on every local boot -- meaning local development silently
+// never exercised the Admin datapath at all. The production build is esbuild
+// --format=cjs --packages=external, which emits these back as plain require() calls,
+// so the bundled server behaves exactly as before.
+//
+// The previous lazy-require comment worried about firebase-admin leaking into the
+// frontend bundle. That cannot happen: this file is imported only by server.ts and is
+// not reachable from Vite's browser entry graph.
+import { initializeApp, cert, applicationDefault, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 
 type AdminFirestore = any;
 
@@ -64,13 +76,10 @@ function initAdmin(): AdminFirestore | null {
   initAttempted = true;
 
   try {
-    // firebase-admin v14 is modular: the root `require("firebase-admin")` does NOT
-    // expose `admin.credential.cert` (that was the v11-style namespaced API and is why
-    // init previously failed with "Cannot read properties of undefined (reading 'cert')").
-    // Use the subpath modules. Required lazily so bundling the frontend never pulls in
-    // firebase-admin.
-    const { initializeApp, cert, applicationDefault, getApps } = require('firebase-admin/app');
-    const { getFirestore } = require('firebase-admin/firestore');
+    // firebase-admin v14 is modular: the root import does NOT expose
+    // `admin.credential.cert` (that was the v11-style namespaced API and is why init
+    // previously failed with "Cannot read properties of undefined (reading 'cert')").
+    // The subpath modules imported at the top of this file are the v14 surface.
 
     const projectId = process.env.FIREBASE_PROJECT_ID || 'btc15-pro--prediction-terminal';
     const inlineJson = process.env.FIREBASE_SERVICE_ACCOUNT_JSON || '';
