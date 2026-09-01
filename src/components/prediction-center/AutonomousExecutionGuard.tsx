@@ -14,12 +14,16 @@ import {
   DollarSign,
   PieChart
 } from 'lucide-react';
+import { UNKNOWN_DISPLAY, formatDecisionPercent } from '../../utils/decisionDisplay';
 
 interface AutonomousExecutionGuardProps {
   spotPrice: number;
   strikePrice: number;
-  conviction: number;
-  reversalRisk: number;
+  // Null while the canonical decision is uncommitted (HYDRATING). `null <= 25`
+  // coerces to `0 <= 25`, so an unmeasured reversal risk previously rendered
+  // the reassurance "comfortably below the 25% safety ceiling".
+  conviction: number | null;
+  reversalRisk: number | null;
   isActuallyLocked: boolean;
   asset: string;
   isUp: boolean;
@@ -41,14 +45,25 @@ export const AutonomousExecutionGuard: React.FC<AutonomousExecutionGuardProps> =
   const cushionDollar = spotPrice - strikePrice;
   const cushionPct = ((cushionDollar / Math.max(1, strikePrice)) * 100).toFixed(2);
 
+  // Without a committed decision there is no conviction and no risk assessment,
+  // so nothing downstream may be computed from them.
+  const convictionKnown = conviction !== null;
+  const reversalKnown = reversalRisk !== null;
+
   // Dynamic cryptographic hash for the current 15M cycle
-  const cycleHash = `0x9f4a8b7c2e1d03${Math.floor(spotPrice * 100).toString(16)}bc88a5${Math.floor(conviction * 10).toString(16)}e7`;
+  const cycleHash = convictionKnown
+    ? `0x9f4a8b7c2e1d03${Math.floor(spotPrice * 100).toString(16)}bc88a5${Math.floor(conviction * 10).toString(16)}e7`
+    : UNKNOWN_DISPLAY;
 
   // Kelly Criterion recommended sizing: f* = (bp - q) / b
   // b = odds (e.g. 1.8), p = win prob, q = 1 - p
-  const winProb = conviction / 100;
-  const kellyPct = Math.max(0, Math.min(25, ((winProb * 1.85 - (1 - winProb)) / 0.85) * 100));
-  const recommendedSize = Math.round((bankroll * (kellyPct / 100)));
+  // Sizing advice from a null conviction would be a real dollar recommendation
+  // derived from nothing, so it is withheld entirely rather than defaulted.
+  const winProb = convictionKnown ? conviction / 100 : null;
+  const kellyPct = winProb === null
+    ? null
+    : Math.max(0, Math.min(25, ((winProb * 1.85 - (1 - winProb)) / 0.85) * 100));
+  const recommendedSize = kellyPct === null ? null : Math.round(bankroll * (kellyPct / 100));
 
   const handleCopyHash = () => {
     navigator.clipboard.writeText(cycleHash);
@@ -122,7 +137,9 @@ export const AutonomousExecutionGuard: React.FC<AutonomousExecutionGuardProps> =
           </div>
 
           <div className="text-[10px] text-purple-300/80 font-sans leading-relaxed">
-            {reversalRisk <= 25
+            {!reversalKnown
+              ? `Reversal risk ${UNKNOWN_DISPLAY} — not assessed for this cycle. No safety margin is being claimed.`
+              : reversalRisk <= 25
               ? `Reversal risk is ${reversalRisk}%, comfortably below the 25% safety ceiling.`
               : `High reversal risk (${reversalRisk}%). VIXY protection is defending capital.`}
           </div>
@@ -132,15 +149,25 @@ export const AutonomousExecutionGuard: React.FC<AutonomousExecutionGuardProps> =
         <div className="p-3.5 rounded-2xl bg-[#12072e]/90 border border-purple-800/40 space-y-2">
           <div className="flex items-center justify-between text-[10px] font-mono text-purple-400 font-bold uppercase">
             <span>KELLY SIZING ADVICE</span>
-            <span className="text-amber-300 font-mono font-black">{kellyPct.toFixed(1)}%</span>
+            <span className="text-amber-300 font-mono font-black">
+              {kellyPct === null ? UNKNOWN_DISPLAY : `${kellyPct.toFixed(1)}%`}
+            </span>
           </div>
 
           <div className="text-xl font-black font-mono text-white">
-            ${recommendedSize} <span className="text-xs text-purple-300 font-sans font-normal">/ ${bankroll}</span>
+            {recommendedSize === null ? (
+              UNKNOWN_DISPLAY
+            ) : (
+              <>
+                ${recommendedSize} <span className="text-xs text-purple-300 font-sans font-normal">/ ${bankroll}</span>
+              </>
+            )}
           </div>
 
           <div className="text-[10px] text-purple-300/80 font-sans leading-relaxed">
-            Optimal allocation based on {conviction}% directional conviction.
+            {convictionKnown
+              ? `Optimal allocation based on ${conviction}% directional conviction.`
+              : 'No allocation advice while VIXY has not committed a decision for this cycle.'}
           </div>
         </div>
 
@@ -196,7 +223,7 @@ export const AutonomousExecutionGuard: React.FC<AutonomousExecutionGuardProps> =
                   <div>ASSET: {asset}/USDT</div>
                   <div>DIRECTION: {isUp ? 'UP (BUY CALL)' : 'DOWN (BUY PUT)'}</div>
                   <div>LOCK STRIKE: ${strikePrice.toFixed(2)}</div>
-                  <div>CONVICTION: {conviction}%</div>
+                  <div>CONVICTION: {formatDecisionPercent(conviction)}</div>
                   <div>HASH: {cycleHash}</div>
                 </div>
               </div>

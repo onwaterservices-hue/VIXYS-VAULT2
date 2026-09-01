@@ -13,6 +13,7 @@
  */
 
 import { Canonical15mDecision, ConfluenceFactorItem } from '../types/canonicalDecision';
+import { hasCommittedDecision } from './decisionDisplay';
 
 export interface EvidenceVectorItem {
   name: 'Momentum' | 'Trend' | 'Order Flow' | 'Volume' | 'Sentiment' | 'Volatility';
@@ -40,6 +41,49 @@ export interface ComputedEvidenceSummary {
   dynamicExplanation: string;
 }
 
+const EVIDENCE_VECTOR_NAMES: EvidenceVectorItem['name'][] = [
+  'Momentum',
+  'Trend',
+  'Order Flow',
+  'Volume',
+  'Sentiment',
+  'Volatility',
+];
+
+/**
+ * The all-unknown matrix, used whenever the engine has not committed a decision.
+ * Nothing here is scored, aligned, or counted, so no downstream consumer can
+ * derive a conviction or a composite from an absent decision.
+ */
+function buildUnknownEvidenceSummary(): ComputedEvidenceSummary {
+  const vectors: EvidenceVectorItem[] = EVIDENCE_VECTOR_NAMES.map(name => ({
+    name,
+    score: null,
+    displayScore: '—',
+    percent: 0,
+    status: 'UNAVAILABLE',
+    aligned: false,
+    detail: 'Awaiting the authoritative decision for this cycle',
+    isStaleOrMissing: true,
+  }));
+
+  return {
+    vectors,
+    alignedCount: 0,
+    totalValidCount: 0,
+    totalCount: 6,
+    compositeScore: null,
+    compositeDisplay: '—',
+    convictionPct: 0,
+    signalsAlignedHeader: '— / 6 SIGNALS ALIGNED',
+    convictionHeaderText: 'CONVICTION —/10',
+    convictionPercentText: '— SIGNAL CONVICTION',
+    compositeFooterText: '— / 10 COMPOSITE',
+    dynamicExplanation:
+      'VIXY has not committed a decision for this cycle yet. No directional evidence is being asserted.',
+  };
+}
+
 /**
  * Extracts or computes the 6 genuine evidence vectors from the Canonical 15M Decision object.
  */
@@ -48,6 +92,16 @@ export function computeEvidenceVectors(
   feedStatus?: string
 ): ComputedEvidenceSummary {
   const isFeedStale = feedStatus === 'STALE' || feedStatus === 'DISCONNECTED' || feedStatus === 'MISSING_DATA';
+
+  // No committed decision -> no evidence. Every branch below ultimately falls
+  // back to a literal (`confidence || 75`, `score ?? 80`, `lockScore || 70`)
+  // when the decision carries no factors, which fabricated a complete, aligned
+  // six-vector matrix for cycles the engine had not judged -- under a heading
+  // naming a direction that was itself defaulted to 'UP'.
+  if (!hasCommittedDecision(decision)) {
+    return buildUnknownEvidenceSummary();
+  }
+
   const dir = decision?.direction || 'UP';
   const isUp = dir === 'UP';
 

@@ -34,6 +34,7 @@ import { TAB_TO_PATH } from '../utils/routePaths';
 import { BTCTicker } from '../types';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
+import { UNKNOWN_DISPLAY, formatDecisionPercent, hasCommittedDecision } from '../utils/decisionDisplay';
 
 interface VixyHubViewProps {
   ticker: BTCTicker;
@@ -65,16 +66,22 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Direction and conviction state
-  const rawDirection = canonical15m.direction || 'UP';
+  // Direction and conviction state. All four are null until the engine commits
+  // a decision; the old literals (UP / 78 / 87 / 22) made an unjudged cycle
+  // look like a confident bullish lock on the hub tiles.
+  const decisionCommitted = hasCommittedDecision(canonical15m);
+  const rawDirection = decisionCommitted ? canonical15m.direction : null;
   const isUp = rawDirection === 'UP' || (rawDirection as any) === 'YES';
   const isDown = rawDirection === 'DOWN' || (rawDirection as any) === 'NO';
   const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
 
-  const calibrationConfidence = canonical15m.confidence ?? 78;
-  const lockScoreRaw = canonical15m.lockScore ?? (canonical15m.lockEvaluation?.lockScore ?? 87);
-  const lockQuality = lockScoreRaw <= 10 ? Math.round(lockScoreRaw * 10) : Math.round(lockScoreRaw);
-  const reversalRisk = canonical15m.reversalRisk ?? 22;
+  const calibrationConfidence = decisionCommitted ? canonical15m.confidence ?? null : null;
+  const lockScoreRaw = decisionCommitted
+    ? canonical15m.lockScore ?? canonical15m.lockEvaluation?.lockScore ?? null
+    : null;
+  const lockQuality =
+    lockScoreRaw === null ? null : lockScoreRaw <= 10 ? Math.round(lockScoreRaw * 10) : Math.round(lockScoreRaw);
+  const reversalRisk = decisionCommitted ? canonical15m.reversalRisk ?? null : null;
   const regime = canonical15m.regime || 'TRENDING_BULL';
   const lifecycle = getNormalizedLifecycleState(canonical15m);
   const isLocked = lifecycle === 'LOCKED' || lifecycle === 'PROTECTED';
@@ -253,15 +260,17 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-baseline gap-2.5 sm:gap-3">
                     <span className={`text-3xl sm:text-4xl lg:text-5xl font-black font-sans tracking-tight ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-slate-200'}`}>
-                      {rawDirection}
+                      {rawDirection ?? UNKNOWN_DISPLAY}
                     </span>
                     <span className="text-xl sm:text-2xl lg:text-3xl font-mono font-bold text-white">
-                      {calibrationConfidence}%
+                      {formatDecisionPercent(calibrationConfidence)}
                     </span>
                     <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider whitespace-nowrap">CALIBRATION CONFIDENCE</span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-300 font-sans mt-1 leading-relaxed max-w-xl">
-                    {canonical15m.gemini?.primaryHypothesis || 'Multi-venue taker flow alignment synchronized with 15M cycle policy.'}
+                    {decisionCommitted
+                      ? canonical15m.gemini?.primaryHypothesis || 'Multi-venue taker flow alignment synchronized with 15M cycle policy.'
+                      : 'Waiting for the authoritative decision for this cycle.'}
                   </p>
                 </div>
               </div>
@@ -273,22 +282,26 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
               {/* Metric 1: Calibration Confidence */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">CALIBRATION</span>
-                <span className="text-lg sm:text-xl font-black text-white py-1">{calibrationConfidence}%</span>
+                <span className="text-lg sm:text-xl font-black text-white py-1">{formatDecisionPercent(calibrationConfidence)}</span>
                 <span className="text-[9.5px] text-slate-500 font-sans truncate">Model Conviction</span>
               </div>
 
               {/* Metric 2: Lock Quality */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">LOCK QUALITY</span>
-                <span className="text-lg sm:text-xl font-black text-slate-200 py-1">{lockQuality} <span className="text-xs font-normal text-slate-500">/ 100</span></span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">{canonical15m.evidenceAlignment ?? 8}/10 Aligned</span>
+                <span className="text-lg sm:text-xl font-black text-slate-200 py-1">
+                  {lockQuality === null ? UNKNOWN_DISPLAY : <>{lockQuality} <span className="text-xs font-normal text-slate-500">/ 100</span></>}
+                </span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">
+                  {decisionCommitted && canonical15m.evidenceAlignment != null ? `${canonical15m.evidenceAlignment}/10 Aligned` : `${UNKNOWN_DISPLAY} Aligned`}
+                </span>
               </div>
 
               {/* Metric 3: Reversal Risk */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">REVERSAL RISK</span>
-                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>{reversalRisk}%</span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk < 30 ? 'Low Hazard' : 'Moderate'}</span>
+                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk === null ? 'text-purple-300' : reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>{formatDecisionPercent(reversalRisk)}</span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk === null ? 'Not assessed' : reversalRisk < 30 ? 'Low Hazard' : 'Moderate'}</span>
               </div>
 
               {/* Metric 4: Cycle Expiry */}

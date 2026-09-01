@@ -85,6 +85,9 @@ export function useCanonical15mDecision(): {
   isStale: boolean;
   isDisconnected: boolean;
 } {
+  // Seeded from createInitial15mDecision, which now reports HYDRATING with every
+  // decision-derived field null. Before the first poll returns, the card
+  // therefore renders "no decision yet" instead of a plausible invented one.
   const [decision, setDecision] = useState<Canonical15mDecision>(() => createInitial15mDecision());
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [localUpdatedAt, setLocalUpdatedAt] = useState<number>(Date.now());

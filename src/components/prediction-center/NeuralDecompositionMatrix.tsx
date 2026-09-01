@@ -14,12 +14,16 @@ import {
   CheckCircle2,
   Sliders
 } from 'lucide-react';
+import { UNKNOWN_DISPLAY } from '../../utils/decisionDisplay';
 
 interface NeuralDecompositionMatrixProps {
-  conviction: number;
+  // Null whenever the canonical decision is uncommitted (HYDRATING). These were
+  // typed non-nullable and compared directly, and because `null < 25` coerces to
+  // `0 < 25` the tail-risk factor scored an absent reversal risk as BULLISH.
+  conviction: number | null;
   isUp: boolean;
-  lockQuality: number;
-  reversalRisk: number;
+  lockQuality: number | null;
+  reversalRisk: number | null;
 }
 
 interface NeuralFactor {
@@ -103,11 +107,16 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
       id: 'tail_entropy',
       name: 'Entropy & Reversal Tail Risk Dampener',
       weight: 10,
-      score: reversalRisk < 25 ? 85 : 40,
-      contribution: reversalRisk < 25 ? +8.5 : +4.0,
-      status: reversalRisk < 25 ? 'BULLISH' : 'NEUTRAL',
+      // An unmeasured reversal risk scores nothing and is NEUTRAL. Comparing
+      // null directly made an unknown risk read as the most favourable case.
+      score: reversalRisk === null ? 0 : reversalRisk < 25 ? 85 : 40,
+      contribution: reversalRisk === null ? 0 : reversalRisk < 25 ? +8.5 : +4.0,
+      status: reversalRisk === null ? 'NEUTRAL' : reversalRisk < 25 ? 'BULLISH' : 'NEUTRAL',
       description: 'Quantitative tail-risk filter that penalizes noisy or high-entropy ranges to prevent false lockouts.',
-      metric: `Reversal Risk at ${reversalRisk}% (Threshold: 25%)`,
+      metric:
+        reversalRisk === null
+          ? `Reversal Risk ${UNKNOWN_DISPLAY} (Threshold: 25%)`
+          : `Reversal Risk at ${reversalRisk}% (Threshold: 25%)`,
       category: 'VOLATILITY',
     },
   ];
@@ -238,9 +247,20 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
       {/* Synthesis Footer */}
       <div className="p-3 rounded-2xl bg-[#140833] border border-purple-800/40 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-purple-200 font-sans">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <CheckCircle2 className={`w-4 h-4 shrink-0 ${conviction === null ? 'text-purple-400' : 'text-emerald-400'}`} />
           <span>
-            <strong>Composite Conviction Synthesized:</strong> {conviction}% directional probability validated across all 6 sub-models with 0% NaN penalty.
+            {conviction === null ? (
+              // Nothing has been synthesized, so claim nothing. This previously
+              // read "% directional probability validated across all 6
+              // sub-models" for a cycle with no decision at all.
+              <>
+                <strong>Composite Conviction:</strong> {UNKNOWN_DISPLAY} — awaiting the authoritative decision for this cycle.
+              </>
+            ) : (
+              <>
+                <strong>Composite Conviction Synthesized:</strong> {conviction}% directional probability validated across all 6 sub-models with 0% NaN penalty.
+              </>
+            )}
           </span>
         </div>
         <div className="text-[10px] font-mono text-purple-400">

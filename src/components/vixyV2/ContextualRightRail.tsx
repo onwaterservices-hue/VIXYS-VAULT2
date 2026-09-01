@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ShieldCheck, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Radio,
+  ShieldCheck,
   Activity, 
   Sparkles, 
   ArrowRight, 
@@ -23,6 +24,7 @@ import { Canonical15mDecision } from '../../types/canonicalDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 import { computeEvidenceVectors } from '../../utils/evidenceVectors';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
+import { UNKNOWN_DISPLAY, formatDecisionPercent, hasCommittedDecision } from '../../utils/decisionDisplay';
 
 interface ContextualRightRailProps {
   decision?: Canonical15mDecision;
@@ -47,8 +49,12 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const direction = decision?.direction || 'UP';
-  const confidence = decision?.confidence || 78;
+  // null until the engine commits. These previously defaulted to 'UP' and 78,
+  // so the rail advertised "UP / 78% HIGH CONFIDENCE" for cycles with no
+  // decision at all -- beside a card that correctly said none existed.
+  const decisionCommitted = hasCommittedDecision(decision);
+  const direction = decisionCommitted ? decision?.direction ?? null : null;
+  const confidence = decisionCommitted ? decision?.confidence ?? null : null;
   const isUp = direction === 'UP';
 
   const secondsRemaining = useMemo(() => {
@@ -64,9 +70,13 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
     return computeEvidenceVectors(decision);
   }, [decision]);
 
-  const reversalRisk = decision?.reversalRisk ?? 28;
+  // A missing reversal risk is unknown, not 28% and not low.
+  const reversalRisk = decisionCommitted ? decision?.reversalRisk ?? null : null;
+  const reversalKnown = reversalRisk !== null;
+  // Null in, null out. Feeding a placeholder into the assessment would return a
+  // real-looking LOW tier for a risk that was never measured.
   const reversalAssessment = useMemo(() => {
-    return getReversalRiskAssessment(reversalRisk);
+    return reversalRisk === null ? null : getReversalRiskAssessment(reversalRisk);
   }, [reversalRisk]);
 
   return (
@@ -84,22 +94,32 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
             <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 ${
-                  isUp
+                  !decisionCommitted
+                    ? 'bg-purple-950/80 border-purple-500/40 text-purple-300'
+                    : isUp
                     ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400'
                     : 'bg-rose-950/80 border-rose-500/50 text-rose-400'
                 }`}
               >
-                {isUp ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+                {!decisionCommitted ? (
+                  <Radio className="w-5 h-5 animate-pulse" />
+                ) : isUp ? (
+                  <TrendingUp className="w-5 h-5" />
+                ) : (
+                  <TrendingDown className="w-5 h-5" />
+                )}
               </div>
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-base font-black text-white">{direction}</span>
-                  <V2Badge variant={confidence >= 75 ? 'emerald' : 'amber'} size="xs">
-                    {confidence}%
+                  <span className="text-base font-black text-white">{direction ?? UNKNOWN_DISPLAY}</span>
+                  <V2Badge variant={confidence !== null && confidence >= 75 ? 'emerald' : 'amber'} size="xs">
+                    {formatDecisionPercent(confidence)}
                   </V2Badge>
                 </div>
                 <div className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold truncate">
-                  {confidence >= 75 ? 'HIGH CONFIDENCE' : 'MODERATE CONFIDENCE'}
+                  {confidence === null
+                    ? 'NO COMMITTED DECISION'
+                    : confidence >= 75 ? 'HIGH CONFIDENCE' : 'MODERATE CONFIDENCE'}
                 </div>
               </div>
             </div>
@@ -131,8 +151,12 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
         </div>
       </V2Panel>
 
-      {/* 2. WHY VIXY THINKS UP / DOWN */}
-      <V2Panel title={`WHY VIXY THINKS ${direction}`} icon={Sparkles} padding="sm">
+      {/* 2. WHY VIXY THINKS UP / DOWN — no direction, no claim to explain */}
+      <V2Panel
+        title={direction ? `WHY VIXY THINKS ${direction}` : 'AWAITING DECISION'}
+        icon={Sparkles}
+        padding="sm"
+      >
         <div className="space-y-2.5">
           <div className="flex items-center justify-between text-[10px] text-emerald-400 font-bold pb-1.5 border-b border-purple-900/30">
             <span className="flex items-center gap-1">
@@ -213,29 +237,37 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
         <div className="space-y-2">
           <div className="flex items-center justify-between bg-[#080512] p-2.5 rounded-xl border border-purple-900/40">
             <div className="flex items-center gap-2 min-w-0">
-              <div className={`p-1.5 rounded-lg border shrink-0 ${reversalAssessment.cardClass}`}>
+              <div className={`p-1.5 rounded-lg border shrink-0 ${
+                reversalKnown ? reversalAssessment?.cardClass : 'bg-purple-950/80 border-purple-500/40 text-purple-300'
+              }`}>
                 <ShieldCheck className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className={`text-[11px] font-bold uppercase leading-none ${reversalAssessment.colorClass}`}>
-                  {reversalAssessment.tier === 'HIGH' ? 'HAZARD ELEVATED' : 'ACTIVE'}
+                <div className={`text-[11px] font-bold uppercase leading-none ${
+                  reversalKnown ? reversalAssessment?.colorClass : 'text-purple-300'
+                }`}>
+                  {!reversalKnown ? 'STANDBY' : reversalAssessment?.tier === 'HIGH' ? 'HAZARD ELEVATED' : 'ACTIVE'}
                 </div>
                 <div className="text-[9.5px] text-slate-400 mt-0.5">Reversal Risk</div>
               </div>
             </div>
 
             <div className="text-right shrink-0">
-              <div className="text-sm font-black text-slate-100 font-mono">{reversalAssessment.score}%</div>
-              <div className={`text-[8.5px] font-bold uppercase ${reversalAssessment.colorClass}`}>
-                {reversalAssessment.label}
+              <div className="text-sm font-black text-slate-100 font-mono">
+                {reversalKnown ? `${reversalAssessment?.score}%` : UNKNOWN_DISPLAY}
+              </div>
+              <div className={`text-[8.5px] font-bold uppercase ${
+                reversalKnown ? reversalAssessment?.colorClass : 'text-purple-300/80'
+              }`}>
+                {reversalKnown ? reversalAssessment?.label : 'NOT ASSESSED'}
               </div>
             </div>
           </div>
 
           <div className="p-2 rounded-lg bg-[#080512] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono">
             <span className="text-slate-400">SHIELD STATUS:</span>
-            <span className={`font-bold ${reversalAssessment.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
-              {reversalAssessment.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
+            <span className={`font-bold ${!reversalKnown ? 'text-purple-300' : reversalAssessment?.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment?.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
+              {!reversalKnown ? 'AWAITING DECISION' : reversalAssessment?.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment?.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
             </span>
           </div>
         </div>

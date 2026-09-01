@@ -36,11 +36,12 @@ import {
 import { ModuleRenderProps } from '../../config/vixyLiveModules';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
+import { UNKNOWN_DISPLAY, formatDecisionPercent, hasCommittedDecision } from '../../utils/decisionDisplay';
 
 // ================= CORE MODULES =================
 
 export const Decision15mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker, onExpandModule }) => {
-  const rawDirection = canonical15m.direction || 'UP';
+  const rawDirection = hasCommittedDecision(canonical15m) ? canonical15m.direction : null;
   const isUp = rawDirection === 'UP' || (rawDirection as any) === 'YES';
   const isDown = rawDirection === 'DOWN' || (rawDirection as any) === 'NO';
   const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
@@ -75,7 +76,7 @@ export const Decision15mModule: React.FC<ModuleRenderProps> = ({ canonical15m, t
         </div>
         <div>
           <div className={`text-2xl font-black font-sans tracking-tight ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
-            {rawDirection}
+            {rawDirection ?? UNKNOWN_DISPLAY}
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
             STRIKE: <strong className="text-white">${targetStrike.toFixed(2)}</strong>
@@ -95,7 +96,8 @@ export const Decision15mModule: React.FC<ModuleRenderProps> = ({ canonical15m, t
 
 export const Decision1mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
   const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const isUp = (canonical15m.confidence ?? 78) >= 50;
+  // An absent confidence is not a bullish one.
+  const isUp = hasCommittedDecision(canonical15m) && canonical15m.confidence !== null && canonical15m.confidence >= 50;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -130,7 +132,7 @@ export const Decision1mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ti
 };
 
 export const CalibrationConfidenceModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const confidence = canonical15m.confidence ?? 78;
+  const confidence = hasCommittedDecision(canonical15m) ? canonical15m.confidence ?? null : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -146,28 +148,37 @@ export const CalibrationConfidenceModule: React.FC<ModuleRenderProps> = ({ canon
 
       <div>
         <div className="flex items-baseline justify-between">
-          <span className="text-3xl font-black text-white font-mono">{confidence}%</span>
-          <span className="text-xs font-bold text-emerald-400 font-mono">HIGH TIER</span>
+          <span className="text-3xl font-black text-white font-mono">{formatDecisionPercent(confidence)}</span>
+          <span className="text-xs font-bold text-emerald-400 font-mono">
+            {confidence === null ? '' : 'HIGH TIER'}
+          </span>
         </div>
         <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
           <div
             className="h-full rounded-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400"
-            style={{ width: `${confidence}%` }}
+            style={{ width: confidence === null ? '0%' : `${confidence}%` }}
           />
         </div>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
         <span>EVIDENCE CONFLUENCE</span>
-        <span className="text-slate-200 font-bold">{canonical15m.evidenceAlignment ?? 8}/10 GATES ALIGNED</span>
+        <span className="text-slate-200 font-bold">
+          {hasCommittedDecision(canonical15m) && canonical15m.evidenceAlignment != null
+            ? `${canonical15m.evidenceAlignment}/10 GATES ALIGNED`
+            : `${UNKNOWN_DISPLAY} GATES ALIGNED`}
+        </span>
       </div>
     </div>
   );
 };
 
 export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const rawLockScore = canonical15m.lockScore ?? (canonical15m.lockEvaluation?.lockScore ?? 87);
-  const lockQuality = rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
+  const rawLockScore = hasCommittedDecision(canonical15m)
+    ? canonical15m.lockScore ?? canonical15m.lockEvaluation?.lockScore ?? null
+    : null;
+  const lockQuality =
+    rawLockScore === null ? null : rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -178,17 +189,21 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">LOCK QUALITY</span>
         </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-black">{lockQuality} / 100</span>
+        <span className="text-emerald-400 font-mono text-[10px] font-black">
+          {lockQuality === null ? UNKNOWN_DISPLAY : `${lockQuality} / 100`}
+        </span>
       </div>
 
       <div>
         <div className="text-xl font-black text-white font-sans">
-          {lockQuality >= 80 ? 'OPTIMAL LOCK' : lockQuality >= 60 ? 'STRONG LOCK' : 'MODERATE LOCK'}
+          {lockQuality === null
+            ? 'AWAITING EVALUATION'
+            : lockQuality >= 80 ? 'OPTIMAL LOCK' : lockQuality >= 60 ? 'STRONG LOCK' : 'MODERATE LOCK'}
         </div>
         <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
           <div
             className="h-full rounded-full bg-gradient-to-r from-purple-600 to-emerald-400"
-            style={{ width: `${Math.min(100, Math.max(0, lockQuality))}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, lockQuality ?? 0))}%` }}
           />
         </div>
       </div>
@@ -202,8 +217,9 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
 };
 
 export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const rawRisk = canonical15m.reversalRisk ?? 22;
-  const assessment = getReversalRiskAssessment(rawRisk);
+  const rawRisk = hasCommittedDecision(canonical15m) ? canonical15m.reversalRisk ?? null : null;
+  const riskKnown = rawRisk !== null;
+  const assessment = getReversalRiskAssessment(rawRisk ?? 0);
   const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
 
   return (
@@ -215,14 +231,16 @@ export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">REVERSAL RISK</span>
         </div>
-        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${assessment.badgeClass}`}>
-          {assessment.statusLabel}
+        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+          riskKnown ? assessment.badgeClass : 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+        }`}>
+          {riskKnown ? assessment.statusLabel : 'NOT ASSESSED'}
         </span>
       </div>
 
       <div className="flex items-baseline justify-between">
-        <span className={`text-3xl font-black font-mono ${assessment.colorClass}`}>
-          {assessment.score}%
+        <span className={`text-3xl font-black font-mono ${riskKnown ? assessment.colorClass : 'text-purple-300'}`}>
+          {riskKnown ? `${assessment.score}%` : UNKNOWN_DISPLAY}
         </span>
         <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 font-mono">
           <ShieldCheck className="w-4 h-4 text-emerald-400" />
@@ -324,7 +342,9 @@ export const VixySignalModule: React.FC<ModuleRenderProps> = ({ canonical15m, ti
       </div>
 
       <div>
-        <div className="text-2xl font-black text-emerald-400 font-mono">{canonical15m.direction || 'UP'} TARGET</div>
+        <div className="text-2xl font-black text-emerald-400 font-mono">
+          {hasCommittedDecision(canonical15m) ? `${canonical15m.direction} TARGET` : `${UNKNOWN_DISPLAY} TARGET`}
+        </div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
           Settlement Strike: <strong className="text-white">${targetStrike.toFixed(2)}</strong>
         </div>
@@ -332,7 +352,9 @@ export const VixySignalModule: React.FC<ModuleRenderProps> = ({ canonical15m, ti
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
         <span>EXECUTION CONFIDENCE</span>
-        <span className="text-emerald-400 font-bold">{canonical15m.confidence || 78}% CONVICTION</span>
+        <span className="text-emerald-400 font-bold">
+          {formatDecisionPercent(hasCommittedDecision(canonical15m) ? canonical15m.confidence : null)} CONVICTION
+        </span>
       </div>
     </div>
   );
@@ -771,7 +793,7 @@ export const SignalMatrixModule: React.FC<ModuleRenderProps> = () => {
 };
 
 export const EvidenceAlignmentModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const aligned = canonical15m.evidenceAlignment ?? 8;
+  const aligned = hasCommittedDecision(canonical15m) ? canonical15m.evidenceAlignment ?? null : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -782,7 +804,9 @@ export const EvidenceAlignmentModule: React.FC<ModuleRenderProps> = ({ canonical
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">EVIDENCE ALIGNMENT</span>
         </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">{aligned}/10 GATES PASS</span>
+        <span className="text-emerald-400 font-mono text-[10px] font-bold">
+          {aligned === null ? `${UNKNOWN_DISPLAY}/10 GATES PASS` : `${aligned}/10 GATES PASS`}
+        </span>
       </div>
 
       <div className="space-y-1.5">

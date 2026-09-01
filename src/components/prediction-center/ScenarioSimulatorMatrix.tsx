@@ -13,14 +13,18 @@ import {
   CheckCircle2,
   Zap
 } from 'lucide-react';
+import { UNKNOWN_DISPLAY, formatDecisionPercent } from '../../utils/decisionDisplay';
 
 interface ScenarioSimulatorMatrixProps {
   spotPrice: number;
   strikePrice: number;
   asset: string;
-  baseConviction: number;
-  baseLockQuality: number;
-  baseReversalRisk: number;
+  // Null while the canonical decision is uncommitted (HYDRATING). `null + x`
+  // coerces to `0 + x`, so the simulator previously produced confident-looking
+  // conviction, lock-quality and EV figures out of an absent decision.
+  baseConviction: number | null;
+  baseLockQuality: number | null;
+  baseReversalRisk: number | null;
   isUp: boolean;
 }
 
@@ -46,6 +50,22 @@ export const ScenarioSimulatorMatrix: React.FC<ScenarioSimulatorMatrixProps> = (
   const simulationResults = useMemo(() => {
     const isAboveStrike = simulatedPrice > strikePrice;
     const distanceToStrikePct = ((simulatedPrice - strikePrice) / strikePrice) * 100;
+
+    // A what-if needs something real to shift. With no committed decision there
+    // is no baseline, so the decision-derived outputs stay null and only the
+    // price-derived ones (which come from live spot, not the decision) remain.
+    if (baseConviction === null || baseLockQuality === null || baseReversalRisk === null) {
+      return {
+        simPrice: simulatedPrice,
+        simConviction: null,
+        simLockQuality: null,
+        simReversalRisk: null,
+        isAboveStrike,
+        distanceToStrikePct,
+        expectedValue: null,
+        roiPct: null,
+      };
+    }
 
     let simConviction = baseConviction;
     let simLockQuality = baseLockQuality;
@@ -228,25 +248,28 @@ export const ScenarioSimulatorMatrix: React.FC<ScenarioSimulatorMatrixProps> = (
             <div className="p-2 rounded-xl bg-[#0d0422] border border-purple-800/30 text-center">
               <div className="text-[9px] text-purple-400">SIM CONVICTION</div>
               <div className={`text-base font-black mt-0.5 ${
-                simulationResults.simConviction >= 70 ? 'text-emerald-400' : simulationResults.simConviction >= 50 ? 'text-amber-400' : 'text-rose-400'
+                simulationResults.simConviction === null ? 'text-purple-300'
+                  : simulationResults.simConviction >= 70 ? 'text-emerald-400'
+                  : simulationResults.simConviction >= 50 ? 'text-amber-400' : 'text-rose-400'
               }`}>
-                {simulationResults.simConviction}%
+                {formatDecisionPercent(simulationResults.simConviction)}
               </div>
             </div>
 
             <div className="p-2 rounded-xl bg-[#0d0422] border border-purple-800/30 text-center">
               <div className="text-[9px] text-purple-400">SIM LOCK QUALITY</div>
               <div className="text-base font-black text-cyan-300 mt-0.5">
-                {simulationResults.simLockQuality} / 100
+                {simulationResults.simLockQuality === null ? UNKNOWN_DISPLAY : `${simulationResults.simLockQuality} / 100`}
               </div>
             </div>
 
             <div className="p-2 rounded-xl bg-[#0d0422] border border-purple-800/30 text-center">
               <div className="text-[9px] text-purple-400">SIM REVERSAL RISK</div>
               <div className={`text-base font-black mt-0.5 ${
-                simulationResults.simReversalRisk <= 25 ? 'text-emerald-400' : 'text-rose-400'
+                simulationResults.simReversalRisk === null ? 'text-purple-300'
+                  : simulationResults.simReversalRisk <= 25 ? 'text-emerald-400' : 'text-rose-400'
               }`}>
-                {simulationResults.simReversalRisk}%
+                {formatDecisionPercent(simulationResults.simReversalRisk)}
               </div>
             </div>
           </div>
@@ -274,21 +297,30 @@ export const ScenarioSimulatorMatrix: React.FC<ScenarioSimulatorMatrixProps> = (
               </div>
               <div className="flex items-center justify-between text-purple-200">
                 <span className="text-[11px]">Expected Value (EV):</span>
-                <span className={`font-mono font-black ${simulationResults.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {simulationResults.expectedValue >= 0 ? '+' : ''}${simulationResults.expectedValue.toFixed(2)}
+                <span className={`font-mono font-black ${
+                  simulationResults.expectedValue === null ? 'text-purple-300'
+                    : simulationResults.expectedValue >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                }`}>
+                  {simulationResults.expectedValue === null
+                    ? UNKNOWN_DISPLAY
+                    : `${simulationResults.expectedValue >= 0 ? '+' : ''}$${simulationResults.expectedValue.toFixed(2)}`}
                 </span>
               </div>
             </div>
           </div>
 
           <div className={`p-3 rounded-xl border text-center ${
-            simulationResults.roiPct >= 0
+            simulationResults.roiPct === null
+              ? 'bg-purple-950/30 border-purple-500/40 text-purple-300'
+              : simulationResults.roiPct >= 0
               ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-300'
               : 'bg-rose-950/30 border-rose-500/40 text-rose-300'
           }`}>
             <div className="text-[9px] font-bold uppercase tracking-wider">EXPECTED RETURN ON RISK</div>
             <div className="text-xl font-black font-mono mt-0.5">
-              {simulationResults.roiPct >= 0 ? '+' : ''}{simulationResults.roiPct.toFixed(1)}% ROI
+              {simulationResults.roiPct === null
+                ? `${UNKNOWN_DISPLAY} ROI`
+                : `${simulationResults.roiPct >= 0 ? '+' : ''}${simulationResults.roiPct.toFixed(1)}% ROI`}
             </div>
           </div>
         </div>

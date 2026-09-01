@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Canonical15mDecision } from '../types/canonicalDecision';
 import { playQuantChime, playDiscordPing } from '../utils/audio';
+import { UNKNOWN_DISPLAY } from '../utils/decisionDisplay';
 
 export interface SystemAlertItem {
   id: string;
@@ -174,15 +175,18 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
 
     lastProcessedCycleRef.current = { id: cycleId, state: currentState };
 
-    const conf = canonicalDecision.confidence || 91;
-    const dir = canonicalDecision.direction || 'UP';
+    // These only fire for committed states, but never announce a conviction or
+    // direction the decision does not carry -- a notification is quoted back to
+    // the user as fact, so `|| 91` / `|| 'UP'` would be a fabricated headline.
+    const conf = canonicalDecision.confidence;
+    const dir = canonicalDecision.direction;
     const spot = canonicalDecision.currentSpot ? `$${canonicalDecision.currentSpot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$80,350';
 
-    if (currentState === 'LOCKED_UP' || currentState === 'LOCKED_DOWN') {
+    if ((currentState === 'LOCKED_UP' || currentState === 'LOCKED_DOWN') && dir != null) {
       addNotification({
         type: '15M_LOCK',
         title: `15M BTC Cycle Locked — ${dir}`,
-        description: `Direction: ${dir} | Conviction ${conf}% | Spot Pivot: ${spot}`,
+        description: `Direction: ${dir} | Conviction ${conf == null ? UNKNOWN_DISPLAY : `${conf}%`} | Spot Pivot: ${spot}`,
         priority: 'HIGH',
         direction: dir as 'UP' | 'DOWN',
         confidence: conf,

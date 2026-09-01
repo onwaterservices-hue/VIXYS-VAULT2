@@ -37,6 +37,7 @@ import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
+import { UNKNOWN_DISPLAY, formatDecisionPercent, hasCommittedDecision } from '../utils/decisionDisplay';
 
 interface LandingPageProps {
   ticker: BTCTicker;
@@ -108,8 +109,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
     : 'text-purple-300 bg-purple-500/10 border-purple-500/30';
 
-  const confidenceScore = Math.round(canonical15m.confidence || 76);
-  const lockScore = Math.round(canonical15m.lockScore || 88);
+  // The public hero terminal shows a live spot price and countdown, so any
+  // number beside them reads as equally live. These defaulted to 76 and 88,
+  // which is what an uncommitted cycle displayed to logged-out visitors --
+  // fixed values presented as a real confidence and lock score.
+  const landingDecisionCommitted = hasCommittedDecision(canonical15m);
+  const confidenceScore = landingDecisionCommitted && canonical15m.confidence != null
+    ? Math.round(canonical15m.confidence)
+    : null;
+  const lockScore = landingDecisionCommitted && canonical15m.lockScore != null
+    ? Math.round(canonical15m.lockScore)
+    : null;
 
   const modelFactors = [
     { id: 1, name: 'EMA9 Trend Alignment', detail: 'Spot price > EMA9 (9-period Exponential Moving Average)', status: 'PASS', type: 'Trend' },
@@ -317,16 +327,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">VIXY CONFIDENCE</span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-white">
-                    {confidenceScore}%
+                    {formatDecisionPercent(confidenceScore)}
                   </span>
                   <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
-                    Lock Score {lockScore}
+                    Lock Score {lockScore ?? UNKNOWN_DISPLAY}
                   </span>
                 </div>
                 <div className="w-full h-1.5 bg-purple-950 rounded-full overflow-hidden mt-1">
                   <div
                     className="h-full bg-gradient-to-r from-purple-500 via-violet-400 to-cyan-400 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(10, confidenceScore))}%` }}
+                    style={{ width: `${confidenceScore === null ? 0 : Math.min(100, Math.max(10, confidenceScore))}%` }}
                   />
                 </div>
               </div>

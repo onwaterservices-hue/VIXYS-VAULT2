@@ -136,16 +136,17 @@ export interface LockScoreBreakdown {
 }
 
 export interface CanonicalProtectionData {
-  lockScore: number;                 // 0 to 100 composite score
+  // Null while no decision is committed -- see the note on Canonical15mDecision.
+  lockScore: number | null;          // 0 to 100 composite score
   lockProgressPct: number;           // 0 to 100% progress towards requirement
   temporalStability: number;         // 0 to 100%
-  reversalRisk: number;              // 0 to 100%
+  reversalRisk: number | null;       // 0 to 100%
   capitalPreservationScore: number;  // 0 to 100% (higher = stronger reason to stay out)
   capitalPreserved: boolean;
   lateCycleProtectionActive: boolean;
   protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
   lockTier: LockTier;
-  lockEvaluation: LockEvaluationFields;
+  lockEvaluation: LockEvaluationFields | null;
   checklist: {
     cycleActive: boolean;
     minLockDelayPassed?: boolean;
@@ -189,11 +190,20 @@ export interface Canonical15mDecision {
   spotAtLock: number | null;  // Spot price recorded at lock moment
   
   // 3. State & Conviction
+  //
+  // The four decision-derived fields below are null whenever the backend has
+  // no committed decision for this cycle (currentState 'HYDRATING'). That is
+  // the real wire contract -- /api/vixy/15m/current sends direction,
+  // confidence, lockScore and reversalRisk as null until a decision is
+  // committed. They were previously typed non-nullable, which let every
+  // consumer paper over the null with a literal (|| 'UP', ?? 87, || 78) and
+  // present an invented decision as a real one. Keep them nullable so the
+  // compiler forces each surface to say "unknown" instead of guessing.
   currentState: Canonical15mState;
-  direction: Canonical15mDirection;
-  confidence: number;         // 0 to 100
-  lockScore: number;          // 0 to 100 composite score
-  reversalRisk: number;       // 0 to 100
+  direction: Canonical15mDirection | null;
+  confidence: number | null;  // 0 to 100, null when no committed decision
+  lockScore: number | null;   // 0 to 100 composite score, null when uncommitted
+  reversalRisk: number | null; // 0 to 100, null when uncommitted
   capitalPreservationScore: number; // 0 to 100
   capitalPreserved: boolean;
   regime: MarketRegimeType;
@@ -264,8 +274,29 @@ export function isValid15mStateTransition(
   // Once settled, cannot transition
   if (currentState === 'SETTLED') return false;
 
+  // HYDRATING is never a destination. It means "no decision has been formed
+  // yet", so nothing may fall back into it once the engine has an opinion --
+  // that would be a regression out of the lifecycle. No case below proposes it.
+  if (proposedState === 'HYDRATING') return false;
+
   // Strict valid transition graph
   switch (currentState) {
+    // HYDRATING is the pre-decision initialization state, not a trading
+    // lifecycle stage: a freshly seeded cycle sits here until the first real
+    // engine tick. It is an ENTRY POINT into the lifecycle and permits exactly
+    // what WATCH permits, plus WATCH itself as the natural first step. Without
+    // this case it fell to `default: return false` and the engine could never
+    // leave it -- permanently wedged on the seed.
+    case 'HYDRATING':
+      return (
+        proposedState === 'WATCH' ||
+        proposedState === 'CONFIRMING' ||
+        proposedState === 'LOCKED_UP' ||
+        proposedState === 'LOCKED_DOWN' ||
+        proposedState === 'SKIP' ||
+        proposedState === 'SETTLED'
+      );
+
     case 'WATCH':
       return (
         proposedState === 'CONFIRMING' ||

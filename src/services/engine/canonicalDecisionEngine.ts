@@ -66,7 +66,15 @@ let canonicalState: Canonical15mDecision | null = null;
 let temporalObservations: TemporalObservation[] = [];
 
 /**
- * Initializes a clean Canonical Decision for a newly started 15M cycle
+ * Initializes a clean Canonical Decision for a newly started 15M cycle.
+ *
+ * A freshly opened cycle has no decision, so every decision-derived field is
+ * null and the state is HYDRATING. This function previously seeded plausible
+ * numbers (confidence 50, lockScore 45, reversalRisk 12, plus a matching
+ * lockEvaluation block) which the UI could not distinguish from a committed
+ * decision: the card latched them on mount and, because the live payload sends
+ * null for those fields while HYDRATING, never cleared them. A seed is not a
+ * measurement -- if the engine has not decided, the object must say so.
  */
 export function createInitial15mDecision(params?: {
   nowMs?: number;
@@ -95,11 +103,11 @@ export function createInitial15mDecision(params?: {
     currentSpot: spot,
     spotAtLock: null,
 
-    currentState: 'WATCH',
-    direction: 'NEUTRAL',
-    confidence: 50,
-    lockScore: 45,
-    reversalRisk: 12,
+    currentState: 'HYDRATING',
+    direction: null,
+    confidence: null,
+    lockScore: null,
+    reversalRisk: null,
     capitalPreservationScore: 15,
     capitalPreserved: false,
     regime: 'CHOPPY',
@@ -115,13 +123,13 @@ export function createInitial15mDecision(params?: {
       bullScore: 50,
       bearScore: 50,
       netDirectionalBias: 0,
-      confidence: 50,
+      confidence: null,
       regime: 'CHOPPY',
-      alignedEvidenceCount: 4,
+      alignedEvidenceCount: 0,
       evidenceFactors: [],
       contradictionScore: 12,
-      reversalRisk: 12,
-      signalDirection: 'NEUTRAL',
+      reversalRisk: null,
+      signalDirection: null,
       signalMomentum: 'STABLE',
       reasoning: 'Cycle initialized. Calibrating multi-venue orderbook telemetry across 10 factor groups.',
       primaryHypothesis: 'Evaluating directional confluence baseline',
@@ -131,35 +139,19 @@ export function createInitial15mDecision(params?: {
     },
 
     protection: {
-      lockScore: 45,
-      lockProgressPct: 62,
+      lockScore: null,
+      lockProgressPct: 0,
       temporalStability: 72,
-      reversalRisk: 12,
+      reversalRisk: null,
       capitalPreservationScore: 15,
       capitalPreserved: false,
       lateCycleProtectionActive: false,
       protectionStatus: 'WATCH',
       lockTier: 'NONE',
-      lockEvaluation: {
-        lockScore: 45,
-        conviction: 50,
-        reversalRisk: 12,
-        probabilityEdge: 25,
-        probabilityStability: 72,
-        modelAgreement: 40,
-        dataHealth: 98,
-        observationSeconds: 0,
-        lockEligible: false,
-        lockTier: 'NONE',
-        lockReadiness: 45,
-        blockerReason: 'Calibrating multi-venue orderbook telemetry across 10 factor groups.',
-        lockReason: 'Calibrating multi-venue orderbook telemetry across 10 factor groups.',
-        probVelocity: {
-          upVelocity: 0,
-          chopVelocity: 0,
-          downVelocity: 0
-        }
-      },
+      // No evaluation has run yet. The wire contract sends this as null while
+      // HYDRATING; seeding a scored block here let the lock-quality tile read a
+      // committed-looking 45/50/12 out of a cycle the engine had not judged.
+      lockEvaluation: null,
       checklist: {
         cycleActive: true,
         minLockDelayPassed: false,
