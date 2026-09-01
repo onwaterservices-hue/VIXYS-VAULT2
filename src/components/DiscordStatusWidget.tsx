@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MessageSquare, Check, CheckCircle2, Sparkles, RefreshCw } from 'lucide-react';
-import { getDiscordAuthUrlApi } from '../services/api';
+import { getDiscordAuthUrlSecure } from '../services/api';
 
 interface DiscordStatusWidgetProps {
   discordLinked: boolean;
@@ -36,7 +36,7 @@ export const DiscordStatusWidget: React.FC<DiscordStatusWidgetProps> = ({
         // ignore
       }
 
-      const authData = await getDiscordAuthUrlApi(savedEmail);
+      const authData = await getDiscordAuthUrlSecure();
       if (authData && authData.url) {
         const width = 600;
         const height = 700;

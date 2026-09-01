@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { MessageSquare, CheckCircle2, Sparkles, RefreshCw, ExternalLink, ShieldCheck, ArrowRight, X, Users, BellRing, Zap, HelpCircle } from 'lucide-react';
 import { AlertSettings } from '../types';
-import { getDiscordAuthUrlApi, verifyDiscordMembershipApi } from '../services/api';
+import { getDiscordAuthUrlSecure, verifyDiscordMembershipApi } from '../services/api';
 
 // Backend-authoritative entitlement tier -> display label. Replaces the old
 // `guildMember ? 'PRO' : 'None'` guess, which showed PRO for any free user who
@@ -88,7 +88,7 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     try {
-      const authData = await getDiscordAuthUrlApi(settings.emailAddress);
+      const authData = await getDiscordAuthUrlSecure();
       if (authData && authData.url) {
         const width = 600;
         const height = 700;
