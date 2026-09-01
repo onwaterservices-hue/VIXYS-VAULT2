@@ -183,9 +183,11 @@ console.log('== 5. projection: routes serve the canonical record, and downgrade 
 console.log('== 6. insufficient REAL telemetry produces HYDRATING, never fabricated values ==');
 {
   // hasSufficientRealTelemetry with a de-seeded buffer
-  const mk = (ticks, price, tickTs) => build(
+  // current15mStrikePrice became a required input (F1): without a strike the
+  // contract cannot be evaluated, so the instance must not publish a decision.
+  const mk = (ticks, price, tickTs, strike = 77100) => build(
     srcSufficient,
-    { rollingBtcTicks: new Array(ticks).fill({ price: 1, ts: 1 }), MIN_REAL_TICKS_FOR_DECISION: 12, currentBtcPrice: price, lastMarketUpdateTs: tickTs },
+    { rollingBtcTicks: new Array(ticks).fill({ price: 1, ts: 1 }), MIN_REAL_TICKS_FOR_DECISION: 12, currentBtcPrice: price, lastMarketUpdateTs: tickTs, current15mStrikePrice: strike },
     'return hasSufficientRealTelemetry();',
   );
   check('empty buffer => insufficient', mk(0, 77000, Date.now()) === false);
@@ -193,6 +195,7 @@ console.log('== 6. insufficient REAL telemetry produces HYDRATING, never fabrica
   check('12 ticks => sufficient', mk(12, 77000, Date.now()) === true);
   check('no observed price => insufficient', mk(50, 0, Date.now()) === false);
   check('no engine tick => insufficient', mk(50, 77000, 0) === false);
+  check('no strike => insufficient (F1)', mk(50, 77000, Date.now(), 0) === false);
 
   // The builder must refuse to produce a payload at all.
   const payload = build(
@@ -202,6 +205,7 @@ console.log('== 6. insufficient REAL telemetry produces HYDRATING, never fabrica
       lastMarketUpdateTs: 0, active15mCycle: { cycleId: 'C', stage: 'ANALYZING' },
       currentDirection: 'NEUTRAL', currentConfidence: 0, currentModelProbability: 0.5,
       current15mStrikePrice: 0, latestLockEvaluation: null, latestBtc15mPipeline: null,
+      buildEvidenceSubScores: () => [],
     },
     'return buildCanonicalPayloadFromEngine(0);',
   );

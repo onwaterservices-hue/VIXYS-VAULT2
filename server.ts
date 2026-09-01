@@ -1287,6 +1287,19 @@ let currentEdgePct = 14.5;
 // UNHYDRATED SENTINEL. 18 granted a cold instance instant signal persistence
 // and let it satisfy the persistence gate without observing anything.
 let persistenceSeconds = 0;
+// F8: wall-clock anchor for persistenceSeconds. 0 means "no directional hold".
+let directionHoldSinceMs = 0;
+// H1: timestamp of the last observation that actually reached the persistence
+// branch. Wall-clock persistence is only meaningful if the instance was
+// OBSERVING across that span. On Vercel a lambda is frozen between
+// invocations, so without this a lambda frozen for eight minutes would thaw
+// and immediately claim eight minutes of directional persistence it never
+// witnessed -- instantly satisfying a gate meant to represent sustained
+// agreement. 0 means "no observation recorded yet".
+let lastObservationAtMs = 0;
+// Four expected tick intervals (the engine ticks every 3s). A longer gap means
+// the observation stream was interrupted, not that the direction held.
+const MAX_OBSERVATION_GAP_MS = 4 * 3000;
 const requiredPersistenceSeconds = 15;
 let errorCount = 0;
 const SERVER_SESSION_ID = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -1862,10 +1875,141 @@ function buildCanonicalPayloadFromEngine(livePrice) {
     telemetryTicks: rollingBtcTicks.length,
     intervalStart: active15mCycle.intervalStart ?? null,
     intervalEnd: active15mCycle.intervalEnd ?? null,
+    // F2: evidence travels WITH the decision so every instance and every route
+    // shows the same reasoning behind the same direction.
+    evidence: { subScores: buildEvidenceSubScores(dir || "NEUTRAL") },
   };
   return payload;
 }
 __name(buildCanonicalPayloadFromEngine, "buildCanonicalPayloadFromEngine");
+
+// F2/H3: the evidence sub-scores are part of the DECISION, not per-instance
+// commentary. They were built inline in the route from this instance's own
+// pipeline, so a stale instance rendered its own evidence beside another
+// instance's canonical decision. They are now computed once, carried in the
+// canonical record, and projected from it.
+//
+// H3: an earlier pass nulled only `score` and left `aligned` and `detail`
+// fabricating -- a missing pipeline still produced "Multi-TF 4/5 momentum
+// alignment", "+$18", "1.24x", "Vol regime NORMAL (1.20%)" and a green
+// `aligned: true`. A null score beside an invented alignment badge is still a
+// fabricated claim. When the underlying pipeline data is missing, ALL THREE
+// fields are now null: the factor is reported as unknown, not as agreeing.
+function unknownEvidenceFactor(name) {
+  return { name, score: null, aligned: null, detail: null };
+}
+__name(unknownEvidenceFactor, "unknownEvidenceFactor");
+
+function buildEvidenceSubScores(decisionDirection) {
+  const p = latestBtc15mPipeline;
+  const mtf = p?.multiTimeframeAlignment;
+  const ps = p?.priceStructure;
+  const of = p?.orderFlowAnalytics;
+  const vm = p?.volatilityExpectedMove;
+  const ev = p?.edgeVsConfidence;
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+  const out = [];
+
+  // Momentum -- multi-timeframe alignment count.
+  const alignedCount = num(mtf?.alignedCount);
+  if (alignedCount === null) {
+    out.push(unknownEvidenceFactor("Momentum"));
+  } else {
+    const boost =
+      mtf.momentumClassification === "ACCELERATING"
+        ? 1.5
+        : mtf.momentumClassification === "STABLE"
+          ? 0.5
+          : -1.0;
+    out.push({
+      name: "Momentum",
+      score: Math.max(1.0, Math.min(9.8, Math.round(((alignedCount / 5) * 8 + boost) * 10) / 10)),
+      aligned: alignedCount >= 3,
+      detail: "Multi-TF " + alignedCount + "/5 momentum alignment",
+    });
+  }
+
+  // Trend -- VWAP displacement and breakout state.
+  const disp = num(ps?.displacementUSD);
+  if (!ps || disp === null) {
+    out.push(unknownEvidenceFactor("Trend"));
+  } else {
+    out.push({
+      name: "Trend",
+      score: Math.max(1.0, Math.min(9.8, Math.round((6.5 + Math.min(3.0, Math.abs(disp) / 20)) * 10) / 10)),
+      aligned: ps.breakoutState ? ps.breakoutState !== "FAKEOUT" : null,
+      detail: "VWAP displacement " + disp.toFixed(1),
+    });
+  }
+
+  // Order Flow -- taker buy ratio.
+  const taker = num(of?.takerBuyRatio);
+  if (taker === null) {
+    out.push(unknownEvidenceFactor("Order Flow"));
+  } else {
+    out.push({
+      name: "Order Flow",
+      score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (taker - 0.5) * 4)) * 10) / 10)),
+      aligned: taker >= 1.0,
+      detail: "Taker buy ratio " + taker.toFixed(2) + "x",
+    });
+  }
+
+  // Volume -- expected-move coverage.
+  const cov = num(vm?.coverageRatio);
+  if (cov === null) {
+    out.push(unknownEvidenceFactor("Volume"));
+  } else {
+    out.push({
+      name: "Volume",
+      score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, cov * 2.5)) * 10) / 10)),
+      aligned: typeof vm.isStrikeFeasible === "boolean" ? vm.isStrikeFeasible : null,
+      detail: "Expected move coverage " + cov.toFixed(2) + "x",
+    });
+  }
+
+  // Sentiment -- Kalshi implied probability. A missing cross-venue feed is
+  // stated plainly; it is the one case where a detail string is honest without
+  // a score, because it reports the absence rather than a value.
+  const kalshiProb = num(ev?.kalshiImpliedProbability);
+  if (kalshiProb === null || kalshiProb === 0) {
+    out.push({
+      name: "Sentiment",
+      score: null,
+      aligned: null,
+      detail: "Cross-venue feed unavailable",
+    });
+  } else {
+    const relevantProb = decisionDirection === "UP" ? kalshiProb : 1 - kalshiProb;
+    out.push({
+      name: "Sentiment",
+      score: Math.max(1.0, Math.min(9.8, Math.round(relevantProb * 100) / 10)),
+      aligned: decisionDirection === "UP" ? kalshiProb >= 0.5 : kalshiProb < 0.5,
+      detail: "Kalshi implied " + (kalshiProb * 100).toFixed(0) + "c",
+    });
+  }
+
+  // Volatility -- realized volatility regime.
+  const regime = vm?.volatilityRegime;
+  if (!regime) {
+    out.push(unknownEvidenceFactor("Volatility"));
+  } else {
+    const realized = num(vm?.realizedVol15mPct);
+    out.push({
+      name: "Volatility",
+      score: regime === "EXTREME" ? 3.5 : regime === "COMPRESSED" ? 6.0 : 8.0,
+      aligned: regime !== "EXTREME",
+      detail:
+        "Vol regime " +
+        regime +
+        (realized === null ? "" : " (" + realized.toFixed(2) + "%)"),
+    });
+  }
+
+  return out;
+}
+__name(buildEvidenceSubScores, "buildEvidenceSubScores");
 
 // Brings this instance's in-memory cycle into line with the committed decision.
 // Only terminal decisions are adopted: those are the ones where divergence is
@@ -1875,6 +2019,21 @@ __name(buildCanonicalPayloadFromEngine, "buildCanonicalPayloadFromEngine");
 function adoptCanonicalDecisionLocally(record) {
   if (!record || !record.cycleId) return;
   if (active15mCycle.cycleId !== record.cycleId) return;
+  // F1: the strike belongs to the CYCLE, not to the instance. An instance that
+  // booted mid-cycle has no strike of its own and must not recompute one from
+  // the current spot -- that would silently redefine the contract. Adopt the
+  // strike the cycle was actually opened with, from the canonical record.
+  if (
+    (!Number.isFinite(current15mStrikePrice) || current15mStrikePrice <= 0) &&
+    Number.isFinite(record.strike) &&
+    record.strike > 0
+  ) {
+    current15mStrikePrice = record.strike;
+    if (!active15mCycle.strikePrice) active15mCycle.strikePrice = record.strike;
+    console.log(
+      `[CANONICAL_ADOPT_STRIKE] ${record.cycleId}: adopted strike ${record.strike} from the canonical record.`,
+    );
+  }
   const stage = canonicalNormalizeStage(record.stage);
   if (stage === "LOCKED") {
     if (!active15mCycle.isLocked) {
@@ -2022,6 +2181,10 @@ function projectCanonicalOntoResponse(responseObj, record) {
     responseObj.protection.skipReasonCode = record.skipReason ?? responseObj.protection.skipReasonCode ?? null;
   }
 
+  // F2: evidence comes from the committed record or not at all. `?? null`
+  // rather than a local fallback, so a stale instance can never show its own
+  // evidence beside another instance's canonical decision.
+  responseObj.evidence = record.evidence ?? null;
   responseObj.decisionSource = "FIRESTORE_CANONICAL";
   responseObj.canonicalUpdatedAt = record.updatedAt ?? null;
   responseObj.canonicalStageRank = canonicalStageRank(stage);
@@ -2064,6 +2227,15 @@ function markResponseHydrating(responseObj, reason) {
   responseObj.lockedAt = null;
   responseObj.lockTier = "NONE";
   responseObj.lockEvaluation = null;
+  // F2: a "no decision" response must not carry evidence for a decision.
+  responseObj.evidence = null;
+  // F6-adjacent (required by F1/F3): currentSpot/openStrike are 0 on an
+  // unhydrated instance now that the seeds are gone. Reporting 0 would render
+  // as $0.00; null is the honest "not observed yet".
+  if (!(Number.isFinite(responseObj.currentSpot) && responseObj.currentSpot > 0))
+    responseObj.currentSpot = null;
+  if (!(Number.isFinite(responseObj.openStrike) && responseObj.openStrike > 0))
+    responseObj.openStrike = null;
   responseObj.decisionSource = "HYDRATING";
   responseObj.hydratingReason = reason || "INSUFFICIENT_REAL_TELEMETRY";
   responseObj.telemetryTicks = rollingBtcTicks.length;
@@ -2352,10 +2524,19 @@ let cycleVwapAccumulator = {
 // defaults when this is false.
 function hasSufficientRealTelemetry() {
   return (
+    // F3: only ticks carrying a real, finite, positive price are stored, so
+    // length here is a count of genuine observations rather than invocations.
     rollingBtcTicks.length >= MIN_REAL_TICKS_FOR_DECISION &&
     Number.isFinite(currentBtcPrice) &&
     currentBtcPrice > 0 &&
-    lastMarketUpdateTs > 0
+    lastMarketUpdateTs > 0 &&
+    // F1: without a strike the contract cannot be evaluated at all -- moneyness
+    // is undefined. Rather than divide by zero or invent a strike, the instance
+    // declares itself unable to decide and the routes answer HYDRATING. The
+    // strike arrives from Kalshi, from the next cycle rollover, or by adopting
+    // it from the canonical record for this cycle.
+    Number.isFinite(current15mStrikePrice) &&
+    current15mStrikePrice > 0
   );
 }
 __name(hasSufficientRealTelemetry, "hasSufficientRealTelemetry");
@@ -2516,13 +2697,21 @@ function evaluateBtc15mHighConvictionPipeline(
     Math.min(10, bullVolPct / Math.max(10, 100 - bullVolPct)),
   );
   const netDeltaEst = (bullVolPct - 50) * 1.8;
-  rollingBtcTicks.push({
-    price: spot,
-    ts: now,
-    takerBuyRatio: takerRatio,
-    delta: netDeltaEst,
-  });
-  if (rollingBtcTicks.length > 300) rollingBtcTicks.shift();
+  // F3: only REAL observations enter the buffer. `spot` is currentBtcPrice when
+  // every price source failed, which is now 0 rather than the old 64161.4 seed;
+  // storing it would let zero-price ticks count toward
+  // MIN_REAL_TICKS_FOR_DECISION and would poison the log-return math below
+  // (Math.log(0/prev) === -Infinity). No synthetic price is substituted -- the
+  // tick simply is not recorded, so the instance stays honestly under-supplied.
+  if (Number.isFinite(spot) && spot > 0) {
+    rollingBtcTicks.push({
+      price: spot,
+      ts: now,
+      takerBuyRatio: takerRatio,
+      delta: netDeltaEst,
+    });
+    if (rollingBtcTicks.length > 300) rollingBtcTicks.shift();
+  }
   const getPriceAtAgo = __name((sec) => {
     const targetTs = now - sec * 1e3;
     for (let i = rollingBtcTicks.length - 1; i >= 0; i--) {
@@ -2603,9 +2792,14 @@ function evaluateBtc15mHighConvictionPipeline(
     for (let i = 1; i < rollingBtcTicks.length; i++) {
       const prev = rollingBtcTicks[i - 1].price;
       const curr = rollingBtcTicks[i].price;
-      if (prev > 0) returns.push(Math.log(curr / prev));
+      // F3: guarding only `prev` left Math.log(0/prev) === -Infinity reachable,
+      // which made meanReturn -Infinity and the variance NaN.
+      if (prev > 0 && curr > 0) returns.push(Math.log(curr / prev));
     }
-    const meanReturn = returns.reduce((acc, r) => acc + r, 0) / returns.length;
+    const meanReturn =
+      returns.length > 0
+        ? returns.reduce((acc, r) => acc + r, 0) / returns.length
+        : 0;
     const variance =
       returns.reduce((acc, r) => acc + Math.pow(r - meanReturn, 2), 0) /
       Math.max(1, returns.length - 1);
@@ -3331,12 +3525,29 @@ async function runMarketEngineTick() {
         }
       } catch (kErr) {}
     }
-    const spotStrikeDist = livePrice - current15mStrikePrice;
-    const moneynessPct = (spotStrikeDist / current15mStrikePrice) * 100;
-    const intervalMomentum =
-      Math.round(
-        ((livePrice - current15mStrikePrice) / current15mStrikePrice) * 1e4,
-      ) / 100;
+    // F1: current15mStrikePrice starts at 0 now that the 64100 boot seed is
+    // gone, and on an instance that boots mid-cycle it stays 0 until either
+    // Kalshi supplies a strike or the next 15m rollover -- up to 15 minutes.
+    // These two divisions were unguarded, so moneyness and momentum became
+    // Infinity (or NaN when the spot is also unknown) and propagated into the
+    // pipeline. The identical division at getKalshi15mMarketState already
+    // guards this way; the tick path simply never did.
+    //
+    // No fabricated substitute is used: when the strike is unknown the
+    // displacement is reported as 0 (there is no measurable displacement from
+    // an unknown reference) AND hasSufficientRealTelemetry() returns false, so
+    // no decision is committed and the routes answer HYDRATING.
+    const strikeIsKnown =
+      Number.isFinite(current15mStrikePrice) && current15mStrikePrice > 0;
+    const spotStrikeDist = strikeIsKnown ? livePrice - current15mStrikePrice : 0;
+    const moneynessPct = strikeIsKnown
+      ? (spotStrikeDist / current15mStrikePrice) * 100
+      : 0;
+    const intervalMomentum = strikeIsKnown
+      ? Math.round(
+          ((livePrice - current15mStrikePrice) / current15mStrikePrice) * 1e4,
+        ) / 100
+      : 0;
     currentMomentum = intervalMomentum;
     let open = currentBtcOpenPrice || livePrice - 40;
     if (Math.abs(open - livePrice) > livePrice * 0.1) {
@@ -3414,15 +3625,48 @@ async function runMarketEngineTick() {
           : latestBtc15mPipeline.edgeVsConfidence.modelProbability <= 0.48
             ? "DOWN"
             : "NEUTRAL";
+    // F8: this was `persistenceSeconds += 3` -- one increment per INVOCATION,
+    // on the assumption of a fixed 3s cadence. Request-driven ticks broke that
+    // assumption, so a burst of concurrent GETs could add 9-12 "seconds" of
+    // persistence from one instant of market data and satisfy the lock gate's
+    // persistence and rolling-stability checks without the time they represent
+    // having passed. It is now derived from the wall clock, so it is genuinely
+    // seconds regardless of how often the tick runs. It is also surfaced to
+    // users as seconds in latestLockEvaluation, which is now truthful.
+    const observationNowMs = Date.now();
+    // H1: was this observation continuous with the previous one, or did the
+    // instance stop observing in between (a freeze, or a long fetch stall)?
+    const observationGapMs = lastObservationAtMs
+      ? observationNowMs - lastObservationAtMs
+      : Infinity;
+    const observationStreamContinuous =
+      observationGapMs <= MAX_OBSERVATION_GAP_MS;
     if (
       pipelineDirection === currentDirection &&
       pipelineDirection !== "NEUTRAL"
     ) {
-      persistenceSeconds += 3;
+      // Restart the hold when there is no anchor yet, OR when the observation
+      // stream was interrupted. Persistence may only accrue over time this
+      // instance actually watched.
+      if (!directionHoldSinceMs || !observationStreamContinuous) {
+        if (directionHoldSinceMs && !observationStreamContinuous) {
+          console.warn(
+            `[PERSISTENCE_GAP_RESET] cycleId=${active15mCycle.cycleId} gap=${Math.round(observationGapMs / 1e3)}s exceeds ${MAX_OBSERVATION_GAP_MS / 1e3}s; restarting the directional hold instead of crediting unobserved time.`,
+          );
+        }
+        directionHoldSinceMs = observationNowMs;
+      }
+      persistenceSeconds = Math.max(
+        0,
+        Math.floor((observationNowMs - directionHoldSinceMs) / 1e3),
+      );
     } else {
+      directionHoldSinceMs =
+        pipelineDirection !== "NEUTRAL" ? observationNowMs : 0;
       persistenceSeconds = 0;
       currentDirection = pipelineDirection;
     }
+    lastObservationAtMs = observationNowMs;
     const historyLen = serverLearningEngine.settledHistory.length;
     const avgBrier =
       historyLen > 0
@@ -3659,10 +3903,48 @@ async function runMarketEngineTick() {
 // Mark this instance hydrated once a tick has run, so read handlers can tell a
 // warm instance (real live values) from a cold serverless boot still holding the
 // seed defaults (spot 64161.4, evidence 0, etc.) that users saw flicker in.
+// F8: runMarketEngineTickTracked was not memoized, so every concurrent caller
+// started its OWN full tick. The live card polls with three concurrent
+// subscribers every 3s, and each request-path guard fired a tick, so a cold
+// instance ran roughly 4x the intended tick rate -- all against essentially one
+// instant of market data. Concurrent callers now share a single in-flight tick.
+let inFlightEngineTick = null;
 async function runMarketEngineTickTracked() {
-  await runMarketEngineTick();
-  engineHydrated = true;
+  if (inFlightEngineTick) return inFlightEngineTick;
+  inFlightEngineTick = (async () => {
+    try {
+      await runMarketEngineTick();
+      engineHydrated = true;
+    } finally {
+      inFlightEngineTick = null;
+    }
+  })();
+  return inFlightEngineTick;
 }
+
+// F9: an upstream price outage must not turn every GET into a full multi-fetch
+// engine tick. hasSufficientRealTelemetry() stays false for the whole outage, so
+// without this bound each request would run up to seven sequential 5s fetches
+// plus Firestore work -- an unauthenticated amplification loop on the three
+// busiest read endpoints. At most ONE request-driven tick per instance per
+// interval; everything else either joins the in-flight tick or proceeds and is
+// answered HYDRATING. The 12-real-tick requirement is unchanged; only the rate
+// at which a request may *provoke* a tick is bounded.
+const REQUEST_TICK_MIN_INTERVAL_MS = 3000;
+let lastRequestDrivenTickAtMs = 0;
+async function ensureEngineHydratedForRequest() {
+  if (engineHydrated && hasSufficientRealTelemetry()) return;
+  // Join a tick already running rather than starting a competing one.
+  if (inFlightEngineTick) {
+    try { await inFlightEngineTick; } catch {}
+    return;
+  }
+  const now = Date.now();
+  if (now - lastRequestDrivenTickAtMs < REQUEST_TICK_MIN_INTERVAL_MS) return;
+  lastRequestDrivenTickAtMs = now;
+  try { await runMarketEngineTickTracked(); } catch {}
+}
+__name(ensureEngineHydratedForRequest, "ensureEngineHydratedForRequest");
 setInterval(runMarketEngineTickTracked, 3e3);
 // Run one tick immediately on cold boot so the very first request does not serve
 // seed placeholders while waiting for the 3s interval to fire for the first time.
@@ -4223,6 +4505,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     intervalEnd: active15mCycle.intervalEnd ?? null,
     engineTickTs: lastMarketUpdateTs || null,
     telemetryTicks: rollingBtcTicks.length,
+    evidence: { subScores: buildEvidenceSubScores(dir) },
   });
 
   if (lockWinner && lockWinner.lockWriteToken === lockWriteToken) {
@@ -4658,6 +4941,8 @@ async function checkAndSettle15mCycle(livePrice) {
     globalSequenceNumber++;
     currentEngineCycleId += 1;
     persistenceSeconds = 0;
+    directionHoldSinceMs = 0;
+    lastObservationAtMs = 0;
     const oldCycleId = active15mCycle.cycleId;
     active15mCycle = {
       cycleId: currentCycleId,
@@ -4932,12 +5217,15 @@ async function checkAndSettle15mCycle(livePrice) {
   } else {
     active15mCycle.provisionalBias = "NEUTRAL_BIAS";
   }
-  const spotStrikeDiff = Math.abs(
-    livePrice - (active15mCycle.kalshiStrike || current15mStrikePrice),
-  );
-  const moneynessPct =
-    (spotStrikeDiff / (active15mCycle.kalshiStrike || current15mStrikePrice)) *
-    100;
+  // F1: same divide-by-zero exposure -- both operands can now be 0.
+  const biasStrikeRef = active15mCycle.kalshiStrike || current15mStrikePrice;
+  const biasStrikeKnown = Number.isFinite(biasStrikeRef) && biasStrikeRef > 0;
+  const spotStrikeDiff = biasStrikeKnown
+    ? Math.abs(livePrice - biasStrikeRef)
+    : 0;
+  const moneynessPct = biasStrikeKnown
+    ? (spotStrikeDiff / biasStrikeRef) * 100
+    : 0;
   const isMomentumFlat =
     Math.abs(currentMomentum) < 0.015 && moneynessPct < 0.015;
   const isProbIndecisive =
@@ -12966,8 +13254,12 @@ app.get("/api/diagnostic", (req, res) => {
     `cycleStatus=${active15mCycle.status}`,
     `cycleStage=${active15mCycle.stage}`,
     `cycleExpiry=${new Date(active15mCycle.intervalEnd).toISOString()}`,
-    `strike=${active15mCycle.kalshiStrike || current15mStrikePrice || 65e3}`,
-    `spot=${currentBtcPrice || 64821.5}`,
+    // F11: same fabrication -- `|| 65e3` invented a strike for the health line.
+    `strike=${active15mCycle.kalshiStrike || current15mStrikePrice || "unhydrated"}`,
+    // F11: the `|| 64821.5` fallback printed a fabricated spot on the HEALTH
+    // surface, where it reads as a passing check. De-seeding currentBtcPrice to
+    // 0 made it fire more often, not less. Report the unhydrated state honestly.
+    `spot=${Number.isFinite(currentBtcPrice) && currentBtcPrice > 0 ? currentBtcPrice : "unhydrated"}`,
     `liveDirection=${active15mCycle.status === "CALIBRATING" || active15mCycle.status === "BOOTSTRAPPING" || active15mCycle.status === "OBSERVING" ? "OBSERVING" : active15mCycle.lockedDirection || (currentDirection === "UP" ? "BUY UP" : currentDirection === "DOWN" ? "BUY DOWN" : "WAIT")}`,
     `liveProbability=${active15mCycle.lockedProbability || Math.round(currentModelProbability * 100)}`,
     `liveConfidence=${active15mCycle.lockedConfidence || Math.round(currentConfidence)}`,
@@ -13666,9 +13958,7 @@ app.get("/api/vixy/state", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || !hasSufficientRealTelemetry()) {
-    try { await runMarketEngineTickTracked(); } catch {}
-  }
+  await ensureEngineHydratedForRequest();
   // CANONICAL DECISION READ. This route no longer derives the decision from
   // this instance's memory, and no longer hand-syncs only the lock document.
   // It reads the one committed decision for the cycle (1.5s per-instance TTL
@@ -13855,9 +14145,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || !hasSufficientRealTelemetry()) {
-    try { await runMarketEngineTickTracked(); } catch {}
-  }
+  await ensureEngineHydratedForRequest();
   // CANONICAL DECISION READ. This route no longer derives the decision from
   // this instance's memory, and no longer hand-syncs only the lock document.
   // It reads the one committed decision for the cycle (1.5s per-instance TTL
@@ -14084,89 +14372,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     pnlDollar: null,
     stateVersion: globalSequenceNumber,
     updatedAt: now,
-    evidence: {
-      subScores: [
-        {
-          name: "Momentum",
-          score: (() => {
-            const mtf = latestBtc15mPipeline?.multiTimeframeAlignment;
-            if (!mtf) return 8.0;
-            const alignedTf = mtf.alignedCount ?? 4;
-            const boost = mtf.momentumClassification === "ACCELERATING" ? 1.5 : mtf.momentumClassification === "STABLE" ? 0.5 : -1.0;
-            return Math.max(1.0, Math.min(9.8, Math.round(((alignedTf / 5) * 8 + boost) * 10) / 10));
-          })(),
-          aligned: (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) >= 3,
-          detail: "Multi-TF " + (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) + "/5 momentum alignment",
-        },
-        {
-          name: "Trend",
-          score: (() => {
-            const ps = latestBtc15mPipeline?.priceStructure;
-            if (!ps) return 8.2;
-            const disp = Math.abs(ps.displacementUSD ?? 0);
-            return Math.max(1.0, Math.min(9.8, Math.round((6.5 + Math.min(3.0, disp / 20)) * 10) / 10));
-          })(),
-          aligned: (latestBtc15mPipeline?.priceStructure?.breakoutState !== "FAKEOUT"),
-          detail: "VWAP displacement " + (latestBtc15mPipeline?.priceStructure?.displacementUSD?.toFixed(1) ?? "+$18"),
-        },
-        {
-          name: "Order Flow",
-          score: (() => {
-            const of = latestBtc15mPipeline?.orderFlowAnalytics;
-            if (!of) return 7.9;
-            const taker = of.takerBuyRatio ?? 1.2;
-            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (taker - 0.5) * 4)) * 10) / 10));
-          })(),
-          aligned: (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio ?? 1.2) >= 1.0,
-          detail: "Taker buy ratio " + (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio?.toFixed(2) ?? "1.24") + "x",
-        },
-        {
-          name: "Volume",
-          score: (() => {
-            const expMove = latestBtc15mPipeline?.volatilityExpectedMove;
-            if (!expMove) return 7.6;
-            const cov = expMove.coverageRatio ?? 1.4;
-            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, cov * 2.5)) * 10) / 10));
-          })(),
-          aligned: (latestBtc15mPipeline?.volatilityExpectedMove?.isStrikeFeasible ?? true),
-          detail: "Expected move coverage " + (latestBtc15mPipeline?.volatilityExpectedMove?.coverageRatio?.toFixed(2) ?? "1.40") + "x",
-        },
-        {
-          name: "Sentiment",
-          score: (() => {
-            const ev = latestBtc15mPipeline?.edgeVsConfidence;
-            const kalshiProb = ev?.kalshiImpliedProbability;
-            if (kalshiProb === undefined || kalshiProb === null || kalshiProb === 0) {
-              return null;
-            }
-            const candidateDir = isLocked ? lockedPred?.direction : livePred.direction;
-            const relevantProb = candidateDir === "UP" ? kalshiProb : (1 - kalshiProb);
-            return Math.max(1.0, Math.min(9.8, Math.round(relevantProb * 100) / 10));
-          })(),
-          aligned: (() => {
-            const ev = latestBtc15mPipeline?.edgeVsConfidence;
-            const kalshiProb = ev?.kalshiImpliedProbability;
-            if (!kalshiProb) return false;
-            const candidateDir = isLocked ? lockedPred?.direction : livePred.direction;
-            return candidateDir === "UP" ? kalshiProb >= 0.50 : kalshiProb < 0.50;
-          })(),
-          detail: latestBtc15mPipeline?.edgeVsConfidence?.kalshiImpliedProbability 
-            ? "Kalshi implied " + (latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability * 100).toFixed(0) + "c"
-            : "Cross-venue feed unavailable",
-        },
-        {
-          name: "Volatility",
-          score: (() => {
-            const vm = latestBtc15mPipeline?.volatilityExpectedMove;
-            if (!vm) return 7.2;
-            const score = vm.volatilityRegime === "EXTREME" ? 3.5 : vm.volatilityRegime === "COMPRESSED" ? 6.0 : 8.0;
-            return Math.max(1.0, Math.min(9.8, score));
-          })(),
-          aligned: latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime !== "EXTREME",
-          detail: "Vol regime " + (latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime ?? "NORMAL") + " (" + (latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? 1.2).toFixed(2) + "%)",
-        }
-      ]
-    },
+    // Populated from the canonical record by
+    // projectCanonicalOntoResponse; null when no committed decision exists.
+    evidence: null,
     // ---- AUTHORITATIVE LIFECYCLE + FRESHNESS (additive) --------------------
     // currentState above is deliberately narrow (Canonical15mState). It cannot
     // express the engine's real pre-lock lifecycle, so the frontend used to
@@ -14204,9 +14412,7 @@ app.get(
   async (req, res) => {
     // COLD-INSTANCE HYDRATION GUARD (see /api/vixy/15m/current). Prevents this
     // instance serving seed placeholders on a cold serverless boot.
-    if (!engineHydrated || !hasSufficientRealTelemetry()) {
-      try { await runMarketEngineTickTracked(); } catch {}
-    }
+    await ensureEngineHydratedForRequest();
     // CANONICAL DECISION READ. This route no longer derives the decision from
   // this instance's memory, and no longer hand-syncs only the lock document.
   // It reads the one committed decision for the cycle (1.5s per-instance TTL
@@ -16033,6 +16239,17 @@ const DEFAULT_STORE_DIR =
 const STORE_FILE_PATH = path.join(DEFAULT_STORE_DIR, "vixy_store.json");
 function sanitizeForFirestore(obj) {
   if (obj === null || obj === void 0) return null;
+  // F1: Firestore rejects NaN/Infinity/-Infinity. Previously only `undefined`
+  // was stripped, so a single non-finite number anywhere in a payload made the
+  // whole write throw -- and for commitCanonicalDecision that meant the
+  // instance could never commit and served HYDRATING indefinitely.
+  //
+  // null is the honest representation of "not computable", and it is what the
+  // response contract already uses for an absent value. This can only ever
+  // convert a value that was ALREADY meaningless (NaN/Infinity) -- a finite
+  // number, including 0 and negatives, is passed through untouched, so a valid
+  // decision cannot be turned into a null by this layer.
+  if (typeof obj === "number") return Number.isFinite(obj) ? obj : null;
   if (typeof obj !== "object") return obj;
   if (Array.isArray(obj)) {
     return obj.map(sanitizeForFirestore).filter((v) => v !== void 0);
