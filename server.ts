@@ -3949,6 +3949,99 @@ setInterval(runMarketEngineTickTracked, 3e3);
 // Run one tick immediately on cold boot so the very first request does not serve
 // seed placeholders while waiting for the 3s interval to fire for the first time.
 runMarketEngineTickTracked().catch(() => {});
+
+// ---- VERCEL CRON: ENGINE TICK -------------------------------------------
+// vercel.json schedules "/api/cron/engine-tick" every minute, but the route was
+// never defined -- only /api/cron/hourly-market and /api/cron/settle exist. The
+// platform's warm-up therefore hit nothing for the engine.
+//
+// Consequence, observed in production and on both previews: the interval above
+// only advances while a lambda is thawed, so an instance served its single
+// cold-boot tick and was frozen. rollingBtcTicks stayed at 1 against
+// MIN_REAL_TICKS_FOR_DECISION (12), hasSufficientRealTelemetry() stayed false,
+// buildCanonicalPayloadFromEngine returned null, and NOTHING was ever committed
+// -- every cycle answered HYDRATING for its whole life and no canonical decision
+// could form. The 15M lifecycle could not run at all.
+//
+// The fix restores the opportunity to observe, and nothing else. It holds ONE
+// invocation open so the EXISTING tracked tick can accumulate REAL observations,
+// then lets the existing commit path do its normal work. Explicitly unchanged:
+// hasSufficientRealTelemetry(), the 12-tick minimum, the lock gate, the
+// qualification gates, commitCanonicalDecision and terminal monotonicity. No
+// telemetry, direction, confidence or lock score is synthesised here -- a tick
+// that cannot read a real price still records nothing (see F3 in
+// runMarketEngineTick), so this can only ever supply genuine observations.
+//
+// Once ANY instance commits, every reader projects that shared record via
+// readCanonicalDecision, so a single warmed instance per cycle is sufficient;
+// serving instances do not need their own 12 ticks.
+//
+// Budget: vercel.json sets maxDuration 60 for api/index.ts. The deadline stays
+// inside that so the invocation returns normally instead of being killed.
+const ENGINE_TICK_CRON_DEADLINE_MS = 45e3;
+const ENGINE_TICK_CRON_INTERVAL_MS = 3e3;
+// Bounds amplification the same way REQUEST_TICK_MIN_INTERVAL_MS (F9) does for
+// the read routes: this route holds an invocation open for ~45s, so without a
+// guard repeated calls could stack warm loops on one instance. At most one runs.
+let engineTickCronInFlight = false;
+
+app.all("/api/cron/engine-tick", async (req, res) => {
+  if (engineTickCronInFlight) {
+    return res.json({
+      success: true,
+      job: "ENGINE_TICK",
+      skipped: "ALREADY_RUNNING_ON_THIS_INSTANCE",
+      telemetryTicks: rollingBtcTicks.length,
+      requiredTelemetryTicks: MIN_REAL_TICKS_FOR_DECISION,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  engineTickCronInFlight = true;
+  const startedAt = Date.now();
+  const ticksAtStart = rollingBtcTicks.length;
+  let tickInvocations = 0;
+  let lastError = null;
+  try {
+    while (Date.now() - startedAt < ENGINE_TICK_CRON_DEADLINE_MS) {
+      try {
+        // The existing tracked tick. Concurrent callers join the in-flight run,
+        // so this never duplicates work with the 3s interval on this instance.
+        await runMarketEngineTickTracked();
+        tickInvocations++;
+      } catch (err) {
+        lastError = String(err?.message || err);
+      }
+      const elapsed = Date.now() - startedAt;
+      if (ENGINE_TICK_CRON_DEADLINE_MS - elapsed <= ENGINE_TICK_CRON_INTERVAL_MS) break;
+      await new Promise((resolve) =>
+        setTimeout(resolve, ENGINE_TICK_CRON_INTERVAL_MS),
+      );
+    }
+  } finally {
+    engineTickCronInFlight = false;
+  }
+  // Diagnostics only -- reports what the engine actually observed. Reaching the
+  // tick minimum is NOT asserted here: an upstream price outage legitimately
+  // leaves the instance under-supplied, and that must stay visible rather than
+  // be reported as success.
+  return res.json({
+    success: true,
+    job: "ENGINE_TICK",
+    durationMs: Date.now() - startedAt,
+    tickInvocations,
+    telemetryTicksAtStart: ticksAtStart,
+    telemetryTicks: rollingBtcTicks.length,
+    requiredTelemetryTicks: MIN_REAL_TICKS_FOR_DECISION,
+    sufficientRealTelemetry: hasSufficientRealTelemetry(),
+    cycleId: active15mCycle?.cycleId ?? null,
+    engineStage: active15mCycle?.stage ?? null,
+    qualificationStatus: active15mCycle?.qualificationStatus ?? null,
+    engineTickTs: lastMarketUpdateTs || null,
+    lastError,
+    timestamp: new Date().toISOString(),
+  });
+});
+
 const serverUsers = [];
 app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
   const email = String(
