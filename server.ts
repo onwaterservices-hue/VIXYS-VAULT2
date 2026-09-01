@@ -5422,7 +5422,10 @@ app.post("/api/auth/forgot-password", async (req, res) => {
         used: false,
         createdAt: new Date().toISOString(),
       });
-      const resetUrl = `https://www.vixxyvault.com/api/auth/reset-password?token=${token}`;
+      // Hardcoding the production host meant a Preview deployment emailed links
+      // that pointed at production.
+      const appBase = (process.env.APP_URL || "https://www.vixxyvault.com").replace(/\/$/, "");
+      const resetUrl = `${appBase}/api/auth/reset-password?token=${token}`;
       if (process.env.RESEND_API_KEY) {
         try {
           const emailRes = await fetch("https://api.resend.com/emails", {
@@ -5432,14 +5435,30 @@ app.post("/api/auth/forgot-password", async (req, res) => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              from: "VIXY Vault <onboarding@resend.dev>",
+              // Configurable so switching to the verified domain is an env change,
+              // not a code change. The onboarding@resend.dev default is Resend's
+              // shared sandbox sender: with no verified domain it may ONLY deliver
+              // to the Resend account owner's own address and returns 403 for every
+              // other recipient -- which is why no real user ever received a reset.
+              from: process.env.RESEND_FROM_EMAIL || "VIXY Vault <onboarding@resend.dev>",
               to: cleanEmail,
               subject: "Reset your VIXY Vault password",
               html: `<p>Someone requested a password reset for your VIXY Vault account.</p><p><a href="${resetUrl}">Click here to set a new password</a>. This link expires in 30 minutes.</p><p>If you didn't request this, you can safely ignore this email.</p>`,
             }),
           });
           if (!emailRes.ok) {
-            console.error("[PasswordReset] Resend API error, status:", emailRes.status, await emailRes.text());
+            const body = await emailRes.text().catch(() => "");
+            console.error(
+              `[PasswordReset] Resend REJECTED the send: HTTP ${emailRes.status} ${body}`.trim(),
+            );
+            if (emailRes.status === 403) {
+              console.error(
+                "[PasswordReset] 403 from Resend usually means the `from` address is not " +
+                "authorised for this recipient -- e.g. the sandbox sender onboarding@resend.dev " +
+                "with no verified domain, which can only email the Resend account owner. " +
+                "Verify a domain and set RESEND_FROM_EMAIL.",
+              );
+            }
           }
         } catch (emailErr) {
           console.error("[PasswordReset] Email send failed:", emailErr?.message || emailErr);
@@ -5509,12 +5528,30 @@ app.post("/api/auth/reset-password", async (req, res) => {
     if (!existing) {
       return res.status(400).json({ success: false, message: "Account not found." });
     }
+    // The new hash must reach Firestore before we call this a success.
+    //
+    // Previously the persist failure was swallowed with a console.warn, then the
+    // token was burned and { success: true } returned. On a serverless instance
+    // the in-memory user object and the /tmp disk store are both ephemeral, so a
+    // failed Firestore write meant the password change silently evaporated --
+    // while the user was told it worked and their one-time link was already spent,
+    // locking them out with no way back in.
+    const previousHash = existing.passwordHash;
     existing.passwordHash = hashPassword(password);
     savePersistentStore();
     try {
       await persistSingleUser(existing);
     } catch (err) {
-      console.warn("[PasswordReset] Firestore user sync failed:", err?.message || err);
+      // Roll the in-memory object back so this instance does not serve a password
+      // that was never durably stored, and leave the token UNUSED so the link
+      // still works on a retry.
+      existing.passwordHash = previousHash;
+      savePersistentStore();
+      console.error("[PasswordReset] Durable persist FAILED, reset aborted:", err?.message || err);
+      return res.status(503).json({
+        success: false,
+        message: "We could not save your new password. Please try that link again in a moment.",
+      });
     }
     await setDoc(tokenRef, { used: true, usedAt: new Date().toISOString() }, { merge: true });
     console.log(`[PasswordReset] Password successfully reset for ${cleanEmail}`);
