@@ -3,6 +3,18 @@ import { MessageSquare, CheckCircle2, Sparkles, RefreshCw, ExternalLink, ShieldC
 import { AlertSettings } from '../types';
 import { getDiscordAuthUrlApi, verifyDiscordMembershipApi } from '../services/api';
 
+// Backend-authoritative entitlement tier -> display label. Replaces the old
+// `guildMember ? 'PRO' : 'None'` guess, which showed PRO for any free user who
+// had merely joined the Discord server. Only the backend knows the real tier.
+const tierLabel = (tier?: string, fallback: string = 'None') => {
+  switch (String(tier || '').toUpperCase()) {
+    case 'ELITE': return 'VIXY ELITE';
+    case 'DAY_PASS': return 'VIXY (24hr) ELITE';
+    case 'NONE': return 'None';
+    default: return fallback;
+  }
+};
+
 interface DiscordOnboardingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -36,7 +48,7 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
           discordUserId: data.discordUserId,
           guildMember: data.guildMember,
           serverJoined: data.guildMember,
-          roleAssigned: data.guildRoles?.[0] || (data.guildMember ? 'PRO' : 'None'),
+          roleAssigned: tierLabel(data.entitlementTier, data.guildRoles?.[0] || 'None'),
           lastSyncTimestamp: new Date().toLocaleTimeString(),
           syncStatus: data.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
         }));
@@ -114,7 +126,7 @@ export const DiscordOnboardingModal: React.FC<DiscordOnboardingModalProps> = ({
           discordLinked: true,
           guildMember: res.profile.guildMember,
           serverJoined: res.profile.guildMember,
-          roleAssigned: res.profile.guildRoles?.[0] || (res.profile.guildMember ? 'PRO' : 'None'),
+          roleAssigned: tierLabel(res.profile.entitlementTier, res.profile.guildRoles?.[0] || 'None'),
           lastSyncTimestamp: new Date().toLocaleTimeString(),
           syncStatus: res.profile.guildMember ? 'HEALTHY' : 'NEEDS_GUILD',
         }));
