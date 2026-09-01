@@ -50,7 +50,13 @@ export type Canonical15mState =
   | 'LOCKED_DOWN'
   | 'SKIP'
   | 'PROTECTED'
-  | 'SETTLED';
+  | 'SETTLED'
+  // HYDRATING means the backend has NO authoritative decision for this cycle:
+  // either no canonical record is committed yet, or the instance has not
+  // observed enough real telemetry to be entitled to an opinion. It is not a
+  // lifecycle stage and must never be rendered as one -- the terminal has to
+  // say it does not know rather than infer a stage from the countdown.
+  | 'HYDRATING';
 
 // The engine's real 15M lifecycle, as advanced by runMarketEngineTick in
 // server.ts. This is a superset of Canonical15mState: several of these stages
@@ -64,7 +70,9 @@ export type EngineStage =
   | 'QUALIFYING'
   | 'LOCKING'
   | 'LOCKED'
-  | 'NO_TRADE';
+  | 'NO_TRADE'
+  // See Canonical15mState: absence of an authoritative decision, not a stage.
+  | 'HYDRATING';
 
 export type Canonical15mDirection = 'UP' | 'DOWN' | 'NEUTRAL' | 'SKIP';
 export type Canonical15mSettlement = 'PENDING' | 'SETTLED';

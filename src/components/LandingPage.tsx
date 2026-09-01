@@ -95,6 +95,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     ? 'CONFIRMING ENTRY'
     : canonical15m.currentState === 'SKIP'
     ? 'SKIP (PROTECTED)'
+    // No authoritative decision yet: do not claim the engine is analysing.
+    : canonical15m.currentState === 'HYDRATING'
+    ? 'SYNCING'
     : 'ANALYZING MARKET';
 
   const stateColor = canonical15m.currentState === 'LOCKED_UP'

@@ -62,7 +62,10 @@ interface CryptoPredictionCenterViewProps {
   onOpenAuth?: (mode: 'login' | 'register') => void;
 }
 
-export type CycleState = 'ANALYZING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'PROTECTED' | 'SETTLED' | 'SKIP';
+// 'HYDRATING' is not a lifecycle stage. It means the backend has no
+// authoritative canonical decision for this cycle yet, and the card must say so
+// rather than infer a stage from the countdown.
+export type CycleState = 'ANALYZING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'PROTECTED' | 'SETTLED' | 'SKIP' | 'HYDRATING';
 
 // Web Audio Soft Institutional Chime (Restrained, Optional)
 const playLockChime = () => {
@@ -384,10 +387,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     LOCKING: 'CONFIRMING',
     LOCKED: 'LOCKED',
     NO_TRADE: 'SKIP',
+    HYDRATING: 'HYDRATING',
   };
 
   const computedCycleState = useMemo<CycleState>(() => {
     const st = canonicalDecision?.currentState;
+    // No authoritative decision -> say so. Checked first so it can never be
+    // overridden by a stale isLocked or a countdown-derived guess below.
+    if (st === 'HYDRATING') return 'HYDRATING';
     if (st === 'SETTLED') return 'SETTLED';
     // SKIP is checked before isLocked. The engine never sets both, but if a
     // payload ever carried a stale isLocked alongside a skipped cycle, showing
@@ -407,12 +414,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       return ENGINE_STAGE_TO_CYCLE_STATE[stage];
     }
 
-    // Legacy fallback only, for a backend that predates engineStage.
-    const secondsRemaining = cycleSecondsRemaining;
-    const elapsed = Math.max(0, 900 - secondsRemaining);
-    if (elapsed < 120) return 'ANALYZING';
-    if (elapsed < 360) return 'BUILDING';
-    return 'CONFIRMING';
+    // No recognised stage. This previously read the countdown and announced
+    // CONFIRMING -- "completing final multi-venue stability checks" -- for any
+    // cycle past 6:00, regardless of what the engine was actually doing. A
+    // clock cannot know the decision, so report HYDRATING instead of inventing.
+    return 'HYDRATING';
   }, [canonicalDecision?.currentState, (canonicalDecision as any)?.isLocked, (canonicalDecision as any)?.engineStage, canonicalDecision?.timeRemainingSec, nowMs]);
 
   // Aura Style Configuration — Authentically VIXY Vault with subtle ambient glow and edge lighting
@@ -457,6 +463,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         return '15-Minute cycle finalized and verified against benchmark settlement index.';
       case 'SKIP':
         return 'Evidence did not reach the required confidence threshold. VIXY is protecting capital.';
+      case 'HYDRATING':
+        return 'Waiting for the authoritative decision for this cycle. VIXY will not display a direction it has not committed to.';
       default:
         return 'VIXY quantitative intelligence engine is monitoring 15-minute cycle structures in real time.';
     }
@@ -1207,6 +1215,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 {computedCycleState === 'PROTECTED' && 'PROTECTION ACTIVE'}
                 {computedCycleState === 'SKIP' && 'VIXY SKIP — CAPITAL PROTECTED'}
                 {computedCycleState === 'SETTLED' && '15M CYCLE SETTLED'}
+                {computedCycleState === 'HYDRATING' && 'VIXY SYNCING — NO DECISION YET'}
               </span>
               <span className="text-purple-300/40 hidden sm:inline">•</span>
               <span className="text-xs text-purple-200/80 leading-relaxed">
@@ -1234,16 +1243,21 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           const elapsedSecRemainder = elapsedSec % 60;
 
           // Stage qualifications
-          const isPhase1Active = elapsedSec < 120 && !isActuallyLocked;
+          // While HYDRATING there is no committed decision, so no phase may be
+          // shown as the one the engine is currently in. The timeline still
+          // renders the 15-minute time axis -- elapsed time is a real fact --
+          // but it stops asserting which stage the engine has reached.
+          const timelineKnown = computedCycleState !== 'HYDRATING';
+          const isPhase1Active = timelineKnown && elapsedSec < 120 && !isActuallyLocked;
           const isPhase1Done = elapsedSec >= 120 || isActuallyLocked;
 
-          const isPhase2Active = elapsedSec >= 120 && elapsedSec < 360 && !isActuallyLocked;
+          const isPhase2Active = timelineKnown && elapsedSec >= 120 && elapsedSec < 360 && !isActuallyLocked;
           const isPhase2Done = elapsedSec >= 360 || isActuallyLocked;
 
-          const isPhase3Active = elapsedSec >= 360 && elapsedSec < 720 && !isActuallyLocked;
+          const isPhase3Active = timelineKnown && elapsedSec >= 360 && elapsedSec < 720 && !isActuallyLocked;
           const isPhase3Done = elapsedSec >= 720 || isActuallyLocked;
 
-          const isPhase4Active = isActuallyLocked || elapsedSec >= 720;
+          const isPhase4Active = timelineKnown && (isActuallyLocked || elapsedSec >= 720);
           const isLockedEarly = isActuallyLocked && elapsedSec < 720;
 
           return (

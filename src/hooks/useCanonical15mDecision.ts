@@ -21,7 +21,9 @@ export type NormalizedLifecycleState =
   | 'LOCKED' 
   | 'PROTECTED' 
   | 'SETTLED' 
-  | 'SKIPPED';
+  | 'SKIPPED'
+  // Not a stage: the honest representation of "no authoritative decision".
+  | 'HYDRATING';
 
 // Maps the engine's real lifecycle stage onto the terminal's existing
 // vocabulary. This is a transport mapping, not a decision: every value here
@@ -34,10 +36,12 @@ const ENGINE_STAGE_TO_LIFECYCLE: Record<EngineStage, NormalizedLifecycleState> =
   LOCKING: 'CONFIRMING',
   LOCKED: 'LOCKED',
   NO_TRADE: 'SKIPPED',
+  HYDRATING: 'HYDRATING',
 };
 
 export function getNormalizedLifecycleState(decision: Canonical15mDecision): NormalizedLifecycleState {
-  if (!decision || !decision.currentState) return 'CALIBRATING';
+  // No payload at all is not a reason to claim a stage.
+  if (!decision || !decision.currentState) return 'HYDRATING';
 
   // Terminal canonical states always win -- they are the engine's committed
   // decision and outrank any in-flight stage.
@@ -47,6 +51,8 @@ export function getNormalizedLifecycleState(decision: Canonical15mDecision): Nor
   if (st === 'SKIP') return 'SKIPPED';
   if (st === 'LOCKED_UP' || st === 'LOCKED_DOWN') return 'LOCKED';
   if (st === 'CONFIRMING') return 'CONFIRMING';
+  // The backend has no authoritative decision. Report that, do not infer one.
+  if (st === 'HYDRATING') return 'HYDRATING';
 
   // Pre-lock, Canonical15mState collapses the entire engine lifecycle into
   // 'WATCH'. engineStage carries what actually got collapsed. Previously this
@@ -59,11 +65,10 @@ export function getNormalizedLifecycleState(decision: Canonical15mDecision): Nor
     return ENGINE_STAGE_TO_LIFECYCLE[stage];
   }
 
-  // Legacy fallback only: reached when talking to a backend that predates
-  // engineStage. Kept so an old deployment degrades rather than breaks.
-  const secondsRemaining = decision.timeRemainingSec ?? 900;
-  const elapsed = Math.max(0, 900 - secondsRemaining);
-  return elapsed < 360 ? 'CALIBRATING' : 'BUILDING';
+  // No recognised stage. This previously reconstructed one from the countdown,
+  // which is exactly the fabrication this work removes: a clock cannot know
+  // what the engine decided. Report HYDRATING instead.
+  return 'HYDRATING';
 }
 
 export function useCanonical15mDecision(): {
@@ -267,6 +272,10 @@ export function useCanonical15mDecision(): {
     case 'SETTLED':
       displayName = `VIXY SETTLED — ${decision.finalOutcome || 'RESOLVED'}`;
       badgeColor = 'text-gray-300 bg-gray-700/40 border-gray-600';
+      break;
+    case 'HYDRATING':
+      displayName = 'VIXY SYNCING';
+      badgeColor = 'text-slate-300 bg-slate-700/40 border-slate-500/50';
       break;
     default:
       displayName = 'VIXY WATCH';

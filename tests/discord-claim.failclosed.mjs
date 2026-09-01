@@ -1,6 +1,13 @@
 // RUNTIME TEST — Discord claim must FAIL CLOSED on every infrastructure failure.
 import { readFileSync } from 'fs';
-const src = readFileSync('/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', 'utf8');
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+// Path resolved RELATIVE to this file. This previously hardcoded an absolute
+// path to a DIFFERENT checkout (~/Downloads/VIXYS-VAULT2-main/server.ts), so the
+// suite silently validated that stale copy instead of the working tree.
+const here = dirname(fileURLToPath(import.meta.url));
+const src = readFileSync(join(here, '..', 'server.ts'), 'utf8');
 const i = src.indexOf('async function claimBroadcastAtomically');
 const j = src.indexOf('__name(claimBroadcastAtomically', i);
 const fnSrc = src.slice(i, j);

@@ -1236,12 +1236,18 @@ let lastKalshiUpdateTs = Date.now();
 let engineFeedStatus = "CONNECTED";
 let engineState = "MONITORING";
 let activeContractSymbol = "BTC-15M";
-let currentDirection = "UP";
-let currentConfidence = 88.5;
+// UNHYDRATED SENTINEL. "UP" was a fabricated boot bias that a cold instance
+// could publish before observing any market data.
+let currentDirection = "NEUTRAL";
+// UNHYDRATED SENTINEL (0 = no opinion). 88.5 was a boot placeholder that
+// production served as real model confidence on cold instances.
+let currentConfidence = 0;
 let currentBullVolumePct = 50;
 let currentMomentum = 0;
-let currentBtcPrice = 64161.4;
-let currentBtcOpenPrice = 64121.4;
+// UNHYDRATED SENTINEL (0 = no observation yet). 64161.4 was the boot seed that
+// leaked into production responses; hasSufficientRealTelemetry() gates on it.
+let currentBtcPrice = 0;
+let currentBtcOpenPrice = 0;
 let lastOpenFetchTs = 0;
 let currentEthPrice = 3515.2;
 let currentSolPrice = 189.5;
@@ -1274,10 +1280,13 @@ function hasTelemetryChangedSignificantly(newObs, prevObs) {
   return false;
 }
 __name(hasTelemetryChangedSignificantly, "hasTelemetryChangedSignificantly");
-let currentModelProbability = 0.685;
+// UNHYDRATED SENTINEL. 0.5 carries no directional claim; 0.685 asserted one.
+let currentModelProbability = 0.5;
 let currentKalshiImpliedProb = 0.54;
 let currentEdgePct = 14.5;
-let persistenceSeconds = 18;
+// UNHYDRATED SENTINEL. 18 granted a cold instance instant signal persistence
+// and let it satisfy the persistence gate without observing anything.
+let persistenceSeconds = 0;
 const requiredPersistenceSeconds = 15;
 let errorCount = 0;
 const SERVER_SESSION_ID = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -1514,6 +1523,564 @@ async function markBroadcastOutcome(cycleId, status) {
   }
 }
 __name(markBroadcastOutcome, "markBroadcastOutcome");
+
+// ============================================================================
+// CANONICAL 15M DECISION — CROSS-INSTANCE SINGLE SOURCE OF TRUTH
+// ============================================================================
+// `active15mCycle` is per-instance memory. On Vercel each lambda runs its own
+// copy, advances it only on setInterval(3s) while thawed, and is frozen between
+// invocations, so two instances answering the same second could return
+// contradictory decisions for one cycleId (measured in production: 12 concurrent
+// requests, one cycle, 7 distinct answers -- UP@91%, DOWN, and SKIP at once,
+// with identical secondsRemaining because that field alone is wall-clock derived).
+//
+// The decision for a cycle is now committed to active_cycle_lock/{cycleId} --
+// the SAME document the lock already used, so no new collection and no
+// firestore.rules change -- and every read route projects from it.
+//
+// Invariants enforced inside the transaction:
+//   * stage rank is monotonic; a stale instance can never move a cycle backward
+//   * once LOCKED or SKIP is committed the decision fields are FROZEN; later
+//     stages (CRITICALLY_INVALIDATED, SETTLED) may annotate but never change
+//     direction/decision/confidence/spotAtLock
+//   * SKIP can never be superseded by a contradictory LOCKED, and vice versa
+//   * LOCKED always carries lockQualified === true and a non-null spotAtLock
+const CANONICAL_STAGE_RANK = {
+  HYDRATING: 0,
+  OBSERVING: 1,
+  CALIBRATING: 2,
+  ANALYZING: 3,
+  QUALIFYING: 4,
+  LOCKING: 4,
+  CONFIRMING: 5,
+  LOCKED: 6,
+  SKIP: 6,
+  NO_TRADE: 6,
+  CRITICALLY_INVALIDATED: 7,
+  SETTLED: 8,
+};
+// LOCKED and SKIP are the two terminal DECISIONS. Reaching either freezes the
+// decision payload for the remainder of the cycle.
+const CANONICAL_DECIDED_STAGES = new Set(["LOCKED", "SKIP", "NO_TRADE"]);
+const CANONICAL_FROZEN_FIELDS = [
+  "direction",
+  "decision",
+  "confidence",
+  "probability",
+  "spotAtLock",
+  "spot",
+  "strike",
+  "lockedAt",
+  "lockQualified",
+  "lockReason",
+  "skipReason",
+];
+const CANONICAL_DECISION_TTL_MS = 1500;
+const CANONICAL_SCHEMA_VERSION = 2;
+
+function canonicalStageRank(stage) {
+  return CANONICAL_STAGE_RANK[String(stage || "HYDRATING").toUpperCase()] ?? 0;
+}
+__name(canonicalStageRank, "canonicalStageRank");
+
+// NO_TRADE is the engine's internal name for a skipped cycle; SKIP is the
+// canonical, client-facing name. Normalise so both sides agree on one token.
+function canonicalNormalizeStage(stage) {
+  const s = String(stage || "HYDRATING").toUpperCase();
+  return s === "NO_TRADE" ? "SKIP" : s;
+}
+__name(canonicalNormalizeStage, "canonicalNormalizeStage");
+
+function canonicalStateForStage(stage, direction) {
+  const s = canonicalNormalizeStage(stage);
+  if (s === "LOCKED") return direction === "DOWN" ? "LOCKED_DOWN" : "LOCKED_UP";
+  if (s === "SKIP") return "SKIP";
+  if (s === "SETTLED") return "SETTLED";
+  if (s === "CRITICALLY_INVALIDATED") return "CRITICALLY_INVALIDATED";
+  if (s === "HYDRATING") return "HYDRATING";
+  if (s === "CONFIRMING" || s === "LOCKING") return "CONFIRMING";
+  return "WATCH";
+}
+__name(canonicalStateForStage, "canonicalStateForStage");
+
+// Per-instance TTL cache of the FETCHED Firestore document only. It never holds
+// a locally-computed decision, and it is dropped the moment this instance
+// commits a newer transition, so it can only ever make an authoritative answer
+// cheaper -- never substitute for one.
+let canonicalDecisionCache = { cycleId: null, record: null, fetchedAtMs: 0 };
+
+function invalidateCanonicalDecisionCache(cycleId) {
+  if (!cycleId || canonicalDecisionCache.cycleId === cycleId) {
+    canonicalDecisionCache = { cycleId: null, record: null, fetchedAtMs: 0 };
+  }
+}
+__name(invalidateCanonicalDecisionCache, "invalidateCanonicalDecisionCache");
+
+function primeCanonicalDecisionCache(cycleId, record) {
+  if (!cycleId || !record) return;
+  canonicalDecisionCache = { cycleId, record, fetchedAtMs: Date.now() };
+}
+__name(primeCanonicalDecisionCache, "primeCanonicalDecisionCache");
+
+// Reads the committed decision for a cycle. Returns null when Firestore is
+// unavailable or the cycle has no committed decision yet -- callers must treat
+// null as HYDRATING and must NOT fall back to locally-computed values.
+async function readCanonicalDecision(cycleId, { allowCache = true } = {}) {
+  if (!cycleId) return null;
+  const now = Date.now();
+  if (
+    allowCache &&
+    canonicalDecisionCache.cycleId === cycleId &&
+    canonicalDecisionCache.record &&
+    now - canonicalDecisionCache.fetchedAtMs < CANONICAL_DECISION_TTL_MS
+  ) {
+    return canonicalDecisionCache.record;
+  }
+  if (!db || !canAttemptFirestoreRead("active_cycle_lock")) return null;
+  try {
+    const snap = await getDoc(doc(db, "active_cycle_lock", String(cycleId)));
+    if (!snap.exists()) return null;
+    const record = snap.data() || null;
+    if (record && record.cycleId && record.cycleId !== cycleId) {
+      // Defensive: never serve one cycle's decision under another's id.
+      console.warn(
+        `[CANONICAL_MISMATCH] Document ${cycleId} carries cycleId=${record.cycleId}; discarding.`,
+      );
+      return null;
+    }
+    primeCanonicalDecisionCache(cycleId, record);
+    return record;
+  } catch (err) {
+    handleFirestoreReadError(err, "readCanonicalDecision");
+    return null;
+  }
+}
+__name(readCanonicalDecision, "readCanonicalDecision");
+
+// Decides whether `incoming` may replace `existing`, and returns the record that
+// must be written (or null to leave the existing record untouched). Pure, so the
+// invariants are unit-testable without Firestore.
+function resolveCanonicalTransition(existing, incoming) {
+  if (!incoming || !incoming.stage) {
+    return { write: null, winner: existing || null, reason: "NO_INCOMING" };
+  }
+  const incomingStage = canonicalNormalizeStage(incoming.stage);
+  const next = { ...incoming, stage: incomingStage };
+  if (!existing || !existing.stage) {
+    return { write: next, winner: next, reason: "FIRST_WRITE" };
+  }
+  const existingStage = canonicalNormalizeStage(existing.stage);
+  const existingRank = canonicalStageRank(existingStage);
+  const incomingRank = canonicalStageRank(incomingStage);
+
+  if (incomingRank < existingRank) {
+    return {
+      write: null,
+      winner: existing,
+      reason: `STALE_BACKWARD (${incomingStage}<${existingStage})`,
+    };
+  }
+
+  const decided = CANONICAL_DECIDED_STAGES.has(existingStage);
+  if (decided) {
+    if (incomingRank === existingRank) {
+      // Already LOCKED or already SKIP. The decision is immutable, including an
+      // attempt to flip LOCKED->SKIP or SKIP->LOCKED at the same rank.
+      return {
+        write: null,
+        winner: existing,
+        reason: `TERMINAL_IMMUTABLE (${existingStage})`,
+      };
+    }
+    // Post-decision annotation (CRITICALLY_INVALIDATED / SETTLED). Advance the
+    // stage but carry the frozen decision fields forward verbatim.
+    const merged = { ...next };
+    for (const f of CANONICAL_FROZEN_FIELDS) {
+      if (existing[f] !== undefined) merged[f] = existing[f];
+    }
+    merged.decidedStage = existing.decidedStage || existingStage;
+    return { write: merged, winner: merged, reason: `ANNOTATE (${incomingStage})` };
+  }
+
+  return {
+    write: next,
+    winner: next,
+    reason: incomingRank === existingRank ? "REFRESH" : "ADVANCE",
+  };
+}
+__name(resolveCanonicalTransition, "resolveCanonicalTransition");
+
+// Enforces the response-coherence contract before anything is committed or
+// served. A LOCKED record that cannot satisfy it is downgraded rather than
+// published, because a lock that its own gate did not qualify is exactly the
+// contradiction this mission exists to remove.
+function assertCanonicalCoherence(record, context = "commit") {
+  if (!record) return null;
+  const stage = canonicalNormalizeStage(record.stage);
+  if (stage === "LOCKED" || String(record.state || "").startsWith("LOCKED")) {
+    const qualified = record.lockQualified === true;
+    const hasSpot =
+      record.spotAtLock !== null &&
+      record.spotAtLock !== undefined &&
+      Number.isFinite(Number(record.spotAtLock));
+    const hasDir = record.direction === "UP" || record.direction === "DOWN";
+    if (!qualified || !hasSpot || !hasDir) {
+      console.error(
+        `[CANONICAL_INCOHERENT_LOCK] ${context}: refusing LOCKED for ${record.cycleId} ` +
+          `(qualified=${record.lockQualified}, spotAtLock=${record.spotAtLock}, direction=${record.direction}).`,
+      );
+      return null;
+    }
+  }
+  return record;
+}
+__name(assertCanonicalCoherence, "assertCanonicalCoherence");
+
+// Commits a decision for `cycleId` first-writer-wins. Returns the winning
+// record -- which may be another instance's -- so the caller adopts the shared
+// truth rather than its own. Returns null only when no authoritative answer
+// could be established.
+async function commitCanonicalDecision(cycleId, payload) {
+  if (!cycleId || !payload) return null;
+  const candidate = assertCanonicalCoherence(
+    {
+      ...payload,
+      cycleId: String(cycleId),
+      stage: canonicalNormalizeStage(payload.stage),
+      schemaVersion: CANONICAL_SCHEMA_VERSION,
+      updatedAt: new Date().toISOString(),
+    },
+    "commitCanonicalDecision",
+  );
+  if (!candidate) return null;
+  candidate.stageRank = canonicalStageRank(candidate.stage);
+  candidate.state = canonicalStateForStage(candidate.stage, candidate.direction);
+  if (CANONICAL_DECIDED_STAGES.has(candidate.stage)) {
+    candidate.decidedStage = candidate.stage;
+    candidate.decidedAt = candidate.decidedAt || candidate.updatedAt;
+  }
+
+  if (!db) {
+    // No shared store means no authoritative decision can exist. Say so rather
+    // than letting this instance's opinion masquerade as canonical.
+    console.error(
+      `[CANONICAL_UNAVAILABLE] Firestore unavailable; no canonical decision committed for ${cycleId}.`,
+    );
+    return null;
+  }
+
+  try {
+    const winner = await runTransaction(db, async (tx) => {
+      const ref = doc(db, "active_cycle_lock", String(cycleId));
+      const snap = await tx.get(ref);
+      const existing = snap.exists() ? snap.data() || null : null;
+      const { write, winner: won, reason } = resolveCanonicalTransition(
+        existing,
+        candidate,
+      );
+      if (!write) {
+        if (reason && reason.startsWith("STALE_BACKWARD")) {
+          console.warn(
+            `[CANONICAL_STALE_REJECTED] ${cycleId}: ${reason}. Adopting committed decision.`,
+          );
+        }
+        return won;
+      }
+      tx.set(ref, sanitizeForFirestore(write));
+      return write;
+    });
+    invalidateCanonicalDecisionCache(String(cycleId));
+    if (winner) primeCanonicalDecisionCache(String(cycleId), winner);
+    return winner || null;
+  } catch (err) {
+    console.error(
+      `[CANONICAL_COMMIT_FAILED] ${cycleId}:`,
+      err?.message || err,
+    );
+    return null;
+  }
+}
+__name(commitCanonicalDecision, "commitCanonicalDecision");
+
+// Projects this instance's engine state into a canonical decision payload.
+// Returns null when the instance has not observed enough REAL telemetry to be
+// entitled to an opinion -- the caller must then leave the cycle HYDRATING
+// rather than committing a manufactured decision.
+function buildCanonicalPayloadFromEngine(livePrice) {
+  if (!hasSufficientRealTelemetry()) return null;
+  const cycleId = active15mCycle.cycleId;
+  if (!cycleId) return null;
+  const stage = canonicalNormalizeStage(
+    active15mCycle.stage || active15mCycle.status || "OBSERVING",
+  );
+  const isLockedStage = stage === "LOCKED";
+  const dir = isLockedStage
+    ? active15mCycle.lockedDirection
+    : currentDirection;
+  const payload = {
+    cycleId,
+    stage,
+    direction: dir || "NEUTRAL",
+    confidence: isLockedStage
+      ? active15mCycle.lockedConfidence
+      : Math.round(currentConfidence),
+    probability: isLockedStage
+      ? active15mCycle.lockedProbability
+      : currentModelProbability,
+    decision: isLockedStage ? active15mCycle.lockedDecision : null,
+    spotAtLock: isLockedStage ? active15mCycle.lockedSpot : null,
+    spot: isLockedStage ? active15mCycle.lockedSpot : null,
+    strike: active15mCycle.strikePrice ?? current15mStrikePrice ?? null,
+    lockedAt: isLockedStage ? active15mCycle.lockedAt : null,
+    lockedReason: isLockedStage ? active15mCycle.lockedReason : null,
+    lockQualified: isLockedStage ? true : latestLockEvaluation?.qualified === true,
+    lockReason: latestLockEvaluation?.reason ?? null,
+    skipReason:
+      stage === "SKIP"
+        ? active15mCycle.qualificationReason ||
+          active15mCycle.choppyReason ||
+          latestLockEvaluation?.reason ||
+          "SKIPPED"
+        : null,
+    lockScore: latestBtc15mPipeline?.lockQuality ?? null,
+    lockTier:
+      latestBtc15mPipeline?.lockQualityTier === "SKIP" ? "NONE" : "STANDARD",
+    reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? null,
+    regime: active15mCycle.isChoppy ? "CHOPPY" : "RANGE_BOUND",
+    evidenceAlignment: latestBtc15mPipeline?.evidenceAgreementCount ?? null,
+    contradictionScore: latestBtc15mPipeline?.chopAnalytics?.chopScore ?? null,
+    temporalStability: Math.max(
+      0,
+      Math.min(100, 100 - (latestBtc15mPipeline?.chopAnalytics?.chopScore ?? 0)),
+    ),
+    protectionStatus: active15mCycle.protectionStatus || "SAFE",
+    qualificationStatus: active15mCycle.qualificationStatus || null,
+    qualificationReason: active15mCycle.qualificationReason || null,
+    lockEvaluation: latestLockEvaluation || null,
+    currentSpotAtCommit: livePrice ?? currentBtcPrice ?? null,
+    engineTickTs: lastMarketUpdateTs || null,
+    telemetryTicks: rollingBtcTicks.length,
+    intervalStart: active15mCycle.intervalStart ?? null,
+    intervalEnd: active15mCycle.intervalEnd ?? null,
+  };
+  return payload;
+}
+__name(buildCanonicalPayloadFromEngine, "buildCanonicalPayloadFromEngine");
+
+// Brings this instance's in-memory cycle into line with the committed decision.
+// Only terminal decisions are adopted: those are the ones where divergence is
+// user-visible and harmful (a LOCKED shown next to a SKIP for one cycleId).
+// Pre-decision stages need no local adoption because every read route now
+// projects from the canonical record rather than from local memory.
+function adoptCanonicalDecisionLocally(record) {
+  if (!record || !record.cycleId) return;
+  if (active15mCycle.cycleId !== record.cycleId) return;
+  const stage = canonicalNormalizeStage(record.stage);
+  if (stage === "LOCKED") {
+    if (!active15mCycle.isLocked) {
+      console.log(
+        `[CANONICAL_ADOPT_LOCK] ${record.cycleId}: adopting committed lock dir=${record.direction} conf=${record.confidence}%.`,
+      );
+    }
+    active15mCycle.isLocked = true;
+    active15mCycle.lockCount = 1;
+    active15mCycle.status = "LOCKED";
+    active15mCycle.stage = "LOCKED";
+    active15mCycle.qualificationStatus = "PASSED";
+    active15mCycle.lockedDirection = record.direction;
+    active15mCycle.lockedConfidence = record.confidence;
+    active15mCycle.lockedProbability = record.probability;
+    active15mCycle.lockedStrike = record.strike;
+    active15mCycle.lockedSpot = record.spotAtLock;
+    active15mCycle.lockedAt = record.lockedAt;
+    active15mCycle.lockedDecision = record.decision;
+    active15mCycle.lockedReason = record.lockedReason;
+    lockedCycleIds.add(record.cycleId);
+  } else if (stage === "SKIP") {
+    active15mCycle.status = "NO_TRADE";
+    active15mCycle.stage = "NO_TRADE";
+    active15mCycle.qualificationStatus = "SKIPPED";
+    active15mCycle.qualificationReason =
+      record.skipReason || active15mCycle.qualificationReason || "SKIPPED";
+  }
+}
+__name(adoptCanonicalDecisionLocally, "adoptCanonicalDecisionLocally");
+
+// Write throttle. The engine ticks every 3s AND every /api/signal request drives
+// checkAndSettle15mCycle, so committing unconditionally would put every instance
+// into a contended transaction on the same document many times a second. A
+// commit is only worth making when it actually changes the decision: any stage
+// transition, any direction change, a material move in confidence or lock
+// score, or a periodic heartbeat so the record cannot go stale.
+const CANONICAL_HEARTBEAT_MS = 6000;
+const CANONICAL_CONFIDENCE_EPSILON = 2;
+const CANONICAL_LOCKSCORE_EPSILON = 3;
+let lastCanonicalCommit = { cycleId: null, stage: null, direction: null, confidence: null, lockScore: null, atMs: 0 };
+
+function shouldCommitCanonical(payload) {
+  if (!payload || !payload.cycleId) return false;
+  const stage = canonicalNormalizeStage(payload.stage);
+  // A terminal decision is always worth committing immediately.
+  if (CANONICAL_DECIDED_STAGES.has(stage)) {
+    return !(
+      lastCanonicalCommit.cycleId === payload.cycleId &&
+      lastCanonicalCommit.stage === stage
+    );
+  }
+  if (lastCanonicalCommit.cycleId !== payload.cycleId) return true;
+  if (lastCanonicalCommit.stage !== stage) return true;
+  if (lastCanonicalCommit.direction !== payload.direction) return true;
+  const dConf = Math.abs(
+    (Number(payload.confidence) || 0) - (Number(lastCanonicalCommit.confidence) || 0),
+  );
+  if (dConf >= CANONICAL_CONFIDENCE_EPSILON) return true;
+  const dLock = Math.abs(
+    (Number(payload.lockScore) || 0) - (Number(lastCanonicalCommit.lockScore) || 0),
+  );
+  if (dLock >= CANONICAL_LOCKSCORE_EPSILON) return true;
+  return Date.now() - lastCanonicalCommit.atMs >= CANONICAL_HEARTBEAT_MS;
+}
+__name(shouldCommitCanonical, "shouldCommitCanonical");
+
+function noteCanonicalCommit(payload) {
+  lastCanonicalCommit = {
+    cycleId: payload.cycleId,
+    stage: canonicalNormalizeStage(payload.stage),
+    direction: payload.direction,
+    confidence: payload.confidence,
+    lockScore: payload.lockScore,
+    atMs: Date.now(),
+  };
+}
+__name(noteCanonicalCommit, "noteCanonicalCommit");
+
+// Overwrites every DECISION-bearing field of a route response with the
+// committed canonical values, so all instances and all routes answer
+// identically for one cycleId. Wall-clock and live-market fields
+// (secondsRemaining, currentSpot, serverTimeMs) are deliberately left as the
+// per-request values -- they are observations, not decisions.
+function projectCanonicalOntoResponse(responseObj, record) {
+  if (!responseObj || !record) return responseObj;
+  const stage = canonicalNormalizeStage(record.stage);
+  const state = canonicalStateForStage(stage, record.direction);
+  const isLocked = stage === "LOCKED";
+
+  responseObj.currentState = state;
+  responseObj.engineStage = stage;
+  responseObj.direction = record.direction ?? responseObj.direction;
+  if (record.confidence !== null && record.confidence !== undefined)
+    responseObj.confidence = record.confidence;
+  if (record.lockScore !== null && record.lockScore !== undefined)
+    responseObj.lockScore = record.lockScore;
+  if (record.reversalRisk !== null && record.reversalRisk !== undefined)
+    responseObj.reversalRisk = record.reversalRisk;
+  if (record.regime) responseObj.regime = record.regime;
+  if (record.evidenceAlignment !== null && record.evidenceAlignment !== undefined)
+    responseObj.evidenceAlignment = record.evidenceAlignment;
+  if (record.temporalStability !== null && record.temporalStability !== undefined)
+    responseObj.temporalStability = record.temporalStability;
+  if (record.contradictionScore !== null && record.contradictionScore !== undefined)
+    responseObj.contradictionScore = record.contradictionScore;
+  if (record.protectionStatus) responseObj.protectionStatus = record.protectionStatus;
+  responseObj.lockTier = record.lockTier ?? responseObj.lockTier;
+  responseObj.spotAtLock = isLocked ? (record.spotAtLock ?? null) : null;
+  responseObj.lockedAt = isLocked
+    ? typeof record.lockedAt === "number"
+      ? record.lockedAt
+      : record.lockedAt
+        ? Date.parse(record.lockedAt)
+        : null
+    : null;
+  if (record.openStrike ?? record.strike)
+    responseObj.openStrike = record.strike ?? responseObj.openStrike;
+  if (record.lockEvaluation) responseObj.lockEvaluation = record.lockEvaluation;
+  responseObj.qualificationStatus =
+    record.qualificationStatus ?? responseObj.qualificationStatus ?? null;
+  responseObj.qualificationReason =
+    record.qualificationReason ?? responseObj.qualificationReason ?? null;
+  responseObj.skipReason = record.skipReason ?? null;
+
+  // Keep the narrative panels consistent with the committed decision rather
+  // than with this instance's local pipeline.
+  if (responseObj.gemini) {
+    responseObj.gemini.signalDirection = record.direction ?? responseObj.gemini.signalDirection;
+    responseObj.gemini.confidence = responseObj.confidence;
+    responseObj.gemini.regime = responseObj.regime;
+    responseObj.gemini.recommendedState = isLocked ? "LOCKED" : stage;
+    responseObj.gemini.reversalRisk = responseObj.reversalRisk;
+    responseObj.gemini.contradictionScore = responseObj.contradictionScore;
+    responseObj.gemini.alignedEvidenceCount = responseObj.evidenceAlignment;
+  }
+  if (responseObj.protection) {
+    responseObj.protection.lockScore = responseObj.lockScore;
+    responseObj.protection.lockProgressPct = responseObj.lockScore;
+    responseObj.protection.reversalRisk = responseObj.reversalRisk;
+    responseObj.protection.temporalStability = responseObj.temporalStability;
+    responseObj.protection.protectionStatus = responseObj.protectionStatus;
+    responseObj.protection.lockTier = responseObj.lockTier;
+    if (record.lockEvaluation) responseObj.protection.lockEvaluation = record.lockEvaluation;
+    responseObj.protection.skipReasonCode = record.skipReason ?? responseObj.protection.skipReasonCode ?? null;
+  }
+
+  responseObj.decisionSource = "FIRESTORE_CANONICAL";
+  responseObj.canonicalUpdatedAt = record.updatedAt ?? null;
+  responseObj.canonicalStageRank = canonicalStageRank(stage);
+
+  // Final coherence gate. A LOCKED response must never leave this function
+  // carrying lockQualified:false or a null spotAtLock -- the exact
+  // contradiction observed in production.
+  if (isLocked) {
+    const qualified = record.lockQualified === true;
+    const hasSpot =
+      responseObj.spotAtLock !== null && responseObj.spotAtLock !== undefined;
+    if (!qualified || !hasSpot) {
+      console.error(
+        `[CANONICAL_INCOHERENT_RESPONSE] ${record.cycleId}: suppressing LOCKED ` +
+          `(qualified=${record.lockQualified}, spotAtLock=${responseObj.spotAtLock}).`,
+      );
+      responseObj.currentState = "WATCH";
+      responseObj.engineStage = "QUALIFYING";
+      responseObj.spotAtLock = null;
+      responseObj.lockedAt = null;
+      responseObj.lockTier = "NONE";
+    }
+  }
+  return responseObj;
+}
+__name(projectCanonicalOntoResponse, "projectCanonicalOntoResponse");
+
+// Marks a response as HYDRATING: this instance has no committed decision to
+// serve and is not permitted to invent one. Decision fields are nulled rather
+// than filled with defaults.
+function markResponseHydrating(responseObj, reason) {
+  if (!responseObj) return responseObj;
+  responseObj.currentState = "HYDRATING";
+  responseObj.engineStage = "HYDRATING";
+  responseObj.direction = null;
+  responseObj.confidence = null;
+  responseObj.lockScore = null;
+  responseObj.reversalRisk = null;
+  responseObj.spotAtLock = null;
+  responseObj.lockedAt = null;
+  responseObj.lockTier = "NONE";
+  responseObj.lockEvaluation = null;
+  responseObj.decisionSource = "HYDRATING";
+  responseObj.hydratingReason = reason || "INSUFFICIENT_REAL_TELEMETRY";
+  responseObj.telemetryTicks = rollingBtcTicks.length;
+  responseObj.requiredTelemetryTicks = MIN_REAL_TICKS_FOR_DECISION;
+  if (responseObj.gemini) {
+    responseObj.gemini.signalDirection = null;
+    responseObj.gemini.confidence = null;
+    responseObj.gemini.recommendedState = "HYDRATING";
+  }
+  if (responseObj.protection) {
+    responseObj.protection.lockScore = null;
+    responseObj.protection.lockTier = "NONE";
+    responseObj.protection.lockEvaluation = null;
+  }
+  return responseObj;
+}
+__name(markResponseHydrating, "markResponseHydrating");
 async function updateCrossAssetFeeds() {
   const now = Date.now();
   if (currentBtcPrice && currentBtcPrice > 0) {
@@ -1759,23 +2326,39 @@ let latestLockEvaluation = {
   isEarlyLock: true,
   oddsWindow5050: true,
 };
+// DE-SEEDED. This buffer previously boot-filled itself with 61 synthetic
+// sine-wave ticks around $64,185, and cycleVwapAccumulator started at a
+// fabricated 64185 VWAP over 25 units of invented volume. Every downstream
+// number -- chop score, realized volatility, momentum, order-flow delta,
+// support/resistance, VWAP displacement -- was therefore computed from invented
+// price history on any instance that had not yet seen enough real ticks, and a
+// freshly booted lambda would publish a confident, entirely manufactured
+// decision. It now starts empty: an instance with insufficient REAL telemetry
+// reports HYDRATING instead of manufacturing a plausible one.
 const rollingBtcTicks = [];
-(() => {
-  const bootNow = Date.now();
-  const baseSpot = 64185;
-  for (let i = 60; i >= 0; i--) {
-    const ts = bootNow - i * 15 * 1e3;
-    const wave = Math.sin(i * 0.25) * 14 + (60 - i) * 0.2;
-    const p = Math.round((baseSpot - wave) * 100) / 100;
-    rollingBtcTicks.push({ price: p, ts, takerBuyRatio: 1.08, delta: 12.5 });
-  }
-})();
+// Minimum count of REAL observed ticks before this instance may express a
+// decision. Below this the pipeline is not trusted and no canonical decision is
+// committed. Deliberately NOT a threshold that can be lowered to force a signal.
+const MIN_REAL_TICKS_FOR_DECISION = 12;
 let cycleVwapAccumulator = {
   cycleStart: Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3),
-  cumulativePv: 64185 * 25,
-  cumulativeVol: 25,
-  vwap: 64185,
+  cumulativePv: 0,
+  cumulativeVol: 0,
+  vwap: null,
 };
+
+// True only when this instance has enough real market telemetry to be entitled
+// to an opinion. Callers must fail into HYDRATING rather than substituting
+// defaults when this is false.
+function hasSufficientRealTelemetry() {
+  return (
+    rollingBtcTicks.length >= MIN_REAL_TICKS_FOR_DECISION &&
+    Number.isFinite(currentBtcPrice) &&
+    currentBtcPrice > 0 &&
+    lastMarketUpdateTs > 0
+  );
+}
+__name(hasSufficientRealTelemetry, "hasSufficientRealTelemetry");
 let latestBtc15mPipeline = {
   lockQuality: 0,
   lockQualityTier: "SKIP",
@@ -1903,11 +2486,13 @@ function evaluateBtc15mHighConvictionPipeline(
     score: dataQualityScore,
   };
   if (cycleVwapAccumulator.cycleStart !== currentIntervalStart) {
+    // Start each cycle with NO assumed volume. The previous 25-unit phantom
+    // prior anchored the cycle VWAP before a single real observation existed.
     cycleVwapAccumulator = {
       cycleStart: currentIntervalStart,
-      cumulativePv: spot * 25,
-      cumulativeVol: 25,
-      vwap: spot,
+      cumulativePv: 0,
+      cumulativeVol: 0,
+      vwap: null,
     };
   } else {
     const estVol = 3.5 + Math.random() * 2;
@@ -1920,7 +2505,12 @@ function evaluateBtc15mHighConvictionPipeline(
           100,
       ) / 100;
   }
-  const vwap = cycleVwapAccumulator.vwap || spot;
+  // No synthetic fallback: before any real volume has accumulated the VWAP is
+  // simply the live spot, which is an observation rather than an invention.
+  const vwap =
+    Number.isFinite(cycleVwapAccumulator.vwap) && cycleVwapAccumulator.vwap > 0
+      ? cycleVwapAccumulator.vwap
+      : spot;
   const takerRatio = Math.max(
     0.1,
     Math.min(10, bullVolPct / Math.max(10, 100 - bullVolPct)),
@@ -3092,7 +3682,8 @@ app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
 });
 let current15mIntervalStart =
   Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
-let current15mStrikePrice = 64100;
+// UNHYDRATED SENTINEL (0 = no strike established until a real spot is seen).
+let current15mStrikePrice = 0;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
 // ============================================================================
@@ -3597,35 +4188,61 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   let didDiverge = false;
   let existingLockData = null;
 
-  if (db) {
-    try {
-      await runTransaction(db, async (transaction) => {
-        const docRef = doc(db, "active_cycle_lock", cycleId);
-        const docSnap = await transaction.get(docRef);
-        if (!docSnap.exists()) {
-          transaction.set(docRef, lockDataToUse);
-          transactionSucceeded = true;
-        } else {
-          existingLockData = docSnap.data();
-          transactionSucceeded = false;
-        }
-      });
-    } catch (err) {
-      console.error(`[lock15mCycle] Firestore transaction failed for cycle ${cycleId}:`, err);
-      try {
-        const docRef = doc(db, "active_cycle_lock", cycleId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          existingLockData = docSnap.data();
-          transactionSucceeded = false;
-        } else {
-          transactionSucceeded = true;
-        }
-      } catch (err2) {
-        transactionSucceeded = true;
-      }
-    }
+  // The lock is now committed through the SAME canonical committer as every
+  // other transition, rather than through its own bespoke transaction. This
+  // matters because the cycle document already exists before the lock (it
+  // carries the pre-lock WATCH/ANALYZING decision), so the old
+  // `if (!docSnap.exists())` test would have treated an ordinary pre-lock
+  // record as a competing lock and adopted its direction. commitCanonicalDecision
+  // advances a pre-lock record to LOCKED, and refuses to overwrite a cycle that
+  // has already committed LOCKED or SKIP.
+  const lockWriteToken = `${SERVER_SESSION_ID}:${lockedTime}:${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+  const lockWinner = await commitCanonicalDecision(cycleId, {
+    ...lockDataToUse,
+    stage: "LOCKED",
+    spotAtLock: livePrice,
+    lockQualified: true,
+    lockWriteToken,
+    lockScore: latestBtc15mPipeline?.lockQuality ?? null,
+    lockTier:
+      latestBtc15mPipeline?.lockQualityTier === "SKIP" ? "NONE" : "STANDARD",
+    reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? null,
+    regime: active15mCycle.isChoppy ? "CHOPPY" : "RANGE_BOUND",
+    evidenceAlignment: latestBtc15mPipeline?.evidenceAgreementCount ?? null,
+    contradictionScore: latestBtc15mPipeline?.chopAnalytics?.chopScore ?? null,
+    temporalStability: Math.max(
+      0,
+      Math.min(100, 100 - (latestBtc15mPipeline?.chopAnalytics?.chopScore ?? 0)),
+    ),
+    protectionStatus: active15mCycle.protectionStatus || "SAFE",
+    qualificationStatus: "PASSED",
+    lockEvaluation: latestLockEvaluation || null,
+    intervalStart: active15mCycle.intervalStart ?? null,
+    intervalEnd: active15mCycle.intervalEnd ?? null,
+    engineTickTs: lastMarketUpdateTs || null,
+    telemetryTicks: rollingBtcTicks.length,
+  });
+
+  if (lockWinner && lockWinner.lockWriteToken === lockWriteToken) {
+    transactionSucceeded = true;
+  } else if (lockWinner) {
+    // Another instance already decided this cycle. Adopt its record rather than
+    // publishing a second, conflicting one.
+    existingLockData = lockWinner;
+    transactionSucceeded = false;
+    console.warn(
+      `[LOCK_ADOPTED_CANONICAL] ${cycleId}: another instance already committed ` +
+        `${canonicalNormalizeStage(lockWinner.stage)}; adopting it.`,
+    );
   } else {
+    // No shared store reachable. The lock still applies to THIS instance so the
+    // engine keeps working, but nothing is published as canonical and the
+    // Discord path (which requires a committed record) stays silent.
+    console.error(
+      `[LOCK_NOT_CANONICAL] ${cycleId}: canonical commit unavailable; lock is instance-local only.`,
+    );
     transactionSucceeded = true;
   }
 
@@ -3753,7 +4370,29 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     cycleId,
   };
 
-  await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
+  // Broadcast the COMMITTED canonical decision, never these locals. finalDir /
+  // finalConf are this instance's view; lockWinner is what every instance and
+  // the web card will show for this cycleId.
+  if (
+    lockWinner &&
+    canonicalNormalizeStage(lockWinner.stage) === "LOCKED" &&
+    lockWinner.lockQualified === true &&
+    lockWinner.spotAtLock !== null &&
+    lockWinner.spotAtLock !== undefined
+  ) {
+    await attemptDiscordSignalBroadcast(
+      cycleId,
+      lockWinner.direction,
+      lockWinner.confidence,
+      lockWinner.spotAtLock,
+      lockWinner.strike,
+      lockWinner.lockedReason || finalReason,
+    );
+  } else {
+    console.warn(
+      `[DISCORD_SUPPRESSED] ${cycleId}: no coherent canonical LOCKED record to broadcast.`,
+    );
+  }
 
   if (transactionSucceeded) {
     try {
@@ -3939,6 +4578,20 @@ async function checkAndSettle15mCycle(livePrice) {
             );
             persistSingleSignalLog(prevLog);
             persistCalibrationState().catch(() => {});
+            // Close the canonical lifecycle for the cycle that just expired.
+            // SETTLED is an annotation: resolveCanonicalTransition carries the
+            // frozen decision fields forward, so settlement can never rewrite
+            // the direction or confidence that was published.
+            await commitCanonicalDecision(
+              `15M-${new Date(prevIntervalStart).toISOString()}`,
+              {
+                stage: "SETTLED",
+                settledAt: prevLog.resolvedAt || new Date(now).toISOString(),
+                settlementPrice: prevLog.settlementPrice ?? livePrice,
+                actualOutcome: prevLog.actualOutcome ?? null,
+                wasCorrect: prevLog.wasCorrect ?? null,
+              },
+            );
           }
         }
       }
@@ -4518,20 +5171,47 @@ async function checkAndSettle15mCycle(livePrice) {
       persistSingleSignalLog(skippedLog);
     }
   }
-  // lockedSnapshot is only populated by lock15mCycle within the SAME warm
-  // serverless instance. A cold instance that merely reads an already-locked
-  // cycle from Firestore has lockedSnapshot === undefined, so gating on it
-  // meant this sync path never fired in production. lockedPrediction is the
-  // authoritative, Firestore-backed record and survives cold starts.
-  const lockedSrc = active15mCycle && (active15mCycle.lockedSnapshot || active15mCycle.lockedPrediction);
-  if (active15mCycle && active15mCycle.isLocked && lockedSrc && active15mCycle.cycleId) {
+  // ---- CANONICAL DECISION COMMIT ------------------------------------------
+  // Publish this tick's conclusion to the one shared record for the cycle. The
+  // returned winner may be ANOTHER instance's decision; when it is, this
+  // instance adopts it rather than continuing to serve its own. Without enough
+  // real telemetry buildCanonicalPayloadFromEngine returns null and nothing is
+  // committed, leaving the cycle HYDRATING instead of manufactured.
+  let canonicalWinner = null;
+  const canonicalPayload = buildCanonicalPayloadFromEngine(livePrice);
+  if (canonicalPayload && shouldCommitCanonical(canonicalPayload)) {
+    noteCanonicalCommit(canonicalPayload);
+    canonicalWinner = await commitCanonicalDecision(
+      canonicalPayload.cycleId,
+      canonicalPayload,
+    );
+    if (canonicalWinner) adoptCanonicalDecisionLocally(canonicalWinner);
+  } else if (canonicalPayload) {
+    // Nothing material changed. Read the committed record instead of writing,
+    // so this instance still converges on shared truth without contending.
+    canonicalWinner = await readCanonicalDecision(canonicalPayload.cycleId);
+    if (canonicalWinner) adoptCanonicalDecisionLocally(canonicalWinner);
+  }
+
+  // Discord consumes the COMMITTED canonical decision, never this instance's
+  // local memory. Previously this read active15mCycle.lockedSnapshot /
+  // lockedPrediction, so a stale instance could broadcast a lock that
+  // disagreed with what the web card was showing for the same cycleId.
+  if (
+    canonicalWinner &&
+    canonicalNormalizeStage(canonicalWinner.stage) === "LOCKED" &&
+    canonicalWinner.cycleId &&
+    canonicalWinner.lockQualified === true &&
+    canonicalWinner.spotAtLock !== null &&
+    canonicalWinner.spotAtLock !== undefined
+  ) {
     await attemptDiscordSignalBroadcast(
-      active15mCycle.cycleId,
-      lockedSrc.direction,
-      lockedSrc.confidence,
-      lockedSrc.spot ?? lockedSrc.spotAtLock,
-      lockedSrc.strike,
-      lockedSrc.reason || "AUTHORITATIVE_LOCK_SYNC",
+      canonicalWinner.cycleId,
+      canonicalWinner.direction,
+      canonicalWinner.confidence,
+      canonicalWinner.spotAtLock,
+      canonicalWinner.strike,
+      canonicalWinner.lockedReason || "AUTHORITATIVE_LOCK_SYNC",
     );
   }
   active15mCycle.sequence = globalSequenceNumber;
@@ -12986,85 +13666,25 @@ app.get("/api/vixy/state", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || currentBtcPrice === 64161.4) {
+  if (!engineHydrated || !hasSufficientRealTelemetry()) {
     try { await runMarketEngineTickTracked(); } catch {}
   }
-  const currentCycleIdForStateSync = active15mCycle.cycleId;
-  if (currentCycleIdForStateSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
-    try {
-      const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForStateSync);
-      const lockDocSnap = await getDoc(lockDocRef);
-      // The 15M cycle can roll over while the Firestore read above is in
-      // flight. Without re-checking identity here, the lock belonging to the
-      // cycle we STARTED reading gets stamped onto whatever cycle is active
-      // now: a brand-new cycle reports LOCKED seconds after opening, carrying
-      // the previous cycle's direction, confidence, spot and lockedAt, and
-      // bypassing the 360s minimum observation window that canLockCurrentCycle
-      // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
-      // followed by a LOCK_SYNC naming the PREVIOUS cycle.
-      if (active15mCycle.cycleId !== currentCycleIdForStateSync) {
-        console.warn(
-          `[LOCK_SYNC_STALE] Route /api/vixy/state discarding lock read for ${currentCycleIdForStateSync}; active cycle is now ${active15mCycle.cycleId}.`,
-        );
-      } else if (lockDocSnap.exists()) {
-        const lockData = lockDocSnap.data();
-        const adoptedDir = lockData.direction;
-        const adoptedConf = lockData.confidence;
-        const adoptedProb = lockData.probability;
-        const adoptedStrike = lockData.strike;
-        const adoptedSpot = lockData.spot;
-        const adoptedLockedAt = lockData.lockedAt;
-        const adoptedReason = lockData.lockedReason || "Firestore canonical lock sync";
-        const adoptedDecision = lockData.decision || (adoptedDir === "UP" ? "BUY UP" : "BUY DOWN");
-
-        if (
-          !active15mCycle.isLocked ||
-          active15mCycle.lockedDirection !== adoptedDir ||
-          active15mCycle.lockedConfidence !== adoptedConf ||
-          active15mCycle.lockedProbability !== adoptedProb ||
-          active15mCycle.lockedStrike !== adoptedStrike
-        ) {
-          if (active15mCycle.isLocked) {
-            console.warn(
-              `[LOCK_DIVERGENCE_DETECTED] Route /api/vixy/state read detected divergence for cycle ${currentCycleIdForStateSync}. ` +
-              `In-memory: dir=${active15mCycle.lockedDirection}, conf=${active15mCycle.lockedConfidence}%, prob=${active15mCycle.lockedProbability}, strike=${active15mCycle.lockedStrike}. ` +
-              `Firestore: dir=${adoptedDir}, conf=${adoptedConf}%, prob=${adoptedProb}, strike=${adoptedStrike}. Self-correcting.`
-            );
-          } else {
-            console.log(
-              `[LOCK_SYNC] Route /api/vixy/state read detected lock in Firestore for cycle ${currentCycleIdForStateSync} that was not yet locked in-memory. Syncing and locking.`
-            );
-          }
-
-          active15mCycle.isLocked = true;
-          active15mCycle.lockCount = 1;
-          active15mCycle.calibrationCount = 1;
-          active15mCycle.calibratedAt = active15mCycle.calibratedAt || adoptedLockedAt;
-          active15mCycle.analysisCount = 1;
-          active15mCycle.analyzedAt = active15mCycle.analyzedAt || adoptedLockedAt;
-          active15mCycle.status = "LOCKED";
-          active15mCycle.stage = "LOCKED";
-          active15mCycle.qualificationStatus = "PASSED";
-          active15mCycle.lockedAt = adoptedLockedAt;
-          active15mCycle.lockedDirection = adoptedDir;
-          active15mCycle.lockedDecision = adoptedDecision;
-          active15mCycle.lockedConfidence = adoptedConf;
-          active15mCycle.lockedProbability = adoptedProb;
-          active15mCycle.lockedStrike = adoptedStrike;
-          active15mCycle.lockedSpot = adoptedSpot;
-          active15mCycle.lockedReason = adoptedReason;
-          active15mCycle.originalDecision = adoptedDecision;
-          active15mCycle.isCriticallyInvalidated = false;
-          active15mCycle.calibrationStatus = "COMPLETE";
-          active15mCycle.analysisStatus = "COMPLETE";
-          active15mCycle.validationStatus = "PASSED";
-          lockedCycleIds.add(currentCycleIdForStateSync);
-        }
-      }
-    } catch (err) {
-      handleFirestoreReadError(err, "Route /api/vixy/state");
-    }
+  // CANONICAL DECISION READ. This route no longer derives the decision from
+  // this instance's memory, and no longer hand-syncs only the lock document.
+  // It reads the one committed decision for the cycle (1.5s per-instance TTL
+  // cache of the FETCHED record only) and projects it below. A null record
+  // means no authoritative decision exists yet -> HYDRATING, never a guess.
+  const canonicalCycleId = active15mCycle.cycleId;
+  let canonicalRecord = await readCanonicalDecision(canonicalCycleId);
+  if (canonicalRecord && active15mCycle.cycleId !== canonicalCycleId) {
+    // The cycle rolled over while the read was in flight. Discard rather than
+    // stamp the previous cycle's decision onto the new one.
+    console.warn(
+      `[CANONICAL_READ_STALE] Route /api/vixy/state discarding decision for ${canonicalCycleId}; active cycle is now ${active15mCycle.cycleId}.`,
+    );
+    canonicalRecord = null;
   }
+  if (canonicalRecord) adoptCanonicalDecisionLocally(canonicalRecord);
 
   globalSequenceNumber++;
   const now = new Date().toISOString();
@@ -13181,8 +13801,50 @@ app.get("/api/vixy/state", async (req, res) => {
     sequence: globalSequenceNumber,
     btc15mPipeline: latestBtc15mPipeline,
   };
+  // Same canonical decision as /api/vixy/15m/current, projected onto this
+  // route's shape. Both routes must never disagree for one cycleId.
+  if (canonicalRecord) {
+    const cStage = canonicalNormalizeStage(canonicalRecord.stage);
+    const cLocked = cStage === "LOCKED";
+    statePayload.status = cStage;
+    statePayload.stage = cStage;
+    statePayload.isLocked = cLocked;
+    statePayload.decisionSource = "FIRESTORE_CANONICAL";
+    statePayload.canonicalUpdatedAt = canonicalRecord.updatedAt ?? null;
+    statePayload.lockedPrediction = cLocked
+      ? {
+          direction: canonicalRecord.direction,
+          probability: canonicalRecord.probability,
+          confidence: canonicalRecord.confidence,
+          lockedAt: canonicalRecord.lockedAt,
+          spotAtLock: canonicalRecord.spotAtLock,
+          strike: canonicalRecord.strike,
+          reason: canonicalRecord.lockedReason,
+          decision: canonicalRecord.decision,
+        }
+      : null;
+    statePayload.livePrediction = {
+      direction: canonicalRecord.direction,
+      probability: canonicalRecord.probability,
+      confidence: canonicalRecord.confidence,
+    };
+  } else {
+    statePayload.status = "HYDRATING";
+    statePayload.stage = "HYDRATING";
+    statePayload.isLocked = false;
+    statePayload.lockedPrediction = null;
+    statePayload.livePrediction = {
+      direction: null,
+      probability: null,
+      confidence: null,
+    };
+    statePayload.decisionSource = "HYDRATING";
+    statePayload.hydratingReason = hasSufficientRealTelemetry()
+      ? "NO_CANONICAL_DECISION_COMMITTED"
+      : "INSUFFICIENT_REAL_TELEMETRY";
+  }
   console.log(
-    `[VIXY_STATE_SOURCE] source=FIRESTORE_AND_MEMORY cycle=${active15mCycle.cycleId} sequence=${globalSequenceNumber} status=${statePayload.status}`,
+    `[VIXY_STATE_SOURCE] source=${statePayload.decisionSource} cycle=${active15mCycle.cycleId} sequence=${globalSequenceNumber} status=${statePayload.status}`,
   );
   res.json(statePayload);
 });
@@ -13193,85 +13855,25 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || currentBtcPrice === 64161.4) {
+  if (!engineHydrated || !hasSufficientRealTelemetry()) {
     try { await runMarketEngineTickTracked(); } catch {}
   }
-  const currentCycleIdForCurrentSync = active15mCycle.cycleId;
-  if (currentCycleIdForCurrentSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
-    try {
-      const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForCurrentSync);
-      const lockDocSnap = await getDoc(lockDocRef);
-      // The 15M cycle can roll over while the Firestore read above is in
-      // flight. Without re-checking identity here, the lock belonging to the
-      // cycle we STARTED reading gets stamped onto whatever cycle is active
-      // now: a brand-new cycle reports LOCKED seconds after opening, carrying
-      // the previous cycle's direction, confidence, spot and lockedAt, and
-      // bypassing the 360s minimum observation window that canLockCurrentCycle
-      // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
-      // followed by a LOCK_SYNC naming the PREVIOUS cycle.
-      if (active15mCycle.cycleId !== currentCycleIdForCurrentSync) {
-        console.warn(
-          `[LOCK_SYNC_STALE] Route /api/vixy/15m/current discarding lock read for ${currentCycleIdForCurrentSync}; active cycle is now ${active15mCycle.cycleId}.`,
-        );
-      } else if (lockDocSnap.exists()) {
-        const lockData = lockDocSnap.data();
-        const adoptedDir = lockData.direction;
-        const adoptedConf = lockData.confidence;
-        const adoptedProb = lockData.probability;
-        const adoptedStrike = lockData.strike;
-        const adoptedSpot = lockData.spot;
-        const adoptedLockedAt = lockData.lockedAt;
-        const adoptedReason = lockData.lockedReason || "Firestore canonical lock sync";
-        const adoptedDecision = lockData.decision || (adoptedDir === "UP" ? "BUY UP" : "BUY DOWN");
-
-        if (
-          !active15mCycle.isLocked ||
-          active15mCycle.lockedDirection !== adoptedDir ||
-          active15mCycle.lockedConfidence !== adoptedConf ||
-          active15mCycle.lockedProbability !== adoptedProb ||
-          active15mCycle.lockedStrike !== adoptedStrike
-        ) {
-          if (active15mCycle.isLocked) {
-            console.warn(
-              `[LOCK_DIVERGENCE_DETECTED] Route /api/vixy/15m/current read detected divergence for cycle ${currentCycleIdForCurrentSync}. ` +
-              `In-memory: dir=${active15mCycle.lockedDirection}, conf=${active15mCycle.lockedConfidence}%, prob=${active15mCycle.lockedProbability}, strike=${active15mCycle.lockedStrike}. ` +
-              `Firestore: dir=${adoptedDir}, conf=${adoptedConf}%, prob=${adoptedProb}, strike=${adoptedStrike}. Self-correcting.`
-            );
-          } else {
-            console.log(
-              `[LOCK_SYNC] Route /api/vixy/15m/current read detected lock in Firestore for cycle ${currentCycleIdForCurrentSync} that was not yet locked in-memory. Syncing and locking.`
-            );
-          }
-
-          active15mCycle.isLocked = true;
-          active15mCycle.lockCount = 1;
-          active15mCycle.calibrationCount = 1;
-          active15mCycle.calibratedAt = active15mCycle.calibratedAt || adoptedLockedAt;
-          active15mCycle.analysisCount = 1;
-          active15mCycle.analyzedAt = active15mCycle.analyzedAt || adoptedLockedAt;
-          active15mCycle.status = "LOCKED";
-          active15mCycle.stage = "LOCKED";
-          active15mCycle.qualificationStatus = "PASSED";
-          active15mCycle.lockedAt = adoptedLockedAt;
-          active15mCycle.lockedDirection = adoptedDir;
-          active15mCycle.lockedDecision = adoptedDecision;
-          active15mCycle.lockedConfidence = adoptedConf;
-          active15mCycle.lockedProbability = adoptedProb;
-          active15mCycle.lockedStrike = adoptedStrike;
-          active15mCycle.lockedSpot = adoptedSpot;
-          active15mCycle.lockedReason = adoptedReason;
-          active15mCycle.originalDecision = adoptedDecision;
-          active15mCycle.isCriticallyInvalidated = false;
-          active15mCycle.calibrationStatus = "COMPLETE";
-          active15mCycle.analysisStatus = "COMPLETE";
-          active15mCycle.validationStatus = "PASSED";
-          lockedCycleIds.add(currentCycleIdForCurrentSync);
-        }
-      }
-    } catch (err) {
-      handleFirestoreReadError(err, "Route /api/vixy/15m/current");
-    }
+  // CANONICAL DECISION READ. This route no longer derives the decision from
+  // this instance's memory, and no longer hand-syncs only the lock document.
+  // It reads the one committed decision for the cycle (1.5s per-instance TTL
+  // cache of the FETCHED record only) and projects it below. A null record
+  // means no authoritative decision exists yet -> HYDRATING, never a guess.
+  const canonicalCycleId = active15mCycle.cycleId;
+  let canonicalRecord = await readCanonicalDecision(canonicalCycleId);
+  if (canonicalRecord && active15mCycle.cycleId !== canonicalCycleId) {
+    // The cycle rolled over while the read was in flight. Discard rather than
+    // stamp the previous cycle's decision onto the new one.
+    console.warn(
+      `[CANONICAL_READ_STALE] Route /api/vixy/15m/current discarding decision for ${canonicalCycleId}; active cycle is now ${active15mCycle.cycleId}.`,
+    );
+    canonicalRecord = null;
   }
+  if (canonicalRecord) adoptCanonicalDecisionLocally(canonicalRecord);
 
   globalSequenceNumber++;
   const now = new Date().toISOString();
@@ -13583,6 +14185,18 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     serverTimeMs: Date.now(),
     serverSource: "VIXY_STATE_ADAPTER_v1",
   };
+  // Serve the ONE committed decision for this cycle. When none exists, this
+  // instance is not entitled to answer with a locally-computed decision.
+  if (canonicalRecord) {
+    projectCanonicalOntoResponse(decisionObj, canonicalRecord);
+  } else {
+    markResponseHydrating(
+      decisionObj,
+      hasSufficientRealTelemetry()
+        ? "NO_CANONICAL_DECISION_COMMITTED"
+        : "INSUFFICIENT_REAL_TELEMETRY",
+    );
+  }
   res.json(decisionObj);
 });
 app.get(
@@ -13590,85 +14204,25 @@ app.get(
   async (req, res) => {
     // COLD-INSTANCE HYDRATION GUARD (see /api/vixy/15m/current). Prevents this
     // instance serving seed placeholders on a cold serverless boot.
-    if (!engineHydrated || currentBtcPrice === 64161.4) {
+    if (!engineHydrated || !hasSufficientRealTelemetry()) {
       try { await runMarketEngineTickTracked(); } catch {}
     }
-    const currentCycleIdForSignalSync = active15mCycle.cycleId;
-    if (currentCycleIdForSignalSync && db && canAttemptFirestoreRead("active_cycle_lock")) {
-      try {
-        const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForSignalSync);
-        const lockDocSnap = await getDoc(lockDocRef);
-        // The 15M cycle can roll over while the Firestore read above is in
-        // flight. Without re-checking identity here, the lock belonging to the
-        // cycle we STARTED reading gets stamped onto whatever cycle is active
-        // now: a brand-new cycle reports LOCKED seconds after opening, carrying
-        // the previous cycle's direction, confidence, spot and lockedAt, and
-        // bypassing the 360s minimum observation window that canLockCurrentCycle
-        // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
-        // followed by a LOCK_SYNC naming the PREVIOUS cycle.
-        if (active15mCycle.cycleId !== currentCycleIdForSignalSync) {
-          console.warn(
-            `[LOCK_SYNC_STALE] Route /api/signal discarding lock read for ${currentCycleIdForSignalSync}; active cycle is now ${active15mCycle.cycleId}.`,
-          );
-        } else if (lockDocSnap.exists()) {
-          const lockData = lockDocSnap.data();
-          const adoptedDir = lockData.direction;
-          const adoptedConf = lockData.confidence;
-          const adoptedProb = lockData.probability;
-          const adoptedStrike = lockData.strike;
-          const adoptedSpot = lockData.spot;
-          const adoptedLockedAt = lockData.lockedAt;
-          const adoptedReason = lockData.lockedReason || "Firestore canonical lock sync";
-          const adoptedDecision = lockData.decision || (adoptedDir === "UP" ? "BUY UP" : "BUY DOWN");
-
-          if (
-            !active15mCycle.isLocked ||
-            active15mCycle.lockedDirection !== adoptedDir ||
-            active15mCycle.lockedConfidence !== adoptedConf ||
-            active15mCycle.lockedProbability !== adoptedProb ||
-            active15mCycle.lockedStrike !== adoptedStrike
-          ) {
-            if (active15mCycle.isLocked) {
-              console.warn(
-                `[LOCK_DIVERGENCE_DETECTED] Route /api/signal read detected divergence for cycle ${currentCycleIdForSignalSync}. ` +
-                `In-memory: dir=${active15mCycle.lockedDirection}, conf=${active15mCycle.lockedConfidence}%, prob=${active15mCycle.lockedProbability}, strike=${active15mCycle.lockedStrike}. ` +
-                `Firestore: dir=${adoptedDir}, conf=${adoptedConf}%, prob=${adoptedProb}, strike=${adoptedStrike}. Self-correcting.`
-              );
-            } else {
-              console.log(
-                `[LOCK_SYNC] Route /api/signal read detected lock in Firestore for cycle ${currentCycleIdForSignalSync} that was not yet locked in-memory. Syncing and locking.`
-              );
-            }
-
-            active15mCycle.isLocked = true;
-            active15mCycle.lockCount = 1;
-            active15mCycle.calibrationCount = 1;
-            active15mCycle.calibratedAt = active15mCycle.calibratedAt || adoptedLockedAt;
-            active15mCycle.analysisCount = 1;
-            active15mCycle.analyzedAt = active15mCycle.analyzedAt || adoptedLockedAt;
-            active15mCycle.status = "LOCKED";
-            active15mCycle.stage = "LOCKED";
-            active15mCycle.qualificationStatus = "PASSED";
-            active15mCycle.lockedAt = adoptedLockedAt;
-            active15mCycle.lockedDirection = adoptedDir;
-            active15mCycle.lockedDecision = adoptedDecision;
-            active15mCycle.lockedConfidence = adoptedConf;
-            active15mCycle.lockedProbability = adoptedProb;
-            active15mCycle.lockedStrike = adoptedStrike;
-            active15mCycle.lockedSpot = adoptedSpot;
-            active15mCycle.lockedReason = adoptedReason;
-            active15mCycle.originalDecision = adoptedDecision;
-            active15mCycle.isCriticallyInvalidated = false;
-            active15mCycle.calibrationStatus = "COMPLETE";
-            active15mCycle.analysisStatus = "COMPLETE";
-            active15mCycle.validationStatus = "PASSED";
-            lockedCycleIds.add(currentCycleIdForSignalSync);
-          }
-        }
-      } catch (err) {
-        handleFirestoreReadError(err, "Route /api/signal");
-      }
-    }
+    // CANONICAL DECISION READ. This route no longer derives the decision from
+  // this instance's memory, and no longer hand-syncs only the lock document.
+  // It reads the one committed decision for the cycle (1.5s per-instance TTL
+  // cache of the FETCHED record only) and projects it below. A null record
+  // means no authoritative decision exists yet -> HYDRATING, never a guess.
+  const canonicalCycleId = active15mCycle.cycleId;
+  let canonicalRecord = await readCanonicalDecision(canonicalCycleId);
+  if (canonicalRecord && active15mCycle.cycleId !== canonicalCycleId) {
+    // The cycle rolled over while the read was in flight. Discard rather than
+    // stamp the previous cycle's decision onto the new one.
+    console.warn(
+      `[CANONICAL_READ_STALE] Route /api/signal discarding decision for ${canonicalCycleId}; active cycle is now ${active15mCycle.cycleId}.`,
+    );
+    canonicalRecord = null;
+  }
+  if (canonicalRecord) adoptCanonicalDecisionLocally(canonicalRecord);
 
     const asset = (req.query.asset || "BTC").toUpperCase();
     const desk = req.query.desk || "15m";
@@ -13873,6 +14427,66 @@ app.get(
       last10.length > 0
         ? Math.round((last10WinCount / last10.length) * 100)
         : 0;
+    // ---- CANONICAL DECISION OVERRIDE ------------------------------------
+    // Everything decision-bearing on this route now comes from the one
+    // committed record for the cycle, so /api/signal* can never disagree with
+    // /api/vixy/15m/current or with what Discord published.
+    if (canonicalRecord) {
+      const cStage = canonicalNormalizeStage(canonicalRecord.stage);
+      const cLocked = cStage === "LOCKED";
+      const cCoherentLock =
+        cLocked &&
+        canonicalRecord.lockQualified === true &&
+        canonicalRecord.spotAtLock !== null &&
+        canonicalRecord.spotAtLock !== undefined;
+      if (canonicalRecord.confidence !== null && canonicalRecord.confidence !== undefined)
+        displayConf = canonicalRecord.confidence;
+      if (canonicalRecord.probability !== null && canonicalRecord.probability !== undefined)
+        displayProb = canonicalRecord.probability;
+      if (cCoherentLock) {
+        effectiveDirection = canonicalRecord.direction === "DOWN" ? "DOWN" : "UP";
+        decision = `LOCKED \u2014 ${canonicalRecord.decision || (effectiveDirection === "UP" ? "BUY UP" : "BUY DOWN")}`;
+        executionState = effectiveDirection === "UP" ? "LOCKED_UP" : "LOCKED_DOWN";
+        executionDirection = effectiveDirection;
+        executionAuthorized = true;
+        vixyLockState = "LOCKED";
+        signalState = "SIGNAL_CONFIRMED";
+        signalConfirmed = true;
+      } else if (cStage === "SKIP") {
+        effectiveDirection = "NEUTRAL";
+        decision = "PASS \u2014 NO QUALIFIED TRADE";
+        executionState = "NO_TRADE";
+        executionDirection = "NONE";
+        executionAuthorized = false;
+        vixyLockState = "NO_TRADE";
+        signalState = "NO_TRADE";
+        signalConfirmed = false;
+        executionReason = canonicalRecord.skipReason || executionReason;
+      } else {
+        executionAuthorized = false;
+        signalConfirmed = false;
+        vixyLockState = cStage;
+        signalState = cStage;
+      }
+    } else {
+      // No committed decision exists for this cycle. Say so; do not publish a
+      // locally-derived one.
+      effectiveDirection = "NEUTRAL";
+      decision = "HYDRATING \u2014 AWAITING CANONICAL DECISION";
+      displayConf = null;
+      displayProb = null;
+      executionState = "HYDRATING";
+      executionDirection = "NONE";
+      executionAuthorized = false;
+      executionActionLabel = "\u26A1 VIXY HYDRATING";
+      executionReason = hasSufficientRealTelemetry()
+        ? "No canonical decision committed for this cycle yet"
+        : `Insufficient real telemetry (${rollingBtcTicks.length}/${MIN_REAL_TICKS_FOR_DECISION} ticks)`;
+      confidenceLabel = "HYDRATING";
+      vixyLockState = "HYDRATING";
+      signalState = "HYDRATING";
+      signalConfirmed = false;
+    }
     const reqEmail = req.headers["x-user-email"] || req.query.email || "";
     const reqUid = req.headers["x-user-id"] || req.query.uid || "";
     const userAccess = await getUserAccessState(reqEmail, reqUid);
