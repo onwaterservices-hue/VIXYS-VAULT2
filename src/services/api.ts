@@ -713,18 +713,40 @@ export async function verifyDiscordMembershipApi(discordUserId?: string, userEma
   }
 }
 
-export async function disconnectDiscordApi(userEmail?: string, userId?: string) {
+// Unlink the signed-in account's Discord identity.
+//
+// This posted to `/api/discord/disconnect`, which does not exist -- the
+// implemented route is POST /api/discord/unlink. The same path mismatch that
+// broke the OAuth start also broke unlink: the request 404'd, the old catch
+// reported a generic failure, and the link was never actually removed. Unlink
+// and therefore relink could not work.
+//
+// Identity comes from the session cookie; a client-supplied email must not be
+// able to sever another account's Discord link. The parameters are retained
+// (ignored) so the existing callsite keeps compiling.
+//
+// A non-2xx now surfaces truthfully instead of being reported as a soft
+// failure, so the UI cannot show an unlink that did not happen.
+export async function disconnectDiscordApi(_userEmail?: string, _userId?: string) {
   try {
-    const res = await fetch('/api/discord/disconnect', {
+    const res = await fetch('/api/discord/unlink', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(userEmail ? { 'x-user-email': userEmail.toLowerCase() } : {}),
-        ...(userId ? { 'x-user-id': userId } : {}),
-      },
-      body: JSON.stringify({ email: userEmail, userId }),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
     });
-    return await safeParseJson(res);
+    const parsed = await safeParseJson(res);
+    if (!res.ok) {
+      return {
+        success: false,
+        message:
+          res.status === 401
+            ? 'Sign in to VIXY Vault before unlinking Discord.'
+            : `Failed to unlink Discord (status ${res.status}).`,
+        ...(parsed && typeof parsed === 'object' ? parsed : {}),
+      };
+    }
+    return parsed;
   } catch {
     return { success: false, message: 'Failed to disconnect' };
   }

@@ -201,6 +201,49 @@ for (const f of ['src/components/OneHourDeskView.tsx','src/components/Explainabi
 }
 
 // ---------------------------------------------------------------------------
+// 7c. No frontend Discord call may target a route the server does not define.
+//     This is the defect CLASS behind this whole mission: the OAuth start, the
+//     link readback and the unlink all posted to paths that never existed, and
+//     nothing caught it because each failure was swallowed into a generic
+//     "failed" message. Any NEW mismatch fails here.
+// ---------------------------------------------------------------------------
+console.log('\n[7c] Every user-facing Discord path the frontend calls exists');
+
+// Admin/diagnostics-only endpoints that are known to be unimplemented. They
+// break the Admin panel, not user linking. Listed explicitly so the guard stays
+// honest: adding a route here is a deliberate act, and any OTHER missing path
+// fails the suite.
+const KNOWN_UNIMPLEMENTED = new Set([
+  '/api/discord/diagnostics',
+  '/api/discord/health',
+  '/api/discord/bot-status',
+  '/api/discord/test-broadcast',
+  '/api/discord/sync-vip',
+]);
+
+const calledPaths = new Set();
+for (const f of ['src/services/api.ts','src/App.tsx','src/components/CommunityAccessNode.tsx','src/components/DiscordOnboardingModal.tsx','src/components/DiscordStatusWidget.tsx','src/components/AlertSettingsView.tsx']) {
+  // Comment lines are stripped: this file's own explanatory comments name the
+  // dead paths, and matching those would be a false positive.
+  for (const m of strip(R(f)).matchAll(/['\`](\/api\/(?:auth\/)?discord\/[a-zA-Z0-9_-]+)/g)) {
+    calledPaths.add(m[1]);
+  }
+}
+check('frontend Discord callsites were discovered', calledPaths.size > 0, `${calledPaths.size}`);
+for (const p of [...calledPaths].sort()) {
+  if (KNOWN_UNIMPLEMENTED.has(p)) continue;
+  check(`server implements ${p}`, server.includes(`"${p}"`));
+}
+// The two paths this mission repaired must never come back.
+check('nothing calls the dead /api/auth/discord/url', !calledPaths.has('/api/auth/discord/url'));
+check('nothing calls the dead /api/discord/disconnect', !calledPaths.has('/api/discord/disconnect'));
+check('unlink posts to the implemented /api/discord/unlink',
+  /disconnectDiscordApi[\s\S]{0,900}'\/api\/discord\/unlink'/.test(api));
+check('unlink sends the session cookie, not a client email',
+  /disconnectDiscordApi[\s\S]{0,900}credentials:\s*'include'/.test(api) &&
+  !/disconnectDiscordApi[\s\S]{0,900}x-user-email/.test(api));
+
+// ---------------------------------------------------------------------------
 // 8. Stripe webhook integrity must not have been disturbed.
 // ---------------------------------------------------------------------------
 console.log('\n[8] Stripe webhook signature path untouched');
