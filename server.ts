@@ -12793,7 +12793,19 @@ app.get("/api/vixy/state", async (req, res) => {
     try {
       const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForStateSync);
       const lockDocSnap = await getDoc(lockDocRef);
-      if (lockDocSnap.exists()) {
+      // The 15M cycle can roll over while the Firestore read above is in
+      // flight. Without re-checking identity here, the lock belonging to the
+      // cycle we STARTED reading gets stamped onto whatever cycle is active
+      // now: a brand-new cycle reports LOCKED seconds after opening, carrying
+      // the previous cycle's direction, confidence, spot and lockedAt, and
+      // bypassing the 360s minimum observation window that canLockCurrentCycle
+      // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
+      // followed by a LOCK_SYNC naming the PREVIOUS cycle.
+      if (active15mCycle.cycleId !== currentCycleIdForStateSync) {
+        console.warn(
+          `[LOCK_SYNC_STALE] Route /api/vixy/state discarding lock read for ${currentCycleIdForStateSync}; active cycle is now ${active15mCycle.cycleId}.`,
+        );
+      } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
@@ -12988,7 +13000,19 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     try {
       const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForCurrentSync);
       const lockDocSnap = await getDoc(lockDocRef);
-      if (lockDocSnap.exists()) {
+      // The 15M cycle can roll over while the Firestore read above is in
+      // flight. Without re-checking identity here, the lock belonging to the
+      // cycle we STARTED reading gets stamped onto whatever cycle is active
+      // now: a brand-new cycle reports LOCKED seconds after opening, carrying
+      // the previous cycle's direction, confidence, spot and lockedAt, and
+      // bypassing the 360s minimum observation window that canLockCurrentCycle
+      // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
+      // followed by a LOCK_SYNC naming the PREVIOUS cycle.
+      if (active15mCycle.cycleId !== currentCycleIdForCurrentSync) {
+        console.warn(
+          `[LOCK_SYNC_STALE] Route /api/vixy/15m/current discarding lock read for ${currentCycleIdForCurrentSync}; active cycle is now ${active15mCycle.cycleId}.`,
+        );
+      } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
@@ -13122,14 +13146,24 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     openStrike: strike,
     currentSpot: spot,
     spotAtLock: lockedPred?.spotAtLock ?? null,
+    // The engine expresses a skipped cycle as stage NO_TRADE with
+    // qualificationStatus SKIPPED (see the lifecycle block in
+    // runMarketEngineTick). This adapter previously collapsed that into
+    // "WATCH", so a skipped cycle was indistinguishable from a live one and
+    // the terminal kept animating toward a decision the engine had already
+    // declined to make. SKIP is an existing member of Canonical15mState; it
+    // simply was never emitted.
     currentState: isLocked
       ? lockedPred?.direction === "UP"
         ? "LOCKED_UP"
         : "LOCKED_DOWN"
-      : active15mCycle.qualificationStatus === "PASSED" &&
-          (latestLockEvaluation?.persistenceSeconds || 0) > 0
-        ? "CONFIRMING"
-        : "WATCH",
+      : active15mCycle.stage === "NO_TRADE" ||
+          active15mCycle.qualificationStatus === "SKIPPED"
+        ? "SKIP"
+        : active15mCycle.qualificationStatus === "PASSED" &&
+            (latestLockEvaluation?.persistenceSeconds || 0) > 0
+          ? "CONFIRMING"
+          : "WATCH",
     direction: isLocked ? lockedPred?.direction : livePred.direction,
     confidence: confidenceVal,
     lockScore: latestBtc15mPipeline?.lockQuality ?? 50,
@@ -13330,6 +13364,22 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         }
       ]
     },
+    // ---- AUTHORITATIVE LIFECYCLE + FRESHNESS (additive) --------------------
+    // currentState above is deliberately narrow (Canonical15mState). It cannot
+    // express the engine's real pre-lock lifecycle, so the frontend used to
+    // invent CALIBRATING/BUILDING/CONFIRMING from a countdown clock -- two
+    // components, two different sets of thresholds, neither matching the
+    // engine. engineStage carries the actual stage so nothing has to be
+    // guessed client-side.
+    engineStage: active15mCycle.stage || "OBSERVING",
+    qualificationStatus: active15mCycle.qualificationStatus || null,
+    qualificationReason: active15mCycle.qualificationReason || null,
+    // engineTickTs is the last time the market engine actually advanced, NOT
+    // the time this request was served. It is the only field that can tell a
+    // client whether the engine is live or wedged: request time always looks
+    // fresh, even when the engine behind it has stopped.
+    engineTickTs: lastMarketUpdateTs || null,
+    serverTimeMs: Date.now(),
     serverSource: "VIXY_STATE_ADAPTER_v1",
   };
   res.json(decisionObj);
@@ -13347,7 +13397,19 @@ app.get(
       try {
         const lockDocRef = doc(db, "active_cycle_lock", currentCycleIdForSignalSync);
         const lockDocSnap = await getDoc(lockDocRef);
-        if (lockDocSnap.exists()) {
+        // The 15M cycle can roll over while the Firestore read above is in
+        // flight. Without re-checking identity here, the lock belonging to the
+        // cycle we STARTED reading gets stamped onto whatever cycle is active
+        // now: a brand-new cycle reports LOCKED seconds after opening, carrying
+        // the previous cycle's direction, confidence, spot and lockedAt, and
+        // bypassing the 360s minimum observation window that canLockCurrentCycle
+        // enforces. Observed in the logs as a VIXY_CYCLE_TRANSITION immediately
+        // followed by a LOCK_SYNC naming the PREVIOUS cycle.
+        if (active15mCycle.cycleId !== currentCycleIdForSignalSync) {
+          console.warn(
+            `[LOCK_SYNC_STALE] Route /api/signal discarding lock read for ${currentCycleIdForSignalSync}; active cycle is now ${active15mCycle.cycleId}.`,
+          );
+        } else if (lockDocSnap.exists()) {
           const lockData = lockDocSnap.data();
           const adoptedDir = lockData.direction;
           const adoptedConf = lockData.confidence;

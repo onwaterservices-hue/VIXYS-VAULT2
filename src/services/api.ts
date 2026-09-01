@@ -1673,6 +1673,35 @@ export async function fetchResolvedLogApi(): Promise<any> {
   return data;
 }
 
+/**
+ * Canonical 15M decision fetch.
+ *
+ * Deliberately does NOT go through safeFetchJson. That helper is correct for
+ * most callers, but its failure policy is fatal here: on a 429, a non-2xx, a
+ * non-JSON body, or a dropped connection it returns the last cached payload
+ * instead of failing. The live terminal then re-applied a stale decision on
+ * every poll, refreshed its own heartbeat from it, and displayed a green LIVE
+ * badge over a feed that had been dead for minutes.
+ *
+ * This fetcher throws instead, so the caller can distinguish "the engine said
+ * this" from "we could not reach the engine". It also sends no-store, matching
+ * every other live fetcher in this file.
+ */
+export async function fetchCanonical15mDecision(): Promise<any> {
+  const res = await fetch(`/api/vixy/15m/current?_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  if (!res.ok) {
+    throw new Error(`Canonical 15M fetch failed: HTTP ${res.status}`);
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new Error('Canonical 15M fetch returned a non-JSON body');
+  }
+  return await res.json();
+}
+
 export async function fetchVixyStateApi(): Promise<any> {
   const data = await safeFetchJson<any>(`/api/vixy/state?_t=${Date.now()}`, {
     cache: 'no-store',

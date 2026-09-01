@@ -359,6 +359,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // Derive Canonical Cycle Presentation State
   const isActuallyLocked = useMemo(() => {
     const st = canonicalDecision?.currentState;
+    // A skipped cycle is never locked, whatever isLocked says -- otherwise the
+    // card paints the committed UP/DOWN aura over a cycle the engine declined.
+    if (st === 'SKIP') return false;
     return st === 'LOCKED_UP' || st === 'LOCKED_DOWN' || Boolean((canonicalDecision as any)?.isLocked);
   }, [canonicalDecision?.currentState, (canonicalDecision as any)?.isLocked]);
 
@@ -370,20 +373,47 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     );
   }, [displayConfidence, lockQualityScore, displayReversalRisk]);
 
+  // Maps the engine's real lifecycle stage onto this card's existing display
+  // vocabulary. Same progression the card always showed, now driven by the
+  // engine instead of a countdown.
+  const ENGINE_STAGE_TO_CYCLE_STATE: Record<string, CycleState> = {
+    OBSERVING: 'ANALYZING',
+    CALIBRATING: 'ANALYZING',
+    ANALYZING: 'BUILDING',
+    QUALIFYING: 'CONFIRMING',
+    LOCKING: 'CONFIRMING',
+    LOCKED: 'LOCKED',
+    NO_TRADE: 'SKIP',
+  };
+
   const computedCycleState = useMemo<CycleState>(() => {
     const st = canonicalDecision?.currentState;
     if (st === 'SETTLED') return 'SETTLED';
-    if (st === 'LOCKED_UP' || st === 'LOCKED_DOWN' || (canonicalDecision as any)?.isLocked) return 'LOCKED';
+    // SKIP is checked before isLocked. The engine never sets both, but if a
+    // payload ever carried a stale isLocked alongside a skipped cycle, showing
+    // LOCKED would invent a committed trade the engine explicitly declined.
     if (st === 'SKIP') return 'SKIP';
+    if (st === 'LOCKED_UP' || st === 'LOCKED_DOWN' || (canonicalDecision as any)?.isLocked) return 'LOCKED';
     if (st === 'PROTECTED') return 'PROTECTED';
     if (st === 'CONFIRMING') return 'CONFIRMING';
 
+    // Pre-lock the canonical state is 'WATCH' for the entire engine lifecycle.
+    // engineStage carries the real stage. This previously read the countdown
+    // and announced CONFIRMING -- "completing final multi-venue stability
+    // checks" -- for any cycle past 6:00, even when the engine was merely
+    // QUALIFYING with its lock gate still refusing.
+    const stage = (canonicalDecision as any)?.engineStage as string | undefined;
+    if (stage && ENGINE_STAGE_TO_CYCLE_STATE[stage]) {
+      return ENGINE_STAGE_TO_CYCLE_STATE[stage];
+    }
+
+    // Legacy fallback only, for a backend that predates engineStage.
     const secondsRemaining = cycleSecondsRemaining;
     const elapsed = Math.max(0, 900 - secondsRemaining);
     if (elapsed < 120) return 'ANALYZING';
     if (elapsed < 360) return 'BUILDING';
     return 'CONFIRMING';
-  }, [canonicalDecision?.currentState, (canonicalDecision as any)?.isLocked, canonicalDecision?.timeRemainingSec, nowMs]);
+  }, [canonicalDecision?.currentState, (canonicalDecision as any)?.isLocked, (canonicalDecision as any)?.engineStage, canonicalDecision?.timeRemainingSec, nowMs]);
 
   // Aura Style Configuration — Authentically VIXY Vault with subtle ambient glow and edge lighting
   const auraBorderClass = useMemo(() => {
