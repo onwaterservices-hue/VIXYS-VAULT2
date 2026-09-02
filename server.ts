@@ -12940,7 +12940,13 @@ const persistentSignalLogs = [];
 // event: it is written once at settlement and re-read thereafter, so it
 // outlives the process that created it. Records are never mutated here.
 async function hydrateSignalHistoryFromFirestore() {
-  if (!db) return { hydrated: 0, reason: "NO_FIRESTORE_HANDLE" };
+  // Readiness must match the Admin-aware rule used elsewhere in this file
+  // (see discordFirestore.ready): with a service account active, adminDb is the
+  // datapath and the CLIENT handle `db` is legitimately null. Guarding on `!db`
+  // alone made hydration skip entirely on any instance where the client SDK had
+  // not initialized -- which is why one lambda restored 229 locks while another
+  // reported NO_FIRESTORE_HANDLE against the very same collection.
+  if (!_adminActive && !db) return { hydrated: 0, reason: "NO_FIRESTORE_HANDLE" };
   try {
     const snap = await getDocs(
       query(collection(db, "signal_logs"), limit(300)),
