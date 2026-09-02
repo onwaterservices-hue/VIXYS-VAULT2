@@ -3091,11 +3091,101 @@ async function runMarketEngineTick() {
 // Mark this instance hydrated once a tick has run, so read handlers can tell a
 // warm instance (real live values) from a cold serverless boot still holding the
 // seed defaults (spot 64161.4, evidence 0, etc.) that users saw flicker in.
+// Single-flight guard.
+//
+// runMarketEngineTickTracked now has TWO drivers: the 3s setInterval below (which
+// only lives as long as a warm lambda) and /api/cron/engine-tick (scheduled every
+// minute). Without coalescing, a tick slower than its caller's cadence would let
+// two ticks interleave while mutating active15mCycle and running settlement.
+// Concurrent callers await the SAME in-flight tick rather than starting another.
+let _engineTickInFlight = null;
+let _engineTickLastRunMs = 0;
+let _engineTickRuns = 0;
+
 async function runMarketEngineTickTracked() {
-  await runMarketEngineTick();
-  engineHydrated = true;
+  if (_engineTickInFlight) return _engineTickInFlight;
+  _engineTickInFlight = (async () => {
+    try {
+      await runMarketEngineTick();
+      engineHydrated = true;
+      _engineTickLastRunMs = Date.now();
+      _engineTickRuns += 1;
+    } finally {
+      _engineTickInFlight = null;
+    }
+  })();
+  return _engineTickInFlight;
 }
 setInterval(runMarketEngineTickTracked, 3e3);
+
+// GET/POST /api/cron/engine-tick -- the scheduled driver for the 15M engine.
+//
+// vercel.json has scheduled this path every minute for as long as the crons have
+// existed, but no such route was ever registered: production returned 404 on every
+// invocation (verified against www.vixxyvault.com). The engine therefore ran ONLY
+// from the module-scope setInterval above, which exists exactly as long as a warm
+// lambda instance does.
+//
+// That is not a cosmetic gap. Settlement runs INLINE on cycle rollover inside
+// checkAndSettle15mCycle, so whenever no instance happened to be alive at a
+// quarter-hour boundary, that cycle was never graded at all. Hydrating the real
+// ledger from Firestore measured 36 of the 95 locks that reached a
+// terminal-or-expired state still sitting unsettled -- the recorded track record is
+// structurally incomplete, and no downstream fix can recover outcomes that were
+// never observed.
+//
+// This route makes the existing schedule real. It performs the same tick as the
+// interval, coalesced through the guard above, and reports only observed values --
+// no fixed counts. (The previous /api/cron/settle stub returned a literal
+// checked:18/settled:4 forever; that pattern is deliberately not repeated here.)
+app.all("/api/cron/engine-tick", async (req, res) => {
+  const startedAt = Date.now();
+  // True when another tick was already running and this request joined it rather
+  // than starting a second one.
+  const coalesced = !!_engineTickInFlight;
+  try {
+    await runMarketEngineTickTracked();
+  } catch (err) {
+    console.error("[VIXY_ENGINE_TICK] cron tick failed:", err && err.message);
+    return res.status(500).json({
+      success: false,
+      job: "ENGINE_TICK",
+      coalesced,
+      error: String((err && err.message) || err),
+      durationMs: Date.now() - startedAt,
+      timestamp: new Date().toISOString(),
+    });
+  }
+  const cycle = active15mCycle || null;
+  return res.json({
+    success: true,
+    job: "ENGINE_TICK",
+    // Vercel Cron sets this header; absent means the call came from elsewhere.
+    scheduled: !!req.headers["x-vercel-cron"],
+    coalesced,
+    totalRuns: _engineTickRuns,
+    lastRunAt: _engineTickLastRunMs
+      ? new Date(_engineTickLastRunMs).toISOString()
+      : null,
+    cycle: cycle
+      ? {
+          cycleId: cycle.cycleId || null,
+          status: cycle.status || null,
+          isLocked: !!cycle.isLocked,
+          sequence: cycle.sequence ?? null,
+        }
+      : null,
+    ledger: {
+      total: persistentSignalLogs.length,
+      settled: persistentSignalLogs.filter(
+        (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
+      ).length,
+      locked: persistentSignalLogs.filter((s) => s.status === "LOCKED").length,
+    },
+    durationMs: Date.now() - startedAt,
+    timestamp: new Date().toISOString(),
+  });
+});
 // Run one tick immediately on cold boot so the very first request does not serve
 // seed placeholders while waiting for the 3s interval to fire for the first time.
 runMarketEngineTickTracked().catch(() => {});
