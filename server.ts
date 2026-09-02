@@ -2404,13 +2404,25 @@ function evaluateBtc15mHighConvictionPipeline(
     0.96,
     Math.max(0.05, Math.round(baseProb * 1e3) / 1e3),
   );
-  const historicalAcc = serverLearningEngine.historicalAccuracy || 71.8;
+  // Shrink the directional probability toward 0.5, not toward historical accuracy.
+  //
+  // boundedProb is genuinely P(UP): it is 0.5 + a signed bias where UP adds and
+  // DOWN subtracts. The previous blend mixed in historicalAccuracy/100, which is
+  // "how often the model is right" -- a different quantity entirely, and one with
+  // no directional meaning. The effect was a constant upward push on P(UP): with
+  // the (fabricated) historicalAccuracy of 81.8, a perfectly neutral signal
+  // became 0.5*0.85 + 0.818*0.15 = 0.548 UP on every cycle. It also made the
+  // model's direction depend on its own scoreboard, so a change in measured
+  // accuracy silently moved every future prediction.
+  //
+  // Shrinking toward 0.5 is the standard, direction-neutral form of the same
+  // regularisation: it damps extreme readings by the identical 15% without
+  // asserting a side. The weight is unchanged.
   const calibratedModelProb = Math.min(
     0.96,
     Math.max(
       0.05,
-      Math.round((boundedProb * 0.85 + (historicalAcc / 100) * 0.15) * 1e3) /
-        1e3,
+      Math.round((boundedProb * 0.85 + 0.5 * 0.15) * 1e3) / 1e3,
     ),
   );
   const directionalProb =
@@ -2836,11 +2848,32 @@ async function runMarketEngineTick() {
     currentEdgePct = latestBtc15mPipeline.edgeVsConfidence.realEdgePct;
     currentKalshiImpliedProb =
       latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability;
+    // Direction must come from the model's chosen side, not from the SIZE of its
+    // edge.
+    //
+    // realEdgePct is computed RELATIVE to candidateDir:
+    //   directionalProb = candidateDir === "UP" ? p : 1 - p
+    //   realEdgePct     = directionalProb - impliedProbability(candidateDir)
+    // so it answers "is my pick better than the market's price for that pick?".
+    // It is positive for a WELL-SUPPORTED DOWN call exactly as it is for a
+    // well-supported UP call. Reading `realEdgePct >= 0` as "UP" therefore
+    // discarded candidateDir and re-derived direction from a quantity that does
+    // not encode direction, flipping good DOWN calls to UP.
+    //
+    // Measured consequence in production: 28 of 32 settled locks (87.5%) were UP
+    // over a window in which BTC drifted from ~$80.6k to ~$77.3k, UP calls hit
+    // 35.7% while the 4 DOWN calls hit 75%.
+    //
+    // candidateDir is already published as explainability.direction (it is set to
+    // "SKIP" only when lockQualityTier is SKIP), so the chosen side is used
+    // directly. NEUTRAL falls through to the existing probability thresholds.
+    const pipelineCandidateDir =
+      latestBtc15mPipeline.explainability &&
+      latestBtc15mPipeline.explainability.direction;
     const pipelineDirection =
-      latestBtc15mPipeline.lockQualityTier !== "SKIP"
-        ? latestBtc15mPipeline.edgeVsConfidence.realEdgePct >= 0
-          ? "UP"
-          : "DOWN"
+      latestBtc15mPipeline.lockQualityTier !== "SKIP" &&
+      (pipelineCandidateDir === "UP" || pipelineCandidateDir === "DOWN")
+        ? pipelineCandidateDir
         : latestBtc15mPipeline.edgeVsConfidence.modelProbability >= 0.52
           ? "UP"
           : latestBtc15mPipeline.edgeVsConfidence.modelProbability <= 0.48
