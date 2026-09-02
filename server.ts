@@ -12898,101 +12898,140 @@ const serverLearningEngine = {
   settledHistory: [],
 };
 const base15mMs = Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
-const persistentSignalLogs = Array.from({ length: 12 }).map((_, i) => {
-  const seq = 12 - i;
-  const cycleStartMs = base15mMs - seq * 15 * 60 * 1e3;
-  const lockedTimeMs = cycleStartMs + 412 * 1e3;
-  const expiresTimeMs = cycleStartMs + 15 * 60 * 1e3;
-  const isSkip = i === 5;
-  const isUpSequence =
-    i === 0 || i === 2 || i === 3 || i === 6 || i === 8 || i === 9 || i === 11;
-  const direction = isSkip ? "NEUTRAL" : isUpSequence ? "UP" : "DOWN";
-  const wasCorrect = isSkip ? false : i !== 3 && i !== 8;
-  const strike = 64100 + (i % 4) * 25;
-  const spotAtLock =
-    direction === "UP"
-      ? strike - 12.5
-      : direction === "DOWN"
-        ? strike + 14
-        : strike + 1.2;
-  const settlementPrice = isSkip
-    ? strike + 0.5
-    : wasCorrect
-      ? direction === "UP"
-        ? strike + 24.5
-        : strike - 21
-      : direction === "UP"
-        ? strike - 16.5
-        : strike + 18;
-  const actualOutcome = isSkip
-    ? "NEUTRAL"
-    : settlementPrice >= strike
-      ? "UP"
-      : "DOWN";
-  const confidence = isSkip ? 52 : 70 + (i % 4) * 5;
-  const brierScore = isSkip
-    ? 0.25
-    : Math.round(Math.pow(confidence / 100 - (wasCorrect ? 1 : 0), 2) * 1e3) /
-      1e3;
-  return {
-    id: `sig_lock_${cycleStartMs}`,
-    market: "BTC",
-    ticker: "BTC/USD",
-    intervalStart: new Date(cycleStartMs).toISOString(),
-    intervalEnd: new Date(expiresTimeMs).toISOString(),
-    direction,
-    confidence,
-    targetStrike: strike,
-    spotAtLock,
-    btcPriceAtLock: spotAtLock,
-    ethPriceAtLock: currentEthPrice,
-    solPriceAtLock: currentSolPrice,
-    lockedAt: new Date(lockedTimeMs).toISOString(),
-    expiresAt: new Date(expiresTimeMs).toISOString(),
-    status: isSkip ? "NO_TRADE" : "RESOLVED",
-    resolvedAt: new Date(expiresTimeMs).toISOString(),
-    settlementPrice,
-    actualOutcome,
-    wasCorrect,
-    brierScore,
-    modelVersion: "VIXY_AUTHORITATIVE_NEURAL_v5",
-    dataSource: "COINBASE_KRAKEN_CASCADE",
-    latencyMs: 14,
-    qualificationReason: isSkip
-      ? "INSUFFICIENT_STATISTICAL_EDGE"
-      : "QUALIFIED_MOMENTUM_ALIGNMENT",
-    cycleId: `15M-${new Date(cycleStartMs).toISOString()}`,
-    timeframe: "15M",
-    decision: isSkip ? "SKIP" : direction === "UP" ? "BUY_UP" : "BUY_DOWN",
-    entryPrice: spotAtLock,
-    strike,
-    confidencePct: confidence,
-    lockedProbability: isSkip ? 0.5 : direction === "UP" ? 0.72 : 0.28,
-    settlementAt: new Date(expiresTimeMs).toISOString(),
-    actualDirection: actualOutcome,
-    outcome: isSkip ? "SKIP" : wasCorrect ? "WIN" : "LOSS",
-  };
-});
-persistentSignalLogs.forEach((item) => {
-  if (item.status === "RESOLVED") {
-    serverLearningEngine.settledHistory.push({
+// The 15M lock ledger. REAL settled cycles only.
+//
+// This array was previously seeded at module load with 12 fabricated "resolved"
+// locks, and that seed -- not the engine -- was the track record the product
+// displayed. The generator decided outcomes by array index
+// (`wasCorrect = i !== 3 && i !== 8`), so it always produced exactly 9 wins,
+// 2 losses and 1 skip = 81.8%, forever, whether the model was excellent or
+// completely broken. It pinned every strike near $64,100 via
+// `strike = 64100 + (i % 4) * 25` regardless of the real BTC price, and it
+// derived `settlementPrice` FROM the predetermined outcome -- inverting the
+// direction of causality that makes a settlement mean anything. The fake rows
+// were then pushed into serverLearningEngine.settledHistory, so the learning
+// engine was calibrating on invented outcomes, and historicalAccuracy was
+// finally overwritten with a literal 81.8.
+//
+// Nothing about that measured the algorithm. It is removed rather than adjusted:
+// a prediction record that is generated cannot be made accurate.
+//
+// The ledger now starts EMPTY and is filled from exactly two real sources:
+//   1. hydrateSignalHistoryFromFirestore(), below, which reloads previously
+//      settled cycles from the durable `signal_logs` collection at boot.
+//   2. the live settlement path in the engine tick, which settles the previous
+//      cycle against the actual observed spot price, writes the result through
+//      persistSingleSignalLog(), and updates accuracy from real outcomes.
+//
+// Consequence to expect: a freshly deployed instance shows an empty ledger and
+// a WARMING_UP calibration state until real cycles settle or hydration
+// completes. That is the honest state, and it is the point.
+const persistentSignalLogs = [];
+
+// Rehydrate the real ledger on boot.
+//
+// persistSingleSignalLog() has always written settled locks to Firestore
+// `signal_logs`, but nothing ever read them back -- the collection was
+// write-only. Every Vercel cold start therefore discarded the genuine record
+// and replaced it with the seed above, which is why real results never
+// survived and the win rate never moved off 81.8%.
+//
+// Reading them back is what makes a lock a durable, immutable prediction
+// event: it is written once at settlement and re-read thereafter, so it
+// outlives the process that created it. Records are never mutated here.
+async function hydrateSignalHistoryFromFirestore() {
+  if (!db) return { hydrated: 0, reason: "NO_FIRESTORE_HANDLE" };
+  try {
+    const snap = await getDocs(
+      query(collection(db, "signal_logs"), limit(300)),
+    );
+    const records = [];
+    snap.forEach((d) => {
+      const data = typeof d.data === "function" ? d.data() : d.data;
+      if (data && data.id) records.push(data);
+    });
+    if (!records.length) return { hydrated: 0, reason: "EMPTY_COLLECTION" };
+
+    // Newest first, matching the order the live path maintains via unshift().
+    records.sort(
+      (a, b) =>
+        new Date(b.intervalStart || b.lockedAt || 0).getTime() -
+        new Date(a.intervalStart || a.lockedAt || 0).getTime(),
+    );
+
+    for (const rec of records) {
+      if (!persistentSignalLogs.find((s) => s.id === rec.id)) {
+        persistentSignalLogs.push(rec);
+      }
+      // A settled cycle must never be re-settled: mark it processed so the
+      // engine tick's settlement guard skips it after a restart.
+      if (rec.status === "RESOLVED" || rec.status === "CRITICALLY_INVALIDATED") {
+        processedSettlements.add(rec.id);
+      }
+    }
+
+    const settled = persistentSignalLogs.filter(
+      (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
+    );
+    serverLearningEngine.settledHistory = settled.map((item) => ({
       id: item.id,
-      asset: "BTC",
+      asset: item.market || "BTC",
       desk: "15m",
       timestamp: item.resolvedAt,
       prediction: item.direction,
       confidence: item.confidence,
       actualOutcome: item.actualOutcome,
       brierScore: item.brierScore,
-    });
+    }));
+    recomputeAccuracyFromSettledHistory();
+    console.log(
+      `[VIXY_LEDGER_HYDRATE] Restored ${persistentSignalLogs.length} lock(s) from Firestore (${settled.length} settled). Accuracy=${serverLearningEngine.historicalAccuracy}%`,
+    );
+    return { hydrated: persistentSignalLogs.length, settled: settled.length };
+  } catch (err) {
+    console.error(
+      "[VIXY_LEDGER_HYDRATE] Failed to restore lock ledger:",
+      err && err.message,
+    );
+    return { hydrated: 0, reason: "HYDRATE_FAILED" };
   }
-});
-serverLearningEngine.todaySettledCount =
-  serverLearningEngine.settledHistory.length;
-serverLearningEngine.historicalAccuracy = 81.8;
-latestCalibrationState.historicalAccuracy = 81.8;
-latestCalibrationState.calibrationSampleSize =
-  serverLearningEngine.settledHistory.length;
+}
+__name(hydrateSignalHistoryFromFirestore, "hydrateSignalHistoryFromFirestore");
+
+// Accuracy is DERIVED from settled outcomes, never assigned a literal.
+// With no settled cycles yet, accuracy is null (unknown) rather than a
+// flattering default, and calibration reports WARMING_UP.
+function recomputeAccuracyFromSettledHistory() {
+  const history = serverLearningEngine.settledHistory || [];
+  const total = history.length;
+  serverLearningEngine.todaySettledCount = total;
+  if (!total) {
+    serverLearningEngine.historicalAccuracy = null;
+    latestCalibrationState.historicalAccuracy = null;
+    latestCalibrationState.calibrationSampleSize = 0;
+    latestCalibrationState.calibrationStatus = "WARMING_UP";
+    return;
+  }
+  const wins = history.filter((h) => h.prediction === h.actualOutcome).length;
+  const accuracy = Math.round((wins / total) * 1e3) / 10;
+  const avgBrier =
+    Math.round(
+      (history.reduce((acc, h) => acc + (h.brierScore || 0), 0) / total) * 1e3,
+    ) / 1e3;
+  serverLearningEngine.historicalAccuracy = accuracy;
+  latestCalibrationState.historicalAccuracy = accuracy;
+  latestCalibrationState.brierScore = avgBrier;
+  latestCalibrationState.calibrationSampleSize = total;
+  latestCalibrationState.calibrationStatus =
+    total >= latestCalibrationState.calibrationMinimumSamples
+      ? "ACTIVE"
+      : "WARMING_UP";
+}
+__name(recomputeAccuracyFromSettledHistory, "recomputeAccuracyFromSettledHistory");
+
+recomputeAccuracyFromSettledHistory();
+hydrateSignalHistoryFromFirestore().catch(() => {});
+
 app.get("/api/signal/resolved-log", (req, res) => {
   const limit2 = Math.min(200, parseInt(req.query.limit || "200", 10));
   const isDemo = __name((s) => {
@@ -15450,13 +15489,49 @@ app.get("/api/leaderboard", (req, res) => {
 app.get("/api/signal-snapshots", (req, res) => {
   res.json({ snapshots: [], message: "Building confidence history..." });
 });
-app.all("/api/cron/settle", (req, res) => {
+// Vercel calls this every 15 minutes (vercel.json crons). It previously
+// returned a fixed literal -- checked: 18, settled: 4, samplesLoggedTotal: 340 --
+// and settled nothing at all. Those three numbers were identical on every
+// invocation forever, so the job reported healthy settlement activity while
+// performing none, and any monitoring built on it was monitoring a constant.
+//
+// Real settlement happens inline in the engine tick when a 15M cycle rolls over
+// (it compares the observed spot to the strike and writes the outcome through
+// persistSingleSignalLog). This endpoint is therefore a SAFETY NET and a status
+// report, not a second settlement engine: it re-reports the true ledger state
+// and re-runs hydration when the in-memory ledger is empty after a cold start.
+//
+// It deliberately does NOT settle overdue locks against the current spot price.
+// A lock that expired 40 minutes ago cannot be settled against the price now --
+// that would manufacture an outcome from the wrong data, which is exactly the
+// class of fiction this endpoint used to embody. Overdue locks are reported so
+// the gap is visible instead of being silently papered over.
+app.all("/api/cron/settle", async (req, res) => {
+  const nowMs = Date.now();
+  let hydration = null;
+  if (persistentSignalLogs.length === 0) {
+    hydration = await hydrateSignalHistoryFromFirestore().catch(() => null);
+  }
+  const settled = persistentSignalLogs.filter(
+    (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
+  );
+  const pending = persistentSignalLogs.filter((s) => s.status === "LOCKED");
+  const overdue = pending.filter(
+    (s) => s.expiresAt && new Date(s.expiresAt).getTime() <= nowMs,
+  );
   res.json({
     success: true,
     job: "CONTRACT_SETTLEMENT_CHECK",
-    checked: 18,
-    settled: 4,
-    samplesLoggedTotal: 340,
+    // Every count below is read from the live ledger.
+    checked: persistentSignalLogs.length,
+    settled: settled.length,
+    pendingLocked: pending.length,
+    overdueUnsettled: overdue.length,
+    overdueCycleIds: overdue.slice(0, 10).map((s) => s.cycleId || s.id),
+    settledSampleSize: serverLearningEngine.settledHistory.length,
+    historicalAccuracyPct: serverLearningEngine.historicalAccuracy,
+    calibrationStatus: latestCalibrationState.calibrationStatus,
+    hydration,
     timestamp: new Date().toISOString(),
   });
 });
