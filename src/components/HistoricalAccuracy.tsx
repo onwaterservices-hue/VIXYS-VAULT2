@@ -5,6 +5,10 @@ import {
 } from 'lucide-react';
 import { fetchResolvedLogApi, fetchVixyStateApi } from '../services/api';
 
+// Mirrors latestCalibrationState.calibrationMinimumSamples in server.ts, the
+// sample size at which the backend flips calibration from WARMING_UP to ACTIVE.
+const CALIBRATION_TARGET_SAMPLES = 50;
+
 export const HistoricalAccuracy: React.FC<any> = () => {
   const [liveState, setLiveState] = useState<any>(null);
   const [resolvedLog, setResolvedLog] = useState<any[]>([]);
@@ -101,11 +105,19 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     const last10Total = recent10Settled.length;
     const last10WinRate = last10Total > 0 ? (last10Wins / last10Total) * 100 : 0;
 
-    const edgeSum = settled.reduce((acc, s) => acc + (s.edge || 5.5), 0);
-    const avgEdge = settled.length > 0 ? edgeSum / settled.length : 0;
+    // Averages must never invent their inputs. A settled cycle with no
+    // recorded edge is excluded from the average rather than counted as a
+    // synthesized 5.5, which previously let a thin or empty ledger report a
+    // confident-looking figure that no real cycle ever produced.
+    const edgeSamples = settled.filter(s => Number.isFinite(Number(s.edge)));
+    const avgEdge = edgeSamples.length > 0
+      ? edgeSamples.reduce((acc, s) => acc + Number(s.edge), 0) / edgeSamples.length
+      : null;
     
-    const confSum = settled.reduce((acc, s) => acc + (s.confidence || 75), 0);
-    const avgConf = settled.length > 0 ? confSum / settled.length : 0;
+    const confSamples = settled.filter(s => Number.isFinite(Number(s.confidence)));
+    const avgConf = confSamples.length > 0
+      ? confSamples.reduce((acc, s) => acc + Number(s.confidence), 0) / confSamples.length
+      : null;
     
     let currentStreak = 0;
     let currentStreakType = 'NONE';
@@ -146,7 +158,12 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       currentStreakType, 
       bestStreak, 
       avgEdge, 
-      avgConf 
+      avgConf,
+      // Sample state drives the warming-up UI. hasSample is the difference
+      // between "no data yet" and a measured 0% -- rendering those identically
+      // is how an empty ledger came to look like a track record.
+      hasSample: totalLocks > 0,
+      settledSampleSize: totalLocks
     };
   }, [resolvedLog, backendStats]);
 
@@ -162,9 +179,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       const wins = settled.filter(s => s.wasCorrect).length;
       const losses = settled.length - wins;
       
-      const edgeSum = settled.reduce((acc, s) => acc + (s.edge || 5.5), 0);
+      const edgeSum = settled.reduce((acc, s) => acc + (Number.isFinite(Number(s.edge)) ? Number(s.edge) : 0), 0);
       const avgEdge = settled.length > 0 ? edgeSum / settled.length : 0;
-      const confSum = settled.reduce((acc, s) => acc + (s.confidence || 75), 0);
+      const confSum = settled.reduce((acc, s) => acc + (Number.isFinite(Number(s.confidence)) ? Number(s.confidence) : 0), 0);
       const avgConf = settled.length > 0 ? confSum / settled.length : 0;
 
       let streak = 0;
@@ -254,19 +271,67 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       </div>
 
       {/* -------------------------------------------------- */}
+      {/* 1b. CALIBRATION WARMING-UP STATE                   */}
+      {/* -------------------------------------------------- */}
+      {/* Shown until the ledger holds enough settled cycles for a win rate to
+          mean anything. This exists because the ledger is now REAL: it starts
+          empty on a fresh deployment and fills only as cycles actually settle.
+          Every figure below is a live count -- nothing is projected, and no
+          placeholder track record is displayed while the sample is thin. */}
+      {metrics.settledSampleSize < CALIBRATION_TARGET_SAMPLES && (
+        <div className="border border-amber-900/40 bg-gradient-to-r from-amber-950/25 via-zinc-950/40 to-zinc-950/40 rounded-xl p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-950/50 border border-amber-800/50 flex items-center justify-center shrink-0">
+                <Hourglass className="w-4 h-4 text-amber-400 animate-pulse" />
+              </div>
+              <div>
+                <div className="text-xs font-black text-amber-300 tracking-widest uppercase">
+                  {metrics.settledSampleSize === 0 ? 'Awaiting First Settlement' : 'Calibration Warming Up'}
+                </div>
+                <div className="text-[11px] text-zinc-400 font-mono mt-0.5">
+                  {metrics.settledSampleSize === 0
+                    ? 'The engine is live. The first 15M cycle settles at the next quarter hour.'
+                    : `Win rate becomes statistically meaningful at ${CALIBRATION_TARGET_SAMPLES} settled cycles.`}
+                </div>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="font-mono text-lg font-black text-amber-300">
+                {metrics.settledSampleSize}
+                <span className="text-zinc-600 text-sm"> / {CALIBRATION_TARGET_SAMPLES}</span>
+              </div>
+              <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">Settled Cycles</div>
+            </div>
+          </div>
+          <div className="mt-3 h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-amber-300 rounded-full transition-all duration-700"
+              style={{ width: `${Math.min(100, (metrics.settledSampleSize / CALIBRATION_TARGET_SAMPLES) * 100)}%` }}
+            />
+          </div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono">
+            VIXY settles 4 cycles per hour. Results persist across restarts and are never seeded.
+          </div>
+        </div>
+      )}
+
+      {/* -------------------------------------------------- */}
       {/* 2. PERFORMANCE COMMAND BAR                         */}
       {/* -------------------------------------------------- */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
         {[
-          { label: 'LAST 10 WIN RATE', val: `${metrics.last10WinRate.toFixed(1)}%`, color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
+          // A dash means "not measured yet". A real 0 still renders as 0 --
+          // the two must never look the same.
+          { label: 'LAST 10 WIN RATE', val: metrics.last10Total > 0 ? `${metrics.last10WinRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
           { label: 'TOTAL LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'WINS', val: metrics.wins, color: 'text-emerald-400', bg: 'border-emerald-900/40 bg-emerald-950/20' },
           { label: 'LOSSES', val: metrics.losses, color: 'text-rose-400', bg: 'border-rose-900/40 bg-rose-950/20' },
           { label: 'SKIPPED', val: metrics.noTrades, color: 'text-purple-300', bg: 'border-purple-900/40 bg-purple-950/20' },
           { label: 'STREAK', val: `${metrics.currentStreak} ${metrics.currentStreakType}`, color: metrics.currentStreakType === 'WIN' ? 'text-emerald-400' : 'text-zinc-400', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'BEST STREAK', val: `${metrics.bestStreak} W`, color: 'text-amber-400', bg: 'border-zinc-800 bg-zinc-950/40' },
-          { label: 'AVG EDGE', val: `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' },
-          { label: 'AVG CONF', val: `${metrics.avgConf.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' }
+          { label: 'AVG EDGE', val: metrics.avgEdge === null ? '--' : `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' },
+          { label: 'AVG CONF', val: metrics.avgConf === null ? '--' : `${metrics.avgConf.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' }
         ].map(m => (
           <div key={m.label} className={`border rounded-xl p-3 text-center ${m.bg}`}>
             <div className="text-[9px] font-bold text-zinc-400 tracking-wider uppercase mb-1">{m.label}</div>
@@ -295,7 +360,18 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
                 <span>{selectedAsset === 'ALL' ? 'BTC' : selectedAsset} 15M ACCURACY:</span>
                 <span className="text-emerald-200 font-black">
-                  {(selectedAsset === 'ALL' || selectedAsset === 'BTC' ? (metrics.winRate || 84.0) : (assetMatrix.find(a => a.asset === selectedAsset)?.winRate || 84.0)).toFixed(1)}%
+                  {(() => {
+                    // Previously fell back to a literal 84.0 whenever the real
+                    // win rate was 0 or absent, so an empty ledger advertised an
+                    // 84% accuracy that had never been measured.
+                    const wr = (selectedAsset === 'ALL' || selectedAsset === 'BTC')
+                      ? metrics.winRate
+                      : assetMatrix.find(a => a.asset === selectedAsset)?.winRate;
+                    const n = (selectedAsset === 'ALL' || selectedAsset === 'BTC')
+                      ? metrics.settledSampleSize
+                      : (assetMatrix.find(a => a.asset === selectedAsset)?.totalLocks || 0);
+                    return n > 0 && Number.isFinite(Number(wr)) ? `${Number(wr).toFixed(1)}%` : 'AWAITING DATA';
+                  })()}
                 </span>
               </div>
             </div>
@@ -354,7 +430,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'NEUTRAL';
               const isUpDir = String(direction).toUpperCase().includes('UP');
               
-              const conf = lockedPrediction?.confidence || liveState?.confidence || 72.8;
+              // No invented 72.8: if the engine has not published a confidence
+              // for this cycle yet, the card shows it as unknown.
+              const conf = lockedPrediction?.confidence ?? liveState?.confidence ?? null;
               const edge = lockedPrediction?.edge || liveState?.edge;
               const cycleSeq = liveState?.sequence || liveState?.cycleId || '1407';
 
@@ -370,7 +448,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 spotAtLock: lockedSpot,
                 settlementPrice: spot,
                 confidence: conf,
-                edge: edge || 5.5,
+                edge: Number.isFinite(Number(edge)) ? Number(edge) : null,
                 reversalRisk: 38,
                 proofHash: `0x7a8d...${cycleSeq}`,
                 reasons: [isSkip ? formatSkipReason(liveState?.lockEligibility?.reason) : 'Real-time multi-model validation active']
@@ -632,12 +710,14 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
                     <div className="bg-black/50 p-2.5 rounded-xl border border-purple-900/40">
                       <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">Confidence</div>
-                      <div className="text-cyan-300 font-bold">{log.confidence || (isNoTrade ? 72 : 84)}%</div>
+                      <div className="text-cyan-300 font-bold">{Number.isFinite(Number(log.confidence)) ? `${log.confidence}%` : '--'}</div>
                     </div>
 
                     <div className="bg-black/50 p-2.5 rounded-xl border border-purple-900/40">
                       <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">{isNoTrade ? 'Reversal Risk' : 'Edge'}</div>
-                      <div className="text-purple-300 font-bold">{isNoTrade ? `${log.reversalRisk || 42}%` : `+${log.edge || 6.5}%`}</div>
+                      <div className="text-purple-300 font-bold">{isNoTrade
+                        ? (Number.isFinite(Number(log.reversalRisk)) ? `${log.reversalRisk}%` : '--')
+                        : (Number.isFinite(Number(log.edge)) ? `+${log.edge}%` : '--')}</div>
                     </div>
                   </div>
 
@@ -844,12 +924,12 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Model Confidence</div>
-                <div className="text-cyan-300 font-black text-sm">{activeProvenance.confidence || 84}%</div>
+                <div className="text-cyan-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.confidence)) ? `${activeProvenance.confidence}%` : '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Statistical Edge</div>
-                <div className="text-purple-300 font-black text-sm">+{activeProvenance.edge || 6.5}%</div>
+                <div className="text-purple-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.edge)) ? `+${activeProvenance.edge}%` : '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
