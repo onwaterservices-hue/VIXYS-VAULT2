@@ -282,7 +282,21 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
   // =========================================================================
   // STATE 3 (FULLY VERIFIED USER) — SLEEK ULTRA-COMPACT COMMAND RIBBON
   // =========================================================================
-  if (mode === 'dashboard' && isFullyVerified && !isLoadingProfile) {
+  // The `mode === 'dashboard'` gate was the reason a fully linked account still
+  // saw "CONNECT DISCORD" on the Alerts page forever. AlertSettingsView mounts
+  // this component as mode="settings", and there is no connected rendering for
+  // that mode anywhere below -- so a verified user in settings always fell
+  // through to the NOT CONNECTED gateway panel no matter what the backend said.
+  //
+  // Confirmed against production: /api/discord/user-profile returned
+  // linked:true, guildMember:true, entitlementTier ELITE, verificationStatus
+  // VERIFIED, connected since 2026-08-30 -- while the panel still rendered the
+  // connect call-to-action. loadProfile() was working correctly the whole time;
+  // the connected branch was simply unreachable in this mode.
+  //
+  // Connection state is a property of the account, not of where the component
+  // happens to be mounted, so it now renders wherever the component is used.
+  if (isFullyVerified && !isLoadingProfile) {
     return (
       <div className={`bg-[#070412]/95 rounded-2xl border border-purple-500/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_20px_rgba(109,24,255,0.12)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
         {/* Subtle Ambient Radial Glow Backdrop */}
