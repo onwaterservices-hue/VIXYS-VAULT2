@@ -5685,6 +5685,143 @@ app.get("/api/discord/health", (req, res) => {
   });
 });
 
+// GET /api/discord/bot-status -- real bot runtime state for the Bot Hub.
+//
+// This route did not exist: production returned 404 on both GET and POST.
+// getDiscordBotStatusApi() in src/services/api.ts swallowed that 404 and
+// substituted a HARDCODED "healthy" object -- isReady: true, botTag
+// "VIXY AI Bot", guildCount 1, pingMs 14, totalAlertsDispatched 12 -- so the
+// Discord Bot Hub reported a live, working bot no matter what the bot was
+// actually doing. A completely dead bot and a healthy one rendered
+// identically, which is the same class of defect as the missing
+// /api/auth/discord/url: a frontend calling a route the server never had.
+//
+// Every field below is read from the live bot singleton and the process
+// environment. Nothing is synthesized, and no token or ID value is returned.
+app.get("/api/discord/bot-status", (req, res) => {
+  const state = getDiscordBotStatus();
+  const { envConfig } = validateDiscordEnv();
+  return res.json({
+    success: true,
+    status: {
+      isReady: state.isReady,
+      botTag: state.botTag,
+      botId: state.botId,
+      guildCount: state.guildCount,
+      pingMs: state.pingMs,
+      mode: state.mode,
+      inviteUrl: state.inviteUrl,
+      lastBroadcastAt: state.lastBroadcastAt,
+      totalAlertsDispatched: state.totalAlertsDispatched,
+      lastError: state.lastError,
+    },
+    envConfigured: {
+      hasBotToken: envConfig.DISCORD_BOT_TOKEN,
+      hasClientId: envConfig.DISCORD_CLIENT_ID,
+      hasGuildId: envConfig.DISCORD_GUILD_ID,
+      hasWebhookUrl: envConfig.DISCORD_WEBHOOK_URL,
+      hasVipRoleId: envConfig.DISCORD_VIP_ROLE_ID,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// GET /api/discord/diagnostics -- live guild/role diagnostics for the Bot Hub
+// and the Admin Panel, both of which fetch this path directly.
+//
+// Also absent in production (404). DiscordBotHubView reads `success` and
+// `queue` off the response and AdminPanel renders the diagnostics object, so
+// with the route missing both panels silently fell back to empty state and
+// could never show a real guild-access or role-hierarchy problem.
+//
+// runDiscordDiagnostics() performs live Discord API calls, so it is bounded by
+// its own catch: a Discord outage degrades this to the cached report rather
+// than failing the whole panel.
+app.get("/api/discord/diagnostics", async (req, res) => {
+  const report = getDiscordDiagnosticsReport();
+  const live = await runDiscordDiagnostics().catch((err) => {
+    console.error("[Discord Diagnostics] live probe failed:", err && err.message);
+    return null;
+  });
+  const state = getDiscordBotStatus();
+  return res.json({
+    success: true,
+    botState: {
+      isReady: state.isReady,
+      mode: state.mode,
+      botTag: state.botTag,
+      guildCount: state.guildCount,
+      pingMs: state.pingMs,
+      lastError: state.lastError,
+    },
+    // null when the live probe could not run -- deliberately not defaulted to
+    // `false`, so "unknown" is never rendered as a confirmed failure.
+    guildAccessible: live ? live.guildAccessible : null,
+    hierarchySufficient: live ? live.hierarchySufficient : null,
+    botHasManageRoles: live ? live.botHasManageRoles : null,
+    liveProbeRan: !!live,
+    diagnostics: report.diagnostics,
+    diagnosticText: report.text,
+    queue: discordSyncQueue.slice(0, 50),
+    metrics: discordSyncMetrics,
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// POST /api/discord/test-broadcast -- dispatch a test signal embed.
+//
+// Missing in production (404), so the Bot Hub's "send test broadcast" control
+// was inert. This posts a message into the Discord server, so unlike the two
+// read-only routes above it is gated to OWNER/ADMIN via the session-verified
+// requireRole middleware rather than being open to any signed-in account.
+app.post(
+  "/api/discord/test-broadcast",
+  requireRole(["OWNER", "ADMIN"]),
+  async (req, res) => {
+    const body = req.body || {};
+    const rawDirection = String(body.direction || "YES").toUpperCase();
+    // The Bot Hub sends YES/NO; other callers use UP/DOWN. Normalize to the
+    // YES/NO union broadcastSignalToDiscord expects.
+    const direction =
+      rawDirection === "NO" || rawDirection === "DOWN" ? "NO" : "YES";
+    const currentPrice = Number(body.currentPrice);
+    const targetPrice = Number(body.targetPrice);
+    if (!Number.isFinite(currentPrice) || !Number.isFinite(targetPrice)) {
+      return res.status(400).json({
+        success: false,
+        message: "currentPrice and targetPrice must be finite numbers.",
+      });
+    }
+    try {
+      const result = await broadcastSignalToDiscord({
+        symbol: String(body.symbol || "BTC"),
+        direction,
+        confidence: Number.isFinite(Number(body.confidence))
+          ? Number(body.confidence)
+          : 0,
+        edgePct: Number.isFinite(Number(body.edgePct)) ? Number(body.edgePct) : 0,
+        currentPrice,
+        targetPrice,
+        reasoning: String(body.reasoning || "Manual test broadcast from Bot Hub."),
+        webhookUrl: body.webhookUrl || undefined,
+        tier: body.tier === "FREE" ? "FREE" : "ELITE",
+      });
+      return res.json({
+        success: !!result.success,
+        method: result.method,
+        message: result.message,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err) {
+      console.error("[Discord Test Broadcast] failed:", err && err.message);
+      return res.status(502).json({
+        success: false,
+        message: "Discord dispatch failed: " + (err && err.message),
+      });
+    }
+  },
+);
+
 // GET /api/discord/user-profile -- the canonical link state the UI polls.
 //
 // This route did not exist. App.tsx and CommunityAccessNode call it on load and
@@ -5718,9 +5855,14 @@ app.get("/api/discord/user-profile", async (req, res) => {
 
     // Guild membership is re-checked live against Discord rather than trusting a
     // stored flag, so leaving the server is reflected immediately.
+    // One call now yields both membership and the member's real role names,
+    // replacing the hardcoded `guildRoles: []` below.
     let guildMember = false;
+    let guildRoleNames = [];
     if (discordUserId) {
-      guildMember = await checkLiveGuildMembership(discordUserId).catch(() => false);
+      const live = await fetchLiveGuildMemberRoles(discordUserId).catch(() => null);
+      guildMember = !!(live && live.member);
+      guildRoleNames = (live && live.roleNames) || [];
     }
 
     // Report a tier only when it can be resolved authoritatively. On a cold
@@ -5740,7 +5882,7 @@ app.get("/api/discord/user-profile", async (req, res) => {
         entitlementTier: resolved.authoritative ? resolved.tier : null,
         entitlementResolved: resolved.authoritative,
         entitlementReason: resolved.reason,
-        guildRoles: [],
+        guildRoles: guildRoleNames,
         // Consumed by App.tsx / CommunityAccessNode to derive syncStatus.
         // VERIFIED requires actual guild membership -- a link alone is not
         // verification, so an unlinked-from-guild user reads as NEEDS_GUILD
@@ -6176,6 +6318,87 @@ async function checkLiveGuildMembership(discordUserId) {
   }
 }
 __name(checkLiveGuildMembership, "checkLiveGuildMembership");
+
+// Guild role names for a member, resolved live from Discord.
+//
+// /api/discord/user-profile returned a hardcoded `guildRoles: []`, so the UI
+// never learned which role a member actually holds. That empty array is why the
+// terminal fell back to displaying an invented "PRO MEMBER" label: the real role
+// was applied correctly in Discord all along, but nothing ever asked for it.
+// Verified directly against the Discord API -- a linked ELITE account carries
+// the VIXY ELITE and Verified roles while the profile route still reported [].
+//
+// checkLiveGuildMembership above already fetches the member object and discards
+// everything except res.ok. This returns the roles from that same call, so the
+// membership check costs no extra request, plus a guild-roles lookup cached for
+// five minutes to turn role IDs into names.
+let _guildRoleNameCache = { at: 0, byId: null };
+const GUILD_ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchGuildRoleNameMap() {
+  const now = Date.now();
+  if (_guildRoleNameCache.byId && now - _guildRoleNameCache.at < GUILD_ROLE_CACHE_TTL_MS) {
+    return _guildRoleNameCache.byId;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      "https://discord.com/api/v10/guilds/" + process.env.DISCORD_GUILD_ID + "/roles",
+      {
+        headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) return _guildRoleNameCache.byId || null;
+    const roles = await res.json();
+    const byId = {};
+    for (const r of roles) byId[r.id] = r.name;
+    _guildRoleNameCache = { at: now, byId };
+    return byId;
+  } catch (err) {
+    console.error("[Discord] Guild role list fetch failed:", err?.message || err);
+    // Serve a stale map rather than dropping role names on a transient failure.
+    return _guildRoleNameCache.byId || null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchGuildRoleNameMap, "fetchGuildRoleNameMap");
+
+// Returns { member, roleIds, roleNames }. `member` is false only when Discord
+// actually says the user is not in the guild; a transient failure returns
+// member:false with empty roles, matching checkLiveGuildMembership's behaviour.
+async function fetchLiveGuildMemberRoles(discordUserId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      "https://discord.com/api/v10/guilds/" +
+        process.env.DISCORD_GUILD_ID +
+        "/members/" +
+        discordUserId,
+      {
+        headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) return { member: false, roleIds: [], roleNames: [] };
+    const m = await res.json();
+    const roleIds = Array.isArray(m.roles) ? m.roles : [];
+    const byId = await fetchGuildRoleNameMap();
+    const roleNames = byId
+      ? roleIds.map((id) => byId[id]).filter(Boolean)
+      : [];
+    return { member: true, roleIds, roleNames };
+  } catch (err) {
+    console.error("[Discord] Live guild member roles fetch failed:", err?.message || err);
+    return { member: false, roleIds: [], roleNames: [] };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchLiveGuildMemberRoles, "fetchLiveGuildMemberRoles");
 
 // Backs the existing (previously unimplemented) account-status widget.
 // Reuses the same session auth and Firestore link data as the rest of the

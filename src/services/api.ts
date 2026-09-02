@@ -752,26 +752,42 @@ export async function disconnectDiscordApi(_userEmail?: string, _userId?: string
   }
 }
 
+// Real bot status, or an explicit UNKNOWN -- never an invented one.
+//
+// This previously returned a hardcoded object whenever the request failed:
+// isReady: true, botTag 'VIXY AI Bot', guildCount 1, pingMs 14,
+// totalAlertsDispatched 12. Because /api/discord/bot-status did not exist on
+// the server (404 in production), that fallback fired on EVERY call, so the
+// Bot Hub always displayed a healthy, connected bot with a plausible ping and
+// dispatch count that were pure invention. A dead bot was unreportable.
+//
+// The route now exists. When it still cannot be reached, callers get
+// `reachable: false` and null fields so the UI can say "status unknown"
+// instead of asserting health it has not verified.
 export async function getDiscordBotStatusApi() {
   const data = await safeFetchJson<any>('/api/discord/bot-status');
-  if (data) return data;
+  if (data) return { ...data, reachable: true };
 
   return {
+    reachable: false,
     status: {
-      isReady: true,
-      botTag: 'VIXY AI Bot',
-      guildCount: 1,
-      pingMs: 14,
-      mode: 'WEBHOOK_FALLBACK',
-      inviteUrl: 'https://discord.com/api/oauth2/authorize?client_id=1534690638937981028&permissions=2416004096&scope=bot%20applications.commands',
-      lastBroadcastAt: new Date().toISOString(),
-      totalAlertsDispatched: 12,
+      isReady: false,
+      botTag: null,
+      botId: null,
+      guildCount: null,
+      pingMs: null,
+      mode: 'UNKNOWN',
+      inviteUrl: null,
+      lastBroadcastAt: null,
+      totalAlertsDispatched: null,
+      lastError: 'Bot status endpoint unreachable.',
     },
     envConfigured: {
-      hasBotToken: false,
-      hasClientId: false,
-      hasWebhookUrl: true,
-      hasVipRoleId: false,
+      hasBotToken: null,
+      hasClientId: null,
+      hasGuildId: null,
+      hasWebhookUrl: null,
+      hasVipRoleId: null,
     },
   };
 }

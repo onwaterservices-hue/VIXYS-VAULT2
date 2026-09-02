@@ -61,6 +61,10 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
 }) => {
   const [profile, setProfile] = useState<any>(null);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
+  // True when the backend could not be asked at all (transport error or a 5xx).
+  // "Unknown" is a third state: it must not be rendered as connected, and it
+  // must not be rendered as a confirmed disconnection either.
+  const [linkStateUnknown, setLinkStateUnknown] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -105,6 +109,22 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
 
       // 2. Direct Discord profile query fallback
       const res = await getDiscordUserProfileApi(savedEmail);
+
+      // A failed lookup is not evidence of anything. Previously a 500 from
+      // /api/discord/user-profile left `profile` null while
+      // `settings.discordLinked` (persisted in localStorage) still read true,
+      // and isLinked ORed the two -- so the panel announced
+      // "Discord Identity Connected" with a username the server had never
+      // returned. Observed directly: the API answered
+      // {error:"PROFILE_LOOKUP_FAILED", linked:false} while the UI showed
+      // step 1 LINKED. Client-side storage must never out-vote the backend.
+      if (!res || (res as any).error) {
+        setProfile(null);
+        setLinkStateUnknown(true);
+        return;
+      }
+      setLinkStateUnknown(false);
+
       if (res && res.linked && res.profile) {
         setProfile(res.profile);
         if (setSettings) {
@@ -135,6 +155,8 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
       }
     } catch (e) {
       console.warn('Failed to fetch Discord user profile from backend:', e);
+      setProfile(null);
+      setLinkStateUnknown(true);
     } finally {
       setIsLoadingProfile(false);
     }
@@ -271,18 +293,36 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
     }
   };
 
-  const isLinked = !!profile || (settings?.discordLinked ?? false);
+  // The backend is the only authority on whether an account is linked.
+  // settings.discordLinked is a localStorage-persisted cache and was previously
+  // ORed in here, which let stale client state assert a connection the server
+  // did not confirm.
+  const isLinked = !!profile;
   const displayName = profile?.discordGlobalName || profile?.discordUsername || settings?.discordUsername;
   const username = profile?.discordUsername;
   const avatarUrl = profile?.discordAvatar;
-  const guildMember = profile?.guildMember ?? settings?.guildMember ?? false;
+  const guildMember = profile?.guildMember ?? false;
   const isFullyVerified = isLinked && guildMember;
   const roleAssigned = profile?.guildRoles?.[0] || (guildMember ? 'PRO MEMBER' : 'None');
 
   // =========================================================================
   // STATE 3 (FULLY VERIFIED USER) — SLEEK ULTRA-COMPACT COMMAND RIBBON
   // =========================================================================
-  if (mode === 'dashboard' && isFullyVerified && !isLoadingProfile) {
+  // The `mode === 'dashboard'` gate was the reason a fully linked account still
+  // saw "CONNECT DISCORD" on the Alerts page forever. AlertSettingsView mounts
+  // this component as mode="settings", and there is no connected rendering for
+  // that mode anywhere below -- so a verified user in settings always fell
+  // through to the NOT CONNECTED gateway panel no matter what the backend said.
+  //
+  // Confirmed against production: /api/discord/user-profile returned
+  // linked:true, guildMember:true, entitlementTier ELITE, verificationStatus
+  // VERIFIED, connected since 2026-08-30 -- while the panel still rendered the
+  // connect call-to-action. loadProfile() was working correctly the whole time;
+  // the connected branch was simply unreachable in this mode.
+  //
+  // Connection state is a property of the account, not of where the component
+  // happens to be mounted, so it now renders wherever the component is used.
+  if (isFullyVerified && !isLoadingProfile) {
     return (
       <div className={`bg-[#070412]/95 rounded-2xl border border-purple-500/30 px-4 py-3 flex flex-wrap items-center justify-between gap-3 shadow-[0_0_20px_rgba(109,24,255,0.12)] font-mono text-xs relative overflow-hidden transition-all duration-200 hover:border-purple-500/50 ${className}`}>
         {/* Subtle Ambient Radial Glow Backdrop */}
@@ -365,6 +405,14 @@ export const CommunityAccessNode: React.FC<CommunityAccessNodeProps> = ({
             <span className="px-3 py-1 rounded-full bg-purple-500/20 border border-purple-400/50 text-purple-200 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
               <RefreshCw className="w-3 h-3 text-purple-300 animate-spin" />
               <span>AUTHENTICATING...</span>
+            </span>
+          ) : linkStateUnknown ? (
+            /* The backend could not be reached. Saying "NOT CONNECTED" here
+               would be an assertion we cannot support, and saying "CONNECTED"
+               is what the localStorage fallback used to do wrongly. */
+            <span className="px-3 py-1 rounded-full bg-zinc-500/15 border border-zinc-500/40 text-zinc-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
+              <ShieldAlert className="w-3.5 h-3.5 text-zinc-400" />
+              <span>STATUS UNAVAILABLE</span>
             </span>
           ) : isLinked && !guildMember ? (
             <span className="px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 shadow-sm">
