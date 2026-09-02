@@ -5765,9 +5765,14 @@ app.get("/api/discord/user-profile", async (req, res) => {
 
     // Guild membership is re-checked live against Discord rather than trusting a
     // stored flag, so leaving the server is reflected immediately.
+    // One call now yields both membership and the member's real role names,
+    // replacing the hardcoded `guildRoles: []` below.
     let guildMember = false;
+    let guildRoleNames = [];
     if (discordUserId) {
-      guildMember = await checkLiveGuildMembership(discordUserId).catch(() => false);
+      const live = await fetchLiveGuildMemberRoles(discordUserId).catch(() => null);
+      guildMember = !!(live && live.member);
+      guildRoleNames = (live && live.roleNames) || [];
     }
 
     // Report a tier only when it can be resolved authoritatively. On a cold
@@ -5787,7 +5792,7 @@ app.get("/api/discord/user-profile", async (req, res) => {
         entitlementTier: resolved.authoritative ? resolved.tier : null,
         entitlementResolved: resolved.authoritative,
         entitlementReason: resolved.reason,
-        guildRoles: [],
+        guildRoles: guildRoleNames,
         // Consumed by App.tsx / CommunityAccessNode to derive syncStatus.
         // VERIFIED requires actual guild membership -- a link alone is not
         // verification, so an unlinked-from-guild user reads as NEEDS_GUILD
@@ -6223,6 +6228,87 @@ async function checkLiveGuildMembership(discordUserId) {
   }
 }
 __name(checkLiveGuildMembership, "checkLiveGuildMembership");
+
+// Guild role names for a member, resolved live from Discord.
+//
+// /api/discord/user-profile returned a hardcoded `guildRoles: []`, so the UI
+// never learned which role a member actually holds. That empty array is why the
+// terminal fell back to displaying an invented "PRO MEMBER" label: the real role
+// was applied correctly in Discord all along, but nothing ever asked for it.
+// Verified directly against the Discord API -- a linked ELITE account carries
+// the VIXY ELITE and Verified roles while the profile route still reported [].
+//
+// checkLiveGuildMembership above already fetches the member object and discards
+// everything except res.ok. This returns the roles from that same call, so the
+// membership check costs no extra request, plus a guild-roles lookup cached for
+// five minutes to turn role IDs into names.
+let _guildRoleNameCache = { at: 0, byId: null };
+const GUILD_ROLE_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function fetchGuildRoleNameMap() {
+  const now = Date.now();
+  if (_guildRoleNameCache.byId && now - _guildRoleNameCache.at < GUILD_ROLE_CACHE_TTL_MS) {
+    return _guildRoleNameCache.byId;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      "https://discord.com/api/v10/guilds/" + process.env.DISCORD_GUILD_ID + "/roles",
+      {
+        headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) return _guildRoleNameCache.byId || null;
+    const roles = await res.json();
+    const byId = {};
+    for (const r of roles) byId[r.id] = r.name;
+    _guildRoleNameCache = { at: now, byId };
+    return byId;
+  } catch (err) {
+    console.error("[Discord] Guild role list fetch failed:", err?.message || err);
+    // Serve a stale map rather than dropping role names on a transient failure.
+    return _guildRoleNameCache.byId || null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchGuildRoleNameMap, "fetchGuildRoleNameMap");
+
+// Returns { member, roleIds, roleNames }. `member` is false only when Discord
+// actually says the user is not in the guild; a transient failure returns
+// member:false with empty roles, matching checkLiveGuildMembership's behaviour.
+async function fetchLiveGuildMemberRoles(discordUserId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(
+      "https://discord.com/api/v10/guilds/" +
+        process.env.DISCORD_GUILD_ID +
+        "/members/" +
+        discordUserId,
+      {
+        headers: { Authorization: "Bot " + process.env.DISCORD_BOT_TOKEN },
+        signal: controller.signal,
+      },
+    );
+    if (!res.ok) return { member: false, roleIds: [], roleNames: [] };
+    const m = await res.json();
+    const roleIds = Array.isArray(m.roles) ? m.roles : [];
+    const byId = await fetchGuildRoleNameMap();
+    const roleNames = byId
+      ? roleIds.map((id) => byId[id]).filter(Boolean)
+      : [];
+    return { member: true, roleIds, roleNames };
+  } catch (err) {
+    console.error("[Discord] Live guild member roles fetch failed:", err?.message || err);
+    return { member: false, roleIds: [], roleNames: [] };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchLiveGuildMemberRoles, "fetchLiveGuildMemberRoles");
 
 // Backs the existing (previously unimplemented) account-status widget.
 // Reuses the same session auth and Firestore link data as the rest of the
