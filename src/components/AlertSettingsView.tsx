@@ -164,15 +164,15 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
               <Send className="w-4 h-4 text-purple-400" />
               <h3 className="text-xs font-bold text-white uppercase tracking-wider">Discord Bot & Webhook Service</h3>
             </div>
-            <span
-              className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
-                settings.discordLinked
-                  ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
-                  : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-              }`}
-            >
-              {settings.discordLinked ? 'DISCORD LINKED' : 'NOT LINKED'}
-            </span>
+            {/* The Discord link badge that used to sit here read
+                settings.discordLinked -- a localStorage-persisted cache -- while
+                CommunityAccessNode directly below renders the same status from
+                the backend. The two disagreed inside a single card: a green
+                "DISCORD LINKED" chip sitting immediately above a "CONNECT
+                DISCORD" call to action, which is what made the panel look
+                broken. The authoritative status is shown by the gateway panel
+                below, so this duplicate is removed rather than given a second
+                source of truth to drift from. */}
           </div>
 
           {/* Community Access Node (Discord Gateway) */}
