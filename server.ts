@@ -13029,10 +13029,42 @@ function recomputeAccuracyFromSettledHistory() {
 }
 __name(recomputeAccuracyFromSettledHistory, "recomputeAccuracyFromSettledHistory");
 
-recomputeAccuracyFromSettledHistory();
-hydrateSignalHistoryFromFirestore().catch(() => {});
+// Single in-flight hydration, shared by every reader.
+//
+// Hydration was previously fire-and-forget at module load, which raced on
+// serverless: each lambda instance has its own in-memory ledger, and a request
+// arriving before hydration finished read an empty one. Observed directly on a
+// preview deployment -- /api/cron/settle (which awaits hydration) reported 229
+// restored locks and 59 settled, while /api/signal/resolved-log on a sibling
+// instance returned an empty ledger for the same data.
+//
+// ensureLedgerHydrated() memoizes the promise so concurrent callers share one
+// Firestore read, and read paths await it instead of guessing.
+let _ledgerHydrationPromise = null;
+function ensureLedgerHydrated() {
+  if (!_ledgerHydrationPromise) {
+    _ledgerHydrationPromise = hydrateSignalHistoryFromFirestore().catch((err) => {
+      // Allow a later request to retry rather than caching a failure forever.
+      _ledgerHydrationPromise = null;
+      console.error("[VIXY_LEDGER_HYDRATE] deferred hydration failed:", err && err.message);
+      return { hydrated: 0, reason: "HYDRATE_FAILED" };
+    });
+  }
+  return _ledgerHydrationPromise;
+}
+__name(ensureLedgerHydrated, "ensureLedgerHydrated");
 
-app.get("/api/signal/resolved-log", (req, res) => {
+recomputeAccuracyFromSettledHistory();
+// Start hydration at boot; readers await the same promise.
+ensureLedgerHydrated();
+
+app.get("/api/signal/resolved-log", async (req, res) => {
+  // Await the shared hydration so a cold instance reports the real ledger
+  // instead of an empty one. Without this the endpoint returned total:0 while
+  // a warm sibling instance held 59 settled cycles.
+  if (persistentSignalLogs.length === 0) {
+    await ensureLedgerHydrated();
+  }
   const limit2 = Math.min(200, parseInt(req.query.limit || "200", 10));
   const isDemo = __name((s) => {
     const idLower = (s.id || "").toLowerCase();
@@ -15510,7 +15542,7 @@ app.all("/api/cron/settle", async (req, res) => {
   const nowMs = Date.now();
   let hydration = null;
   if (persistentSignalLogs.length === 0) {
-    hydration = await hydrateSignalHistoryFromFirestore().catch(() => null);
+    hydration = await ensureLedgerHydrated().catch(() => null);
   }
   const settled = persistentSignalLogs.filter(
     (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
