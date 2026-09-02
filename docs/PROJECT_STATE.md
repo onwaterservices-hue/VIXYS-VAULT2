@@ -1,157 +1,277 @@
-# Project state — audited 2026-09-02
+# Project state
 
-Baseline: `main` = `1d230e1`. Each claim below is marked with how it was checked.
+**Baseline: `main` = `05ab8fb`, deployed to production and verified 2026-09-02.**
 
-- **[verified-prod]** observed against www.vixxyvault.com
-- **[verified-preview]** observed on a Vercel preview deployment
-- **[verified-local]** observed in a local run of the real build
-- **[code]** read from source, not executed
-- **[unverified]** stated but not confirmed — treat as open
+This document separates what has been **observed** from what is **still open**.
+Nothing below is inferred from a commit message or a code comment alone.
 
-## Working
+Evidence tags: `[prod]` observed on www.vixxyvault.com · `[preview]` observed on a
+Vercel preview · `[local]` observed in a local run of the real build ·
+`[code]` read from source, not executed.
 
-- **15M decision engine** [verified-local, verified-preview] — runs on real market
-  data, produces cycles, and correctly *declines* to lock below the 66% confidence
-  gate (observed at 55%). Qualification rules are intact and were not weakened.
-- **Discord identity chain** [verified-prod] — session → OAuth → Discord user ID →
-  guild membership → entitlement → role. The audited account has been linked since
-  2026-08-30 and reads back correctly today, so link persistence survives cold
-  starts, restarts and re-login.
-- **Discord role assignment** [verified-prod] — queried the Discord API directly:
-  `VIXY ELITE` and `Verified` are genuinely applied, and the bot's role sits above
-  them in the hierarchy, so it can manage what it needs to.
-- **OAuth start** [verified-prod] — `/api/discord/connect` returns 200 for a signed-in
-  session and produces a correct consent URL (single-use 64-hex state, correct
-  `redirect_uri`, `scope=identify`).
-- **Stripe webhook signature verification** [code] — raw body is preserved for
-  `/api/stripe/webhook` (`server.ts:382`) and `constructEvent` is used (`:11786`).
-- **Subscription persistence** [code] — written to Firestore `subscriptions/<email>`
-  and `users/`, hydrated into memory on read.
-- **Cold-start entitlement safety** [code] — the authoritative resolver refuses to
-  demote on an unresolved negative; it can withhold a downgrade but not over-grant.
-- **Firestore Admin datapath in production** [verified-prod] — production logs show
-  init via `FIREBASE_SERVICE_ACCOUNT_JSON`, zero credential errors, zero circuit-breaker
-  trips over a 3-hour window.
+---
 
-## Broken
+# PART 1 — VERIFIED FACTS
 
-- **`/api/cron/engine-tick` does not exist.** [verified-prod: 404] `vercel.json`
-  schedules it every minute, but no such route is registered in `server.ts` (only
-  `/api/cron/settle` and `/api/cron/hourly-market` are). The minute cron has been
-  calling a 404 endpoint. **This is the highest-priority issue** — see Risks.
-- **Fabricated telemetry in the cycle log.** [code] `server.ts:4611` emits
-  `algorithm=RUNNING websocket=CONNECTED` as unconditional string literals in the
-  template, so they report the same values regardless of actual state. Confirmed
-  there is nothing behind the websocket claim: `WebSocketServer`/`WebSocket` are
-  imported at `server.ts:22` but `new WebSocketServer` appears nowhere, so no
-  websocket server is ever instantiated and market data is fetched over REST.
-- **The test suite does not run in CI and mostly tests the wrong file.**
-  [verified-local] `npm test` is `tsc --noEmit`, so `tests/` never executes. Three
-  of four `.mjs` tests read source from
-  `/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts` — a copy 24KB smaller
-  and a day older than this repo, present only on one machine.
-  `tests/verify_lifecycle.ts` imports `'../backend'`, which does not exist. Only
-  `discord-oauth-linkage.invariants.mjs` resolves paths relative to itself.
-  The tests that do run, pass.
-- **Four frontend-called routes 404** [verified-prod]: `/api/system-status`,
-  `/api/signal/learning-metrics`, `/api/alerts/send`, `/api/admin/unfreeze-bots`.
-- **Discord slash commands do not work** [code] — `initializeDiscordBot()` is
-  exported but never called, and a gateway websocket cannot persist on serverless.
+Each of these was observed against a running system on 2026-09-02.
 
-## Partially implemented
+## The engine runs on schedule
 
-- **15M lock ledger persistence.** Settlement writes to `signal_logs` have always
-  worked, but nothing read them back, so every cold start discarded real history.
-  Hydration is implemented on `fix/mission-b-real-lock-settlement` and **restored 229
-  real locks, 59 settled, on a preview** [verified-preview]. Not on `main`.
-- **Settlement coverage.** Of 229 hydrated records, 59 were settled and 36 were
-  still `LOCKED` past expiry [verified-preview] — 36 of the 95 locks that reached a
-  terminal-or-expired state were never graded. Settlement only runs when a live
-  process observes the rollover, a direct consequence of the engine-tick issue.
-  (The remaining 134 records are skips/no-trades and other non-terminal states.)
-- **Admin datapath migration** — `docs/admin-datapath-migration.md` is headed
-  "DEFERRED, NOT STARTED" and enumerates 24 incompatible call sites at commit
-  `cc3c847`. The Admin datapath is nevertheless live in production today, so that
-  document is **historical and now partly inaccurate**. It was left untouched by
-  this audit.
+**`/api/cron/engine-tick` is live and returns 200.** `[prod]`
 
-## Known risks
+It previously did not exist. `vercel.json` had scheduled it every minute since the
+crons were introduced, and production returned **404** on every invocation, so the
+15M engine ran only from the module-scope `setInterval(runMarketEngineTickTracked,
+3000)` — which lives exactly as long as a warm lambda does.
 
-1. **The engine's correctness depends on lambda warmth.** [code + verified-preview]
-   The 15M engine is driven by `setInterval(runMarketEngineTickTracked, 3000)` at
-   module scope (`server.ts:3098`). On Vercel that only runs while an instance
-   happens to be alive, and the every-minute cron meant to guarantee it is a 404.
-   Consequences: cycles may be unobserved, and settlement — which happens inline on
-   rollover — is silently skipped whenever no instance is alive at the boundary.
-   This is the mechanism behind the 36 unsettled locks and it structurally corrupts
-   the track record the product is sold on.
-2. **`applicationDefault()` produces a false-green persistence layer.**
-   [verified-preview] With no service-account variable, `initializeApp({credential:
-   applicationDefault()})` and `getFirestore()` both *succeed* on Vercel, so
-   `adminDb` is non-null and `_adminActive`/`adminDatapathActive` report **true** —
-   while every actual read and write then fails with "Could not load the default
-   credentials", the circuit breaker opens, and the process exits `128`. The catch
-   block in `firebaseAdmin.ts` only fires on init errors, which never happen here.
-   There is no readiness probe that performs an actual operation.
-3. **Preview environments are not representative.** `FIREBASE_SERVICE_ACCOUNT_JSON`
-   and `SESSION_SIGNING_SECRET` were Production-only until 2026-09-02, so previews
-   had a dead Firestore and could not sign anyone in. The Discord **role ID** vars
-   are still Production-only (`elitePresent: false`, `verifiedPresent: false` on
-   preview), so role assignment cannot be tested outside production.
-4. **Fabricated display values.** Removed on the 15M branch, but still present
-   elsewhere on `main`: `PerformanceLabView` contains a complete hardcoded
-   calibration table (58 predictions, 85.5% accuracy, Brier 0.048) labelled
-   "VERIFIED"; `VixyAiStatusCard`, `ModuleCards`, `OpportunityScannerView` and
-   `ExecutiveCommandCenter` carry fixed demo numbers.
-5. **Single-file blast radius.** `server.ts` is 16,644 lines holding routing, the
-   engine, entitlement and the datapath shim. Any change carries broad risk and
-   review is difficult.
-6. **Firestore circuit breaker can suppress writes for 24 hours.** [code] On a
-   quota error the backoff is set to 24h (`server.ts:15729`); meanwhile settled
-   cycles queue only in the in-memory `pendingSignalLogsQueue` and are lost if the
-   instance dies. The app continues to look healthy throughout.
-7. **The disk store is not durable.** [code] `vixy_store.json` lives under `/tmp`
-   on Vercel — per-instance and lost on recycling. Anything relying on it as a
-   fallback for Firestore is relying on a cache.
-8. **Kalshi auto-trade is an undocumented live-trading surface.** [code]
-   `/api/kalshi/auto-trade/go-live` exists with no documentation or test coverage
-   in this repo. Not audited here.
-9. **Repository noise.** 193 `.cjs` + 150 `.py` one-off scripts at the root obscure
-   what is real, and several contain operational queries.
-10. **Undeduplicated polling.** [code + verified-prod] `/api/vixy/15m/current` has a
-   single callsite (`fetchCanonical15mDecision`, `src/services/api.ts:1745`), wrapped
-   by the `useCanonical15mDecision` hook, which is imported by ~10 component files.
-   Each mounted instance polls independently, and the call uses raw `fetch` with a
-   cache-busting `?_t=` parameter, so it bypasses `safeFetchJson`'s cache and the
-   requests are not deduplicated. Three identical concurrent requests were observed
-   in production. (An earlier draft said "three components each poll", which
-   described the symptom as if it were the mechanism.)
+A single-flight guard was added at the same time: the interval and the cron are
+two independent drivers, and a tick slower than its caller's cadence could
+otherwise interleave while mutating `active15mCycle` and running settlement.
+Verified under load `[local]`: 8 concurrent invocations, all succeeded, **7
+coalesced**, all reporting the same `totalRuns` — one tick executed, not eight.
+Sequential calls each advance, so the guard releases and a failed tick cannot
+wedge the engine.
 
-## Unfinished work
+## Lock qualification is unchanged
 
-- Two branches are pushed and **unmerged**; `main` has none of this work:
-  - `fix/discord-only-completion` (4 commits) — verified, awaiting merge.
-  - `fix/mission-b-real-lock-settlement` (5 commits) — real ledger + hydration.
-- **The 42.4% figure is provisional.** [verified-preview] It is the measured
-  accuracy over 59 settled cycles, versus the 81.8% the product displayed, which was
-  generated by array index. Two open questions: the 36 unsettled locks may bias it,
-  and some hydrated rows may be residue from the old seed (identifiable by strikes
-  near $64,100 and constant ETH `3515.2` / SOL `189.5`). **The contamination check
-  has not been completed.**
-- A *fresh* end-to-end OAuth round trip is unconfirmed — the authorization was left
-  past the 10-minute state TTL, so no new link was recorded. The surviving Aug-30
-  link is stronger evidence of durability, but the fresh path remains untested.
+**The 66% minimum confidence gate and its companion checks were not weakened.**
+`[local]` `[prod]`
+
+Observed in both directions: the engine declined to lock at 55–56% confidence, and
+qualified at 91%. No threshold was touched by any change.
+
+## Discord routes are live
+
+`[prod]` after the merge:
+
+| Endpoint | Before | Now |
+|---|---|---|
+| `/api/discord/bot-status` | 404 | **200** |
+| `/api/discord/diagnostics` | 404 | **200** |
+| `/api/discord/test-broadcast` | 404 | **401** (OWNER/ADMIN gated) |
+| `/api/discord/connect` · `/user-profile` · `/status` | 401 | **401** — gates intact |
+
+`bot-status` now reports the bot's real state (`isReady: false`, `mode:
+WEBHOOK_FALLBACK`, `guildCount: 0`, `ping: 0`). It previously answered a 404 with
+a hardcoded `isReady: true, pingMs: 14, guildCount: 1, totalAlertsDispatched: 12`,
+so a dead bot and a healthy one rendered identically.
+
+## The backend is authoritative for Discord linking
+
+`[prod]` `[local]`
+
+`isLinked` previously ORed `settings.discordLinked` — a localStorage value — into
+the answer. Observed directly: `/api/discord/user-profile` returned **HTTP 500
+`PROFILE_LOOKUP_FAILED`** while the panel rendered "1. LINKED ✓ — Discord Identity
+Connected (@@vixyvault_owner)", a username the server had never returned in that
+response.
+
+Link state is now read only from the backend, with three states rather than two:
+connected / not connected / **STATUS UNAVAILABLE** for "the request could not be
+completed". A duplicate localStorage-driven badge in `AlertSettingsView` was
+removed rather than left as a second source of truth.
+
+The connected rendering was also gated behind `mode === 'dashboard'` while
+AlertSettingsView mounts `mode="settings"`, so a fully linked, guild-verified
+ELITE account saw "CONNECT DISCORD" indefinitely. Fixed and verified visually
+against a running build with a real session.
+
+## The Discord identity chain works end to end
+
+`[prod]`, verified against live Discord:
+
+    session cookie -> OAuth (scope identify) -> Discord user ID 766312591915483156
+      -> guild membership -> ELITE entitlement -> roles applied
+
+`VIXY ELITE` and `Verified` are genuinely present on the account, and the bot's
+own role (`VIXY AI`, position 10) outranks `VIXY ELITE` (8), `24hr ELITE` (7) and
+`Verified` (6), so it can manage what it needs to. The link has persisted since
+**2026-08-30** and reads back correctly, so it survives cold starts, restarts and
+re-login.
+
+`guildRoles` was a hardcoded `[]` and is now read live from Discord. Role sync was
+never broken — only the readback was missing.
+
+## The lock ledger is real and durable
+
+**229 locks hydrate from Firestore on cold start; 59 are settled.** `[prod]`
+
+`signal_logs` was write-only: settlements were persisted but never read back, so
+every cold start discarded the genuine record. Hydration now restores it through a
+memoized single in-flight promise that read paths await — added after two
+endpoints were observed disagreeing about identical data purely on instance
+warmth, and after hydration was found to be guarding on the null *client* handle
+(`!db`) instead of the Admin-aware rule (`_adminActive || !!db`).
+
+## Historical settlement is real, and so is the current baseline
+
+**Verified production baseline: 25W / 34L over 59 settled cycles = 42.4%,
+average Brier 0.403.** `[prod]`
+
+This replaces a **fabricated 81.8%**. That figure was generated at module load by a
+12-entry seed whose wins were decided by array index
+(`wasCorrect = i !== 3 && i !== 8`), with strikes pinned near $64,100 regardless of
+the real BTC price, and `settlementPrice` derived *from* the predetermined outcome.
+`serverLearningEngine.historicalAccuracy = 81.8` was additionally assigned as a
+literal. Those rows were fed into `settledHistory`, so calibration ran on invented
+outcomes.
+
+**42.4% is a measurement, not a target.** On a binary UP/DOWN call it is below a
+coin flip, and a Brier of 0.403 is worse than always predicting 50/50 (0.25). It is
+recorded here as the honest baseline from which improvement can be measured. See
+OPEN ISSUES for the sampling caveat.
+
+## The contamination claim was investigated and found to be FALSE
+
+An earlier analysis in this session claimed roughly half the settled history was
+residue from the old seed, and a merge was held on that basis. **That claim was
+wrong.**
+
+It came from a loose strike-range heuristic (64090–64180), which matched *genuine*
+mid-August rows recorded when BTC actually traded near $64k. Settled strikes span
+**$62,634–$80,615**, consistent with real BTC movement over the period.
+
+The decisive test is the seed's own signature — `latencyMs: 14` together with
+`lockedProbability ∈ {0.72, 0.28, 0.5}` and a strike in {64100, 64125, 64150,
+64175}. `[preview]` **Zero rows match.** Every stored row carries `latencyMs: 12`,
+which is what the real settlement path writes. The boot seed was never persisted
+to Firestore.
+
+**Conclusion: the stored ledger is genuine. No filter or purge is required.**
+
+## `entitlementReason: "IN_MEMORY"` is intentional, not a defect
+
+Also flagged prematurely in this session and then withdrawn on inspection. `[code]`
+
+`resolveDiscordEntitlementTierAuthoritative` trusts a **positive** paid tier found
+in memory, because nothing in the system fabricates a paid tier — it can only have
+come from a real Stripe or Firestore record. A **negative** result triggers
+Firestore hydration before it is believed, specifically so a cold lambda's empty
+map cannot read as "NONE" and demote a paying member mid-request.
+
+The design can only ever withhold a downgrade; it cannot over-grant. The durable
+state that matters — the link itself — lives in Firestore `discord_links`.
+
+---
+
+# PART 2 — OPEN ISSUES
+
+## 1. `applicationDefault()` reports a healthy datapath that cannot perform a read
+
+**Status: OPEN. Not fixed. Currently latent, masked by configuration.**
+
+`src/lib/firebaseAdmin.ts:116` is unchanged by any of tonight's work. When no
+service-account variable is present, `initializeApp({credential:
+applicationDefault()})` and `getFirestore()` both **succeed** on Vercel, so
+`adminDb` is non-null, `_adminActive` is true, and `/api/discord/health` reports
+`adminDatapathActive: true` — while every subsequent read and write fails with
+"Could not load the default credentials", the circuit breaker opens, and the
+process exits `128`. `[preview]` The `catch` in `firebaseAdmin.ts` only fires on
+init errors, which never occur on this path.
+
+`adminDatapathActive` is `!!_adminActive` (`server.ts:5682`) — a check that an
+object was constructed, not that an operation succeeded. **No readiness probe
+performs a real read.**
+
+Why it is currently invisible: `FIREBASE_SERVICE_ACCOUNT_JSON` was added to the
+Vercel **Preview** environment on 2026-09-02, and production already had it. Both
+environments now initialise via the service account. The defect will resurface the
+moment that variable is absent, rotated incorrectly, or malformed — and it will
+present as a healthy application silently persisting nothing.
+
+**This is the highest-priority remaining issue.** It is the same "reports healthy
+while broken" pattern that made the preceding week's debugging unproductive.
+
+## 2. 36 locks remain ungraded
+
+`[prod]` Of 229 hydrated records, 59 settled and **36 are still `LOCKED` past their
+expiry** — 36 of the 95 locks that reached a terminal-or-expired state were never
+graded. Ten of the affected cycle IDs are returned by `/api/cron/settle` under
+`overdueCycleIds`.
+
+These are a direct consequence of the engine-tick gap, which is now fixed going
+forward. **They cannot be honestly recovered**: settling a lock that expired hours
+ago against a current price manufactures an outcome from the wrong data. They are
+surfaced rather than guessed.
+
+Consequence for the baseline: the 59-cycle sample excludes 36 cycles that failed to
+settle for reasons plausibly correlated with time of day and traffic. **42.4% may
+be biased in an unknown direction**, and 59 cycles is a modest sample. Treat it as
+the best current estimate, not a settled fact.
+
+**Watch item:** with the cron live, `settled` should climb from 59 and
+`overdueUnsettled` should stop growing. If `overdueUnsettled` keeps rising, the
+cron is not doing its job.
+
+## 3. Fabricated display values remain elsewhere
+
+`[code]` Removed from the results terminal, but still present:
+`PerformanceLabView` ships a complete hardcoded calibration table (42 and 58
+predictions, 92.7% and 85.5% accuracy, Brier 0.031/0.048) labelled **"VERIFIED"**.
+`VixyAiStatusCard`, `ModuleCards`, `OpportunityScannerView` and
+`ExecutiveCommandCenter` carry fixed demo numbers.
+
+## 4. Fabricated telemetry in the cycle log
+
+`[code]` `server.ts:4611` emits `algorithm=RUNNING websocket=CONNECTED` as
+unconditional string literals. There is nothing behind the websocket claim:
+`WebSocketServer` is imported at `server.ts:22` but `new WebSocketServer` appears
+nowhere, and market data is fetched over REST.
+
+## 5. Four frontend-called routes still 404
+
+`[prod]` `/api/system-status`, `/api/signal/learning-metrics`, `/api/alerts/send`,
+`/api/admin/unfreeze-bots`.
+
+## 6. Discord slash commands do not run
+
+`[code]` `initializeDiscordBot()` is exported but never called, and a gateway
+websocket cannot persist on serverless. Needs an always-on host or Discord HTTP
+interactions — an open architectural decision.
+
+## 7. The test suite does not run in CI and mostly targets the wrong file
+
+`[local]` `npm test` is `tsc --noEmit`, so `tests/` never executes. Three of four
+`.mjs` suites read `/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts` — a
+copy present on one machine, 24KB smaller and a day older than this repo.
+`tests/verify_lifecycle.ts` imports `'../backend'`, which does not exist. The tests
+that do run, pass.
+
+## 8. Kalshi auto-trade is an undocumented live-trading surface
+
+`[code]` `/api/kalshi/auto-trade/go-live` and 8 sibling routes exist with no
+documentation or test coverage. Not audited.
+
+## 9. Structural
+
+- **Single-file blast radius**: `server.ts` is ~16.9k lines after tonight's merges.
+- **Repository noise**: 193 `.cjs` + 150 `.py` one-off scripts at the root.
+- **Undeduplicated polling**: `/api/vixy/15m/current` has one callsite wrapped by
+  `useCanonical15mDecision`, imported by ~10 component files; each mounted instance
+  polls with a cache-busting `?_t=`, bypassing the cache. Three identical
+  concurrent requests observed `[prod]`.
+- **Firestore circuit breaker** can suppress durable writes for **24 hours** on a
+  quota error (`server.ts:15729`) while queued logs sit in memory.
+- **The disk store is not durable**: `/tmp/vixy_store.json` is per-instance.
+
+---
 
 ## Verification status summary
 
 | Area | Status |
 |---|---|
-| Discord identity chain | verified end to end against live Discord + production |
-| Discord fresh OAuth round trip | **not verified** |
-| 15M engine decision + lock gate | verified locally and on preview |
-| 15M settlement correctness | logic read; **coverage is incomplete in production** |
-| Ledger hydration | verified on preview (229 locks / 59 settled) |
-| Real win rate | provisional 42.4%, contamination check outstanding |
-| Stripe webhook → entitlement | **code-read only; no live payment traced** |
-| Auth / session issuing | verified locally (login works with the secret present) |
-| Role assignment on preview | **not testable** — role ID vars are Production-only |
+| engine-tick cron live | **verified [prod]** |
+| single-flight coalescing | **verified [local]**, 7 of 8 concurrent calls coalesced |
+| lock qualification unchanged | **verified**, both directions (declined 56%, qualified 91%) |
+| Discord routes live | **verified [prod]** |
+| Discord identity chain + roles | **verified [prod]** against live Discord |
+| Backend authoritative for linking | **verified [prod] [local]** |
+| Ledger hydration (229 / 59) | **verified [prod]** |
+| Baseline 25W/34L, 42.4%, Brier 0.403 | **verified [prod]** |
+| Seed contamination | **investigated — claim false**, zero signature matches |
+| `IN_MEMORY` entitlement | **investigated — intentional** |
+| `applicationDefault()` false-green | **OPEN**, unfixed, latent |
+| 36 ungraded locks | **OPEN**, unrecoverable |
+| Fresh end-to-end OAuth round trip | **not verified** — state TTL expired during the attempt |
+| Stripe payment → entitlement → role | **not verified** — code-read only, no live payment traced |
+| Role assignment on a preview | **not testable** — role ID vars are Production-only |

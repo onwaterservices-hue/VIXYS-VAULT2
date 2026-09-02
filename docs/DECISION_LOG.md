@@ -65,8 +65,8 @@ re-settling, so a restart cannot double-count an outcome.
 
 ## Part 2 — Decisions made during the Sept 2026 remediation
 
-These are on branches (`fix/discord-only-completion`,
-`fix/mission-b-real-lock-settlement`) and **not yet on `main`**.
+**All of these are now merged and deployed** (`main` = `05ab8fb`, verified in
+production 2026-09-02). They are no longer proposals.
 
 ### Delete the fabricated ledger rather than correct it
 The 12-entry seed decided wins by array index (`wasCorrect = i !== 3 && i !== 8`)
@@ -107,6 +107,67 @@ Local sign-in, the OAuth "Authorize" click and re-entering
 an OAuth state expired while waiting — and remains the correct trade.
 
 ---
+
+### Drive the engine from the cron, and coalesce the two drivers
+
+`/api/cron/engine-tick` was scheduled in `vercel.json` but never registered, so
+the engine ran only from a module-scope `setInterval` that lives as long as a warm
+lambda. Registering the route introduced a second independent driver, so a
+single-flight guard was added rather than shipping the route alone: concurrent
+callers await the same in-flight promise, and it is cleared in a `finally` so a
+failed tick cannot wedge the engine.
+
+The route reports only observed values. The `/api/cron/settle` stub it replaces
+returned a literal `checked:18, settled:4` on every invocation forever; that
+pattern was deliberately not repeated.
+
+### Investigated and REVERSED: the seed-contamination claim
+
+**An earlier conclusion in this session — that roughly half the settled history was
+residue from the fabricated seed — was wrong, and is recorded here so it is not
+repeated.**
+
+The claim rested on a loose strike-range heuristic (64090–64180). That range
+matched *genuine* mid-August rows written when BTC actually traded near $64k;
+settled strikes span $62,634–$80,615, consistent with real price movement.
+
+The correct test is the seed's exact signature: `latencyMs: 14` with
+`lockedProbability ∈ {0.72, 0.28, 0.5}` and a strike in {64100, 64125, 64150,
+64175}. Zero stored rows match; every row carries `latencyMs: 12`, which is what
+the real settlement path writes. The boot seed was never persisted to Firestore.
+
+**Decision: no contamination filter and no purge.** The stored ledger is genuine.
+Method lesson: run the exact-signature test before any range heuristic, and do not
+report a heuristic as a finding.
+
+### Investigated and CONFIRMED INTENTIONAL: `entitlementReason: "IN_MEMORY"`
+
+Also flagged prematurely in this session, then withdrawn on inspection.
+
+`resolveDiscordEntitlementTierAuthoritative` trusts a **positive** paid tier found
+in memory because nothing in the system fabricates a paid tier — it can only have
+come from a real Stripe or Firestore record. A **negative** triggers Firestore
+hydration before it is believed, so a cold lambda's empty map cannot read as
+"NONE" and demote a paying member mid-request.
+
+The asymmetry is the point: the design can withhold a downgrade but never
+over-grant. **No change made.**
+
+### Deferred, with reasons: `applicationDefault()` health reporting
+
+Identified as the highest-priority remaining issue but **not fixed**, and
+deliberately left out of tonight's merges to keep each branch to one concern.
+
+With no service-account variable, `initializeApp({credential:
+applicationDefault()})` succeeds on Vercel, so `adminDb` is non-null and
+`adminDatapathActive` reports true, while every subsequent operation fails. The
+health flag is `!!_adminActive` — proof that an object was constructed, not that a
+read succeeded.
+
+It is currently masked because `FIREBASE_SERVICE_ACCOUNT_JSON` was added to the
+Preview environment on 2026-09-02 and production already had it. The fix is a
+readiness probe that performs a real Firestore operation before reporting healthy.
+See PROJECT_STATE.md, OPEN ISSUES #1.
 
 ## Part 3 — Historical, NOT currently accurate
 

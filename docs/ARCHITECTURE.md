@@ -1,8 +1,9 @@
 # Architecture
 
-Describes the repository as it exists at `main` = `1d230e1` (audited 2026-09-02).
-Everything here was read from the code or verified against a live endpoint.
-Anything unverified is labelled.
+Describes the repository at `main` = `05ab8fb` (deployed and verified
+2026-09-02). Everything here was read from the code or verified against a live
+endpoint; anything unverified is labelled. See PROJECT_STATE.md for the split
+between verified facts and open issues.
 
 ## Shape
 
@@ -14,7 +15,7 @@ bundled by esbuild into `dist/server.cjs`.
       rewrites: /api/(.*) -> /api/index.ts    (everything reaches the Express app)
                 /(.*)     -> /index.html      (SPA)
       functions: api/index.ts maxDuration 60
-      crons:    /api/cron/engine-tick    * * * * *
+      crons:    /api/cron/engine-tick    * * * * *   (registered in 05ab8fb; was 404)
                 /api/cron/settle         */15 * * * *
                 /api/cron/hourly-market  0 * * * *
 
@@ -25,7 +26,7 @@ app, so **every route lives in `server.ts`**.
 
 | System | Location | Notes |
 |---|---|---|
-| API + engine monolith | `server.ts` (16,644 lines, 602KB at `1d230e1`) | all routes, 15M engine, Firestore shim |
+| API + engine monolith | `server.ts` (~16.9k lines after the `05ab8fb` merges) | all routes, 15M engine, Firestore shim |
 | Frontend | `src/` (101 `.tsx`, 68 `.ts`) | React 19 + Vite + Tailwind 4 |
 | API client | `src/services/api.ts` | `safeFetchJson` swallows non-2xx and returns `null` |
 | Discord OAuth handlers | `src/bot/discordOAuth.ts` | handler factories; datapath injected |
@@ -66,10 +67,10 @@ and is not covered by any documentation or test in this repo.
 | Fact | Authority |
 |---|---|
 | Session identity | HMAC-signed HttpOnly cookie, `signSession` / `authenticateSession` (`server.ts:971`, `:1058`); fails closed with no `SESSION_SIGNING_SECRET` |
-| Discord link | Firestore `discord_links/<email>` + `discord_links_by_discord_id/<discordUserId>` reverse index |
+| Discord link | Firestore `discord_links/<email>` + `discord_links_by_discord_id/<discordUserId>` reverse index. **The backend is the sole authority**: client storage is a cache with no vote, and an unreachable backend renders as STATUS UNAVAILABLE rather than as either state |
 | Subscription | Firestore `subscriptions/<email>` and `users/<id|email>`; mirrored into the in-memory `userSubscriptions` map |
 | Day pass | in-memory `userDayPasses` map, hydrated from Firestore |
-| Settled 15M locks | Firestore `signal_logs/<id>`; `settlement_locks/<id>` for idempotency |
+| Settled 15M locks | Firestore `signal_logs/<id>`, **rehydrated at boot** via `ensureLedgerHydrated()` (229 locks / 59 settled observed in production); `settlement_locks/<id>` for idempotency |
 | Live cycle | in-memory `active15mCycle`, mirrored to `active_cycle_lock/<cycleId>` |
 | Entitlement tier | derived, not stored — `resolveDiscordEntitlementTier` (`:5373`) over subscription/day-pass state |
 
@@ -126,7 +127,14 @@ queued only in memory.
 
     Binance / Coinbase / Kraken / CoinGecko REST
         -> runMarketEngineTick()            server.ts:2610
-        -> runMarketEngineTickTracked()     :3094, driven by setInterval(..., 3000) at :3098
+        -> runMarketEngineTickTracked()     driven by BOTH:
+             setInterval(..., 3000)           warm-instance cadence
+             GET/POST /api/cron/engine-tick   every minute (Vercel Cron)
+           Both share a single-flight guard: concurrent callers await the same
+           in-flight promise instead of starting a second tick, so the two
+           drivers cannot interleave while mutating active15mCycle or settling.
+           The promise is cleared in a `finally`, so a failed tick cannot wedge
+           the engine. Verified: 8 concurrent invocations, 7 coalesced.
         -> active15mCycle  (quarter-hour aligned, id 15M-<ISO cycleStart>)
         -> canLockCurrentCycle(livePrice)   :3200   qualification gate
         -> lock15mCycle(...)                :3540   writes active_cycle_lock/<cycleId>
@@ -144,9 +152,12 @@ spread, edge and persistence checks. Below threshold the engine declines to lock
 Gemini (`@google/genai`) is initialised when `GEMINI_API_KEY` is present
 (`:907`) and contributes the `gemini` block of the decision payload.
 
-**The engine is driven by `setInterval` inside a serverless process.** See
-PROJECT_STATE for the consequences; this is the most important structural fact
-about the system.
+**Historical note.** Until `05ab8fb` the engine was driven ONLY by the
+module-scope `setInterval`, because `/api/cron/engine-tick` was scheduled in
+`vercel.json` but never registered — production returned 404 on every invocation.
+Since settlement runs inline on cycle rollover, any quarter-hour boundary crossed
+with no warm instance went ungraded. That is the origin of the 36 ungraded locks
+in PROJECT_STATE.md, and it is why the cron driver matters more than it looks.
 
 ## Data flow: Stripe → subscription → entitlement → Discord role
 
