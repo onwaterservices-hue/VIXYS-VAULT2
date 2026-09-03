@@ -1989,10 +1989,10 @@ function evaluateBtc15mHighConvictionPipeline(
   const bearVoteCount = votes.filter((v) => v === "BEARISH").length;
   let candidateDir = "NEUTRAL";
   let alignedCount = 0;
-  if (bullVoteCount >= 3 && bullVoteCount > bearVoteCount) {
+  if (bullVoteCount >= 3 && bullVoteCount > bearVoteCount && spot >= strike - 8) {
     candidateDir = "UP";
     alignedCount = bullVoteCount;
-  } else if (bearVoteCount >= 3 && bearVoteCount > bullVoteCount) {
+  } else if (bearVoteCount >= 3 && bearVoteCount > bullVoteCount && spot <= strike + 8) {
     candidateDir = "DOWN";
     alignedCount = bearVoteCount;
   } else if (spot > strike + 8) {
@@ -2002,7 +2002,7 @@ function evaluateBtc15mHighConvictionPipeline(
     candidateDir = "DOWN";
     alignedCount = Math.max(bearVoteCount, 2);
   } else {
-    candidateDir = bullVoteCount >= bearVoteCount ? "UP" : "DOWN";
+    candidateDir = bullVoteCount > bearVoteCount ? "UP" : bearVoteCount > bullVoteCount ? "DOWN" : spot >= strike ? "UP" : "DOWN";
     alignedCount = Math.max(bullVoteCount, bearVoteCount);
   }
   const mtfState =
