@@ -13489,6 +13489,9 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   const resolved = persistentSignalLogs.filter(
     (s) =>
       (s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED") &&
+      // Rows the late sweep could not grade (seed/invalid strike) carry no
+      // real outcome and must count neither as a win nor as a loss.
+      s.exitReason !== "DATA_INVALID_STRIKE" &&
       !isDemo(s),
   );
   const upWins = resolved.filter(
