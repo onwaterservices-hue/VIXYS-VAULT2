@@ -2624,11 +2624,11 @@ async function runMarketEngineTick() {
     currentEngineCycleId += 1;
     const now = Date.now();
     if (now - lastOpenFetchTs > 6e4) {
-      fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")
+      fetchWithTimeout("https://api.exchange.coinbase.com/products/BTC-USD/stats")
         .then((r) => r.json())
         .then((d) => {
-          if (d && d.openPrice) {
-            const o = parseFloat(d.openPrice);
+          if (d && d.open) {
+            const o = parseFloat(d.open);
             if (o > 0) currentBtcOpenPrice = o;
           }
           lastOpenFetchTs = now;
@@ -2711,7 +2711,7 @@ async function runMarketEngineTick() {
     if (!fetchSuccess) {
       try {
         const bnRes = await fetchWithTimeout(
-          "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+          "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
         );
         if (bnRes.ok) {
           const bnData = await bnRes.json();
