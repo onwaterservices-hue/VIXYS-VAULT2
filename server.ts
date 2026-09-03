@@ -3898,6 +3898,30 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     cycleId,
   };
 
+  if (logItem) {
+    logItem.lockSnapshot = {
+      reversalThreat: active15mCycle.reversalThreat ?? null,
+      evidenceAgreement: active15mCycle.evidenceAgreement ?? null,
+      hasConflict: active15mCycle.hasConflict ?? null,
+      candidateDirection: active15mCycle.candidateDirection ?? null,
+      lockedDirection: active15mCycle.lockedDirection ?? null,
+      lockedConfidence: active15mCycle.lockedConfidence ?? null,
+      lockedProbability: active15mCycle.lockedProbability ?? null,
+      lockedStrike: active15mCycle.lockedStrike ?? null,
+      lockedSpot: active15mCycle.lockedSpot ?? null,
+      lockedEdgePct: active15mCycle.lockedEdgePct ?? null,
+      lockedReason: active15mCycle.lockedReason ?? null,
+      calibrationStatus: active15mCycle.calibrationStatus ?? null,
+      analysisStatus: active15mCycle.analysisStatus ?? null,
+      calibrationSamples: active15mCycle.calibrationSamples ?? null,
+      observationCount: active15mCycle.cycleObservationCount ?? null,
+      dataAgeMs: active15mCycle.calibrationDataAgeMs ?? null,
+      choppyReason: active15mCycle.choppyReason ?? null,
+      snapshotVersion: "v1",
+      engineVersion: "VIXY-VAULT-v5",
+    };
+  }
+
   await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
 
   if (transactionSucceeded) {
