@@ -15964,6 +15964,86 @@ app.all("/api/cron/settle", async (req, res) => {
   const overdue = pending.filter(
     (s) => s.expiresAt && new Date(s.expiresAt).getTime() <= nowMs,
   );
+
+  // LATE SETTLEMENT SWEEP. Live settlement only grades the immediately
+  // previous cycle's lock at rollover, so any lock whose boundary passed with
+  // no warm instance was orphaned at LOCKED forever (31 rows on 2026-09-03).
+  // Grade those from the real Coinbase Exchange 1-minute close ending at
+  // expiry, tag provenance so they are never mistaken for live settlement,
+  // and do NOT feed shadow calibration - a late outcome must not retrain.
+  const lateSettlement: any = { graded: 0, wins: 0, losses: 0, invalidated: 0, skipped: 0, rows: [] as any[] };
+  const lateCandidates = overdue
+    .filter((s) => nowMs - new Date(s.expiresAt).getTime() > 2 * 60 * 1e3)
+    .slice(0, 40);
+  for (const row of lateCandidates as any[]) {
+    const expMs = new Date(row.expiresAt).getTime();
+    const strike = Number(row.targetStrike);
+    const dir = row.direction;
+    const strikePlausible =
+      Number.isFinite(strike) && strike > 1e3 && strike !== 64100 && strike !== 64161.4;
+    if (!strikePlausible || (dir !== "UP" && dir !== "DOWN")) {
+      row.status = "CRITICALLY_INVALIDATED";
+      row.resolvedAt = new Date().toISOString();
+      row.settlementAt = row.resolvedAt;
+      row.exitReason = "DATA_INVALID_STRIKE";
+      row.settlementSource = "LATE_SWEEP";
+      row.moveInFavor = null;
+      row.moveInFavorPct = null;
+      processedSettlements.add(row.id);
+      lateSettlement.invalidated += 1;
+      lateSettlement.rows.push({ id: row.id, result: "INVALIDATED", reason: row.exitReason });
+      try { await persistSingleSignalLog(row); } catch {}
+      continue;
+    }
+    let lateClose: number | null = null;
+    try {
+      const startIso = new Date(expMs - 60 * 1e3).toISOString();
+      const endIso = new Date(expMs - 1).toISOString();
+      const cRes = await fetchWithTimeout(
+        `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${startIso}&end=${endIso}`,
+      );
+      if (cRes.ok) {
+        const k = await cRes.json();
+        if (Array.isArray(k) && k.length && Number(k[0][4]) > 1e3) lateClose = Number(k[0][4]);
+      }
+    } catch {}
+    if (lateClose === null) {
+      lateSettlement.skipped += 1;
+      lateSettlement.rows.push({ id: row.id, result: "SKIPPED", reason: "NO_CANDLE" });
+      continue;
+    }
+    row.status = "RESOLVED";
+    row.resolvedAt = new Date().toISOString();
+    row.settlementAt = row.resolvedAt;
+    row.settlementPrice = lateClose;
+    row.exitPrice = lateClose;
+    row.exitReason = "SETTLED_LATE_FROM_CANDLE";
+    row.settlementSource = "COINBASE_1M_CLOSE";
+    row.settledForExpiry = new Date(expMs).toISOString();
+    row.actualOutcome = lateClose >= strike ? "UP" : "DOWN";
+    row.actualDirection = row.actualOutcome;
+    row.wasCorrect = row.actualOutcome === dir;
+    row.outcome = row.wasCorrect ? "WIN" : "LOSS";
+    row.brierScore =
+      Math.round(Math.pow((Number(row.confidence) || 0) / 100 - (row.wasCorrect ? 1 : 0), 2) * 1e3) / 1e3;
+    const lateEntry = Number(row.entryPrice ?? row.spotAtLock);
+    if (Number.isFinite(lateEntry) && lateEntry > 1e3) {
+      const signed = (lateClose - lateEntry) * (dir === "UP" ? 1 : -1);
+      row.moveInFavor = Math.round(signed * 100) / 100;
+      row.moveInFavorPct = Math.round((signed / lateEntry) * 1e4) / 100;
+    } else {
+      row.moveInFavor = null;
+      row.moveInFavorPct = null;
+    }
+    processedSettlements.add(row.id);
+    lateSettlement.graded += 1;
+    if (row.wasCorrect) lateSettlement.wins += 1; else lateSettlement.losses += 1;
+    lateSettlement.rows.push({ id: row.id, result: row.outcome, close: lateClose, strike, dir });
+    try { await persistSingleSignalLog(row); } catch {}
+  }
+  if (lateSettlement.graded + lateSettlement.invalidated > 0) {
+    try { savePersistentStore(); } catch {}
+  }
   res.json({
     success: true,
     job: "CONTRACT_SETTLEMENT_CHECK",
@@ -15973,6 +16053,7 @@ app.all("/api/cron/settle", async (req, res) => {
     pendingLocked: pending.length,
     overdueUnsettled: overdue.length,
     overdueCycleIds: overdue.slice(0, 10).map((s) => s.cycleId || s.id),
+    lateSettlement,
     settledSampleSize: serverLearningEngine.settledHistory.length,
     historicalAccuracyPct: serverLearningEngine.historicalAccuracy,
     calibrationStatus: latestCalibrationState.calibrationStatus,
