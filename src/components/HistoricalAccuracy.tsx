@@ -319,11 +319,12 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       {/* -------------------------------------------------- */}
       {/* 2. PERFORMANCE COMMAND BAR                         */}
       {/* -------------------------------------------------- */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-10 gap-2.5">
         {[
           // A dash means "not measured yet". A real 0 still renders as 0 --
           // the two must never look the same.
-          { label: 'LAST 10 WIN RATE', val: metrics.last10Total > 0 ? `${metrics.last10WinRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
+          { label: 'LIFETIME WIN RATE', val: metrics.totalLocks > 0 ? `${metrics.winRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
+          { label: 'RECENT FORM', val: metrics.last10Total > 0 ? `${metrics.last10Wins} of last ${metrics.last10Total}` : '--', color: 'text-zinc-300', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'TOTAL LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'WINS', val: metrics.wins, color: 'text-emerald-400', bg: 'border-emerald-900/40 bg-emerald-950/20' },
           { label: 'LOSSES', val: metrics.losses, color: 'text-rose-400', bg: 'border-rose-900/40 bg-rose-950/20' },
@@ -611,8 +612,21 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               const entryPrice = log.spotAtLock ?? log.btcPriceAtLock ?? log.entryPrice;
               const settlementPrice = isResolved ? (log.settlementPrice ?? log.exitPrice) : null;
-              const priceDelta = entryPrice && settlementPrice ? settlementPrice - entryPrice : null;
-              const priceDeltaPct = entryPrice && settlementPrice ? ((settlementPrice - entryPrice) / entryPrice) * 100 : null;
+              // Direction-signed move: positive means price went the way VIXY
+              // called it, so a DOWN win never renders as a red negative number.
+              // Prefer the server-computed moveInFavor (null when the ledger row
+              // carries an implausible price); fall back to computing it here for
+              // rows settled before that field existed.
+              const dirSign = log.direction === 'DOWN' ? -1 : log.direction === 'UP' ? 1 : 0;
+              const pricesUsable = Number(entryPrice) > 1000 && Number(settlementPrice) > 1000 && dirSign !== 0;
+              const hasServerMove = typeof log.moveInFavor === 'number' && Number.isFinite(log.moveInFavor);
+              const hasServerMovePct = typeof log.moveInFavorPct === 'number' && Number.isFinite(log.moveInFavorPct);
+              const priceDelta = hasServerMove
+                ? log.moveInFavor
+                : (pricesUsable ? (Number(settlementPrice) - Number(entryPrice)) * dirSign : null);
+              const priceDeltaPct = hasServerMovePct
+                ? log.moveInFavorPct
+                : (pricesUsable ? ((Number(settlementPrice) - Number(entryPrice)) / Number(entryPrice)) * 100 * dirSign : null);
               const durationStr = formatDuration(log.lockedAt, log.resolvedAt || log.expiresAt);
 
               const direction = log.direction || 'NEUTRAL';
@@ -739,7 +753,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </div>
                       {isResolved && priceDelta !== null && (
                         <div className={`text-[10px] font-mono font-bold ${priceDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} ({priceDeltaPct !== null ? `${priceDeltaPct >= 0 ? '+' : ''}${priceDeltaPct.toFixed(2)}%` : ''})
+                          {priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} ({priceDeltaPct !== null ? `${priceDeltaPct >= 0 ? '+' : ''}${priceDeltaPct.toFixed(2)}%` : ''}) <span className="text-zinc-500 font-normal normal-case">in VIXY's direction</span>
                         </div>
                       )}
                       {isNoTrade && (
