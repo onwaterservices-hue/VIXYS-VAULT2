@@ -4012,6 +4012,43 @@ async function checkAndSettle15mCycle(livePrice) {
             ) / 1e3;
           prevLog.settlementAt = prevLog.resolvedAt;
           prevLog.actualDirection = prevLog.actualOutcome;
+          // --- EXIT TELEMETRY (additive) ---
+          // There is no early-exit execution path in this engine today:
+          // hasActivePosition is a hardcoded `false` in the guardian block, so
+          // guardianAction can only ever be ENTER or WAIT - TAKE_PROFIT / EXIT
+          // are unreachable. Every lock therefore exits at cycle expiry.
+          // exitReason records ONLY states that actually exist, so the UI can
+          // never render a fabricated early exit.
+          prevLog.exitPrice = livePrice;
+          prevLog.exitReason =
+            prevLog.status === "CRITICALLY_INVALIDATED"
+              ? "CRITICALLY_INVALIDATED"
+              : "SETTLED_AT_EXPIRY";
+          const entryForMove = Number(prevLog.entryPrice ?? prevLog.spotAtLock);
+          const exitForMove = Number(prevLog.exitPrice);
+          const movePricesUsable =
+            Number.isFinite(entryForMove) &&
+            entryForMove > 1e3 &&
+            Number.isFinite(exitForMove) &&
+            exitForMove > 1e3;
+          if (
+            movePricesUsable &&
+            (prevLog.direction === "UP" || prevLog.direction === "DOWN")
+          ) {
+            const signedMove =
+              (exitForMove - entryForMove) *
+              (prevLog.direction === "UP" ? 1 : -1);
+            prevLog.moveInFavor = Math.round(signedMove * 100) / 100;
+            prevLog.moveInFavorPct =
+              Math.round((signedMove / entryForMove) * 1e4) / 100;
+          } else {
+            // Honest null rather than a fabricated number. Either the direction
+            // was NEUTRAL (a skip has no entry), or this ledger row carries an
+            // implausible price - seven rows written 2026-09-01..03 have
+            // entryPrice/spotAtLock of 100 while BTC was ~77,000.
+            prevLog.moveInFavor = null;
+            prevLog.moveInFavorPct = null;
+          }
           prevLog.outcome = prevLog.wasCorrect ? "WIN" : "LOSS";
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
