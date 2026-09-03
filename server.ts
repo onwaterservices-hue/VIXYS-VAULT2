@@ -2644,7 +2644,7 @@ async function runMarketEngineTick() {
       if (cbRes.ok) {
         const cbData = await cbRes.json();
         const p = parseFloat(cbData?.data?.amount);
-        if (p && p > 0) {
+        if (p && p > 1e3) {
           livePrice = p;
           currentBtcPrice = livePrice;
           fetchSuccess = true;
@@ -2683,7 +2683,7 @@ async function runMarketEngineTick() {
         if (krRes.ok) {
           const krData = await krRes.json();
           const p = parseFloat(krData?.result?.XXBTZUSD?.c?.[0]);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
@@ -2699,7 +2699,7 @@ async function runMarketEngineTick() {
         if (cgRes.ok) {
           const cgData = await cgRes.json();
           const p = parseFloat(cgData?.bitcoin?.usd);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
@@ -2716,7 +2716,7 @@ async function runMarketEngineTick() {
         if (bnRes.ok) {
           const bnData = await bnRes.json();
           const p = parseFloat(bnData?.price);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
