@@ -350,31 +350,7 @@ function getStripe() {
   return stripeClient;
 }
 __name(getStripe, "getStripe");
-const serverJournalEntries = [
-  {
-    id: "LOG-8812",
-    userId: "usr_owner_01",
-    ticker: "BTC/USDT 15M",
-    direction: "YES",
-    entryPrice: 63980,
-    targetPrice: 64100,
-    stopLoss: 63880,
-    stake: 2500,
-    edgeAtEntry: 7.4,
-    notes:
-      "Clean L2 net delta spike (+1,420 BTC). Kalshi implied odds underpriced at 48%.",
-    outcome: "WIN",
-    pnlUSD: 280,
-    createdAt: new Date(Date.now() - 72e5).toISOString(),
-    entryHash:
-      "0x" +
-      crypto
-        .createHash("sha256")
-        .update("usr_owner_01-BTC/USDT 15M-63980-2500-2026-08-03")
-        .digest("hex")
-        .slice(0, 16),
-  },
-];
+const serverJournalEntries = [];
 const app = express();
 const PORT = 3000;
 app.use((req, res, next) => {

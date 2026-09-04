@@ -436,10 +436,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 stageName = 'VERIFYING LOCK';
               }
 
-              const spot = liveState?.spot || liveState?.spotAtLock || 63008.43;
+              // No invented $63,008.43: if neither the live feed nor the lock snapshot
+      // has a spot price yet, the card shows the price as unavailable
+      // rather than a stale hardcoded number indistinguishable from real data.
+      const spot = liveState?.spot ?? liveState?.spotAtLock ?? null;
               const lockedPrediction = liveState?.lockedPrediction || liveState?.livePrediction;
               const lockedSpot = lockedPrediction?.spotAtLock || spot;
-              const priceDiff = spot - lockedSpot;
+              const priceDiff = (spot != null && lockedSpot != null) ? spot - lockedSpot : null;
               
               const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'NEUTRAL';
               const isUpDir = String(direction).toUpperCase().includes('UP');
@@ -554,9 +557,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">LIVE SPOT PRICE</div>
                       <div className="text-xl sm:text-2xl font-mono text-white font-black flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                        ${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${spot != null ? spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Unavailable'}
                       </div>
-                      {isLocked && priceDiff !== 0 && (
+                      {isLocked && priceDiff !== null && priceDiff !== 0 && (
                         <div className={`text-xs font-mono font-bold mt-0.5 ${priceDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {priceDiff >= 0 ? '+' : ''}${priceDiff.toFixed(2)} vs Entry
                         </div>
