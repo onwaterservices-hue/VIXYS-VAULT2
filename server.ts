@@ -13485,6 +13485,17 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   }, "isDemo");
   const recentLogs = persistentSignalLogs
     .filter((s) => !isDemo(s))
+    // Plain slice(0, N) took the FIRST N rows in ledger append order, i.e. the
+    // OLDEST rows once the ledger passed the limit - so the per-asset accuracy
+    // matrix (built client-side from this response) silently fell behind the
+    // real ledger while the unsliced server-side `stats` below stayed current.
+    // Sort by lockedAt descending first so "recent" actually means recent.
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.lockedAt || b.resolvedAt || 0).getTime() -
+        new Date(a.lockedAt || a.resolvedAt || 0).getTime(),
+    )
     .slice(0, limit2);
   const resolved = persistentSignalLogs.filter(
     (s) =>
