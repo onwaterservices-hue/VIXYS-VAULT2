@@ -196,19 +196,32 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           break;
         }
       }
-      return { 
-        asset, 
-        totalLocks: settled.length, 
-        wins, 
-        losses, 
-        winRate: settled.length > 0 ? (wins/settled.length)*100 : null,
+      // Prefer the server's unsliced per-asset count when available - the
+      // client-side settled/wins/losses above are computed from resolvedLog,
+      // which is capped at the API's limit2 and can fall behind the real
+      // ledger once total row count (across all assets and statuses) passes
+      // that cap. Streak/avgEdge/avgConf have no server equivalent yet, so
+      // those stay client-computed from whatever window is available.
+      const serverAsset = backendStats?.perAsset?.[asset];
+      const totalLocks = serverAsset ? serverAsset.total : settled.length;
+      const finalWins = serverAsset ? serverAsset.wins : wins;
+      const finalLosses = serverAsset ? serverAsset.losses : losses;
+      const finalWinRate = serverAsset
+        ? serverAsset.winRatePct
+        : (settled.length > 0 ? (wins / settled.length) * 100 : null);
+      return {
+        asset,
+        totalLocks,
+        wins: finalWins,
+        losses: finalLosses,
+        winRate: finalWinRate,
         streak,
         sType,
         avgEdge,
         avgConf
       };
     });
-  }, [resolvedLog]);
+  }, [resolvedLog, backendStats]);
 
   const filteredLogs = useMemo(() => {
     return resolvedLog.filter(s => {

@@ -13525,10 +13525,29 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   const pending = persistentSignalLogs.filter(
     (s) => s.status === "LOCKED" && !isDemo(s),
   ).length;
+  // Unsliced per-asset breakdown, computed the same way as the totals above,
+  // so the frontend's accuracy matrix never has to fall back to the
+  // recentResolved array (which is capped at limit2 and will fall behind the
+  // real ledger on any asset once total row count passes that cap).
+  const perAssetStats = {};
+  for (const s of resolved) {
+    const assetKey = (s.asset || "BTC").toUpperCase();
+    if (!perAssetStats[assetKey]) {
+      perAssetStats[assetKey] = { wins: 0, losses: 0, total: 0 };
+    }
+    perAssetStats[assetKey].total += 1;
+    if (s.wasCorrect) perAssetStats[assetKey].wins += 1;
+    else perAssetStats[assetKey].losses += 1;
+  }
+  for (const key of Object.keys(perAssetStats)) {
+    const a = perAssetStats[key];
+    a.winRatePct = a.total > 0 ? Math.round((a.wins / a.total) * 1e3) / 10 : 0;
+  }
   res.json({
     recentResolved: recentLogs,
     stats: {
       total: totalCount,
+      perAsset: perAssetStats,
       winCount,
       lossCount,
       winRatePct,
