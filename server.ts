@@ -8005,7 +8005,7 @@ app.get(
 app.post(
   "/api/admin/users/role",
   requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
+  async (req, res) => {
     const { userId, newRole } = req.body;
     const validRoles = [
       "OWNER",
@@ -8042,7 +8042,22 @@ app.post(
         "ROLE_CHANGE",
         `Changed role for ${user.email} to ${newRole}`,
       );
-      persistSingleUser(user).catch(() => {});
+      // Was fire-and-forget (persistSingleUser(user).catch(() => {})): the
+      // response always claimed success even if the Firestore write failed,
+      // and on Vercel the function can tear down before that write lands -
+      // the exact pattern that already lost azar45157@gmail.com's Elite
+      // access once. Now awaited, with a real failure reported to the caller.
+      try {
+        await persistSingleUser(user);
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          error: "PERSIST_FAILED",
+          message:
+            "Role was changed in memory but failed to persist to Firestore: " +
+            (err?.message || String(err)),
+        });
+      }
     }
     res.json({
       success: true,
@@ -8056,7 +8071,7 @@ app.post(
 app.post(
   "/api/admin/users/update",
   requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
+  async (req, res) => {
     const {
       userId,
       name,
@@ -8167,7 +8182,21 @@ app.post(
       userDiscordProfiles.set(activeEmail.toLowerCase(), discordProfile);
     }
     savePersistentStore();
-    persistSingleUser(user).catch(() => {});
+    // Was fire-and-forget: this route edits the full record (subscription,
+    // role, Stripe IDs, verification status included), so a lost write here
+    // is a bigger blast radius than a role-only change. Now awaited, with a
+    // real failure reported instead of an unconditional success response.
+    try {
+      await persistSingleUser(user);
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: "PERSIST_FAILED",
+        message:
+          "User record was updated in memory but failed to persist to Firestore: " +
+          (err?.message || String(err)),
+      });
+    }
     addServerAuditLog(
       "ADMIN",
       "USER_RECORD_EDITED",
