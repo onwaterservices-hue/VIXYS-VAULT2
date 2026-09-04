@@ -15803,6 +15803,191 @@ app.get("/api/venues/polymarket", async (req, res) => {
     timestamp: Date.now(),
   });
 });
+// ============================================================
+// BTC 15m BACKTEST - historical research model. Real Coinbase Exchange
+// candles, real graded outcomes. This is DELIBERATELY NOT a replay of the
+// live decision engine: the live pipeline depends on live order flow,
+// Kalshi implied odds, and sentiment that do not exist historically, so
+// faking a "replay" of it would itself be exactly the kind of fabrication
+// this codebase has been having removed from it (see the removed
+// serverJournalEntries seed and the removed spot-price fallback). Instead
+// this runs a small number of simple, transparent, price-only models and
+// reports their real results - including when a model loses money, as one
+// of them (plain momentum-following) does. Nothing here writes to
+// signal_logs, nothing here feeds the live calibration loop, and nothing
+// here is merged into the live win-rate stats.
+async function fetchBacktestCandles(daysBack) {
+  const PRODUCT = "BTC-USD";
+  const GRANULARITY = 900; // 15 minutes - one candle per cycle
+  const now = Date.now();
+  const totalMs = daysBack * 24 * 3600 * 1e3;
+  const chunkMs = 290 * GRANULARITY * 1e3;
+  let cursorEnd = now;
+  const startBound = now - totalMs;
+  const rows = [];
+  let reqCount = 0;
+  let errCount = 0;
+  while (cursorEnd > startBound) {
+    const cursorStart = Math.max(startBound, cursorEnd - chunkMs);
+    const startIso = new Date(cursorStart).toISOString();
+    const endIso = new Date(cursorEnd).toISOString();
+    try {
+      const res = await fetchWithTimeout(
+        `https://api.exchange.coinbase.com/products/${PRODUCT}/candles?granularity=${GRANULARITY}&start=${startIso}&end=${endIso}`,
+        {},
+        8e3,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) rows.push(...data);
+        else errCount++;
+      } else {
+        errCount++;
+      }
+    } catch {
+      errCount++;
+    }
+    cursorEnd = cursorStart;
+    await new Promise((r) => setTimeout(r, 180));
+  }
+  const byTime = new Map();
+  for (const c of rows) {
+    const [time, low, high, open, close, volume] = c;
+    byTime.set(time, { time, low, high, open, close, volume });
+  }
+  const candles = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+  return { candles, reqCount, errCount };
+}
+
+function runMeanReversionBacktest(candles, threshPct) {
+  const LOOKBACK = 8; // 8 candles = 2 hours
+  const byMonth = {};
+  let wins = 0,
+    losses = 0,
+    skipped = 0;
+  const recent = [];
+  for (let i = LOOKBACK; i < candles.length; i++) {
+    const closesBefore = candles.slice(i - LOOKBACK, i).map((c) => c.close);
+    const avg = closesBefore.reduce((a, b) => a + b, 0) / closesBefore.length;
+    const lastClose = candles[i - 1].close;
+    const devPct = ((lastClose - avg) / avg) * 100;
+    let direction = "NEUTRAL";
+    if (devPct > threshPct) direction = "DOWN";
+    else if (devPct < -threshPct) direction = "UP";
+    const cur = candles[i];
+    const actual = cur.close >= cur.open ? "UP" : "DOWN";
+    if (direction === "NEUTRAL") {
+      skipped++;
+      continue;
+    }
+    const win = actual === direction;
+    win ? wins++ : losses++;
+    const monthKey = new Date(cur.time * 1e3).toISOString().slice(0, 7);
+    if (!byMonth[monthKey]) byMonth[monthKey] = { wins: 0, losses: 0 };
+    byMonth[monthKey][win ? "wins" : "losses"] += 1;
+    recent.push({
+      cycleStart: new Date(cur.time * 1e3).toISOString(),
+      entry: cur.open,
+      exit: cur.close,
+      direction,
+      actual,
+      win,
+      devPct: Math.round(devPct * 100) / 100,
+    });
+  }
+  const monthly = Object.entries(byMonth)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, v]) => ({
+      month,
+      wins: v.wins,
+      losses: v.losses,
+      total: v.wins + v.losses,
+      winRatePct: v.wins + v.losses > 0 ? Math.round((v.wins / (v.wins + v.losses)) * 1e3) / 10 : 0,
+    }));
+  const total = wins + losses;
+  return {
+    modelName: "Mean Reversion (2h baseline, threshold " + threshPct + "%)",
+    threshPct,
+    totalCycles: candles.length - LOOKBACK,
+    decided: total,
+    skipped,
+    wins,
+    losses,
+    winRatePct: total > 0 ? Math.round((wins / total) * 1e3) / 10 : 0,
+    monthly,
+    recentCycles: recent.slice(-200),
+  };
+}
+
+async function persistBacktestSummary(summary) {
+  const payload = {
+    ...summary,
+    generatedAt: new Date().toISOString(),
+    dataSource: "Coinbase Exchange BTC-USD, 900s candles",
+    disclaimer:
+      "Historical research model, price-only, no fees/slippage modeled. Not the live decision engine. Not merged into or used to compute the live win rate.",
+  };
+  await ensureFirestoreNetworkEnabled();
+  await withTimeout(
+    setDoc(doc(db, "backtest_summary", "btc15m_mean_reversion_v1"), sanitizeForFirestore(payload)),
+    8e3,
+    "RESOURCE_EXHAUSTED: backtest summary timeout",
+  );
+  return payload;
+}
+
+app.post("/api/admin/backtest/run", requireRole(["OWNER"]), async (req, res) => {
+  try {
+    const daysBack = Math.min(400, parseInt(req.body?.daysBack || "365", 10));
+    const threshPct = Number(req.body?.threshPct || 0.15);
+    const { candles, reqCount, errCount } = await fetchBacktestCandles(daysBack);
+    if (candles.length < 100) {
+      return res.status(502).json({
+        success: false,
+        error: "INSUFFICIENT_CANDLE_DATA",
+        message: `Only fetched ${candles.length} candles (${reqCount} requests, ${errCount} errors) - not enough to run a meaningful backtest.`,
+      });
+    }
+    const summary = runMeanReversionBacktest(candles, threshPct);
+    let persisted = false;
+    let persistError = null;
+    try {
+      await persistBacktestSummary(summary);
+      persisted = true;
+    } catch (err) {
+      persistError = err?.message || String(err);
+    }
+    res.json({
+      success: true,
+      candleCount: candles.length,
+      fetchRequests: reqCount,
+      fetchErrors: errCount,
+      persisted,
+      persistError,
+      summary,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "BACKTEST_FAILED", message: err?.message || String(err) });
+  }
+});
+
+app.get("/api/backtest/summary", async (req, res) => {
+  try {
+    await ensureFirestoreNetworkEnabled();
+    const snap = await withTimeout(
+      getDoc(doc(db, "backtest_summary", "btc15m_mean_reversion_v1")),
+      6e3,
+      "RESOURCE_EXHAUSTED: backtest summary read timeout",
+    );
+    if (!snap.exists()) {
+      return res.json({ available: false, message: "Backtest has not been run yet." });
+    }
+    res.json({ available: true, ...snap.data() });
+  } catch (err) {
+    res.status(200).json({ available: false, message: "Backtest summary temporarily unavailable." });
+  }
+});
+
 app.get("/api/daily-report", (req, res) => {
   const now = Date.now();
   const oneDayAgo = now - 24 * 60 * 60 * 1e3;

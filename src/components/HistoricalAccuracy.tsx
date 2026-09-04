@@ -9,6 +9,8 @@ import { fetchResolvedLogApi, fetchVixyStateApi } from '../services/api';
 // sample size at which the backend flips calibration from WARMING_UP to ACTIVE.
 const CALIBRATION_TARGET_SAMPLES = 50;
 
+import { BacktestPanel } from './BacktestPanel';
+
 export const HistoricalAccuracy: React.FC<any> = () => {
   const [liveState, setLiveState] = useState<any>(null);
   const [resolvedLog, setResolvedLog] = useState<any[]>([]);
@@ -1013,7 +1015,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
           </div>
         </div>
-      )}
+        )}
+
+      <div className="mt-6">
+        <BacktestPanel />
+      </div>
 
     </div>
   );
