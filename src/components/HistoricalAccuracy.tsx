@@ -334,12 +334,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       {/* -------------------------------------------------- */}
       {/* 2. PERFORMANCE COMMAND BAR                         */}
       {/* -------------------------------------------------- */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-10 gap-2.5">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-9 gap-2.5">
         {[
           // A dash means "not measured yet". A real 0 still renders as 0 --
           // the two must never look the same.
-          { label: 'LIFETIME WIN RATE', val: metrics.totalLocks > 0 ? `${metrics.winRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
-          { label: 'RECENT FORM', val: metrics.last10Total > 0 ? `${metrics.last10Wins} of last ${metrics.last10Total}` : '--', color: 'text-zinc-300', bg: 'border-zinc-800 bg-zinc-950/40' },
+          { label: 'LAST 10 WINS', val: metrics.last10Total > 0 ? `${metrics.last10WinRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
           { label: 'TOTAL LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'WINS', val: metrics.wins, color: 'text-emerald-400', bg: 'border-emerald-900/40 bg-emerald-950/20' },
           { label: 'LOSSES', val: metrics.losses, color: 'text-rose-400', bg: 'border-rose-900/40 bg-rose-950/20' },
