@@ -704,7 +704,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     </div>
 
                     <div className="text-[11px] font-mono font-black px-2.5 py-1 rounded-xl bg-black/80 border border-zinc-800 text-zinc-300 uppercase">
-                      ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400 font-black' : log.actualOutcome === 'DOWN' ? 'text-rose-400 font-black' : 'text-purple-300 font-black'}>{log.actualOutcome || (isNoTrade ? 'SKIPPED' : log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')}</span>
+                      ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400 font-black' : log.actualOutcome === 'DOWN' ? 'text-rose-400 font-black' : isLocked ? 'text-cyan-400 font-black' : 'text-purple-300 font-black'}>{
+                      // A LOCKED row has no real outcome yet - the previous
+                      // fallback guessed the OPPOSITE of the called direction
+                      // for any pending row, so a live BUY UP always showed
+                      // "ACTUAL: DOWN" while still in progress.
+                      log.actualOutcome || (isLocked ? 'PENDING' : isNoTrade ? 'SKIPPED' : log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')
+                    }</span>
                     </div>
                   </div>
 
