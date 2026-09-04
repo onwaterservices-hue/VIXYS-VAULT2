@@ -15816,7 +15816,9 @@ app.get("/api/venues/polymarket", async (req, res) => {
 // of them (plain momentum-following) does. Nothing here writes to
 // signal_logs, nothing here feeds the live calibration loop, and nothing
 // here is merged into the live win-rate stats.
-async function fetchBacktestCandles(daysBack) {
+async function fetchBacktestCandles(daysBack, maxMs) {
+  const fetchStart = Date.now();
+  const timeBudgetMs = maxMs || 45e3;
   const PRODUCT = "BTC-USD";
   const GRANULARITY = 900; // 15 minutes - one candle per cycle
   const now = Date.now();
@@ -15828,9 +15830,16 @@ async function fetchBacktestCandles(daysBack) {
   let reqCount = 0;
   let errCount = 0;
   while (cursorEnd > startBound) {
+    if (Date.now() - fetchStart > timeBudgetMs) {
+      // Stop early rather than risk the shared 60s function timeout killing
+      // the whole request mid-fetch. Whatever candles we have so far still
+      // produce a valid, honest (just shorter-window) backtest.
+      break;
+    }
     const cursorStart = Math.max(startBound, cursorEnd - chunkMs);
     const startIso = new Date(cursorStart).toISOString();
     const endIso = new Date(cursorEnd).toISOString();
+    reqCount++;
     try {
       const res = await fetchWithTimeout(
         `https://api.exchange.coinbase.com/products/${PRODUCT}/candles?granularity=${GRANULARITY}&start=${startIso}&end=${endIso}`,
@@ -16174,6 +16183,36 @@ app.get("/api/signal-snapshots", (req, res) => {
 // that would manufacture an outcome from the wrong data, which is exactly the
 // class of fiction this endpoint used to embody. Overdue locks are reported so
 // the gap is visible instead of being silently papered over.
+app.all("/api/cron/backtest-refresh", async (req, res) => {
+  // Weekly automatic refresh of the BTC backtest research panel. Deliberately
+  // NOT on the 15-minute settle cron cadence - a full historical candle fetch
+  // has no reason to re-run that often, and this route uses a smaller trailing
+  // window (180d, ~58 requests) plus a hard time budget so it can never come
+  // close to the shared 60s function timeout, even on a slow day for Coinbase.
+  try {
+    const { candles, reqCount, errCount } = await fetchBacktestCandles(180, 4e4);
+    if (candles.length < 100) {
+      return res.status(200).json({
+        success: false,
+        error: "INSUFFICIENT_CANDLE_DATA",
+        message: `Only fetched ${candles.length} candles (${reqCount} requests, ${errCount} errors).`,
+      });
+    }
+    const summary = runMeanReversionBacktest(candles, 0.15);
+    let persisted = false;
+    let persistError = null;
+    try {
+      await persistBacktestSummary(summary);
+      persisted = true;
+    } catch (err) {
+      persistError = err?.message || String(err);
+    }
+    res.json({ success: true, candleCount: candles.length, reqCount, errCount, persisted, persistError, winRatePct: summary.winRatePct });
+  } catch (err) {
+    res.status(200).json({ success: false, error: "BACKTEST_REFRESH_FAILED", message: err?.message || String(err) });
+  }
+});
+
 app.all("/api/cron/settle", async (req, res) => {
   const nowMs = Date.now();
   let hydration = null;

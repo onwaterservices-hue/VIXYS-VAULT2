@@ -13,6 +13,10 @@
     {
       "path": "/api/cron/hourly-market",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/backtest-refresh",
+      "schedule": "0 6 * * 1"
     }
   ],
   "rewrites": [
