@@ -1,3 +1,4 @@
+import { installSessionGuard } from "./services/sessionGuard";
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
@@ -45,6 +46,8 @@ if (typeof window !== 'undefined') {
     }
   });
 }
+
+installSessionGuard();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
