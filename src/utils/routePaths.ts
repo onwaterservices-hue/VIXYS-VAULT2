@@ -21,6 +21,7 @@ export const TAB_TO_PATH: Record<string, string> = {
   journal: '/trade-journal',
   alerts: '/alerts',
   settings: '/settings',
+  refer: '/refer',
   admin: '/admin',
   pricing: '/pricing',
   auth: '/auth',
