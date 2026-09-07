@@ -108,6 +108,13 @@ service cloud.firestore {
     match /regime_memory_bank/{memoryId} { allow read, write: if isBackendSystem(); }
     match /algorithm_performance_history/{historyId} { allow read, write: if isBackendSystem(); }
     match /vixy_engine_heartbeat/{docId} { allow read, write: if isBackendSystem(); }
+
+    // Refer to Earn. Backend-only: every read and write goes through the
+    // authenticated server path, never directly from a browser.
+    match /referral_codes/{code}        { allow read, write: if isBackendSystem(); }
+    match /referral_attributions/{email}{ allow read, write: if isBackendSystem(); }
+    match /referral_conversions/{sid}   { allow read, write: if isBackendSystem(); }
+    match /referral_stats/{email}       { allow read, write: if isBackendSystem(); }
     match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
     match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
     match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }

@@ -9,6 +9,7 @@ import {
   Bell,
   BarChart2,
   CreditCard,
+  Gift,
   Settings,
   X,
   Search,
@@ -155,7 +156,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       items: [
         { id: "alerts", label: "Alerts", icon: Bell, badge: "3", badgeType: "alert" },
         { id: "pricing", label: "Membership Terminal", icon: CreditCard, badge: hasActiveAccess ? "ACTIVE" : "PRO" },
-        { id: "settings", label: "Settings", icon: Settings },
+        { id: "refer", label: "Refer to Earn", icon: Gift, badge: "EARN" },
+          { id: "settings", label: "Settings", icon: Settings },
       ],
     },
     ...(userRole === "ADMIN" || userRole === "OWNER"

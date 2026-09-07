@@ -199,6 +199,8 @@ import {
   where as _clientWhere,
   runTransaction as _clientRunTransaction,
 } from "firebase/firestore";
+import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
+import { createReferralHandlers } from "./src/services/referral/referralRoutes";
 
 /**
  * ADMIN-AWARE FIRESTORE DATAPATH SHIM
@@ -5678,6 +5680,45 @@ app.get(
   createDiscordConnectHandler(() => db, authenticateSession, discordFirestore),
 );
 
+// ---------------------------------------------------------------------------
+// VIXY VAULT - INVITE TO EARN
+//
+// Wired with the same injection shape as the Discord handlers above. The
+// referral modules never import firebase/firestore themselves, so every write
+// goes through the Admin-aware shim rather than the client SDK - a client-SDK
+// write here would be silently denied by firestore.rules, which is exactly how
+// kalshi_credentials writes were failing.
+// ---------------------------------------------------------------------------
+const referralStore = createReferralStore(() => db, discordFirestore, console);
+
+const referralHandlers = createReferralHandlers({
+  store: referralStore,
+  authenticateSession,
+  siteUrl:
+    process.env.PUBLIC_SITE_URL ||
+    process.env.VITE_PUBLIC_SITE_URL ||
+    "https://vixxyvault.com",
+  // Awaited, not fire-and-forget. A lost write here would show the user a code
+  // that stops existing on the next cold start.
+  persistUserCode: async (user, code) => {
+    user.referralCode = code;
+    savePersistentStore();
+    await persistSingleUser(user);
+  },
+});
+
+app.get("/api/referral/me", (req, res) => referralHandlers.me(req, res));
+app.post("/api/referral/claim-code", (req, res) =>
+  referralHandlers.claimCode(req, res),
+);
+app.get("/api/referral/resolve", (req, res) =>
+  referralHandlers.resolve(req, res),
+);
+app.post("/api/referral/attach", (req, res) =>
+  referralHandlers.attach(req, res),
+);
+
+
 app.get(
   "/api/auth/discord/callback",
   createDiscordCallbackHandler(
@@ -9084,9 +9125,29 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
     const origin =
       req.headers.origin || process.env.APP_URL || "http://localhost:3000";
     const lineItem = { price: resolvedPriceId, quantity: 1 };
-    const sessionParams = {
+    let vixyReferralCode = null;
+        let vixyReferralCoupon = null;
+        try {
+          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          if (vixyAttribution && vixyAttribution.code) {
+            vixyReferralCode = vixyAttribution.code;
+            vixyReferralCoupon = REFERRAL_COUPON_ID;
+          }
+        } catch (referralLookupErr) {
+          // Never block a purchase because the referral lookup failed. The
+          // buyer simply checks out at full price rather than seeing an error.
+          console.warn("[REFERRAL] checkout lookup failed", referralLookupErr);
+        }
+
+        const sessionParams: any = {
       payment_method_types: ["card"],
-      allow_promotion_codes: true,
+      // discounts and allow_promotion_codes are mutually exclusive in the
+          // Stripe API - sending both is a 400. When the buyer arrived on a
+          // valid referral code the coupon is applied server-side; otherwise
+          // the manual promo box stays enabled exactly as before.
+          ...(vixyReferralCoupon
+            ? { discounts: [{ coupon: vixyReferralCoupon }] }
+            : { allow_promotion_codes: true }),
       customer: stripeCustomerId || void 0,
       customer_email: stripeCustomerId ? void 0 : cleanUserEmail || void 0,
       client_reference_id: user.id || cleanUid || cleanUserEmail,
@@ -9107,7 +9168,12 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
         `${origin}/?stripe_status=success&plan=${targetPlan}&ref=${cleanReferral}`,
       cancel_url: cancelUrl || `${origin}/?stripe_status=cancelled`,
     };
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    if (vixyReferralCode && sessionParams.metadata) {
+          // Stamp the durable attribution, not whatever the client posted, so
+          // the webhook credits the referrer recorded at signup time.
+          sessionParams.metadata.referralCode = vixyReferralCode;
+        }
+        const session = await stripe.checkout.sessions.create(sessionParams);
     console.log(`[STRIPE CHECKOUT]
 authenticated: true
 userResolved: ${Boolean(user)}
@@ -9256,9 +9322,29 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
       discordProfile?.discordUserId ||
       user.discordId ||
       "";
-    const sessionParams = {
+    let vixyReferralCode = null;
+        let vixyReferralCoupon = null;
+        try {
+          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          if (vixyAttribution && vixyAttribution.code) {
+            vixyReferralCode = vixyAttribution.code;
+            vixyReferralCoupon = REFERRAL_COUPON_ID;
+          }
+        } catch (referralLookupErr) {
+          // Never block a purchase because the referral lookup failed. The
+          // buyer simply checks out at full price rather than seeing an error.
+          console.warn("[REFERRAL] checkout lookup failed", referralLookupErr);
+        }
+
+        const sessionParams: any = {
       payment_method_types: ["card"],
-      allow_promotion_codes: true,
+      // discounts and allow_promotion_codes are mutually exclusive in the
+          // Stripe API - sending both is a 400. When the buyer arrived on a
+          // valid referral code the coupon is applied server-side; otherwise
+          // the manual promo box stays enabled exactly as before.
+          ...(vixyReferralCoupon
+            ? { discounts: [{ coupon: vixyReferralCoupon }] }
+            : { allow_promotion_codes: true }),
       customer: stripeCustomerId || void 0,
       customer_email: stripeCustomerId ? void 0 : cleanUserEmail || void 0,
       client_reference_id: user.id || cleanUid || cleanUserEmail,
@@ -9279,7 +9365,12 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
       success_url: `${origin}/?stripe_status=success&day_pass=activated&ref=${cleanReferral}`,
       cancel_url: `${origin}/?stripe_status=cancelled`,
     };
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    if (vixyReferralCode && sessionParams.metadata) {
+          // Stamp the durable attribution, not whatever the client posted, so
+          // the webhook credits the referrer recorded at signup time.
+          sessionParams.metadata.referralCode = vixyReferralCode;
+        }
+        const session = await stripe.checkout.sessions.create(sessionParams);
     console.log(
       `[DAY PASS CHECKOUT CREATED] user=${user.id}, email=${cleanUserEmail}, session=${session.id}`,
     );
@@ -12582,7 +12673,61 @@ timestamp: ${new Date().toISOString()}`);
             console.warn("[Stripe Webhook] Discord sync exception:", err);
           });
         }
-        break;
+        // --- VIXY VAULT: INVITE TO EARN ------------------------------------
+          // Runs last, after the buyer's own entitlement is fully provisioned,
+          // and swallows its own errors. The referrer's bonus must never be
+          // able to cost the customer the plan they just paid for.
+          try {
+            if (referralCode && referralCode !== "DIRECT") {
+              const vixyConversion = await referralStore.processConversion({
+                sessionId: session.id,
+                code: referralCode,
+                referredEmail: customerEmail,
+                amountTotal,
+                currency: session.currency || "usd",
+                plan,
+              });
+              if (vixyConversion && vixyConversion.idempotentReplay) {
+                console.log(
+                  "[REFERRAL] replay ignored for session",
+                  session.id,
+                );
+              } else if (vixyConversion && vixyConversion.status === "GRANTED") {
+                // Warm this instance's cache so the referrer sees the day now
+                // rather than waiting for a cold start to rehydrate it.
+                userDayPasses.set(vixyConversion.referrerEmail, {
+                  email: vixyConversion.referrerEmail,
+                  status: "ACTIVE",
+                  expiresAt: vixyConversion.dayPassExpiresAt,
+                  source: "REFERRAL_BONUS",
+                });
+                addServerAuditLog(
+                  "SYSTEM_REFERRAL",
+                  "REFERRAL_BONUS_DAY_GRANTED",
+                  `${vixyConversion.referrerEmail} earned a bonus day from ${vixyConversion.referredEmailMasked} via ${referralCode}`,
+                  "SUCCESS",
+                );
+              } else if (
+                vixyConversion &&
+                vixyConversion.status === "GRANT_FAILED"
+              ) {
+                addServerAuditLog(
+                  "SYSTEM_REFERRAL",
+                  "REFERRAL_BONUS_DAY_FAILED",
+                  `Bonus day write failed for ${vixyConversion.referrerEmail} on session ${session.id}`,
+                  "WARN",
+                );
+              }
+            }
+          } catch (referralErr) {
+            console.error(
+              "[REFERRAL] conversion processing failed",
+              session.id,
+              referralErr,
+            );
+          }
+
+          break;
       }
       case "checkout.session.async_payment_failed": {
         const session = event.data.object;

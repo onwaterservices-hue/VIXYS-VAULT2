@@ -34,6 +34,8 @@ import { CURRENT_DATA_SOURCE } from './utils/statGating';
 import { AuthModal } from './components/AuthModal';
 import { TradeJournalView } from './components/TradeJournalView';
 import { SettingsView } from './components/SettingsView';
+import ReferralPanel from './components/ReferralPanel';
+import { useReferralCapture } from './hooks/useReferralCapture';
 import { ScalpingDeskView } from './components/ScalpingDeskView';
 import { OneHourDeskView } from './components/OneHourDeskView';
 import { AIPatternEngine } from './components/AIPatternEngine';
@@ -104,6 +106,9 @@ export default function App() {
       user: null,
     };
   });
+
+  // Refer to Earn: capture ?ref= on landing, attach it once a session exists.
+  useReferralCapture(authState.user?.email ?? null);
 
   const [userRole, setUserRole] = useState<'UNPAID' | 'PRO' | 'ELITE' | 'ADMIN' | 'OWNER'>(() => {
     try {
@@ -1594,6 +1599,7 @@ export default function App() {
                     )
                   )}
 
+                  {activeTab === 'refer' && <ReferralPanel />}
                   {activeTab === 'settings' && (
                     <SettingsView
                       authState={authState}
