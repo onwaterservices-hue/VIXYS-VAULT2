@@ -5167,6 +5167,9 @@ async function getUserAccessState(email, uid) {
       ...(entitlement.entitlements.proQuant
         ? ["scalping", "whale_tracker", "ai_patterns", "explainability"]
         : []),
+      ...(entitlement.entitlements.eliteQuant
+        ? ["orderbook_imbalance", "api_keys", "bot_webhooks", "signal_export", "auto_trade"]
+        : []),
     ],
     locked:
       entitlement.status !== "active" && entitlement.status !== "trialing",
@@ -6771,6 +6774,9 @@ app.post("/api/auth/register", async (req, res) => {
   }
   const serverSession = { ...newUser, passwordHash: void 0 };
   const entitlement = getUserEntitlement(cleanEmail);
+  // Phase 1: a fresh signup gets a signed session immediately, same as login.
+  // Non-fatal on failure: the session guard will route them to login instead.
+  issueSessionCookie(res, newUser);
   return res.json({ success: true, user: serverSession, entitlement });
 });
 app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
