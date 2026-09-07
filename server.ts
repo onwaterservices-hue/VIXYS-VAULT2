@@ -14335,6 +14335,48 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   };
   res.json(decisionObj);
 });
+const ANONYMOUS_SIGNAL_ACCESS: any = {
+  role: "UNPAID",
+  isAdmin: false,
+  accessState: "LOCKED",
+  discordVerified: false,
+  subscriptionStatus: "inactive",
+  entitlements: [],
+  locked: true,
+};
+const SIGNAL_TEASER_STRIP_FIELDS = [
+  "direction",
+  "confidence",
+  "probability",
+  "calibratedProbability",
+  "strike",
+  "targetStrike",
+  "lockedDirection",
+  "lockedConfidence",
+  "lockedProbability",
+  "lockedStrike",
+  "lockedSpot",
+  "spotAtLock",
+  "lockedPrediction",
+  "livePrediction",
+  "lockedDecision",
+  "confidenceLabel",
+  "evidenceAgreement",
+  "execution",
+];
+const applySignalTeaser = (res: any) => {
+  const send = res.json.bind(res);
+  res.json = (body: any) => {
+    if (body && typeof body === "object") {
+      for (const f of SIGNAL_TEASER_STRIP_FIELDS) {
+        if (f in body) body[f] = null;
+      }
+      body.teaser = true;
+      body.upgradeUrl = "/pricing";
+    }
+    return send(body);
+  };
+};
 app.get(
   ["/api/signal", "/api/signal/latest", "/api/live-engine"],
   async (req, res) => {
@@ -14623,9 +14665,15 @@ app.get(
       last10.length > 0
         ? Math.round((last10WinCount / last10.length) * 100)
         : 0;
-    const reqEmail = req.headers["x-user-email"] || req.query.email || "";
-    const reqUid = req.headers["x-user-id"] || req.query.uid || "";
-    const userAccess = await getUserAccessState(reqEmail, reqUid);
+    const vixySession = authenticateSession(req);
+    const reqEmail = (vixySession?.email || "").toLowerCase().trim();
+    const reqUid = vixySession?.uid || "";
+    const userAccess = reqEmail
+      ? await getUserAccessState(reqEmail, reqUid)
+      : ANONYMOUS_SIGNAL_ACCESS;
+    if (userAccess && userAccess.locked === true) {
+      applySignalTeaser(res);
+    }
     res.json({
       sessionId: SERVER_SESSION_ID,
       market: "BTC_KALSHI_15M",
