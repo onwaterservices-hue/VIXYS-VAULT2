@@ -115,6 +115,21 @@ service cloud.firestore {
     match /referral_attributions/{email}{ allow read, write: if isBackendSystem(); }
     match /referral_conversions/{sid}   { allow read, write: if isBackendSystem(); }
     match /referral_stats/{email}       { allow read, write: if isBackendSystem(); }
+
+    // ---- Invite to Earn: conversion rewards + VIXY credits ledger ----
+    // Backend-only. The frontend reads these through /api/referral/* gated by
+    // authenticateSession(req), so one user can never read another's earnings.
+    match /referral_rewards/{referralId} { allow read, write: if isBackendSystem(); }
+    match /vxy_ledger/{entryId} { allow read, write: if isBackendSystem(); }
+    match /referral_payout_tickets/{ticketId} { allow read, write: if isBackendSystem(); }
+    match /referral_events/{eventId} { allow read, write: if isBackendSystem(); }
+
+    // Precomputed leaderboard: display handles and qualified-conversion counts
+    // only. Never emails, never dollar amounts.
+    match /referral_leaderboard/{docId} {
+      allow read: if true;
+      allow write: if isBackendSystem();
+    }
     match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
     match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
     match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }
