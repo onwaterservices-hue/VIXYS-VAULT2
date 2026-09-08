@@ -68,10 +68,17 @@ export default function ReferralPanel() {
       if (!meRes.ok) throw new Error(String(meRes.status));
       setData(await meRes.json());
       setError(null);
+      // Render the invite half immediately. Credits load separately below and
+      // must never be able to hold the whole page in a loading state.
+      setLoading(false);
       // Credits are a separate concern: if the ledger is unavailable the page
       // still renders the invite half rather than failing whole.
       try {
-        const bRes = await fetch("/api/referral/balance", { credentials: "include" });
+        // Hard timeout: a slow or hanging ledger read must not freeze the page.
+        const bRes = await fetch("/api/referral/balance", {
+          credentials: "include",
+          signal: AbortSignal.timeout(8000),
+        });
         if (bRes.ok) setBal(await bRes.json());
       } catch {
         /* balance is optional */
