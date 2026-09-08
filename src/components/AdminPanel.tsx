@@ -58,6 +58,7 @@ import {
 } from "lucide-react";
 import { SupportTicket } from "../types";
 import { DiscordBotHubView } from "./DiscordBotHubView";
+import AdminReferralQueue from "./AdminReferralQueue";
 import {
   fetchAdminDiagnostics,
   fetchAdminUsers,
@@ -2404,6 +2405,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {activeSection === "referrals" && (
           <div className="space-y-4">
+            <AdminReferralQueue />
             <div className="flex items-center justify-between vixy-card hud-corners p-4">
               <div>
                 <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200">
