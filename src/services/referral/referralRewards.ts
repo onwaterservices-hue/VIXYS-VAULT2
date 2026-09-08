@@ -411,3 +411,45 @@ export async function getLeaderboardWithRank(db: Firestore, userId: string) {
     you: idx >= 0 ? { rank: idx + 1, conversions: entries[idx].conversions } : null,
   };
 }
+
+/**
+ * ADMIN: open payout tickets plus programme-wide totals.
+ * Read-only. There is deliberately no path that edits a balance directly -
+ * every adjustment goes through the ledger with an admin ID and a reason.
+ */
+export async function getAdminReferralOverview(db: Firestore) {
+  const [ticketSnap, rewardSnap] = await Promise.all([
+    getDocs(collection(db, NEW_COL.TICKETS)),
+    getDocs(collection(db, NEW_COL.REWARDS)),
+  ]);
+
+  const tickets: Record<string, unknown>[] = [];
+  ticketSnap.forEach((d) => {
+    const t = d.data() as Record<string, unknown>;
+    if (t.ticketId) tickets.push(t);
+  });
+
+  let rewardsCreated = 0, creditsAwarded = 0, reversed = 0, pending = 0;
+  rewardSnap.forEach((d) => {
+    const r = d.data() as { amountCredits?: number; status?: string; referralId?: string };
+    if (!r.referralId) return; // skip the __cust__ dedupe markers
+    rewardsCreated += 1;
+    const amt = Number(r.amountCredits) || 0;
+    if (r.status === "REVERSED") reversed += amt;
+    else {
+      creditsAwarded += amt;
+      if (r.status === "PENDING") pending += amt;
+    }
+  });
+
+  return {
+    tickets: tickets.sort((a, b) =>
+      String(b.createdAt).localeCompare(String(a.createdAt)),
+    ),
+    openTickets: tickets.filter((t) => t.status === "REQUESTED").length,
+    rewardsCreated,
+    creditsAwarded,
+    creditsPending: pending,
+    creditsReversed: reversed,
+  };
+}

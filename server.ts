@@ -201,7 +201,7 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
-import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank } from "./src/services/referral/referralRewards";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
 /**
@@ -5836,6 +5836,19 @@ app.all("/api/cron/referral-leaderboard", async (req, res) => {
     res.status(503).json({ ok: false });
   }
 });
+
+app.get(
+  "/api/admin/referral/overview",
+  requireRole(["OWNER", "ADMIN"]),
+  async (req, res) => {
+    try {
+      res.json(await getAdminReferralOverview(db));
+    } catch (e) {
+      log.error("[REFERRAL] admin overview failed", e);
+      res.status(503).json({ success: false, message: "Overview unavailable." });
+    }
+  },
+);
 
 // =============== end Invite to Earn: credits endpoints ===============
 
