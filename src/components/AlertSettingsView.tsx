@@ -1,3 +1,4 @@
+import VixyMascot from "./VixyMascot";
 import React, { useState } from 'react';
 import {
   Bell,
@@ -175,6 +176,15 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 source of truth to drift from. */}
           </div>
 
+          {/* VIXY mascot hero */}
+          <div className="flex flex-col items-center gap-5 py-4 text-center sm:flex-row sm:items-center sm:text-left">
+            <VixyMascot size={140} />
+            <div>
+              <span className="vx-label">VIXY is in the server</span>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Locks, calls and settlements. Live in Discord.</h2>
+              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-white/55">Link your account once and VIXY posts every 15-minute call, lock and graded outcome to the Vault server as it happens. Your role syncs with your membership.</p>
+            </div>
+          </div>
           {/* Community Access Node (Discord Gateway) */}
           <CommunityAccessNode settings={settings} setSettings={setSettings} mode="settings" />
 
