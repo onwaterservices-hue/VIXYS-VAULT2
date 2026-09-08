@@ -42,8 +42,39 @@ export function isValidCodeFormat(code) {
   return CODE_PATTERN.test(code);
 }
 
+/**
+ * Confusable-character classes. These codes get READ ALOUD: Oliver reads a code
+ * off a Discord DM to credit someone, and money follows. "ALEX0" and "ALEXO"
+ * are different strings but the same spoken word, so a spoken code would be
+ * ambiguous between two real people.
+ *
+ * The speak-key collapses each confusable class to one representative. Reserved
+ * checks run against it, so "ADM1N" cannot stand in for "ADMIN".
+ */
+const CONFUSABLE_MAP = {
+  "0": "O", O: "O",
+  "1": "I", I: "I", L: "I",
+  "5": "S", S: "S",
+  "8": "B", B: "B",
+  "2": "Z", Z: "Z",
+  "6": "G", G: "G",
+};
+
+export function toSpeakKey(raw) {
+  const upper = normalizeCode(raw);
+  let out = "";
+  for (const ch of upper) out += CONFUSABLE_MAP[ch] || ch;
+  return out;
+}
+
+const RESERVED_SPEAK_KEYS = new Set(
+  Array.from(RESERVED_CODES).map((w) => toSpeakKey(w)),
+);
+
 export function isReservedCode(code) {
-  return RESERVED_CODES.has(code);
+  if (RESERVED_CODES.has(code)) return true;
+  // Also block lookalikes of reserved words.
+  return RESERVED_SPEAK_KEYS.has(toSpeakKey(code));
 }
 
 export function normalizeEmail(raw) {
