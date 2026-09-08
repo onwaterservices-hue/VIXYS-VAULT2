@@ -201,7 +201,7 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
-import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser } from "./src/services/referral/referralRewards";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
 /**
@@ -5814,6 +5814,29 @@ app.post(
     res.status(r.ok ? 200 : 400).json(r);
   },
 );
+app.get("/api/referral/leaderboard", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    res.json(await getLeaderboardWithRank(db, u.email));
+  } catch (e) {
+    log.error("[REFERRAL] leaderboard failed", e);
+    res.status(503).json({ success: false, message: "Leaderboard unavailable." });
+  }
+});
+
+// Rebuild the precomputed leaderboard. Admin-triggered or cron-triggered.
+// Deliberately NOT computed per page load: a per-render collection scan would
+// compound the existing polling load from the 15m cycle endpoint.
+app.all("/api/cron/referral-leaderboard", async (req, res) => {
+  try {
+    res.json(await rebuildLeaderboard(db));
+  } catch (e) {
+    log.error("[REFERRAL] leaderboard rebuild failed", e);
+    res.status(503).json({ ok: false });
+  }
+});
+
 // =============== end Invite to Earn: credits endpoints ===============
 
 

@@ -362,3 +362,52 @@ export async function reverseRewardsForReferredUser(
   }
   return { ok: true, reversed };
 }
+
+/**
+ * LEADERBOARD - read-only consumer of the ledger.
+ *
+ * Ranks on QUALIFIED CONVERSION COUNT ONLY. Never clicks, signups, pending
+ * referrals, or dollar amounts: earnings imply a user's tier mix and roughly
+ * what they make, which is not other users' business.
+ * Reversed conversions do not rank, so a refunded referral cannot hold a spot.
+ *
+ * Precomputed into referral_leaderboard/current. Do NOT compute per page load:
+ * this app already has a polling-storm problem from the 15m cycle endpoint.
+ */
+export async function rebuildLeaderboard(
+  db: Firestore,
+): Promise<{ ok: boolean; entries: number }> {
+  const snap = await getDocs(collection(db, NEW_COL.REWARDS));
+  const counts = new Map<string, number>();
+  snap.forEach((d) => {
+    const r = d.data() as { referrerUserId?: string; status?: string };
+    if (!r.referrerUserId || r.status === "REVERSED") return;
+    counts.set(r.referrerUserId, (counts.get(r.referrerUserId) ?? 0) + 1);
+  });
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25);
+  const entries = ranked.map(([userId, conversions]) => {
+    const at = userId.indexOf("@");
+    const stem = at > 0 ? userId.slice(0, at) : userId;
+    const handle = stem.slice(0, 2) + "***" + (stem.length > 2 ? stem.slice(-1) : "");
+    return { userId, handle, conversions };
+  });
+  await setDoc(doc(db, NEW_COL.LEADERBOARD, "current"), {
+    entries, rebuiltAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
+  });
+  return { ok: true, entries: entries.length };
+}
+
+/** Top 10 plus the caller's own rank, even when outside the top 10. */
+export async function getLeaderboardWithRank(db: Firestore, userId: string) {
+  const snap = await getDoc(doc(db, NEW_COL.LEADERBOARD, "current"));
+  const entries = snap.exists()
+    ? ((snap.data()?.entries ?? []) as { userId: string; handle: string; conversions: number }[])
+    : [];
+  const idx = entries.findIndex((e) => e.userId === userId);
+  return {
+    top: entries.slice(0, 10).map((e, i) => ({
+      rank: i + 1, handle: e.handle, conversions: e.conversions,
+    })),
+    you: idx >= 0 ? { rank: idx + 1, conversions: entries[idx].conversions } : null,
+  };
+}
