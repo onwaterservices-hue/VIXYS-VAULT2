@@ -1,0 +1,16 @@
+{
+  "name": "VIXY AI",
+  "short_name": "VIXY",
+  "description": "AI-powered market intelligence with live predictions, whale tracking, order flow analysis, smart money monitoring, and real-time trading insights.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090B",
+  "theme_color": "#6D28FF",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}
