@@ -201,7 +201,8 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
-import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket } from "./src/services/referral/referralRewards";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser } from "./src/services/referral/referralRewards";
+import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
 /**
  * ADMIN-AWARE FIRESTORE DATAPATH SHIM
@@ -5718,6 +5719,103 @@ app.get("/api/referral/resolve", (req, res) =>
 app.post("/api/referral/attach", (req, res) =>
   referralHandlers.attach(req, res),
 );
+
+// ================= Invite to Earn: credits endpoints =================
+// Every route resolves identity via authenticateSession(req), the canonical
+// source. A user can only ever read or spend their own credits.
+function vixyCreditUser(req: any, res: any) {
+  const u = authenticateSession(req);
+  if (!u || !u.email) {
+    res.status(401).json({ success: false, message: "Sign in to use invites." });
+    return null;
+  }
+  return { email: String(u.email).trim().toLowerCase(), raw: u };
+}
+
+app.get("/api/referral/balance", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    const b = await getBalance(db, u.email);
+    res.json({
+      ...b,
+      availableUsd: (Math.max(0, b.available) / 100).toFixed(2),
+      pendingUsd: (b.pending / 100).toFixed(2),
+      creditsPerDay: REFERRAL_CREDITS_PER_DAY,
+      payoutThreshold: REFERRAL_PAYOUT_THRESHOLD,
+      daysAffordable: Math.floor(Math.max(0, b.available) / REFERRAL_CREDITS_PER_DAY),
+    });
+  } catch (e) {
+    log.error("[REFERRAL] balance failed", e);
+    res.status(503).json({ success: false, message: "Credits unavailable right now." });
+  }
+});
+
+app.post("/api/referral/redeem-day", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  const days = Math.max(1, Math.min(30, Number(req.body?.days) || 1));
+  try {
+    const r = await redeemCreditsForDay(db, u.email, days);
+    if (!r.ok) return res.status(400).json(r);
+    // Reuse the existing bonus-day grant so this inherits its Firestore path.
+    try {
+      await referralStore.grantBonusDay(u.email, "redeem_" + r.entryId, days * 24);
+    } catch (grantErr) {
+      log.error("[REFERRAL] day grant failed after debit", grantErr);
+      return res.status(500).json({
+        ok: false,
+        message: "Grant failed. Contact support with this ID: " + r.entryId,
+      });
+    }
+    res.json(r);
+  } catch (e) {
+    log.error("[REFERRAL] redeem failed", e);
+    res.status(503).json({ success: false, message: "Redemption unavailable." });
+  }
+});
+
+app.post("/api/referral/request-payout", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    const alpha = "ACDEFHJKMNPQRTUVWXY34579";
+    let ticketId = "VXY-";
+    for (let i = 0; i < 5; i++) {
+      ticketId += alpha[Math.floor(Math.random() * alpha.length)];
+    }
+    const r = await openPayoutTicket(db, u.email, ticketId);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) {
+    log.error("[REFERRAL] payout request failed", e);
+    res.status(503).json({ success: false, message: "Payout unavailable." });
+  }
+});
+
+app.post(
+  "/api/admin/referral/resolve-ticket",
+  requireRole(["OWNER", "ADMIN"]),
+  async (req, res) => {
+    const { ticketId, outcome, payoutType, reason } = req.body || {};
+    if (!ticketId || !outcome || !reason) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ticketId, outcome and reason are required." });
+    }
+    const admin = authenticateSession(req);
+    const r = await resolvePayoutTicket(
+      db,
+      String(ticketId),
+      String(admin?.email || "unknown"),
+      outcome === "FULFILLED" ? "FULFILLED" : "DENIED",
+      payoutType ? String(payoutType) : null,
+      String(reason),
+    );
+    res.status(r.ok ? 200 : 400).json(r);
+  },
+);
+// =============== end Invite to Earn: credits endpoints ===============
+
 
 
 app.get(
@@ -12938,6 +13036,19 @@ timestamp: ${new Date().toISOString()}`);
         break;
       }
       case "charge.refunded": {
+        // ---- Invite to Earn: reverse referral credits on refund ----
+        // Never deletes history: writes a negative offsetting ledger entry.
+        try {
+          const refEmail = await extractEmail(event.data.object);
+          if (refEmail) {
+            const rv = await reverseRewardsForReferredUser(
+              db, String(refEmail), "PAYMENT_REVERSED", String(event?.id || ""),
+            );
+            if (rv.reversed > 0) console.log("[REFERRAL] reversed", rv.reversed);
+          }
+        } catch (revErr) {
+          console.warn("[REFERRAL] reversal failed", String(revErr));
+        }
         const charge = event.data.object;
         const customerEmail = await extractEmail(charge);
         if (customerEmail) {

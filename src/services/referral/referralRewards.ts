@@ -329,3 +329,36 @@ export async function resolvePayoutTicket(
   await logEvent(db, "REFERRAL_PAYOUT_RESOLVED", { ticketId, outcome, adminUserId, payoutType });
   return { ok: true };
 }
+
+/**
+ * Reverse every unreversed reward earned from a given referred customer.
+ *
+ * A Stripe charge does not carry the original checkout sessionId, so we cannot
+ * resolve the referral by ID from a refund event. We look the reward up by the
+ * referred customer instead, which is the identity the conversion recorded.
+ *
+ * Idempotent: reverseReferralReward keys its ledger entry on the Stripe event
+ * ID, so a replayed refund event writes nothing new.
+ */
+export async function reverseRewardsForReferredUser(
+  db: Firestore, referredUserId: string, reason: ReasonCode, stripeEventId: string,
+): Promise<{ ok: boolean; reversed: number }> {
+  if (!referredUserId) return { ok: false, reversed: 0 };
+
+  const snap = await getDocs(
+    query(collection(db, NEW_COL.REWARDS), where("referredUserId", "==", referredUserId)),
+  );
+
+  let reversed = 0;
+  for (const d of snap.docs) {
+    const r = d.data() as { referralId?: string; status?: string };
+    if (!r.referralId || r.status === "REVERSED") continue;
+    const out = await reverseReferralReward(db, r.referralId, reason, stripeEventId);
+    if (out.ok && (out.reversedCredits ?? 0) > 0) reversed += 1;
+  }
+
+  if (reversed > 0) {
+    await logEvent(db, "REFERRAL_REWARDS_REVERSED_BULK", { referredUserId, reversed, reason });
+  }
+  return { ok: true, reversed };
+}
