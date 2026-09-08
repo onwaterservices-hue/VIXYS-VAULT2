@@ -1,112 +1,83 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Check, Copy, Gift, Link2, Loader2, RefreshCw, Share2, TriangleAlert } from "lucide-react";
-
 /**
- * VIXY VAULT - REFER TO EARN
+ * VIXY VAULT - Invite to Earn.
  *
- * Every value comes from GET /api/referral/me. Nothing is estimated or seeded
- * client-side. A missing field renders as an em dash, never 0: a dash means
- * "not reported", a zero means "the server says zero".
+ * Conversion-based referral rewards. Every number is server-derived; nothing is
+ * seeded, hardcoded, or interpolated client-side.
+ *
+ * HONESTY RULES:
+ *  - PENDING is never displayed as earned. A user who thinks they have $47 and
+ *    can only spend $32 files a support ticket.
+ *  - Empty state shows real zeros, framed as an invitation.
+ *  - No streaks or countdown timers: they manufacture urgency the economics do
+ *    not support and push people to spam links instead of bringing customers.
  */
 
-type Status = "JOINED" | "CONVERTED" | "REVERSED";
+import React, { useCallback, useEffect, useState } from "react";
+import {
+  Gift, Copy, Share2, CalendarPlus, MessageSquare, Check, Trophy, Loader2,
+} from "lucide-react";
 
-interface Row {
-  maskedEmail: string;
-  status: Status;
-  joinedAt: string | null;
-  convertedAt: string | null;
+interface ReferralRow {
+  status?: string;
+  createdAt?: string;
+  plan?: string;
+  rewardCredits?: number;
+  rewardState?: string;
+  referredEmailMasked?: string;
 }
 
-interface Summary {
+interface ReferralMe {
   code: string | null;
   link: string | null;
   canChooseCode: boolean;
   discountPercent: number;
-  freeDaysEarned: number | null;
-  friendsJoined: number | null;
-  friendsConverted: number | null;
-  referrals: Row[];
+  freeDaysEarned: number;
+  friendsJoined: number;
+  friendsConverted: number;
+  referrals: ReferralRow[];
 }
 
-const CODE_RE = /^[A-Z0-9]{4,16}$/;
-
-function num(v: number | null | undefined): string {
-  return typeof v === "number" && Number.isFinite(v) ? String(v) : "\u2014";
+interface CreditBalance {
+  available: number;
+  pending: number;
+  escrowed: number;
+  redeemed: number;
+  reversed: number;
+  lifetimeEarned: number;
+  creditsPerDay: number;
+  payoutThreshold: number;
+  daysAffordable: number;
 }
 
-function ago(iso: string | null): string {
-  if (!iso) return "";
-  const t = new Date(iso).getTime();
-  if (!Number.isFinite(t)) return "";
-  const d = Math.floor((Date.now() - t) / 86400000);
-  return d <= 0 ? "TODAY" : d === 1 ? "YESTERDAY" : d + "D AGO";
-}
-
-async function copyText(v: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(v);
-      return true;
-    }
-  } catch { /* fall through to legacy path */ }
-  try {
-    const el = document.createElement("textarea");
-    el.value = v;
-    el.style.position = "fixed";
-    el.style.opacity = "0";
-    document.body.appendChild(el);
-    el.select();
-    const ok = document.execCommand("copy");
-    document.body.removeChild(el);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
-function Pill({ status }: { status: Status }) {
-  const tone: Record<Status, string> = {
-    CONVERTED: "border-violet-400/40 bg-violet-400/10 text-violet-200",
-    JOINED: "border-white/15 bg-white/5 text-white/55",
-    REVERSED: "border-amber-400/30 bg-amber-400/10 text-amber-200/80",
-  };
-  const label: Record<Status, string> = {
-    CONVERTED: "PURCHASED",
-    JOINED: "SIGNED UP",
-    REVERSED: "REFUNDED",
-  };
-  return (
-    <span className={"rounded border px-2 py-0.5 font-mono text-[10px] tracking-wider " + tone[status]}>
-      {label[status]}
-    </span>
-  );
-}
+const usd = (c = 0) => "$" + (Math.max(0, c) / 100).toFixed(2);
 
 export default function ReferralPanel() {
-  const [data, setData] = useState<Summary | null>(null);
+  const [data, setData] = useState<ReferralMe | null>(null);
+  const [bal, setBal] = useState<CreditBalance | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<"link" | "code" | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [codeInput, setCodeInput] = useState("");
+  const [codeError, setCodeError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    setError(null);
     try {
-      const res = await fetch("/api/referral/me", { credentials: "include" });
-      if (!res.ok) {
-        throw new Error(
-          res.status === 401
-            ? "Sign in to see your invite link."
-            : "Couldn't load your invite status.",
-        );
+      const meRes = await fetch("/api/referral/me", { credentials: "include" });
+      if (!meRes.ok) throw new Error(String(meRes.status));
+      setData(await meRes.json());
+      setError(null);
+      // Credits are a separate concern: if the ledger is unavailable the page
+      // still renders the invite half rather than failing whole.
+      try {
+        const bRes = await fetch("/api/referral/balance", { credentials: "include" });
+        if (bRes.ok) setBal(await bRes.json());
+      } catch {
+        /* balance is optional */
       }
-      setData((await res.json()) as Summary);
-    } catch (e) {
-      setError((e as Error).message || "Couldn't load your invite status.");
+    } catch {
+      setError("Couldn't load your referrals. Retry in a moment.");
     } finally {
       setLoading(false);
     }
@@ -114,224 +85,301 @@ export default function ReferralPanel() {
 
   useEffect(() => {
     void load();
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-    };
   }, [load]);
 
-  const flash = useCallback((w: "link" | "code") => {
-    setCopied(w);
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setCopied(null), 1800);
-  }, []);
-
-  const doCopy = useCallback(
-    async (w: "link" | "code") => {
-      const v = w === "link" ? data?.link : data?.code;
-      if (v && (await copyText(v))) flash(w);
-    },
-    [data, flash],
-  );
-
-  const doShare = useCallback(async () => {
-    if (!data?.link) return;
-    const pct = data.discountPercent || 20;
-    if (typeof navigator.share === "function") {
-      try {
-        await navigator.share({
-          title: "VIXY'S VAULT",
-          text: `Take ${pct}% off VIXY'S VAULT with my link.`,
-          url: data.link,
-        });
-        return;
-      } catch { /* sheet dismissed - fall back to copy */ }
-    }
-    if (await copyText(data.link)) flash("link");
-  }, [data, flash]);
-
-  const doClaim = useCallback(async () => {
-    const code = draft.trim().toUpperCase();
-    if (!CODE_RE.test(code)) {
-      setClaimError("Use 4-16 letters and numbers.");
+  const claimCode = async () => {
+    const code = codeInput.trim().toUpperCase();
+    if (code.length < 4) {
+      setCodeError("Codes are at least 4 characters.");
       return;
     }
-    setClaiming(true);
-    setClaimError(null);
+    setBusy(true);
+    setCodeError(null);
     try {
-      const res = await fetch("/api/referral/claim-code", {
+      const r = await fetch("/api/referral/claim-code", {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ code }),
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || json?.success === false) {
-        setClaimError(json?.message || "That code isn't available.");
-        return;
+      const j = await r.json();
+      if (!r.ok || j?.success === false) {
+        setCodeError(j?.message || "That code isn't available.");
+      } else {
+        setCodeInput("");
+        await load();
       }
-      setDraft("");
-      await load();
     } catch {
-      setClaimError("Network error. Try again.");
+      setCodeError("Couldn't claim that code. Try again.");
     } finally {
-      setClaiming(false);
+      setBusy(false);
     }
-  }, [draft, load]);
+  };
 
-  const pct = data?.discountPercent ?? 20;
-  const rows = data?.referrals ?? [];
-  const hasCode = Boolean(data?.code);
-  const ghost =
-    "inline-flex items-center gap-2 rounded-lg border border-white/12 bg-white/[0.03] px-3 py-2 font-mono text-xs tracking-wider text-white/70 transition-colors hover:border-violet-400/50 hover:text-white";
-  const label = "font-mono text-[10px] uppercase tracking-[0.18em] text-white/40";
+  const post = async (path: string, body?: unknown) => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const r = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body ?? {}),
+      });
+      const j = await r.json();
+      if (j?.ticketId) {
+        setNotice("Ticket " + j.ticketId + " created. DM this ID to VIXY on Discord.");
+      } else {
+        setNotice(j?.message || (j?.ok ? "Done." : "That didn't go through."));
+      }
+      if (j?.ok) await load();
+    } catch {
+      setNotice("Request failed. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyLink = async () => {
+    if (!data?.link) return;
+    try {
+      await navigator.clipboard.writeText(data.link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setNotice("Couldn't copy. Select the link and copy manually.");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 p-8 text-sm text-white/40">
+        <Loader2 className="w-4 h-4 animate-spin" /> Loading your referrals...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <p className="text-sm text-rose-300 mb-3">{error}</p>
+        <button
+          onClick={() => { setLoading(true); void load(); }}
+          className="px-4 py-2 text-xs tracking-[0.15em] border border-white/15 rounded-lg hover:bg-white/5"
+        >
+          RETRY
+        </button>
+      </div>
+    );
+  }
+
+  const available = bal?.available ?? 0;
+  const pending = bal?.pending ?? 0;
+  const lifetime = bal?.lifetimeEarned ?? 0;
+  const threshold = bal?.payoutThreshold ?? 2500;
+  const perDay = bal?.creditsPerDay ?? 999;
+  const qualified = data?.friendsConverted ?? 0;
+
+  // --radar-pct is a UNITLESS NUMBER: the CSS does calc(3.6deg * var(--radar-pct)).
+  const pct = Math.min(100, Math.round((available / Math.max(1, threshold)) * 100));
+  const canDay = available >= perDay;
+  const canPayout = available >= threshold;
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-5">
-      <div className="relative overflow-hidden rounded-xl border border-violet-500/25 bg-[#0a0713]/90 p-6 sm:p-8">
-        <div aria-hidden className="pointer-events-none absolute -right-28 -top-32 h-72 w-72 rounded-full bg-violet-600/20 blur-[90px]" />
+    <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
 
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <Gift className="h-4 w-4 text-violet-300" />
-              <span className={label}>REFER TO EARN</span>
+      <div className="hud-corners rounded-2xl border border-violet-500/25 bg-[#0a0713]/90 p-8">
+        <div className="flex items-center gap-2 mb-3">
+          <Gift className="w-4 h-4 text-violet-300" />
+          <span className="text-[11px] tracking-[0.2em] text-violet-300 font-mono">
+            INVITE TO EARN
+          </span>
+        </div>
+
+        <h1 className="hud-gradient-text text-4xl font-semibold mb-2">
+          {lifetime > 0
+            ? "You've earned " + usd(lifetime) + " so far."
+            : "Turn invites into VIXY credit."}
+        </h1>
+        <p className="text-sm text-white/55 max-w-xl leading-relaxed">
+          Your friend gets {data?.discountPercent ?? 20}% off. You earn credit when they
+          become a paying member -- not when they click, and not when they sign up.
+        </p>
+
+        {!data?.code ? (
+          <div className="mt-6 rounded-xl border border-white/10 bg-black/50 p-5">
+            <div className="text-[11px] tracking-[0.15em] text-white/40 font-mono mb-2">
+              CLAIM YOUR CODE
             </div>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-white">
-              Give {pct}% off. Get a free day.
-            </h2>
-            <p className="mt-2 max-w-[56ch] text-sm leading-relaxed text-white/55">
-              Share your link. Your friend takes {pct}% off whatever they buy, and the day
-              their purchase clears you get 24 hours of full Vault access.
+            <p className="text-sm text-white/40 mb-3">
+              4-16 letters and numbers. Friends type this at checkout, so make it easy
+              to say out loud.
             </p>
+            <div className="flex gap-2 flex-wrap">
+              <input
+                value={codeInput}
+                onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setCodeError(null); }}
+                placeholder="VIXY2026"
+                maxLength={16}
+                className="flex-1 min-w-[200px] bg-black/50 border border-white/12 rounded-lg px-4 py-3 font-mono tracking-[0.2em] text-white"
+              />
+              <button
+                onClick={claimCode}
+                disabled={busy}
+                className="px-6 py-3 rounded-lg bg-violet-600/20 border border-violet-400/60 text-violet-300 text-xs tracking-[0.15em] font-mono hover:bg-violet-600/30 disabled:opacity-40"
+              >
+                CLAIM CODE
+              </button>
+            </div>
+            {codeError && <p className="mt-2 text-xs text-rose-300">{codeError}</p>}
           </div>
+        ) : (
+          <div className="mt-6 rounded-xl border border-white/10 bg-black/50 p-5">
+            <div className="text-[11px] tracking-[0.15em] text-white/40 font-mono mb-3">
+              YOUR LINK
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <div className="flex-1 min-w-[240px] font-mono text-sm bg-black/50 border border-white/12 rounded-lg px-4 py-3 text-white/80 truncate">
+                {data.link}
+              </div>
+              <button
+                onClick={copyLink}
+                className="px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center gap-2 text-white/70"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copied ? "COPIED" : "COPY"}
+              </button>
+              <button
+                onClick={() => navigator.share?.({ url: data.link as string })}
+                className="px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center gap-2 text-white/70"
+              >
+                <Share2 className="w-4 h-4" /> SHARE
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[1fr_260px] items-center">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="hud-stat-card rounded-xl border border-emerald-400/25 bg-emerald-400/[0.06] p-5">
+            <div className="hud-stat-label text-emerald-300/80">AVAILABLE</div>
+            <div className="hud-stat-value text-glow-emerald">{available.toLocaleString()}</div>
+            <div className="text-xs text-emerald-200/70 mt-1">{usd(available)} - ready now</div>
+          </div>
+          <div className="hud-stat-card rounded-xl border border-amber-400/25 bg-amber-400/[0.06] p-5">
+            <div className="hud-stat-label text-amber-300/80">PENDING</div>
+            <div className="hud-stat-value text-glow-amber">{pending.toLocaleString()}</div>
+            <div className="text-xs text-amber-100/80 mt-1">clears after the refund window</div>
+          </div>
+          <div className="hud-stat-card rounded-xl border border-violet-400/25 bg-white/[0.02] p-5">
+            <div className="hud-stat-label text-white/40">QUALIFIED</div>
+            <div className="hud-stat-value text-glow-purple">{qualified}</div>
+            <div className="text-xs text-white/40 mt-1">paying members you brought</div>
+          </div>
+        </div>
+
+        <div
+          className="radar-wrap mx-auto max-w-[220px]"
+          style={{ ["--radar-pct" as any]: pct }}
+        >
+          <div className="radar-outer-glow" />
+          <div className="radar-ring-track" />
+          <div className="radar-progress" />
+          <div className="radar-sweep-ring" />
+          <div className="radar-core">
+            <div className="radar-value">{pct}%</div>
+            <div className="radar-label">TO PAYOUT</div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/50 p-5">
+        <div className="flex justify-between items-baseline mb-3 flex-wrap gap-2">
+          <span className="text-sm text-white/55">
+            Payout unlocks at {threshold.toLocaleString()} credits
+          </span>
+          <span className={canPayout ? "text-sm text-emerald-300" : "text-sm text-white/40"}>
+            {canPayout
+              ? "Unlocked"
+              : (threshold - available).toLocaleString() + " to go"}
+          </span>
+        </div>
+
+        <div className="flex gap-3 flex-wrap">
           <button
-            type="button"
-            onClick={() => void load()}
-            aria-label="Refresh invite status"
-            className="rounded-lg border border-white/10 p-2 text-white/40 transition-colors hover:border-violet-400/40 hover:text-white"
+            onClick={() => post("/api/referral/redeem-day", { days: 1 })}
+            disabled={busy || !canDay}
+            className="flex-1 min-w-[200px] px-5 py-3 rounded-lg border border-violet-400/40 bg-violet-600/20 text-violet-200 hover:bg-violet-600/30 disabled:opacity-35 text-sm flex items-center justify-center gap-2"
           >
-            <RefreshCw className="h-4 w-4" />
+            <CalendarPlus className="w-4 h-4" />
+            Add a day - {perDay.toLocaleString()}
+          </button>
+          <button
+            onClick={() => post("/api/referral/request-payout")}
+            disabled={busy || !canPayout}
+            className="flex-1 min-w-[200px] px-5 py-3 rounded-lg border border-white/12 text-white/70 hover:bg-white/5 disabled:opacity-35 text-sm flex items-center justify-center gap-2"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Request payout - {available.toLocaleString()}
           </button>
         </div>
 
-        <div className="relative mt-7">
-          {loading ? (
-            <div className="flex h-[112px] items-center gap-3 rounded-lg border border-white/10 bg-white/[0.02] px-5 font-mono text-xs tracking-wider text-white/40">
-              <Loader2 className="h-4 w-4 animate-spin" /> LOADING INVITE LINK
-            </div>
-          ) : error ? (
-            <div className="flex items-start gap-3 rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-5 py-4">
-              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-              <div className="text-sm text-amber-100/85">
-                {error}
-                <button type="button" onClick={() => void load()} className="ml-2 underline underline-offset-4 hover:text-white">
-                  Retry
-                </button>
-              </div>
-            </div>
-          ) : hasCode ? (
-            <div className="rounded-lg border border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-transparent p-5">
-              <span className={label}>YOUR CODE</span>
-              <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
-                <span className="font-mono text-4xl font-bold tracking-[0.14em] text-white sm:text-5xl">
-                  {data!.code}
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void doCopy("code")} className={ghost}>
-                    {copied === "code" ? <Check className="h-3.5 w-3.5 text-violet-300" /> : <Copy className="h-3.5 w-3.5" />}
-                    {copied === "code" ? "COPIED" : "COPY CODE"}
-                  </button>
-                  <button type="button" onClick={() => void doCopy("link")} className={ghost}>
-                    {copied === "link" ? <Check className="h-3.5 w-3.5 text-violet-300" /> : <Link2 className="h-3.5 w-3.5" />}
-                    {copied === "link" ? "COPIED" : "COPY LINK"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void doShare()}
-                    className="inline-flex items-center gap-2 rounded-lg bg-violet-500 px-4 py-2 font-mono text-xs tracking-wider text-white shadow-[0_0_28px_-6px_rgba(139,92,246,0.8)] transition-colors hover:bg-violet-400"
-                  >
-                    <Share2 className="h-3.5 w-3.5" /> SHARE
-                  </button>
-                </div>
-              </div>
-              {data!.link && <p className="mt-4 truncate font-mono text-xs text-white/30">{data!.link}</p>}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-white/10 bg-white/[0.02] p-5">
-              <label htmlFor="vixy-ref-code" className={label}>CLAIM YOUR CODE</label>
-              <p className="mt-2 text-sm text-white/50">
-                4-16 letters and numbers. Friends type this at checkout, so make it easy to say out loud.
-              </p>
-              <div className="mt-4 flex flex-col gap-3 sm:flex-row">
-                <input
-                  id="vixy-ref-code"
-                  value={draft}
-                  maxLength={16}
-                  spellCheck={false}
-                  autoComplete="off"
-                  placeholder="VIXY2026"
-                  onChange={(e) => setDraft(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ""))}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !claiming) void doClaim(); }}
-                  className="flex-1 rounded-lg border border-white/12 bg-black/50 px-4 py-3 font-mono tracking-[0.14em] text-white placeholder:text-white/20 focus:border-violet-400/60 focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => void doClaim()}
-                  disabled={claiming || draft.length < 4}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-500 px-5 py-3 font-mono text-xs tracking-wider text-white transition-colors hover:bg-violet-400 disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/30"
-                >
-                  {claiming && <Loader2 className="h-3.5 w-3.5 animate-spin" />} CLAIM CODE
-                </button>
-              </div>
-              {claimError && <p className="mt-3 text-sm text-amber-200/85">{claimError}</p>}
-            </div>
-          )}
-        </div>
-
-        <dl className="relative mt-5 grid grid-cols-3 divide-x divide-white/[0.07] rounded-lg border border-white/[0.07] bg-white/[0.015]">
-          <div className="px-4 py-5 sm:px-6">
-            <dt className={label}>FREE DAYS</dt>
-            <dd className="mt-2 font-mono text-3xl font-bold tabular-nums text-violet-200">{num(data?.freeDaysEarned)}</dd>
-          </div>
-          <div className="px-4 py-5 sm:px-6">
-            <dt className={label}>SIGNED UP</dt>
-            <dd className="mt-2 font-mono text-3xl font-bold tabular-nums text-white/85">{num(data?.friendsJoined)}</dd>
-          </div>
-          <div className="px-4 py-5 sm:px-6">
-            <dt className={label}>PURCHASED</dt>
-            <dd className="mt-2 font-mono text-3xl font-bold tabular-nums text-white/85">{num(data?.friendsConverted)}</dd>
-          </div>
-        </dl>
-
-        <ol className="relative mt-5 flex flex-col gap-3 font-mono text-[11px] tracking-wider text-white/50 sm:flex-row sm:items-center sm:gap-0">
-          <li className="sm:pr-5">01 SHARE YOUR LINK</li>
-          <li aria-hidden className="hidden h-px w-8 bg-gradient-to-r from-violet-400/50 to-violet-400/10 sm:block" />
-          <li className="sm:px-5">02 THEY TAKE {pct}% OFF</li>
-          <li aria-hidden className="hidden h-px w-8 bg-gradient-to-r from-violet-400/50 to-violet-400/10 sm:block" />
-          <li className="text-violet-200/90 sm:pl-5">03 YOU GET A FREE DAY</li>
-        </ol>
+        {notice && <p className="mt-3 text-xs text-white/60">{notice}</p>}
       </div>
 
-      <div className="rounded-xl border border-white/[0.08] bg-[#0a0713]/70 p-6">
-        <span className={label}>YOUR INVITES</span>
-        {rows.length === 0 ? (
-          <p className="mt-3 text-sm text-white/40">
-            {hasCode
-              ? "Nobody has used your code yet. Send it to one person today."
+      <div>
+        <div className="text-[11px] tracking-[0.2em] text-white/30 font-mono mb-3">YOUR FUNNEL</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+            <div className="text-2xl text-white/85">{data?.friendsJoined ?? 0}</div>
+            <div className="text-xs text-white/40 mt-1">Signed up</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+            <div className="text-2xl text-white/85">{qualified}</div>
+            <div className="text-xs text-white/40 mt-1">Paid</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+            <div className="text-2xl text-white/85">{data?.freeDaysEarned ?? 0}</div>
+            <div className="text-xs text-white/40 mt-1">Free days</div>
+          </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-4">
+            <div className="text-2xl text-white/85">{usd(lifetime)}</div>
+            <div className="text-xs text-white/40 mt-1">Earned</div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-[11px] tracking-[0.2em] text-white/30 font-mono mb-3">YOUR INVITES</div>
+        {(data?.referrals?.length ?? 0) === 0 ? (
+          <div className="rounded-xl border border-white/10 bg-black/50 p-6 text-sm text-white/40">
+            {data?.code
+              ? "Share your link to get started. Your first Starter conversion earns 580 credits."
               : "Claim a code above to start inviting."}
-          </p>
+          </div>
         ) : (
-          <ul className="mt-3 divide-y divide-white/[0.06]">
-            {rows.map((r, i) => (
-              <li key={r.maskedEmail + i} className="flex items-center justify-between gap-4 py-3">
-                <span className="truncate font-mono text-sm text-white/70">{r.maskedEmail}</span>
-                <span className="flex shrink-0 items-center gap-3">
-                  <span className="font-mono text-[10px] tracking-wider text-white/30">{ago(r.convertedAt || r.joinedAt)}</span>
-                  <Pill status={r.status} />
-                </span>
-              </li>
+          <div className="rounded-xl border border-white/10 overflow-hidden divide-y divide-white/5">
+            {(data as ReferralMe).referrals.map((r, i) => (
+              <div key={i} className="flex justify-between items-center px-4 py-3 bg-white/[0.02]">
+                <div className="min-w-0">
+                  <div className="text-sm text-white/80 truncate">
+                    {r.referredEmailMasked || "New member"}
+                    {r.plan ? " - " + r.plan : ""}
+                  </div>
+                  <div className="text-xs text-white/30">
+                    {r.createdAt ? String(r.createdAt).slice(0, 10) : ""}
+                  </div>
+                </div>
+                <div className="text-right whitespace-nowrap">
+                  <div className="text-sm text-white/70">
+                    {r.rewardCredits ? "+" + r.rewardCredits : "--"}
+                  </div>
+                  <div className="text-xs text-white/40">{r.rewardState || r.status || ""}</div>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </div>
     </div>
