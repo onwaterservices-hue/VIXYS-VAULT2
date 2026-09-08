@@ -201,6 +201,7 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket } from "./src/services/referral/referralRewards";
 
 /**
  * ADMIN-AWARE FIRESTORE DATAPATH SHIM
@@ -12687,6 +12688,26 @@ timestamp: ${new Date().toISOString()}`);
                 currency: session.currency || "usd",
                 plan,
               });
+              // ---- Invite to Earn: conversion reward (additive; never blocks fulfilment) ----
+              try {
+                if (vixyConversion && vixyConversion.status === "GRANTED") {
+                  const rr = await qualifyReferralConversion(db, {
+                    referralId: String(vixyConversion.sessionId || ""),
+                    referrerUserId: String(vixyConversion.referrerEmail || ""),
+                    referredUserId: String(vixyConversion.referredEmail || ""),
+                    plan: String(vixyConversion.plan || ""),
+                    stripeCustomerId: String(session?.customer || ""),
+                    stripeEventId: String(event?.id || ""),
+                    stripeCheckoutSessionId: String(vixyConversion.sessionId || ""),
+                    stripeSubscriptionId: String(session?.subscription || "") || undefined,
+                    stripePaymentIntentId: String(session?.payment_intent || "") || undefined,
+                    amountPaidCents: Number(vixyConversion.amountTotal) || 0,
+                  });
+                  console.log("[REFERRAL] reward", JSON.stringify(rr));
+                }
+              } catch (rewardErr) {
+                console.warn("[REFERRAL] reward creation failed", String(rewardErr));
+              }
               if (vixyConversion && vixyConversion.idempotentReplay) {
                 console.log(
                   "[REFERRAL] replay ignored for session",
