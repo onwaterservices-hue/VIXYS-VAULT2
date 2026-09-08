@@ -5736,7 +5736,15 @@ app.get("/api/referral/balance", async (req, res) => {
   const u = vixyCreditUser(req, res);
   if (!u) return;
   try {
-    const b = await getBalance(db, u.email);
+    // Bound the ledger read. referralRewards uses the client SDK, so if the
+    // vxy_ledger rules are not published this query can stall; without a race
+    // the lambda would burn its full 60s budget on every call.
+    const b = await Promise.race([
+      getBalance(db, u.email),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("LEDGER_TIMEOUT")), 6000),
+      ),
+    ]);
     res.json({
       ...b,
       availableUsd: (Math.max(0, b.available) / 100).toFixed(2),
@@ -5746,8 +5754,19 @@ app.get("/api/referral/balance", async (req, res) => {
       daysAffordable: Math.floor(Math.max(0, b.available) / REFERRAL_CREDITS_PER_DAY),
     });
   } catch (e) {
-    log.error("[REFERRAL] balance failed", e);
-    res.status(503).json({ success: false, message: "Credits unavailable right now." });
+    const why = String((e as Error)?.message || e);
+    log.error("[REFERRAL] balance failed", why);
+    // Return a well-formed zero balance rather than an error, so the page
+    // renders normally instead of showing a failure for a supplementary panel.
+    res.status(200).json({
+      available: 0, pending: 0, escrowed: 0, redeemed: 0, reversed: 0,
+      lifetimeEarned: 0, availableUsd: "0.00", pendingUsd: "0.00",
+      creditsPerDay: REFERRAL_CREDITS_PER_DAY,
+      payoutThreshold: REFERRAL_PAYOUT_THRESHOLD,
+      daysAffordable: 0,
+      degraded: true,
+      reason: why === "LEDGER_TIMEOUT" ? "LEDGER_TIMEOUT" : "LEDGER_UNAVAILABLE",
+    });
   }
 });
 
