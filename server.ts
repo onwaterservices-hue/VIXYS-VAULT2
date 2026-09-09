@@ -9654,10 +9654,33 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
     let vixyReferralCode = null;
         let vixyReferralCoupon = null;
         try {
-          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          // Was getAttribution(cleanEmail) -- cleanEmail is not defined in this
+          // handler (it defines cleanUserEmail), so this threw a ReferenceError
+          // every time, was swallowed below, and the referral coupon was NEVER
+          // applied at checkout. Referred friends were attributed (referrer
+          // earned credit) but silently paid full price.
+          const vixyAttribution = await referralStore.getAttribution(cleanUserEmail);
           if (vixyAttribution && vixyAttribution.code) {
-            vixyReferralCode = vixyAttribution.code;
-            vixyReferralCoupon = REFERRAL_COUPON_ID;
+            // ONE referral discount per account, first paid conversion only.
+            // The attribution is write-once (one code per account forever), but
+            // without this guard the coupon would re-apply on every checkout, so
+            // a single account could farm the 20% across cancel/resubscribe
+            // cycles. Withheld once the account has converted (the webhook sets
+            // status CONVERTED) or already holds a paid subscription.
+            const alreadyConverted = String(vixyAttribution.status || "").toUpperCase() === "CONVERTED";
+            const existingSub = cleanUserEmail ? userSubscriptions.get(cleanUserEmail) : null;
+            const alreadyPaid = Boolean(
+              existingSub &&
+                ["ACTIVE", "TRIALING", "PAST_DUE"].includes(String(existingSub.status || "").toUpperCase()),
+            );
+            if (!alreadyConverted && !alreadyPaid) {
+              vixyReferralCode = vixyAttribution.code;
+              vixyReferralCoupon = REFERRAL_COUPON_ID;
+            } else {
+              console.log(
+                `[REFERRAL] coupon withheld for ${cleanUserEmail}: alreadyConverted=${alreadyConverted} alreadyPaid=${alreadyPaid} (one referral discount per account)`,
+              );
+            }
           }
         } catch (referralLookupErr) {
           // Never block a purchase because the referral lookup failed. The
@@ -9851,10 +9874,33 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
     let vixyReferralCode = null;
         let vixyReferralCoupon = null;
         try {
-          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          // Was getAttribution(cleanEmail) -- cleanEmail is not defined in this
+          // handler (it defines cleanUserEmail), so this threw a ReferenceError
+          // every time, was swallowed below, and the referral coupon was NEVER
+          // applied at checkout. Referred friends were attributed (referrer
+          // earned credit) but silently paid full price.
+          const vixyAttribution = await referralStore.getAttribution(cleanUserEmail);
           if (vixyAttribution && vixyAttribution.code) {
-            vixyReferralCode = vixyAttribution.code;
-            vixyReferralCoupon = REFERRAL_COUPON_ID;
+            // ONE referral discount per account, first paid conversion only.
+            // The attribution is write-once (one code per account forever), but
+            // without this guard the coupon would re-apply on every checkout, so
+            // a single account could farm the 20% across cancel/resubscribe
+            // cycles. Withheld once the account has converted (the webhook sets
+            // status CONVERTED) or already holds a paid subscription.
+            const alreadyConverted = String(vixyAttribution.status || "").toUpperCase() === "CONVERTED";
+            const existingSub = cleanUserEmail ? userSubscriptions.get(cleanUserEmail) : null;
+            const alreadyPaid = Boolean(
+              existingSub &&
+                ["ACTIVE", "TRIALING", "PAST_DUE"].includes(String(existingSub.status || "").toUpperCase()),
+            );
+            if (!alreadyConverted && !alreadyPaid) {
+              vixyReferralCode = vixyAttribution.code;
+              vixyReferralCoupon = REFERRAL_COUPON_ID;
+            } else {
+              console.log(
+                `[REFERRAL] coupon withheld for ${cleanUserEmail}: alreadyConverted=${alreadyConverted} alreadyPaid=${alreadyPaid} (one referral discount per account)`,
+              );
+            }
           }
         } catch (referralLookupErr) {
           // Never block a purchase because the referral lookup failed. The

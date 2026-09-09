@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, ArrowRight, X, Sparkles, CheckCircle2, ShieldCheck, Key, Ticket } from 'lucide-react';
 import { AuthState } from '../types';
+import { setPendingReferral } from '../hooks/useReferralCapture';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -117,6 +118,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setLoading(false);
         setErrorMsg('Passwords do not match. Please re-enter your password.');
         return;
+      }
+      // Persist a manually entered referral code so useReferralCapture attaches
+      // it once the session exists and fires the congrats toast. Previously the
+      // field displayed but was never read.
+      if (referralCode.trim()) {
+        setPendingReferral(referralCode);
       }
     }
 

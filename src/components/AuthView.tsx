@@ -15,6 +15,7 @@ import {
   Check,
 } from 'lucide-react';
 import { AuthState } from '../types';
+import { setPendingReferral } from '../hooks/useReferralCapture';
 
 interface AuthViewProps {
   authState: AuthState;
@@ -92,6 +93,13 @@ export const AuthView: React.FC<AuthViewProps> = ({
         setLoading(false);
         setErrorMsg('Passwords do not match. Please re-enter your password.');
         return;
+      }
+      // Persist a manually entered referral code into the same pending store the
+      // ?ref= link uses, so useReferralCapture attaches it once the session
+      // exists (and fires the congrats toast on a valid code). Previously this
+      // field showed "applied" but was never read anywhere.
+      if (referralCode.trim()) {
+        setPendingReferral(referralCode);
       }
     }
 
@@ -343,7 +351,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
                     {referralCode.trim().length > 0 && (
                       <p className="text-[10.5px] text-emerald-300 font-sans flex items-center gap-1 mt-1">
                         <Check className="w-3 h-3 text-emerald-400" />
-                        <span>Referral Code <strong>{referralCode}</strong> applied.</span>
+                        <span>Code <strong>{referralCode}</strong> saved — we'll apply your discount right after you sign up.</span>
                       </p>
                     )}
                   </div>

@@ -32,6 +32,22 @@ function readPending(): Pending | null {
   } catch { return null; }
 }
 
+/**
+ * Store a code the user typed into the signup form, so the same attach-on-
+ * session flow that handles ?ref= links also handles manual entry. First code
+ * wins, matching the URL-capture rule.
+ */
+export function setPendingReferral(rawCode: string): boolean {
+  try {
+    const code = String(rawCode || "").trim().toUpperCase();
+    if (!CODE_RE.test(code)) return false;
+    if (!readPending()) {
+      window.localStorage.setItem(KEY, JSON.stringify({ code, seenAt: Date.now() }));
+    }
+    return true;
+  } catch { return false; }
+}
+
 export function captureReferralFromUrl(): string | null {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -73,6 +89,25 @@ export function useReferralCapture(userEmail: string | null | undefined): void {
         // transient 5xx keeps it queued for the next mount.
         if (res.ok || (res.status >= 400 && res.status < 500)) {
           window.localStorage.removeItem(KEY);
+        }
+        // On a genuinely new, valid attach, announce it so the app can show the
+        // congrats toast. A repeat/self/already-attributed attempt (4xx) is not
+        // celebrated -- only a fresh success.
+        if (res.ok) {
+          try {
+            const body = await res.json();
+            if (body && body.success) {
+              window.dispatchEvent(
+                new CustomEvent("vixy:referral-attached", {
+                  detail: {
+                    code: body.code || pending.code,
+                    discountPercent: body.discountPercent ?? null,
+                    referrerLabel: body.referrerLabel ?? null,
+                  },
+                }),
+              );
+            }
+          } catch { /* toast is cosmetic; attach already succeeded */ }
         }
       } catch { /* offline - leave it queued */ }
     })();

@@ -71,6 +71,7 @@ import { VixyLockView } from './components/VixyLockView';
 import { VixyLiveView } from './components/VixyLiveView';
 import { StarterDeskView } from './components/StarterDeskView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
+import ReferralCongratsToast from './components/ReferralCongratsToast';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 export default function App() {
@@ -1147,6 +1148,7 @@ export default function App() {
   return (
     <>
       <AuthToast toast={authToast} onClose={() => setAuthToast(null)} />
+      <ReferralCongratsToast />
       {isVerifyingPayment && (
         <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-4 bg-[#05020F]/95 backdrop-blur-md animate-fadeIn font-mono text-center">
           <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(34,211,238,0.4)]" />
