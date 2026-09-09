@@ -323,6 +323,22 @@ the right architecture re-evaluates p every checkpoint after the lock and
 surfaces PROTECT — today's engine freezes `lockedConfidence` at lock and only
 reacts to a $750 / 1.2% move or a probability collapse to ≤0.15.
 
+**Item D — what causes the false / high-confidence locks.** Four mechanisms,
+all measured:
+1. `calibratedConfidencePct = 70 + (agreement−8)×5 + (aligned−3)×3 + ITM×5`
+   (capped 96) counts *agreeing* evidence families, but the families are
+   largely moneyness restated (Spearman 1.000). It is a vote tally, not a
+   probability: in the live ledger its 90–95% bucket won 33–36% on the
+   directional test.
+2. It commits at the earliest legal second. Production locks: 50/73 within a
+   minute of the 360s floor, median lead **3.2 bps** — where Table 1 says
+   60–75%. In replay the same code (with strike ≈ open) waits for ~14 bps
+   and wins 91% — the surface is the same; production sat in its worst corner.
+3. Pre-Sep-2 it locked AGAINST the side price was on (20/35; won 25%).
+4. `lockedConfidence` is frozen at lock and the post-lock monitor only reacts
+   to a $750 / 1.2% move, p ≤ 0.15, or guardian panic — nothing a 15-minute
+   contract ever sees. Hence "91%" while lock quality fell 93 → 35 live.
+
 ## ★★★★★★ LAYER 5 INSIDE THE REAL GATE — Phase 8 result (7-day trades, 672 identical cycles)
 
 `--lock-rule strike_side` evaluates the strike-side rule as a fourth term of
