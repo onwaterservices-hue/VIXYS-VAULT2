@@ -23,6 +23,86 @@ Board: `VIXY_ENGINE_TASKS.md` · Rules: `CLAUDE.md`
 
 Phases A, B, C, D4 complete; C5 reconciled. Phase E in progress.
 
+---
+
+## SESSION 4 — production deep audit (2026-09-09 ~15:00Z) + ledger persistence fix
+
+**PR #28 merge is STILL PENDING (blocked for the agent by the permission
+classifier; the owner must click merge).** Everything below was verified against
+production = `main`@`7eea881` through Chrome; the fixes are on this branch.
+
+### Watched live: the lock-row loss, end to end
+- 14:45Z cycle locked UP 88% at 14:51:01 (361s in — first legal second again,
+  ~8 bps lead). Price then fell to $114 BELOW the strike with confidence frozen
+  at 88 while lockScore fell to 53. Payload showed `lockTier:"NONE"` while
+  LOCKED, and `qualificationReason:"ENTRY_WINDOW_EXPIRED"` beside
+  `qualificationStatus:"PASSED"` (REGRESSION-2deba55, live).
+- At settlement the lock VANISHED: the ledger's newest rows stayed the
+  14:30/14:15 SKIPs; no lock row has persisted since 10:00Z (13:45, 14:15 86%,
+  14:45 88% all lost). SKIP rows write fine.
+- `/api/cron/settle` fires exactly on schedule (20 hits/5h, Vercel logs) with
+  ZERO runtime errors — so overdue LOCKED rows would have been swept if they
+  existed. Conclusion: the rows never reached Firestore.
+- Rollover incoherence on one screen (15:01Z): ring "LOCKED UP 88% — 00:19
+  left" (STALE badge) a minute after settlement; canonical card "CALIBRATING
+  DOWN 54%"; right rail "DOWN 50%"; `/api/vixy/15m/current` said WATCH UP 91.
+  The card mixed the NEW contract id with the OLD strike. `/api/signal`
+  simultaneously reported probability 0.415 / confidence 52 — the two-engine
+  split is the single worst user-facing coherence failure.
+
+### Root cause (code-confirmed) and the fix — commit `05d3bc8`
+The sig_lock row was written ONCE, fire-and-forget, from whichever instance won
+the `active_cycle_lock` claim transaction. An unawaited setDoc races the lambda
+freeze; `canAttemptFirestoreWrite()` defers writes while `backendAuthReady` is
+false (every cold instance) into a pending queue that dies with the instance;
+claim-losing instances never attempt the write; nothing retries. Four-part
+repair, all idempotent by deterministic doc id:
+1. lock time: persist AWAITED, and from claim-losers too (adopted canonical
+   values converge);
+2. post-lock monitor: re-assert the row once a minute until cycle end;
+3. `/api/cron/settle`: rebuild missing rows from the durable
+   `active_cycle_lock/<cycleId>` claim docs (last 8h, provenance-tagged
+   `reconstructedFrom:"ACTIVE_CYCLE_LOCK_CLAIM"`, strike-validated) so the late
+   sweep grades them from the real candle; response reports `reconciliation`;
+4. `/api/cron/engine-tick`: drains pending persistence queues before returning.
+After merge+deploy, the first settle run should recover today's lost locks IF
+their claim docs landed — check `reconciliation` in the settle response.
+
+### Honesty fixes shipped this session (same commit + `HistoricalAccuracy`/UI)
+- Provenance modal: unconditional VERIFIED chip → SETTLED/UNSETTLED from the
+  record's real settlement; invented `LOCK-1407` id fallback removed; header no
+  longer claims "SETTLEMENT VERIFIED • 10 MARKETS".
+- Prediction center: lock score `?? 87` → null, rendered as unavailable
+  ("AWAITING ENGINE DATA"); gate/child props fail to weakest state, never to a
+  fabricated healthy one.
+- ExecutiveCommandCenter (Live Dashboard, shows by default): removed the static
+  "+1,420 BTC net taker accumulation / underpricing by +12.4%" story, the
+  `|| 88` confluence fallback, and the hardcoded "30-Day Model Win Rate: 88.4%
+  Verified" tile (real measured accuracy ≈ 49.5%).
+- CandleChart: literal "EDGE +12.2%" chip removed.
+Verified: tsc clean, 20/20 test files, `npm run build` clean (vite + server.cjs).
+
+### MAPPED, NOT YET FIXED — the remaining fabrication seeds (next session's target)
+- `LiveDashboard.tsx:310-355`: the `signal` useState seeds an entire fabricated
+  PredictionSignal. Effects overwrite direction/confidence/modelProb/edge, but
+  `...prev` permanently keeps `reasoning`, `keyFactors` (+1,420 BTC),
+  `orderFlow` (netDelta 1420, fake depths, bookPressureScore 88),
+  `similarSetupsCount: 314 @ 91.4%`, `tradeGrade: 'A+'`, and `venueOdds`.
+- `LiveDashboard.tsx:248` hardcodes `kalshiProbPct = 54.0` in the canonical
+  sync (line 200 falls back to 0.54), so every EDGE figure is model-minus-an-
+  INVENTED market price. A real Kalshi implied price at t is also the missing
+  measurement for the research track — one fix serves both.
+- `StarterDeskView.tsx:66-90`: same class of fallbacks ('Probabilistic Edge
+  +15.4%', 142 setups @ 84.5%).
+- `ExecutiveCommandCenter.tsx` still says "LIVE DATA STREAMING • Updated
+  Sub-Second" (decor claims); `ExplainabilityVaultView.tsx:91` fabricated
+  observedFact; `src/data/assetData.ts` static reasoning strings.
+- The `/api/signal` vs `/api/vixy/15m/current` two-engine split (three
+  directions on one screen at rollover) — mission-1-canonical-decision scope.
+
+Note: `b865a47` (trade walker retry/checkpoint) landed from the parallel
+ingestion session; the 21-day trade ingestion continues there.
+
 ### CORRECTION to earlier notes
 The original brief's description of `getCalibratedConfidence` with
 `INSUFFICIENT_SAMPLE` at n<15, and server lock tiers EARLY <480s / STANDARD

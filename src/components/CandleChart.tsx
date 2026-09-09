@@ -1443,10 +1443,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           AI CONF {activeSignal.confidence > 1 ? Math.round(activeSignal.confidence) : Math.round(activeSignal.confidence * 100)}%
         </span>
 
-        {/* Edge Chip */}
-        <span className="hidden sm:inline-block px-2 py-1 rounded-lg bg-emerald-950/80 border border-emerald-500/40 text-[10px] font-extrabold text-emerald-400">
-          EDGE +12.2%
-        </span>
+        {/* The edge chip was the literal "+12.2%" for every user at every moment.
+            No edge renders here until one is computed against a real market price. */}
       </div>
 
       {/* Spot Price & Controls */}
