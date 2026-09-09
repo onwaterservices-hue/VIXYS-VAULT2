@@ -124,8 +124,11 @@ change. Recorded so E2 can measure whether it adds independent value.
 - [x] **E3a** Early-lock skill is not real: 55.6% (n=72), p=0.41; no
       time or moneyness bin separates from 50%. Nothing the engine outputs
       carries directional information at n=142.
-- [~] **E3b** Real taker flow (tradeCache) as an independent predictor at a
-      fixed intracycle time, all cycles.
+- [x] **E3b** Real taker flow at fixed checkpoints, all 287 cycles: 42–55%
+      everywhere, no cell significant in the predictive direction. Tool:
+      `scripts/replay15m/research/flowSkill.ts`. Repeat at 7 days.
+- [x] **E3c** `/api/orderflow` returns resting L2 depth labelled as taker
+      flow; pinned, not changed (no consumer yet).
 - [~] Widen sample to 7 days (ingestion running).
 
 - [ ] **E1** Write down what the engine currently computes, exactly.

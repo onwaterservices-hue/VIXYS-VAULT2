@@ -305,6 +305,39 @@ claim (7-day ingestion launched); (2) the next test is a genuinely
 independent feature — real taker buy/sell flow from `tradeCache` — evaluated
 at a fixed time in **every** cycle (n=288), not only at locks.
 
+## E3b — does REAL taker flow predict 15M direction? Not at n=287.
+
+`scripts/replay15m/research/flowSkill.ts` — at fixed checkpoints T inside
+every cycle, sign(taker buy − taker sell) over the prior W seconds vs
+sign(price(end) − price(T)). Pure forecast test, no strike, no look-ahead.
+
+```
+T      moneyness  mom60  | flow W=30   60     120    180    300
+180s   53.1%      51.2%  |  52.1%  53.1%  51.7%  50.3%  53.8%
+300s   55.1%      52.8%  |  46.3%  48.8%  45.3%  48.4%  47.7%
+420s   53.0%      51.8%  |  47.4%  52.3%  54.7%  50.9%  50.5%
+480s   53.7%      46.7%  |  54.0%  46.7%  51.9%  51.6%  54.0%
+600s   49.1%      47.3%  |  48.4%  42.1%  43.2%  48.8%  48.4%
+720s   50.2%      48.2%  |  45.6%  47.7%  47.7%  51.6%  52.3%
+```
+n≈285 per cell. Only two cells reach p<0.05 (T=600 W=60/120) and both are
+*below* 50% — the ~1.5 chance hits expected from 30 cells. Top-tercile
+"strong flow" subsets (n=96) range 44–59%, none significant. Best comparator
+is moneyness at T=300s, 55.1%, p≈0.09 — not significant.
+
+**Conclusion:** at 3 days, neither the engine's outputs nor the first
+genuinely independent feature carries detectable 15-minute directional
+information. This is the honest baseline the rebuild starts from. Re-run at
+7 days: `npx tsx scripts/replay15m/research/flowSkill.ts <start> <end>`.
+
+## `/api/orderflow` mislabels book depth as taker flow
+It sums the top-30 resting bid and ask levels of Coinbase's L2 book and
+returns them as `netTakerDeltaUSD` / `takerBuyRatio` / `bullVolumePct`.
+Resting depth is not aggressor flow. No `src/` consumer exists today (the
+radar draws `Math.random()`), so nothing is misled yet — but any radar wiring
+must not treat these fields as taker flow. Pinned in
+`tests/orderflow-endpoint.characterization.mjs`.
+
 ## NEXT ACTION
 
 Phase C5 is **done**; main merged and re-pinned. The most informative signal so
