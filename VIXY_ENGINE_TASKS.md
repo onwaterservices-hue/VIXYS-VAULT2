@@ -78,9 +78,14 @@ The key question is not "did it guess UP/DOWN correctly?" but
       The harness now separates the DEFECT (lookbacks unresolvable) from the
       SYMPTOM (equal votes, which never reaches 0 because the three votes use
       different thresholds and legitimately agree in a quiet market).
-- [~] **C5** Reconcile against the live baseline (103 graded · 49.5% ·
-      Brier 0.378 · 43 UP / 8 DOWN wins). Investigate any remaining divergence
-      rather than tuning it away.
+- [x] **C5** Reconciled. — `1215209` The trade-level replay's 93% is an
+      artifact of a strike frozen at the cycle open: 142/142 locks call the
+      side price had already moved to, median $89.70 clear of the strike, with
+      only $34.10 of travel left. Graded from the lock price instead,
+      **post-lock directional accuracy is 50.0% (71/142)** — matching
+      production's 49.5%. The harness and the ledger agree; **the engine has no
+      measurable directional edge.** This metric is now printed every run and
+      is strike-independent.
 
 **Bonus unlocked:** trades carry a real `side`, so buckets record genuine taker
 buy/sell volume. Deliberately NOT fed to the engine yet — `bullVolPct` is

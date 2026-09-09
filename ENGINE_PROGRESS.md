@@ -89,6 +89,62 @@ legitimately agree in a quiet market).
 
 ---
 
+## ★ THE CENTRAL FINDING — the engine has no measurable directional edge
+
+Phase C5, commit `1215209`. Read this before any predictive work.
+
+Trade-level replay, 3 days, 1,159,101 real trades, 86,400 3s buckets, lookback
+collapse 3.1%. It reported **143 locks, 93.0% win rate, Brier 0.065** against a
+live ledger of 49.5%. Per the rule, that meant the harness was still wrong. It
+was — but not because of tick rate this time. Because of the strike.
+
+```
+locks calling the side price had ALREADY moved to : 142/142 = 100%
+median |lockSpot - strike|                        : $89.70
+median |settle  - lockSpot|                       : $34.10
+```
+
+The strike is frozen at the cycle open. The engine locks ~8 minutes in, when
+price already sits a median **$89.70** clear of it, and price then travels only
+another **$34.10**. The outcome was already decided before the lock was taken.
+The engine is naming the side price is already on and being graded against a
+stale reference.
+
+Grading the same locks from the price **at the moment of the lock** — the only
+question that matters — gives:
+
+```
+post-lock directional accuracy : 50.0%  (71/142)
+  UP calls                     : 47.1%  (33/70)
+  DOWN calls                   : 52.8%  (38/72)
+```
+
+A coin flip. And it lands on top of production's **49.5% (51/103)**. The harness
+and the live ledger now agree. The disagreement was never "the engine does
+better in replay" — it was the replay's strike turning an already-decided
+outcome into an apparent prediction.
+
+**What this reframes.** The 80-85% / 85-90% / 90-95% calibration inversion is
+not a mis-tuned confidence curve on top of a working predictor. There is no
+measurable edge underneath it to calibrate. Confidence of 96 is being attached
+to a coin flip — consistent with `b10d3fa`: the "independent" evidence families
+are largely one quantity (moneyness) counted several times, which is exactly
+what manufactures high confidence without information.
+
+**Consequence for the rebuild.** Phases F–I are not a tuning exercise. The
+predictive core has to produce an edge that does not currently exist, and
+`post-lock directional accuracy` is the metric that will say whether it does.
+It is strike-independent, so it cannot be flattered by changing the strike rule.
+Any future claim of improvement must move THAT number above 50% out-of-sample.
+
+**Caveats, stated plainly.** 142 locks over 3 days in one regime — not a large
+or diverse sample. The counterfactual regrades existing locks rather than
+re-running the engine with a different strike (a different strike would change
+moneyness, hence which cycles lock and in which direction), so it isolates
+"did price continue after the lock" rather than simulating a different market.
+That is the cleanest available test of forecasting skill, but it is not a
+backtest of a differently-configured engine.
+
 ## BASELINE — the numbers to reconcile against
 
 ```
@@ -159,14 +215,20 @@ blocked on production read access.
 
 ## NEXT ACTION
 
-**Phase C5** — reconcile the trade-level replay against the live baseline over
-a multi-day window. Investigate divergence; do not tune it away. Remaining
-known divergences from production: strike (replay uses `round(spot/10)*10`,
-production uses the Kalshi `floor_strike`), the seeded PRNG, and
-`crossAssetPen` fed 0.
+Phase C5 is **done** — see THE CENTRAL FINDING above. The harness reconciles
+with the live ledger once directional skill is measured strike-independently.
 
-Then **E3** — ablation: which components actually carry predictive value?
-Then **D5** — chronological TRAIN / VALIDATION / OUT-OF-SAMPLE split.
+**E3 — ablation.** With a trustworthy replay and a strike-independent metric,
+determine whether ANY current component carries directional information. The
+prior is poor: the evidence families are largely one quantity counted several
+times. Test real taker buy/sell flow from `tradeCache` (recorded, not yet fed
+to the engine) as the first genuinely independent candidate.
+
+**D5** — chronological TRAIN / VALIDATION / OUT-OF-SAMPLE split, so any
+candidate edge is tested on data it was not chosen on.
+
+**Widen the sample** before drawing structural conclusions: 3 days / 142 locks
+is one regime. Ingestion cost is ~420 requests per day of history.
 
 Ingestion cost, measured: ~4.9 trades/sec, ~420k/day, 1000 trades per request,
 so ~420 requests/day of history walking back from now. 3 days ≈ 1150 requests
