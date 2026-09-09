@@ -14,7 +14,7 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  Gift, Copy, Share2, CalendarPlus, MessageSquare, Check, Trophy, Loader2,
+  Gift, Copy, Share2, CalendarPlus, MessageSquare, Check, Trophy, Loader2, Lock,
 } from "lucide-react";
 
 interface ReferralRow {
@@ -59,8 +59,12 @@ export default function ReferralPanel() {
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  // True only in the session where the claim just happened, so the layout
+  // switch comes with an unmissable "locked to your account" confirmation.
+  const [justClaimed, setJustClaimed] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,6 +118,7 @@ export default function ReferralPanel() {
         setCodeError(j?.message || "That code isn't available.");
       } else {
         setCodeInput("");
+        setJustClaimed(true);
         await load();
       }
     } catch {
@@ -156,6 +161,32 @@ export default function ReferralPanel() {
     } catch {
       setNotice("Couldn't copy. Select the link and copy manually.");
     }
+  };
+
+  const copyCode = async () => {
+    if (!data?.code) return;
+    try {
+      await navigator.clipboard.writeText(data.code);
+      setCopiedCode(true);
+      setTimeout(() => setCopiedCode(false), 2000);
+    } catch {
+      setNotice("Couldn't copy. Select the code and copy manually.");
+    }
+  };
+
+  // navigator.share only exists on some browsers (mostly mobile). Falling back
+  // to copy beats a button that silently does nothing on desktop.
+  const shareLink = async () => {
+    if (!data?.link) return;
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({ url: data.link });
+        return;
+      } catch {
+        /* user cancelled or share failed — fall through to copy */
+      }
+    }
+    await copyLink();
   };
 
   if (loading) {
@@ -220,12 +251,14 @@ export default function ReferralPanel() {
             </div>
             <p className="text-sm text-white/40 mb-3">
               4-16 letters and numbers. Friends type this at checkout, so make it easy
-              to say out loud.
+              to say out loud. Once claimed it's locked to your account for good — pick
+              one you like.
             </p>
             <div className="flex gap-2 flex-wrap">
               <input
                 value={codeInput}
                 onChange={(e) => { setCodeInput(e.target.value.toUpperCase()); setCodeError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && !busy) void claimCode(); }}
                 placeholder="VIXY2026"
                 maxLength={16}
                 className="flex-1 min-w-[200px] bg-black/50 border border-white/12 rounded-lg px-4 py-3 font-mono tracking-[0.2em] text-white"
@@ -233,16 +266,51 @@ export default function ReferralPanel() {
               <button
                 onClick={claimCode}
                 disabled={busy}
-                className="px-6 py-3 rounded-lg bg-violet-600/20 border border-violet-400/60 text-violet-300 text-xs tracking-[0.15em] font-mono hover:bg-violet-600/30 disabled:opacity-40"
+                className="px-6 py-3 rounded-lg bg-violet-600/20 border border-violet-400/60 text-violet-300 text-xs tracking-[0.15em] font-mono hover:bg-violet-600/30 disabled:opacity-40 flex items-center gap-2"
               >
-                CLAIM CODE
+                {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                {busy ? "CLAIMING..." : "CLAIM CODE"}
               </button>
             </div>
             {codeError && <p className="mt-2 text-xs text-rose-300">{codeError}</p>}
           </div>
         ) : (
-          <div className="mt-6 rounded-xl border border-white/10 bg-black/50 p-5">
-            <div className="text-[11px] tracking-[0.15em] text-white/40 font-mono mb-3">
+          <div className={`mt-6 rounded-xl border p-5 ${justClaimed ? "border-emerald-400/50 bg-emerald-950/20" : "border-violet-500/30 bg-black/50"}`}>
+            {justClaimed && (
+              <div className="mb-4 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-emerald-300 text-xs font-mono tracking-[0.1em]">
+                <Check className="w-4 h-4" />
+                <span>CODE CLAIMED — it's locked to your account. Time to earn.</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+              <div className="text-[11px] tracking-[0.15em] text-violet-300/80 font-mono">
+                YOUR REFERRAL CODE
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] text-white/35 font-mono">
+                <Lock className="w-3 h-3" />
+                <span>Locked to your account</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap mb-1">
+              <div className="hud-gradient-text font-mono font-black tracking-[0.25em] text-3xl sm:text-4xl select-all">
+                {data.code}
+              </div>
+              <button
+                onClick={copyCode}
+                className="px-3 py-2 rounded-lg border border-violet-400/40 bg-violet-600/15 hover:bg-violet-600/30 text-xs tracking-[0.12em] flex items-center gap-2 text-violet-200 font-mono"
+              >
+                {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                {copiedCode ? "COPIED" : "COPY CODE"}
+              </button>
+            </div>
+            <p className="text-sm text-white/55 mb-4">
+              Go invite and earn — friends get {data?.discountPercent ?? 20}% off with it,
+              you earn credit when they go paid.
+            </p>
+
+            <div className="text-[11px] tracking-[0.15em] text-white/40 font-mono mb-2">
               YOUR LINK
             </div>
             <div className="flex gap-2 flex-wrap">
@@ -257,7 +325,7 @@ export default function ReferralPanel() {
                 {copied ? "COPIED" : "COPY"}
               </button>
               <button
-                onClick={() => navigator.share?.({ url: data.link as string })}
+                onClick={shareLink}
                 className="px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center gap-2 text-white/70"
               >
                 <Share2 className="w-4 h-4" /> SHARE
