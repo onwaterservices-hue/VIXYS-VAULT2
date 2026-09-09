@@ -9456,13 +9456,24 @@ app.post("/api/stripe/validate-promo", async (req, res) => {
   }
   try {
     const stripe = getStripe();
-    const list = await stripe.promotionCodes.list({ code: cleanCode, active: true, limit: 1 });
-    const promo = list && list.data && list.data[0];
-    if (!promo || !promo.coupon || promo.coupon.valid === false) {
-      return res.status(400).json({
-        valid: false,
-        message: `"${cleanCode}" isn't an active discount code.`,
-      });
+    // Match client-side rather than trusting the list `code` filter. Observed
+    // 2026-09-09: promotionCodes.list({code:"REFER_20", active:true}) returned
+    // empty while that promotion code was live and active (Stripe checkout
+    // applied it, -$4.80 on a $24 plan). Listing and comparing p.code avoids
+    // whatever filter quirk caused that, so the manual box agrees with what
+    // Stripe actually honours at checkout.
+    const list = await stripe.promotionCodes.list({ limit: 100 });
+    const promo = (list && list.data ? list.data : []).find(
+      (p) => String(p.code || "").toUpperCase() === cleanCode,
+    );
+    if (!promo) {
+      return res.status(400).json({ valid: false, message: `"${cleanCode}" isn't a discount code.` });
+    }
+    if (promo.active === false) {
+      return res.status(400).json({ valid: false, message: `"${cleanCode}" is inactive right now.` });
+    }
+    if (!promo.coupon || promo.coupon.valid === false) {
+      return res.status(400).json({ valid: false, message: `"${cleanCode}" isn't an active discount code.` });
     }
     const coupon = promo.coupon;
     const discountPct = typeof coupon.percent_off === "number" ? coupon.percent_off : null;
