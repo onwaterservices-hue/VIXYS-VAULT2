@@ -36,17 +36,14 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
   const venues = ['Kalshi', 'Polymarket', 'DraftKings', 'Prediction Matrix', 'Cross Venue'];
 
   // AI Dynamic Summary Generator
+  // This banner previously narrated a fixed story per asset ("+1,467 BTC net
+  // taker buy cushion and 91% AI confidence on Kalshi", "+15.8% edge", ...) and
+  // rendered CONFIDENCE / EDGE chips from static config -- the same numbers for
+  // every user at every moment, beside a live card that often disagreed. The
+  // live decision has one source of truth: the 15-minute cycle card below.
+  // This banner no longer states any number it did not observe.
   const getAiSummary = () => {
-    if (selectedAsset === 'ETH') {
-      return `ETH currently exhibits the strongest statistical edge (+15.8%) across all tracked assets with heavy staking inflows while BTC consolidates.`;
-    }
-    if (selectedAsset === 'SOL') {
-      return `SOL is in an active short squeeze cascade (+18.4% edge) with high-frequency DEX arbitrage volume driving maximum confidence on Polymarket.`;
-    }
-    if (selectedAsset === 'BTC') {
-      return `BTC high-integrity prediction setup detected with +1,467 BTC net taker buy cushion and 91% AI confidence on Kalshi.`;
-    }
-    return `${activeConfig.name} holds a +${activeConfig.prediction.edgePct}% statistical edge on ${selectedVenues[0] || 'Kalshi'} with ${activeConfig.prediction.confidence}% AI confidence.`;
+    return `${activeConfig.name} · live 15-minute decision, conviction and lock gate are on the cycle card below. Every number there is observed, never modelled here.`;
   };
 
   return (
@@ -183,11 +180,8 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
           </span>
         </div>
         <div className="hidden lg:flex items-center gap-2 shrink-0 font-mono text-[11px]">
-          <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 font-bold border border-emerald-800/50">
-            CONFIDENCE: {activeConfig.prediction.confidence}%
-          </span>
           <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 font-bold border border-slate-800">
-            EDGE: +{activeConfig.prediction.edgePct}%
+            VENUES: {selectedVenues.length ? selectedVenues.join(' · ') : 'none selected'}
           </span>
         </div>
       </div>
