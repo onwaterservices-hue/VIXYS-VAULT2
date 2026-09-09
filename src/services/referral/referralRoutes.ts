@@ -146,7 +146,22 @@ export function createReferralHandlers({
 
     try {
       const record = await store.attachReferral(code, user.email);
-      res.json({ success: true, code: record.code, discountPercent: REFERRAL_DISCOUNT_PERCENT });
+      // Privacy-safe referrer label for the congrats toast: the owner's display
+      // NAME only, never their email, and only when one is set. The referred
+      // user was handed this exact code, and attach requires an authenticated
+      // session plus a valid code, so this is not an enumeration oracle the way
+      // /resolve would be. Falls back to null -> the toast shows the code.
+      let referrerLabel = null;
+      try {
+        const owner = await store.getCodeOwner(code);
+        if (owner && owner.ownerName) referrerLabel = String(owner.ownerName);
+      } catch { /* label is cosmetic; never fail the attach for it */ }
+      res.json({
+        success: true,
+        code: record.code,
+        discountPercent: REFERRAL_DISCOUNT_PERCENT,
+        referrerLabel,
+      });
     } catch (err) {
       const c = (err && err.code) || "UNKNOWN";
       // 4xx for every definitive rejection so the client stops retrying and
