@@ -287,7 +287,22 @@ blocked on production read access.
 
 ---
 
-## E3 — is early-lock skill real? NO.
+## ⚠ DATA DEFECT FOUND AND FIXED — trade-cache bucket price was the FIRST print
+
+`tests/replay-harness.invariants.mjs` (added to pin the harness's own rules)
+caught it: `bucketize` set each 3s bucket's price to the first trade, not the
+last, because `ms >= (b as any)._lastMs ?? -Infinity` parses as
+`(ms >= undefined) ?? -Infinity` — always false. Every persisted bucket's price
+lagged by up to 3s. Fixed; the entire trade cache was wiped and is being
+rebuilt; the 7-day run was restarted.
+
+**Every trade-level number above this line (E3a, E3b, OLD-vs-NEW, the 50.0%
+skill figure) was computed on first-print buckets and will be re-derived.**
+The qualitative picture is unlikely to move (a ≤3s lag on a 15-minute
+horizon), but no number is quoted until it has been re-run on corrected data.
+Candle-based results are unaffected.
+
+## E3 — is early-lock skill real? NO. *(pre-fix data; re-run pending)*
 
 On the OLD engine's 142 locks: EARLY (<480s) 40/72 = 55.6%, **exact binomial
 p = 0.41**. Skill by 60s lock-time bin: 58.3 / 50.0 / 54.2 / 42.1 / 42.9 /

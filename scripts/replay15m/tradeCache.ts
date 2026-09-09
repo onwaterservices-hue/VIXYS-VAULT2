@@ -113,8 +113,12 @@ function bucketize(trades: RawTrade[], bucketSeconds: number): Map<number, Trade
     if (b.high === null || price > b.high) b.high = price;
     if (b.low === null || price < b.low) b.low = price;
     // trades arrive newest-first within a page; the LAST trade of the bucket in
-    // time order is the one with the greatest timestamp, so track it explicitly
-    if (ms >= (b as any)._lastMs ?? -Infinity) { (b as any)._lastMs = ms; b.price = price; }
+    // time order is the one with the greatest timestamp, so track it explicitly.
+    // (Previously `ms >= (b as any)._lastMs ?? -Infinity`, which parses as
+    // `(ms >= undefined) ?? -Infinity` === false, so the price never updated
+    // after the first print. Caught by tests/replay-harness.invariants.mjs.)
+    const lastMs = (b as any)._lastMs ?? -Infinity;
+    if (ms >= lastMs) { (b as any)._lastMs = ms; b.price = price; }
   }
   for (const b of buckets.values()) delete (b as any)._lastMs;
   return buckets;

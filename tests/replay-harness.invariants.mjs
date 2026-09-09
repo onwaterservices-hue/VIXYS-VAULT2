@@ -48,7 +48,8 @@ t.section('TRADE CACHE -- real prints only, correct aggressor side');
 // Coinbase reports `side` as the MAKER side: side "sell" => the resting order
 // was a sell => the taker BOUGHT (an up-tick). Verified against Coinbase docs.
 t.check('taker buy volume is credited when maker side is "sell"', cache.includes("if (t.side === 'sell') b.buyVolume += size; else b.sellVolume += size;"));
-const bucketizeSrc = sliceBetween(cache, 'function bucketize(', '/**', 'bucketize');
+// End at the next exported function; the intervening doc comment is inert once transpiled.
+const bucketizeSrc = sliceBetween(cache, 'function bucketize(', 'export async function getTradeTicks(', 'bucketize');
 const bucketize = new Function('Math', 'Map', 'Date', 'parseFloat', 'Number', `${strip(bucketizeSrc)}; return bucketize;`)(Math, Map, Date, parseFloat, Number);
 const b = bucketize([
   { trade_id: 1, side: 'sell', size: '0.5', price: '100', time: '2026-09-09T00:00:01.000Z' },  // taker bought
