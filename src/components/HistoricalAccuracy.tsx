@@ -452,23 +452,23 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               // for this cycle yet, the card shows it as unknown.
               const conf = lockedPrediction?.confidence ?? liveState?.confidence ?? null;
               const edge = lockedPrediction?.edge || liveState?.edge;
-              const cycleSeq = liveState?.sequence || liveState?.cycleId || '1407';
+              const cycleSeq = liveState?.sequence || liveState?.cycleId || null;
 
               const activeAsset = selectedAsset === 'ALL' ? 'BTC' : selectedAsset;
 
               const liveLogObject = {
-                id: `live-cycle-${cycleSeq}`,
+                id: `live-cycle-${cycleSeq ?? 'unknown'}`,
                 ticker: activeAsset,
                 intervalStart: new Date().toISOString(),
                 lockedAt: new Date().toISOString(),
                 status: isSkip ? 'SKIPPED' : isLocked ? 'LOCKED' : stageName,
                 direction: isUpDir ? 'UP' : 'DOWN',
                 spotAtLock: lockedSpot,
-                settlementPrice: spot,
+                settlementPrice: null,   // the live cycle has not settled; never show spot as a settlement
                 confidence: conf,
                 edge: Number.isFinite(Number(edge)) ? Number(edge) : null,
-                reversalRisk: 38,
-                proofHash: `0x7a8d...${cycleSeq}`,
+                reversalRisk: liveState?.reversalRisk ?? liveState?.lockedPrediction?.reversalRisk ?? null,
+                proofHash: null,   // there is no proof artefact for a live cycle; do not invent one
                 reasons: [isSkip ? formatSkipReason(liveState?.lockEligibility?.reason) : 'Real-time multi-model validation active']
               };
 
@@ -951,12 +951,12 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 font-mono text-xs mb-5">
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Entry Spot Price</div>
-                <div className="text-white font-black text-sm">${Number(activeProvenance.spotAtLock || activeProvenance.btcPriceAtLock || 63008).toLocaleString()}</div>
+                <div className="text-white font-black text-sm">{activeProvenance.spotAtLock || activeProvenance.btcPriceAtLock ? `$${Number(activeProvenance.spotAtLock || activeProvenance.btcPriceAtLock).toLocaleString()}` : '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Settlement Price</div>
-                <div className="text-white font-black text-sm">${Number(activeProvenance.settlementPrice || activeProvenance.spotAtLock || 63008).toLocaleString()}</div>
+                <div className="text-white font-black text-sm">{activeProvenance.settlementPrice ? `$${Number(activeProvenance.settlementPrice).toLocaleString()}` : 'NOT SETTLED'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
@@ -976,9 +976,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Verification Status</div>
-                <div className="text-emerald-400 font-black flex items-center gap-1">
-                  <Check className="w-3.5 h-3.5" /> PROVED
-                </div>
+                {activeProvenance.settlementPrice && String(activeProvenance.status || '').toUpperCase() === 'RESOLVED' ? (
+                  <div className="text-emerald-400 font-black flex items-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> SETTLED
+                  </div>
+                ) : (
+                  <div className="text-amber-400 font-black flex items-center gap-1">UNSETTLED</div>
+                )}
               </div>
             </div>
 
@@ -998,7 +1002,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <ExternalLink className="w-3.5 h-3.5 text-cyan-400" /> VERIFIABLE PROOF HASH
                 </div>
                 <div className="text-[11px] text-zinc-400 break-all select-all font-mono bg-black p-2 rounded border border-zinc-800/80">
-                  {activeProvenance.proofHash || `0x8f2a1e940b3c7d6215a8e0f941162d04a9e3b1c875d24e6a00f${activeProvenance.id || '1407'}`}
+                  {activeProvenance.proofHash || 'NO PROOF ARTEFACT — this record carries no verifiable hash'}
                 </div>
               </div>
             </div>
