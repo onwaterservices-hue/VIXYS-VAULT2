@@ -314,12 +314,16 @@ and the regression unresolved, production would effectively take **87 locks /
 commit-point cut to match the gate) is now a product decision with a
 measured consequence, not a code-hygiene item.
 
-Caveats: 7 days, one regime; the v1 table was fitted on 27 days of candles
-that overlap these 7 days for the price/strike fields (the rule's inputs are
-engine-independent, so this is not engine tuning on the test set, but the
-table is not strictly out-of-sample for this window — refit on a disjoint
-window before calling it final). Kalshi implied price at t still not
-measured, so "edge vs market" remains unquantified.
+**Disjoint refit — overlap caveat closed.** Table refitted on Aug 12 → Sep 2
+12:00 only (2,063 cycles), evaluated inside the real gate on Sep 2 → 9 (no
+overlap): bar 0.95 → **127 locks at 97.6% (124W/3L)**, median lock 675s; bar
+0.90 → **231 at 95.2%**, median 600s. Same shape as the overlapping fit
+(132 / 97.0%; 260 / 94.2%). Validation of the disjoint table against the
+trade snippets: mean |Δp| 0.038 over 109 shared cells.
+
+Remaining caveats: 7 evaluation days, one regime; Kalshi implied price at t
+still not measured, so "edge vs market" is unquantified; the rule buys
+precision on the product criterion, not forecasting skill.
 
 ## ★★★★★ THE RECONCILIATION — production's own ledger explains the 49.5%
 

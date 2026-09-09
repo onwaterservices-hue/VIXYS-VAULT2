@@ -199,7 +199,7 @@ change. Recorded so E2 can measure whether it adds independent value.
       97.0% (from 346 at 91.0%); bar 0.90 → 260 at 94.2%. Strict subsets. 45 of
       the 0.95 locks sit in the 720–779s commit-point gap. **DECISION NEEDED:**
       bar, and 720-vs-780 alignment.
-- [ ] **J1c** Refit the table on a window disjoint from the evaluation window.
+- [x] **J1c** Disjoint refit (Aug 12→Sep 2) evaluated on Sep 2→9: bar 0.95 → 127 locks at 97.6%; bar 0.90 → 231 at 95.2%.
 - [ ] **J1d** Kalshi implied price at t → edge vs market.
 - [ ] **J2** Runtime performance.
 - [ ] **J3** UI — **not before the decision object is trustworthy.**
