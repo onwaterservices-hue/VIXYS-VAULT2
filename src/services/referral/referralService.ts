@@ -155,19 +155,44 @@ export function createReferralStore(getDb, fs, log = console) {
       createdAt: new Date().toISOString(),
     };
 
+    let finalRecord: any = record;
     await fs.runTransaction(db, async (tx) => {
       const ref = fs.doc(db, REFERRAL_CODES, code);
       const existing = await tx.get(ref);
       if (existing.exists()) {
         const owner = existing.data();
-        if (normalizeEmail(owner.ownerEmail) !== email || !opts.allowOverwrite) {
+        const sameOwner = normalizeEmail(owner.ownerEmail) === email;
+        if (!sameOwner) {
           throw Object.assign(new Error("CODE_TAKEN"), { code: "CODE_TAKEN" });
+        }
+        if (!opts.allowOverwrite) {
+          // Idempotent re-claim by the SAME owner. This is not an error: the
+          // code is already theirs. Keep the original doc (and its createdAt)
+          // and fall through to the stats-index repair below, so a user whose
+          // code never made it into REFERRAL_STATS gets healed on re-claim.
+          finalRecord = owner;
+          return;
         }
       }
       tx.set(ref, record);
     });
 
-    return record;
+    // Durable reverse index by email. me() renders the "you have a code"
+    // layout from getStats(email).code, but that stats doc was previously
+    // written ONLY when a friend joined -- so a user who claimed a code but had
+    // no referrals yet had no stats doc, and me() fell back to the per-instance
+    // user.referralCode, which is absent on every other serverless instance
+    // (claim succeeded, page never updated). Persist the code into the owner's
+    // stats here so every instance shows the claimed layout immediately.
+    // Best-effort-awaited: the code is already durably claimed above, so a
+    // stats hiccup must not make the caller 409 a retry.
+    try {
+      await writeStats(email, (st) => { st.code = finalRecord.code; return st; });
+    } catch (err) {
+      log.warn("[REFERRAL] claim stats-index write failed", email, err);
+    }
+
+    return finalRecord;
   }
 
   /**
