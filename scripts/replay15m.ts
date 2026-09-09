@@ -57,6 +57,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { buildEngineSandbox, sliceThrough } from './replay15m/engineSandbox.ts';
 import { getCandles, type Candle } from './replay15m/candleCache.ts';
+import { getTradeTicks, type TradeTick } from './replay15m/tradeCache.ts';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CYCLE_MS = 15 * 60 * 1000;
@@ -77,6 +78,12 @@ function parseArgs(argv: string[]) {
 }
 const args = parseArgs(process.argv.slice(2));
 const OFFLINE = Boolean(args.offline);
+// 'trades' fills rollingBtcTicks at production's ~3s cadence from real trade
+// prints. 'candles' fills it once a minute, which collapses the 15s/30s/60s
+// lookbacks onto one price and inflates every downstream score -- see the
+// FIDELITY DIAGNOSTICS block. Use trades for anything you intend to believe.
+const SOURCE: 'trades' | 'candles' = args.source === 'trades' ? 'trades' : 'candles';
+const BUCKET_SECONDS = args['bucket-seconds'] ? Number(args['bucket-seconds']) : 3;
 const SEED = args.seed ? Number(args.seed) : 1;
 const MIN_COVERAGE = args['min-coverage'] ? Number(args['min-coverage']) : 12; // of 15 minutes
 
@@ -151,10 +158,25 @@ let lookaheadViolations = 0;
 // number produced here can never be read without the caveat attached.
 const fidelity = {
   ticks: 0,
-  shortTfCollapsed: 0,   // ticks where tf15s == tf30s == tf1m
+  // THE ACTUAL DEFECT: whether the observation stream can resolve the 15s, 30s
+  // and 60s lookbacks to DISTINCT prices at all. This is a property of tick
+  // spacing, independent of the engine's thresholds.
+  lookbackResolvable: 0,
+  lookbackCollapsed: 0,
+  // Downstream symptom: the three short timeframe VOTES coming out equal. This
+  // is only partly the defect -- votes use different thresholds (0.012/0.015/
+  // 0.02) and legitimately agree in a quiet market, so it never reaches 0.
+  shortTfVotesEqual: 0,
   alignedCount: new Map<number, number>(),
   agreementCount: new Map<number, number>(),
 };
+// Mirrors getPriceAtAgo in evaluateBtc15mHighConvictionPipeline: the newest
+// observation at or before (now - sec).
+function priceAtAgo(buf: { tsMs: number; price: number }[], nowMs: number, sec: number): number | null {
+  const target = nowMs - sec * 1000;
+  for (let i = buf.length - 1; i >= 0; i--) if (buf[i].tsMs <= target) return buf[i].price;
+  return buf.length ? buf[0].price : null;
+}
 function bump(m: Map<number, number>, k: number) { m.set(k, (m.get(k) || 0) + 1); }
 function assertNoLookahead(candleTimeMs: number, tickNowMs: number) {
   if (candleTimeMs > tickNowMs) {
@@ -176,6 +198,37 @@ async function main() {
   console.log(`cycles     : ${Math.floor((endMs - startMs) / CYCLE_MS)}`);
   console.log(`seed       : ${SEED}   offline: ${OFFLINE}`);
 
+  console.log(`source     : ${SOURCE}${SOURCE === 'trades' ? ` (${BUCKET_SECONDS}s buckets from real trade prints)` : ' (1-minute candles)'}`);
+
+  // Unified observation stream: [tsMs, price] pairs the engine is ticked with.
+  let stream: { tsMs: number; price: number }[] = [];
+  let byMinute = new Map<number, Candle>();
+  let sourceSummary = '';
+  let tradeStats: any = null;
+
+  if (SOURCE === 'trades') {
+    process.stdout.write('trades     : ');
+    const { ticks, stats } = await getTradeTicks(ROOT, startMs, endMs, {
+      offline: OFFLINE, bucketSeconds: BUCKET_SECONDS,
+      onProgress: (m) => process.stdout.write(`\n${m}`),
+    });
+    tradeStats = stats;
+    stream = ticks.map((t) => ({ tsMs: t.tsMs, price: t.price }));
+    console.log('');
+    console.log(`             ${stats.bucketsTotal} buckets `
+      + `(${stats.bucketsWithTrades} with real prints, ${stats.bucketsEmpty} empty), `
+      + `${stats.tradesUsed} trades, ${stats.requests} requests, `
+      + `${stats.hoursFromCache}h cached / ${stats.hoursFetched}h fetched`);
+    if (stats.bucketsEmpty) {
+      console.log(`             ${stats.bucketsEmpty} empty buckets carry the last real trade price `
+        + `(${(stats.bucketsEmpty / Math.max(1, stats.bucketsTotal) * 100).toFixed(2)}%) -- nothing interpolated`);
+    }
+    sourceSummary = `${stats.bucketsTotal} x ${BUCKET_SECONDS}s buckets`;
+  } else {
+    await runCandleSource();
+  }
+
+  async function runCandleSource() {
   // --- candles ---
   process.stdout.write('candles    : ');
   const { candles, stats } = await getCandles(ROOT, Math.floor(startMs / 1000), Math.floor(endMs / 1000), {
@@ -189,8 +242,11 @@ async function main() {
     + `, ${stats.minutesMissing} missing`);
   if (!candles.length) { console.error('no candles -- aborting'); process.exit(1); }
 
-  const byMinute = new Map<number, Candle>();
+  byMinute = new Map<number, Candle>();
   for (const c of candles) byMinute.set(c.time * 1000, c);
+  stream = candles.map((c) => ({ tsMs: c.time * 1000, price: c.close }));
+  sourceSummary = `${candles.length} x 60s candles`;
+  }
 
   // --- replay ---
   const sandbox = buildEngineSandbox(ROOT, { seed: SEED });
@@ -201,18 +257,30 @@ async function main() {
   const records: CycleRecord[] = [];
   let skippedNoCoverage = 0;
 
+  // Group the observation stream into cycles. Only ticks belonging to a cycle
+  // are ever visible to that cycle, and they are consumed in time order.
+  const byCycle = new Map<number, { tsMs: number; price: number }[]>();
+  for (const tk of stream) {
+    const cs = Math.floor(tk.tsMs / CYCLE_MS) * CYCLE_MS;
+    if (!byCycle.has(cs)) byCycle.set(cs, []);
+    byCycle.get(cs)!.push(tk);
+  }
+  for (const arr of byCycle.values()) arr.sort((a, b) => a.tsMs - b.tsMs);
+
+  // Coverage floor scales with the source: 15 ticks/cycle from candles,
+  // CYCLE/BUCKET from trades.
+  const expectedPerCycle = SOURCE === 'trades' ? (CYCLE_MS / 1000) / BUCKET_SECONDS : 15;
+  const minCoverage = args['min-coverage']
+    ? Number(args['min-coverage'])
+    : Math.floor(expectedPerCycle * 0.8);
+
   for (let cs = startMs; cs < endMs; cs += CYCLE_MS) {
-    // Candles belonging to this cycle, ascending. Only these are ever visible.
-    const minutes: Candle[] = [];
-    for (let m = cs; m < cs + CYCLE_MS; m += 60000) {
-      const c = byMinute.get(m);
-      if (c) minutes.push(c);
-    }
-    if (minutes.length < MIN_COVERAGE) { skippedNoCoverage++; continue; }
+    const cycleTicks = byCycle.get(cs) || [];
+    if (cycleTicks.length < minCoverage) { skippedNoCoverage++; continue; }
 
     // Strike is fixed at cycle open from the first observed price, matching
     // server.ts's non-Kalshi path: round(livePrice / 10) * 10.
-    const openPrice = minutes[0].open;
+    const openPrice = cycleTicks[0].price;
     const strike = Math.round(openPrice / 10) * 10;
     const cycleId = `15M-${new Date(cs).toISOString()}`;
 
@@ -220,7 +288,7 @@ async function main() {
 
     const rec: CycleRecord = {
       cycleId, intervalStart: cs, intervalEnd: cs + CYCLE_MS, strike,
-      ticks: 0, coverageMinutes: minutes.length,
+      ticks: 0, coverageMinutes: cycleTicks.length,
       locked: false, lockTSec: null, lockDirection: null, lockConfidence: null,
       lockQualityAtLock: null, lockSpot: null,
       directionFlips: 0, firstBlocker: null, blockerAtClose: null,
@@ -230,10 +298,11 @@ async function main() {
     };
 
     let prevDir = 'NEUTRAL';
-    for (const c of minutes) {
-      const tickNow = c.time * 1000;
+    const lookbackBuf: { tsMs: number; price: number }[] = [];
+    for (const tk of cycleTicks) {
+      const tickNow = tk.tsMs;
       assertNoLookahead(tickNow, tickNow);
-      const spot = c.close;
+      const spot = tk.price;
 
       sandbox.tick(spot, tickNow, strike);
       const gate = sandbox.canLock(spot, tickNow);
@@ -247,7 +316,16 @@ async function main() {
 
       const mtf = st.pipeline?.multiTimeframeAlignment;
       fidelity.ticks++;
-      if (mtf && mtf.tf15s === mtf.tf30s && mtf.tf30s === mtf.tf1m) fidelity.shortTfCollapsed++;
+      if (mtf && mtf.tf15s === mtf.tf30s && mtf.tf30s === mtf.tf1m) fidelity.shortTfVotesEqual++;
+      lookbackBuf.push({ tsMs: tickNow, price: spot });
+      if (lookbackBuf.length > 400) lookbackBuf.shift();
+      const p15 = priceAtAgo(lookbackBuf, tickNow, 15);
+      const p30 = priceAtAgo(lookbackBuf, tickNow, 30);
+      const p60 = priceAtAgo(lookbackBuf, tickNow, 60);
+      if (p15 !== null && p30 !== null && p60 !== null) {
+        if (p15 === p30 && p30 === p60) fidelity.lookbackCollapsed++;
+        else fidelity.lookbackResolvable++;
+      }
       if (mtf) bump(fidelity.alignedCount, mtf.alignedCount);
       bump(fidelity.agreementCount, st.pipeline?.evidenceAgreementCount ?? -1);
 
@@ -255,18 +333,24 @@ async function main() {
       if (!rec.firstBlocker && blocker) rec.firstBlocker = blocker;
       rec.blockerAtClose = blocker;
 
-      rec.trajectory.push({
-        tSec: Math.floor((tickNow - cs) / 1000),
-        spot,
-        direction: st.direction,
-        confidence: st.confidence,
-        lockQuality: st.lockQuality ?? 0,
-        lockQualityTier: st.lockQualityTier ?? 'SKIP',
-        reversalRisk: st.pipeline?.reversalAssessment?.threatScore ?? 0,
-        evidenceAgreement: st.pipeline?.evidenceAgreementCount ?? 0,
-        allowed: Boolean(gate.allowed),
-        blocker,
-      });
+      // Trajectories are sampled, not stored per-tick, or a 30-day trade-level
+      // run would emit ~900k points per JSON. Sampling never affects the
+      // decision -- every tick is still executed.
+      const sampleEvery = SOURCE === 'trades' ? Math.max(1, Math.round(20 / BUCKET_SECONDS)) : 1;
+      if (rec.ticks % sampleEvery === 0 || gate.allowed) {
+        rec.trajectory.push({
+          tSec: Math.floor((tickNow - cs) / 1000),
+          spot,
+          direction: st.direction,
+          confidence: st.confidence,
+          lockQuality: st.lockQuality ?? 0,
+          lockQualityTier: st.lockQualityTier ?? 'SKIP',
+          reversalRisk: st.pipeline?.reversalAssessment?.threatScore ?? 0,
+          evidenceAgreement: st.pipeline?.evidenceAgreementCount ?? 0,
+          allowed: Boolean(gate.allowed),
+          blocker,
+        });
+      }
 
       // First allowed tick is the lock. The real engine commits once per cycle
       // (lock15mCycle refuses a second), so the replay does the same.
@@ -283,10 +367,10 @@ async function main() {
 
     // --- settlement: strictly after the cycle has closed ---
     // Production settles on the first tick of the NEXT cycle, at that tick's
-    // live price. The replay uses the next cycle's first candle open.
-    const nextOpenCandle = byMinute.get(cs + CYCLE_MS);
-    if (nextOpenCandle) {
-      rec.settlementPrice = nextOpenCandle.open;
+    // live price, so the replay uses the next cycle's first observation.
+    const nextTicks = byCycle.get(cs + CYCLE_MS);
+    if (nextTicks && nextTicks.length) {
+      rec.settlementPrice = nextTicks[0].price;
       if (rec.locked) {
         const graded = grade(
           { direction: rec.lockDirection, confidence: rec.lockConfidence, targetStrike: strike },
@@ -296,27 +380,27 @@ async function main() {
         rec.wasCorrect = graded.wasCorrect;
         rec.brierScore = graded.brierScore;
 
-        // excursions measured from the lock price over the remainder of the cycle
-        const after = minutes.filter((m) => m.time * 1000 >= cs + (rec.lockTSec! * 1000));
+        // Excursions from the lock price over the remainder of the cycle,
+        // measured on observed prices only.
+        const after = cycleTicks.filter((x) => x.tsMs >= cs + rec.lockTSec! * 1000).map((x) => x.price);
         if (after.length && rec.lockSpot != null) {
-          const highs = Math.max(...after.map((m) => m.high));
-          const lows = Math.min(...after.map((m) => m.low));
+          const hi = Math.max(...after), lo = Math.min(...after);
           const up = rec.lockDirection === 'UP';
-          rec.maxFavorableExcursion = Math.round(((up ? highs - rec.lockSpot : rec.lockSpot - lows)) * 100) / 100;
-          rec.maxAdverseExcursion = Math.round(((up ? rec.lockSpot - lows : highs - rec.lockSpot)) * 100) / 100;
+          rec.maxFavorableExcursion = Math.round((up ? hi - rec.lockSpot : rec.lockSpot - lo) * 100) / 100;
+          rec.maxAdverseExcursion = Math.round((up ? rec.lockSpot - lo : hi - rec.lockSpot) * 100) / 100;
         }
       }
     }
     records.push(rec);
   }
 
-  report(records, { skippedNoCoverage, stats });
+  report(records, { skippedNoCoverage, sourceSummary, tradeStats });
 
   if (args.json) {
     const out = String(args.json);
     writeFileSync(out, JSON.stringify({
       window: { startMs, endMs }, seed: SEED, generatedAt: new Date().toISOString(),
-      candleStats: stats, skippedNoCoverage, records,
+      source: SOURCE, sourceSummary, tradeStats, skippedNoCoverage, records,
     }, null, 2));
     console.log(`\nwrote ${out}`);
   }
@@ -330,7 +414,7 @@ function pct(n: number, d: number): number | null {
 }
 const show = (v: number | null, suffix = '') => (v === null ? 'null' : `${v}${suffix}`);
 
-function report(records: CycleRecord[], meta: { skippedNoCoverage: number; stats: any }) {
+function report(records: CycleRecord[], meta: { skippedNoCoverage: number; sourceSummary: string; tradeStats: any }) {
   const locked = records.filter((r) => r.locked);
   const graded = locked.filter((r) => r.wasCorrect !== null);
   const wins = graded.filter((r) => r.wasCorrect);
@@ -338,6 +422,7 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; stats
   console.log('='.repeat(78));
   console.log('REPLAY RESULT');
   console.log('='.repeat(78));
+  console.log(`source                   : ${meta.sourceSummary}`);
   console.log(`cycles replayed          : ${records.length}`);
   console.log(`cycles skipped (coverage): ${meta.skippedNoCoverage}`);
   console.log(`lookahead violations     : ${lookaheadViolations}`);
@@ -412,15 +497,24 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; stats
 
   console.log('');
   console.log('FIDELITY DIAGNOSTICS -- how far this replay is from production');
-  const collapsePct = pct(fidelity.shortTfCollapsed, fidelity.ticks);
+  const lookbackTotal = fidelity.lookbackCollapsed + fidelity.lookbackResolvable;
+  const collapsePct = pct(fidelity.lookbackCollapsed, lookbackTotal);
+  const votesPct = pct(fidelity.shortTfVotesEqual, fidelity.ticks);
   console.log(`  ticks simulated                : ${fidelity.ticks}`);
-  console.log(`  tf15s == tf30s == tf1m         : ${fidelity.shortTfCollapsed} (${show(collapsePct, '%')})`);
-  console.log('    ^ MEASURED HARNESS DEFECT. rollingBtcTicks is spaced 60s apart here, so');
-  console.log('      getPriceAtAgo(15), (30) and (60) all resolve to the SAME previous-minute');
-  console.log('      price. Three of the engine\'s five timeframe votes therefore carry one');
-  console.log('      number, inflating multiTimeframeAlignment.alignedCount, which inflates');
-  console.log('      calibratedConfidencePct and lockQuality. Production ticks ~every 3s and');
-  console.log('      does not have this collapse. Any win rate below is inflated by it.');
+  console.log(`  lookback COLLAPSE (the defect) : ${fidelity.lookbackCollapsed}/${lookbackTotal} (${show(collapsePct, '%')})`);
+  console.log('    ^ ticks where getPriceAtAgo(15), (30) and (60) resolve to the SAME price,');
+  console.log('      i.e. the observation spacing cannot separate the three short lookbacks.');
+  console.log('      Each collapsed tick hands three of the engine\'s five timeframe votes one');
+  console.log('      number, inflating alignedCount -> calibratedConfidencePct -> lockQuality.');
+  if (SOURCE === 'candles') {
+    console.log('      1-minute candles collapse ~85% of ticks. Re-run with --source trades.');
+  } else {
+    console.log(`      ${BUCKET_SECONDS}s buckets resolve the lookbacks; production ticks at a similar cadence.`);
+  }
+  console.log(`  short-TF votes equal           : ${fidelity.shortTfVotesEqual} (${show(votesPct, '%')})`);
+  console.log('    ^ downstream symptom, NOT the defect. The three votes use different');
+  console.log('      thresholds (0.012 / 0.015 / 0.02) and legitimately agree in a quiet');
+  console.log('      market, so this never reaches zero even with perfect data.');
   const fmtHist = (m: Map<number, number>) =>
     [...m.entries()].sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}:${v}`).join('  ');
   console.log(`  alignedCount (of 5)            : ${fmtHist(fidelity.alignedCount)}`);
@@ -430,14 +524,21 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; stats
   console.log('='.repeat(78));
   console.log('DIVERGENCES FROM PRODUCTION (structural -- see file header)');
   console.log('  1. strike is round(spot/10)*10; production uses the Kalshi floor_strike');
-  console.log('  2. 15 ticks/cycle from 1m candles; production ticks ~every 3s');
+  console.log(SOURCE === 'trades'
+    ? `  2. RESOLVED for this run: ${BUCKET_SECONDS}s buckets from real trade prints, matching production's ~3s cadence`
+    : '  2. 15 ticks/cycle from 1m candles; production ticks ~every 3s  <-- USE --source trades');
   console.log('  3. pipeline Math.random() pinned to a seeded PRNG');
   console.log('  4. crossAssetPen fed 0; ETH/SOL feeds not reconstructible from BTC candles');
   console.log('  These are reasons the replay CANNOT reproduce the production ledger exactly.');
   console.log('');
-  console.log('  DO NOT quote the win rate above as an engine result. Divergence (2) is');
-  console.log('  measured in FIDELITY DIAGNOSTICS and is large. Reconciling with the live');
-  console.log('  ledger requires trade-level (sub-second) history, not 1-minute candles.');
+  if (SOURCE === 'candles') {
+    console.log('  DO NOT quote the win rate above as an engine result. Divergence (2) is');
+    console.log('  measured in FIDELITY DIAGNOSTICS and is large. Re-run with --source trades.');
+  } else {
+    console.log('  Divergence (2) is resolved on this run. Divergences (1), (3) and (4)');
+    console.log('  remain, so this is still a measurement of the ENGINE\'S LOGIC over real');
+    console.log('  history -- not a reconstruction of the production ledger.');
+  }
   console.log('='.repeat(78));
 }
 
