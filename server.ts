@@ -15389,6 +15389,41 @@ app.get("/api/vixy/health", (req, res) => {
         : "OFFLINE",
   });
 });
+// Empirical confidence calibration.
+// Raw model confidence has no reliable relationship to outcomes. Measured over
+// 103 graded locks: claimed 80-85% won 5 of 18 (27.8%), claimed 85-90% won 18 of
+// 39 (46.2%), claimed 90-95% won 15 of 24 (62.5%). The curve is non-monotonic and
+// inverted through the middle, so showing a paying user the raw number overstates
+// the engine badly in exactly the band it fires most often. This maps a raw
+// confidence onto the observed win rate of its own bucket, and refuses to answer
+// when the bucket is too thin to mean anything rather than guessing.
+const CALIBRATION_MIN_BUCKET_SAMPLES = 15;
+function getCalibratedConfidence(rawConf: number): any {
+  const raw = Number(rawConf);
+  if (!Number.isFinite(raw)) {
+    return { raw: null, calibrated: null, sampleSize: 0, bucket: null, status: "NO_INPUT" };
+  }
+  const settled = (persistentSignalLogs as any[]).filter((s: any) => s.status === "RESOLVED");
+  const lo = Math.min(95, Math.max(50, Math.floor(raw / 5) * 5));
+  const hi = lo >= 95 ? 101 : lo + 5;
+  const items = settled.filter((s: any) => {
+    const c = s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
+    return c >= lo && c < hi;
+  });
+  const n = items.length;
+  const wins = items.filter((s: any) => s.wasCorrect).length;
+  const bucket = lo + "-" + (hi === 101 ? 100 : hi) + "%";
+  if (n < CALIBRATION_MIN_BUCKET_SAMPLES) {
+    return { raw, calibrated: null, sampleSize: n, wins, bucket, status: "INSUFFICIENT_SAMPLE" };
+  }
+  return { raw, calibrated: Math.round((wins / n) * 1e3) / 10, sampleSize: n, wins, bucket, status: "CALIBRATED" };
+}
+
+app.get("/api/signal/calibrated-confidence", (req, res) => {
+  const raw = Number((req.query as any).confidence ?? (req.query as any).conf);
+  res.json(getCalibratedConfidence(raw));
+});
+
 app.get("/api/signal/confidence-buckets", (req, res) => {
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
   const bucketRanges = [
