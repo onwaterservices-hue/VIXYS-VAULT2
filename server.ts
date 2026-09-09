@@ -16627,6 +16627,30 @@ app.all("/api/cron/settle", async (req, res) => {
   const lateCandidates = overdue
     .filter((s) => nowMs - new Date(s.expiresAt).getTime() > 2 * 60 * 1e3)
     .slice(0, 40);
+  // Candle lookups are the entire cost of this sweep. 40 sequential round trips
+  // to Coinbase did not fit the lambda budget, so runs timed out partway and left
+  // rows stuck at LOCKED. Prefetch concurrently in chunks of 8 (Coinbase public
+  // limit is ~10 rps); the grading loop below is unchanged and just reads the map.
+  const candleByRow = new Map<string, number>();
+  for (let ci = 0; ci < lateCandidates.length; ci += 8) {
+    await Promise.all(
+      (lateCandidates.slice(ci, ci + 8) as any[]).map(async (r0: any) => {
+        const e0 = new Date(r0.expiresAt).getTime();
+        try {
+          const s0 = new Date(e0 - 60 * 1e3).toISOString();
+          const t0 = new Date(e0 - 1).toISOString();
+          const q0 = await fetchWithTimeout(
+            `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${s0}&end=${t0}`,
+          );
+          if (q0.ok) {
+            const k0 = await q0.json();
+            if (Array.isArray(k0) && k0.length && Number(k0[0][4]) > 1e3)
+              candleByRow.set(r0.id, Number(k0[0][4]));
+          }
+        } catch {}
+      }),
+    );
+  }
   for (const row of lateCandidates as any[]) {
     const expMs = new Date(row.expiresAt).getTime();
     const strike = Number(row.targetStrike);
@@ -16647,18 +16671,7 @@ app.all("/api/cron/settle", async (req, res) => {
       try { await persistSingleSignalLog(row); } catch {}
       continue;
     }
-    let lateClose: number | null = null;
-    try {
-      const startIso = new Date(expMs - 60 * 1e3).toISOString();
-      const endIso = new Date(expMs - 1).toISOString();
-      const cRes = await fetchWithTimeout(
-        `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${startIso}&end=${endIso}`,
-      );
-      if (cRes.ok) {
-        const k = await cRes.json();
-        if (Array.isArray(k) && k.length && Number(k[0][4]) > 1e3) lateClose = Number(k[0][4]);
-      }
-    } catch {}
+    let lateClose: number | null = candleByRow.get(row.id) ?? null;
     if (lateClose === null) {
       lateSettlement.skipped += 1;
       lateSettlement.rows.push({ id: row.id, result: "SKIPPED", reason: "NO_CANDLE" });
