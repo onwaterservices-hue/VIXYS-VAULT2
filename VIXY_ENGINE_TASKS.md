@@ -194,7 +194,8 @@ change. Recorded so E2 can measure whether it adds independent value.
 
 ## PHASE J — INTEGRATION  `[ ]`  (only after I passes)
 
-- [ ] **J1** Integrate behind a flag.
+- [x] **J1** Layer 5 integrated behind `VIXY_LOCK_RULE=strike_side` (default off); observation always exposed as `lockGate.strikeSide`. — `94954b7`
+- [ ] **J1b** Phase 8 comparison inside the real gate (running) → decide default.
 - [ ] **J2** Runtime performance.
 - [ ] **J3** UI — **not before the decision object is trustworthy.**
 

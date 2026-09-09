@@ -123,6 +123,7 @@ Taken from `package.json`. These are the real commands — do not invent others.
 | replay determinism + leakage | `npm run verify:replay-determinism` |
 | run the replay harness | `npm run replay:15m -- --source trades --days 3 [--offline]` |
 | replay a specific engine version | `git show <sha>:server.ts > /tmp/old.ts && npm run replay:15m -- --source trades --offline --start … --end … --engine-source /tmp/old.ts` |
+| evaluate Layer 5 inside the real gate | `npm run replay:15m -- --source trades --offline --start … --end … --lock-rule strike_side --bar 0.95` |
 | compare two replay runs (Phase 8 table) | `npx tsx scripts/replay15m/research/compareRuns.ts A.json B.json [labelA] [labelB]` |
 | real-flow forecast test (E3b) | `npx tsx scripts/replay15m/research/flowSkill.ts <startIso> <endIso>` |
 | production build | `npm run build` |
@@ -166,6 +167,15 @@ when a copy of it does.
   720–779s the gate returns `allowed=true` while emitting `ENTRY_WINDOW_EXPIRED`
   and `lock15mCycle`'s commit point refuses. The tests will FAIL when it is
   fixed — update them deliberately when you do.
+- **Layer 5 (strike-side probability) is observation-first and flag-gated.**
+  `computeStrikeSideProbability` always runs and is exposed as
+  `lockGate.strikeSide` on the canonical payload; it changes `allowed` only
+  when `VIXY_LOCK_RULE=strike_side` (default `off`), and then it can only
+  deny — unknown cell, p below `VIXY_LOCK_RULE_BAR` (default 0.95), or the
+  engine calling the side price is *not* on. The table is
+  `src/data/strikeSideTable.v1.json` (versioned, with provenance; refit with
+  `scripts/replay15m/research/exportStrikeSideTable.ts`). Never hand-edit
+  cells. Never let it loosen another gate.
 - **`validationPassed` in `canLockCurrentCycle` is pinned two ways** —
   structurally (its exact conjunct set, parsed from source) and behaviourally.
   It has been silently gutted four times; when it is, the gate returns
