@@ -2735,6 +2735,7 @@ async function runMarketEngineTick() {
                 : null);
             if (strikeVal && strikeVal > 0) {
               current15mStrikePrice = strikeVal;
+              strike15mResolved = true;
             }
             const yesAsk = m.yes_ask_dollars
               ? parseFloat(m.yes_ask_dollars)
@@ -3217,7 +3218,8 @@ app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
 });
 let current15mIntervalStart =
   Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
-let current15mStrikePrice = 64100;
+let current15mStrikePrice = 0;
+let strike15mResolved = false;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
 // ============================================================================
@@ -3543,7 +3545,8 @@ function canLockCurrentCycle(livePrice) {
   );
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
-  const allowed = !alreadyLocked && validationPassed;
+  if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
+  const allowed = !alreadyLocked && validationPassed && strike15mResolved;
   const dir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -3965,6 +3968,7 @@ async function checkAndSettle15mCycle(livePrice) {
     const prevIntervalStart = current15mIntervalStart;
     current15mIntervalStart = intervalStart;
     current15mStrikePrice = Math.round(livePrice / 10) * 10;
+    strike15mResolved = true;
     if (prevIntervalStart > 0) {
       const prevSigId = `sig_lock_${prevIntervalStart}`;
       if (!processedSettlements.has(prevSigId)) {
