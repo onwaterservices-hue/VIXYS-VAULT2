@@ -6079,9 +6079,21 @@ const referralHandlers = createReferralHandlers({
     savePersistentStore();
     await persistSingleUser(user);
   },
+  // One referral discount per account: an account that already holds a paid
+  // subscription is not eligible for the referral discount (mirrors the
+  // checkout guard so the client and the checkout agree).
+  isAccountAlreadyPaid: (user) => {
+    const email = String(user?.email || "").trim().toLowerCase();
+    if (!email) return false;
+    const sub = userSubscriptions.get(email);
+    return Boolean(
+      sub && ["ACTIVE", "TRIALING", "PAST_DUE"].includes(String(sub.status || "").toUpperCase()),
+    );
+  },
 });
 
 app.get("/api/referral/me", (req, res) => referralHandlers.me(req, res));
+app.get("/api/referral/my-discount", (req, res) => referralHandlers.myDiscount(req, res));
 app.post("/api/referral/claim-code", (req, res) =>
   referralHandlers.claimCode(req, res),
 );
@@ -9430,64 +9442,53 @@ app.get("/api/stripe/config", (req, res) => {
     paymentLinks: AUTHORITATIVE_STRIPE_LINKS,
   });
 });
-app.post("/api/stripe/validate-promo", (req, res) => {
+// Validate a discount code against STRIPE, not a hardcoded table. The previous
+// version returned valid:true for a fixed set of demo strings AND for anything
+// starting with "REF-"/"PROMO-", so a made-up code showed "15% off applied"
+// on the VIXY page and was then rejected by Stripe at checkout -- the customer
+// paid full price after being told they had a discount. This asks Stripe for a
+// real, active promotion code and reports its real percent_off, or fails.
+app.post("/api/stripe/validate-promo", async (req, res) => {
   const { code } = req.body;
   const cleanCode = (code || "").trim().toUpperCase();
-  const validPromos = {
-    PROMOTER20: {
-      discountPct: 20,
-      promoterName: "Alpha Promoter Network",
-      commissionRatePct: 20,
-      desc: "20% Off Subscription + Promoter Commission Tracked",
-    },
-    VIXY50: {
-      discountPct: 50,
-      promoterName: "Vixy Founding Vault Member",
-      commissionRatePct: 15,
-      desc: "50% First Month Discount",
-    },
-    ALPHA10: {
-      discountPct: 10,
-      promoterName: "Crypto Twitter Partner",
-      commissionRatePct: 15,
-      desc: "10% Lifetime Vault Discount",
-    },
-    "REF-ALEX": {
-      discountPct: 15,
-      promoterName: "Alex Mercer (Top Referrer)",
-      commissionRatePct: 25,
-      desc: "15% Off VIP Referral Tag",
-    },
-    VIP2026: {
-      discountPct: 25,
-      promoterName: "Institutional VIP Access",
-      commissionRatePct: 20,
-      desc: "25% Annual Pass Discount",
-    },
-  };
-  if (validPromos[cleanCode]) {
+  if (!cleanCode || cleanCode.length < 3) {
+    return res.status(400).json({ valid: false, message: "Enter a promo code." });
+  }
+  try {
+    const stripe = getStripe();
+    const list = await stripe.promotionCodes.list({ code: cleanCode, active: true, limit: 1 });
+    const promo = list && list.data && list.data[0];
+    if (!promo || !promo.coupon || promo.coupon.valid === false) {
+      return res.status(400).json({
+        valid: false,
+        message: `"${cleanCode}" isn't an active discount code.`,
+      });
+    }
+    const coupon = promo.coupon;
+    const discountPct = typeof coupon.percent_off === "number" ? coupon.percent_off : null;
+    const amountOff = typeof coupon.amount_off === "number" ? coupon.amount_off : null;
     return res.json({
       valid: true,
       code: cleanCode,
-      ...validPromos[cleanCode],
+      // Real values from Stripe. One of discountPct / amountOff is present.
+      discountPct: discountPct ?? undefined,
+      amountOffCents: amountOff ?? undefined,
+      desc:
+        discountPct != null
+          ? `${discountPct}% off applied at checkout`
+          : amountOff != null
+            ? `$${(amountOff / 100).toFixed(2)} off applied at checkout`
+            : "Discount applied at checkout",
     });
-  }
-  if (cleanCode.startsWith("REF-") || cleanCode.startsWith("PROMO-")) {
-    return res.json({
-      valid: true,
-      code: cleanCode,
-      discountPct: 15,
-      promoterName: `Promoter (${cleanCode})`,
-      commissionRatePct: 20,
-      desc: `15% Discount via Referral Code ${cleanCode}`,
-    });
-  }
-  return res
-    .status(400)
-    .json({
+  } catch (err) {
+    // Fail closed: never claim a discount is valid when we could not confirm it
+    // with Stripe. The buyer can still type the code in Stripe's own box.
+    console.warn("[STRIPE] validate-promo lookup failed:", err?.message || err);
+    return res.status(400).json({
       valid: false,
-      message: `Invalid or expired discount code "${cleanCode}". Try PROMOTER20 or REF-ALEX.`,
+      message: "Couldn't verify that code right now. You can still enter it on the payment page.",
     });
+  }
 });
 const createCheckoutSessionHandler = __name(async (req, res) => {
   if (
@@ -13250,10 +13251,31 @@ timestamp: ${new Date().toISOString()}`);
           // and swallows its own errors. The referrer's bonus must never be
           // able to cost the customer the plan they just paid for.
           try {
-            if (referralCode && referralCode !== "DIRECT") {
+            // The attribution code from the checkout metadata is only present on
+            // the server-API checkout path. The static Payment Link buttons carry
+            // no metadata, so those conversions arrived as "DIRECT" and the
+            // referrer earned nothing -- the "earn" half of Invite to Earn was
+            // dead on the most common path. Fall back to the buyer's DURABLE
+            // attribution (written at signup by /api/referral/attach), so a
+            // referrer is credited regardless of which checkout path was used.
+            let effectiveReferralCode = referralCode;
+            if (!effectiveReferralCode || effectiveReferralCode === "DIRECT") {
+              try {
+                const buyerAttribution = await referralStore.getAttribution(customerEmail);
+                if (buyerAttribution && buyerAttribution.code) {
+                  effectiveReferralCode = buyerAttribution.code;
+                  console.log(
+                    `[REFERRAL] conversion attributed from durable attribution (metadata was DIRECT): ${customerEmail} <- ${effectiveReferralCode}`,
+                  );
+                }
+              } catch (attrErr) {
+                console.warn("[REFERRAL] attribution fallback lookup failed", attrErr);
+              }
+            }
+            if (effectiveReferralCode && effectiveReferralCode !== "DIRECT") {
               const vixyConversion = await referralStore.processConversion({
                 sessionId: session.id,
-                code: referralCode,
+                code: effectiveReferralCode,
                 referredEmail: customerEmail,
                 amountTotal,
                 currency: session.currency || "usd",
@@ -13296,7 +13318,7 @@ timestamp: ${new Date().toISOString()}`);
                 addServerAuditLog(
                   "SYSTEM_REFERRAL",
                   "REFERRAL_BONUS_DAY_GRANTED",
-                  `${vixyConversion.referrerEmail} earned a bonus day from ${vixyConversion.referredEmailMasked} via ${referralCode}`,
+                  `${vixyConversion.referrerEmail} earned a bonus day from ${vixyConversion.referredEmailMasked} via ${effectiveReferralCode}`,
                   "SUCCESS",
                 );
               } else if (

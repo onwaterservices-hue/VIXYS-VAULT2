@@ -64,6 +64,37 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const [appliedPromo, setAppliedPromo] = useState<{ code: string; discountPct: number; promoterName: string; desc: string } | null>(null);
   const [promoStatusMsg, setPromoStatusMsg] = useState<string>('');
   const [isValidatingPromo, setIsValidatingPromo] = useState<boolean>(false);
+  // Server-truth referral discount for THIS account: whether it's eligible and
+  // which shared Stripe promotion code applies the % off at the payment link.
+  // The per-user referral code is attribution only; this is the code Stripe
+  // actually knows. Withheld once the account has converted or already pays.
+  const [referralDiscount, setReferralDiscount] = useState<{ promoCode: string; discountPercent: number; referredByLabel: string | null } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch('/api/referral/my-discount', { credentials: 'include' });
+        if (!r.ok || cancelled) return;
+        const j = await r.json();
+        if (!cancelled && j && j.eligible && j.promoCode) {
+          setReferralDiscount({ promoCode: j.promoCode, discountPercent: j.discountPercent ?? 20, referredByLabel: j.referredByLabel ?? null });
+        } else if (!cancelled) {
+          setReferralDiscount(null);
+        }
+      } catch { /* discount auto-apply is best-effort; manual entry still works */ }
+    })();
+    return () => { cancelled = true; };
+  }, [authState?.user?.email]);
+
+  // Precedence: a code the buyer manually applied/typed wins over the auto
+  // referral code, so someone with a better promoter code isn't downgraded.
+  const effectiveCheckoutPromo = (): string | undefined => {
+    if (appliedPromo?.code) return appliedPromo.code;
+    if (promoCodeInput.trim()) return promoCodeInput.trim();
+    if (referralDiscount?.promoCode) return referralDiscount.promoCode;
+    return undefined;
+  };
 
   const handleExtendMonth = async () => {
     setIsExtendingMonth(true);
@@ -191,7 +222,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     return getStripePaymentUrl(planKey, billingInterval, {
       email: currentUserEmail,
       uid: currentUid,
-      promoCode: appliedPromo?.code || (promoCodeInput.trim() ? promoCodeInput.trim() : undefined),
+      promoCode: effectiveCheckoutPromo(),
     });
   };
 
@@ -300,7 +331,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     const directFallbackUrl = getStripePaymentUrl(planToCheckout, billingInterval, {
       email: currentUserEmail,
       uid: currentUid,
-      promoCode: appliedPromo?.code || (promoCodeInput !== 'PROMOTER20' ? promoCodeInput : undefined),
+      promoCode: effectiveCheckoutPromo(),
     });
 
     if (customStripeUrl) {
@@ -319,8 +350,12 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
         body: JSON.stringify({
           plan: planToCheckout,
           interval: billingInterval,
-          promoCode: appliedPromo?.code || promoCodeInput,
-          referralCode: appliedPromo?.code || promoCodeInput,
+          // promoCode carries the discount (manual code, else the auto referral
+          // promo code). referralCode is attribution ONLY and stays the manual
+          // code -- the server derives real credit from the durable attribution,
+          // so the shared discount code must never be mis-stamped as attribution.
+          promoCode: effectiveCheckoutPromo(),
+          referralCode: appliedPromo?.code || promoCodeInput || undefined,
           userEmail: currentUserEmail,
           uid: currentUid,
           userName: authState?.user?.name,

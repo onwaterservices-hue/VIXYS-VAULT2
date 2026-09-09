@@ -23,6 +23,12 @@ export const REFERRAL_STATS = "referral_stats";
 // customer-typeable promotion code, or anyone gets 20% off with no referrer
 // attached and nobody earns a day.
 export const REFERRAL_COUPON_ID = process.env.REFERRAL_COUPON_ID || "REFER_20";
+// The customer-facing Stripe PROMOTION CODE string (created in the Stripe
+// dashboard, tied to the coupon above, with "Allow promotion codes" enabled on
+// the Payment Links). This is what rides `prefilled_promo_code` on the payment
+// link so a referred friend's discount applies without typing. Defaults to the
+// same string as the coupon id since the owner named the promotion code REFER_20.
+export const REFERRAL_PROMO_CODE = process.env.REFERRAL_PROMO_CODE || REFERRAL_COUPON_ID;
 export const REFERRAL_DISCOUNT_PERCENT = 20;
 export const REFERRAL_BONUS_HOURS = 24;
 export const REFERRAL_DAILY_BONUS_CAP = 5;
