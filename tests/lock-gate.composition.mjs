@@ -387,6 +387,18 @@ if (hi && lo) {
   t.check('flag ON: cites STRIKE_SIDE_UNKNOWN (NO_CYCLE_RANGE)', (unk.g.reasons || []).some((r) => r.includes('STRIKE_SIDE_UNKNOWN') && r.includes('NO_CYCLE_RANGE')));
   const still = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'strike_side')(e); e.latestBtc15mPipeline.lockQuality = 10; });
   t.eq('flag ON never loosens other gates (lockQuality=10 still DENIED)', still.g.allowed, false);
+  // Post-lock observation: once locked, the payload carries the LOCKED side's p
+  // and a PROTECT signal; price on the locked side -> p; crossed -> 1-p.
+  const lockedSame = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'off')(e); e.active15mCycle.isLocked = true; e.active15mCycle.lockedDirection = 'UP'; });
+  const ss1 = lockedSame.env.active15mCycle.lockEligibility.strikeSide;
+  t.eq('locked UP, price above strike -> pLockedSide == p', ss1.pLockedSide, ss1.p);
+  t.eq('locked UP, price above strike -> protectSignal false', ss1.protectSignal, false);
+  const lockedCrossed = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'off')(e); e.active15mCycle.isLocked = true; e.active15mCycle.lockedDirection = 'DOWN'; });
+  const ss2 = lockedCrossed.env.active15mCycle.lockEligibility.strikeSide;
+  t.check('locked DOWN, price above strike -> pLockedSide == 1-p', Math.abs(ss2.pLockedSide - (1 - ss2.p)) < 0.002, `p=${ss2.p} pLocked=${ss2.pLockedSide}`);
+  t.eq('locked DOWN, price above strike (p>=0.95) -> protectSignal true', ss2.protectSignal, true);
+  const notLocked = runGateSpot(720, withRule(hi[0], 'UP', 'off'));
+  t.eq('not locked -> pLockedSide null', notLocked.env.active15mCycle.lockEligibility.strikeSide.pLockedSide, null);
 }
 
 t.section('PART B6: lockEligibility side effect');

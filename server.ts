@@ -3450,7 +3450,7 @@ let active15mCycle = {
 // disagreeing with the side price is on). It can never loosen another gate.
 const VIXY_LOCK_RULE = process.env.VIXY_LOCK_RULE || "off";
 const VIXY_LOCK_RULE_BAR = Math.min(0.999, Math.max(0.5, Number(process.env.VIXY_LOCK_RULE_BAR || 0.95)));
-function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow) {
+function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow, lockedSide = null) {
   const T = (strikeSideTableV1 as any);
   const unknown = (reason) => ({ p: null, n: 0, reason, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR });
   if (!(spot > 0) || !(strike > 0)) return unknown("NO_PRICE_OR_STRIKE");
@@ -3467,7 +3467,13 @@ function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycle
   const vt = T.volTercilesBps; const v = rangeBps < vt.L_below ? "L" : rangeBps < vt.H_atOrAbove ? "M" : "H";
   const key = `${cp}|${d}|${v}`; const cell = T.cells[key];
   if (!cell || cell.p === null) return { p: null, n: cell ? cell.n : 0, reason: "INSUFFICIENT_SAMPLE", key, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
-  return { p: cell.p, n: cell.n, reason: null, key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide: distBps > 0 ? "UP" : "DOWN", tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
+  const currentSide = distBps > 0 ? "UP" : "DOWN";
+  // After a lock, the number that matters is the probability that the LOCKED
+  // side wins, which is p if price is still on that side and 1-p if it has
+  // crossed. Exposed as an observation only (PROTECT research: a locked-side
+  // p below 0.5 caught 40% of losses at 1.8% false alarms with ~120s warning).
+  const pLockedSide = lockedSide === "UP" || lockedSide === "DOWN" ? (lockedSide === currentSide ? cell.p : Math.round((1 - cell.p) * 1000) / 1000) : null;
+  return { p: cell.p, n: cell.n, reason: null, key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide, lockedSide, pLockedSide, protectSignal: pLockedSide !== null ? pLockedSide < 0.5 : null, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
 }
 __name(computeStrikeSideProbability, "computeStrikeSideProbability");
 function canLockCurrentCycle(livePrice) {
@@ -3730,6 +3736,7 @@ function canLockCurrentCycle(livePrice) {
   if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
   const strikeSide = computeStrikeSideProbability(
     livePrice, current15mStrikePrice, effElapsed, active15mCycle.cycleHigh, active15mCycle.cycleLow,
+    active15mCycle.isLocked ? active15mCycle.lockedDirection : null,
   );
   // Flag-gated Layer 5. Off by default; when on it can only add a denial.
   let strikeRuleBlocks = false;
