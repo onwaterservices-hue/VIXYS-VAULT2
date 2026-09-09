@@ -430,6 +430,17 @@ all measured:
    to a $750 / 1.2% move, p ≤ 0.15, or guardian panic — nothing a 15-minute
    contract ever sees. Hence "91%" while lock quality fell 93 → 35 live.
 
+**Harness incidents this session (both fixed, both pinned):** the 21-day trade
+walk died on ECONNRESET (no retry on network errors) and then on OOM (~9M raw
+prints retained before bucketizing). The walker now retries network failures,
+folds pages into buckets immediately, dedupes only against the previous page,
+checkpoints complete hours every 50 pages, and seeks its start cursor by
+binary search on trade_id so a re-run fetches only the missing span (2 hours
+in 113 requests / 35 s). **Also discovered: `tsconfig.json` excludes `scripts/`
+and `tests/`, so `tsc --noEmit` has never type-checked the harness — every
+"TSC=0" on harness edits was vacuous. Runtime runs and the suites are the only
+check; a `tsconfig.scripts.json` is the fix (NEXT).**
+
 ## ★★★★★★ LAYER 5 INSIDE THE REAL GATE — Phase 8 result (7-day trades, 672 identical cycles)
 
 `--lock-rule strike_side` evaluates the strike-side rule as a fourth term of
