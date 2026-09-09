@@ -11,13 +11,58 @@ Board: `VIXY_ENGINE_TASKS.md` · Rules: `CLAUDE.md`
 ## CURRENT STATE
 
 - Branch: `feat/engine-replay-harness`
-- Base: `main` @ `3e31a84`
+- **`origin/main` (`7eea881`) merged in at `bb0f050`.** 44 commits landed on
+  main after this branch was cut from `3e31a84`, including engine changes.
+  Only conflict was `.gitignore` (union). The P0 settlement fix survives the
+  merge; `main` itself still carries the `/api/signal` spot=100 path.
 - `npm run vixy:verify`: **PASS** (5/5 stages, 0 skipped)
-- Tests: 12 files, 502 checks, all passing
-- Engine decision logic: **UNCHANGED from `main`**
+- Tests: 13 files, 581 checks, all passing
+- Engine decision logic on this branch: **identical to `main`@`7eea881`** —
+  no threshold, gate or tier changed here. Additive only: settlement
+  validation, write guard, `feedHealth`, `lockGate`.
 
-Phases A, B, C and D4 are complete. The replay is now trustworthy enough to
-measure with. Phase E (mathematical reconstruction) is in progress.
+Phases A, B, C, D4 complete; C5 reconciled. Phase E in progress.
+
+### CORRECTION to earlier notes
+The original brief's description of `getCalibratedConfidence` with
+`INSUFFICIENT_SAMPLE` at n<15, and server lock tiers EARLY <480s / STANDARD
+480–660s / LATE ≥660s with bars 85/75/68, **was correct** — for `main` at
+`7eea881` (commits `7eea881`, `2deba55`). Earlier notes here and in
+`OVERNIGHT_PROGRESS.md` said none of it existed; they were reading a stale
+base that had not fetched. The brief was right.
+
+### REGRESSION on main — `2deba55` (not fixed here; gate logic is off-limits)
+`withinEntryWindow` was moved to `effElapsed < 780` but the reason check stayed
+at `>= 720`, and `lock15mCycle`'s commit point still refuses `>= 720`. For
+720–779s of every cycle: the gate returns `allowed=true` while pushing
+`ENTRY_WINDOW_EXPIRED (elapsed=Ns >= 780s …)` (false on its face),
+`lockEligibility` reads `eligible=true` with an EXPIRED reason, and the commit
+point refuses the lock anyway, logging `[VIXY_LOCK_WINDOW_REJECTED]` every 3s.
+This is the exact contradiction the comment above the window check says was
+fixed by aligning both to 720. Pinned by name (`REGRESSION-2deba55`) in
+`tests/lock-gate.composition.mjs` and `lock-gate.invariants.mjs` so the suite is
+green on current behaviour and **fails the moment it is fixed**, forcing an
+acknowledged update. Verified adversarially: simulating the fix produces 7+1
+named failures. In replay, 5 of 145 locks fell inside this window.
+
+### `lockGate` on the canonical payload · `lockEligibility` fields
+`2deba55` computed the tier and bars as locals nobody outside the gate could
+see, so the terminal was hardcoding one number. `canLockCurrentCycle` now
+writes `lockTier / minLockQuality / minEvidenceAgreement / minMtfAligned /
+strikeResolved` onto `active15mCycle.lockEligibility` (observation only; no
+decision reads them back), and `/api/vixy/15m/current` exposes them as
+`lockGate`. Top-level `lockTier` remains the legacy binary (SKIP→NONE, else
+STANDARD) — pinned as-is. The lock-quality card reads `lockGate.minLockQuality`
+and shows `Gate threshold unavailable` when absent.
+Verified on the live payload: `{tier:"STANDARD", minLockQuality:75, …,
+reason:"STRIKE_UNRESOLVED"}` on a cold instance. **NOT verified in the rendered
+UI**: the merged build now enforces sign-in (`3d8077d`), which I cannot do.
+
+### Write guard observed blocking a real write
+On this local run with production credentials in `.env`, the guard blocked
+`setDoc:telemetry_observations/obs_1788959340000` and reported
+`reason: "not running inside a deployment (VERCEL unset)"` at
+`/api/live-engine/health`. Phase B working as built.
 
 ---
 
@@ -88,6 +133,35 @@ data, because the three votes use thresholds 0.012 / 0.015 / 0.02 and
 legitimately agree in a quiet market).
 
 ---
+
+## ★ OLD vs NEW ENGINE on identical data (main's engine changes)
+
+Same 3 days, same 1,159,101 trades, same seed. OLD = engine at `3e31a84`;
+NEW = engine at `main`@`7eea881` (adaptive lock schedule, calibration map,
+phantom-strike guard, revived reversal detector, tie-break fix).
+
+```
+                        locks      strike-graded   DIRECTIONAL SKILL     lock time   EARLY/STD/LATE
+OLD (3e31a84)           142/288    93.0%           50.0%  (71/142 ±4.2)   med 465s    72 / 57 / 13
+NEW (main 7eea881)      145/288    92.4%           44.1%  (64/145 ±4.2)   med 534s    38 / 86 / 21
+
+skill by lock tier      EARLY        STANDARD      LATE
+OLD                     55.6% (72)   47.4% (57)    30.8% (13)
+NEW                     50.0% (38)   43.0% (86)    38.1% (21)
+```
+
+- Per cycle: both lock in 131, direction differs in 2; NEW locks later in 34
+  cycles, earlier in 14. Five NEW locks fall in the 720–779s regression window.
+- **Skill declines the later the lock, in both engines.** With a strike frozen
+  at the open, a later lock means price has already moved further and has less
+  room to continue. `2deba55` lowers the bar late and shifts locks toward the
+  worst-performing tier; its stated rationale ("evidence strengthens as the
+  cycle runs") is backwards for forecasting.
+- NEW vs OLD skill difference (−5.9 pts) is ~1.4 SE — not a confident
+  regression, but no evidence of improvement, and directionally consistent
+  with the mechanism.
+- Lock quality ≥90 vs <90: OLD 44.4% (n=9) vs 50.4%; NEW 53.6% (n=28) vs 41.9%.
+  n too small to conclude; noted, not claimed.
 
 ## ★ THE CENTRAL FINDING — the engine has no measurable directional edge
 
@@ -215,7 +289,12 @@ blocked on production read access.
 
 ## NEXT ACTION
 
-Phase C5 is **done** — see THE CENTRAL FINDING above. The harness reconciles
+Phase C5 is **done**; main merged and re-pinned. The most informative signal so
+far is **skill vs lock timing** (EARLY 55.6% → LATE 30.8% on OLD) — the only
+dimension that separates outcomes at all. That is where Phase E3 should start:
+is early-lock skill real (n=72) or an artifact of early locks being taken on
+smaller moves? Then real taker flow from `tradeCache` as the first independent
+candidate feature. Widen the sample first (≈420 requests/day of history). The harness reconciles
 with the live ledger once directional skill is measured strike-independently.
 
 **E3 — ablation.** With a trustworthy replay and a strike-independent metric,

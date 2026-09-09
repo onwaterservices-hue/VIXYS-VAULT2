@@ -102,7 +102,25 @@ change. Recorded so E2 can measure whether it adds independent value.
       source-agnostic observation stream. `--source trades`. — `9e507db`
 - [ ] **D5** Chronological TRAIN / VALIDATION / OUT-OF-SAMPLE split.
 
-## PHASE E — MATHEMATICAL RECONSTRUCTION OF THE CURRENT ENGINE  `[ ]`
+## MERGE — `origin/main` @ `7eea881` merged at `bb0f050`  `[x]`
+
+- [x] 44 commits from main merged; only `.gitignore` conflicted (union).
+- [x] Suites re-pinned to main's engine: adaptive tiers (85/75/68 by
+      effElapsed), `strike15mResolved` term in `allowed`, `getCalibratedConfidence`
+      with `INSUFFICIENT_SAMPLE` at n<15. 13 files / 581 checks.
+- [x] **REGRESSION-2deba55** pinned by name (gate says allowed at 720–779s while
+      the commit point refuses). Not fixed here — gate logic is off-limits.
+      **→ Needs a decision: align both to 720 or both to 780.**
+- [x] `lockGate` exposed on the canonical payload; card reads it.
+- [ ] Verify the tier label in the rendered UI — **BLOCKED: needs sign-in.**
+- [ ] `main` still has the `/api/signal` spot=100 settlement path (this branch
+      removes it). **→ Merge this branch, or cherry-pick `d3df10f`, soon.**
+
+## PHASE E — MATHEMATICAL RECONSTRUCTION OF THE CURRENT ENGINE  `[~]`
+
+- [x] **E0** OLD vs NEW engine on identical trade data (see ENGINE_PROGRESS):
+      skill 50.0% → 44.1%; skill falls with later locks in both; `2deba55`
+      shifts locks later.
 
 - [ ] **E1** Write down what the engine currently computes, exactly.
 - [ ] **E2** Feature-independence audit. Known finding to confirm:

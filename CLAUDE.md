@@ -154,6 +154,15 @@ when a copy of it does.
   with `VIXY_ALLOW_PRODUCTION_WRITES=true`; force off with
   `VIXY_PERSISTENCE_MODE=readonly`. State is visible at
   `/api/live-engine/health` under `persistenceWriteGuard`.
+- **The lock gate is tier-dependent, not flat.** Since `2deba55` on main:
+  EARLY <480s needs lockQuality 85 / agreement 8 / MTF 4; STANDARD 480–659s
+  75 / 6 / 3; LATE ≥660s 68 / 5 / 3. `strike15mResolved` is a separate term
+  in `allowed`. The real applied bar is on the canonical payload as `lockGate`;
+  top-level `lockTier` is a legacy binary and does not reflect it.
+- **Known regression on main (`2deba55`), pinned by name, not fixed:** for
+  720–779s the gate returns `allowed=true` while emitting `ENTRY_WINDOW_EXPIRED`
+  and `lock15mCycle`'s commit point refuses. The tests will FAIL when it is
+  fixed — update them deliberately when you do.
 - **`validationPassed` in `canLockCurrentCycle` is pinned two ways** —
   structurally (its exact conjunct set, parsed from source) and behaviourally.
   It has been silently gutted four times; when it is, the gate returns
