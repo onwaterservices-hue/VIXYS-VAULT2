@@ -3742,6 +3742,30 @@ function canLockCurrentCycle(livePrice) {
     livePrice, current15mStrikePrice, effElapsed, active15mCycle.cycleHigh, active15mCycle.cycleLow,
     active15mCycle.isLocked ? active15mCycle.lockedDirection : null,
   );
+  // ── LAYER 5 SHADOW (observation only — never touches `allowed`) ──────────
+  // While the flag is off, record per cycle what the standalone strike-side
+  // rule would have done: the first evaluation inside the legal entry window
+  // (360–780s, the same bounds the gate enforces) where p >= bar on a definite
+  // side. Attached to the ledger row at settlement for old-vs-new comparison.
+  // Per-instance memory: `ticks` says how much of the cycle this instance saw.
+  try {
+    let sh = shadowL5ByCycle.get(cycleId);
+    if (!sh) {
+      sh = { cycleId, bar: VIXY_LOCK_RULE_BAR, tableVersion: strikeSide.tableVersion ?? null, wouldLock: null, lastEval: null, ticks: 0 };
+      shadowL5ByCycle.set(cycleId, sh);
+      if (shadowL5ByCycle.size > 6) {
+        const oldest = shadowL5ByCycle.keys().next().value;
+        if (oldest !== cycleId) shadowL5ByCycle.delete(oldest);
+      }
+    }
+    sh.ticks += 1;
+    if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
+      sh.lastEval = { atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key: strikeSide.key ?? null };
+      if (!sh.wouldLock && strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780) {
+        sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key: strikeSide.key ?? null };
+      }
+    }
+  } catch {}
   // Flag-gated Layer 5. Off by default; when on it can only add a denial.
   let strikeRuleBlocks = false;
   if (VIXY_LOCK_RULE === "strike_side") {
@@ -4386,6 +4410,14 @@ async function checkAndSettle15mCycle(livePrice) {
             totalHistory >= latestCalibrationState.calibrationMinimumSamples
               ? "ACTIVE"
               : "WARMING_UP";
+          // Attach this instance's Layer 5 shadow record to the settled row
+          // (observation only) so the live old-vs-new comparison rides the
+          // ledger. Missing when another instance settles a cycle it watched.
+          const shSettle = shadowL5ByCycle.get(prevLog.cycleId || `15M-${new Date(prevIntervalStart).toISOString()}`);
+          if (shSettle) {
+            prevLog.shadowL5 = { ...shSettle, engineDecision: prevLog.decision || null, recordedBy: "SHADOW_L5_v1" };
+            shadowL5ByCycle.delete(shSettle.cycleId);
+          }
           let isDuplicate = false;
           try {
             if (
@@ -4466,6 +4498,13 @@ async function checkAndSettle15mCycle(livePrice) {
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
         };
+        // Same shadow attachment for engine SKIPs: this is where the rule and
+        // the engine most often diverge, so the SKIP rows carry it too.
+        const shSkip = shadowL5ByCycle.get(active15mCycle.cycleId);
+        if (shSkip) {
+          skippedLog.shadowL5 = { ...shSkip, engineDecision: "SKIP", recordedBy: "SHADOW_L5_v1" };
+          shadowL5ByCycle.delete(shSkip.cycleId);
+        }
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) {
           persistentSignalLogs.pop();
@@ -16176,9 +16215,10 @@ app.get("/api/whales", async (req, res) => {
     .toUpperCase()
     .replace("USDT", "")
     .replace("-USD", "");
+  const minUSD = Math.max(1e4, Number(req.query.min) || 1e4);
   try {
     const cbRes = await fetchWithTimeout(
-      `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=50`,
+      `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=100`,
     );
     if (cbRes.ok) {
       const trades = await cbRes.json();
@@ -16196,95 +16236,43 @@ app.get("/api/whales", async (req, res) => {
             sizeUSD,
             price: parseFloat(t.price),
             contractPrice: `${rawSymbol} Spot $${parseFloat(t.price).toLocaleString()}`,
-            venue: "Coinbase Pro",
-            confidence: Math.round(88 + Math.min(10, sizeUSD / 5e4)),
-            entityName:
-              sizeUSD > 1e5
-                ? "Institutional Block Router"
-                : "Algorithmic Sweeper",
-            impact:
-              sizeUSD > 2e5 ? "CRITICAL" : sizeUSD > 1e5 ? "EXTREME" : "HIGH",
+            venue: "Coinbase",
+            takerSide: t.side === "sell" ? "BUY" : "SELL",
+            // Labeled deterministic size tier over the observed notional. The
+            // old fields here were fiction: nobody knows the entity behind a
+            // print, and a size-derived number is not a "confidence".
+            sizeTier:
+              sizeUSD >= 1e6 ? "$1M+" : sizeUSD >= 25e4 ? "$250k+" : sizeUSD >= 1e5 ? "$100k+" : "$10k+",
             timestamp: new Date(t.time).getTime(),
           };
         })
-        .filter((t) => t.sizeUSD >= 1e4)
+        .filter((t) => t.sizeUSD >= minUSD)
         .slice(0, 20);
-      if (whaleTrades.length > 0) {
-        return res.json({
-          symbol: rawSymbol,
-          count: whaleTrades.length,
-          orders: whaleTrades,
-          timestamp: Date.now(),
-        });
-      }
+      const buyUSD = whaleTrades.filter((t) => t.takerSide === "BUY").reduce((a, t) => a + t.sizeUSD, 0);
+      const sellUSD = whaleTrades.filter((t) => t.takerSide === "SELL").reduce((a, t) => a + t.sizeUSD, 0);
+      const newestMs = whaleTrades.length ? Math.max(...whaleTrades.map((t) => t.timestamp)) : null;
+      // An empty result is an honest result: no prints above the threshold in
+      // the scanned tape. It is NOT a failure and must never be padded. The
+      // fabricated fallback that used to live below this point (invented
+      // entities, venues and confidences, served with HTTP 200) is gone.
+      return res.json({
+        symbol: rawSymbol,
+        source: "COINBASE_EXCHANGE",
+        count: whaleTrades.length,
+        orders: whaleTrades,
+        thresholdUSD: minUSD,
+        tradesScanned: Array.isArray(trades) ? trades.length : 0,
+        takerBuyUSD: buyUSD,
+        takerSellUSD: sellUSD,
+        takerBuyShare: buyUSD + sellUSD > 0 ? Math.round((buyUSD / (buyUSD + sellUSD)) * 1000) / 1000 : null,
+        lastTradeAgeMs: newestMs !== null ? Math.max(0, Date.now() - newestMs) : null,
+        timestamp: Date.now(),
+      });
     }
-  } catch (err) {}
-  const now = Date.now();
-  const currentPrice = currentBtcPrice || 63900;
-  const fallbackOrders = [
-    {
-      id: `wh-live-${now}-1`,
-      time: "Just now",
-      asset: rawSymbol,
-      action: "BUY_SWEEP",
-      sizeUSD: 248e4,
-      price: currentPrice,
-      contractPrice: `${rawSymbol} Spot $${currentPrice.toLocaleString()}`,
-      venue: "Kalshi",
-      confidence: 94,
-      entityName: "Institutional Volume Cluster #02",
-      impact: "CRITICAL",
-      timestamp: now,
-    },
-    {
-      id: `wh-live-${now}-2`,
-      time: "2 mins ago",
-      asset: rawSymbol,
-      action: "STRIKE_DEFENSE",
-      sizeUSD: 185e4,
-      price: currentPrice - 50,
-      contractPrice: `${rawSymbol} Floor Defense`,
-      venue: "Polymarket",
-      confidence: 91,
-      entityName: "Apex Quant Liquidity #14",
-      impact: "EXTREME",
-      timestamp: now - 12e4,
-    },
-    {
-      id: `wh-live-${now}-3`,
-      time: "5 mins ago",
-      asset: rawSymbol,
-      action: "BUY_SWEEP",
-      sizeUSD: 312e4,
-      price: currentPrice + 20,
-      contractPrice: `${rawSymbol} Spot $${(currentPrice + 20).toLocaleString()}`,
-      venue: "Coinbase Pro",
-      confidence: 95,
-      entityName: "BlackRock Custody Bridge",
-      impact: "CRITICAL",
-      timestamp: now - 3e5,
-    },
-    {
-      id: `wh-live-${now}-4`,
-      time: "8 mins ago",
-      asset: rawSymbol,
-      action: "ICEBERG_ACCUMULATION",
-      sizeUSD: 94e4,
-      price: currentPrice - 30,
-      contractPrice: `${rawSymbol} Iceberg Bid`,
-      venue: "Derive",
-      confidence: 89,
-      entityName: "Satoshi Era Cluster #089",
-      impact: "HIGH",
-      timestamp: now - 48e4,
-    },
-  ];
-  res.json({
-    symbol: rawSymbol,
-    count: fallbackOrders.length,
-    orders: fallbackOrders,
-    timestamp: now,
-  });
+    return res.status(503).json({ error: "WHALES_UNAVAILABLE", source: "COINBASE_EXCHANGE", status: cbRes.status });
+  } catch (err) {
+    return res.status(503).json({ error: "WHALES_UNAVAILABLE", source: "COINBASE_EXCHANGE", reason: String(err?.message || err).slice(0, 120) });
+  }
 });
 app.get("/api/orderflow", async (req, res) => {
   const rawSymbol = (req.query.asset || "BTC")
@@ -17357,6 +17345,10 @@ let lastLoggedCycleHash = "";
 let lastLoggedLockMonitorHash = "";
 let lastHeartbeatLogTs = 0;
 let lastLockRowAssertMs = 0;
+// Layer 5 shadow records: cycleId -> what the standalone strike-side rule
+// would have done this cycle, per instance. Observation only; attached to the
+// ledger row at settlement so old-vs-new runs live while the flag stays off.
+const shadowL5ByCycle = new Map();
 let wssClientsCount = 0;
 const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];

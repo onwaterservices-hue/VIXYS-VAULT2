@@ -114,6 +114,47 @@ Verified: tsc clean, 20/20 test files, `npm run build` clean (vite + server.cjs)
 Note: `b865a47` (trade walker retry/checkpoint) landed from the parallel
 ingestion session; the 21-day trade ingestion continues there.
 
+### SESSION 4b — whale tracker made real + Layer 5 shadow recorder (same branch)
+
+- **`/api/whales` is now honest**: fabricated 4-row fallback deleted (it was
+  serving "BlackRock Custody Bridge" etc. with HTTP 200 — observed live on
+  production for `?asset=ETH` at 15:59Z); invented per-row `confidence` /
+  `entityName` / `impact` removed; real rows carry `takerSide` and a labeled
+  `sizeTier`; venue failure → 503 `WHALES_UNAVAILABLE`; empty is returned as
+  empty with `thresholdUSD` / `tradesScanned` / `takerBuyShare` /
+  `lastTradeAgeMs`; `?min=` threshold param; tape deepened to 100 trades.
+- **`WhaleTrackerView.tsx` rewritten on real data**: polls `/api/whales` +
+  `/api/radar` every 5s (BTC/ETH/SOL; ALL merges the three), renders real
+  prints (taker side, venue, computed relative time), RESTING BOOK DEPTH from
+  the real L2 (explicitly "not aggressor flow", never "defense"), 15M cycle
+  context (spot vs open strike, observation only), and honest
+  LOADING/UNAVAILABLE/empty states. Deleted: `INITIAL_WHALE_ORDERS`,
+  `STRIKE_WALLS` ($64k era), `TOP_WHALE_ENTITIES` (fake win rates),
+  "+$42.1M" volume pad, static "89% BULL DEFENSE", "250ms BRIDGE LATENCY",
+  "dark pool" claims, NVDA/SPY/TSLA pills (no real feed).
+- **`WhaleBrain.tsx`**: no more invented default "-$0.09M SOLD" sweep,
+  "DARK POOL RADAR / 12 DARK SCANS" badges, hardcoded "-1m" timestamp, or
+  impact-derived confidence; shows the newest real print or an honest
+  waiting/degraded state.
+- **Tests**: `whale-components.characterization.mjs` (23 checks) pins all of
+  the above out permanently; `radar-endpoint.characterization.mjs` re-pinned
+  from "fabrications AS-IS" to the honest contract (23 checks). 21/21 files.
+- **Layer 5 SHADOW RECORDER (observation only)**: `canLockCurrentCycle` now
+  records per cycle the first in-window (360–780s) evaluation where the
+  standalone rule clears the bar (`shadowL5ByCycle`), and settlement/skip
+  rollover attaches it to the persisted ledger row as `shadowL5`
+  (`recordedBy: SHADOW_L5_v1`, with `ticks` = instance coverage, engine
+  decision alongside). With the flag off this yields the live old-vs-new
+  horse race on real cycles, riding the fixed persistence path.
+- **`L5_FALSIFICATION_MISSION.md`** written: the next research session's
+  brief — attack the 97.6% (untouched final OOS on the 21-day data, threshold
+  perturbation, dimension ablation, UP/DOWN splits, bootstrap CIs, regime
+  slices on trades, shadow-vs-replay reconciliation, Kalshi implied price) —
+  before any promotion decision. Flag stays off throughout.
+- PR #28 merge attempts (gh CLI and the GitHub UI via browser) are blocked by
+  the permission classifier in every form — **the owner must click merge**;
+  Vercel auto-deploys main via the GitHub integration.
+
 ### CORRECTION to earlier notes
 The original brief's description of `getCalibratedConfidence` with
 `INSUFFICIENT_SAMPLE` at n<15, and server lock tiers EARLY <480s / STANDARD
