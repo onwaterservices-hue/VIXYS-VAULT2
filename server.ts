@@ -15985,6 +15985,67 @@ app.get("/api/signal/backtest-replay", (req, res) => {
     sampleCycles: cycleDetails.slice(0, 15),
   });
 });
+// ----------------------------------------------------------------------------
+// /api/radar -- REAL data for the ORDERBOOK & LIQUIDITY RADAR.
+// ----------------------------------------------------------------------------
+// The radar component in production drew its depth ladder from sin/cos of the
+// spot price and its whale tape from Math.random(), with the buy/sell skew
+// generated FROM the engine's own direction and then shown to users as
+// corroborating order flow. This endpoint replaces every one of those with an
+// observed value from Coinbase Exchange, or an explicit failure. Nothing here
+// is estimated, decorated or defaulted.
+//
+// Aggressor side: Coinbase reports `side` as the MAKER side. A "sell" maker
+// means the taker BOUGHT (up-tick); a "buy" maker means the taker SOLD. The
+// tape reports takerSide accordingly. (/api/whales below had this inverted.)
+const RADAR_WHALE_MIN_USD = 1e4;
+app.get("/api/radar", async (req, res) => {
+  const rawSymbol = String(req.query.asset || "BTC").toUpperCase().replace("USDT", "").replace("-USD", "");
+  const t0 = Date.now();
+  try {
+    const [bookRes, tradesRes] = await Promise.all([
+      fetchWithTimeout(`https://api.exchange.coinbase.com/products/${rawSymbol}-USD/book?level=2`),
+      fetchWithTimeout(`https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=100`),
+    ]);
+    if (!bookRes.ok || !tradesRes.ok) {
+      return res.status(503).json({ error: "RADAR_UNAVAILABLE", book: bookRes.ok, trades: tradesRes.ok, source: "COINBASE_EXCHANGE" });
+    }
+    const book = await bookRes.json();
+    const trades = await tradesRes.json();
+    const level = (rows, n) => { let cum = 0; return rows.slice(0, n).map((r) => { const price = parseFloat(r[0]), size = parseFloat(r[1]); cum += size; return { price, size, cumulative: Math.round(cum * 1e4) / 1e4 }; }); };
+    const bids = level(book.bids || [], 8), asks = level(book.asks || [], 8);
+    const depth = (rows, n) => rows.slice(0, n).reduce((a, r) => a + parseFloat(r[1]), 0);
+    const bidDepthBTC = Math.round(depth(book.bids || [], 30) * 1e3) / 1e3;
+    const askDepthBTC = Math.round(depth(book.asks || [], 30) * 1e3) / 1e3;
+    const tape = (Array.isArray(trades) ? trades : [])
+      .map((t) => { const price = parseFloat(t.price), size = parseFloat(t.size); return { tradeId: t.trade_id, timeMs: Date.parse(t.time), price, size, usd: Math.round(price * size), takerSide: t.side === "sell" ? "BUY" : "SELL", venue: "COINBASE" }; })
+      .filter((t) => Number.isFinite(t.price) && Number.isFinite(t.size));
+    let takerBuyBTC = 0, takerSellBTC = 0;
+    for (const t of tape) { if (t.takerSide === "BUY") takerBuyBTC += t.size; else takerSellBTC += t.size; }
+    const whales = tape.filter((t) => t.usd >= RADAR_WHALE_MIN_USD).slice(0, 12);
+    const newest = tape.length ? Math.max(...tape.map((t) => t.timeMs)) : null;
+    return res.json({
+      symbol: rawSymbol, source: "COINBASE_EXCHANGE", fetchedAt: Date.now(), fetchMs: Date.now() - t0,
+      book: {
+        bids, asks,
+        bestBid: bids[0]?.price ?? null, bestAsk: asks[0]?.price ?? null,
+        spreadUSD: bids[0] && asks[0] ? Math.round((asks[0].price - bids[0].price) * 100) / 100 : null,
+        bidDepthBTC, askDepthBTC,
+        ratio: askDepthBTC > 0 ? Math.round((bidDepthBTC / askDepthBTC) * 100) / 100 : null,
+        levelsRead: { bids: Math.min(30, (book.bids || []).length), asks: Math.min(30, (book.asks || []).length) },
+      },
+      tape: whales,
+      skew: {
+        window: { trades: tape.length, oldestMs: tape.length ? Math.min(...tape.map((t) => t.timeMs)) : null, newestMs: newest },
+        takerBuyBTC: Math.round(takerBuyBTC * 1e4) / 1e4, takerSellBTC: Math.round(takerSellBTC * 1e4) / 1e4,
+        takerBuyShare: takerBuyBTC + takerSellBTC > 0 ? Math.round((takerBuyBTC / (takerBuyBTC + takerSellBTC)) * 1000) / 1000 : null,
+      },
+      lastTradeAgeMs: newest ? Math.max(0, Date.now() - newest) : null,
+    });
+  } catch (err) {
+    return res.status(503).json({ error: "RADAR_UNAVAILABLE", source: "COINBASE_EXCHANGE", reason: String(err?.message || err).slice(0, 120) });
+  }
+});
 app.get("/api/whales", async (req, res) => {
   const rawSymbol = (req.query.asset || "BTC")
     .toUpperCase()
@@ -16003,7 +16064,10 @@ app.get("/api/whales", async (req, res) => {
             id: `wh-${t.trade_id}`,
             time: new Date(t.time).toLocaleTimeString(),
             asset: rawSymbol,
-            action: t.side === "buy" ? "BUY_SWEEP" : "SELL_DUMP",
+            // Coinbase `side` is the MAKER side: a "buy" maker means the taker
+            // SOLD. This previously read `t.side === "buy" ? "BUY_SWEEP"`, i.e.
+            // every print was labelled with the wrong aggressor.
+            action: t.side === "sell" ? "BUY_SWEEP" : "SELL_DUMP",
             sizeUSD,
             price: parseFloat(t.price),
             contractPrice: `${rawSymbol} Spot $${parseFloat(t.price).toLocaleString()}`,
