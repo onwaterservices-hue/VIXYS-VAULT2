@@ -287,6 +287,42 @@ blocked on production read access.
 
 ---
 
+## SESSION 3 — proving the candidate (in progress)
+
+**Production safety (merged into PR #28, awaiting merge click):** the mid-cycle
+NO_TRADE writer persisted finished-looking SKIP rows with future `resolvedAt`
+and the live spot as "settlement" — observed live (14:15 cycle: ledger SKIP
+resolved "14:30:00" while another instance was LOCKED_UP 86%). Now: mid-cycle
+marker only; rollover persists a SKIP only if no lock row exists (memory, then
+shared ledger; fails closed). Fabricated skip fields removed. `a5ad411`.
+Entry window aligned at 780 everywhere; the regression pins fired as designed
+and were replaced. `1f6186e`.
+
+**Item C — do intracycle engine/price features add information beyond the
+table?** Stacked logistic on logit(p_table) + features, train first half /
+test second half (`incrementalValue.ts`):
+```
+                         27d candles (2,591 cyc)        7d trades (671 cyc)
+TABLE (Layer 5 base)     log-loss .4634  AUC .724       .4835  AUC .654
+TABLE+ENGINE             Δ −0.0009  (noise)             Δ −0.0058  AUC .694
+TABLE+PRICE              Δ −0.0002  (noise)             Δ −0.0023
+ENGINE only              Δ +0.0410  (far worse)         Δ +0.0143
+```
+At the large sample the engine's features add nothing; at 7 days there is a
+hint (bar-0.95 locks 103 at 98.1% vs table's 165 at 93.3%). Verdict pending
+the 21-day trade data. Provisional: **no proven incremental value.**
+
+**Item 6/E — post-lock behaviour** (`postLock.ts`, rule locks at p≥0.95, test
+half): candles 761 locks 96.7%; price crosses back over the strike in 3.0% of
+cycles → those win 56.5%, the rest 98.0%. A PROTECT signal (table p for the
+locked side < 0.5 at a later checkpoint) catches 40% of losses with 1.8%
+false alarms and a median 120s of warning (trades: 1/2 losses, 0 false
+alarms). The table never reaches 0.95 before 300s; 300–479s locks win 93.8%
+(n=16). So: early "exceptionally strong" locks are rare and slightly weaker;
+the right architecture re-evaluates p every checkpoint after the lock and
+surfaces PROTECT — today's engine freezes `lockedConfidence` at lock and only
+reacts to a $750 / 1.2% move or a probability collapse to ≤0.15.
+
 ## ★★★★★★ LAYER 5 INSIDE THE REAL GATE — Phase 8 result (7-day trades, 672 identical cycles)
 
 `--lock-rule strike_side` evaluates the strike-side rule as a fourth term of
