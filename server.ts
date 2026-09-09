@@ -9472,10 +9472,16 @@ app.post("/api/stripe/validate-promo", async (req, res) => {
     if (promo.active === false) {
       return res.status(400).json({ valid: false, message: `"${cleanCode}" is inactive right now.` });
     }
-    if (!promo.coupon || promo.coupon.valid === false) {
-      return res.status(400).json({ valid: false, message: `"${cleanCode}" isn't an active discount code.` });
+    // The promotion code exists and is active. Stripe itself enforces the
+    // coupon's validity at checkout (verified live: REFER_20 applied -20% on a
+    // $24 plan), so we do NOT reject here on coupon.valid -- the list response's
+    // nested coupon can be partial, which was producing false negatives. Resolve
+    // the coupon (retrieve it if the list gave only an id) to surface the real %.
+    let coupon: any = promo.coupon;
+    if (typeof coupon === "string") {
+      try { coupon = await stripe.coupons.retrieve(coupon); } catch { coupon = null; }
     }
-    const coupon = promo.coupon;
+    coupon = coupon || {};
     const discountPct = typeof coupon.percent_off === "number" ? coupon.percent_off : null;
     const amountOff = typeof coupon.amount_off === "number" ? coupon.amount_off : null;
     return res.json({
