@@ -13,11 +13,11 @@ Board: `VIXY_ENGINE_TASKS.md` · Rules: `CLAUDE.md`
 - Branch: `feat/engine-replay-harness`
 - Base: `main` @ `3e31a84`
 - `npm run vixy:verify`: **PASS** (5/5 stages, 0 skipped)
-- Tests: 11 files, 480 checks, all passing
+- Tests: 12 files, 502 checks, all passing
 - Engine decision logic: **UNCHANGED from `main`**
 
-Phases A and B are complete. Phase C (trade-level data) is next and is the
-gate on all predictive work.
+Phases A, B, C and D4 are complete. The replay is now trustworthy enough to
+measure with. Phase E (mathematical reconstruction) is in progress.
 
 ---
 
@@ -57,23 +57,35 @@ cannot write. Production is unaffected because production always has `VERCEL`.
 
 ---
 
-## THE CENTRAL BLOCKER — read before trusting any replay number
+## THE CENTRAL BLOCKER — RESOLVED (Phase C)
 
-The 1-minute replay reports **96.8%** over 30 days against a live ledger of
-**49.5%**. The harness is wrong, and the cause is measured, not guessed:
+The 1-minute replay reported **96.8%** over 30 days against a live ledger of
+**49.5%**. Cause, measured rather than guessed: with candles 60s apart,
+`getPriceAtAgo(15)`, `(30)` and `(60)` all resolve to the same previous-minute
+price, so three of the engine's five timeframe votes carry one number. That
+inflates `alignedCount` → `calibratedConfidencePct` → `lockQuality`, which is
+why 44 of 62 replay locks sat at the confidence cap of 96 while production's
+ledger has nothing above 95.
 
-With candles 60s apart, `getPriceAtAgo(15)`, `(30)` and `(60)` all resolve to
-the same previous-minute price. Three of the engine's five timeframe votes
-therefore carry one number — on **85.1%** of 43,199 simulated ticks. That
-inflates `multiTimeframeAlignment.alignedCount`, which inflates
-`calibratedConfidencePct` and `lockQuality`, which is why 44 of 62 replay locks
-sit at the confidence cap of 96 while production's ledger has nothing above 95.
+Fixed by ingesting real trade prints at production's cadence. Identical 2-hour
+window, same seed:
 
-Inspecting the locks confirms it end to end: in every one, price was already
-$134–$574 clear of the strike at lock time and simply stayed there.
+```
+                          candles          trades (3s)
+ticks simulated           120              2400
+lookback COLLAPSE         120/120  100%    58/2400   2.4%
+short-TF votes equal      85%              40.3%
+```
 
-**Do not tune the engine against 1-minute replay output.** Phase C exists to
-remove this.
+The residual 2.4% is genuine flat-price stretches.
+
+**Always run `--source trades`.** `--source candles` still exists for
+comparison and prints a warning not to quote its win rate.
+
+Note the harness now separates the DEFECT (lookbacks unresolvable — the real
+measure) from the SYMPTOM (equal votes, which never reaches 0 even with perfect
+data, because the three votes use thresholds 0.012 / 0.015 / 0.02 and
+legitimately agree in a quiet market).
 
 ---
 
@@ -99,11 +111,20 @@ blocked on production read access.
 
 ## KNOWN DEFECTS NOT YET FIXED
 
-1. **`currentBullVolumePct` is not order flow.** It is
-   `min(90, max(10, round(50 + moneynessPct*25 + intervalMomentum*15)))` — a
-   pure function of spot vs strike — yet drives an "Order Flow" evidence
-   family and displays as `Taker: X% Bull`. Momentum likely corroborates
-   itself. Leading hypothesis for the calibration inversion. (Phase E2)
+1. **`currentBullVolumePct` is not order flow.** PROVEN, `b10d3fa`:
+   `min(90, max(10, round(50 + moneynessPct*25 + intervalMomentum*15)))`.
+   `intervalMomentum` is `moneynessPct` rounded to 2dp — the same quantity, not
+   a second signal — and **Spearman(moneyness, bullVolPct) = 1.0000 exactly**.
+   Yet it renders as `Taker: X% Bull | Delta: N BTC` and drives
+   `bidAskImbalancePct`. The one external input (`open`, from Binance's 24h
+   ticker) is computed, clamped, and never read again — a 21% different open
+   changes nothing. The clamp to [10,90] also makes +$800 and +$8000 above the
+   strike identical.
+   **Hypothesis for E3 (not yet proven):** a cycle merely far from its strike
+   scores as though independent sources agreed, so confidence rises on one
+   fact counted repeatedly. Leading candidate for the calibration inversion.
+   Real taker buy/sell volume is now available from `tradeCache` to test
+   whether genuine order flow adds anything the derived figure does not.
 2. **Five dead conjuncts in `validationPassed`.** `algorithm`,
    `authoritativeState`, `vixyWebSocket`, `calibrationComplete`,
    `analysisComplete` are all `const x = true`. `calibrationComplete` still
@@ -138,7 +159,15 @@ blocked on production read access.
 
 ## NEXT ACTION
 
-**Phase C1** — trade-level ingestion from Coinbase
-`/products/BTC-USD/trades`, cached to disk, same offline/deterministic contract
-as the candle cache. Then C2 (aggregate to ~3s observations), C4 (show the
-collapse rate fall), C5 (reconcile against the baseline).
+**Phase C5** — reconcile the trade-level replay against the live baseline over
+a multi-day window. Investigate divergence; do not tune it away. Remaining
+known divergences from production: strike (replay uses `round(spot/10)*10`,
+production uses the Kalshi `floor_strike`), the seeded PRNG, and
+`crossAssetPen` fed 0.
+
+Then **E3** — ablation: which components actually carry predictive value?
+Then **D5** — chronological TRAIN / VALIDATION / OUT-OF-SAMPLE split.
+
+Ingestion cost, measured: ~4.9 trades/sec, ~420k/day, 1000 trades per request,
+so ~420 requests/day of history walking back from now. 3 days ≈ 1150 requests
+≈ 7 minutes.
