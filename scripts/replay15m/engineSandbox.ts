@@ -52,6 +52,10 @@ export interface SandboxOptions {
    * Phase 8 requires, without checking anything out.
    */
   engineSourcePath?: string;
+  /** Layer 5 strike-side rule: 'off' (default) or 'strike_side'. */
+  lockRule?: 'off' | 'strike_side';
+  /** Bar for the rule (default 0.95). */
+  lockRuleBar?: number;
 }
 
 export interface EngineSandbox {
@@ -102,6 +106,12 @@ export function buildEngineSandbox(repoRoot: string, opts: SandboxOptions = {}):
     '__name(canLockCurrentCycle',
     'canLockCurrentCycle',
   );
+  // Layer 5 helper (absent in engines before it existed -- then a stub is
+  // declared so older gates, which never call it, still evaluate).
+  const helperSrc = src.includes('function computeStrikeSideProbability(')
+    ? sliceBetween(src, 'function computeStrikeSideProbability(', '__name(computeStrikeSideProbability', 'computeStrikeSideProbability').replace('(strikeSideTableV1 as any)', 'strikeSideTableV1')
+    : 'function computeStrikeSideProbability() { return { p: null, n: 0, reason: "NO_LAYER5" }; }';
+  const strikeSideTable = JSON.parse(readFileSync(join(repoRoot, 'src', 'data', 'strikeSideTable.v1.json'), 'utf8'));
   // The block in runMarketEngineTick that turns a pipeline result into the
   // engine's directional state (currentDirection / persistenceSeconds / ...).
   // This is where the directional-bias fix lives, so it must be the real one.
@@ -165,6 +175,11 @@ let current15mStrikePrice = 0;
 // live strike. In replay every cycle is given its strike at beginCycle, so the
 // faithful value is true. (It is set false only to simulate a cold instance.)
 let strike15mResolved = true;
+// Layer 5 (strike-side rule) inputs. Off unless the harness is asked to test it.
+const VIXY_LOCK_RULE = __LOCK_RULE__;
+const VIXY_LOCK_RULE_BAR = __LOCK_RULE_BAR__;
+const strikeSideTableV1 = __STRIKE_SIDE_TABLE__;
+${helperSrc}
 let currentBullVolumePct = 50;
 let currentMomentum = 0;
 let currentConfidence = 50;
@@ -243,6 +258,7 @@ return {
       status: "ACTIVE", stage: "OBSERVING", qualificationStatus: "PENDING",
       protectionStatus: "WATCH",
       isCriticallyInvalidated: false,
+      cycleHigh: 0, cycleLow: 0,
     };
     current15mStrikePrice = strike;
     currentDirection = "NEUTRAL";
@@ -284,7 +300,8 @@ return {
 };
 `;
 
-  const factory = new Function('__SEEDED_RANDOM_FN__', body.replace('__SEEDED_RANDOM__', '__SEEDED_RANDOM_FN__'));
-  const api = factory(mulberry32(opts.seed ?? 1));
+  const factory = new Function('__SEEDED_RANDOM_FN__', '__LOCK_RULE__', '__LOCK_RULE_BAR__', '__STRIKE_SIDE_TABLE__',
+    body.replace('__SEEDED_RANDOM__', '__SEEDED_RANDOM_FN__'));
+  const api = factory(mulberry32(opts.seed ?? 1), opts.lockRule ?? 'off', opts.lockRuleBar ?? 0.95, strikeSideTable);
   return { ...api, provenance };
 }

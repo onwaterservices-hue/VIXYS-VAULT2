@@ -27,7 +27,7 @@
 // These tests document CURRENT behaviour, including behaviour that is wrong.
 // They are not aspirational. Where the shipped code is doing something
 // indefensible it is pinned with a comment saying so, rather than fixed here.
-import { serverSrc, extractFn, sliceBetween, createHarness } from './_engineSource.mjs';
+import { serverSrc, extractFn, sliceBetween, createHarness, buildStrikeSideHelper, readRepoFile } from './_engineSource.mjs';
 
 const t = createHarness('lock-gate.composition');
 const gateSrc = extractFn('canLockCurrentCycle', 'function canLockCurrentCycle(livePrice)');
@@ -86,8 +86,12 @@ t.check('no unpinned conjunct added to validationPassed', added.length === 0, `A
 // regression made `allowed` ignore the lock ledger entirely.
 // ea05da9 on main: a cold instance that has not yet received a live strike may
 // not lock, whatever the other conditions say.
-t.check('allowed = !alreadyLocked && validationPassed && strike15mResolved',
-  /const allowed = !alreadyLocked && validationPassed && strike15mResolved;/.test(gateSrc));
+// Layer 5 (strike-side rule) adds a fourth term that can only DENY, and only
+// when VIXY_LOCK_RULE=strike_side. With the flag off it is always false.
+t.check('allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks',
+  /const allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;/.test(gateSrc));
+t.check('strikeRuleBlocks is only ever set inside the flag check',
+  (gateSrc.match(/strikeRuleBlocks = true/g) || []).length === 3 && /if \(VIXY_LOCK_RULE === "strike_side"\)/.test(gateSrc));
 t.check('STRIKE_UNRESOLVED reason is emitted when the strike is unresolved',
   gateSrc.includes('reasons.push("STRIKE_UNRESOLVED'));
 
@@ -165,6 +169,12 @@ function makeEnv(elapsedSec, mutate) {
     latestCrossAssetContext: { state: 'ALIGNED', riskPenalty: 0, directionalAgreementRatio: 1 },
     // ea05da9 on main: a cold instance with no live strike may not lock.
     strike15mResolved: true,
+    // Layer 5 inputs. Flag OFF by default so every case above pins the
+    // unchanged behaviour; the flag-on section below overrides these.
+    VIXY_LOCK_RULE: 'off',
+    VIXY_LOCK_RULE_BAR: 0.95,
+    current15mStrikePrice: 64000,
+    computeStrikeSideProbability: buildStrikeSideHelper('off', 0.95),
     lockedCycleIds: new Set(),
   };
   if (mutate) mutate(env);
@@ -330,6 +340,53 @@ t.section('PART B5: effElapsed prefers cycleObservationDuration over wall clock'
 // its floor without the wall clock agreeing.
 const gObs = runGate(100, (e) => { e.active15mCycle.cycleObservationDuration = 400; });
 t.eq('elapsed=100s but cycleObservationDuration=400 -> ALLOWED', gObs.allowed, true);
+
+t.section('PART B7: Layer 5 strike-side rule -- OFF changes nothing, ON can only deny');
+const table = JSON.parse(readRepoFile('src/data/strikeSideTable.v1.json'));
+// Pick real cells from the table: one at 720s with p >= 0.95 (any vol bin) and
+// one at 360s with p < 0.95. The env then reproduces that cell's inputs.
+const cellsAt = (cp) => Object.entries(table.cells).filter(([k, c]) => k.startsWith(`${cp}|`) && c.p !== null);
+const hi = cellsAt(720).find(([, c]) => c.p >= 0.95), lo = cellsAt(360).find(([, c]) => c.p < 0.95);
+t.check('table has a >=0.95 cell at 720s and a <0.95 cell at 360s', Boolean(hi && lo), JSON.stringify({ hi, lo }));
+const binMid = (i) => { const [a, b] = table.distBinsBps[i]; return (a + (b ?? a + 20)) / 2; };
+const rangeFor = (v) => (v === 'L' ? table.volTercilesBps.L_below / 2 : v === 'M' ? (table.volTercilesBps.L_below + table.volTercilesBps.H_atOrAbove) / 2 : table.volTercilesBps.H_atOrAbove * 2);
+const withRule = (cellKey, dir, rule, bar = 0.95) => (e) => {
+  const [, binStr, vol] = cellKey.split('|'); const bps = binMid(Number(binStr)); const range = rangeFor(vol);
+  e.VIXY_LOCK_RULE = rule; e.VIXY_LOCK_RULE_BAR = bar;
+  e.computeStrikeSideProbability = buildStrikeSideHelper(rule, bar);
+  e.current15mStrikePrice = 64000;
+  const spot = 64000 * (1 + bps / 1e4);
+  e.active15mCycle.cycleLow = 64000; e.active15mCycle.cycleHigh = Math.max(spot, 64000 * (1 + range / 1e4));
+  e.currentDirection = dir;
+  e.active15mCycle.recentObservations = e.active15mCycle.recentObservations.map((o) => ({ ...o, candidateDir: dir }));
+  e.__spot = spot;
+};
+function runGateSpot(secs, mutate) {
+  const env = makeEnv(secs, mutate); const spot = env.__spot; delete env.__spot;
+  const keys = Object.keys(env);
+  const g = new Function(...keys, `${gateSrc}; return canLockCurrentCycle(${spot});`)(...keys.map((k) => env[k]));
+  return { g, env };
+}
+if (hi && lo) {
+  const off = runGateSpot(360, withRule(lo[0], 'UP', 'off'));
+  t.eq('flag OFF: lock ALLOWED even where p < bar', off.g.allowed, true);
+  t.check('flag OFF: strikeSide is still OBSERVED on lockEligibility', typeof off.env.active15mCycle.lockEligibility.strikeSide?.p === 'number');
+  t.eq('flag OFF: lockRule reported as off', off.env.active15mCycle.lockEligibility.lockRule, 'off');
+  const below = runGateSpot(360, withRule(lo[0], 'UP', 'strike_side'));
+  t.eq('flag ON: p < bar -> DENIED', below.g.allowed, false);
+  t.check('flag ON: cites STRIKE_SIDE_BELOW_BAR with the cell key', (below.g.reasons || []).some((r) => r.includes('STRIKE_SIDE_BELOW_BAR') && r.includes(lo[0])), (below.g.reasons || []).join('|'));
+  const okRun = runGateSpot(720, withRule(hi[0], 'UP', 'strike_side'));
+  t.eq('flag ON: p >= bar and engine on the current side -> ALLOWED', okRun.g.allowed, true);
+  t.eq('flag ON: observation carries the cell used', okRun.env.active15mCycle.lockEligibility.strikeSide.key, hi[0]);
+  const dis = runGateSpot(720, withRule(hi[0], 'DOWN', 'strike_side'));
+  t.eq('flag ON: engine against the current side -> DENIED', dis.g.allowed, false);
+  t.check('flag ON: cites STRIKE_SIDE_DISAGREES', (dis.g.reasons || []).some((r) => r.includes('STRIKE_SIDE_DISAGREES')));
+  const unk = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'strike_side')(e); e.active15mCycle.cycleHigh = 0; e.active15mCycle.cycleLow = 0; });
+  t.eq('flag ON: p unknown -> DENIED (fail closed)', unk.g.allowed, false);
+  t.check('flag ON: cites STRIKE_SIDE_UNKNOWN (NO_CYCLE_RANGE)', (unk.g.reasons || []).some((r) => r.includes('STRIKE_SIDE_UNKNOWN') && r.includes('NO_CYCLE_RANGE')));
+  const still = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'strike_side')(e); e.latestBtc15mPipeline.lockQuality = 10; });
+  t.eq('flag ON never loosens other gates (lockQuality=10 still DENIED)', still.g.allowed, false);
+}
 
 t.section('PART B6: lockEligibility side effect');
 // canLockCurrentCycle MUTATES active15mCycle.lockEligibility as a side effect.

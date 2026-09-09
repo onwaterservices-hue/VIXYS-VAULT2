@@ -95,6 +95,9 @@ const ENGINE_SOURCE = args['engine-source'] ? resolve(String(args['engine-source
 // after the cycle closes. One completed cycle therefore yields ~14 labelled
 // samples instead of one. Nothing here feeds back into the decision.
 const SNIPPETS_PATH = args.snippets ? resolve(String(args.snippets)) : null;
+// --lock-rule strike_side [--bar 0.95]: evaluate Layer 5 INSIDE the real gate.
+const LOCK_RULE: 'off' | 'strike_side' = args['lock-rule'] === 'strike_side' ? 'strike_side' : 'off';
+const LOCK_RULE_BAR = args.bar ? Number(args.bar) : 0.95;
 const SNIPPET_SECS = [60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840];
 const MIN_COVERAGE = args['min-coverage'] ? Number(args['min-coverage']) : 12; // of 15 minutes
 
@@ -265,7 +268,8 @@ async function main() {
   }
 
   // --- replay ---
-  const sandbox = buildEngineSandbox(ROOT, { seed: SEED, engineSourcePath: ENGINE_SOURCE });
+  const sandbox = buildEngineSandbox(ROOT, { seed: SEED, engineSourcePath: ENGINE_SOURCE, lockRule: LOCK_RULE, lockRuleBar: LOCK_RULE_BAR });
+  if (LOCK_RULE !== 'off') console.log(`lock rule  : ${LOCK_RULE} bar=${LOCK_RULE_BAR} (Layer 5 evaluated inside the real gate)`);
   if (ENGINE_SOURCE) console.log(`engine src : ${ENGINE_SOURCE}  (NOT the working tree)`);
   console.log(`engine     : sliced from server.ts (${sandbox.provenance.serverChars} chars) `
     + `pipeline=${sandbox.provenance.pipelineChars} gate=${sandbox.provenance.gateChars}`);

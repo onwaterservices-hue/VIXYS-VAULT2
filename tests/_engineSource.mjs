@@ -48,6 +48,14 @@ export function sliceThrough(src, startAnchor, endAnchor, label) {
   return src.slice(i, j + endAnchor.length);
 }
 
+// The strike-side helper the gate calls, executed verbatim with the real table.
+export function buildStrikeSideHelper(lockRule = 'off', bar = 0.95) {
+  const helperSrc = sliceBetween(serverSrc, 'function computeStrikeSideProbability(', '__name(computeStrikeSideProbability', 'computeStrikeSideProbability');
+  const table = JSON.parse(readRepoFile('src/data/strikeSideTable.v1.json'));
+  const js = helperSrc.replace('(strikeSideTableV1 as any)', 'strikeSideTableV1');
+  return new Function('strikeSideTableV1', 'VIXY_LOCK_RULE', 'VIXY_LOCK_RULE_BAR', 'Math', `${js}; return computeStrikeSideProbability;`)(table, lockRule, bar, Math);
+}
+
 export function extractFn(name, startAnchor) {
   return sliceBetween(serverSrc, startAnchor, `__name(${name}`, name);
 }

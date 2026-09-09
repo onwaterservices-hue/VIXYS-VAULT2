@@ -4,6 +4,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { buildStrikeSideHelper } from './_engineSource.mjs';
 
 // Reads the server.ts of the repository this test lives in. It previously read
 // an absolute path under ~/Downloads that was a stale copy ~950 lines behind
@@ -91,6 +92,8 @@ function makeEnv(elapsedSec, overrides = {}) {
     lockedCycleIds: new Set(),
     // ea05da9 on main: a cold instance with no live strike may not lock.
     strike15mResolved: true,
+    VIXY_LOCK_RULE: 'off', VIXY_LOCK_RULE_BAR: 0.95, current15mStrikePrice: 64000,
+    computeStrikeSideProbability: buildStrikeSideHelper('off', 0.95),
     globalSequenceNumber: 1,
     ...overrides.globals,
   };

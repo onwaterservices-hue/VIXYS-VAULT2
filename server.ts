@@ -418,6 +418,9 @@ import { AutomationScheduler } from "./src/bot/services/automationScheduler";
 // app config values (apiKey, projectId, etc.), not secrets by Firebase's
 // own design -- security lives in Firestore Rules, not in hiding these.
 import firebaseAppletConfig from "./firebase-applet-config.json";
+// Strike-side probability table (fitted offline, versioned, with provenance).
+// See scripts/replay15m/research/exportStrikeSideTable.ts and ENGINE_PROGRESS.md.
+import strikeSideTableV1 from "./src/data/strikeSideTable.v1.json";
 process.on("unhandledRejection", (reason) => {
   const errStr = String(reason?.message || reason);
   if (
@@ -3387,6 +3390,8 @@ let active15mCycle = {
   provisionalBias: "NEUTRAL_BIAS",
   historicalSimilarityPct: 85,
   recentObservations: [],
+  cycleHigh: 0,
+  cycleLow: 0,
   calibrationCount: 0,
   calibratedAt: null,
   calibrationStatus: "INITIALIZING",
@@ -3432,6 +3437,39 @@ let active15mCycle = {
   invalidationReason: null,
   originalDecision: null,
 };
+// ----------------------------------------------------------------------------
+// STRIKE-SIDE PROBABILITY -- Layer 5 candidate, observation-first.
+// ----------------------------------------------------------------------------
+// P(price settles on the side of the strike it is CURRENTLY on | seconds into
+// the cycle, |distance| from strike in bps, intracycle volatility so far). This
+// is the product's own win criterion (Kalshi/Polymarket 15m contracts settle
+// against the strike fixed at cycle open), measured on 2,591 real cycles and
+// cross-validated on 3.0M trade prints. It is ALWAYS computed and exposed as an
+// observation. It only affects `allowed` when VIXY_LOCK_RULE=strike_side, and
+// then it can only DENY (p unknown, p below the bar, or the engine's direction
+// disagreeing with the side price is on). It can never loosen another gate.
+const VIXY_LOCK_RULE = process.env.VIXY_LOCK_RULE || "off";
+const VIXY_LOCK_RULE_BAR = Math.min(0.999, Math.max(0.5, Number(process.env.VIXY_LOCK_RULE_BAR || 0.95)));
+function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow) {
+  const T = (strikeSideTableV1 as any);
+  const unknown = (reason) => ({ p: null, n: 0, reason, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR });
+  if (!(spot > 0) || !(strike > 0)) return unknown("NO_PRICE_OR_STRIKE");
+  const distBps = ((spot - strike) / strike) * 1e4;
+  if (distBps === 0) return unknown("AT_STRIKE");
+  const cps = T.checkpointSecs;
+  let cp = null; for (const c of cps) if (effElapsed >= c) cp = c;
+  if (cp === null) return unknown("BEFORE_FIRST_CHECKPOINT");
+  const bins = T.distBinsBps; let d = -1;
+  for (let i = 0; i < bins.length; i++) { const [lo, hi] = bins[i]; if (Math.abs(distBps) >= lo && (hi === null || Math.abs(distBps) < hi)) { d = i; break; } }
+  if (d < 0) return unknown("NO_DIST_BIN");
+  const rangeBps = cycleHigh > 0 && cycleLow > 0 ? ((cycleHigh - cycleLow) / cycleLow) * 1e4 : null;
+  if (rangeBps === null) return unknown("NO_CYCLE_RANGE");
+  const vt = T.volTercilesBps; const v = rangeBps < vt.L_below ? "L" : rangeBps < vt.H_atOrAbove ? "M" : "H";
+  const key = `${cp}|${d}|${v}`; const cell = T.cells[key];
+  if (!cell || cell.p === null) return { p: null, n: cell ? cell.n : 0, reason: "INSUFFICIENT_SAMPLE", key, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
+  return { p: cell.p, n: cell.n, reason: null, key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide: distBps > 0 ? "UP" : "DOWN", tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
+}
+__name(computeStrikeSideProbability, "computeStrikeSideProbability");
 function canLockCurrentCycle(livePrice) {
   const now = Date.now();
   const reasons = [];
@@ -3684,7 +3722,17 @@ function canLockCurrentCycle(livePrice) {
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
   if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
-  const allowed = !alreadyLocked && validationPassed && strike15mResolved;
+  const strikeSide = computeStrikeSideProbability(
+    livePrice, current15mStrikePrice, effElapsed, active15mCycle.cycleHigh, active15mCycle.cycleLow,
+  );
+  // Flag-gated Layer 5. Off by default; when on it can only add a denial.
+  let strikeRuleBlocks = false;
+  if (VIXY_LOCK_RULE === "strike_side") {
+    if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
+    else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
+    else if (strikeSide.currentSide !== dirTarget) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_DISAGREES (engine=${dirTarget}, price is ${strikeSide.currentSide} of strike)`); }
+  }
+  const allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;
   const dir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -3709,6 +3757,8 @@ function canLockCurrentCycle(livePrice) {
     minEvidenceAgreement,
     minMtfAligned,
     strikeResolved: strike15mResolved,
+    lockRule: VIXY_LOCK_RULE,
+    strikeSide,
   };
   return {
     allowed,
@@ -4426,6 +4476,8 @@ async function checkAndSettle15mCycle(livePrice) {
       provisionalBias: "NEUTRAL_BIAS",
       historicalSimilarityPct: 85,
       recentObservations: [],
+      cycleHigh: 0,
+      cycleLow: 0,
       calibrationCount: 0,
       calibratedAt: null,
       calibrationStatus: "INGESTING",
@@ -4558,6 +4610,11 @@ async function checkAndSettle15mCycle(livePrice) {
   }
   const elapsedMs = now - intervalStart;
   active15mCycle.cycleObservationDuration = elapsedSeconds;
+  // Intracycle range so far, for the strike-side probability's volatility bin.
+  if (livePrice > 0) {
+    active15mCycle.cycleHigh = Math.max(active15mCycle.cycleHigh || 0, livePrice);
+    active15mCycle.cycleLow = active15mCycle.cycleLow > 0 ? Math.min(active15mCycle.cycleLow, livePrice) : livePrice;
+  }
   active15mCycle.calibrationWindowMs = elapsedMs;
   active15mCycle.calibrationDataAgeMs = now - lastMarketUpdateTs;
   const candidateDir =
@@ -14741,6 +14798,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           eligible: active15mCycle.lockEligibility.eligible ?? null,
           reason: active15mCycle.lockEligibility.reason ?? null,
           strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
+          lockRule: active15mCycle.lockEligibility.lockRule ?? null,
+          strikeSide: active15mCycle.lockEligibility.strikeSide ?? null,
         }
       : null,
     lockEvaluation: latestLockEvaluation || {
