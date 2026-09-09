@@ -3364,10 +3364,10 @@ function canLockCurrentCycle(livePrice) {
   // invariant test at elapsed=721s). Aligned to 720s to match the reason, the intended
   // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
-    minimumObservationWindowPassed && effElapsed < 720 && effRemaining >= 120;
+    minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
   if (effElapsed >= 720 || effRemaining < 180) {
     reasons.push(
-      `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`,
+      `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 780s / remaining=${effRemaining}s)`,
     );
   }
   const marketDataFresh = engineFeedStatus === "CONNECTED" && dataAgeMs <= 15e3;
@@ -3418,26 +3418,34 @@ function canLockCurrentCycle(livePrice) {
       `DATA_QUALITY_DEGRADED (status=${latestBtc15mPipeline.dataQuality.status}, freshness=${latestBtc15mPipeline.dataQuality.feedFreshnessMs}ms)`,
     );
   }
+  // Adaptive lock schedule. The strike is fixed at cycle open, so evidence about
+  // where price sits relative to it strengthens as the cycle runs. Demand more
+  // conviction to commit early, less to commit late. Thresholds only - the
+  // 18-condition validationPassed Boolean and every other gate are untouched.
+  const lockTier = effElapsed < 480 ? "EARLY" : effElapsed < 660 ? "STANDARD" : "LATE";
+  const minLockQuality = lockTier === "EARLY" ? 85 : lockTier === "LATE" ? 68 : 75;
+  const minEvidenceAgreement = lockTier === "EARLY" ? 8 : lockTier === "LATE" ? 5 : 6;
+  const minMtfAligned = lockTier === "EARLY" ? 4 : 3;
   const lockQualityPass =
     latestBtc15mPipeline.lockQualityTier !== "SKIP" &&
-    latestBtc15mPipeline.lockQuality >= 75;
+    latestBtc15mPipeline.lockQuality >= minLockQuality;
   if (!lockQualityPass) {
     reasons.push(
-      `LOCK_QUALITY_INSUFFICIENT (tier=${latestBtc15mPipeline.lockQualityTier}, score=${latestBtc15mPipeline.lockQuality}/100 < 75)`,
+      `LOCK_QUALITY_INSUFFICIENT (tier=${latestBtc15mPipeline.lockQualityTier}, score=${latestBtc15mPipeline.lockQuality}/100 < ${minLockQuality} tier=${lockTier})`,
     );
   }
   const evidenceAgreementPass =
-    latestBtc15mPipeline.evidenceAgreementCount >= 6;
+    latestBtc15mPipeline.evidenceAgreementCount >= minEvidenceAgreement;
   if (!evidenceAgreementPass) {
     reasons.push(
-      `EVIDENCE_AGREEMENT_INSUFFICIENT (agree=${latestBtc15mPipeline.evidenceAgreementCount}/11 < 6)`,
+      `EVIDENCE_AGREEMENT_INSUFFICIENT (agree=${latestBtc15mPipeline.evidenceAgreementCount}/11 < ${minEvidenceAgreement} tier=${lockTier})`,
     );
   }
   const mtfPass =
-    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= 3;
+    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= minMtfAligned;
   if (!mtfPass) {
     reasons.push(
-      `MTF_ALIGNMENT_INSUFFICIENT (aligned=${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5 < 3)`,
+      `MTF_ALIGNMENT_INSUFFICIENT (aligned=${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5 < ${minMtfAligned} tier=${lockTier})`,
     );
   }
   const strikeFeasiblePass =
