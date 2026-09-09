@@ -1,3 +1,4 @@
+import VixyMascot from "./VixyMascot";
 import React, { useState } from 'react';
 import {
   Bell,
@@ -175,157 +176,18 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
                 source of truth to drift from. */}
           </div>
 
+          {/* VIXY mascot hero */}
+          <div className="flex flex-col items-center gap-5 py-4 text-center sm:flex-row sm:items-center sm:text-left">
+            <VixyMascot size={140} />
+            <div>
+              <span className="vx-label">VIXY is in the server</span>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">Locks, calls and settlements. Live in Discord.</h2>
+              <p className="mt-2 max-w-[48ch] text-sm leading-relaxed text-white/55">Link your account once and VIXY posts every 15-minute call, lock and graded outcome to the Vault server as it happens. Your role syncs with your membership.</p>
+            </div>
+          </div>
           {/* Community Access Node (Discord Gateway) */}
           <CommunityAccessNode settings={settings} setSettings={setSettings} mode="settings" />
 
-          {/* Sound & Audio Notifications */}
-          <div className="p-4 bg-[#0a0518] rounded-xl border border-purple-900/60 space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Music className="w-4 h-4 text-purple-400" />
-                <span className="text-xs font-bold text-white">Discord Audio Ping Sound</span>
-              </div>
-              <button
-                onClick={() =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    discordSoundEnabled: !prev.discordSoundEnabled,
-                  }))
-                }
-                className={`px-2.5 py-1 rounded-xl text-xs font-bold border transition-all flex items-center gap-1.5 ${
-                  settings.discordSoundEnabled
-                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                    : 'bg-zinc-800 text-zinc-400 border-zinc-700'
-                }`}
-              >
-                {settings.discordSoundEnabled ? (
-                  <>
-                    <Volume2 className="w-3.5 h-3.5 text-purple-400" /> Sound ON
-                  </>
-                ) : (
-                  <>
-                    <VolumeX className="w-3.5 h-3.5" /> Muted
-                  </>
-                )}
-              </button>
-            </div>
-
-            {settings.discordSoundEnabled && (
-              <div className="space-y-3 pt-1">
-                <div>
-                  <label className="text-[10px] text-purple-300/60 block mb-1">Audio Ping Chime Sound Effect</label>
-                  <select
-                    value={settings.discordNotificationSound || 'discord_ping'}
-                    onChange={(e) =>
-                      setSettings({
-                        ...settings,
-                        discordNotificationSound: e.target.value as any,
-                      })
-                    }
-                    className="w-full bg-[#0c0620] border border-purple-900/60 rounded-xl px-2.5 py-1.5 text-xs text-purple-100 focus:outline-none focus:border-purple-500"
-                  >
-                    <option value="discord_ping">Discord Ping (Dual High-Pitch Chime)</option>
-                    <option value="quant_chime">Quant Bell (Institutional Sine)</option>
-                    <option value="subsecond_alert">Sub-Second Micro-Pulse Alert</option>
-                  </select>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => playAlertSound(settings.discordNotificationSound || 'discord_ping')}
-                  className="px-3 py-1.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all flex items-center gap-1.5"
-                >
-                  <Volume2 className="w-3.5 h-3.5" />
-                  Test Sound Effect Audio Chime 🔊
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Webhook Configuration */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-purple-200 font-bold">Enable Discord Webhook Alerts</label>
-              <input
-                type="checkbox"
-                checked={settings.discordEnabled}
-                onChange={(e) => setSettings({ ...settings, discordEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-purple-900 bg-[#0a0518] text-purple-600 focus:ring-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-purple-300/60 block">Discord Webhook URL</label>
-              <input
-                type="text"
-                placeholder="https://discord.com/api/webhooks/..."
-                value={settings.discordWebhook}
-                onChange={(e) => setSettings({ ...settings, discordWebhook: e.target.value })}
-                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <button
-              onClick={handleTestDiscord}
-              disabled={isSendingTest || !settings.discordWebhook}
-              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg shadow-purple-900/30"
-            >
-              {isSendingTest ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
-              Send Test Discord Webhook Alert
-            </button>
-          </div>
-
-          {/* Secondary Telegram Section */}
-          <div className="border-t border-purple-900/40 pt-6 space-y-4">
-            <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
-              <div className="flex items-center gap-2">
-                <Bot className="w-4 h-4 text-purple-400" />
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Secondary Telegram Bot Integration</h3>
-              </div>
-              <span className="text-[10px] text-purple-300/50">Optional Fallback</span>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <label className="text-xs text-purple-200 font-bold">Enable Telegram Bot</label>
-              <input
-                type="checkbox"
-                checked={settings.telegramEnabled}
-                onChange={(e) => setSettings({ ...settings, telegramEnabled: e.target.checked })}
-                className="w-4 h-4 rounded border-purple-900 bg-[#0a0518] text-purple-600 focus:ring-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-purple-300/60 block">Telegram Bot Token</label>
-              <input
-                type="text"
-                placeholder="123456789:ABCdefGhIJKlmNoPQRsTUVwxyZ"
-                value={settings.telegramBotToken}
-                onChange={(e) => setSettings({ ...settings, telegramBotToken: e.target.value })}
-                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-[11px] text-purple-300/60 block">Telegram Chat ID</label>
-              <input
-                type="text"
-                placeholder="-100123456789"
-                value={settings.telegramChatId}
-                onChange={(e) => setSettings({ ...settings, telegramChatId: e.target.value })}
-                className="w-full bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs text-purple-100 placeholder-purple-300/30 focus:outline-none focus:border-purple-500"
-              />
-            </div>
-
-            <button
-              onClick={handleTestTelegram}
-              disabled={isSendingTest || !settings.telegramBotToken || !settings.telegramChatId}
-              className="px-4 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/30 text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-2"
-            >
-              {isSendingTest ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
-              Send Test Telegram Alert
-            </button>
-          </div>
         </div>
 
         {/* Quant Filter Rules */}

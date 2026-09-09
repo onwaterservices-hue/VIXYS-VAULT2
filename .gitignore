@@ -13,5 +13,9 @@ coverage/
 # .claude/settings.json, which IS committed).
 .claude/settings.local.json
 
-# replay harness candle cache (regenerated from Coinbase on demand)
+# Build artifacts (committed by accident 2026-09-08; keep out of git)
+build/
+dist/
+
+# replay harness data cache (regenerated from Coinbase on demand)
 .cache/

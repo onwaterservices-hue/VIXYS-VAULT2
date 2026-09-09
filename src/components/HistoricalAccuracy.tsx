@@ -9,6 +9,8 @@ import { fetchResolvedLogApi, fetchVixyStateApi } from '../services/api';
 // sample size at which the backend flips calibration from WARMING_UP to ACTIVE.
 const CALIBRATION_TARGET_SAMPLES = 50;
 
+import { BacktestPanel } from './BacktestPanel';
+
 export const HistoricalAccuracy: React.FC<any> = () => {
   const [liveState, setLiveState] = useState<any>(null);
   const [resolvedLog, setResolvedLog] = useState<any[]>([]);
@@ -196,19 +198,32 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           break;
         }
       }
-      return { 
-        asset, 
-        totalLocks: settled.length, 
-        wins, 
-        losses, 
-        winRate: settled.length > 0 ? (wins/settled.length)*100 : null,
+      // Prefer the server's unsliced per-asset count when available - the
+      // client-side settled/wins/losses above are computed from resolvedLog,
+      // which is capped at the API's limit2 and can fall behind the real
+      // ledger once total row count (across all assets and statuses) passes
+      // that cap. Streak/avgEdge/avgConf have no server equivalent yet, so
+      // those stay client-computed from whatever window is available.
+      const serverAsset = backendStats?.perAsset?.[asset];
+      const totalLocks = serverAsset ? serverAsset.total : settled.length;
+      const finalWins = serverAsset ? serverAsset.wins : wins;
+      const finalLosses = serverAsset ? serverAsset.losses : losses;
+      const finalWinRate = serverAsset
+        ? serverAsset.winRatePct
+        : (settled.length > 0 ? (wins / settled.length) * 100 : null);
+      return {
+        asset,
+        totalLocks,
+        wins: finalWins,
+        losses: finalLosses,
+        winRate: finalWinRate,
         streak,
         sType,
         avgEdge,
         avgConf
       };
     });
-  }, [resolvedLog]);
+  }, [resolvedLog, backendStats]);
 
   const filteredLogs = useMemo(() => {
     return resolvedLog.filter(s => {
@@ -323,7 +338,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
         {[
           // A dash means "not measured yet". A real 0 still renders as 0 --
           // the two must never look the same.
-          { label: 'LAST 10 WIN RATE', val: metrics.last10Total > 0 ? `${metrics.last10WinRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
+          { label: 'LAST 10 WINS', val: metrics.last10Total > 0 ? `${metrics.last10WinRate.toFixed(1)}%` : '--', color: 'text-purple-400', bg: 'border-purple-900/50 bg-purple-950/20' },
           { label: 'TOTAL LOCKS', val: metrics.totalLocks, color: 'text-white', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'WINS', val: metrics.wins, color: 'text-emerald-400', bg: 'border-emerald-900/40 bg-emerald-950/20' },
           { label: 'LOSSES', val: metrics.losses, color: 'text-rose-400', bg: 'border-rose-900/40 bg-rose-950/20' },
@@ -422,10 +437,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 stageName = 'VERIFYING LOCK';
               }
 
-              const spot = liveState?.spot || liveState?.spotAtLock || 63008.43;
+              // No invented $63,008.43: if neither the live feed nor the lock snapshot
+      // has a spot price yet, the card shows the price as unavailable
+      // rather than a stale hardcoded number indistinguishable from real data.
+      const spot = liveState?.spot ?? liveState?.spotAtLock ?? null;
               const lockedPrediction = liveState?.lockedPrediction || liveState?.livePrediction;
               const lockedSpot = lockedPrediction?.spotAtLock || spot;
-              const priceDiff = spot - lockedSpot;
+              const priceDiff = (spot != null && lockedSpot != null) ? spot - lockedSpot : null;
               
               const direction = lockedPrediction?.direction || liveState?.lockedDirection || 'NEUTRAL';
               const isUpDir = String(direction).toUpperCase().includes('UP');
@@ -540,9 +558,9 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">LIVE SPOT PRICE</div>
                       <div className="text-xl sm:text-2xl font-mono text-white font-black flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                        ${spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        ${spot != null ? spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Unavailable'}
                       </div>
-                      {isLocked && priceDiff !== 0 && (
+                      {isLocked && priceDiff !== null && priceDiff !== 0 && (
                         <div className={`text-xs font-mono font-bold mt-0.5 ${priceDiff >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {priceDiff >= 0 ? '+' : ''}${priceDiff.toFixed(2)} vs Entry
                         </div>
@@ -611,8 +629,21 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               const entryPrice = log.spotAtLock ?? log.btcPriceAtLock ?? log.entryPrice;
               const settlementPrice = isResolved ? (log.settlementPrice ?? log.exitPrice) : null;
-              const priceDelta = entryPrice && settlementPrice ? settlementPrice - entryPrice : null;
-              const priceDeltaPct = entryPrice && settlementPrice ? ((settlementPrice - entryPrice) / entryPrice) * 100 : null;
+              // Direction-signed move: positive means price went the way VIXY
+              // called it, so a DOWN win never renders as a red negative number.
+              // Prefer the server-computed moveInFavor (null when the ledger row
+              // carries an implausible price); fall back to computing it here for
+              // rows settled before that field existed.
+              const dirSign = log.direction === 'DOWN' ? -1 : log.direction === 'UP' ? 1 : 0;
+              const pricesUsable = Number(entryPrice) > 1000 && Number(settlementPrice) > 1000 && dirSign !== 0;
+              const hasServerMove = typeof log.moveInFavor === 'number' && Number.isFinite(log.moveInFavor);
+              const hasServerMovePct = typeof log.moveInFavorPct === 'number' && Number.isFinite(log.moveInFavorPct);
+              const priceDelta = hasServerMove
+                ? log.moveInFavor
+                : (pricesUsable ? (Number(settlementPrice) - Number(entryPrice)) * dirSign : null);
+              const priceDeltaPct = hasServerMovePct
+                ? log.moveInFavorPct
+                : (pricesUsable ? ((Number(settlementPrice) - Number(entryPrice)) / Number(entryPrice)) * 100 * dirSign : null);
               const durationStr = formatDuration(log.lockedAt, log.resolvedAt || log.expiresAt);
 
               const direction = log.direction || 'NEUTRAL';
@@ -690,7 +721,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     </div>
 
                     <div className="text-[11px] font-mono font-black px-2.5 py-1 rounded-xl bg-black/80 border border-zinc-800 text-zinc-300 uppercase">
-                      ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400 font-black' : log.actualOutcome === 'DOWN' ? 'text-rose-400 font-black' : 'text-purple-300 font-black'}>{log.actualOutcome || (isNoTrade ? 'SKIPPED' : log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')}</span>
+                      ACTUAL: <span className={log.actualOutcome === 'UP' ? 'text-emerald-400 font-black' : log.actualOutcome === 'DOWN' ? 'text-rose-400 font-black' : isLocked ? 'text-cyan-400 font-black' : 'text-purple-300 font-black'}>{
+                      // A LOCKED row has no real outcome yet - the previous
+                      // fallback guessed the OPPOSITE of the called direction
+                      // for any pending row, so a live BUY UP always showed
+                      // "ACTUAL: DOWN" while still in progress.
+                      log.actualOutcome || (isLocked ? 'PENDING' : isNoTrade ? 'SKIPPED' : log.wasCorrect ? log.direction : log.direction === 'UP' ? 'DOWN' : 'UP')
+                    }</span>
                     </div>
                   </div>
 
@@ -739,7 +776,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </div>
                       {isResolved && priceDelta !== null && (
                         <div className={`text-[10px] font-mono font-bold ${priceDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} ({priceDeltaPct !== null ? `${priceDeltaPct >= 0 ? '+' : ''}${priceDeltaPct.toFixed(2)}%` : ''})
+                          {priceDelta >= 0 ? '+' : ''}${priceDelta.toFixed(2)} ({priceDeltaPct !== null ? `${priceDeltaPct >= 0 ? '+' : ''}${priceDeltaPct.toFixed(2)}%` : ''}) <span className="text-zinc-500 font-normal normal-case">in VIXY's direction</span>
                         </div>
                       )}
                       {isNoTrade && (
@@ -977,7 +1014,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             </div>
           </div>
         </div>
-      )}
+        )}
+
+      <div className="mt-6">
+        <BacktestPanel />
+      </div>
 
     </div>
   );

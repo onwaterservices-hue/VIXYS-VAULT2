@@ -108,6 +108,28 @@ service cloud.firestore {
     match /regime_memory_bank/{memoryId} { allow read, write: if isBackendSystem(); }
     match /algorithm_performance_history/{historyId} { allow read, write: if isBackendSystem(); }
     match /vixy_engine_heartbeat/{docId} { allow read, write: if isBackendSystem(); }
+
+    // Refer to Earn. Backend-only: every read and write goes through the
+    // authenticated server path, never directly from a browser.
+    match /referral_codes/{code}        { allow read, write: if isBackendSystem(); }
+    match /referral_attributions/{email}{ allow read, write: if isBackendSystem(); }
+    match /referral_conversions/{sid}   { allow read, write: if isBackendSystem(); }
+    match /referral_stats/{email}       { allow read, write: if isBackendSystem(); }
+
+    // ---- Invite to Earn: conversion rewards + VIXY credits ledger ----
+    // Backend-only. The frontend reads these through /api/referral/* gated by
+    // authenticateSession(req), so one user can never read another's earnings.
+    match /referral_rewards/{referralId} { allow read, write: if isBackendSystem(); }
+    match /vxy_ledger/{entryId} { allow read, write: if isBackendSystem(); }
+    match /referral_payout_tickets/{ticketId} { allow read, write: if isBackendSystem(); }
+    match /referral_events/{eventId} { allow read, write: if isBackendSystem(); }
+
+    // Precomputed leaderboard: display handles and qualified-conversion counts
+    // only. Never emails, never dollar amounts.
+    match /referral_leaderboard/{docId} {
+      allow read: if true;
+      allow write: if isBackendSystem();
+    }
     match /system_state/{stateId} { allow read, write: if isBackendSystem(); }
     match /predictions/{predictionId} { allow read, write: if isBackendSystem(); }
     match /settlement_locks/{lockId} { allow read, write: if isBackendSystem(); }
@@ -116,6 +138,8 @@ service cloud.firestore {
     // Encrypted Kalshi keys. Never client-reachable under any circumstance.
     match /kalshi_credentials/{userId} { allow read, write: if isBackendSystem(); }
     match /auto_trade_configs/{userId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_executions/{execId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_dedupe/{dedupeId} { allow read, write: if isBackendSystem(); }
     match /auto_trade_logs/{logId} { allow read, write: if isBackendSystem(); }
 
     // --- Boot probe ---------------------------------------------------------------

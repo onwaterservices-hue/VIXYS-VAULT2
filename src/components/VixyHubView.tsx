@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { TAB_TO_PATH } from '../utils/routePaths';
 import { BTCTicker } from '../types';
+import CycleObject from './CycleObject';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 
@@ -218,6 +219,20 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
           </div>
         </div>
 
+        {/* Cycle Object: the 15-minute cycle as one living instrument. Same hook as the card below. */}
+        <section className="mb-6 rounded-2xl border border-white/[0.07] bg-white/[0.015] px-6 py-7 sm:px-10">
+          <div className="flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-md text-center lg:text-left">
+              <span className="vx-label">The cycle</span>
+              <h3 className="mt-2 text-2xl font-semibold tracking-tight text-white">What VIXY is doing right now</h3>
+              <p className="mt-2 text-sm leading-relaxed text-white/55">
+                Calibrating, building, confirming, locked, settled. The ring is time through
+                the 15-minute window. Nothing on it is a prediction; it is the state of the engine.
+              </p>
+            </div>
+            <CycleObject />
+          </div>
+        </section>
         {/* Flagship Hero Card: "CANONICAL 15M CYCLE" */}
         <div className={`p-5 sm:p-7 rounded-3xl border transition-all duration-300 ${ambientGlowClass}`}>
           <div className="flex flex-col lg:flex-row justify-between gap-6 items-stretch lg:items-center">

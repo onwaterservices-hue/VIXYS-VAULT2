@@ -109,7 +109,9 @@ function generatePredictions(): HistoricalPrediction[] {
   return predictions;
 }
 
-export const INITIAL_HISTORICAL_PREDICTIONS: HistoricalPrediction[] = generatePredictions();
+// Seeded WIN/LOSS records removed: generatePredictions() used a 0.76-weighted RNG.
+// Real settled outcomes live in Firestore signal_logs (see /api/signal/resolved-log).
+export const INITIAL_HISTORICAL_PREDICTIONS: HistoricalPrediction[] = [];
 
 export const INITIAL_SUPPORT_TICKETS: SupportTicket[] = [
   {
@@ -142,13 +144,13 @@ export const INITIAL_SUPPORT_TICKETS: SupportTicket[] = [
 ];
 
 export const INITIAL_ADMIN_STATS: AdminStats = {
-  mrr: 12450,
-  activeSubscribers: 248,
-  predictionsToday: 96,
-  winRate: 88.4,
-  apiLatencyMs: 14,
+  mrr: 0,
+  activeSubscribers: 0,
+  predictionsToday: 0,
+  winRate: 0,
+  apiLatencyMs: 0,
   serverStatus: 'HEALTHY',
-  totalPredictionsAnalyzed: 4812,
-  brierScore: 0.084,
+  totalPredictionsAnalyzed: 0,
+  brierScore: 0,
 };
 

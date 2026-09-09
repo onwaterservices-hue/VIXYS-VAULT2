@@ -199,6 +199,10 @@ import {
   where as _clientWhere,
   runTransaction as _clientRunTransaction,
 } from "firebase/firestore";
+import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
+import { createReferralHandlers } from "./src/services/referral/referralRoutes";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview } from "./src/services/referral/referralRewards";
+import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
 /**
  * ADMIN-AWARE FIRESTORE DATAPATH SHIM
@@ -435,31 +439,7 @@ function getStripe() {
   return stripeClient;
 }
 __name(getStripe, "getStripe");
-const serverJournalEntries = [
-  {
-    id: "LOG-8812",
-    userId: "usr_owner_01",
-    ticker: "BTC/USDT 15M",
-    direction: "YES",
-    entryPrice: 63980,
-    targetPrice: 64100,
-    stopLoss: 63880,
-    stake: 2500,
-    edgeAtEntry: 7.4,
-    notes:
-      "Clean L2 net delta spike (+1,420 BTC). Kalshi implied odds underpriced at 48%.",
-    outcome: "WIN",
-    pnlUSD: 280,
-    createdAt: new Date(Date.now() - 72e5).toISOString(),
-    entryHash:
-      "0x" +
-      crypto
-        .createHash("sha256")
-        .update("usr_owner_01-BTC/USDT 15M-63980-2500-2026-08-03")
-        .digest("hex")
-        .slice(0, 16),
-  },
-];
+const serverJournalEntries = [];
 const app = express();
 const PORT = 3000;
 app.use((req, res, next) => {
@@ -2098,10 +2078,10 @@ function evaluateBtc15mHighConvictionPipeline(
   const bearVoteCount = votes.filter((v) => v === "BEARISH").length;
   let candidateDir = "NEUTRAL";
   let alignedCount = 0;
-  if (bullVoteCount >= 3 && bullVoteCount > bearVoteCount) {
+  if (bullVoteCount >= 3 && bullVoteCount > bearVoteCount && spot >= strike - 8) {
     candidateDir = "UP";
     alignedCount = bullVoteCount;
-  } else if (bearVoteCount >= 3 && bearVoteCount > bullVoteCount) {
+  } else if (bearVoteCount >= 3 && bearVoteCount > bullVoteCount && spot <= strike + 8) {
     candidateDir = "DOWN";
     alignedCount = bearVoteCount;
   } else if (spot > strike + 8) {
@@ -2111,7 +2091,7 @@ function evaluateBtc15mHighConvictionPipeline(
     candidateDir = "DOWN";
     alignedCount = Math.max(bearVoteCount, 2);
   } else {
-    candidateDir = bullVoteCount >= bearVoteCount ? "UP" : "DOWN";
+    candidateDir = bullVoteCount > bearVoteCount ? "UP" : bearVoteCount > bullVoteCount ? "DOWN" : spot >= strike ? "UP" : "DOWN";
     alignedCount = Math.max(bullVoteCount, bearVoteCount);
   }
   const mtfState =
@@ -2733,11 +2713,11 @@ async function runMarketEngineTick() {
     currentEngineCycleId += 1;
     const now = Date.now();
     if (now - lastOpenFetchTs > 6e4) {
-      fetchWithTimeout("https://api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT")
+      fetchWithTimeout("https://api.exchange.coinbase.com/products/BTC-USD/stats")
         .then((r) => r.json())
         .then((d) => {
-          if (d && d.openPrice) {
-            const o = parseFloat(d.openPrice);
+          if (d && d.open) {
+            const o = parseFloat(d.open);
             if (o > 0) currentBtcOpenPrice = o;
           }
           lastOpenFetchTs = now;
@@ -2758,7 +2738,7 @@ async function runMarketEngineTick() {
       if (cbRes.ok) {
         const cbData = await cbRes.json();
         const p = parseFloat(cbData?.data?.amount);
-        if (p && p > 0) {
+        if (p && p > 1e3) {
           livePrice = p;
           currentBtcPrice = livePrice;
           fetchSuccess = true;
@@ -2802,7 +2782,7 @@ async function runMarketEngineTick() {
         if (krRes.ok) {
           const krData = await krRes.json();
           const p = parseFloat(krData?.result?.XXBTZUSD?.c?.[0]);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
@@ -2821,7 +2801,7 @@ async function runMarketEngineTick() {
         if (cgRes.ok) {
           const cgData = await cgRes.json();
           const p = parseFloat(cgData?.bitcoin?.usd);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
@@ -2836,12 +2816,12 @@ async function runMarketEngineTick() {
     if (!fetchSuccess) {
       try {
         const bnRes = await fetchWithTimeout(
-          "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+          "https://api.exchange.coinbase.com/products/BTC-USD/ticker",
         );
         if (bnRes.ok) {
           const bnData = await bnRes.json();
           const p = parseFloat(bnData?.price);
-          if (p && p > 0) {
+          if (p && p > 1e3) {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
@@ -2885,6 +2865,7 @@ async function runMarketEngineTick() {
                 : null);
             if (strikeVal && strikeVal > 0) {
               current15mStrikePrice = strikeVal;
+              strike15mResolved = true;
             }
             const yesAsk = m.yes_ask_dollars
               ? parseFloat(m.yes_ask_dollars)
@@ -2963,14 +2944,14 @@ async function runMarketEngineTick() {
     const calibrationSampleSize =
       serverLearningEngine.todaySettledCount ||
       serverLearningEngine.settledHistory.length ||
-      148;
+      0;
     const calibrationMinimumSamples = 50;
     const calibrationStatus =
       calibrationSampleSize >= calibrationMinimumSamples
         ? "ACTIVE"
         : "WARMING_UP";
     const historicalAccuracyVal =
-      serverLearningEngine.historicalAccuracy || 71.8;
+      serverLearningEngine.historicalAccuracy || 0;
     currentModelProbability =
       latestBtc15mPipeline.edgeVsConfidence.modelProbability;
     currentConfidence =
@@ -3367,7 +3348,8 @@ app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
 });
 let current15mIntervalStart =
   Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
-let current15mStrikePrice = 64100;
+let current15mStrikePrice = 0;
+let strike15mResolved = false;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
 // ============================================================================
@@ -3512,10 +3494,10 @@ function canLockCurrentCycle(livePrice) {
   // invariant test at elapsed=721s). Aligned to 720s to match the reason, the intended
   // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
-    minimumObservationWindowPassed && effElapsed < 720 && effRemaining >= 120;
+    minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
   if (effElapsed >= 720 || effRemaining < 180) {
     reasons.push(
-      `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 720s / remaining=${effRemaining}s)`,
+      `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 780s / remaining=${effRemaining}s)`,
     );
   }
   const marketDataFresh = engineFeedStatus === "CONNECTED" && dataAgeMs <= 15e3;
@@ -3566,26 +3548,34 @@ function canLockCurrentCycle(livePrice) {
       `DATA_QUALITY_DEGRADED (status=${latestBtc15mPipeline.dataQuality.status}, freshness=${latestBtc15mPipeline.dataQuality.feedFreshnessMs}ms)`,
     );
   }
+  // Adaptive lock schedule. The strike is fixed at cycle open, so evidence about
+  // where price sits relative to it strengthens as the cycle runs. Demand more
+  // conviction to commit early, less to commit late. Thresholds only - the
+  // 18-condition validationPassed Boolean and every other gate are untouched.
+  const lockTier = effElapsed < 480 ? "EARLY" : effElapsed < 660 ? "STANDARD" : "LATE";
+  const minLockQuality = lockTier === "EARLY" ? 85 : lockTier === "LATE" ? 68 : 75;
+  const minEvidenceAgreement = lockTier === "EARLY" ? 8 : lockTier === "LATE" ? 5 : 6;
+  const minMtfAligned = lockTier === "EARLY" ? 4 : 3;
   const lockQualityPass =
     latestBtc15mPipeline.lockQualityTier !== "SKIP" &&
-    latestBtc15mPipeline.lockQuality >= 75;
+    latestBtc15mPipeline.lockQuality >= minLockQuality;
   if (!lockQualityPass) {
     reasons.push(
-      `LOCK_QUALITY_INSUFFICIENT (tier=${latestBtc15mPipeline.lockQualityTier}, score=${latestBtc15mPipeline.lockQuality}/100 < 75)`,
+      `LOCK_QUALITY_INSUFFICIENT (tier=${latestBtc15mPipeline.lockQualityTier}, score=${latestBtc15mPipeline.lockQuality}/100 < ${minLockQuality} tier=${lockTier})`,
     );
   }
   const evidenceAgreementPass =
-    latestBtc15mPipeline.evidenceAgreementCount >= 6;
+    latestBtc15mPipeline.evidenceAgreementCount >= minEvidenceAgreement;
   if (!evidenceAgreementPass) {
     reasons.push(
-      `EVIDENCE_AGREEMENT_INSUFFICIENT (agree=${latestBtc15mPipeline.evidenceAgreementCount}/11 < 6)`,
+      `EVIDENCE_AGREEMENT_INSUFFICIENT (agree=${latestBtc15mPipeline.evidenceAgreementCount}/11 < ${minEvidenceAgreement} tier=${lockTier})`,
     );
   }
   const mtfPass =
-    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= 3;
+    latestBtc15mPipeline.multiTimeframeAlignment.alignedCount >= minMtfAligned;
   if (!mtfPass) {
     reasons.push(
-      `MTF_ALIGNMENT_INSUFFICIENT (aligned=${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5 < 3)`,
+      `MTF_ALIGNMENT_INSUFFICIENT (aligned=${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5 < ${minMtfAligned} tier=${lockTier})`,
     );
   }
   const strikeFeasiblePass =
@@ -3693,7 +3683,8 @@ function canLockCurrentCycle(livePrice) {
   );
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
-  const allowed = !alreadyLocked && validationPassed;
+  if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
+  const allowed = !alreadyLocked && validationPassed && strike15mResolved;
   const dir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -4028,6 +4019,30 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     cycleId,
   };
 
+  if (logItem) {
+    logItem.lockSnapshot = {
+      reversalThreat: active15mCycle.reversalThreat ?? null,
+      evidenceAgreement: active15mCycle.evidenceAgreement ?? null,
+      hasConflict: active15mCycle.hasConflict ?? null,
+      candidateDirection: active15mCycle.candidateDirection ?? null,
+      lockedDirection: active15mCycle.lockedDirection ?? null,
+      lockedConfidence: active15mCycle.lockedConfidence ?? null,
+      lockedProbability: active15mCycle.lockedProbability ?? null,
+      lockedStrike: active15mCycle.lockedStrike ?? null,
+      lockedSpot: active15mCycle.lockedSpot ?? null,
+      lockedEdgePct: active15mCycle.lockedEdgePct ?? null,
+      lockedReason: active15mCycle.lockedReason ?? null,
+      calibrationStatus: active15mCycle.calibrationStatus ?? null,
+      analysisStatus: active15mCycle.analysisStatus ?? null,
+      calibrationSamples: active15mCycle.calibrationSamples ?? null,
+      observationCount: active15mCycle.cycleObservationCount ?? null,
+      dataAgeMs: active15mCycle.calibrationDataAgeMs ?? null,
+      choppyReason: active15mCycle.choppyReason ?? null,
+      snapshotVersion: "v1",
+      engineVersion: "VIXY-VAULT-v5",
+    };
+  }
+
   await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
 
   if (transactionSucceeded) {
@@ -4150,6 +4165,7 @@ async function checkAndSettle15mCycle(livePrice) {
     const prevIntervalStart = current15mIntervalStart;
     current15mIntervalStart = intervalStart;
     current15mStrikePrice = Math.round(livePrice / 10) * 10;
+    strike15mResolved = true;
     if (prevIntervalStart > 0) {
       const prevSigId = `sig_lock_${prevIntervalStart}`;
       if (!processedSettlements.has(prevSigId)) {
@@ -4177,6 +4193,43 @@ async function checkAndSettle15mCycle(livePrice) {
             ) / 1e3;
           prevLog.settlementAt = prevLog.resolvedAt;
           prevLog.actualDirection = prevLog.actualOutcome;
+          // --- EXIT TELEMETRY (additive) ---
+          // There is no early-exit execution path in this engine today:
+          // hasActivePosition is a hardcoded `false` in the guardian block, so
+          // guardianAction can only ever be ENTER or WAIT - TAKE_PROFIT / EXIT
+          // are unreachable. Every lock therefore exits at cycle expiry.
+          // exitReason records ONLY states that actually exist, so the UI can
+          // never render a fabricated early exit.
+          prevLog.exitPrice = livePrice;
+          prevLog.exitReason =
+            prevLog.status === "CRITICALLY_INVALIDATED"
+              ? "CRITICALLY_INVALIDATED"
+              : "SETTLED_AT_EXPIRY";
+          const entryForMove = Number(prevLog.entryPrice ?? prevLog.spotAtLock);
+          const exitForMove = Number(prevLog.exitPrice);
+          const movePricesUsable =
+            Number.isFinite(entryForMove) &&
+            entryForMove > 1e3 &&
+            Number.isFinite(exitForMove) &&
+            exitForMove > 1e3;
+          if (
+            movePricesUsable &&
+            (prevLog.direction === "UP" || prevLog.direction === "DOWN")
+          ) {
+            const signedMove =
+              (exitForMove - entryForMove) *
+              (prevLog.direction === "UP" ? 1 : -1);
+            prevLog.moveInFavor = Math.round(signedMove * 100) / 100;
+            prevLog.moveInFavorPct =
+              Math.round((signedMove / entryForMove) * 1e4) / 100;
+          } else {
+            // Honest null rather than a fabricated number. Either the direction
+            // was NEUTRAL (a skip has no entry), or this ledger row carries an
+            // implausible price - seven rows written 2026-09-01..03 have
+            // entryPrice/spotAtLock of 100 while BTC was ~77,000.
+            prevLog.moveInFavor = null;
+            prevLog.moveInFavorPct = null;
+          }
           prevLog.outcome = prevLog.wasCorrect ? "WIN" : "LOSS";
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
@@ -4942,7 +4995,7 @@ async function checkAndSettle15mCycle(livePrice) {
       latestGuardianDecision?.action === "EXIT" ||
       latestGuardianDecision?.action === "PROTECT" ||
       (latestGuardianDecision?.reversalThreat || 0) >= 80;
-    const reversalDetected = isExtremeDisplacement && isProbabilityCollapsed;
+    const reversalDetected = isExtremeDisplacement || isProbabilityCollapsed || isGuardianPanic;
     const lockMonitorHash = `${currentCycleId}:${active15mCycle.lockedDirection}:${reversalDetected}:${probForLockedDir.toFixed(2)}`;
     if (
       lockMonitorHash !== lastLoggedLockMonitorHash ||
@@ -5318,6 +5371,9 @@ async function getUserAccessState(email, uid) {
       ...(entitlement.entitlements.starter ? ["15m_desk"] : []),
       ...(entitlement.entitlements.proQuant
         ? ["scalping", "whale_tracker", "ai_patterns", "explainability"]
+        : []),
+      ...(entitlement.entitlements.eliteQuant
+        ? ["orderbook_imbalance", "api_keys", "bot_webhooks", "signal_export", "auto_trade"]
         : []),
     ],
     locked:
@@ -5826,6 +5882,197 @@ app.get(
   "/api/discord/connect",
   createDiscordConnectHandler(() => db, authenticateSession, discordFirestore),
 );
+
+// ---------------------------------------------------------------------------
+// VIXY VAULT - INVITE TO EARN
+//
+// Wired with the same injection shape as the Discord handlers above. The
+// referral modules never import firebase/firestore themselves, so every write
+// goes through the Admin-aware shim rather than the client SDK - a client-SDK
+// write here would be silently denied by firestore.rules, which is exactly how
+// kalshi_credentials writes were failing.
+// ---------------------------------------------------------------------------
+const referralStore = createReferralStore(() => db, discordFirestore, console);
+
+const referralHandlers = createReferralHandlers({
+  store: referralStore,
+  authenticateSession,
+  siteUrl:
+    process.env.PUBLIC_SITE_URL ||
+    process.env.VITE_PUBLIC_SITE_URL ||
+    "https://vixxyvault.com",
+  // Awaited, not fire-and-forget. A lost write here would show the user a code
+  // that stops existing on the next cold start.
+  persistUserCode: async (user, code) => {
+    user.referralCode = code;
+    savePersistentStore();
+    await persistSingleUser(user);
+  },
+});
+
+app.get("/api/referral/me", (req, res) => referralHandlers.me(req, res));
+app.post("/api/referral/claim-code", (req, res) =>
+  referralHandlers.claimCode(req, res),
+);
+app.get("/api/referral/resolve", (req, res) =>
+  referralHandlers.resolve(req, res),
+);
+app.post("/api/referral/attach", (req, res) =>
+  referralHandlers.attach(req, res),
+);
+
+// ================= Invite to Earn: credits endpoints =================
+// Every route resolves identity via authenticateSession(req), the canonical
+// source. A user can only ever read or spend their own credits.
+function vixyCreditUser(req: any, res: any) {
+  const u = authenticateSession(req);
+  if (!u || !u.email) {
+    res.status(401).json({ success: false, message: "Sign in to use invites." });
+    return null;
+  }
+  return { email: String(u.email).trim().toLowerCase(), raw: u };
+}
+
+app.get("/api/referral/balance", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    // Bound the ledger read. referralRewards uses the client SDK, so if the
+    // vxy_ledger rules are not published this query can stall; without a race
+    // the lambda would burn its full 60s budget on every call.
+    const b = await Promise.race([
+      getBalance(db, u.email),
+      new Promise<never>((_, rej) =>
+        setTimeout(() => rej(new Error("LEDGER_TIMEOUT")), 6000),
+      ),
+    ]);
+    res.json({
+      ...b,
+      availableUsd: (Math.max(0, b.available) / 100).toFixed(2),
+      pendingUsd: (b.pending / 100).toFixed(2),
+      creditsPerDay: REFERRAL_CREDITS_PER_DAY,
+      payoutThreshold: REFERRAL_PAYOUT_THRESHOLD,
+      daysAffordable: Math.floor(Math.max(0, b.available) / REFERRAL_CREDITS_PER_DAY),
+    });
+  } catch (e) {
+    const why = String((e as Error)?.message || e);
+    console.error("[REFERRAL] balance failed", why);
+    // Return a well-formed zero balance rather than an error, so the page
+    // renders normally instead of showing a failure for a supplementary panel.
+    res.status(200).json({
+      available: 0, pending: 0, escrowed: 0, redeemed: 0, reversed: 0,
+      lifetimeEarned: 0, availableUsd: "0.00", pendingUsd: "0.00",
+      creditsPerDay: REFERRAL_CREDITS_PER_DAY,
+      payoutThreshold: REFERRAL_PAYOUT_THRESHOLD,
+      daysAffordable: 0,
+      degraded: true,
+      reason: why === "LEDGER_TIMEOUT" ? "LEDGER_TIMEOUT" : "LEDGER_UNAVAILABLE",
+    });
+  }
+});
+
+app.post("/api/referral/redeem-day", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  const days = Math.max(1, Math.min(30, Number(req.body?.days) || 1));
+  try {
+    const r = await redeemCreditsForDay(db, u.email, days);
+    if (!r.ok) return res.status(400).json(r);
+    // Reuse the existing bonus-day grant so this inherits its Firestore path.
+    try {
+      await referralStore.grantBonusDay(u.email, "redeem_" + r.entryId, days * 24);
+    } catch (grantErr) {
+      console.error("[REFERRAL] day grant failed after debit", grantErr);
+      return res.status(500).json({
+        ok: false,
+        message: "Grant failed. Contact support with this ID: " + r.entryId,
+      });
+    }
+    res.json(r);
+  } catch (e) {
+    console.error("[REFERRAL] redeem failed", e);
+    res.status(503).json({ success: false, message: "Redemption unavailable." });
+  }
+});
+
+app.post("/api/referral/request-payout", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    const alpha = "ACDEFHJKMNPQRTUVWXY34579";
+    let ticketId = "VXY-";
+    for (let i = 0; i < 5; i++) {
+      ticketId += alpha[Math.floor(Math.random() * alpha.length)];
+    }
+    const r = await openPayoutTicket(db, u.email, ticketId);
+    res.status(r.ok ? 200 : 400).json(r);
+  } catch (e) {
+    console.error("[REFERRAL] payout request failed", e);
+    res.status(503).json({ success: false, message: "Payout unavailable." });
+  }
+});
+
+app.post(
+  "/api/admin/referral/resolve-ticket",
+  requireRole(["OWNER", "ADMIN"]),
+  async (req, res) => {
+    const { ticketId, outcome, payoutType, reason } = req.body || {};
+    if (!ticketId || !outcome || !reason) {
+      return res
+        .status(400)
+        .json({ success: false, message: "ticketId, outcome and reason are required." });
+    }
+    const admin = authenticateSession(req);
+    const r = await resolvePayoutTicket(
+      db,
+      String(ticketId),
+      String(admin?.email || "unknown"),
+      outcome === "FULFILLED" ? "FULFILLED" : "DENIED",
+      payoutType ? String(payoutType) : null,
+      String(reason),
+    );
+    res.status(r.ok ? 200 : 400).json(r);
+  },
+);
+app.get("/api/referral/leaderboard", async (req, res) => {
+  const u = vixyCreditUser(req, res);
+  if (!u) return;
+  try {
+    res.json(await getLeaderboardWithRank(db, u.email));
+  } catch (e) {
+    console.error("[REFERRAL] leaderboard failed", e);
+    res.status(503).json({ success: false, message: "Leaderboard unavailable." });
+  }
+});
+
+// Rebuild the precomputed leaderboard. Admin-triggered or cron-triggered.
+// Deliberately NOT computed per page load: a per-render collection scan would
+// compound the existing polling load from the 15m cycle endpoint.
+app.all("/api/cron/referral-leaderboard", async (req, res) => {
+  try {
+    res.json(await rebuildLeaderboard(db));
+  } catch (e) {
+    console.error("[REFERRAL] leaderboard rebuild failed", e);
+    res.status(503).json({ ok: false });
+  }
+});
+
+app.get(
+  "/api/admin/referral/overview",
+  requireRole(["OWNER", "ADMIN"]),
+  async (req, res) => {
+    try {
+      res.json(await getAdminReferralOverview(db));
+    } catch (e) {
+      console.error("[REFERRAL] admin overview failed", e);
+      res.status(503).json({ success: false, message: "Overview unavailable." });
+    }
+  },
+);
+
+// =============== end Invite to Earn: credits endpoints ===============
+
+
 
 app.get(
   "/api/auth/discord/callback",
@@ -6923,6 +7170,9 @@ app.post("/api/auth/register", async (req, res) => {
   }
   const serverSession = { ...newUser, passwordHash: void 0 };
   const entitlement = getUserEntitlement(cleanEmail);
+  // Phase 1: a fresh signup gets a signed session immediately, same as login.
+  // Non-fatal on failure: the session guard will route them to login instead.
+  issueSessionCookie(res, newUser);
   return res.json({ success: true, user: serverSession, entitlement });
 });
 app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
@@ -8157,7 +8407,7 @@ app.get(
 app.post(
   "/api/admin/users/role",
   requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
+  async (req, res) => {
     const { userId, newRole } = req.body;
     const validRoles = [
       "OWNER",
@@ -8194,7 +8444,22 @@ app.post(
         "ROLE_CHANGE",
         `Changed role for ${user.email} to ${newRole}`,
       );
-      persistSingleUser(user).catch(() => {});
+      // Was fire-and-forget (persistSingleUser(user).catch(() => {})): the
+      // response always claimed success even if the Firestore write failed,
+      // and on Vercel the function can tear down before that write lands -
+      // the exact pattern that already lost azar45157@gmail.com's Elite
+      // access once. Now awaited, with a real failure reported to the caller.
+      try {
+        await persistSingleUser(user);
+      } catch (err) {
+        return res.status(500).json({
+          success: false,
+          error: "PERSIST_FAILED",
+          message:
+            "Role was changed in memory but failed to persist to Firestore: " +
+            (err?.message || String(err)),
+        });
+      }
     }
     res.json({
       success: true,
@@ -8208,7 +8473,7 @@ app.post(
 app.post(
   "/api/admin/users/update",
   requireRole(["OWNER", "ADMIN"]),
-  (req, res) => {
+  async (req, res) => {
     const {
       userId,
       name,
@@ -8319,7 +8584,21 @@ app.post(
       userDiscordProfiles.set(activeEmail.toLowerCase(), discordProfile);
     }
     savePersistentStore();
-    persistSingleUser(user).catch(() => {});
+    // Was fire-and-forget: this route edits the full record (subscription,
+    // role, Stripe IDs, verification status included), so a lost write here
+    // is a bigger blast radius than a role-only change. Now awaited, with a
+    // real failure reported instead of an unconditional success response.
+    try {
+      await persistSingleUser(user);
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: "PERSIST_FAILED",
+        message:
+          "User record was updated in memory but failed to persist to Firestore: " +
+          (err?.message || String(err)),
+      });
+    }
     addServerAuditLog(
       "ADMIN",
       "USER_RECORD_EDITED",
@@ -9201,9 +9480,29 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
     const origin =
       req.headers.origin || process.env.APP_URL || "http://localhost:3000";
     const lineItem = { price: resolvedPriceId, quantity: 1 };
-    const sessionParams = {
+    let vixyReferralCode = null;
+        let vixyReferralCoupon = null;
+        try {
+          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          if (vixyAttribution && vixyAttribution.code) {
+            vixyReferralCode = vixyAttribution.code;
+            vixyReferralCoupon = REFERRAL_COUPON_ID;
+          }
+        } catch (referralLookupErr) {
+          // Never block a purchase because the referral lookup failed. The
+          // buyer simply checks out at full price rather than seeing an error.
+          console.warn("[REFERRAL] checkout lookup failed", referralLookupErr);
+        }
+
+        const sessionParams: any = {
       payment_method_types: ["card"],
-      allow_promotion_codes: true,
+      // discounts and allow_promotion_codes are mutually exclusive in the
+          // Stripe API - sending both is a 400. When the buyer arrived on a
+          // valid referral code the coupon is applied server-side; otherwise
+          // the manual promo box stays enabled exactly as before.
+          ...(vixyReferralCoupon
+            ? { discounts: [{ coupon: vixyReferralCoupon }] }
+            : { allow_promotion_codes: true }),
       customer: stripeCustomerId || void 0,
       customer_email: stripeCustomerId ? void 0 : cleanUserEmail || void 0,
       client_reference_id: user.id || cleanUid || cleanUserEmail,
@@ -9224,7 +9523,12 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
         `${origin}/?stripe_status=success&plan=${targetPlan}&ref=${cleanReferral}`,
       cancel_url: cancelUrl || `${origin}/?stripe_status=cancelled`,
     };
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    if (vixyReferralCode && sessionParams.metadata) {
+          // Stamp the durable attribution, not whatever the client posted, so
+          // the webhook credits the referrer recorded at signup time.
+          sessionParams.metadata.referralCode = vixyReferralCode;
+        }
+        const session = await stripe.checkout.sessions.create(sessionParams);
     console.log(`[STRIPE CHECKOUT]
 authenticated: true
 userResolved: ${Boolean(user)}
@@ -9373,9 +9677,29 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
       discordProfile?.discordUserId ||
       user.discordId ||
       "";
-    const sessionParams = {
+    let vixyReferralCode = null;
+        let vixyReferralCoupon = null;
+        try {
+          const vixyAttribution = await referralStore.getAttribution(cleanEmail);
+          if (vixyAttribution && vixyAttribution.code) {
+            vixyReferralCode = vixyAttribution.code;
+            vixyReferralCoupon = REFERRAL_COUPON_ID;
+          }
+        } catch (referralLookupErr) {
+          // Never block a purchase because the referral lookup failed. The
+          // buyer simply checks out at full price rather than seeing an error.
+          console.warn("[REFERRAL] checkout lookup failed", referralLookupErr);
+        }
+
+        const sessionParams: any = {
       payment_method_types: ["card"],
-      allow_promotion_codes: true,
+      // discounts and allow_promotion_codes are mutually exclusive in the
+          // Stripe API - sending both is a 400. When the buyer arrived on a
+          // valid referral code the coupon is applied server-side; otherwise
+          // the manual promo box stays enabled exactly as before.
+          ...(vixyReferralCoupon
+            ? { discounts: [{ coupon: vixyReferralCoupon }] }
+            : { allow_promotion_codes: true }),
       customer: stripeCustomerId || void 0,
       customer_email: stripeCustomerId ? void 0 : cleanUserEmail || void 0,
       client_reference_id: user.id || cleanUid || cleanUserEmail,
@@ -9396,7 +9720,12 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
       success_url: `${origin}/?stripe_status=success&day_pass=activated&ref=${cleanReferral}`,
       cancel_url: `${origin}/?stripe_status=cancelled`,
     };
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    if (vixyReferralCode && sessionParams.metadata) {
+          // Stamp the durable attribution, not whatever the client posted, so
+          // the webhook credits the referrer recorded at signup time.
+          sessionParams.metadata.referralCode = vixyReferralCode;
+        }
+        const session = await stripe.checkout.sessions.create(sessionParams);
     console.log(
       `[DAY PASS CHECKOUT CREATED] user=${user.id}, email=${cleanUserEmail}, session=${session.id}`,
     );
@@ -12699,7 +13028,81 @@ timestamp: ${new Date().toISOString()}`);
             console.warn("[Stripe Webhook] Discord sync exception:", err);
           });
         }
-        break;
+        // --- VIXY VAULT: INVITE TO EARN ------------------------------------
+          // Runs last, after the buyer's own entitlement is fully provisioned,
+          // and swallows its own errors. The referrer's bonus must never be
+          // able to cost the customer the plan they just paid for.
+          try {
+            if (referralCode && referralCode !== "DIRECT") {
+              const vixyConversion = await referralStore.processConversion({
+                sessionId: session.id,
+                code: referralCode,
+                referredEmail: customerEmail,
+                amountTotal,
+                currency: session.currency || "usd",
+                plan,
+              });
+              // ---- Invite to Earn: conversion reward (additive; never blocks fulfilment) ----
+              try {
+                if (vixyConversion && vixyConversion.status === "GRANTED") {
+                  const rr = await qualifyReferralConversion(db, {
+                    referralId: String(vixyConversion.sessionId || ""),
+                    referrerUserId: String(vixyConversion.referrerEmail || ""),
+                    referredUserId: String(vixyConversion.referredEmail || ""),
+                    plan: String(vixyConversion.plan || ""),
+                    stripeCustomerId: String(session?.customer || ""),
+                    stripeEventId: String(event?.id || ""),
+                    stripeCheckoutSessionId: String(vixyConversion.sessionId || ""),
+                    stripeSubscriptionId: String(session?.subscription || "") || undefined,
+                    stripePaymentIntentId: String(session?.payment_intent || "") || undefined,
+                    amountPaidCents: Number(vixyConversion.amountTotal) || 0,
+                  });
+                  console.log("[REFERRAL] reward", JSON.stringify(rr));
+                }
+              } catch (rewardErr) {
+                console.warn("[REFERRAL] reward creation failed", String(rewardErr));
+              }
+              if (vixyConversion && vixyConversion.idempotentReplay) {
+                console.log(
+                  "[REFERRAL] replay ignored for session",
+                  session.id,
+                );
+              } else if (vixyConversion && vixyConversion.status === "GRANTED") {
+                // Warm this instance's cache so the referrer sees the day now
+                // rather than waiting for a cold start to rehydrate it.
+                userDayPasses.set(vixyConversion.referrerEmail, {
+                  email: vixyConversion.referrerEmail,
+                  status: "ACTIVE",
+                  expiresAt: vixyConversion.dayPassExpiresAt,
+                  source: "REFERRAL_BONUS",
+                });
+                addServerAuditLog(
+                  "SYSTEM_REFERRAL",
+                  "REFERRAL_BONUS_DAY_GRANTED",
+                  `${vixyConversion.referrerEmail} earned a bonus day from ${vixyConversion.referredEmailMasked} via ${referralCode}`,
+                  "SUCCESS",
+                );
+              } else if (
+                vixyConversion &&
+                vixyConversion.status === "GRANT_FAILED"
+              ) {
+                addServerAuditLog(
+                  "SYSTEM_REFERRAL",
+                  "REFERRAL_BONUS_DAY_FAILED",
+                  `Bonus day write failed for ${vixyConversion.referrerEmail} on session ${session.id}`,
+                  "WARN",
+                );
+              }
+            }
+          } catch (referralErr) {
+            console.error(
+              "[REFERRAL] conversion processing failed",
+              session.id,
+              referralErr,
+            );
+          }
+
+          break;
       }
       case "checkout.session.async_payment_failed": {
         const session = event.data.object;
@@ -12889,6 +13292,19 @@ timestamp: ${new Date().toISOString()}`);
         break;
       }
       case "charge.refunded": {
+        // ---- Invite to Earn: reverse referral credits on refund ----
+        // Never deletes history: writes a negative offsetting ledger entry.
+        try {
+          const refEmail = await extractEmail(event.data.object);
+          if (refEmail) {
+            const rv = await reverseRewardsForReferredUser(
+              db, String(refEmail), "PAYMENT_REVERSED", String(event?.id || ""),
+            );
+            if (rv.reversed > 0) console.log("[REFERRAL] reversed", rv.reversed);
+          }
+        } catch (revErr) {
+          console.warn("[REFERRAL] reversal failed", String(revErr));
+        }
         const charge = event.data.object;
         const customerEmail = await extractEmail(charge);
         if (customerEmail) {
@@ -13613,10 +14029,24 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   }, "isDemo");
   const recentLogs = persistentSignalLogs
     .filter((s) => !isDemo(s))
+    // Plain slice(0, N) took the FIRST N rows in ledger append order, i.e. the
+    // OLDEST rows once the ledger passed the limit - so the per-asset accuracy
+    // matrix (built client-side from this response) silently fell behind the
+    // real ledger while the unsliced server-side `stats` below stayed current.
+    // Sort by lockedAt descending first so "recent" actually means recent.
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.lockedAt || b.resolvedAt || 0).getTime() -
+        new Date(a.lockedAt || a.resolvedAt || 0).getTime(),
+    )
     .slice(0, limit2);
   const resolved = persistentSignalLogs.filter(
     (s) =>
       (s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED") &&
+      // Rows the late sweep could not grade (seed/invalid strike) carry no
+      // real outcome and must count neither as a win nor as a loss.
+      s.exitReason !== "DATA_INVALID_STRIKE" &&
       !isDemo(s),
   );
   const upWins = resolved.filter(
@@ -13639,10 +14069,29 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   const pending = persistentSignalLogs.filter(
     (s) => s.status === "LOCKED" && !isDemo(s),
   ).length;
+  // Unsliced per-asset breakdown, computed the same way as the totals above,
+  // so the frontend's accuracy matrix never has to fall back to the
+  // recentResolved array (which is capped at limit2 and will fall behind the
+  // real ledger on any asset once total row count passes that cap).
+  const perAssetStats = {};
+  for (const s of resolved) {
+    const assetKey = (s.asset || "BTC").toUpperCase();
+    if (!perAssetStats[assetKey]) {
+      perAssetStats[assetKey] = { wins: 0, losses: 0, total: 0 };
+    }
+    perAssetStats[assetKey].total += 1;
+    if (s.wasCorrect) perAssetStats[assetKey].wins += 1;
+    else perAssetStats[assetKey].losses += 1;
+  }
+  for (const key of Object.keys(perAssetStats)) {
+    const a = perAssetStats[key];
+    a.winRatePct = a.total > 0 ? Math.round((a.wins / a.total) * 1e3) / 10 : 0;
+  }
   res.json({
     recentResolved: recentLogs,
     stats: {
       total: totalCount,
+      perAsset: perAssetStats,
       winCount,
       lossCount,
       winRatePct,
@@ -14476,6 +14925,48 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   };
   res.json(decisionObj);
 });
+const ANONYMOUS_SIGNAL_ACCESS: any = {
+  role: "UNPAID",
+  isAdmin: false,
+  accessState: "LOCKED",
+  discordVerified: false,
+  subscriptionStatus: "inactive",
+  entitlements: [],
+  locked: true,
+};
+const SIGNAL_TEASER_STRIP_FIELDS = [
+  "direction",
+  "confidence",
+  "probability",
+  "calibratedProbability",
+  "strike",
+  "targetStrike",
+  "lockedDirection",
+  "lockedConfidence",
+  "lockedProbability",
+  "lockedStrike",
+  "lockedSpot",
+  "spotAtLock",
+  "lockedPrediction",
+  "livePrediction",
+  "lockedDecision",
+  "confidenceLabel",
+  "evidenceAgreement",
+  "execution",
+];
+const applySignalTeaser = (res: any) => {
+  const send = res.json.bind(res);
+  res.json = (body: any) => {
+    if (body && typeof body === "object") {
+      for (const f of SIGNAL_TEASER_STRIP_FIELDS) {
+        if (f in body) body[f] = null;
+      }
+      body.teaser = true;
+      body.upgradeUrl = "/pricing";
+    }
+    return send(body);
+  };
+};
 app.get(
   ["/api/signal", "/api/signal/latest", "/api/live-engine"],
   async (req, res) => {
@@ -14782,9 +15273,15 @@ app.get(
       last10.length > 0
         ? Math.round((last10WinCount / last10.length) * 100)
         : 0;
-    const reqEmail = req.headers["x-user-email"] || req.query.email || "";
-    const reqUid = req.headers["x-user-id"] || req.query.uid || "";
-    const userAccess = await getUserAccessState(reqEmail, reqUid);
+    const vixySession = authenticateSession(req);
+    const reqEmail = (vixySession?.email || "").toLowerCase().trim();
+    const reqUid = vixySession?.uid || "";
+    const userAccess = reqEmail
+      ? await getUserAccessState(reqEmail, reqUid)
+      : ANONYMOUS_SIGNAL_ACCESS;
+    if (userAccess && userAccess.locked === true) {
+      applySignalTeaser(res);
+    }
     res.json({
       sessionId: SERVER_SESSION_ID,
       market: "BTC_KALSHI_15M",
@@ -15156,6 +15653,41 @@ app.get("/api/vixy/health", (req, res) => {
         : "OFFLINE",
   });
 });
+// Empirical confidence calibration.
+// Raw model confidence has no reliable relationship to outcomes. Measured over
+// 103 graded locks: claimed 80-85% won 5 of 18 (27.8%), claimed 85-90% won 18 of
+// 39 (46.2%), claimed 90-95% won 15 of 24 (62.5%). The curve is non-monotonic and
+// inverted through the middle, so showing a paying user the raw number overstates
+// the engine badly in exactly the band it fires most often. This maps a raw
+// confidence onto the observed win rate of its own bucket, and refuses to answer
+// when the bucket is too thin to mean anything rather than guessing.
+const CALIBRATION_MIN_BUCKET_SAMPLES = 15;
+function getCalibratedConfidence(rawConf: number): any {
+  const raw = Number(rawConf);
+  if (!Number.isFinite(raw)) {
+    return { raw: null, calibrated: null, sampleSize: 0, bucket: null, status: "NO_INPUT" };
+  }
+  const settled = (persistentSignalLogs as any[]).filter((s: any) => s.status === "RESOLVED");
+  const lo = Math.min(95, Math.max(50, Math.floor(raw / 5) * 5));
+  const hi = lo >= 95 ? 101 : lo + 5;
+  const items = settled.filter((s: any) => {
+    const c = s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
+    return c >= lo && c < hi;
+  });
+  const n = items.length;
+  const wins = items.filter((s: any) => s.wasCorrect).length;
+  const bucket = lo + "-" + (hi === 101 ? 100 : hi) + "%";
+  if (n < CALIBRATION_MIN_BUCKET_SAMPLES) {
+    return { raw, calibrated: null, sampleSize: n, wins, bucket, status: "INSUFFICIENT_SAMPLE" };
+  }
+  return { raw, calibrated: Math.round((wins / n) * 1e3) / 10, sampleSize: n, wins, bucket, status: "CALIBRATED" };
+}
+
+app.get("/api/signal/calibrated-confidence", (req, res) => {
+  const raw = Number((req.query as any).confidence ?? (req.query as any).conf);
+  res.json(getCalibratedConfidence(raw));
+});
+
 app.get("/api/signal/confidence-buckets", (req, res) => {
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
   const bucketRanges = [
@@ -15968,6 +16500,200 @@ app.get("/api/venues/polymarket", async (req, res) => {
     timestamp: Date.now(),
   });
 });
+// ============================================================
+// BTC 15m BACKTEST - historical research model. Real Coinbase Exchange
+// candles, real graded outcomes. This is DELIBERATELY NOT a replay of the
+// live decision engine: the live pipeline depends on live order flow,
+// Kalshi implied odds, and sentiment that do not exist historically, so
+// faking a "replay" of it would itself be exactly the kind of fabrication
+// this codebase has been having removed from it (see the removed
+// serverJournalEntries seed and the removed spot-price fallback). Instead
+// this runs a small number of simple, transparent, price-only models and
+// reports their real results - including when a model loses money, as one
+// of them (plain momentum-following) does. Nothing here writes to
+// signal_logs, nothing here feeds the live calibration loop, and nothing
+// here is merged into the live win-rate stats.
+async function fetchBacktestCandles(daysBack, maxMs) {
+  const fetchStart = Date.now();
+  const timeBudgetMs = maxMs || 45e3;
+  const PRODUCT = "BTC-USD";
+  const GRANULARITY = 900; // 15 minutes - one candle per cycle
+  const now = Date.now();
+  const totalMs = daysBack * 24 * 3600 * 1e3;
+  const chunkMs = 290 * GRANULARITY * 1e3;
+  let cursorEnd = now;
+  const startBound = now - totalMs;
+  const rows = [];
+  let reqCount = 0;
+  let errCount = 0;
+  while (cursorEnd > startBound) {
+    if (Date.now() - fetchStart > timeBudgetMs) {
+      // Stop early rather than risk the shared 60s function timeout killing
+      // the whole request mid-fetch. Whatever candles we have so far still
+      // produce a valid, honest (just shorter-window) backtest.
+      break;
+    }
+    const cursorStart = Math.max(startBound, cursorEnd - chunkMs);
+    const startIso = new Date(cursorStart).toISOString();
+    const endIso = new Date(cursorEnd).toISOString();
+    reqCount++;
+    try {
+      const res = await fetchWithTimeout(
+        `https://api.exchange.coinbase.com/products/${PRODUCT}/candles?granularity=${GRANULARITY}&start=${startIso}&end=${endIso}`,
+        {},
+        8e3,
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) rows.push(...data);
+        else errCount++;
+      } else {
+        errCount++;
+      }
+    } catch {
+      errCount++;
+    }
+    cursorEnd = cursorStart;
+    await new Promise((r) => setTimeout(r, 180));
+  }
+  const byTime = new Map();
+  for (const c of rows) {
+    const [time, low, high, open, close, volume] = c;
+    byTime.set(time, { time, low, high, open, close, volume });
+  }
+  const candles = Array.from(byTime.values()).sort((a, b) => a.time - b.time);
+  return { candles, reqCount, errCount };
+}
+
+function runMeanReversionBacktest(candles, threshPct) {
+  const LOOKBACK = 8; // 8 candles = 2 hours
+  const byMonth = {};
+  let wins = 0,
+    losses = 0,
+    skipped = 0;
+  const recent = [];
+  for (let i = LOOKBACK; i < candles.length; i++) {
+    const closesBefore = candles.slice(i - LOOKBACK, i).map((c) => c.close);
+    const avg = closesBefore.reduce((a, b) => a + b, 0) / closesBefore.length;
+    const lastClose = candles[i - 1].close;
+    const devPct = ((lastClose - avg) / avg) * 100;
+    let direction = "NEUTRAL";
+    if (devPct > threshPct) direction = "DOWN";
+    else if (devPct < -threshPct) direction = "UP";
+    const cur = candles[i];
+    const actual = cur.close >= cur.open ? "UP" : "DOWN";
+    if (direction === "NEUTRAL") {
+      skipped++;
+      continue;
+    }
+    const win = actual === direction;
+    win ? wins++ : losses++;
+    const monthKey = new Date(cur.time * 1e3).toISOString().slice(0, 7);
+    if (!byMonth[monthKey]) byMonth[monthKey] = { wins: 0, losses: 0 };
+    byMonth[monthKey][win ? "wins" : "losses"] += 1;
+    recent.push({
+      cycleStart: new Date(cur.time * 1e3).toISOString(),
+      entry: cur.open,
+      exit: cur.close,
+      direction,
+      actual,
+      win,
+      devPct: Math.round(devPct * 100) / 100,
+    });
+  }
+  const monthly = Object.entries(byMonth)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, v]) => ({
+      month,
+      wins: v.wins,
+      losses: v.losses,
+      total: v.wins + v.losses,
+      winRatePct: v.wins + v.losses > 0 ? Math.round((v.wins / (v.wins + v.losses)) * 1e3) / 10 : 0,
+    }));
+  const total = wins + losses;
+  return {
+    modelName: "Mean Reversion (2h baseline, threshold " + threshPct + "%)",
+    threshPct,
+    totalCycles: candles.length - LOOKBACK,
+    decided: total,
+    skipped,
+    wins,
+    losses,
+    winRatePct: total > 0 ? Math.round((wins / total) * 1e3) / 10 : 0,
+    monthly,
+    recentCycles: recent.slice(-200),
+  };
+}
+
+async function persistBacktestSummary(summary) {
+  const payload = {
+    ...summary,
+    generatedAt: new Date().toISOString(),
+    dataSource: "Coinbase Exchange BTC-USD, 900s candles",
+    disclaimer:
+      "Historical research model, price-only, no fees/slippage modeled. Not the live decision engine. Not merged into or used to compute the live win rate.",
+  };
+  await ensureFirestoreNetworkEnabled();
+  await withTimeout(
+    setDoc(doc(db, "backtest_summary", "btc15m_mean_reversion_v1"), sanitizeForFirestore(payload)),
+    8e3,
+    "RESOURCE_EXHAUSTED: backtest summary timeout",
+  );
+  return payload;
+}
+
+app.post("/api/admin/backtest/run", requireRole(["OWNER"]), async (req, res) => {
+  try {
+    const daysBack = Math.min(400, parseInt(req.body?.daysBack || "365", 10));
+    const threshPct = Number(req.body?.threshPct || 0.15);
+    const { candles, reqCount, errCount } = await fetchBacktestCandles(daysBack);
+    if (candles.length < 100) {
+      return res.status(502).json({
+        success: false,
+        error: "INSUFFICIENT_CANDLE_DATA",
+        message: `Only fetched ${candles.length} candles (${reqCount} requests, ${errCount} errors) - not enough to run a meaningful backtest.`,
+      });
+    }
+    const summary = runMeanReversionBacktest(candles, threshPct);
+    let persisted = false;
+    let persistError = null;
+    try {
+      await persistBacktestSummary(summary);
+      persisted = true;
+    } catch (err) {
+      persistError = err?.message || String(err);
+    }
+    res.json({
+      success: true,
+      candleCount: candles.length,
+      fetchRequests: reqCount,
+      fetchErrors: errCount,
+      persisted,
+      persistError,
+      summary,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: "BACKTEST_FAILED", message: err?.message || String(err) });
+  }
+});
+
+app.get("/api/backtest/summary", async (req, res) => {
+  try {
+    await ensureFirestoreNetworkEnabled();
+    const snap = await withTimeout(
+      getDoc(doc(db, "backtest_summary", "btc15m_mean_reversion_v1")),
+      6e3,
+      "RESOURCE_EXHAUSTED: backtest summary read timeout",
+    );
+    if (!snap.exists()) {
+      return res.json({ available: false, message: "Backtest has not been run yet." });
+    }
+    res.json({ available: true, ...snap.data() });
+  } catch (err) {
+    res.status(200).json({ available: false, message: "Backtest summary temporarily unavailable." });
+  }
+});
+
 app.get("/api/daily-report", (req, res) => {
   const now = Date.now();
   const oneDayAgo = now - 24 * 60 * 60 * 1e3;
@@ -16154,6 +16880,36 @@ app.get("/api/signal-snapshots", (req, res) => {
 // that would manufacture an outcome from the wrong data, which is exactly the
 // class of fiction this endpoint used to embody. Overdue locks are reported so
 // the gap is visible instead of being silently papered over.
+app.all("/api/cron/backtest-refresh", async (req, res) => {
+  // Weekly automatic refresh of the BTC backtest research panel. Deliberately
+  // NOT on the 15-minute settle cron cadence - a full historical candle fetch
+  // has no reason to re-run that often, and this route uses a smaller trailing
+  // window (180d, ~58 requests) plus a hard time budget so it can never come
+  // close to the shared 60s function timeout, even on a slow day for Coinbase.
+  try {
+    const { candles, reqCount, errCount } = await fetchBacktestCandles(180, 4e4);
+    if (candles.length < 100) {
+      return res.status(200).json({
+        success: false,
+        error: "INSUFFICIENT_CANDLE_DATA",
+        message: `Only fetched ${candles.length} candles (${reqCount} requests, ${errCount} errors).`,
+      });
+    }
+    const summary = runMeanReversionBacktest(candles, 0.15);
+    let persisted = false;
+    let persistError = null;
+    try {
+      await persistBacktestSummary(summary);
+      persisted = true;
+    } catch (err) {
+      persistError = err?.message || String(err);
+    }
+    res.json({ success: true, candleCount: candles.length, reqCount, errCount, persisted, persistError, winRatePct: summary.winRatePct });
+  } catch (err) {
+    res.status(200).json({ success: false, error: "BACKTEST_REFRESH_FAILED", message: err?.message || String(err) });
+  }
+});
+
 app.all("/api/cron/settle", async (req, res) => {
   const nowMs = Date.now();
   let hydration = null;
@@ -16167,6 +16923,99 @@ app.all("/api/cron/settle", async (req, res) => {
   const overdue = pending.filter(
     (s) => s.expiresAt && new Date(s.expiresAt).getTime() <= nowMs,
   );
+
+  // LATE SETTLEMENT SWEEP. Live settlement only grades the immediately
+  // previous cycle's lock at rollover, so any lock whose boundary passed with
+  // no warm instance was orphaned at LOCKED forever (31 rows on 2026-09-03).
+  // Grade those from the real Coinbase Exchange 1-minute close ending at
+  // expiry, tag provenance so they are never mistaken for live settlement,
+  // and do NOT feed shadow calibration - a late outcome must not retrain.
+  const lateSettlement: any = { graded: 0, wins: 0, losses: 0, invalidated: 0, skipped: 0, rows: [] as any[] };
+  const lateCandidates = overdue
+    .filter((s) => nowMs - new Date(s.expiresAt).getTime() > 2 * 60 * 1e3)
+    .slice(0, 40);
+  // Candle lookups are the entire cost of this sweep. 40 sequential round trips
+  // to Coinbase did not fit the lambda budget, so runs timed out partway and left
+  // rows stuck at LOCKED. Prefetch concurrently in chunks of 8 (Coinbase public
+  // limit is ~10 rps); the grading loop below is unchanged and just reads the map.
+  const candleByRow = new Map<string, number>();
+  for (let ci = 0; ci < lateCandidates.length; ci += 8) {
+    await Promise.all(
+      (lateCandidates.slice(ci, ci + 8) as any[]).map(async (r0: any) => {
+        const e0 = new Date(r0.expiresAt).getTime();
+        try {
+          const s0 = new Date(e0 - 60 * 1e3).toISOString();
+          const t0 = new Date(e0 - 1).toISOString();
+          const q0 = await fetchWithTimeout(
+            `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${s0}&end=${t0}`,
+          );
+          if (q0.ok) {
+            const k0 = await q0.json();
+            if (Array.isArray(k0) && k0.length && Number(k0[0][4]) > 1e3)
+              candleByRow.set(r0.id, Number(k0[0][4]));
+          }
+        } catch {}
+      }),
+    );
+  }
+  for (const row of lateCandidates as any[]) {
+    const expMs = new Date(row.expiresAt).getTime();
+    const strike = Number(row.targetStrike);
+    const dir = row.direction;
+    const strikePlausible =
+      Number.isFinite(strike) && strike > 1e3 && strike !== 64100 && strike !== 64161.4;
+    if (!strikePlausible || (dir !== "UP" && dir !== "DOWN")) {
+      row.status = "CRITICALLY_INVALIDATED";
+      row.resolvedAt = new Date().toISOString();
+      row.settlementAt = row.resolvedAt;
+      row.exitReason = "DATA_INVALID_STRIKE";
+      row.settlementSource = "LATE_SWEEP";
+      row.moveInFavor = null;
+      row.moveInFavorPct = null;
+      processedSettlements.add(row.id);
+      lateSettlement.invalidated += 1;
+      lateSettlement.rows.push({ id: row.id, result: "INVALIDATED", reason: row.exitReason });
+      try { await persistSingleSignalLog(row); } catch {}
+      continue;
+    }
+    let lateClose: number | null = candleByRow.get(row.id) ?? null;
+    if (lateClose === null) {
+      lateSettlement.skipped += 1;
+      lateSettlement.rows.push({ id: row.id, result: "SKIPPED", reason: "NO_CANDLE" });
+      continue;
+    }
+    row.status = "RESOLVED";
+    row.resolvedAt = new Date().toISOString();
+    row.settlementAt = row.resolvedAt;
+    row.settlementPrice = lateClose;
+    row.exitPrice = lateClose;
+    row.exitReason = "SETTLED_LATE_FROM_CANDLE";
+    row.settlementSource = "COINBASE_1M_CLOSE";
+    row.settledForExpiry = new Date(expMs).toISOString();
+    row.actualOutcome = lateClose >= strike ? "UP" : "DOWN";
+    row.actualDirection = row.actualOutcome;
+    row.wasCorrect = row.actualOutcome === dir;
+    row.outcome = row.wasCorrect ? "WIN" : "LOSS";
+    row.brierScore =
+      Math.round(Math.pow((Number(row.confidence) || 0) / 100 - (row.wasCorrect ? 1 : 0), 2) * 1e3) / 1e3;
+    const lateEntry = Number(row.entryPrice ?? row.spotAtLock);
+    if (Number.isFinite(lateEntry) && lateEntry > 1e3) {
+      const signed = (lateClose - lateEntry) * (dir === "UP" ? 1 : -1);
+      row.moveInFavor = Math.round(signed * 100) / 100;
+      row.moveInFavorPct = Math.round((signed / lateEntry) * 1e4) / 100;
+    } else {
+      row.moveInFavor = null;
+      row.moveInFavorPct = null;
+    }
+    processedSettlements.add(row.id);
+    lateSettlement.graded += 1;
+    if (row.wasCorrect) lateSettlement.wins += 1; else lateSettlement.losses += 1;
+    lateSettlement.rows.push({ id: row.id, result: row.outcome, close: lateClose, strike, dir });
+    try { await persistSingleSignalLog(row); } catch {}
+  }
+  if (lateSettlement.graded + lateSettlement.invalidated > 0) {
+    try { savePersistentStore(); } catch {}
+  }
   res.json({
     success: true,
     job: "CONTRACT_SETTLEMENT_CHECK",
@@ -16176,6 +17025,7 @@ app.all("/api/cron/settle", async (req, res) => {
     pendingLocked: pending.length,
     overdueUnsettled: overdue.length,
     overdueCycleIds: overdue.slice(0, 10).map((s) => s.cycleId || s.id),
+    lateSettlement,
     settledSampleSize: serverLearningEngine.settledHistory.length,
     historicalAccuracyPct: serverLearningEngine.historicalAccuracy,
     calibrationStatus: latestCalibrationState.calibrationStatus,

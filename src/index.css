@@ -457,3 +457,59 @@
 .animate-laser-sweep {
   animation: sweepLaserHorizontal 2.2s ease-in-out infinite;
 }
+
+
+/* ===========================================================================
+   VIXY design tokens (Phase 0). Additive only. Nothing above this line
+   changes; new work reads these instead of hardcoding.
+   =========================================================================== */
+:root {
+  --vx-bg: #07060c;
+  --vx-surface: rgba(255, 255, 255, 0.015);
+  --vx-border: rgba(255, 255, 255, 0.07);
+  --vx-border-strong: rgba(255, 255, 255, 0.12);
+  --vx-text: #f2f0f7;
+  --vx-text-2: rgba(242, 240, 247, 0.62);
+  --vx-text-3: rgba(242, 240, 247, 0.40);
+  --vx-accent: #a855f7;
+  --vx-accent-soft: rgba(168, 85, 247, 0.18);
+  --vx-up: #34d399;
+  --vx-down: #fb7185;
+  --vx-warn: #fbbf24;
+  --vx-radius: 12px;
+  --vx-radius-sm: 8px;
+  --vx-glow: 0 0 28px -6px rgba(168, 85, 247, 0.75);
+  /* Cycle Object phase colours - one per NormalizedLifecycleState */
+  --vx-phase-calibrating: #7c8ba1;
+  --vx-phase-building: #60a5fa;
+  --vx-phase-confirming: #a78bfa;
+  --vx-phase-locked: #a855f7;
+  --vx-phase-protected: #fbbf24;
+  --vx-phase-settled: #34d399;
+  --vx-phase-skipped: #94a3b8;
+}
+
+/* Micro-label: the ONLY place uppercase mono belongs. */
+.vx-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--vx-text-3);
+}
+
+/* State grammar: a state is never rendered as a value. */
+.vx-state {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--vx-border-strong);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--vx-text-2);
+}
+.vx-state.warn { border-color: rgba(251,191,36,0.4); color: #fde68a; background: rgba(251,191,36,0.08); }
+.vx-state.live { border-color: rgba(52,211,153,0.4); color: #a7f3d0; background: rgba(52,211,153,0.08); }
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-outer-glow, .radar-orbit, .radar-sweep-ring, .radar-glint { animation: none !important; }
+}
