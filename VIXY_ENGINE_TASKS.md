@@ -62,21 +62,30 @@ The key question is not "did it guess UP/DOWN correctly?" but
 - [ ] **B5** Verify the guard behaves correctly in a real Vercel deployment.
       **BLOCKED:** requires a deploy (STOP CONDITION).
 
-## PHASE C — TRUSTWORTHY HIGH-RESOLUTION DATA  `[ ]`  ← NEXT
+## PHASE C — TRUSTWORTHY HIGH-RESOLUTION DATA  `[x]` (C5 in progress)
 
-The 1-minute replay is unusable for tuning: `getPriceAtAgo(15|30|60)` all resolve
-to the same previous-minute price, collapsing 3 of 5 timeframe votes on ~85% of
-ticks and inflating agreement → confidence → lock quality.
-
-- [ ] **C1** Trade-level ingestion from Coinbase `/products/BTC-USD/trades`,
-      cached to disk, same offline/deterministic contract as the candle cache.
-- [ ] **C2** Aggregate trades into ~3s observations matching production's tick
-      cadence. Real trades only — no interpolation, no synthetic ticks.
-- [ ] **C3** Expose actual timestamp coverage; gaps stay gaps.
-- [ ] **C4** Re-run the fidelity diagnostic and show the collapse rate drop.
-- [ ] **C5** Reconcile against the live baseline (103 graded · 49.5% ·
+- [x] **C1** Trade-level ingestion from Coinbase `/products/BTC-USD/trades`
+      (`scripts/replay15m/tradeCache.ts`), cached per complete UTC hour, same
+      offline/deterministic contract as the candle cache. — `9e507db`
+- [x] **C2** Aggregated into 3s observation buckets matching production's
+      cadence. Real prints only. An empty bucket carries the last real price
+      and is flagged `empty:true` with `tradeCount 0`; over 2h only 6/2400
+      (0.25%) were empty. Nothing interpolated. — `9e507db`
+- [x] **C3** Coverage reported every run: buckets total / with prints / empty,
+      trades used, requests, hours cached vs fetched. — `9e507db`
+- [x] **C4** Collapse rate measured, identical 2h window, same seed:
+      **candles 120/120 = 100%** → **trades 58/2400 = 2.4%**. — `9e507db`
+      The harness now separates the DEFECT (lookbacks unresolvable) from the
+      SYMPTOM (equal votes, which never reaches 0 because the three votes use
+      different thresholds and legitimately agree in a quiet market).
+- [~] **C5** Reconcile against the live baseline (103 graded · 49.5% ·
       Brier 0.378 · 43 UP / 8 DOWN wins). Investigate any remaining divergence
       rather than tuning it away.
+
+**Bonus unlocked:** trades carry a real `side`, so buckets record genuine taker
+buy/sell volume. Deliberately NOT fed to the engine yet — `bullVolPct` is
+currently derived from moneyness, and swapping in real order flow is an engine
+change. Recorded so E2 can measure whether it adds independent value.
 
 ## PHASE D — DETERMINISTIC REPLAY ON REAL DATA  `[~]`
 
@@ -84,7 +93,8 @@ ticks and inflating agreement → confidence → lock quality.
 - [x] **D2** No-look-ahead invariant asserted every tick.
 - [x] **D3** Per-cycle trajectory capture (confidence, lock quality, reversal
       risk, direction, time-to-lock, flips, MAE/MFE, blocker).
-- [ ] **D4** Re-point onto trade-level data from Phase C.
+- [x] **D4** Re-pointed onto trade-level data; candles and trades share one
+      source-agnostic observation stream. `--source trades`. — `9e507db`
 - [ ] **D5** Chronological TRAIN / VALIDATION / OUT-OF-SAMPLE split.
 
 ## PHASE E — MATHEMATICAL RECONSTRUCTION OF THE CURRENT ENGINE  `[ ]`
