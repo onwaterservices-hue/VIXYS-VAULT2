@@ -315,11 +315,29 @@ worst-performing corner of Table 1 (t≈360s, 0–6 bps ⇒ ~60–74%) — and
 Both are the same surface. The engine is not "broken vs replay"; it is
 choosing a bad point on a surface the data now describes precisely.
 
-Why production locks at 360s with a tiny lead while replay locks at ~540s with
-a large one is the remaining mechanistic gap — most likely the strike
-reference: production's `current15mStrikePrice` is the Kalshi `floor_strike`
-when the Kalshi fetch succeeds and `round(open/10)*10` when it does not, so
-"moneyness" is measured against a moving reference. Next investigation.
+**Strike-reference hypothesis: REFUTED.** Joining the 73 locks with cycle opens
+from the candle cache: the Kalshi strike sits at the open (median +0.5 bps,
+|abs| median 1.3 bps); settlement side vs Kalshi strike == side vs open in
+70/73. The two "round-10" strikes are the phantom $64,100 (`ea05da9`) —
+1,680 bps from the open, both accidental WINs. All three contaminated rows
+are now identified: one $100 settlement, two phantom strikes.
+
+**The actual explanation — the ledger spans three engine eras:**
+```
+era                            n   win%   UP/DN  med lock  med lead  against  win w/  win ag
+pre-795d994 (before Sep 2)    35  42.9%   30/5    362s     -1.6 bps    20      67%     25%
+795d994..2deba55 (Sep 2–9)    36  61.1%   35/1    364s     +4.1 bps     2      59%    100%
+post-2deba55 (Sep 9)           2   100%    2/0    360s    +21.8 bps     0
+```
+The 49.5% is dominated by the pre-Sep-2 engine, which locked AGAINST the side
+price was on 20 times out of 35 (the momentum-overrides-strike bug `795d994`
+fixed) and won 25% of those. The engine as it has run since Sep 2 is at
+**61%** — consistent with Table 1 for its operating point (t≈360s, ~4 bps
+lead ⇒ 69–74%) minus noise — and its remaining gap to 90%+ is entirely
+**lock timing and lead**: it commits at the first legal second with a ~4 bps
+lead, and 35 of 36 calls are UP. Replay's 91% is the same engine committing
+later with a ~$100 lead on the same surface. The system is now fully
+reconciled: replay, ledger, users' 90%+ and Table 1 are one picture.
 
 **Ledger freshness:** the latest resolved cycle is 10:00 UTC; the 13:45 lock
 watched live (and everything since 10:15) is absent at 14:02. Settlement or
