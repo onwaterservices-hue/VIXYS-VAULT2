@@ -88,6 +88,14 @@ const SEED = args.seed ? Number(args.seed) : 1;
 // --engine-source <path>: slice the engine from this file instead of the
 // working tree's server.ts (e.g. `git show 3e31a84:server.ts > /tmp/old.ts`).
 const ENGINE_SOURCE = args['engine-source'] ? resolve(String(args['engine-source'])) : undefined;
+// --snippets <file.jsonl>: intracycle learning samples. At every checkpoint
+// (each 60s; the 5-minute marks are a subset) the engine's state and a handful
+// of price/flow features are captured USING ONLY TICKS <= THAT CHECKPOINT. The
+// label -- which side of the frozen strike price settled on -- is attached
+// after the cycle closes. One completed cycle therefore yields ~14 labelled
+// samples instead of one. Nothing here feeds back into the decision.
+const SNIPPETS_PATH = args.snippets ? resolve(String(args.snippets)) : null;
+const SNIPPET_SECS = [60, 120, 180, 240, 300, 360, 420, 480, 540, 600, 660, 720, 780, 840];
 const MIN_COVERAGE = args['min-coverage'] ? Number(args['min-coverage']) : 12; // of 15 minutes
 
 let endMs: number, startMs: number;
@@ -209,7 +217,7 @@ async function main() {
   console.log(`source     : ${SOURCE}${SOURCE === 'trades' ? ` (${BUCKET_SECONDS}s buckets from real trade prints)` : ' (1-minute candles)'}`);
 
   // Unified observation stream: [tsMs, price] pairs the engine is ticked with.
-  let stream: { tsMs: number; price: number }[] = [];
+  let stream: { tsMs: number; price: number; buyVolume?: number; sellVolume?: number }[] = [];
   let byMinute = new Map<number, Candle>();
   let sourceSummary = '';
   let tradeStats: any = null;
@@ -221,7 +229,7 @@ async function main() {
       onProgress: (m) => process.stdout.write(`\n${m}`),
     });
     tradeStats = stats;
-    stream = ticks.map((t) => ({ tsMs: t.tsMs, price: t.price }));
+    stream = ticks.map((t) => ({ tsMs: t.tsMs, price: t.price, buyVolume: t.buyVolume, sellVolume: t.sellVolume }));
     console.log('');
     console.log(`             ${stats.bucketsTotal} buckets `
       + `(${stats.bucketsWithTrades} with real prints, ${stats.bucketsEmpty} empty), `
@@ -264,11 +272,12 @@ async function main() {
   console.log('');
 
   const records: CycleRecord[] = [];
+  const snippetOut: any[] = [];
   let skippedNoCoverage = 0;
 
   // Group the observation stream into cycles. Only ticks belonging to a cycle
   // are ever visible to that cycle, and they are consumed in time order.
-  const byCycle = new Map<number, { tsMs: number; price: number }[]>();
+  const byCycle = new Map<number, { tsMs: number; price: number; buyVolume?: number; sellVolume?: number }[]>();
   for (const tk of stream) {
     const cs = Math.floor(tk.tsMs / CYCLE_MS) * CYCLE_MS;
     if (!byCycle.has(cs)) byCycle.set(cs, []);
@@ -308,6 +317,8 @@ async function main() {
 
     let prevDir = 'NEUTRAL';
     const lookbackBuf: { tsMs: number; price: number }[] = [];
+    const snippets: any[] = [];
+    let nextSnippet = 0;   // index into SNIPPET_SECS
     for (const tk of cycleTicks) {
       const tickNow = tk.tsMs;
       assertNoLookahead(tickNow, tickNow);
@@ -361,6 +372,36 @@ async function main() {
         });
       }
 
+      // Intracycle snapshot at each checkpoint, from information at or before
+      // this tick only. The label is added after settlement, below.
+      if (SNIPPETS_PATH) {
+        const tSec = Math.floor((tickNow - cs) / 1000);
+        while (nextSnippet < SNIPPET_SECS.length && tSec >= SNIPPET_SECS[nextSnippet]) {
+          const cp = SNIPPET_SECS[nextSnippet++];
+          const p60 = priceAtAgo(lookbackBuf, tickNow, 60), p300 = priceAtAgo(lookbackBuf, tickNow, 300);
+          let buy60 = 0, sell60 = 0, buy180 = 0, sell180 = 0, hasFlow = false;
+          for (let i = cycleTicks.indexOf(tk); i >= 0 && cycleTicks[i].tsMs > tickNow - 180_000; i--) {
+            const x = cycleTicks[i]; if (x.buyVolume == null) break; hasFlow = true;
+            buy180 += x.buyVolume; sell180 += x.sellVolume!;
+            if (x.tsMs > tickNow - 60_000) { buy60 += x.buyVolume; sell60 += x.sellVolume!; }
+          }
+          snippets.push({
+            cycleId, checkpointSec: cp, atSec: tSec, spot, strike,
+            moneynessBps: Math.round((spot - strike) / strike * 1e4 * 10) / 10,
+            mom60Bps: p60 == null ? null : Math.round((spot - p60) / p60 * 1e4 * 10) / 10,
+            mom300Bps: p300 == null ? null : Math.round((spot - p300) / p300 * 1e4 * 10) / 10,
+            flowShare60: hasFlow && buy60 + sell60 > 0 ? Math.round(buy60 / (buy60 + sell60) * 1000) / 1000 : null,
+            flowShare180: hasFlow && buy180 + sell180 > 0 ? Math.round(buy180 / (buy180 + sell180) * 1000) / 1000 : null,
+            direction: st.direction, confidence: st.confidence, lockQuality: st.lockQuality ?? null,
+            lockQualityTier: st.lockQualityTier ?? null, evidenceAgreement: st.pipeline?.evidenceAgreementCount ?? null,
+            alignedCount: st.pipeline?.multiTimeframeAlignment?.alignedCount ?? null,
+            reversalRisk: st.pipeline?.reversalAssessment?.threatScore ?? null,
+            gateAllowed: Boolean(gate.allowed), blocker,
+            lockedByNow: rec.locked, source: SOURCE,
+          });
+        }
+      }
+
       // First allowed tick is the lock. The real engine commits once per cycle
       // (lock15mCycle refuses a second), so the replay does the same.
       if (gate.allowed && !rec.locked) {
@@ -400,7 +441,23 @@ async function main() {
         }
       }
     }
+    // Labels are attached only now, after the cycle has closed and settled.
+    if (SNIPPETS_PATH && snippets.length) {
+      const settled = rec.settlementPrice != null;
+      for (const sn of snippets) {
+        sn.settlementPrice = rec.settlementPrice;
+        sn.settledAboveStrike = settled ? rec.settlementPrice! >= strike : null;   // the product's win criterion
+        sn.settledAboveSpotAtT = settled ? rec.settlementPrice! >= sn.spot : null; // continuation from the checkpoint
+        sn.engineDirCorrectVsStrike = settled && (sn.direction === 'UP' || sn.direction === 'DOWN')
+          ? ((rec.settlementPrice! >= strike) === (sn.direction === 'UP')) : null;
+      }
+      snippetOut.push(...snippets);
+    }
     records.push(rec);
+  }
+  if (SNIPPETS_PATH) {
+    writeFileSync(SNIPPETS_PATH, snippetOut.map((s) => JSON.stringify(s)).join('\n') + '\n');
+    console.log(`snippets   : ${snippetOut.length} labelled intracycle samples from ${records.length} cycles -> ${SNIPPETS_PATH}`);
   }
 
   report(records, { skippedNoCoverage, sourceSummary, tradeStats });
