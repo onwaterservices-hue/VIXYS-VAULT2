@@ -139,6 +139,20 @@ change. Recorded so E2 can measure whether it adds independent value.
       `Taker: X% Bull`. Momentum may be corroborating itself.
 - [ ] **E3** Ablation: which components actually carry predictive value?
 
+## PHASE E' — THE PRODUCT CRITERION (added after the user's correction)  `[~]`
+
+- [x] `--snippets` intracycle dataset (the 5-minute-snippet idea): 36,288
+      labelled samples / 2,592 cycles, no look-ahead. — `a99e2b3`
+- [x] Table 1: P(current side wins | t, |distance|) on 2,591 cycles; stable
+      out-of-sample; volatility matters at small distances. — `f1deb82`
+- [x] Candidate rule fitted first-half / evaluated second-half: ≥95% bar →
+      67.7% of cycles locked at 94.9% win vs engine 2.2% at 96.6%.
+- [ ] Repeat on trade data (7-day ingestion in flight).
+- [ ] Add Kalshi implied price at t → measure edge vs market, not just win%.
+- [ ] Regime slices (trend/range/high-vol) for the rule.
+- [ ] Decide: rule becomes Layer 5 behind a flag (Phase J1), engine evidence
+      demoted to skip/veto roles it can justify.
+
 ## PHASE F — REGIME / EVIDENCE / TEMPORAL / RISK ARCHITECTURE  `[ ]`
 
 - [ ] **F1** Layer 1 — 15M market state → regime.

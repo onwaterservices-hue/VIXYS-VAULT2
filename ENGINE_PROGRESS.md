@@ -343,6 +343,35 @@ BY INTRACYCLE RANGE (volatility proxy; terciles at 11 / 20 bps sampled range)  -
   HIGH-vol  t=720 |mny| 3-6 bps: 69.6% (n=56)
 ```
 
+## ★★★ CANDIDATE LOCK RULE — out of sample, 1,296 later cycles
+
+`scripts/replay15m/research/strikeSideModel.ts`. Empirical table
+P(current side wins | checkpoint t, |distance| bin, running-volatility tercile)
+fitted on the chronologically FIRST 1,295 cycles; bars fixed a priori;
+evaluated only on the SECOND 1,296. One lock per cycle at the first
+qualifying 60s checkpoint; SKIP if none. Volatility uses only spots up to t
+(no look-ahead).
+
+```
+policy                 locks   lock%    WIN%    Wilson95        skips   median t-lock
+CURRENT ENGINE gate       29    2.2%   96.6%   [82.8, 99.4]     1267      540s
+rule bar >=85%          1190   91.8%   86.9%   [84.9, 88.7]      106      540s
+rule bar >=90%          1085   83.7%   91.2%   [89.3, 92.7]      211      660s
+rule bar >=95%           877   67.7%   94.9%   [93.2, 96.1]      419      720s
+```
+
+A transparent, explainable rule locks ~30× more often than the current engine
+at an indistinguishable win rate (CIs overlap; the engine's n=29). This is
+what "locking like crazy when justified" looks like with honest arithmetic.
+
+Caveats (all real): candle-sourced (rule is engine-independent so valid; the
+engine row is candle-inflated in the engine's FAVOUR — it locks more on
+candles, not less); one month, one regime (BTC ~$63k→$79k, trending); no
+Kalshi implied price at t, so "edge vs the market" is not yet measured; the
+25 locks at t=180s are the 40+ bps bin (large early moves). Next: repeat on
+trade data, add Kalshi implied price, add regime slices, then decide whether
+this becomes the engine's Layer 5.
+
 ## PHASE 1 — watching production (www.vixxyvault.com), cycle 13:30–13:45 UTC
 - 13:40 (4:47 left): card **DOWN 52%**, LQ 53 "STRONG EVIDENCE", reversal
   43%; banner above it: **"91% AI confidence on Kalshi, EDGE +12.2%"**. Two
