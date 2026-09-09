@@ -304,7 +304,7 @@ for (const s of [780, 850]) {
     (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')));
 }
 
-t.section('REGRESSION-2deba55: gate and commit point disagree for 720-779s');
+t.section('ALIGNED-780: gate window, reason check and commit point agree (was REGRESSION-2deba55)');
 // 2deba55 moved withinEntryWindow to `effElapsed < 780` but left the reason
 // check at `effElapsed >= 720`, and left lock15mCycle's commit point refusing
 // `>= 720`. So for one minute of every cycle:
@@ -320,18 +320,19 @@ t.section('REGRESSION-2deba55: gate and commit point disagree for 720-779s');
 // the regression makes them FAIL -- forcing the fix to be acknowledged here
 // rather than passing silently. Gate logic is deliberately not changed on this
 // branch.
+// 720-779s is now a legal, consistent part of the entry window: allowed, no
+// EXPIRED reason, eligibility reason clean. lock15mCycle's commit point agrees
+// (tests/lock-gate.invariants.mjs TEST 6).
 for (const s of [720, 750, 779]) {
   const g = runGate(s);
-  t.eq(`REGRESSION effElapsed=${s}s -> gate allowed=true`, g.allowed, true);
-  t.check(`REGRESSION effElapsed=${s}s -> yet reasons contain ENTRY_WINDOW_EXPIRED`,
-    (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')));
+  t.eq(`ALIGNED effElapsed=${s}s -> gate allowed=true`, g.allowed, true);
+  t.check(`ALIGNED effElapsed=${s}s -> no ENTRY_WINDOW_EXPIRED reason`,
+    !(g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')), (g.reasons || []).join('|'));
   const env = runGateEnv(s);
-  t.eq(`REGRESSION effElapsed=${s}s -> lockEligibility.eligible=true`, env.active15mCycle.lockEligibility.eligible, true);
-  t.check(`REGRESSION effElapsed=${s}s -> lockEligibility.reason says EXPIRED`,
-    String(env.active15mCycle.lockEligibility.reason).includes('ENTRY_WINDOW_EXPIRED'));
+  t.eq(`ALIGNED effElapsed=${s}s -> lockEligibility.reason clean`, env.active15mCycle.lockEligibility.reason, 'QUALIFIED_ENTRY_WINDOW');
 }
-t.check('REGRESSION: withinEntryWindow uses 780 while the reason check uses 720',
-  /effElapsed < 780 && effRemaining >= 120/.test(gateSrc) && /if \(effElapsed >= 720 \|\| effRemaining < 180\)/.test(gateSrc));
+t.check('ALIGNED: withinEntryWindow, reason check and remaining floor all use 780 / 120',
+  /effElapsed < 780 && effRemaining >= 120/.test(gateSrc) && /if \(effElapsed >= 780 \|\| effRemaining < 120\)/.test(gateSrc));
 
 t.section('PART B5: effElapsed prefers cycleObservationDuration over wall clock');
 // effElapsed = max(elapsedSeconds, cycleObservationDuration). A cycle whose

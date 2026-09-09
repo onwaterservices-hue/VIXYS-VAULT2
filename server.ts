@@ -3533,7 +3533,13 @@ function canLockCurrentCycle(livePrice) {
   // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
     minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
-  if (effElapsed >= 720 || effRemaining < 180) {
+  // Aligned to 780 with withinEntryWindow above and with lock15mCycle's commit
+  // point. 2deba55 had moved withinEntryWindow to 780 but left this check and the
+  // commit point at 720, so for 720-779s the gate returned allowed=true while
+  // emitting ENTRY_WINDOW_EXPIRED and the commit point refused anyway. Evidence
+  // for 780 rather than 720: in the 7-day trade replay 45 of the strike-side
+  // rule's 132 bar-0.95 locks (97.8% win) fall in that minute.
+  if (effElapsed >= 780 || effRemaining < 120) {
     reasons.push(
       `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 780s / remaining=${effRemaining}s)`,
     );
@@ -3863,9 +3869,9 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   // the primary gate, but lock15mCycle is the only function that actually mutates
   // active15mCycle into a locked state, so it now enforces the boundary itself rather
   // than trusting its caller. Lifecycle: lock legal only within 6:00-12:00.
-  if (effElapsed < 360 || effElapsed >= 720) {
+  if (effElapsed < 360 || effElapsed >= 780) {
     console.warn(
-      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-720s ` +
+      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-780s ` +
       `confirmation window for cycle ${cycleId}. Lock refused.`,
     );
     return false;

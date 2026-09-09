@@ -162,8 +162,8 @@ console.log('== TEST 4: entry window closes late-cycle ==');
 // silently re-labelled as intended here.
 {
   const g = runGate(721);
-  check('REGRESSION-2deba55: elapsed=721s -> gate allowed=true while commit point (TEST 6) refuses',
-    g.allowed === true && (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')),
+  check('ALIGNED-780: elapsed=721s -> gate allowed=true with no EXPIRED reason (commit point agrees, TEST 6)',
+    g.allowed === true && !(g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')),
     `allowed=${g.allowed} reasons=${(g.reasons || []).join('|')}`);
 }
 for (const t of [780, 850]) {
@@ -185,9 +185,16 @@ for (const t of [90, 200, 359]) {
   const r = await runLockWindowCheck(t);
   check(`lock15mCycle elapsed=${t}s -> refuses (false)`, r === false, `returned=${r}`);
 }
-for (const t of [720, 800]) {
+for (const t of [780, 800]) {
   const r = await runLockWindowCheck(t);
   check(`lock15mCycle elapsed=${t}s -> refuses (false)`, r === false, `returned=${r}`);
+}
+{
+  // 720-779s is now inside the commit point's window; with the gate stubbed
+  // permissive the commit point must NOT refuse on the window alone (it then
+  // throws on a missing downstream global, which proves it passed the check).
+  const r = await runLockWindowCheck(750);
+  check('lock15mCycle elapsed=750s -> proceeds past the window check', r !== false, `returned=${r}`);
 }
 
 console.log('== TEST 7: duplicate lock prevention ==');
