@@ -448,6 +448,39 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; sourc
   if (other) console.log(`  OTHER n=${String(other).padStart(4)}  (direction was neither UP nor DOWN)`);
 
   console.log('');
+  console.log('DIRECTIONAL SKILL (strike-independent) -- THE HEADLINE NUMBER');
+  // The win rate above is graded against the cycle's strike. That strike is
+  // frozen at the cycle open, so a lock taken once price has already moved is
+  // scored on a move that had ALREADY happened. It measures strike positioning,
+  // not forecasting.
+  //
+  // This measures forecasting: from the price at the MOMENT OF THE LOCK, did
+  // price end up where the engine said it would? Equivalent to grading against
+  // an at-the-money strike. 50% is a coin flip -- no skill.
+  const skill = graded.filter((r) => r.lockSpot != null && r.settlementPrice != null);
+  const skillWin = skill.filter((r) =>
+    (r.settlementPrice! >= r.lockSpot!) === (r.lockDirection === 'UP')).length;
+  const skillUp = skill.filter((r) => r.lockDirection === 'UP');
+  const skillDown = skill.filter((r) => r.lockDirection === 'DOWN');
+  const wUp = skillUp.filter((r) => (r.settlementPrice! >= r.lockSpot!)).length;
+  const wDn = skillDown.filter((r) => (r.settlementPrice! < r.lockSpot!)).length;
+  console.log(`  post-lock directional accuracy : ${show(pct(skillWin, skill.length), '%')}  (${skillWin}/${skill.length})`);
+  console.log(`    UP calls                     : ${show(pct(wUp, skillUp.length), '%')}  (${wUp}/${skillUp.length})`);
+  console.log(`    DOWN calls                   : ${show(pct(wDn, skillDown.length), '%')}  (${wDn}/${skillDown.length})`);
+  const alreadyMoved = graded.filter((r) =>
+    r.lockSpot != null && ((r.lockSpot! > r.strike) === (r.lockDirection === 'UP'))).length;
+  console.log(`  locks calling the side price had ALREADY moved to: `
+    + `${show(pct(alreadyMoved, graded.length), '%')} (${alreadyMoved}/${graded.length})`);
+  const dStrike = graded.map((r) => Math.abs((r.lockSpot ?? 0) - r.strike)).sort((a, b) => a - b);
+  const dSettle = graded.filter((r) => r.settlementPrice != null && r.lockSpot != null)
+    .map((r) => Math.abs(r.settlementPrice! - r.lockSpot!)).sort((a, b) => a - b);
+  const med = (xs: number[]) => (xs.length ? xs[Math.floor(xs.length / 2)] : null);
+  console.log(`  median |lockSpot - strike|     : $${show(med(dStrike) === null ? null : Math.round(med(dStrike)! * 10) / 10)}`);
+  console.log(`  median |settle  - lockSpot|    : $${show(med(dSettle) === null ? null : Math.round(med(dSettle)! * 10) / 10)}`);
+  console.log('    ^ if the first is much larger than the second, the reported win rate is');
+  console.log('      a property of where the strike sits, not of the engine\'s forecasting.');
+
+  console.log('');
   console.log('CONFIDENCE BUCKET CALIBRATION');
   console.log('  bucket     n     won    win%     avg conf    calib err');
   const ranges = [
