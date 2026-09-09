@@ -99,6 +99,17 @@ Verified: tsc clean, 20/20 test files, `npm run build` clean (vite + server.cjs)
   observedFact; `src/data/assetData.ts` static reasoning strings.
 - The `/api/signal` vs `/api/vixy/15m/current` two-engine split (three
   directions on one screen at rollover) — mission-1-canonical-decision scope.
+- **`WhaleTrackerView.tsx` (the /whale-tracker page) is fabricated end to end**
+  and is the single worst page in the product: an invented feed labelled "LIVE
+  INSTITUTIONAL BLOCK STREAM • 250ms BRIDGE LATENCY • Auto-syncing websocket
+  feed • STREAMING ACTIVE", named fake entities including a real company
+  ("BlackRock Custody Bridge", "Satoshi Era Cluster #089" with a 94.0% win
+  rate, `WhaleTrackerView.tsx:131`), "TRACKED VOLUME (24h) $58.5M", "89% BULL
+  DEFENSE", and "Whale Strike Defense Walls" quoting a BTC $64,000 support
+  floor while BTC trades at $78k — static config from the $64k era. Verified
+  live in production 15:30Z 2026-09-09. Per the no-fabricated-data rule this
+  page should be made inert (honest empty state naming the missing data
+  source) until a real feed exists — no synthetic rows.
 
 Note: `b865a47` (trade walker retry/checkpoint) landed from the parallel
 ingestion session; the 21-day trade ingestion continues there.
