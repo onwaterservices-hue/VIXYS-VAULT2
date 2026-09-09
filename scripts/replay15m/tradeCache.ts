@@ -78,7 +78,16 @@ function cacheDir(root: string, bucketSeconds: number) {
 
 async function fetchPage(after: number | null, attempt = 1): Promise<{ trades: RawTrade[]; after: number | null }> {
   const url = `${ENDPOINT}?limit=1000${after !== null ? `&after=${after}` : ''}`;
-  const res = await fetch(url, { headers: { 'User-Agent': 'vixy-replay15m/1.0' } });
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { 'User-Agent': 'vixy-replay15m/1.0' } });
+  } catch (err) {
+    // Network-level failure (ECONNRESET, DNS, timeout). A 21-day walk died on
+    // one of these after 8,525 requests; retry with backoff instead of dying.
+    if (attempt >= 8) throw err;
+    await sleep(1000 * attempt);
+    return fetchPage(after, attempt + 1);
+  }
   if (res.status === 429 || res.status >= 500) {
     if (attempt >= 6) throw new Error(`HTTP ${res.status} after ${attempt} attempts`);
     await sleep(400 * attempt);
@@ -175,6 +184,7 @@ export async function getTradeTicks(
     // was zero instead of assuming it -- a duplicate print would double-count
     // taker volume silently.
     const seen = new Set<number>();
+    const writtenHours = new Set<number>();
     let after: number | null = null;
     let oldestSeen = Infinity;
     let guard = 0;
@@ -192,6 +202,18 @@ export async function getTradeTicks(
       }
       after = page.after;
       if (after === null) break;
+      // Checkpoint: any missing hour whose whole span lies ABOVE oldestSeen has
+      // been fully walked; persist it now so a crash later loses nothing.
+      if (guard % 100 === 0) {
+        const done = bucketize(collected, bucketSeconds);
+        const nowMs0 = Date.now();
+        for (const h of missing) {
+          if (writtenHours.has(h)) continue;
+          if (!(h > oldestSeen) || !(h + HOUR_MS <= Math.min(endMs, nowMs0))) continue;
+          const rows = [...done.values()].filter((b) => b.tsMs >= h && b.tsMs < h + HOUR_MS).sort((a, b) => a.tsMs - b.tsMs);
+          if (rows.length) { writeFileSync(join(dir, `${h}.json`), JSON.stringify(rows)); writtenHours.add(h); stats.hoursFetched++; }
+        }
+      }
       if (guard % 25 === 0) {
         opts.onProgress?.(
           `  trades: ${stats.requests} requests, back to ${new Date(oldestSeen).toISOString()}, ${collected.length} in window`,
@@ -214,7 +236,7 @@ export async function getTradeTicks(
       const rows = byHour.get(h) || [];
       cached.set(h, rows);
       const hourComplete = h + HOUR_MS <= Math.min(endMs, nowMs);
-      if (hourComplete && rows.length) {
+      if (hourComplete && rows.length && !writtenHours.has(h)) {
         writeFileSync(join(dir, `${h}.json`), JSON.stringify(rows));
         stats.hoursFetched++;
       }
