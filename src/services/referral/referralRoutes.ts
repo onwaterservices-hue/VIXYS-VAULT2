@@ -4,6 +4,7 @@ import {
   isValidCodeFormat,
   isReservedCode,
   REFERRAL_DISCOUNT_PERCENT,
+  REFERRAL_PROMO_CODE,
 } from "./referralService";
 
 /**
@@ -25,6 +26,7 @@ export function createReferralHandlers({
   persistUserCode,
   siteUrl,
   log = console,
+  isAccountAlreadyPaid = (_user?: any) => false,
 }) {
   function buildLink(code) {
     const base = String(siteUrl || "https://vixxyvault.com").replace(/\/+$/, "");
@@ -134,6 +136,57 @@ export function createReferralHandlers({
     }
   }
 
+  /**
+   * GET /api/referral/my-discount
+   *
+   * Server-truth answer to "does THIS signed-in account get the referral
+   * discount, and which promotion code applies it?" The per-user referral code
+   * (VIXY20, ALICE99...) is attribution only and Stripe does not know it; the
+   * discount is carried by ONE shared Stripe promotion code (REFERRAL_PROMO_CODE),
+   * prefilled on the payment link by the client. Enforces one discount per
+   * account: withheld once the account has converted or already pays.
+   */
+  async function myDiscount(req, res) {
+    const user = requireUser(req, res);
+    if (!user) return;
+    try {
+      const attribution = await store.getAttribution(user.email);
+      const hasReferrer = Boolean(attribution && attribution.code);
+      const alreadyConverted = String(attribution?.status || "").toUpperCase() === "CONVERTED";
+      let alreadyPaid = false;
+      try { alreadyPaid = Boolean(isAccountAlreadyPaid(user)); } catch { alreadyPaid = false; }
+      const eligible = hasReferrer && !alreadyConverted && !alreadyPaid;
+
+      let referredByLabel = null;
+      if (hasReferrer) {
+        try {
+          const owner = await store.getCodeOwner(attribution.code);
+          if (owner && owner.ownerName) referredByLabel = String(owner.ownerName);
+        } catch { /* cosmetic */ }
+      }
+
+      res.json({
+        eligible,
+        // Only hand back the promo code when actually eligible, so the client
+        // never prefills a discount the account is not entitled to.
+        promoCode: eligible ? REFERRAL_PROMO_CODE : null,
+        discountPercent: REFERRAL_DISCOUNT_PERCENT,
+        referredByLabel: eligible ? referredByLabel : null,
+        reason: !hasReferrer
+          ? "NO_REFERRER"
+          : alreadyConverted
+            ? "ALREADY_CONVERTED"
+            : alreadyPaid
+              ? "ALREADY_PAID"
+              : "ELIGIBLE",
+      });
+    } catch (err) {
+      log.warn("[REFERRAL] my-discount failed", err);
+      // Fail closed: no false promise of a discount on an outage.
+      res.json({ eligible: false, promoCode: null, discountPercent: REFERRAL_DISCOUNT_PERCENT, reason: "UNAVAILABLE" });
+    }
+  }
+
   /** POST /api/referral/attach  { code } */
   async function attach(req, res) {
     const user = requireUser(req, res);
@@ -222,5 +275,5 @@ export function createReferralHandlers({
     }
   }
 
-  return { me, claimCode, resolve, attach, adminList, adminSave, buildLink };
+  return { me, claimCode, resolve, attach, myDiscount, adminList, adminSave, buildLink };
 }

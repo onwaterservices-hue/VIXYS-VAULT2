@@ -70,6 +70,21 @@ async function run() {
   const ownerAfter = await store.getCodeOwner("VIXY20");
   check("ownership unchanged after a rejected claim", ownerAfter.ownerEmail === "owner@example.com");
 
+  console.log("\n== attribution status drives one-discount-per-account (store level) ==");
+  // The my-discount endpoint and the checkout guard both read attribution
+  // status + paid state; here we pin the store half they depend on.
+  const fs2 = makeFakeFs();
+  const store2 = createReferralStore(() => ({}), fs2, { warn() {}, error() {}, log() {} });
+  await store2.claimCode("ALICE99", "alice@example.com", "u-alice", { ownerName: "Alice" });
+  await store2.attachReferral("ALICE99", "friend@example.com");
+  const friendAttr = await store2.getAttribution("friend@example.com");
+  check("a referred friend has an attribution", Boolean(friendAttr && friendAttr.code === "ALICE99"));
+  check("fresh attribution is JOINED, not CONVERTED (so the discount is still available)", friendAttr.status === "JOINED");
+  const strangerAttr = await store2.getAttribution("stranger@example.com");
+  check("a non-referred account has no attribution (no discount)", !strangerAttr);
+  const aliceOwner = await store2.getCodeOwner("ALICE99");
+  check("code owner display name is available for the congrats/label", aliceOwner && aliceOwner.ownerName === "Alice");
+
   console.log("\n" + pass + " passed, " + fail + " failed\n");
   process.exit(fail === 0 ? 0 : 1);
 }
