@@ -46,9 +46,10 @@ The key question is not "did it guess UP/DOWN correctly?" but
       Fails closed but recoverably. — `d3df10f`
 - [x] **A4** Regression tests, verified adversarially against two deliberate
       reintroductions. — `d3df10f`
-- [ ] **A5** Audit the production ledger for locks already settled at ~$100 and
-      quantify the damage to the 43 UP / 8 DOWN skew.
-      **BLOCKED:** needs production Firestore read access.
+- [x] **A5** Audited via the public resolved-log: **1** lock settled at $100
+      (2026-09-02 19:15). Not the driver of 49.5%. The driver is lock timing
+      and lead: 50/73 locks in 360–420s, median lead 3.2 bps, 22/73 against
+      the current side (won 31.8%). See ENGINE_PROGRESS ★★★★★.
 
 ## PHASE B — DEV / PROD SEPARATION  `[x]`
 

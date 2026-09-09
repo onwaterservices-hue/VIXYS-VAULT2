@@ -287,6 +287,49 @@ blocked on production read access.
 
 ---
 
+## ★★★★★ THE RECONCILIATION — production's own ledger explains the 49.5%
+
+`/api/signal/resolved-log` on production is readable (snapshot saved in the
+session scratchpad). 200 rows, 73 resolved locks, 126 skips, 2026-08-22 →
+2026-09-09 10:00 UTC. Stats: 103 graded, 51W/52L, 49.5%, 44 UP wins / 7 DOWN
+wins, Brier 0.377.
+
+**A5 — the $100 settlement path in the ledger: 1 row.**
+`15M-2026-09-02T19:15Z UP strike 77351.82 settle 100 → LOSS`. Confirmed
+contamination, but one row — it is NOT what explains 49.5%. (3 locks settled
+>10% from strike; the other two need a look.)
+
+**What explains 49.5% — where production locks on the (time, lead) surface:**
+```
+lock time into cycle:  360-420s: 50 of 73   (39 within 12s of the 360s floor)
+lead vs strike at lock: median 3.2 bps
+locked AGAINST the side price was on: 22 of 73  → won 31.8%
+locked WITH the current side:          51 of 73  → won 62.7%
+confidence at lock: 91 (25×), 86 (20×), 81 (17×) — a few discrete values
+direction: UP 67 / DOWN 6
+```
+Production commits at the first legal second with a ~3 bps lead — the
+worst-performing corner of Table 1 (t≈360s, 0–6 bps ⇒ ~60–74%) — and
+30% of the time it commits against the side price is already on, which wins
+32%. Replay's 91% comes from the same engine locking later with a ~$100 lead.
+Both are the same surface. The engine is not "broken vs replay"; it is
+choosing a bad point on a surface the data now describes precisely.
+
+Why production locks at 360s with a tiny lead while replay locks at ~540s with
+a large one is the remaining mechanistic gap — most likely the strike
+reference: production's `current15mStrikePrice` is the Kalshi `floor_strike`
+when the Kalshi fetch succeeds and `round(open/10)*10` when it does not, so
+"moneyness" is measured against a moving reference. Next investigation.
+
+**Ledger freshness:** the latest resolved cycle is 10:00 UTC; the 13:45 lock
+watched live (and everything since 10:15) is absent at 14:02. Settlement or
+persistence is lagging by hours, or the settle cron is not running.
+
+**Provenance modal is fabricated.** `HistoricalAccuracy.tsx:460–472` builds a
+"live-cycle" row with `proofHash: \`0x7a8d...${cycleSeq}\``,
+`settlementPrice: spot` (so entry == settlement), a `|| 63008` fallback, and
+an unconditional "PROVED" badge under a "VERIFIED" chip.
+
 ## ★★★★ CORRECTED 7-DAY TRADE DATA — everything re-derived (3,000,332 prints, 672 cycles, collapse 4.1%)
 
 All earlier trade-level numbers were on first-print buckets. These replace them.
