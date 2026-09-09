@@ -64,6 +64,14 @@ interface CryptoPredictionCenterViewProps {
 
 export type CycleState = 'ANALYZING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'PROTECTED' | 'SETTLED' | 'SKIP';
 
+// The real lock-quality floor enforced by canLockCurrentCycle in server.ts:
+//   lockQualityTier !== "SKIP" && lockQuality >= 75
+// The card previously advertised "Req. 70+ to lock" and a "(Threshold: 70)"
+// explainer, both of which understated the gate -- a score of 72 rendered as
+// "Qualified" while the engine would refuse it. The gate is a flat 75; it is
+// NOT tier-dependent (server.ts only ever emits lockTier STANDARD or NONE).
+const LOCK_QUALITY_MIN = 75;
+
 // Web Audio Soft Institutional Chime (Restrained, Optional)
 const playLockChime = () => {
   try {
@@ -118,6 +126,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [chartMode, setChartMode] = useState<'CANDLE' | 'RIBBON'>('CANDLE');
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const evidenceSummary = useMemo(() => computeEvidenceVectors(canonicalDecision), [canonicalDecision]);
+
+  // Real market-feed health from the canonical decision payload. Undefined when
+  // talking to a backend that predates the field, in which case the status bar
+  // renders "--" rather than inventing a latency or a venue count.
+  const feedHealth = (canonicalDecision as any)?.feedHealth as
+    | { dataAgeMs: number; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
+    | undefined;
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [audioMuted, setAudioMuted] = useState<boolean>(true);
   const [showExplanationModal, setShowExplanationModal] = useState<boolean>(false);
@@ -605,7 +620,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           <div className="flex items-center gap-1.5">
             <span className="text-purple-400/60 font-sans font-bold">VENUES</span>
-            <span className="text-cyan-300 font-bold">4 / 4 SYNCED</span>
+            {feedHealth ? (
+              <span className={`font-bold ${feedHealth.venuesLive === feedHealth.venuesTotal ? 'text-cyan-300' : feedHealth.venuesLive > 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+                {feedHealth.venuesLive} / {feedHealth.venuesTotal} SYNCED
+              </span>
+            ) : (
+              <span className="text-slate-500 font-bold">--</span>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -623,8 +644,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
         <div className="flex items-center gap-3 ml-auto text-[10px]">
           <div className="flex items-center gap-1 text-purple-300">
-            <span className="text-purple-400/60 font-sans">LATENCY:</span>
-            <span className="text-emerald-400 font-bold">0.8s</span>
+            <span className="text-purple-400/60 font-sans">FEED AGE:</span>
+            {typeof feedHealth?.dataAgeMs === 'number' ? (
+              <span className={`font-bold ${feedHealth.dataAgeMs <= 3000 ? 'text-emerald-400' : feedHealth.dataAgeMs <= 7000 ? 'text-amber-400' : 'text-rose-400'}`}>
+                {(feedHealth.dataAgeMs / 1000).toFixed(1)}s
+              </span>
+            ) : (
+              <span className="text-slate-500 font-bold">--</span>
+            )}
           </div>
 
           {computedCycleState === 'SKIP' && (
@@ -963,7 +990,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </span>
                 
                 <div className="text-[9px] text-purple-300/70 font-sans flex items-center gap-1 leading-tight whitespace-nowrap shrink-0">
-                  <span>• BINANCE</span>
+                  <span>• {feedHealth?.priceSource || 'SOURCE UNAVAILABLE'}</span>
                   <span className="flex items-center gap-0.5 text-emerald-400 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> FEED
                   </span>
@@ -1115,7 +1142,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             <div className="mt-3 pt-2 border-t border-purple-900/30 flex items-center justify-between text-[9px] font-sans relative z-10 gap-1">
               <span className="text-purple-200/90 font-medium whitespace-nowrap">Cross-venue evidence</span>
               <span className="text-purple-400/90 font-mono text-[9px] whitespace-nowrap shrink-0">
-                {lockQualityScore >= 78 ? '⚡ Ready (≥78)' : lockQualityScore >= 70 ? 'Qualified (≥70)' : 'Req. 70+ to lock'}
+                {lockQualityScore >= LOCK_QUALITY_MIN ? `⚡ Ready (≥${LOCK_QUALITY_MIN})` : `Req. ${LOCK_QUALITY_MIN}+ to lock`}
               </span>
             </div>
           </div>
@@ -1872,7 +1899,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
                   <span className="text-purple-300">Lock Quality Score</span>
-                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: 70)</span>
+                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: {LOCK_QUALITY_MIN})</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">

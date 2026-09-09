@@ -1254,13 +1254,31 @@ let lastMarketUpdateTs = Date.now();
 let lastModelRunTs = Date.now();
 let lastSignalUpdateTs = Date.now();
 let lastPredictionUpdateTs = Date.now();
-let lastKalshiUpdateTs = Date.now();
+// Initialised to 0, not Date.now(). Seeding this with the boot time made every
+// cold instance claim the Kalshi feed was fresh before a single fetch had
+// happened: /api/live-engine/health reported kalshiFeed "CONNECTED" and
+// lastKalshiUpdate as the boot timestamp. 0 reads as "never updated", so a feed
+// that has not answered is reported as not having answered.
+let lastKalshiUpdateTs = 0;
 let engineFeedStatus = "CONNECTED";
 let engineState = "MONITORING";
 let activeContractSymbol = "BTC-15M";
 let currentDirection = "UP";
 let currentConfidence = 88.5;
 let currentBullVolumePct = 50;
+// REAL market-feed health, populated by runMarketEngineTick.
+// The BTC price comes from a fallback chain (Coinbase -> Kraken -> CoinGecko ->
+// Binance) and the FIRST venue to answer wins, so the venue that actually
+// served the price has to be recorded rather than assumed. Everything here is
+// observed; when a feed has not answered, its flag stays false and priceSource
+// stays null rather than defaulting to a plausible venue name.
+let marketFeedHealth = {
+  priceSource: null,
+  btcFresh: false,
+  ethFresh: false,
+  solFresh: false,
+  lastTickTs: 0,
+};
 let currentMomentum = 0;
 let currentBtcPrice = 64161.4;
 let currentBtcOpenPrice = 64121.4;
@@ -2637,6 +2655,11 @@ async function runMarketEngineTick() {
     }
     let livePrice = currentBtcPrice;
     let fetchSuccess = false;
+    // Reset per-tick feed observations. A feed that fails this tick must read
+    // as not-fresh rather than carrying its previous success forward.
+    marketFeedHealth.priceSource = null;
+    marketFeedHealth.ethFresh = false;
+    marketFeedHealth.solFresh = false;
     try {
       const cbRes = await fetchWithTimeout(
         "https://api.coinbase.com/v2/prices/BTC-USD/spot",
@@ -2648,6 +2671,7 @@ async function runMarketEngineTick() {
           livePrice = p;
           currentBtcPrice = livePrice;
           fetchSuccess = true;
+          marketFeedHealth.priceSource = "COINBASE";
         }
       }
     } catch (e) {}
@@ -2660,6 +2684,7 @@ async function runMarketEngineTick() {
         const p = parseFloat(ethData?.data?.amount);
         if (p && p > 0) {
           currentEthPrice = p;
+          marketFeedHealth.ethFresh = true;
         }
       }
     } catch (e) {}
@@ -2672,6 +2697,7 @@ async function runMarketEngineTick() {
         const p = parseFloat(solData?.data?.amount);
         if (p && p > 0) {
           currentSolPrice = p;
+          marketFeedHealth.solFresh = true;
         }
       }
     } catch (e) {}
@@ -2687,6 +2713,7 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "KRAKEN";
           }
         }
       } catch (e) {}
@@ -2703,6 +2730,7 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "COINGECKO";
           }
         }
       } catch (e) {}
@@ -2720,10 +2748,13 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "BINANCE";
           }
         }
       } catch (e) {}
     }
+    marketFeedHealth.btcFresh = fetchSuccess;
+    marketFeedHealth.lastTickTs = now;
     if (fetchSuccess) {
       lastMarketUpdateTs = now;
       engineFeedStatus = "CONNECTED";
@@ -13983,7 +14014,54 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     : "WATCH";
   const lockTierVal =
     latestBtc15mPipeline?.lockQualityTier === "SKIP" ? "NONE" : "STANDARD";
+  // REAL feed health for the terminal status bar.
+  //
+  // The terminal previously rendered a hardcoded "LATENCY: 0.8s", a hardcoded
+  // "VENUES 4 / 4 SYNCED" and a hardcoded "BINANCE" price label. None of the
+  // three were connected to anything: there was no latency, venue-count or
+  // price-source field on this payload at all. The 0.8s was rendered in green
+  // directly beside a MARKET FEED indicator reading STALE.
+  //
+  // Everything below is observed. dataAgeMs is the real age of the last
+  // successful market tick. priceSource is the venue that actually served the
+  // price this tick (the BTC chain is Coinbase -> Kraken -> CoinGecko ->
+  // Binance, first success wins), and is null when no venue answered.
+  // venuesLive counts the feeds that genuinely returned data on the last tick;
+  // it is not a capability count.
+  const feedDataAgeMs = Math.max(0, Date.now() - lastMarketUpdateTs);
+  const kalshiFresh = Boolean(
+    lastKalshiUpdateTs && Date.now() - lastKalshiUpdateTs < 12e4,
+  );
+  const feedHealth = {
+    dataAgeMs: feedDataAgeMs,
+    status:
+      engineFeedStatus !== "CONNECTED"
+        ? feedDataAgeMs <= 15e3
+          ? "DEGRADED"
+          : "OFFLINE"
+        : feedDataAgeMs <= 3e3
+          ? "LIVE"
+          : feedDataAgeMs <= 7e3
+            ? "DEGRADED"
+            : feedDataAgeMs <= 15e3
+              ? "STALE"
+              : "OFFLINE",
+    priceSource: marketFeedHealth.priceSource,
+    venuesLive:
+      (marketFeedHealth.btcFresh ? 1 : 0) +
+      (marketFeedHealth.ethFresh ? 1 : 0) +
+      (marketFeedHealth.solFresh ? 1 : 0) +
+      (kalshiFresh ? 1 : 0),
+    venuesTotal: 4,
+    venues: {
+      btc: marketFeedHealth.btcFresh,
+      eth: marketFeedHealth.ethFresh,
+      sol: marketFeedHealth.solFresh,
+      kalshi: kalshiFresh,
+    },
+  };
   const decisionObj = {
+    feedHealth,
     cycleId,
     contractId,
     decisionId,
