@@ -11,7 +11,8 @@
     "clean": "rm -rf dist build",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "test": "tsc --noEmit && node tests/run-all.mjs",
+    "test:engine": "node tests/run-all.mjs"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",
