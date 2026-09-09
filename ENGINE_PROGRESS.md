@@ -287,6 +287,40 @@ blocked on production read access.
 
 ---
 
+## ★★★★★★ LAYER 5 INSIDE THE REAL GATE — Phase 8 result (7-day trades, 672 identical cycles)
+
+`--lock-rule strike_side` evaluates the strike-side rule as a fourth term of
+`allowed` in the real `canLockCurrentCycle`, over the same 3.0M prints.
+Every other gate stays on. The rule can only deny.
+
+```
+                        flag OFF (today)     +L5 bar 0.90        +L5 bar 0.95
+locks / rate            346 / 51.5%          260 / 38.7%         132 / 19.6%
+strike-graded WIN       91.0%                94.2% (245/260)     97.0% (128/132)
+median lock             540s                 579s                696s
+locks ≥720s (refused
+  by commit point today) 23                  26                  45
+subset of flag-off?     —                    yes, 0 added        yes, 0 added
+```
+What bar 0.95 removes: 214 engine locks that win **87.9%** (median lead at
+the engine's lock 10.2 bps) and keeps 132 that win 96.2% (median lead 17.6
+bps). Directional-skill numbers stay ~coin-flip throughout — the rule buys
+precision on the product criterion, not forecasting.
+
+**Interaction with REGRESSION-2deba55:** 45 of the 132 bar-0.95 locks fall in
+720–779s, where `lock15mCycle`'s commit point still refuses. With the flag on
+and the regression unresolved, production would effectively take **87 locks /
+672 cycles (12.9%) at 96.6%**. Aligning both checks to 780 (or dropping the
+commit-point cut to match the gate) is now a product decision with a
+measured consequence, not a code-hygiene item.
+
+Caveats: 7 days, one regime; the v1 table was fitted on 27 days of candles
+that overlap these 7 days for the price/strike fields (the rule's inputs are
+engine-independent, so this is not engine tuning on the test set, but the
+table is not strictly out-of-sample for this window — refit on a disjoint
+window before calling it final). Kalshi implied price at t still not
+measured, so "edge vs market" remains unquantified.
+
 ## ★★★★★ THE RECONCILIATION — production's own ledger explains the 49.5%
 
 `/api/signal/resolved-log` on production is readable (snapshot saved in the
