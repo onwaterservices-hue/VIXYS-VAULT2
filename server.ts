@@ -4798,7 +4798,7 @@ async function checkAndSettle15mCycle(livePrice) {
       latestGuardianDecision?.action === "EXIT" ||
       latestGuardianDecision?.action === "PROTECT" ||
       (latestGuardianDecision?.reversalThreat || 0) >= 80;
-    const reversalDetected = isExtremeDisplacement && isProbabilityCollapsed;
+    const reversalDetected = isExtremeDisplacement || isProbabilityCollapsed || isGuardianPanic;
     const lockMonitorHash = `${currentCycleId}:${active15mCycle.lockedDirection}:${reversalDetected}:${probForLockedDir.toFixed(2)}`;
     if (
       lockMonitorHash !== lastLoggedLockMonitorHash ||
@@ -5759,7 +5759,7 @@ app.get("/api/referral/balance", async (req, res) => {
     });
   } catch (e) {
     const why = String((e as Error)?.message || e);
-    log.error("[REFERRAL] balance failed", why);
+    console.error("[REFERRAL] balance failed", why);
     // Return a well-formed zero balance rather than an error, so the page
     // renders normally instead of showing a failure for a supplementary panel.
     res.status(200).json({
@@ -5785,7 +5785,7 @@ app.post("/api/referral/redeem-day", async (req, res) => {
     try {
       await referralStore.grantBonusDay(u.email, "redeem_" + r.entryId, days * 24);
     } catch (grantErr) {
-      log.error("[REFERRAL] day grant failed after debit", grantErr);
+      console.error("[REFERRAL] day grant failed after debit", grantErr);
       return res.status(500).json({
         ok: false,
         message: "Grant failed. Contact support with this ID: " + r.entryId,
@@ -5793,7 +5793,7 @@ app.post("/api/referral/redeem-day", async (req, res) => {
     }
     res.json(r);
   } catch (e) {
-    log.error("[REFERRAL] redeem failed", e);
+    console.error("[REFERRAL] redeem failed", e);
     res.status(503).json({ success: false, message: "Redemption unavailable." });
   }
 });
@@ -5810,7 +5810,7 @@ app.post("/api/referral/request-payout", async (req, res) => {
     const r = await openPayoutTicket(db, u.email, ticketId);
     res.status(r.ok ? 200 : 400).json(r);
   } catch (e) {
-    log.error("[REFERRAL] payout request failed", e);
+    console.error("[REFERRAL] payout request failed", e);
     res.status(503).json({ success: false, message: "Payout unavailable." });
   }
 });
@@ -5843,7 +5843,7 @@ app.get("/api/referral/leaderboard", async (req, res) => {
   try {
     res.json(await getLeaderboardWithRank(db, u.email));
   } catch (e) {
-    log.error("[REFERRAL] leaderboard failed", e);
+    console.error("[REFERRAL] leaderboard failed", e);
     res.status(503).json({ success: false, message: "Leaderboard unavailable." });
   }
 });
@@ -5855,7 +5855,7 @@ app.all("/api/cron/referral-leaderboard", async (req, res) => {
   try {
     res.json(await rebuildLeaderboard(db));
   } catch (e) {
-    log.error("[REFERRAL] leaderboard rebuild failed", e);
+    console.error("[REFERRAL] leaderboard rebuild failed", e);
     res.status(503).json({ ok: false });
   }
 });
@@ -5867,7 +5867,7 @@ app.get(
     try {
       res.json(await getAdminReferralOverview(db));
     } catch (e) {
-      log.error("[REFERRAL] admin overview failed", e);
+      console.error("[REFERRAL] admin overview failed", e);
       res.status(503).json({ success: false, message: "Overview unavailable." });
     }
   },
