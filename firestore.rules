@@ -138,6 +138,8 @@ service cloud.firestore {
     // Encrypted Kalshi keys. Never client-reachable under any circumstance.
     match /kalshi_credentials/{userId} { allow read, write: if isBackendSystem(); }
     match /auto_trade_configs/{userId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_executions/{execId} { allow read, write: if isBackendSystem(); }
+    match /auto_trade_dedupe/{dedupeId} { allow read, write: if isBackendSystem(); }
     match /auto_trade_logs/{logId} { allow read, write: if isBackendSystem(); }
 
     // --- Boot probe ---------------------------------------------------------------
