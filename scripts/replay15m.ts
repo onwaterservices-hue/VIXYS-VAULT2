@@ -85,6 +85,9 @@ const OFFLINE = Boolean(args.offline);
 const SOURCE: 'trades' | 'candles' = args.source === 'trades' ? 'trades' : 'candles';
 const BUCKET_SECONDS = args['bucket-seconds'] ? Number(args['bucket-seconds']) : 3;
 const SEED = args.seed ? Number(args.seed) : 1;
+// --engine-source <path>: slice the engine from this file instead of the
+// working tree's server.ts (e.g. `git show 3e31a84:server.ts > /tmp/old.ts`).
+const ENGINE_SOURCE = args['engine-source'] ? resolve(String(args['engine-source'])) : undefined;
 const MIN_COVERAGE = args['min-coverage'] ? Number(args['min-coverage']) : 12; // of 15 minutes
 
 let endMs: number, startMs: number;
@@ -103,7 +106,12 @@ endMs = Math.floor(endMs / CYCLE_MS) * CYCLE_MS;
 // ---------------------------------------------------------------------------
 // the real settlement grader, sliced out of server.ts
 // ---------------------------------------------------------------------------
-const serverSrc = readFileSync(join(ROOT, 'server.ts'), 'utf8');
+const serverSrc = readFileSync(
+  process.argv.includes('--engine-source')
+    ? resolve(String(process.argv[process.argv.indexOf('--engine-source') + 1]))
+    : join(ROOT, 'server.ts'),
+  'utf8',
+);
 const graderSrc = sliceThrough(
   serverSrc,
   'prevLog.settlementPrice = livePrice;',
@@ -249,7 +257,8 @@ async function main() {
   }
 
   // --- replay ---
-  const sandbox = buildEngineSandbox(ROOT, { seed: SEED });
+  const sandbox = buildEngineSandbox(ROOT, { seed: SEED, engineSourcePath: ENGINE_SOURCE });
+  if (ENGINE_SOURCE) console.log(`engine src : ${ENGINE_SOURCE}  (NOT the working tree)`);
   console.log(`engine     : sliced from server.ts (${sandbox.provenance.serverChars} chars) `
     + `pipeline=${sandbox.provenance.pipelineChars} gate=${sandbox.provenance.gateChars}`);
   console.log('');

@@ -45,6 +45,13 @@ export function sliceBetween(src: string, startAnchor: string, endAnchor: string
 export interface SandboxOptions {
   /** Seed for the one Math.random() call inside the pipeline (VWAP volume estimate). */
   seed?: number;
+  /**
+   * Path to the server.ts to slice the engine from. Defaults to the working
+   * tree's. Point it at a file produced by `git show <sha>:server.ts` to replay
+   * a specific engine version over identical data -- the OLD-vs-NEW comparison
+   * Phase 8 requires, without checking anything out.
+   */
+  engineSourcePath?: string;
 }
 
 export interface EngineSandbox {
@@ -80,7 +87,7 @@ function mulberry32(seed: number) {
 }
 
 export function buildEngineSandbox(repoRoot: string, opts: SandboxOptions = {}): EngineSandbox {
-  const src = readFileSync(join(repoRoot, 'server.ts'), 'utf8');
+  const src = readFileSync(opts.engineSourcePath ?? join(repoRoot, 'server.ts'), 'utf8');
 
   // --- the real sources ----------------------------------------------------
   const pipelineSrc = sliceBetween(

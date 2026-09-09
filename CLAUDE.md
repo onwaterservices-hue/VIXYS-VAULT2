@@ -121,7 +121,9 @@ Taken from `package.json`. These are the real commands — do not invent others.
 | test suite only | `npm run test:engine` |
 | dev/prod write isolation | `npm run verify:dev-isolation` |
 | replay determinism + leakage | `npm run verify:replay-determinism` |
-| run the replay harness | `npm run replay:15m -- --days 30 [--offline]` |
+| run the replay harness | `npm run replay:15m -- --source trades --days 3 [--offline]` |
+| replay a specific engine version | `git show <sha>:server.ts > /tmp/old.ts && npm run replay:15m -- --source trades --offline --start … --end … --engine-source /tmp/old.ts` |
+| real-flow forecast test (E3b) | `npx tsx scripts/replay15m/research/flowSkill.ts <startIso> <endIso>` |
 | production build | `npm run build` |
 | serve a local build | `npm start` (see the sign-in loop below) |
 
