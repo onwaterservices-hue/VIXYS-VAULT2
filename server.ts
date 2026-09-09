@@ -3303,6 +3303,10 @@ app.all("/api/cron/engine-tick", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   }
+  // Writes deferred while backend auth was still resolving (or that failed
+  // transiently) sit in the pending queues; give them a chance to land inside
+  // this invocation instead of dying with the instance.
+  try { await drainPendingPersistenceQueuesAsync(); } catch {}
   const cycle = active15mCycle || null;
   return res.json({
     success: true,
@@ -4117,9 +4121,20 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
 
   await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
 
+  // The ledger row must land regardless of which instance won the claim
+  // transaction: the row id is deterministic (sig_lock_<intervalStart>) and a
+  // claim-loser's logItem carries the ADOPTED canonical values, so concurrent
+  // writes converge on identical content. Awaited, because an unawaited setDoc
+  // raced the lambda freeze — which is how locks displayed to users while never
+  // reaching the shared ledger (observed 2026-09-09: 13:45Z, 14:15Z, 14:45Z).
+  try {
+    await persistSingleSignalLog(logItem);
+  } catch (persistErr) {
+    console.error("[VIXY] lock ledger persist failed (queued for re-assert):", persistErr);
+  }
+
   if (transactionSucceeded) {
     try {
-    persistSingleSignalLog(logItem);
     const globalAutoTradingEnabled = productionMaintenanceState.autoTradingEnabled !== false;
     const checkEntitlement = async (userId) => {
       const u = serverUsers.find((user) => (user.email || "").toLowerCase() === userId);
@@ -5111,6 +5126,18 @@ async function checkAndSettle15mCycle(livePrice) {
       console.log(
         `[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDirection=${active15mCycle.lockedDirection} lockedConfidence=${active15mCycle.lockedConfidence}% lockedProbability=${active15mCycle.lockedProbability} liveDirection=${currentDirection} liveProbability=${currentModelProbability} probabilityForLockedDirection=${probForLockedDir.toFixed(3)} reversalDetected=${reversalDetected} action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}%`,
       );
+    }
+    // Self-healing ledger assert: a lock row written once from one ephemeral
+    // instance can be lost (auth-pending queue, lambda freeze). Re-persist the
+    // active lock row at most once a minute until the cycle ends; the write is
+    // idempotent by doc id, so a duplicate assert converges on the same row.
+    if (now - lastLockRowAssertMs >= 6e4) {
+      lastLockRowAssertMs = now;
+      const assertSigId = `sig_lock_${active15mCycle.intervalStart}`;
+      const assertRow = persistentSignalLogs.find((s) => s.id === assertSigId);
+      if (assertRow && assertRow.status === "LOCKED") {
+        try { await persistSingleSignalLog(assertRow); } catch {}
+      }
     }
     if (isExtremeDisplacement && isProbabilityCollapsed && isGuardianPanic) {
       active15mCycle.isCriticallyInvalidated = true;
@@ -17101,6 +17128,73 @@ app.all("/api/cron/settle", async (req, res) => {
   if (persistentSignalLogs.length === 0) {
     hydration = await ensureLedgerHydrated().catch(() => null);
   }
+  // RECONCILIATION: the claim transaction writes active_cycle_lock/<cycleId>
+  // durably, but the ledger row was historically written once, fire-and-forget,
+  // from whichever instance won the claim — so a lock could be adopted and
+  // displayed everywhere while signal_logs never received its row (observed
+  // 2026-09-09: locks at 13:45Z, 14:15Z and 14:45Z shown live, absent from the
+  // ledger). Rebuild missing rows from the claim docs for the last 8 hours so
+  // the late sweep below grades them from the real settlement candle. Rows are
+  // provenance-tagged and an existing row is never touched.
+  const reconciliation: any = { probed: 0, rebuilt: 0, skippedNoStrike: 0, rows: [] as any[] };
+  if (canAttemptFirestoreRead("active_cycle_lock_reconciliation")) {
+    const cycleMs = 15 * 60 * 1e3;
+    const openMs = Math.floor(nowMs / cycleMs) * cycleMs;
+    for (let k = 1; k <= 32; k++) {
+      const startMs = openMs - k * cycleMs;
+      const rowId = `sig_lock_${startMs}`;
+      if (persistentSignalLogs.some((s) => s.id === rowId)) continue;
+      const cid = `15M-${new Date(startMs).toISOString()}`;
+      reconciliation.probed += 1;
+      let claim = null;
+      try {
+        const claimSnap = await getDoc(doc(db, "active_cycle_lock", cid));
+        if (claimSnap && claimSnap.exists()) claim = claimSnap.data() || null;
+      } catch {
+        continue; // unreadable is not "no lock"; leave for the next run
+      }
+      if (!claim || (claim.direction !== "UP" && claim.direction !== "DOWN")) continue;
+      const claimStrike = Number(claim.strike);
+      if (!Number.isFinite(claimStrike) || claimStrike <= 1e3) {
+        // A row without a plausible strike cannot be graded honestly; skip it
+        // rather than let the sweep invalidate a reconstruction of our own.
+        reconciliation.skippedNoStrike += 1;
+        continue;
+      }
+      const row: any = {
+        id: rowId,
+        market: "BTC",
+        ticker: "BTC/USD",
+        intervalStart: new Date(startMs).toISOString(),
+        intervalEnd: new Date(startMs + cycleMs).toISOString(),
+        direction: claim.direction,
+        probability: claim.probability ?? null,
+        confidence: claim.confidence ?? null,
+        targetStrike: claimStrike,
+        spotAtLock: claim.spot ?? null,
+        btcPriceAtLock: claim.spot ?? null,
+        lockedAt: claim.lockedAt || null,
+        expiresAt: new Date(startMs + cycleMs).toISOString(),
+        status: "LOCKED",
+        modelVersion: claim.modelVersion || null,
+        dataSource: "ACTIVE_CYCLE_LOCK_CLAIM",
+        cycleId: cid,
+        timeframe: "15M",
+        decision: claim.direction === "UP" ? "BUY_UP" : "BUY_DOWN",
+        entryPrice: claim.spot ?? null,
+        strike: claimStrike,
+        confidencePct: claim.confidence ?? null,
+        lockedProbability: claim.probability ?? null,
+        lockedReason: claim.lockedReason || null,
+        reconstructedFrom: "ACTIVE_CYCLE_LOCK_CLAIM",
+      };
+      persistentSignalLogs.unshift(row);
+      try { await persistSingleSignalLog(row); } catch {}
+      reconciliation.rebuilt += 1;
+      reconciliation.rows.push({ id: rowId, dir: row.direction, conf: row.confidence, strike: claimStrike });
+      console.log(`[VIXY_SETTLE_RECONCILIATION] rebuilt ledger row ${rowId} from active_cycle_lock claim (${row.direction} ${row.confidence}% strike=${claimStrike})`);
+    }
+  }
   const settled = persistentSignalLogs.filter(
     (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
   );
@@ -17211,6 +17305,7 @@ app.all("/api/cron/settle", async (req, res) => {
     overdueUnsettled: overdue.length,
     overdueCycleIds: overdue.slice(0, 10).map((s) => s.cycleId || s.id),
     lateSettlement,
+    reconciliation,
     settledSampleSize: serverLearningEngine.settledHistory.length,
     historicalAccuracyPct: serverLearningEngine.historicalAccuracy,
     calibrationStatus: latestCalibrationState.calibrationStatus,
@@ -17261,6 +17356,7 @@ let lastLoggedDiagnosticHash = "";
 let lastLoggedCycleHash = "";
 let lastLoggedLockMonitorHash = "";
 let lastHeartbeatLogTs = 0;
+let lastLockRowAssertMs = 0;
 let wssClientsCount = 0;
 const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];

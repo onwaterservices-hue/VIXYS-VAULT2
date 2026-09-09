@@ -375,8 +375,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
 
   const biasLabel = isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN';
-  const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? 87;
-  const lockQualityScore = rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
+  // No invented 87: if the canonical payload carries no lock score, the card
+  // shows the value as unavailable instead of a fabricated healthy number.
+  const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? null;
+  const lockQualityScore: number | null =
+    rawLockScore === null ? null : rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
 
   // Derive Canonical Cycle Presentation State
   const isActuallyLocked = useMemo(() => {
@@ -390,6 +393,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const isEarlyLockQualified = useMemo(() => {
     return (
       displayConfidence >= 75 &&
+      lockQualityScore !== null &&
       lockQualityScore >= 78 &&
       displayReversalRisk <= 25
     );
@@ -1107,11 +1111,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     <HelpCircle className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <span className="text-emerald-400 font-black font-mono text-[11px] whitespace-nowrap shrink-0">{lockQualityScore} / 100</span>
+                <span className="text-emerald-400 font-black font-mono text-[11px] whitespace-nowrap shrink-0">{lockQualityScore === null ? '—' : lockQualityScore} / 100</span>
               </div>
 
               <div className="text-base sm:text-lg font-black text-white font-sans tracking-tight leading-tight">
-                {lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
+                {lockQualityScore === null ? 'AWAITING ENGINE DATA' : lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
               </div>
 
               {/* High Precision Gradient Progress Bar */}
@@ -1119,7 +1123,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 <motion.div
                   className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
                   initial={{ width: '0%' }}
-                  animate={{ width: `${Math.min(100, Math.max(0, lockQualityScore))}%` }}
+                  animate={{ width: `${Math.min(100, Math.max(0, lockQualityScore ?? 0))}%` }}
                   transition={{ duration: 0.8, ease: 'easeOut' }}
                 />
               </div>
@@ -1151,7 +1155,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <span className="text-purple-400/90 font-mono text-[9px] whitespace-nowrap shrink-0">
                 {lockGateMin === null
                   ? 'Gate threshold unavailable'
-                  : lockQualityScore >= lockGateMin
+                  : (lockQualityScore ?? -1) >= lockGateMin
                     ? `⚡ Ready (≥${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''})`
                     : `Req. ${lockGateMin}+ to lock${lockGateTier ? ` (${lockGateTier})` : ''}`}
               </span>
@@ -1702,7 +1706,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         <NeuralDecompositionMatrix
           conviction={displayConfidence}
           isUp={isUp}
-          lockQuality={lockQualityScore}
+          lockQuality={lockQualityScore ?? 0}
           reversalRisk={displayReversalRisk}
         />
 
@@ -1713,7 +1717,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             strikePrice={targetPrice}
             asset={selectedAsset}
             baseConviction={displayConfidence}
-            baseLockQuality={lockQualityScore}
+            baseLockQuality={lockQualityScore ?? 0}
             baseReversalRisk={displayReversalRisk}
             isUp={isUp}
           />
@@ -1910,7 +1914,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
                   <span className="text-purple-300">Lock Quality Score</span>
-                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: {lockGateMin === null ? '--' : `${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''}`})</span>
+                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore === null ? '—' : lockQualityScore} / 100 (Threshold: {lockGateMin === null ? '--' : `${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''}`})</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">

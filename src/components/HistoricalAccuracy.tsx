@@ -263,10 +263,6 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ENGINE LIVE
                 </span>
                 <span className="text-zinc-600">•</span>
-                <span>SETTLEMENT VERIFIED</span>
-                <span className="text-zinc-600">•</span>
-                <span>10 MARKETS</span>
-                <span className="text-zinc-600">•</span>
                 <span className="text-purple-300">VIXY-ENSEMBLE-5.X</span>
               </div>
             </div>
@@ -904,10 +900,14 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-lg font-black text-white tracking-wide">DECISION PROVENANCE & TELEMETRY</h3>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">VERIFIED</span>
+                    {/* Only a record with a real settlement price has been verified against
+                        anything; a live or unsettled record must not carry the chip. */}
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                      {activeProvenance.settlementPrice != null ? 'SETTLED' : 'UNSETTLED'}
+                    </span>
                   </div>
                   <div className="text-xs text-zinc-400 font-mono mt-0.5">
-                    LOCK ID: <span className="text-purple-300">{activeProvenance.id || 'LOCK-1407'}</span>
+                    LOCK ID: <span className="text-purple-300">{activeProvenance.id || '—'}</span>
                   </div>
                 </div>
               </div>
