@@ -2,24 +2,39 @@
 
 ## Status
 
-Branch `feature/invite-to-earn-credits`. **NOT merged. NOT deployed.**
-Build green, 19/19 invariant tests pass, all changes additive (zero deletions).
+**MERGED and DEPLOYED. Production-verified 2026-09-09.** Claiming a code on
+production (VIXY20, owner account) persists durably: `/api/referral/resolve`
+returns it, `/api/referral/me` returns it across instances, and the page shows
+the "YOUR REFERRAL CODE" locked-to-account hero. 22/22 test files pass.
 
-## BLOCKER - must happen before merge
+### The old rules blocker is RESOLVED (writes go through the Admin SDK)
 
-**Publish `firestore.rules` in the Firebase console.**
+Earlier (2026-09-08) this runbook said referral writes were swallowed by
+`allow read, write: if false` because the referral collections were not in
+`firestore.rules`. That is no longer the failure mode: the backend datapath was
+routed through the Firebase Admin SDK service account (see the
+`admin-datapath-migration` work), and the Admin SDK **bypasses security rules
+entirely**. Every referral write here goes through that Admin-aware shim (`fs`),
+which is why production writes now land and were verified end to end. No rules
+change is required for this feature, and none was made.
 
 Database is NOT `-default-`. It is:
 `ai-studio-btc15pro15minbtc-5ffd95f2-2d75-456b-8811-6d9cbc0c1c72`
 
-Verified 2026-09-08: the live collection list runs `predictions` -> `settlement_locks`
-with NO referral collections at all. The referral system shipped in `fdc2bce`
-(2026-09-07) has **never written a row to production** - every write is swallowed
-by the catch-all `allow read, write: if false` while the API returns success.
-Same silent-failure pattern as the old `kalshi_credentials` bug.
+### Durability fix — PR #30 (2026-09-09)
 
-Publishing fixes that live bug AND enables this feature. Merging first ships a
-page that promises credits and delivers none.
+The original claim path wrote only `REFERRAL_CODES/{code}`, but `me()` shows the
+claimed layout from `getStats(email).code` in `REFERRAL_STATS/{email}` — a doc
+created only on a friend's first join. A user who claimed a code but had no
+referrals yet had no stats doc, so `me()` fell back to the per-instance
+`user.referralCode` (absent on other serverless instances) and the page stayed
+on "claim your code" after a successful claim. Fixed: `claimCode` now writes the
+code into `REFERRAL_STATS`, and a same-owner re-claim is idempotent (self-heals
+codes claimed before the fix). Pinned by `tests/referral-claim.invariants.mjs`.
+
+The claimed-code UI is PR #29: the panel flips to a large "YOUR REFERRAL CODE"
+hero with a COPY CODE button, a "Locked to your account" chip, and a
+green "CODE CLAIMED" banner in the claiming session.
 
 ## Economics (single source of truth: referralPolicy.ts)
 
