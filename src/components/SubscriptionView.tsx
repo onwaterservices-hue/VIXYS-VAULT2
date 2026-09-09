@@ -72,9 +72,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
   React.useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const loadDiscount = async () => {
       try {
-        const r = await fetch('/api/referral/my-discount', { credentials: 'include' });
+        const r = await fetch('/api/referral/my-discount', { credentials: 'include', cache: 'no-store' });
         if (!r.ok || cancelled) return;
         const j = await r.json();
         if (!cancelled && j && j.eligible && j.promoCode) {
@@ -83,8 +83,17 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           setReferralDiscount(null);
         }
       } catch { /* discount auto-apply is best-effort; manual entry still works */ }
-    })();
-    return () => { cancelled = true; };
+    };
+    void loadDiscount();
+    // Close the signup race: the referral code attaches a beat AFTER the account
+    // is created (useReferralCapture posts /attach once the session exists), so a
+    // fresh signup can land on this billing page before the attribution is
+    // written and the first my-discount call would say "not eligible". Re-fetch
+    // when the attach lands (same event that fires the congrats toast) so the
+    // 20% appears here right after the "Congratulations" card.
+    const onAttached = () => { void loadDiscount(); };
+    window.addEventListener('vixy:referral-attached', onAttached);
+    return () => { cancelled = true; window.removeEventListener('vixy:referral-attached', onAttached); };
   }, [authState?.user?.email]);
 
   // Precedence: a code the buyer manually applied/typed wins over the auto
@@ -576,6 +585,26 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Referral discount active banner: only shown when the server confirms
+          this account was referred and is still eligible. The % comes off at
+          the Stripe checkout page (the code is prefilled on the payment link);
+          this makes it visible here first so the buyer isn't surprised. */}
+      {referralDiscount && !appliedPromo && (
+        <div className="max-w-xl mx-auto bg-emerald-950/40 border-2 border-emerald-500/50 rounded-2xl p-4 flex items-center gap-3 text-emerald-100 shadow-xl font-mono animate-fade-in">
+          <div className="p-2.5 bg-emerald-500/20 rounded-xl border border-emerald-400/40 text-emerald-300 shrink-0">
+            <Sparkles className="w-5 h-5" />
+          </div>
+          <div className="text-left">
+            <div className="text-sm font-black text-emerald-300">
+              {referralDiscount.discountPercent}% referral discount active{referralDiscount.referredByLabel ? ` — from ${referralDiscount.referredByLabel}` : ''}
+            </div>
+            <div className="text-[11px] text-emerald-200/80">
+              Applied automatically at checkout on your first subscription. No code to type.
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Header Banner & Monthly / Annual Toggle */}
       <div className="text-center space-y-4 max-w-3xl mx-auto font-mono">
