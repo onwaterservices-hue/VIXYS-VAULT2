@@ -225,7 +225,7 @@ async function main() {
     console.log('');
     console.log(`             ${stats.bucketsTotal} buckets `
       + `(${stats.bucketsWithTrades} with real prints, ${stats.bucketsEmpty} empty), `
-      + `${stats.tradesUsed} trades, ${stats.requests} requests, `
+      + `${stats.tradesUsed} trades (${stats.duplicatesDropped} duplicate ids dropped), ${stats.requests} requests, `
       + `${stats.hoursFromCache}h cached / ${stats.hoursFetched}h fetched`);
     if (stats.bucketsEmpty) {
       console.log(`             ${stats.bucketsEmpty} empty buckets carry the last real trade price `

@@ -57,6 +57,7 @@ export interface TradeStats {
   bucketsWithTrades: number;
   bucketsEmpty: number;
   tradesUsed: number;
+  duplicatesDropped: number;   // same trade_id seen twice across pages (should be 0)
   requests: number;
   hoursFromCache: number;
   hoursFetched: number;
@@ -144,7 +145,7 @@ export async function getTradeTicks(
 
   const stats: TradeStats = {
     bucketSeconds, bucketsTotal: 0, bucketsWithTrades: 0, bucketsEmpty: 0,
-    tradesUsed: 0, requests: 0, hoursFromCache: 0, hoursFetched: 0,
+    tradesUsed: 0, duplicatesDropped: 0, requests: 0, hoursFromCache: 0, hoursFetched: 0,
     coverageStartMs: null, coverageEndMs: null,
   };
 
@@ -169,6 +170,11 @@ export async function getTradeTicks(
     // Walk backwards from the newest trade until we pass the window start.
     const need = Math.min(...missing);
     const collected: RawTrade[] = [];
+    // Coinbase's `after` cursor should return strictly older trade_ids, so pages
+    // must not overlap. Dedupe anyway and COUNT it, so a run proves the overlap
+    // was zero instead of assuming it -- a duplicate print would double-count
+    // taker volume silently.
+    const seen = new Set<number>();
     let after: number | null = null;
     let oldestSeen = Infinity;
     let guard = 0;
@@ -180,6 +186,8 @@ export async function getTradeTicks(
       for (const t of page.trades) {
         const ms = Date.parse(t.time);
         if (ms < oldestSeen) oldestSeen = ms;
+        if (seen.has(t.trade_id)) { stats.duplicatesDropped++; continue; }
+        seen.add(t.trade_id);
         if (ms >= need && ms < endMs) collected.push(t);
       }
       after = page.after;

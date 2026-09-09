@@ -69,10 +69,10 @@ const a = summarize(mA), b = summarize(mB);
 let both = 0, onlyA = 0, onlyB = 0, dirDiff = 0; const dt: number[] = [];
 for (const id of ids) { const x = mA.get(id), y = mB.get(id); if (x.locked && y.locked) { both++; if (x.lockDirection !== y.lockDirection) dirDiff++; dt.push(y.lockTSec - x.lockTSec); } else if (x.locked) onlyA++; else if (y.locked) onlyB++; }
 
-const row = (k: string, va: any, vb: any) => console.log(`${k.padEnd(34)}${String(va).padStart(16)}${String(vb).padStart(16)}`);
+const row = (k: string, va: any, vb: any) => console.log(`${k.padEnd(38)}${String(va).padStart(24)}${String(vb).padStart(24)}`);
 console.log(`PHASE 8 COMPARISON on ${ids.length} identical cycles${dropped ? `  (${dropped} cycle(s) present in only one run were dropped)` : ''}`);
 console.log(`A = ${la}: ${fa}\nB = ${lb}: ${fb}`);
-console.log('='.repeat(66)); row('', la, lb);
+console.log('='.repeat(86)); row('', la, lb);
 row('locks / skips', `${a.locks} / ${a.skips}`, `${b.locks} / ${b.skips}`);
 row('lock rate', pct(a.locks, a.cycles), pct(b.locks, b.cycles));
 row('UP / DOWN locks', `${a.up} / ${a.down}`, `${b.up} / ${b.down}`);
@@ -90,7 +90,7 @@ row('locks in 720-779s (REGRESSION-2deba55)', a.regressionWindowLocks, b.regress
 row('median MFE / MAE ($)', `${a.mfe} / ${a.mae}`, `${b.mfe} / ${b.mae}`);
 row('post-lock reversal (MAE > MFE)', a.reversal, b.reversal);
 row('avg direction flips per cycle', a.flips, b.flips);
-console.log('-'.repeat(66));
+console.log('-'.repeat(86));
 console.log(`per cycle: both lock ${both} · only ${la} ${onlyA} · only ${lb} ${onlyB} · direction differs ${dirDiff} · ${lb} locks later in ${dt.filter((d) => d > 0).length}, earlier in ${dt.filter((d) => d < 0).length}`);
 console.log('\nskill by confidence bucket (n>=10):');
 const keys = [...new Set([...Object.keys(a.buckets), ...Object.keys(b.buckets)])].sort();

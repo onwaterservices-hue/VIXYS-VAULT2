@@ -68,6 +68,8 @@ t.check('carry-forward buckets are flagged empty with zero volume at read time',
 t.check('only complete UTC hours are persisted', cache.includes('const hourComplete = h + HOUR_MS <= Math.min(endMs, nowMs);'));
 t.check('nothing is emitted before the first real print', /Before the first observed trade there is nothing to carry/.test(cache));
 t.check('no interpolation anywhere in the cache', !/interpolat\w*\(/i.test(cache) && !/lerp/i.test(cache));
+t.check('pages are deduped by trade_id and the count is reported',
+  cache.includes('if (seen.has(t.trade_id)) { stats.duplicatesDropped++; continue; }') && replay.includes('duplicate ids dropped'));
 
 t.section('DETERMINISM PLUMBING');
 t.check('Math.random in the pipeline is replaced by a seeded PRNG', readRepoFile('scripts/replay15m/engineSandbox.ts').includes("return prop === 'random' ? __rand : target[prop];"));
