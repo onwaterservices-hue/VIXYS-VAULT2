@@ -56,6 +56,8 @@ export interface SandboxOptions {
   lockRule?: 'off' | 'strike_side';
   /** Bar for the rule (default 0.95). */
   lockRuleBar?: number;
+  /** Alternative strike-side table (e.g. a refit on a disjoint window). */
+  strikeSideTablePath?: string;
 }
 
 export interface EngineSandbox {
@@ -111,7 +113,7 @@ export function buildEngineSandbox(repoRoot: string, opts: SandboxOptions = {}):
   const helperSrc = src.includes('function computeStrikeSideProbability(')
     ? sliceBetween(src, 'function computeStrikeSideProbability(', '__name(computeStrikeSideProbability', 'computeStrikeSideProbability').replace('(strikeSideTableV1 as any)', 'strikeSideTableV1')
     : 'function computeStrikeSideProbability() { return { p: null, n: 0, reason: "NO_LAYER5" }; }';
-  const strikeSideTable = JSON.parse(readFileSync(join(repoRoot, 'src', 'data', 'strikeSideTable.v1.json'), 'utf8'));
+  const strikeSideTable = JSON.parse(readFileSync(opts.strikeSideTablePath ?? join(repoRoot, 'src', 'data', 'strikeSideTable.v1.json'), 'utf8'));
   // The block in runMarketEngineTick that turns a pipeline result into the
   // engine's directional state (currentDirection / persistenceSeconds / ...).
   // This is where the directional-bias fix lives, so it must be the real one.
