@@ -36,6 +36,18 @@ export function sliceBetween(src, startAnchor, endAnchor, label) {
   return src.slice(i, j);
 }
 
+/** Slice from startAnchor up to and INCLUDING endAnchor. */
+export function sliceThrough(src, startAnchor, endAnchor, label) {
+  const nStart = src.split(startAnchor).length - 1;
+  const nEnd = src.split(endAnchor).length - 1;
+  if (nStart !== 1) throw new Error(`${label}: start anchor appears ${nStart}x, expected exactly 1`);
+  if (nEnd !== 1) throw new Error(`${label}: end anchor appears ${nEnd}x, expected exactly 1`);
+  const i = src.indexOf(startAnchor);
+  const j = src.indexOf(endAnchor, i);
+  if (j < 0) throw new Error(`${label}: end anchor precedes start anchor`);
+  return src.slice(i, j + endAnchor.length);
+}
+
 export function extractFn(name, startAnchor) {
   return sliceBetween(serverSrc, startAnchor, `__name(${name}`, name);
 }

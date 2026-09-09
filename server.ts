@@ -221,6 +221,73 @@ import {
  */
 const _adminActive = !!adminDb;
 
+// ----------------------------------------------------------------------------
+// PERSISTENCE WRITE AUTHORIZATION
+// ----------------------------------------------------------------------------
+// Running `node dist/server.cjs` on a developer machine used to start the full
+// engine against whatever credentials happened to be in .env, and immediately
+// begin issuing Firestore writes -- telemetry observations, cycle locks, signal
+// logs. The only thing that stopped it reaching production was the credentials
+// failing to load. That is luck, not architecture.
+//
+// Writes are therefore authorized explicitly, at the shim, which every write in
+// this file routes through (setDoc, deleteDoc, writeBatch, runTransaction).
+// Guarding here rather than at the ~50 call sites means a new call site cannot
+// forget the check.
+//
+// The rule is deliberately conservative in the safe direction: a write is
+// allowed only when this process can positively show it is a real deployment.
+// Vercel sets VERCEL=1 in every deployment, so its ABSENCE proves we are
+// outside one -- a laptop, a replay, CI -- and writes are refused. Production
+// is unaffected because production always has VERCEL set.
+//
+//   VIXY_PERSISTENCE_MODE=readonly      force read-only anywhere (previews, CI)
+//   VIXY_ALLOW_PRODUCTION_WRITES=true   explicit opt-in outside a deployment
+//
+// Reads are never blocked; this is a write guard only.
+const VIXY_PERSISTENCE_READONLY = (() => {
+  if (process.env.VIXY_PERSISTENCE_MODE === "readonly") return true;
+  if (process.env.VIXY_ALLOW_PRODUCTION_WRITES === "true") return false;
+  return !process.env.VERCEL;
+})();
+let _blockedWriteCount = 0;
+let _blockedWriteTargets: string[] = [];
+function _describeRef(ref: any): string {
+  try {
+    return ref?.path || ref?._path?.segments?.join("/") || ref?.id || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+function _writeAllowed(op: string, ref: any): boolean {
+  if (!VIXY_PERSISTENCE_READONLY) return true;
+  _blockedWriteCount += 1;
+  const target = `${op}:${_describeRef(ref)}`;
+  if (_blockedWriteTargets.length < 50) _blockedWriteTargets.push(target);
+  if (_blockedWriteCount <= 3) {
+    console.warn(
+      `[VIXY_PERSISTENCE_READONLY] Blocked ${target}. This process is not a ` +
+      `deployment (VERCEL unset) or was started read-only, so it cannot write ` +
+      `to Firestore. Set VIXY_ALLOW_PRODUCTION_WRITES=true to override.`,
+    );
+  }
+  return false;
+}
+function getPersistenceWriteGuardState() {
+  return {
+    readonly: VIXY_PERSISTENCE_READONLY,
+    blockedWriteCount: _blockedWriteCount,
+    blockedWriteTargets: _blockedWriteTargets.slice(0, 50),
+    reason: process.env.VIXY_PERSISTENCE_MODE === "readonly"
+      ? "VIXY_PERSISTENCE_MODE=readonly"
+      : process.env.VIXY_ALLOW_PRODUCTION_WRITES === "true"
+        ? "VIXY_ALLOW_PRODUCTION_WRITES=true"
+        : process.env.VERCEL
+          ? "running inside a Vercel deployment"
+          : "not running inside a deployment (VERCEL unset)",
+  };
+}
+
 function _wrapDocSnap(s: any) {
   return { id: s.id, exists: () => s.exists, data: () => s.data(), ref: s.ref };
 }
@@ -271,14 +338,25 @@ async function getDoc(ref: any): Promise<any> {
   return _wrapDocSnap(snap);
 }
 async function setDoc(ref: any, data: any, options?: any): Promise<void> {
+  if (!_writeAllowed("setDoc", ref)) return;
   if (!_adminActive) return (_clientSetDoc as any)(ref, data, options);
   await (options && options.merge ? ref.set(data, { merge: true }) : ref.set(data));
 }
 async function deleteDoc(ref: any): Promise<void> {
+  if (!_writeAllowed("deleteDoc", ref)) return;
   if (!_adminActive) return (_clientDeleteDoc as any)(ref);
   await ref.delete();
 }
 function writeBatch(dbRef: any): any {
+  if (VIXY_PERSISTENCE_READONLY) {
+    // A batch that records what it was asked to do and commits nothing.
+    return {
+      set: (ref: any) => _writeAllowed("batch.set", ref),
+      update: (ref: any) => _writeAllowed("batch.update", ref),
+      delete: (ref: any) => _writeAllowed("batch.delete", ref),
+      commit: async () => undefined,
+    };
+  }
   if (!_adminActive) return (_clientWriteBatch as any)(dbRef);
   const b = adminDb.batch();
   return {
@@ -290,6 +368,13 @@ function writeBatch(dbRef: any): any {
   };
 }
 async function runTransaction(dbRef: any, updateFn: (tx: any) => Promise<any>): Promise<any> {
+  if (VIXY_PERSISTENCE_READONLY) {
+    // Transactions here always exist to write, so the whole transaction is
+    // refused rather than run with its writes silently dropped -- a partially
+    // applied transaction would be worse than none.
+    _writeAllowed("runTransaction", dbRef);
+    return undefined;
+  }
   if (!_adminActive) return (_clientRunTransaction as any)(dbRef, updateFn);
   return adminDb.runTransaction(async (t: any) => {
     const wrappedTx = {
@@ -13718,6 +13803,10 @@ app.get("/api/live-engine/health", (req, res) => {
     lastMarketUpdate: new Date(lastMarketUpdateTs).toISOString(),
     lastKalshiUpdate: new Date(lastKalshiUpdateTs).toISOString(),
     lastPredictionUpdate: new Date(lastPredictionUpdateTs).toISOString(),
+    // Whether this process is permitted to write to Firestore, and why. Makes
+    // the dev/prod separation observable instead of something you infer from
+    // whether writes happen to be failing.
+    persistenceWriteGuard: getPersistenceWriteGuardState(),
   });
 });
 let globalSequenceNumber = 1e3;
