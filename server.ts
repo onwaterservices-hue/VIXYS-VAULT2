@@ -2814,14 +2814,14 @@ async function runMarketEngineTick() {
     const calibrationSampleSize =
       serverLearningEngine.todaySettledCount ||
       serverLearningEngine.settledHistory.length ||
-      148;
+      0;
     const calibrationMinimumSamples = 50;
     const calibrationStatus =
       calibrationSampleSize >= calibrationMinimumSamples
         ? "ACTIVE"
         : "WARMING_UP";
     const historicalAccuracyVal =
-      serverLearningEngine.historicalAccuracy || 71.8;
+      serverLearningEngine.historicalAccuracy || 0;
     currentModelProbability =
       latestBtc15mPipeline.edgeVsConfidence.modelProbability;
     currentConfidence =
