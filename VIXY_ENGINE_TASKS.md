@@ -121,6 +121,12 @@ change. Recorded so E2 can measure whether it adds independent value.
 - [x] **E0** OLD vs NEW engine on identical trade data (see ENGINE_PROGRESS):
       skill 50.0% → 44.1%; skill falls with later locks in both; `2deba55`
       shifts locks later.
+- [x] **E3a** Early-lock skill is not real: 55.6% (n=72), p=0.41; no
+      time or moneyness bin separates from 50%. Nothing the engine outputs
+      carries directional information at n=142.
+- [~] **E3b** Real taker flow (tradeCache) as an independent predictor at a
+      fixed intracycle time, all cycles.
+- [~] Widen sample to 7 days (ingestion running).
 
 - [ ] **E1** Write down what the engine currently computes, exactly.
 - [ ] **E2** Feature-independence audit. Known finding to confirm:

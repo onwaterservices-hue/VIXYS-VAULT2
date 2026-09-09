@@ -287,6 +287,24 @@ blocked on production read access.
 
 ---
 
+## E3 — is early-lock skill real? NO.
+
+On the OLD engine's 142 locks: EARLY (<480s) 40/72 = 55.6%, **exact binomial
+p = 0.41**. Skill by 60s lock-time bin: 58.3 / 50.0 / 54.2 / 42.1 / 42.9 /
+30.8% — every bin p > 0.27. Skill by moneyness-at-lock (bps): 0/55.8/50.0/
+46.2/50.0% — every bin p > 0.25. Price moves further from the strike after
+the lock 50.7% (OLD) / 45.5% (NEW) of the time — no continuation edge either.
+The downward slope with later locks is suggestive but inside noise per bin.
+
+**Conclusion at n=142:** no output of the current engine — confidence, lock
+quality, tier, timing, moneyness — separates outcomes. There is nothing here
+to calibrate. Anything that looks like skill on 3 days is noise.
+
+Two consequences: (1) a much larger sample is required before any structural
+claim (7-day ingestion launched); (2) the next test is a genuinely
+independent feature — real taker buy/sell flow from `tradeCache` — evaluated
+at a fixed time in **every** cycle (n=288), not only at locks.
+
 ## NEXT ACTION
 
 Phase C5 is **done**; main merged and re-pinned. The most informative signal so
