@@ -1278,6 +1278,12 @@ let marketFeedHealth = {
   ethFresh: false,
   solFresh: false,
   lastTickTs: 0,
+  // The last BTC price this process actually OBSERVED from a venue, and when.
+  // Distinct from currentBtcPrice, which is seeded to a placeholder (64161.4)
+  // at module load and therefore cannot be used to decide whether a real price
+  // has ever arrived. Settlement validates against these two fields only.
+  lastRealPrice: null,
+  lastRealPriceTs: 0,
 };
 let currentMomentum = 0;
 let currentBtcPrice = 64161.4;
@@ -2672,6 +2678,8 @@ async function runMarketEngineTick() {
           currentBtcPrice = livePrice;
           fetchSuccess = true;
           marketFeedHealth.priceSource = "COINBASE";
+          marketFeedHealth.lastRealPrice = livePrice;
+          marketFeedHealth.lastRealPriceTs = Date.now();
         }
       }
     } catch (e) {}
@@ -2714,6 +2722,8 @@ async function runMarketEngineTick() {
             currentBtcPrice = livePrice;
             fetchSuccess = true;
             marketFeedHealth.priceSource = "KRAKEN";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
@@ -2731,6 +2741,8 @@ async function runMarketEngineTick() {
             currentBtcPrice = livePrice;
             fetchSuccess = true;
             marketFeedHealth.priceSource = "COINGECKO";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
@@ -2749,6 +2761,8 @@ async function runMarketEngineTick() {
             currentBtcPrice = livePrice;
             fetchSuccess = true;
             marketFeedHealth.priceSource = "BINANCE";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
@@ -3980,7 +3994,66 @@ __name(lock15mCycle, "lock15mCycle");
 // 2. The shadow calibration block executes here. It MUST ONLY observe the settled result.
 // 3. Shadow calibration must NEVER influence the production decision state.
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// SETTLEMENT PRICE VALIDATION
+// ----------------------------------------------------------------------------
+// checkAndSettle15mCycle is authoritative for the ledger: it decides
+// actualOutcome, wasCorrect and brierScore for a cycle, and it also sets the
+// NEXT cycle's strike. A wrong price here corrupts the record permanently.
+//
+// It used to accept whatever number it was handed. /api/signal computed
+//   const spot = asset === "BTC" ? currentBtcPrice : 100;
+// and passed that straight in, so a request for any non-BTC asset settled the
+// live BTC cycle at $100 -- forcing actualOutcome DOWN for every open lock and
+// setting the next strike to 100. That path was reachable from the product:
+// LiveDashboard and StarterDeskView call useLiveSignal(selectedAsset), so
+// selecting the ETH or SOL tab issued /api/signal?asset=ETH.
+//
+// The endpoint is fixed, but the guard lives HERE, at the authoritative
+// function, so no future caller can reintroduce the same class of bug.
+//
+// Validation is against marketFeedHealth.lastRealPrice/-Ts -- the last price
+// this process genuinely observed from a venue. currentBtcPrice cannot be used
+// as the reference because it is seeded to a placeholder at module load.
+const SETTLEMENT_MAX_PRICE_AGE_MS = 6e4;
+const SETTLEMENT_MAX_DEVIATION_PCT = 10;
+function validateSettlementPrice(price) {
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    return { ok: false, reason: `NOT_A_POSITIVE_FINITE_NUMBER (got ${JSON.stringify(price)})` };
+  }
+  if (!marketFeedHealth.lastRealPriceTs || !marketFeedHealth.lastRealPrice) {
+    return { ok: false, reason: "NO_OBSERVED_PRICE_YET (this process has never received a venue price)" };
+  }
+  const ageMs = Date.now() - marketFeedHealth.lastRealPriceTs;
+  if (ageMs > SETTLEMENT_MAX_PRICE_AGE_MS) {
+    return { ok: false, reason: `OBSERVED_PRICE_STALE (${ageMs}ms > ${SETTLEMENT_MAX_PRICE_AGE_MS}ms)` };
+  }
+  const ref = marketFeedHealth.lastRealPrice;
+  const deviationPct = Math.abs(price - ref) / ref * 100;
+  if (deviationPct > SETTLEMENT_MAX_DEVIATION_PCT) {
+    return {
+      ok: false,
+      reason: `PRICE_DEVIATES_FROM_OBSERVED (${price} vs observed ${ref}, ${deviationPct.toFixed(2)}% > ${SETTLEMENT_MAX_DEVIATION_PCT}%)`,
+    };
+  }
+  return { ok: true, ageMs, deviationPct };
+}
+__name(validateSettlementPrice, "validateSettlementPrice");
 async function checkAndSettle15mCycle(livePrice) {
+  // FAIL CLOSED, BUT RECOVERABLY.
+  //
+  // Returning before any state is touched means current15mIntervalStart is NOT
+  // advanced and processedSettlements is NOT marked, so the rollover is retried
+  // on the next tick (every 3s) once a trustworthy price is available. Refusing
+  // to settle defers a cycle; settling on a bad price corrupts it forever.
+  const priceCheck = validateSettlementPrice(livePrice);
+  if (!priceCheck.ok) {
+    console.error(
+      `[VIXY_SETTLEMENT_REJECTED] refusing to settle or roll the 15M cycle: ${priceCheck.reason}. ` +
+      `No cycle state was advanced; this will be retried on the next tick.`,
+    );
+    return;
+  }
   const now = Date.now();
   const intervalMs = 15 * 60 * 1e3;
   const intervalStart = Math.floor(now / intervalMs) * intervalMs;
@@ -14432,8 +14505,26 @@ app.get(
       serverLearningEngine.lastWeightUpdateTs,
     ).toISOString();
     const minSamplesNeeded = 500;
-    const spot = asset === "BTC" ? currentBtcPrice : 100;
-    await checkAndSettle15mCycle(spot);
+    // The 15M cycle this endpoint reports on is BTC-only: the cycle id, strike,
+    // lock state and Kalshi market state below all describe BTC. `spot` is
+    // therefore always the authoritative BTC price, whatever asset was asked
+    // for. It previously read
+    //   asset === "BTC" ? currentBtcPrice : 100
+    // so any non-BTC request produced a literal sentinel of 100 and fed it to
+    // checkAndSettle15mCycle, which is authoritative for the ledger: that
+    // settled the live BTC cycle at $100 (forcing actualOutcome DOWN) and set
+    // the next cycle's strike to 100. It was reachable from the product --
+    // LiveDashboard and StarterDeskView call useLiveSignal(selectedAsset), so
+    // choosing the ETH or SOL tab issued /api/signal?asset=ETH.
+    const spot = currentBtcPrice;
+    // NO SETTLEMENT FROM A READ ENDPOINT.
+    //
+    // This used to call checkAndSettle15mCycle(spot). That was the corruption
+    // vector above, and it was redundant: settlement is driven by the 3s
+    // setInterval(runMarketEngineTickTracked) while an instance is warm, and by
+    // the cold-instance hydration guard at the top of this same handler, which
+    // runs a full engine tick. Both settle with the freshly fetched price.
+    // A GET must not mutate the ledger.
     const market15mState = getKalshi15mMarketState(spot);
     const kalshiStrike = active15mCycle.isLocked
       ? active15mCycle.lockedStrike || market15mState.strikePrice
@@ -14609,6 +14700,12 @@ app.get(
       sessionId: SERVER_SESSION_ID,
       market: "BTC_KALSHI_15M",
       asset,
+      // The 15M engine is BTC-only. When another asset is requested the cycle
+      // fields in this response still describe BTC, so say so rather than
+      // letting the caller assume otherwise.
+      requestedAsset: asset,
+      cycleAsset: "BTC",
+      cycleAssetMatchesRequest: asset === "BTC",
       desk,
       currentPrice: spot,
       strike: kalshiStrike,
