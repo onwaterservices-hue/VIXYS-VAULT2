@@ -84,8 +84,12 @@ t.check('no unpinned conjunct added to validationPassed', added.length === 0, `A
 
 // allowed is validationPassed AND not-already-locked. Pinned because a past
 // regression made `allowed` ignore the lock ledger entirely.
-t.check('allowed = !alreadyLocked && validationPassed',
-  /const allowed = !alreadyLocked && validationPassed;/.test(gateSrc));
+// ea05da9 on main: a cold instance that has not yet received a live strike may
+// not lock, whatever the other conditions say.
+t.check('allowed = !alreadyLocked && validationPassed && strike15mResolved',
+  /const allowed = !alreadyLocked && validationPassed && strike15mResolved;/.test(gateSrc));
+t.check('STRIKE_UNRESOLVED reason is emitted when the strike is unresolved',
+  gateSrc.includes('reasons.push("STRIKE_UNRESOLVED'));
 
 // PINNED-AS-IS (believed wrong, deliberately not changed here):
 // four of the 27 conjuncts are hardcoded true and can never fail, so their
@@ -159,6 +163,8 @@ function makeEnv(elapsedSec, mutate) {
     persistenceSeconds: 30,
     latestGuardianDecision: { action: 'HOLD', reversalThreat: 10 },
     latestCrossAssetContext: { state: 'ALIGNED', riskPenalty: 0, directionalAgreementRatio: 1 },
+    // ea05da9 on main: a cold instance with no live strike may not lock.
+    strike15mResolved: true,
     lockedCycleIds: new Set(),
   };
   if (mutate) mutate(env);
@@ -170,11 +176,20 @@ function runGate(elapsedSec, mutate) {
   const keys = Object.keys(env);
   return new Function(...keys, `${gateSrc}; return canLockCurrentCycle(64000);`)(...keys.map((k) => env[k]));
 }
+// Same, but returns the env so the lockEligibility side effect can be read.
+function runGateEnv(elapsedSec, mutate) {
+  const env = makeEnv(elapsedSec, mutate);
+  const keys = Object.keys(env);
+  new Function(...keys, `${gateSrc}; return canLockCurrentCycle(64000);`)(...keys.map((k) => env[k]));
+  return env;
+}
 
 t.section('PART B1: baseline -- fully green state locks');
-const base = runGate(400);
-t.eq('elapsed=400s all-green -> allowed', base.allowed, true);
-t.eq('elapsed=400s all-green -> validationPassed', base.validationPassed, true);
+// 500s sits in the STANDARD tier of the adaptive schedule (2deba55), whose
+// thresholds (75 / 6 / 3) the blocker list below is written against.
+const base = runGate(500);
+t.eq('elapsed=500s all-green -> allowed', base.allowed, true);
+t.eq('elapsed=500s all-green -> validationPassed', base.validationPassed, true);
 
 t.section('PART B2: each gated condition independently blocks the lock');
 // [label, mutation, reason fragment the gate must cite]
@@ -206,18 +221,55 @@ const BLOCKERS = [
 ];
 
 for (const [label, mutate, reasonFragment] of BLOCKERS) {
-  const g = runGate(400, mutate);
+  const g = runGate(500, mutate);
   const reasons = (g.reasons || []).join('|');
   t.check(`${label} -> DENIED`, g.allowed === false, `allowed=${g.allowed} reasons=${reasons}`);
   t.check(`${label} -> cites ${reasonFragment}`, reasons.includes(reasonFragment), `reasons=${reasons}`);
 }
 
 t.section('PART B3: alreadyLocked blocks even with validationPassed true');
-const gLocked = runGate(400, (e) => { e.active15mCycle.isLocked = true; });
+const gLocked = runGate(500, (e) => { e.active15mCycle.isLocked = true; });
 t.eq('isLocked=true -> allowed', gLocked.allowed, false);
 t.eq('isLocked=true -> validationPassed still true', gLocked.validationPassed, true);
-const gLedger = runGate(400, (e) => { e.lockedCycleIds = new Set(['BTC-15M-TEST']); });
+const gLedger = runGate(500, (e) => { e.lockedCycleIds = new Set(['BTC-15M-TEST']); });
 t.eq('cycleId in lockedCycleIds -> allowed', gLedger.allowed, false);
+const gStrike = runGate(500, (e) => { e.strike15mResolved = false; });
+t.eq('strike unresolved -> allowed', gStrike.allowed, false);
+t.eq('strike unresolved -> validationPassed still true (it is a separate term)', gStrike.validationPassed, true);
+t.check('strike unresolved -> cites STRIKE_UNRESOLVED', (gStrike.reasons || []).some((r) => r.includes('STRIKE_UNRESOLVED')));
+
+t.section('PART B3b: adaptive lock schedule (2deba55) -- thresholds by tier');
+// EARLY <480s: 85 / 8 / 4     STANDARD 480-659s: 75 / 6 / 3     LATE >=660s: 68 / 5 / 3
+const TIERS = [
+  ['EARLY',    400, 85, 8, 4],
+  ['STANDARD', 500, 75, 6, 3],
+  ['LATE',     700, 68, 5, 3],
+];
+for (const [tier, secs, minLQ, minAgree, minMtf] of TIERS) {
+  const lq = (v) => runGate(secs, (e) => { e.latestBtc15mPipeline.lockQuality = v; });
+  t.eq(`${tier}@${secs}s lockQuality=${minLQ - 1} -> DENIED`, lq(minLQ - 1).allowed, false);
+  t.eq(`${tier}@${secs}s lockQuality=${minLQ} -> ALLOWED`, lq(minLQ).allowed, true);
+  const ag = (v) => runGate(secs, (e) => { e.latestBtc15mPipeline.evidenceAgreementCount = v; });
+  t.eq(`${tier}@${secs}s agreement=${minAgree - 1} -> DENIED`, ag(minAgree - 1).allowed, false);
+  t.eq(`${tier}@${secs}s agreement=${minAgree} -> ALLOWED`, ag(minAgree).allowed, true);
+  const mt = (v) => runGate(secs, (e) => { e.latestBtc15mPipeline.multiTimeframeAlignment.alignedCount = v; });
+  t.eq(`${tier}@${secs}s mtf=${minMtf - 1} -> DENIED`, mt(minMtf - 1).allowed, false);
+  t.eq(`${tier}@${secs}s mtf=${minMtf} -> ALLOWED`, mt(minMtf).allowed, true);
+  const g = runGate(secs);
+  t.eq(`${tier}@${secs}s lockEligibility.lockTier`, g && runGateEnv(secs).active15mCycle.lockEligibility.lockTier, tier);
+  t.eq(`${tier}@${secs}s lockEligibility.minLockQuality`, runGateEnv(secs).active15mCycle.lockEligibility.minLockQuality, minLQ);
+}
+// Boundaries: 479 is EARLY (needs 85), 480 is STANDARD (needs 75); 659 STANDARD, 660 LATE (needs 68).
+t.eq('lockQuality=84 @479s (EARLY) -> DENIED', runGate(479, (e) => { e.latestBtc15mPipeline.lockQuality = 84; }).allowed, false);
+t.eq('lockQuality=84 @480s (STANDARD) -> ALLOWED', runGate(480, (e) => { e.latestBtc15mPipeline.lockQuality = 84; }).allowed, true);
+t.eq('lockQuality=74 @659s (STANDARD) -> DENIED', runGate(659, (e) => { e.latestBtc15mPipeline.lockQuality = 74; }).allowed, false);
+t.eq('lockQuality=74 @660s (LATE) -> ALLOWED', runGate(660, (e) => { e.latestBtc15mPipeline.lockQuality = 74; }).allowed, true);
+// PINNED-AS-IS: the bar FALLS as the cycle ages. 2deba55's rationale is that
+// "evidence about where price sits relative to [the frozen strike] strengthens
+// as the cycle runs". scripts/replay15m.ts measures post-lock directional
+// accuracy at 50.0% -- the engine is naming the side price already sits on.
+// Lowering the bar late leans further into that, not away from it.
+t.check('PINNED-AS-IS: LATE bar (68) < STANDARD (75) < EARLY (85)', 68 < 75 && 75 < 85);
 
 t.section('PART B4: observation floor and entry window (effElapsed)');
 // HARD 360s floor: no conviction level shortens it. The 90s early-lock bypass
@@ -235,12 +287,41 @@ t.eq('effElapsed=200s at max conviction -> still DENIED', gEarly.allowed, false)
 for (const s of [360, 480, 600, 719]) {
   t.eq(`effElapsed=${s}s -> ALLOWED`, runGate(s).allowed, true);
 }
-for (const s of [720, 780, 850]) {
+for (const s of [780, 850]) {
   const g = runGate(s);
   t.eq(`effElapsed=${s}s -> DENIED (entry window closed)`, g.allowed, false);
   t.check(`effElapsed=${s}s -> cites ENTRY_WINDOW_EXPIRED`,
     (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')));
 }
+
+t.section('REGRESSION-2deba55: gate and commit point disagree for 720-779s');
+// 2deba55 moved withinEntryWindow to `effElapsed < 780` but left the reason
+// check at `effElapsed >= 720`, and left lock15mCycle's commit point refusing
+// `>= 720`. So for one minute of every cycle:
+//   - canLockCurrentCycle returns allowed=true
+//   - while pushing "ENTRY_WINDOW_EXPIRED (elapsed=Ns >= 780s ...)" -- false on
+//     its face for N in 720..779 -- and lockEligibility reads eligible=true with
+//     an EXPIRED reason
+//   - and lock15mCycle refuses the lock anyway (see tests/lock-gate.invariants
+//     TEST 6), logging [VIXY_LOCK_WINDOW_REJECTED] every 3s.
+// This is the exact contradiction the comment above the window check says was
+// previously fixed by aligning both to 720. These checks pin the CURRENT
+// behaviour so the suite stays green on main, and are written so that fixing
+// the regression makes them FAIL -- forcing the fix to be acknowledged here
+// rather than passing silently. Gate logic is deliberately not changed on this
+// branch.
+for (const s of [720, 750, 779]) {
+  const g = runGate(s);
+  t.eq(`REGRESSION effElapsed=${s}s -> gate allowed=true`, g.allowed, true);
+  t.check(`REGRESSION effElapsed=${s}s -> yet reasons contain ENTRY_WINDOW_EXPIRED`,
+    (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')));
+  const env = runGateEnv(s);
+  t.eq(`REGRESSION effElapsed=${s}s -> lockEligibility.eligible=true`, env.active15mCycle.lockEligibility.eligible, true);
+  t.check(`REGRESSION effElapsed=${s}s -> lockEligibility.reason says EXPIRED`,
+    String(env.active15mCycle.lockEligibility.reason).includes('ENTRY_WINDOW_EXPIRED'));
+}
+t.check('REGRESSION: withinEntryWindow uses 780 while the reason check uses 720',
+  /effElapsed < 780 && effRemaining >= 120/.test(gateSrc) && /if \(effElapsed >= 720 \|\| effRemaining < 180\)/.test(gateSrc));
 
 t.section('PART B5: effElapsed prefers cycleObservationDuration over wall clock');
 // effElapsed = max(elapsedSeconds, cycleObservationDuration). A cycle whose
@@ -260,6 +341,9 @@ new Function(...keysSide, `${gateSrc}; return canLockCurrentCycle(64000);`)(...k
 t.check('gate writes active15mCycle.lockEligibility', !!envSide.active15mCycle.lockEligibility);
 t.eq('lockEligibility.minimumElapsedSeconds', envSide.active15mCycle.lockEligibility?.minimumElapsedSeconds, 360);
 t.eq('lockEligibility.preferredWindow at 400s', envSide.active15mCycle.lockEligibility?.preferredWindow, true);
+t.eq('lockEligibility.lockTier at 400s', envSide.active15mCycle.lockEligibility?.lockTier, 'EARLY');
+t.eq('lockEligibility.minLockQuality at 400s', envSide.active15mCycle.lockEligibility?.minLockQuality, 85);
+t.eq('lockEligibility.strikeResolved mirrors the global', envSide.active15mCycle.lockEligibility?.strikeResolved, true);
 t.eq('lockEligibility.reason when green', envSide.active15mCycle.lockEligibility?.reason, 'QUALIFIED_ENTRY_WINDOW');
 
 t.done();

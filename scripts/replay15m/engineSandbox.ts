@@ -154,6 +154,10 @@ let engineFeedStatus = "CONNECTED";
 let currentBtcPrice = 0;
 let currentBtcOpenPrice = 0;
 let current15mStrikePrice = 0;
+// ea05da9 (main): the gate refuses to lock until this instance has received a
+// live strike. In replay every cycle is given its strike at beginCycle, so the
+// faithful value is true. (It is set false only to simulate a cold instance.)
+let strike15mResolved = true;
 let currentBullVolumePct = 50;
 let currentMomentum = 0;
 let currentConfidence = 50;

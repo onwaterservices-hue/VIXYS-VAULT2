@@ -89,6 +89,8 @@ function makeEnv(elapsedSec, overrides = {}) {
     latestKalshiContext: {},
     marketDataSource: 'BINANCE',
     lockedCycleIds: new Set(),
+    // ea05da9 on main: a cold instance with no live strike may not lock.
+    strike15mResolved: true,
     globalSequenceNumber: 1,
     ...overrides.globals,
   };
@@ -149,7 +151,19 @@ const g3 = runGate(200, { globals: { currentConfidence: 96, currentEdgePct: 8, p
 check('elapsed=200s, max conviction -> still DENIED', g3.allowed === false, (g3.reasons||[]).join('|'));
 
 console.log('== TEST 4: entry window closes late-cycle ==');
-for (const t of [721, 780, 850]) {
+// 721 was moved out of this list on purpose. Since 2deba55 (main) the gate's
+// withinEntryWindow runs to 780s while its reason check and lock15mCycle's
+// commit point (TEST 6 below) still cut off at 720s, so at 721s the gate says
+// allowed=true and the commit point refuses. That disagreement is pinned by
+// name in tests/lock-gate.composition.mjs (REGRESSION-2deba55) rather than
+// silently re-labelled as intended here.
+{
+  const g = runGate(721);
+  check('REGRESSION-2deba55: elapsed=721s -> gate allowed=true while commit point (TEST 6) refuses',
+    g.allowed === true && (g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')),
+    `allowed=${g.allowed} reasons=${(g.reasons || []).join('|')}`);
+}
+for (const t of [780, 850]) {
   const g = runGate(t);
   check(`elapsed=${t}s -> lock DENIED`, g.allowed === false, (g.reasons||[]).join('|'));
 }

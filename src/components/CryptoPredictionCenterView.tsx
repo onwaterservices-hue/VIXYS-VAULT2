@@ -64,13 +64,14 @@ interface CryptoPredictionCenterViewProps {
 
 export type CycleState = 'ANALYZING' | 'BUILDING' | 'CONFIRMING' | 'LOCKED' | 'PROTECTED' | 'SETTLED' | 'SKIP';
 
-// The real lock-quality floor enforced by canLockCurrentCycle in server.ts:
-//   lockQualityTier !== "SKIP" && lockQuality >= 75
-// The card previously advertised "Req. 70+ to lock" and a "(Threshold: 70)"
-// explainer, both of which understated the gate -- a score of 72 rendered as
-// "Qualified" while the engine would refuse it. The gate is a flat 75; it is
-// NOT tier-dependent (server.ts only ever emits lockTier STANDARD or NONE).
-const LOCK_QUALITY_MIN = 75;
+// The lock-quality floor is tier-dependent (adaptive schedule, server.ts):
+//   EARLY  (<480s)     85
+//   STANDARD (480-660) 75
+//   LATE   (>=660s)    68
+// The card previously hardcoded a single number ("Req. 70+", then 75). The real
+// bar now arrives on the canonical payload as lockGate.minLockQuality, written
+// by canLockCurrentCycle itself, so this component never guesses it. When the
+// payload lacks it the label says so instead of inventing a threshold.
 
 // Web Audio Soft Institutional Chime (Restrained, Optional)
 const playLockChime = () => {
@@ -130,6 +131,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // Real market-feed health from the canonical decision payload. Undefined when
   // talking to a backend that predates the field, in which case the status bar
   // renders "--" rather than inventing a latency or a venue count.
+  const lockGate = (canonicalDecision as any)?.lockGate as
+    | { tier: string | null; minLockQuality: number | null; minEvidenceAgreement: number | null; minMtfAligned: number | null }
+    | null
+    | undefined;
+  const lockGateMin: number | null = typeof lockGate?.minLockQuality === 'number' ? lockGate.minLockQuality : null;
+  const lockGateTier: string | null = lockGate?.tier ?? null;
   const feedHealth = (canonicalDecision as any)?.feedHealth as
     | { dataAgeMs: number; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
     | undefined;
@@ -1142,7 +1149,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             <div className="mt-3 pt-2 border-t border-purple-900/30 flex items-center justify-between text-[9px] font-sans relative z-10 gap-1">
               <span className="text-purple-200/90 font-medium whitespace-nowrap">Cross-venue evidence</span>
               <span className="text-purple-400/90 font-mono text-[9px] whitespace-nowrap shrink-0">
-                {lockQualityScore >= LOCK_QUALITY_MIN ? `⚡ Ready (≥${LOCK_QUALITY_MIN})` : `Req. ${LOCK_QUALITY_MIN}+ to lock`}
+                {lockGateMin === null
+                  ? 'Gate threshold unavailable'
+                  : lockQualityScore >= lockGateMin
+                    ? `⚡ Ready (≥${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''})`
+                    : `Req. ${lockGateMin}+ to lock${lockGateTier ? ` (${lockGateTier})` : ''}`}
               </span>
             </div>
           </div>
@@ -1899,7 +1910,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
                   <span className="text-purple-300">Lock Quality Score</span>
-                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: {LOCK_QUALITY_MIN})</span>
+                  <span className="font-bold text-amber-400 font-mono">{lockQualityScore} / 100 (Threshold: {lockGateMin === null ? '--' : `${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''}`})</span>
                 </div>
 
                 <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">

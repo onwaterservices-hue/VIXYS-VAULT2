@@ -3700,6 +3700,15 @@ function canLockCurrentCycle(livePrice) {
     remainingSeconds,
     minimumElapsedSeconds: 360,
     preferredWindow: elapsedSeconds >= 360 && elapsedSeconds <= 600,
+    // The adaptive schedule (2deba55) computes the tier and its thresholds as
+    // locals, so nothing outside this function could see which bar was actually
+    // being applied; the terminal was left hardcoding a single number. Exposed
+    // here as observation only -- no decision reads these back.
+    lockTier,
+    minLockQuality,
+    minEvidenceAgreement,
+    minMtfAligned,
+    strikeResolved: strike15mResolved,
   };
   return {
     allowed,
@@ -14720,6 +14729,20 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     contradictionScore: chopScore,
     protectionStatus: protectionStat,
     lockTier: lockTierVal,
+    // The REAL gate the engine is applying right now. lockTier above is a legacy
+    // binary (SKIP -> NONE, else STANDARD) kept for shape compatibility; it does
+    // not reflect the adaptive EARLY/STANDARD/LATE schedule. This does.
+    lockGate: active15mCycle.lockEligibility
+      ? {
+          tier: active15mCycle.lockEligibility.lockTier ?? null,
+          minLockQuality: active15mCycle.lockEligibility.minLockQuality ?? null,
+          minEvidenceAgreement: active15mCycle.lockEligibility.minEvidenceAgreement ?? null,
+          minMtfAligned: active15mCycle.lockEligibility.minMtfAligned ?? null,
+          eligible: active15mCycle.lockEligibility.eligible ?? null,
+          reason: active15mCycle.lockEligibility.reason ?? null,
+          strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
+        }
+      : null,
     lockEvaluation: latestLockEvaluation || {
       qualified: true,
       score: 50,
