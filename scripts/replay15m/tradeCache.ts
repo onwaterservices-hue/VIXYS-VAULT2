@@ -100,9 +100,9 @@ async function fetchPage(after: number | null, attempt = 1): Promise<{ trades: R
 }
 
 /** Fold raw trades into fixed-width buckets. Only real prints contribute. */
-function bucketize(trades: RawTrade[], bucketSeconds: number): Map<number, TradeTick> {
+function bucketize(trades: RawTrade[], bucketSeconds: number, into?: Map<number, TradeTick>): Map<number, TradeTick> {
   const width = bucketSeconds * 1000;
-  const buckets = new Map<number, TradeTick>();
+  const buckets = into ?? new Map<number, TradeTick>();
   for (const t of trades) {
     const ms = Date.parse(t.time);
     if (!Number.isFinite(ms)) continue;
@@ -130,8 +130,31 @@ function bucketize(trades: RawTrade[], bucketSeconds: number): Map<number, Trade
     const lastMs = (b as any)._lastMs ?? -Infinity;
     if (ms >= lastMs) { (b as any)._lastMs = ms; b.price = price; }
   }
-  for (const b of buckets.values()) delete (b as any)._lastMs;
   return buckets;
+}
+const stripLastMs = (rows: TradeTick[]) => rows.map((b) => { const c = { ...b } as any; delete c._lastMs; return c as TradeTick; });
+
+/**
+ * Binary-search a trade_id cursor whose newest trade is at or after targetMs,
+ * so a walk can START at the top of the missing span instead of at "now".
+ * ~20 probe requests replace thousands of pages of already-cached history.
+ */
+async function seekCursorAtOrAfter(targetMs: number): Promise<number | null> {
+  const head = await fetchPage(null);
+  if (!head.trades.length) return null;
+  let hiId = head.trades[0].trade_id;            // newest
+  const headOldest = Date.parse(head.trades[head.trades.length - 1].time);
+  if (headOldest <= targetMs) return null;        // target is within the first page: no seek needed
+  let loId = Math.max(1, hiId - 20_000_000);      // ~40 days of prints at ~5/s
+  for (let i = 0; i < 40 && hiId - loId > 1500; i++) {
+    const midId = Math.floor((loId + hiId) / 2);
+    const pg = await fetchPage(midId + 1000);     // returns ids < midId+1000, i.e. around midId
+    await sleep(120);
+    if (!pg.trades.length) { loId = midId; continue; }
+    const newestMs = Date.parse(pg.trades[0].time);
+    if (newestMs >= targetMs) hiId = midId; else loId = midId;
+  }
+  return hiId + 1000;                             // cursor: first page will contain ids just below hiId+1000
 }
 
 /**
@@ -176,16 +199,18 @@ export async function getTradeTicks(
         `Run once without --offline to populate ${dir}`,
       );
     }
-    // Walk backwards from the newest trade until we pass the window start.
+    // Walk backwards until we pass the OLDEST missing hour. Start at a cursor
+    // seeked to just after the NEWEST missing hour so cached history above it is
+    // not re-paged. Pages are folded into buckets immediately -- raw trades are
+    // never retained (a 21-day walk holding ~9M raw prints ran out of memory).
     const need = Math.min(...missing);
-    const collected: RawTrade[] = [];
-    // Coinbase's `after` cursor should return strictly older trade_ids, so pages
-    // must not overlap. Dedupe anyway and COUNT it, so a run proves the overlap
-    // was zero instead of assuming it -- a duplicate print would double-count
-    // taker volume silently.
-    const seen = new Set<number>();
     const writtenHours = new Set<number>();
+    const newestMissingEnd = Math.max(...missing) + HOUR_MS;
+    const folded = new Map<number, TradeTick>();
+    let prevPageIds = new Set<number>();          // pages are contiguous, so overlap can only be with the previous page
     let after: number | null = null;
+    try { after = await seekCursorAtOrAfter(newestMissingEnd + 60_000); } catch { after = null; }
+    opts.onProgress?.(after === null ? '  trades: walking from the newest print' : `  trades: seeked cursor ${after} near ${new Date(newestMissingEnd).toISOString()}`);
     let oldestSeen = Infinity;
     let guard = 0;
     const MAX_REQUESTS = 20000;
@@ -193,53 +218,50 @@ export async function getTradeTicks(
       const page = await fetchPage(after);
       stats.requests++; guard++;
       if (!page.trades.length) break;
+      const keep: RawTrade[] = []; const ids = new Set<number>();
       for (const t of page.trades) {
         const ms = Date.parse(t.time);
         if (ms < oldestSeen) oldestSeen = ms;
-        if (seen.has(t.trade_id)) { stats.duplicatesDropped++; continue; }
-        seen.add(t.trade_id);
-        if (ms >= need && ms < endMs) collected.push(t);
+        ids.add(t.trade_id);
+        if (prevPageIds.has(t.trade_id)) { stats.duplicatesDropped++; continue; }
+        if (ms >= need && ms < endMs) keep.push(t);
       }
+      prevPageIds = ids;
+      stats.tradesUsed += keep.length;
+      bucketize(keep, bucketSeconds, folded);
       after = page.after;
       if (after === null) break;
       // Checkpoint: any missing hour whose whole span lies ABOVE oldestSeen has
-      // been fully walked; persist it now so a crash later loses nothing.
-      if (guard % 100 === 0) {
-        const done = bucketize(collected, bucketSeconds);
+      // been fully walked; persist it now and drop its buckets from memory.
+      if (guard % 50 === 0 || oldestSeen <= need) {
         const nowMs0 = Date.now();
         for (const h of missing) {
           if (writtenHours.has(h)) continue;
           if (!(h > oldestSeen) || !(h + HOUR_MS <= Math.min(endMs, nowMs0))) continue;
-          const rows = [...done.values()].filter((b) => b.tsMs >= h && b.tsMs < h + HOUR_MS).sort((a, b) => a.tsMs - b.tsMs);
-          if (rows.length) { writeFileSync(join(dir, `${h}.json`), JSON.stringify(rows)); writtenHours.add(h); stats.hoursFetched++; }
+          const rows: TradeTick[] = [];
+          for (const [ts, b] of folded) if (ts >= h && ts < h + HOUR_MS) { rows.push(b); }
+          rows.sort((a, b) => a.tsMs - b.tsMs);
+          if (rows.length) { writeFileSync(join(dir, `${h}.json`), JSON.stringify(stripLastMs(rows))); writtenHours.add(h); stats.hoursFetched++; }
+          for (const [ts] of folded) if (ts >= h && ts < h + HOUR_MS) folded.delete(ts);
         }
       }
       if (guard % 25 === 0) {
         opts.onProgress?.(
-          `  trades: ${stats.requests} requests, back to ${new Date(oldestSeen).toISOString()}, ${collected.length} in window`,
+          `  trades: ${stats.requests} requests, back to ${new Date(oldestSeen).toISOString()}, ${stats.tradesUsed} kept, ${writtenHours.size} hours checkpointed`,
         );
       }
       await sleep(120);
     }
-    stats.tradesUsed = collected.length;
-
-    const all = bucketize(collected, bucketSeconds);
-    // Group into hours and persist only COMPLETE hours.
+    // Final flush: whatever complete missing hours remain in memory.
     const nowMs = Date.now();
-    const byHour = new Map<number, TradeTick[]>();
-    for (const b of [...all.values()].sort((a, b2) => a.tsMs - b2.tsMs)) {
-      const h = Math.floor(b.tsMs / HOUR_MS) * HOUR_MS;
-      if (!byHour.has(h)) byHour.set(h, []);
-      byHour.get(h)!.push(b);
-    }
     for (const h of missing) {
-      const rows = byHour.get(h) || [];
-      cached.set(h, rows);
-      const hourComplete = h + HOUR_MS <= Math.min(endMs, nowMs);
-      if (hourComplete && rows.length && !writtenHours.has(h)) {
-        writeFileSync(join(dir, `${h}.json`), JSON.stringify(rows));
-        stats.hoursFetched++;
-      }
+      if (writtenHours.has(h)) { cached.set(h, JSON.parse(readFileSync(join(dir, `${h}.json`), 'utf8'))); continue; }
+      const rows: TradeTick[] = []; for (const [ts, b] of folded) if (ts >= h && ts < h + HOUR_MS) rows.push(b);
+      rows.sort((a, b) => a.tsMs - b.tsMs);
+      const clean = stripLastMs(rows);
+      cached.set(h, clean);
+      const hourComplete = h + HOUR_MS <= Math.min(endMs, nowMs) && oldestSeen <= h;
+      if (hourComplete && clean.length) { writeFileSync(join(dir, `${h}.json`), JSON.stringify(clean)); writtenHours.add(h); stats.hoursFetched++; }
     }
   }
 
