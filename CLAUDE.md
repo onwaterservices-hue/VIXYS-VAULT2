@@ -125,6 +125,9 @@ Taken from `package.json`. These are the real commands — do not invent others.
 | replay a specific engine version | `git show <sha>:server.ts > /tmp/old.ts && npm run replay:15m -- --source trades --offline --start … --end … --engine-source /tmp/old.ts` |
 | evaluate Layer 5 inside the real gate | `npm run replay:15m -- --source trades --offline --start … --end … --lock-rule strike_side --bar 0.95` |
 | compare two replay runs (Phase 8 table) | `npx tsx scripts/replay15m/research/compareRuns.ts A.json B.json [labelA] [labelB]` |
+| intracycle incremental value (item C) | `npx tsx scripts/replay15m/research/incrementalValue.ts <snippets.jsonl>` |
+| post-lock deterioration / PROTECT (item E) | `npx tsx scripts/replay15m/research/postLock.ts <snippets.jsonl>` |
+| regime slices for the rule | `npx tsx scripts/replay15m/research/regimeSlices.ts <snippets.jsonl>` |
 | real-flow forecast test (E3b) | `npx tsx scripts/replay15m/research/flowSkill.ts <startIso> <endIso>` |
 | production build | `npm run build` |
 | serve a local build | `npm start` (see the sign-in loop below) |

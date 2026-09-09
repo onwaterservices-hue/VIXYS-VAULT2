@@ -200,7 +200,13 @@ change. Recorded so E2 can measure whether it adds independent value.
       the 0.95 locks sit in the 720–779s commit-point gap. **DECISION NEEDED:**
       bar, and 720-vs-780 alignment.
 - [x] **J1c** Disjoint refit (Aug 12→Sep 2) evaluated on Sep 2→9: bar 0.95 → 127 locks at 97.6%; bar 0.90 → 231 at 95.2%.
-- [ ] **J1d** Kalshi implied price at t → edge vs market.
+- [ ] **J1d** Kalshi implied price at t → edge vs market. **BLOCKED: no historical Kalshi prices available.**
+- [x] **J2a** Item C: engine/price features add no incremental information beyond the table at 2,591 cycles (Δlog-loss −0.0009); 7-day hint only. 21-day re-run pending.
+- [x] **J2b** Item 6/E: post-lock deterioration measured; PROTECT (locked-side p < 0.5) catches 40% of losses at 1.8% false alarms, ~120s warning. Exposed as `lockGate.strikeSide.pLockedSide` / `protectSignal` (observation only). — `c5e4b2f`
+- [x] **J2c** Regime slices: 95.7–100% across trend/vol/session terciles on the test half.
+- [x] **Ledger integrity**: mid-cycle SKIP rows no longer persisted; rollover SKIP never shadows a lock. — `a5ad411`
+- [x] **780 alignment** across gate, reason check and commit point. — `1f6186e`
+- [ ] **Merge PR #28** (opened; merge click blocked by permission classifier).
 - [ ] **J2** Runtime performance.
 - [ ] **J3** UI — **not before the decision object is trustworthy.**
 
