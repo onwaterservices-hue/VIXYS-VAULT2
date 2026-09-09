@@ -4422,8 +4422,8 @@ async function checkAndSettle15mCycle(livePrice) {
           status: "NO_TRADE",
           modelVersion:
             serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
-          dataSource: "COINBASE_KRAKEN_CASCADE",
-          latencyMs: 12,
+          dataSource: marketFeedHealth.priceSource || null,
+          latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
@@ -4448,10 +4448,29 @@ async function checkAndSettle15mCycle(livePrice) {
         if (persistentSignalLogs.length > 300) {
           persistentSignalLogs.pop();
         }
-        persistSingleSignalLog(skippedLog);
-        console.log(
-          `[VIXY_CYCLE_SKIPPED] Cycle ID: ${active15mCycle.cycleId} | Reason: ${skippedLog.qualificationReason}`,
-        );
+        // A lock may have been committed for this cycle by ANOTHER instance
+        // (locks are per-instance in memory; the ledger is shared). Never let a
+        // SKIP row shadow a lock: check memory, then the shared ledger, first.
+        const lockRowId = `sig_lock_${active15mCycle.intervalStart}`;
+        let lockExistsElsewhere = persistentSignalLogs.some((s) => s.id === lockRowId);
+        if (!lockExistsElsewhere && db) {
+          try {
+            const lockSnap = await getDoc(doc(db, "signal_logs", lockRowId));
+            lockExistsElsewhere = Boolean(lockSnap && lockSnap.exists());
+          } catch (e) {
+            // Unknown is not "no lock". Fail closed: do not write the SKIP.
+            lockExistsElsewhere = true;
+            console.warn(`[VIXY_CYCLE_SKIPPED] could not verify ${lockRowId} in the ledger; not persisting a SKIP row for this cycle`);
+          }
+        }
+        if (lockExistsElsewhere) {
+          console.log(`[VIXY_CYCLE_SKIPPED] ${active15mCycle.cycleId}: a lock row exists for this cycle; SKIP row not persisted`);
+        } else {
+          persistSingleSignalLog(skippedLog);
+          console.log(
+            `[VIXY_CYCLE_SKIPPED] Cycle ID: ${active15mCycle.cycleId} | Reason: ${skippedLog.qualificationReason}`,
+          );
+        }
       }
     }
     globalSequenceNumber++;
@@ -4921,7 +4940,7 @@ async function checkAndSettle15mCycle(livePrice) {
           confidence:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
-            72,
+            null,
           reversalRisk: reversalThreat,
           targetStrike: active15mCycle.strikePrice,
           spotAtLock: active15mCycle.livePrediction?.spot || livePrice,
@@ -4933,8 +4952,8 @@ async function checkAndSettle15mCycle(livePrice) {
           status: "NO_TRADE",
           modelVersion:
             serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
-          dataSource: "COINBASE_KRAKEN_CASCADE",
-          latencyMs: 12,
+          dataSource: marketFeedHealth.priceSource || null,
+          latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
@@ -4952,7 +4971,7 @@ async function checkAndSettle15mCycle(livePrice) {
           confidencePct:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
-            72,
+            null,
           lockedProbability: active15mCycle.livePrediction?.probability || 50,
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
@@ -4969,12 +4988,19 @@ async function checkAndSettle15mCycle(livePrice) {
           active15mCycle.livePrediction?.confidence ||
           currentConfidence ||
           skippedLog.confidence ||
-          72;
+          null;
         skippedLog.reversalRisk = reversalThreat;
         skippedLog.spotAtLock =
           active15mCycle.livePrediction?.spot || livePrice;
       }
-      persistSingleSignalLog(skippedLog);
+      // NOT persisted here. This block runs MID-CYCLE, and the row it builds
+      // carries resolvedAt = intervalEnd (the future) and settlementPrice =
+      // the current spot. Written to Firestore at that moment it appears in
+      // the public ledger as a settled SKIP for a cycle that is still live --
+      // observed on 2026-09-09 14:15Z, where the ledger showed a SKIP resolved
+      // at 14:30:00 while the engine on another instance was LOCKED_UP. The
+      // in-memory marker is kept; the rollover writer below persists the skip
+      // once the cycle has actually ended and no lock exists for it.
     }
   }
   // lockedSnapshot is only populated by lock15mCycle within the SAME warm
