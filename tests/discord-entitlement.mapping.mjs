@@ -8,10 +8,10 @@
 //   DAY_PASS                       -> "DAY_PASS" (VIXY (24hr) ELEITE'S)
 //   no active purchase             -> "NONE"     (no paid role)
 //
-// Path is resolved RELATIVE to this file. The two older suites in this
-// directory hardcode an absolute path to a different checkout
-// (~/Downloads/VIXYS-VAULT2-main/server.ts), so they silently test that copy
-// rather than the working tree.
+// Path is resolved RELATIVE to this file, so the test moves with the checkout.
+// Two older suites here used to hardcode an absolute path to a different
+// checkout and silently tested that copy instead; they have since been
+// repointed at the working tree.
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';

@@ -6,11 +6,10 @@
 // globals injected, so a test can only pass if the shipped code behaves the
 // way the test says it does.
 //
-// Two of the older test files in this directory read server.ts from
-// /Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts -- a stale copy
-// outside the repo that is 950 lines behind HEAD. Everything added here reads
-// the repo copy via a path derived from this module's own location, so the
-// tests move with the checkout.
+// Paths are derived from this module's own location so the tests move with the
+// checkout. Two older suites here read server.ts from an absolute path outside
+// the repo (a copy ~950 lines behind HEAD) and so were not guarding this
+// checkout at all; they have since been repointed.
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';

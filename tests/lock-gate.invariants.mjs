@@ -2,8 +2,14 @@
 // Executes the REAL canLockCurrentCycle / lock15mCycle source extracted verbatim from
 // server.ts, with controlled state injected. No reimplementation, no network, no Firestore.
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 
-const src = readFileSync(new URL('../../../../../Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', import.meta.url).pathname.includes('null') ? '/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts' : '/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', 'utf8');
+// Reads the server.ts of the repository this test lives in. It previously read
+// an absolute path under ~/Downloads that was a stale copy ~950 lines behind
+// HEAD, so the test was not guarding this checkout at all. Verified to pass
+// unchanged against the repo copy before repointing.
+const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'server.ts'), 'utf8');
 
 function extract(name, startPat) {
   const i = src.indexOf(startPat);

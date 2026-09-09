@@ -1,6 +1,10 @@
 // RUNTIME TEST — Discord claim must FAIL CLOSED on every infrastructure failure.
 import { readFileSync } from 'fs';
-const src = readFileSync('/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', 'utf8');
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+// See the note in lock-gate.invariants.mjs: this read a stale copy of server.ts
+// outside the repo. Verified to pass unchanged against the repo copy.
+const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'server.ts'), 'utf8');
 const i = src.indexOf('async function claimBroadcastAtomically');
 const j = src.indexOf('__name(claimBroadcastAtomically', i);
 const fnSrc = src.slice(i, j);
