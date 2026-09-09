@@ -147,7 +147,7 @@ change. Recorded so E2 can measure whether it adds independent value.
       out-of-sample; volatility matters at small distances. — `f1deb82`
 - [x] Candidate rule fitted first-half / evaluated second-half: ≥95% bar →
       67.7% of cycles locked at 94.9% win vs engine 2.2% at 96.6%.
-- [ ] Repeat on trade data (7-day ingestion in flight).
+- [x] Repeated on corrected 7-day trade data: Table 1 replicates; rule ≥95% 97.5% vs engine 92.8% at the same lock rate, later locks. Earlier "30×" claim corrected (candle artifact).
 - [ ] Add Kalshi implied price at t → measure edge vs market, not just win%.
 - [ ] Regime slices (trend/range/high-vol) for the rule.
 - [ ] Decide: rule becomes Layer 5 behind a flag (Phase J1), engine evidence

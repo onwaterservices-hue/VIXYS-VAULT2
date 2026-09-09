@@ -287,6 +287,47 @@ blocked on production read access.
 
 ---
 
+## ★★★★ CORRECTED 7-DAY TRADE DATA — everything re-derived (3,000,332 prints, 672 cycles, collapse 4.1%)
+
+All earlier trade-level numbers were on first-print buckets. These replace them.
+
+**Engines, identical cycles (compareRuns):**
+```
+                                OLD 3e31a84        NEW main 7eea881
+locks / rate                    324 / 48.2%        346 / 51.5%
+strike-graded win               90.4%              91.0%
+post-lock directional skill     46.3% ±2.8 p=.20   43.1% ±2.7 p=.011  (significantly BELOW 50%)
+skill EARLY / STD / LATE        53.0/42.7/24.1     43.2/43.8/40.4
+median lock                     477s               540s
+locks in 720-779s regression    0                  23
+direction flips / cycle         10.1               4.8   ← main's changes did make it steadier
+skill by confidence 90-95 / 95+ 32.9% / 50.0%      36.2% / 47.4%   ← confidence anti-informative
+```
+Real taker flow (flowSkill, 671 cycles): 45–51% in every cell; nothing predictive.
+Engine vs naive "current side" at t=720: agrees 96.9%; when it disagrees, 45% (n=20).
+
+**Table 1 replicates on trades** (t=720s: 6–10 bps 91%, 10–15 96%, 15–25 99%;
+all-sides 85.0% vs 85.8% on candles). The product number is robust across
+data source and month.
+
+**Candidate rule vs engine — CORRECTED, apples to apples, TEST half (336 cycles):**
+```
+policy                  locks   lock%    WIN%     Wilson95        median lock
+ENGINE (actual replay)   166    49.4%    92.8%   [87.8, 95.8]      537s
+rule bar >=90%           170    50.6%    94.7%   [90.2, 97.2]      660s
+rule bar >=95%           161    47.9%    97.5%   [93.8, 99.0]      720s
+```
+**Correction of my earlier claim.** On candles the engine locked only 2.2% of
+cycles and I wrote that the rule locks "~30× more often". That was the candle
+artifact suppressing the engine's gate, not a property of the rule. On trade
+data the engine already locks ~half of cycles. The honest comparison is:
+same lock rate, the rule wins more at ≥95% (97.5 vs 92.8, intervals barely
+touch) and locks later (720s vs 537s); at ≥90% same lock rate, same win rate,
+later. The rule's real advantages are (1) its number IS the outcome rate —
+the engine's 91% conviction bears no relation to outcomes (skill 36% in the
+90–95 bucket) — and (2) it is explainable. Its cost is later locks, i.e. less
+market edge. Train/test here is only 335/336 cycles; treat as directional.
+
 ## ★★ THE PRODUCT NUMBER — P(settle on the current side of the frozen strike)
 
 The user's correction: a VIXY "win" is the side of the strike FIXED AT CYCLE
@@ -384,6 +425,15 @@ this becomes the engine's Layer 5.
 - Status bar in production still shows the literals `LATENCY 0.8s`,
   `VENUES 4/4`, `BINANCE` — this branch's fixes are not deployed.
 - The card never shows the strike the user is being graded against.
+
+**Cycle 13:45–14:00 UTC, watched end to end:**
+- t=1m39s: UP 55%, LQ 55 — already labelled "STRONG EVIDENCE" during CALIBRATING.
+- t=5m42s: UP **91% "EARLY LOCK READY"**, LQ **93 OPTIMAL**, on a ~6–9 bps lead
+  (Table 1 says ~80% for that state). Locked shortly after, "LOCKED EARLY".
+- t=11m49s: still 91%; price −$157 from the lock point; LQ 93 → 62; reversal 15% → 38%.
+- t=14m57s: still 91%; price **$79,083, ~$160–180 below the cycle open**; LQ 35;
+  signals aligned 5/6 → 2/6; regime CHOP. Conviction never moved once locked.
+  Outcome vs the Kalshi strike: see next entry.
 
 ## ⚠ DATA DEFECT FOUND AND FIXED — trade-cache bucket price was the FIRST print
 
