@@ -287,6 +287,75 @@ blocked on production read access.
 
 ---
 
+## ★★ THE PRODUCT NUMBER — P(settle on the current side of the frozen strike)
+
+The user's correction: a VIXY "win" is the side of the strike FIXED AT CYCLE
+OPEN at settlement (Kalshi/Polymarket 15m contracts) — not continuation from
+the lock. Late locks with 2–5 min left are a legitimate strategy and users
+report 90%+ doing it. `scripts/replay15m.ts --snippets` + `snippetTable.ts`
+measured that criterion on **2,591 real cycles (27 days of candles; this
+table is engine-independent, so candles are valid for it)**:
+
+```
+P(current side wins) by minute and |moneyness| (bps)   win%(n)
+t(s)    0-3     3-6     6-10    10-15   15-25   25-40   40+    all
+ 600    63%    80%     85%     92%     94%     96%    100%   81.8%
+ 660    65%    79%     87%     94%     95%     99%     99%   83.7%
+ 720    67%    80%     91%     95%     97%    100%    100%   85.8%
+ 780    65%    88%     94%     98%     98%    100%    100%   87.9%
+ 840    72%    91%     97%     99%     98%    100%    100%   91.2%
+```
+
+This IS the users' lived 90%+. And the engine on top of it: at t=480/600/720
+it agrees with "current side" 95–97% of the time; **when it disagrees it is
+39–47% correct** — worse than a coin flip. On this evidence the engine adds
+nothing to distance-from-strike and its disagreements subtract.
+
+**What "the best 15-minute lock" therefore is, on evidence:** a calibrated
+P(current side wins | time remaining, distance from strike, volatility) that
+locks the moment it clears a bar (e.g. ≥90%) — as early as that happens, which
+at ≥15 bps is already t≈600s — and says SKIP otherwise. Not an evidence soup.
+Whether that beats the Kalshi price at that moment (the user's "data edge") is
+the next measurement: it needs Kalshi implied prices at t.
+
+Out-of-sample check (chronological halves) and volatility split:
+```
+OUT-OF-SAMPLE STABILITY -- Table 1 split chronologically at 15M-2026-08-25T11:45:00.000Z (2591 cycles)
+t(s)  bin     FIRST-half win%(n)      SECOND-half win%(n)     Wilson95 overlap?
+ 600  6-10     85.4%(205)            84.7%(268)          yes
+ 600  10-15    91.9%(160)            91.8%(183)          yes
+ 600  15+      95.6%(315)            95.5%(292)          yes
+ 720  6-10     92.3%(208)            90.8%(260)          yes
+ 720  10-15    94.8%(173)            96.0%(199)          yes
+ 720  15+      98.3%(343)            98.0%(304)          yes
+ 780  6-10     94.5%(201)            94.2%(243)          yes
+ 780  10-15    98.2%(169)            98.3%(179)          yes
+ 780  15+      99.4%(352)            98.8%(336)          yes
+ 840  6-10     97.3%(223)            95.9%(241)          yes
+ 840  10-15    99.4%(172)            98.9%(190)          yes
+ 840  15+      99.2%(359)            99.2%(355)          yes
+
+BY INTRACYCLE RANGE (volatility proxy; terciles at 11 / 20 bps sampled range)  -- t=720s, |mny| >= 10 bps
+  LOW-vol   94.9% (n=39)
+  MID-vol   98.5% (n=326)
+  HIGH-vol  96.6% (n=654)
+  LOW-vol   t=720 |mny| 3-6 bps: 90.8% (n=271)
+  HIGH-vol  t=720 |mny| 3-6 bps: 69.6% (n=56)
+```
+
+## PHASE 1 — watching production (www.vixxyvault.com), cycle 13:30–13:45 UTC
+- 13:40 (4:47 left): card **DOWN 52%**, LQ 53 "STRONG EVIDENCE", reversal
+  43%; banner above it: **"91% AI confidence on Kalshi, EDGE +12.2%"**. Two
+  confidences on one screen (the banner is TopNavControls' static config).
+- 13:43 (1:23 left): card **SKIP 43%**, reversal **77% HIGH**, protection
+  **VETO ACTIVE (HIGH VOLATILITY)** — while the timeline tile 04 read
+  **"LOCKED — Decision committed & guarded"** (red) and the banner still said
+  "seeing increasing agreement". Price badge **+$54.40 green** over a falling
+  red sparkline. No lock this cycle.
+- Status bar in production still shows the literals `LATENCY 0.8s`,
+  `VENUES 4/4`, `BINANCE` — this branch's fixes are not deployed.
+- The card never shows the strike the user is being graded against.
+
 ## ⚠ DATA DEFECT FOUND AND FIXED — trade-cache bucket price was the FIRST print
 
 `tests/replay-harness.invariants.mjs` (added to pin the harness's own rules)
