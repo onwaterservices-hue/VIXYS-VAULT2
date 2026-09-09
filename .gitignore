@@ -16,3 +16,6 @@ coverage/
 # Build artifacts (committed by accident 2026-09-08; keep out of git)
 build/
 dist/
+
+# replay harness data cache (regenerated from Coinbase on demand)
+.cache/

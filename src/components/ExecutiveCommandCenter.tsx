@@ -211,28 +211,33 @@ export const ExecutiveCommandCenter: React.FC<ExecutiveCommandCenterProps> = ({
                   <span>Executive Briefing:</span>
                   {(() => {
                     const isBullishSignal = ((apiSignal?.direction as string) === 'UP' || (apiSignal?.direction as string) === 'YES' || (signal?.direction as string) === 'YES' || (signal?.direction as string) === 'UP');
+                    // No invented 88: only show a confluence figure the engine
+                    // actually reported for this signal.
+                    const realConf = apiSignal?.confidence ?? signal?.confidence ?? null;
                     return (
                       <span className={`font-extrabold px-2.5 py-0.5 rounded-lg border ${
                         isBullishSignal
                           ? 'text-emerald-400 bg-emerald-950/60 border-emerald-500/30'
                           : 'text-rose-400 bg-rose-950/60 border-rose-500/30'
                       }`}>
-                        {selectedAsset} — {isBullishSignal ? '▲ BUY UP' : '▼ BUY DOWN'} ({Math.round(apiSignal?.confidence || signal?.confidence || 88)}% CONFLUENCE)
+                        {selectedAsset} — {isBullishSignal ? '▲ BUY UP' : '▼ BUY DOWN'}{realConf != null ? ` (${Math.round(Number(realConf))}% CONFLUENCE)` : ''}
                       </span>
                     );
                   })()}
                 </h2>
+                {/* This paragraph used to narrate a fixed story ("+1,420 BTC net taker
+                    accumulation", "underpricing by +12.4%") — the same numbers for every
+                    user at every moment. The briefing states no figure it did not observe. */}
                 <p className="text-xs text-slate-300 leading-relaxed max-w-3xl font-sans">
-                  Institutional order flow shows <strong className="text-emerald-300">+1,420 BTC net taker accumulation</strong> with high-integrity L2 ask absorption. Kalshi/Polymarket implied odds are underpricing the model by <strong className="text-purple-300">+12.4%</strong>.
+                  The live 15-minute decision, conviction and lock state are on the engine card below. Every number shown there is observed from the running engine — this briefing adds none of its own.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0 flex-wrap">
-              <div className="bg-[#080415] px-3 py-2 rounded-2xl border border-purple-800/40 font-mono text-xs space-y-0.5 hidden md:block">
-                <div className="text-[10px] text-purple-300/70 font-bold uppercase">30-Day Model Win Rate</div>
-                <div className="text-emerald-400 font-black text-sm">88.4% Verified</div>
-              </div>
+              {/* The "30-Day Model Win Rate: 88.4% Verified" tile was a hardcoded
+                  literal. No performance claim renders here until it is computed
+                  from the settled ledger. */}
               <button
                 onClick={() => setShowDailyReport(false)}
                 className="text-slate-400 hover:text-white text-xs font-mono px-3 py-1.5 rounded-xl bg-slate-900/60 border border-slate-800 hover:bg-slate-800 transition-all cursor-pointer"

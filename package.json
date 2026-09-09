@@ -11,7 +11,12 @@
     "clean": "rm -rf dist build",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsc --noEmit"
+    "test": "tsc --noEmit && node tests/run-all.mjs",
+    "test:engine": "node tests/run-all.mjs",
+    "verify:dev-isolation": "node scripts/verifyDevIsolation.mjs",
+    "verify:replay-determinism": "node scripts/verifyReplayDeterminism.mjs",
+    "replay:15m": "tsx scripts/replay15m.ts",
+    "vixy:verify": "node scripts/vixyVerify.mjs"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

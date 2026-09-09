@@ -225,6 +225,73 @@ import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS a
  */
 const _adminActive = !!adminDb;
 
+// ----------------------------------------------------------------------------
+// PERSISTENCE WRITE AUTHORIZATION
+// ----------------------------------------------------------------------------
+// Running `node dist/server.cjs` on a developer machine used to start the full
+// engine against whatever credentials happened to be in .env, and immediately
+// begin issuing Firestore writes -- telemetry observations, cycle locks, signal
+// logs. The only thing that stopped it reaching production was the credentials
+// failing to load. That is luck, not architecture.
+//
+// Writes are therefore authorized explicitly, at the shim, which every write in
+// this file routes through (setDoc, deleteDoc, writeBatch, runTransaction).
+// Guarding here rather than at the ~50 call sites means a new call site cannot
+// forget the check.
+//
+// The rule is deliberately conservative in the safe direction: a write is
+// allowed only when this process can positively show it is a real deployment.
+// Vercel sets VERCEL=1 in every deployment, so its ABSENCE proves we are
+// outside one -- a laptop, a replay, CI -- and writes are refused. Production
+// is unaffected because production always has VERCEL set.
+//
+//   VIXY_PERSISTENCE_MODE=readonly      force read-only anywhere (previews, CI)
+//   VIXY_ALLOW_PRODUCTION_WRITES=true   explicit opt-in outside a deployment
+//
+// Reads are never blocked; this is a write guard only.
+const VIXY_PERSISTENCE_READONLY = (() => {
+  if (process.env.VIXY_PERSISTENCE_MODE === "readonly") return true;
+  if (process.env.VIXY_ALLOW_PRODUCTION_WRITES === "true") return false;
+  return !process.env.VERCEL;
+})();
+let _blockedWriteCount = 0;
+let _blockedWriteTargets: string[] = [];
+function _describeRef(ref: any): string {
+  try {
+    return ref?.path || ref?._path?.segments?.join("/") || ref?.id || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+function _writeAllowed(op: string, ref: any): boolean {
+  if (!VIXY_PERSISTENCE_READONLY) return true;
+  _blockedWriteCount += 1;
+  const target = `${op}:${_describeRef(ref)}`;
+  if (_blockedWriteTargets.length < 50) _blockedWriteTargets.push(target);
+  if (_blockedWriteCount <= 3) {
+    console.warn(
+      `[VIXY_PERSISTENCE_READONLY] Blocked ${target}. This process is not a ` +
+      `deployment (VERCEL unset) or was started read-only, so it cannot write ` +
+      `to Firestore. Set VIXY_ALLOW_PRODUCTION_WRITES=true to override.`,
+    );
+  }
+  return false;
+}
+function getPersistenceWriteGuardState() {
+  return {
+    readonly: VIXY_PERSISTENCE_READONLY,
+    blockedWriteCount: _blockedWriteCount,
+    blockedWriteTargets: _blockedWriteTargets.slice(0, 50),
+    reason: process.env.VIXY_PERSISTENCE_MODE === "readonly"
+      ? "VIXY_PERSISTENCE_MODE=readonly"
+      : process.env.VIXY_ALLOW_PRODUCTION_WRITES === "true"
+        ? "VIXY_ALLOW_PRODUCTION_WRITES=true"
+        : process.env.VERCEL
+          ? "running inside a Vercel deployment"
+          : "not running inside a deployment (VERCEL unset)",
+  };
+}
+
 function _wrapDocSnap(s: any) {
   return { id: s.id, exists: () => s.exists, data: () => s.data(), ref: s.ref };
 }
@@ -275,14 +342,25 @@ async function getDoc(ref: any): Promise<any> {
   return _wrapDocSnap(snap);
 }
 async function setDoc(ref: any, data: any, options?: any): Promise<void> {
+  if (!_writeAllowed("setDoc", ref)) return;
   if (!_adminActive) return (_clientSetDoc as any)(ref, data, options);
   await (options && options.merge ? ref.set(data, { merge: true }) : ref.set(data));
 }
 async function deleteDoc(ref: any): Promise<void> {
+  if (!_writeAllowed("deleteDoc", ref)) return;
   if (!_adminActive) return (_clientDeleteDoc as any)(ref);
   await ref.delete();
 }
 function writeBatch(dbRef: any): any {
+  if (VIXY_PERSISTENCE_READONLY) {
+    // A batch that records what it was asked to do and commits nothing.
+    return {
+      set: (ref: any) => _writeAllowed("batch.set", ref),
+      update: (ref: any) => _writeAllowed("batch.update", ref),
+      delete: (ref: any) => _writeAllowed("batch.delete", ref),
+      commit: async () => undefined,
+    };
+  }
   if (!_adminActive) return (_clientWriteBatch as any)(dbRef);
   const b = adminDb.batch();
   return {
@@ -294,6 +372,13 @@ function writeBatch(dbRef: any): any {
   };
 }
 async function runTransaction(dbRef: any, updateFn: (tx: any) => Promise<any>): Promise<any> {
+  if (VIXY_PERSISTENCE_READONLY) {
+    // Transactions here always exist to write, so the whole transaction is
+    // refused rather than run with its writes silently dropped -- a partially
+    // applied transaction would be worse than none.
+    _writeAllowed("runTransaction", dbRef);
+    return undefined;
+  }
   if (!_adminActive) return (_clientRunTransaction as any)(dbRef, updateFn);
   return adminDb.runTransaction(async (t: any) => {
     const wrappedTx = {
@@ -333,6 +418,9 @@ import { AutomationScheduler } from "./src/bot/services/automationScheduler";
 // app config values (apiKey, projectId, etc.), not secrets by Firebase's
 // own design -- security lives in Firestore Rules, not in hiding these.
 import firebaseAppletConfig from "./firebase-applet-config.json";
+// Strike-side probability table (fitted offline, versioned, with provenance).
+// See scripts/replay15m/research/exportStrikeSideTable.ts and ENGINE_PROGRESS.md.
+import strikeSideTableV1 from "./src/data/strikeSideTable.v1.json";
 process.on("unhandledRejection", (reason) => {
   const errStr = String(reason?.message || reason);
   if (
@@ -1234,13 +1322,37 @@ let lastMarketUpdateTs = Date.now();
 let lastModelRunTs = Date.now();
 let lastSignalUpdateTs = Date.now();
 let lastPredictionUpdateTs = Date.now();
-let lastKalshiUpdateTs = Date.now();
+// Initialised to 0, not Date.now(). Seeding this with the boot time made every
+// cold instance claim the Kalshi feed was fresh before a single fetch had
+// happened: /api/live-engine/health reported kalshiFeed "CONNECTED" and
+// lastKalshiUpdate as the boot timestamp. 0 reads as "never updated", so a feed
+// that has not answered is reported as not having answered.
+let lastKalshiUpdateTs = 0;
 let engineFeedStatus = "CONNECTED";
 let engineState = "MONITORING";
 let activeContractSymbol = "BTC-15M";
 let currentDirection = "UP";
 let currentConfidence = 88.5;
 let currentBullVolumePct = 50;
+// REAL market-feed health, populated by runMarketEngineTick.
+// The BTC price comes from a fallback chain (Coinbase -> Kraken -> CoinGecko ->
+// Binance) and the FIRST venue to answer wins, so the venue that actually
+// served the price has to be recorded rather than assumed. Everything here is
+// observed; when a feed has not answered, its flag stays false and priceSource
+// stays null rather than defaulting to a plausible venue name.
+let marketFeedHealth = {
+  priceSource: null,
+  btcFresh: false,
+  ethFresh: false,
+  solFresh: false,
+  lastTickTs: 0,
+  // The last BTC price this process actually OBSERVED from a venue, and when.
+  // Distinct from currentBtcPrice, which is seeded to a placeholder (64161.4)
+  // at module load and therefore cannot be used to decide whether a real price
+  // has ever arrived. Settlement validates against these two fields only.
+  lastRealPrice: null,
+  lastRealPriceTs: 0,
+};
 let currentMomentum = 0;
 let currentBtcPrice = 64161.4;
 let currentBtcOpenPrice = 64121.4;
@@ -2617,6 +2729,11 @@ async function runMarketEngineTick() {
     }
     let livePrice = currentBtcPrice;
     let fetchSuccess = false;
+    // Reset per-tick feed observations. A feed that fails this tick must read
+    // as not-fresh rather than carrying its previous success forward.
+    marketFeedHealth.priceSource = null;
+    marketFeedHealth.ethFresh = false;
+    marketFeedHealth.solFresh = false;
     try {
       const cbRes = await fetchWithTimeout(
         "https://api.coinbase.com/v2/prices/BTC-USD/spot",
@@ -2628,6 +2745,9 @@ async function runMarketEngineTick() {
           livePrice = p;
           currentBtcPrice = livePrice;
           fetchSuccess = true;
+          marketFeedHealth.priceSource = "COINBASE";
+          marketFeedHealth.lastRealPrice = livePrice;
+          marketFeedHealth.lastRealPriceTs = Date.now();
         }
       }
     } catch (e) {}
@@ -2640,6 +2760,7 @@ async function runMarketEngineTick() {
         const p = parseFloat(ethData?.data?.amount);
         if (p && p > 0) {
           currentEthPrice = p;
+          marketFeedHealth.ethFresh = true;
         }
       }
     } catch (e) {}
@@ -2652,6 +2773,7 @@ async function runMarketEngineTick() {
         const p = parseFloat(solData?.data?.amount);
         if (p && p > 0) {
           currentSolPrice = p;
+          marketFeedHealth.solFresh = true;
         }
       }
     } catch (e) {}
@@ -2667,6 +2789,9 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "KRAKEN";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
@@ -2683,6 +2808,9 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "COINGECKO";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
@@ -2700,10 +2828,15 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
+            marketFeedHealth.priceSource = "BINANCE";
+            marketFeedHealth.lastRealPrice = livePrice;
+            marketFeedHealth.lastRealPriceTs = Date.now();
           }
         }
       } catch (e) {}
     }
+    marketFeedHealth.btcFresh = fetchSuccess;
+    marketFeedHealth.lastTickTs = now;
     if (fetchSuccess) {
       lastMarketUpdateTs = now;
       engineFeedStatus = "CONNECTED";
@@ -3170,6 +3303,10 @@ app.all("/api/cron/engine-tick", async (req, res) => {
       timestamp: new Date().toISOString(),
     });
   }
+  // Writes deferred while backend auth was still resolving (or that failed
+  // transiently) sit in the pending queues; give them a chance to land inside
+  // this invocation instead of dying with the instance.
+  try { await drainPendingPersistenceQueuesAsync(); } catch {}
   const cycle = active15mCycle || null;
   return res.json({
     success: true,
@@ -3257,6 +3394,8 @@ let active15mCycle = {
   provisionalBias: "NEUTRAL_BIAS",
   historicalSimilarityPct: 85,
   recentObservations: [],
+  cycleHigh: 0,
+  cycleLow: 0,
   calibrationCount: 0,
   calibratedAt: null,
   calibrationStatus: "INITIALIZING",
@@ -3302,6 +3441,45 @@ let active15mCycle = {
   invalidationReason: null,
   originalDecision: null,
 };
+// ----------------------------------------------------------------------------
+// STRIKE-SIDE PROBABILITY -- Layer 5 candidate, observation-first.
+// ----------------------------------------------------------------------------
+// P(price settles on the side of the strike it is CURRENTLY on | seconds into
+// the cycle, |distance| from strike in bps, intracycle volatility so far). This
+// is the product's own win criterion (Kalshi/Polymarket 15m contracts settle
+// against the strike fixed at cycle open), measured on 2,591 real cycles and
+// cross-validated on 3.0M trade prints. It is ALWAYS computed and exposed as an
+// observation. It only affects `allowed` when VIXY_LOCK_RULE=strike_side, and
+// then it can only DENY (p unknown, p below the bar, or the engine's direction
+// disagreeing with the side price is on). It can never loosen another gate.
+const VIXY_LOCK_RULE = process.env.VIXY_LOCK_RULE || "off";
+const VIXY_LOCK_RULE_BAR = Math.min(0.999, Math.max(0.5, Number(process.env.VIXY_LOCK_RULE_BAR || 0.95)));
+function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow, lockedSide = null) {
+  const T = (strikeSideTableV1 as any);
+  const unknown = (reason) => ({ p: null, n: 0, reason, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR });
+  if (!(spot > 0) || !(strike > 0)) return unknown("NO_PRICE_OR_STRIKE");
+  const distBps = ((spot - strike) / strike) * 1e4;
+  if (distBps === 0) return unknown("AT_STRIKE");
+  const cps = T.checkpointSecs;
+  let cp = null; for (const c of cps) if (effElapsed >= c) cp = c;
+  if (cp === null) return unknown("BEFORE_FIRST_CHECKPOINT");
+  const bins = T.distBinsBps; let d = -1;
+  for (let i = 0; i < bins.length; i++) { const [lo, hi] = bins[i]; if (Math.abs(distBps) >= lo && (hi === null || Math.abs(distBps) < hi)) { d = i; break; } }
+  if (d < 0) return unknown("NO_DIST_BIN");
+  const rangeBps = cycleHigh > 0 && cycleLow > 0 ? ((cycleHigh - cycleLow) / cycleLow) * 1e4 : null;
+  if (rangeBps === null) return unknown("NO_CYCLE_RANGE");
+  const vt = T.volTercilesBps; const v = rangeBps < vt.L_below ? "L" : rangeBps < vt.H_atOrAbove ? "M" : "H";
+  const key = `${cp}|${d}|${v}`; const cell = T.cells[key];
+  if (!cell || cell.p === null) return { p: null, n: cell ? cell.n : 0, reason: "INSUFFICIENT_SAMPLE", key, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
+  const currentSide = distBps > 0 ? "UP" : "DOWN";
+  // After a lock, the number that matters is the probability that the LOCKED
+  // side wins, which is p if price is still on that side and 1-p if it has
+  // crossed. Exposed as an observation only (PROTECT research: a locked-side
+  // p below 0.5 caught 40% of losses at 1.8% false alarms with ~120s warning).
+  const pLockedSide = lockedSide === "UP" || lockedSide === "DOWN" ? (lockedSide === currentSide ? cell.p : Math.round((1 - cell.p) * 1000) / 1000) : null;
+  return { p: cell.p, n: cell.n, reason: null, key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide, lockedSide, pLockedSide, protectSignal: pLockedSide !== null ? pLockedSide < 0.5 : null, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
+}
+__name(computeStrikeSideProbability, "computeStrikeSideProbability");
 function canLockCurrentCycle(livePrice) {
   const now = Date.now();
   const reasons = [];
@@ -3365,7 +3543,13 @@ function canLockCurrentCycle(livePrice) {
   // 6:00-12:00 lifecycle, and the commit-point enforcement in lock15mCycle.
   const withinEntryWindow =
     minimumObservationWindowPassed && effElapsed < 780 && effRemaining >= 120;
-  if (effElapsed >= 720 || effRemaining < 180) {
+  // Aligned to 780 with withinEntryWindow above and with lock15mCycle's commit
+  // point. 2deba55 had moved withinEntryWindow to 780 but left this check and the
+  // commit point at 720, so for 720-779s the gate returned allowed=true while
+  // emitting ENTRY_WINDOW_EXPIRED and the commit point refused anyway. Evidence
+  // for 780 rather than 720: in the 7-day trade replay 45 of the strike-side
+  // rule's 132 bar-0.95 locks (97.8% win) fall in that minute.
+  if (effElapsed >= 780 || effRemaining < 120) {
     reasons.push(
       `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 780s / remaining=${effRemaining}s)`,
     );
@@ -3554,7 +3738,42 @@ function canLockCurrentCycle(livePrice) {
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
   if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
-  const allowed = !alreadyLocked && validationPassed && strike15mResolved;
+  const strikeSide = computeStrikeSideProbability(
+    livePrice, current15mStrikePrice, effElapsed, active15mCycle.cycleHigh, active15mCycle.cycleLow,
+    active15mCycle.isLocked ? active15mCycle.lockedDirection : null,
+  );
+  // ── LAYER 5 SHADOW (observation only — never touches `allowed`) ──────────
+  // While the flag is off, record per cycle what the standalone strike-side
+  // rule would have done: the first evaluation inside the legal entry window
+  // (360–780s, the same bounds the gate enforces) where p >= bar on a definite
+  // side. Attached to the ledger row at settlement for old-vs-new comparison.
+  // Per-instance memory: `ticks` says how much of the cycle this instance saw.
+  try {
+    let sh = shadowL5ByCycle.get(cycleId);
+    if (!sh) {
+      sh = { cycleId, bar: VIXY_LOCK_RULE_BAR, tableVersion: strikeSide.tableVersion ?? null, wouldLock: null, lastEval: null, ticks: 0 };
+      shadowL5ByCycle.set(cycleId, sh);
+      if (shadowL5ByCycle.size > 6) {
+        const oldest = shadowL5ByCycle.keys().next().value;
+        if (oldest !== cycleId) shadowL5ByCycle.delete(oldest);
+      }
+    }
+    sh.ticks += 1;
+    if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
+      sh.lastEval = { atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key: strikeSide.key ?? null };
+      if (!sh.wouldLock && strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780) {
+        sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key: strikeSide.key ?? null };
+      }
+    }
+  } catch {}
+  // Flag-gated Layer 5. Off by default; when on it can only add a denial.
+  let strikeRuleBlocks = false;
+  if (VIXY_LOCK_RULE === "strike_side") {
+    if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
+    else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
+    else if (strikeSide.currentSide !== dirTarget) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_DISAGREES (engine=${dirTarget}, price is ${strikeSide.currentSide} of strike)`); }
+  }
+  const allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;
   const dir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -3570,6 +3789,17 @@ function canLockCurrentCycle(livePrice) {
     remainingSeconds,
     minimumElapsedSeconds: 360,
     preferredWindow: elapsedSeconds >= 360 && elapsedSeconds <= 600,
+    // The adaptive schedule (2deba55) computes the tier and its thresholds as
+    // locals, so nothing outside this function could see which bar was actually
+    // being applied; the terminal was left hardcoding a single number. Exposed
+    // here as observation only -- no decision reads these back.
+    lockTier,
+    minLockQuality,
+    minEvidenceAgreement,
+    minMtfAligned,
+    strikeResolved: strike15mResolved,
+    lockRule: VIXY_LOCK_RULE,
+    strikeSide,
   };
   return {
     allowed,
@@ -3674,9 +3904,9 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   // the primary gate, but lock15mCycle is the only function that actually mutates
   // active15mCycle into a locked state, so it now enforces the boundary itself rather
   // than trusting its caller. Lifecycle: lock legal only within 6:00-12:00.
-  if (effElapsed < 360 || effElapsed >= 720) {
+  if (effElapsed < 360 || effElapsed >= 780) {
     console.warn(
-      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-720s ` +
+      `[VIXY_LOCK_WINDOW_REJECTED] elapsed=${effElapsed}s is outside the legal 360-780s ` +
       `confirmation window for cycle ${cycleId}. Lock refused.`,
     );
     return false;
@@ -3915,9 +4145,20 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
 
   await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
 
+  // The ledger row must land regardless of which instance won the claim
+  // transaction: the row id is deterministic (sig_lock_<intervalStart>) and a
+  // claim-loser's logItem carries the ADOPTED canonical values, so concurrent
+  // writes converge on identical content. Awaited, because an unawaited setDoc
+  // raced the lambda freeze — which is how locks displayed to users while never
+  // reaching the shared ledger (observed 2026-09-09: 13:45Z, 14:15Z, 14:45Z).
+  try {
+    await persistSingleSignalLog(logItem);
+  } catch (persistErr) {
+    console.error("[VIXY] lock ledger persist failed (queued for re-assert):", persistErr);
+  }
+
   if (transactionSucceeded) {
     try {
-    persistSingleSignalLog(logItem);
     const globalAutoTradingEnabled = productionMaintenanceState.autoTradingEnabled !== false;
     const checkEntitlement = async (userId) => {
       const u = serverUsers.find((user) => (user.email || "").toLowerCase() === userId);
@@ -3964,7 +4205,66 @@ __name(lock15mCycle, "lock15mCycle");
 // 2. The shadow calibration block executes here. It MUST ONLY observe the settled result.
 // 3. Shadow calibration must NEVER influence the production decision state.
 // ----------------------------------------------------------------------------
+// ----------------------------------------------------------------------------
+// SETTLEMENT PRICE VALIDATION
+// ----------------------------------------------------------------------------
+// checkAndSettle15mCycle is authoritative for the ledger: it decides
+// actualOutcome, wasCorrect and brierScore for a cycle, and it also sets the
+// NEXT cycle's strike. A wrong price here corrupts the record permanently.
+//
+// It used to accept whatever number it was handed. /api/signal computed
+//   const spot = asset === "BTC" ? currentBtcPrice : 100;
+// and passed that straight in, so a request for any non-BTC asset settled the
+// live BTC cycle at $100 -- forcing actualOutcome DOWN for every open lock and
+// setting the next strike to 100. That path was reachable from the product:
+// LiveDashboard and StarterDeskView call useLiveSignal(selectedAsset), so
+// selecting the ETH or SOL tab issued /api/signal?asset=ETH.
+//
+// The endpoint is fixed, but the guard lives HERE, at the authoritative
+// function, so no future caller can reintroduce the same class of bug.
+//
+// Validation is against marketFeedHealth.lastRealPrice/-Ts -- the last price
+// this process genuinely observed from a venue. currentBtcPrice cannot be used
+// as the reference because it is seeded to a placeholder at module load.
+const SETTLEMENT_MAX_PRICE_AGE_MS = 6e4;
+const SETTLEMENT_MAX_DEVIATION_PCT = 10;
+function validateSettlementPrice(price) {
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    return { ok: false, reason: `NOT_A_POSITIVE_FINITE_NUMBER (got ${JSON.stringify(price)})` };
+  }
+  if (!marketFeedHealth.lastRealPriceTs || !marketFeedHealth.lastRealPrice) {
+    return { ok: false, reason: "NO_OBSERVED_PRICE_YET (this process has never received a venue price)" };
+  }
+  const ageMs = Date.now() - marketFeedHealth.lastRealPriceTs;
+  if (ageMs > SETTLEMENT_MAX_PRICE_AGE_MS) {
+    return { ok: false, reason: `OBSERVED_PRICE_STALE (${ageMs}ms > ${SETTLEMENT_MAX_PRICE_AGE_MS}ms)` };
+  }
+  const ref = marketFeedHealth.lastRealPrice;
+  const deviationPct = Math.abs(price - ref) / ref * 100;
+  if (deviationPct > SETTLEMENT_MAX_DEVIATION_PCT) {
+    return {
+      ok: false,
+      reason: `PRICE_DEVIATES_FROM_OBSERVED (${price} vs observed ${ref}, ${deviationPct.toFixed(2)}% > ${SETTLEMENT_MAX_DEVIATION_PCT}%)`,
+    };
+  }
+  return { ok: true, ageMs, deviationPct };
+}
+__name(validateSettlementPrice, "validateSettlementPrice");
 async function checkAndSettle15mCycle(livePrice) {
+  // FAIL CLOSED, BUT RECOVERABLY.
+  //
+  // Returning before any state is touched means current15mIntervalStart is NOT
+  // advanced and processedSettlements is NOT marked, so the rollover is retried
+  // on the next tick (every 3s) once a trustworthy price is available. Refusing
+  // to settle defers a cycle; settling on a bad price corrupts it forever.
+  const priceCheck = validateSettlementPrice(livePrice);
+  if (!priceCheck.ok) {
+    console.error(
+      `[VIXY_SETTLEMENT_REJECTED] refusing to settle or roll the 15M cycle: ${priceCheck.reason}. ` +
+      `No cycle state was advanced; this will be retried on the next tick.`,
+    );
+    return;
+  }
   const now = Date.now();
   const intervalMs = 15 * 60 * 1e3;
   const intervalStart = Math.floor(now / intervalMs) * intervalMs;
@@ -4110,6 +4410,14 @@ async function checkAndSettle15mCycle(livePrice) {
             totalHistory >= latestCalibrationState.calibrationMinimumSamples
               ? "ACTIVE"
               : "WARMING_UP";
+          // Attach this instance's Layer 5 shadow record to the settled row
+          // (observation only) so the live old-vs-new comparison rides the
+          // ledger. Missing when another instance settles a cycle it watched.
+          const shSettle = shadowL5ByCycle.get(prevLog.cycleId || `15M-${new Date(prevIntervalStart).toISOString()}`);
+          if (shSettle) {
+            prevLog.shadowL5 = { ...shSettle, engineDecision: prevLog.decision || null, recordedBy: "SHADOW_L5_v1" };
+            shadowL5ByCycle.delete(shSettle.cycleId);
+          }
           let isDuplicate = false;
           try {
             if (
@@ -4168,8 +4476,8 @@ async function checkAndSettle15mCycle(livePrice) {
           status: "NO_TRADE",
           modelVersion:
             serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
-          dataSource: "COINBASE_KRAKEN_CASCADE",
-          latencyMs: 12,
+          dataSource: marketFeedHealth.priceSource || null,
+          latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
@@ -4190,14 +4498,40 @@ async function checkAndSettle15mCycle(livePrice) {
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
         };
+        // Same shadow attachment for engine SKIPs: this is where the rule and
+        // the engine most often diverge, so the SKIP rows carry it too.
+        const shSkip = shadowL5ByCycle.get(active15mCycle.cycleId);
+        if (shSkip) {
+          skippedLog.shadowL5 = { ...shSkip, engineDecision: "SKIP", recordedBy: "SHADOW_L5_v1" };
+          shadowL5ByCycle.delete(shSkip.cycleId);
+        }
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) {
           persistentSignalLogs.pop();
         }
-        persistSingleSignalLog(skippedLog);
-        console.log(
-          `[VIXY_CYCLE_SKIPPED] Cycle ID: ${active15mCycle.cycleId} | Reason: ${skippedLog.qualificationReason}`,
-        );
+        // A lock may have been committed for this cycle by ANOTHER instance
+        // (locks are per-instance in memory; the ledger is shared). Never let a
+        // SKIP row shadow a lock: check memory, then the shared ledger, first.
+        const lockRowId = `sig_lock_${active15mCycle.intervalStart}`;
+        let lockExistsElsewhere = persistentSignalLogs.some((s) => s.id === lockRowId);
+        if (!lockExistsElsewhere && db) {
+          try {
+            const lockSnap = await getDoc(doc(db, "signal_logs", lockRowId));
+            lockExistsElsewhere = Boolean(lockSnap && lockSnap.exists());
+          } catch (e) {
+            // Unknown is not "no lock". Fail closed: do not write the SKIP.
+            lockExistsElsewhere = true;
+            console.warn(`[VIXY_CYCLE_SKIPPED] could not verify ${lockRowId} in the ledger; not persisting a SKIP row for this cycle`);
+          }
+        }
+        if (lockExistsElsewhere) {
+          console.log(`[VIXY_CYCLE_SKIPPED] ${active15mCycle.cycleId}: a lock row exists for this cycle; SKIP row not persisted`);
+        } else {
+          persistSingleSignalLog(skippedLog);
+          console.log(
+            `[VIXY_CYCLE_SKIPPED] Cycle ID: ${active15mCycle.cycleId} | Reason: ${skippedLog.qualificationReason}`,
+          );
+        }
       }
     }
     globalSequenceNumber++;
@@ -4228,6 +4562,8 @@ async function checkAndSettle15mCycle(livePrice) {
       provisionalBias: "NEUTRAL_BIAS",
       historicalSimilarityPct: 85,
       recentObservations: [],
+      cycleHigh: 0,
+      cycleLow: 0,
       calibrationCount: 0,
       calibratedAt: null,
       calibrationStatus: "INGESTING",
@@ -4360,6 +4696,11 @@ async function checkAndSettle15mCycle(livePrice) {
   }
   const elapsedMs = now - intervalStart;
   active15mCycle.cycleObservationDuration = elapsedSeconds;
+  // Intracycle range so far, for the strike-side probability's volatility bin.
+  if (livePrice > 0) {
+    active15mCycle.cycleHigh = Math.max(active15mCycle.cycleHigh || 0, livePrice);
+    active15mCycle.cycleLow = active15mCycle.cycleLow > 0 ? Math.min(active15mCycle.cycleLow, livePrice) : livePrice;
+  }
   active15mCycle.calibrationWindowMs = elapsedMs;
   active15mCycle.calibrationDataAgeMs = now - lastMarketUpdateTs;
   const candidateDir =
@@ -4660,7 +5001,7 @@ async function checkAndSettle15mCycle(livePrice) {
           confidence:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
-            72,
+            null,
           reversalRisk: reversalThreat,
           targetStrike: active15mCycle.strikePrice,
           spotAtLock: active15mCycle.livePrediction?.spot || livePrice,
@@ -4672,8 +5013,8 @@ async function checkAndSettle15mCycle(livePrice) {
           status: "NO_TRADE",
           modelVersion:
             serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
-          dataSource: "COINBASE_KRAKEN_CASCADE",
-          latencyMs: 12,
+          dataSource: marketFeedHealth.priceSource || null,
+          latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
@@ -4691,7 +5032,7 @@ async function checkAndSettle15mCycle(livePrice) {
           confidencePct:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
-            72,
+            null,
           lockedProbability: active15mCycle.livePrediction?.probability || 50,
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
@@ -4708,12 +5049,19 @@ async function checkAndSettle15mCycle(livePrice) {
           active15mCycle.livePrediction?.confidence ||
           currentConfidence ||
           skippedLog.confidence ||
-          72;
+          null;
         skippedLog.reversalRisk = reversalThreat;
         skippedLog.spotAtLock =
           active15mCycle.livePrediction?.spot || livePrice;
       }
-      persistSingleSignalLog(skippedLog);
+      // NOT persisted here. This block runs MID-CYCLE, and the row it builds
+      // carries resolvedAt = intervalEnd (the future) and settlementPrice =
+      // the current spot. Written to Firestore at that moment it appears in
+      // the public ledger as a settled SKIP for a cycle that is still live --
+      // observed on 2026-09-09 14:15Z, where the ledger showed a SKIP resolved
+      // at 14:30:00 while the engine on another instance was LOCKED_UP. The
+      // in-memory marker is kept; the rollover writer below persists the skip
+      // once the cycle has actually ended and no lock exists for it.
     }
   }
   // lockedSnapshot is only populated by lock15mCycle within the SAME warm
@@ -4817,6 +5165,18 @@ async function checkAndSettle15mCycle(livePrice) {
       console.log(
         `[VIXY_LOCK_MONITOR] cycle=${currentCycleId} lockedDirection=${active15mCycle.lockedDirection} lockedConfidence=${active15mCycle.lockedConfidence}% lockedProbability=${active15mCycle.lockedProbability} liveDirection=${currentDirection} liveProbability=${currentModelProbability} probabilityForLockedDirection=${probForLockedDir.toFixed(3)} reversalDetected=${reversalDetected} action=KEEP_LOCK priceDeltaPct=${priceDeltaPct.toFixed(2)}%`,
       );
+    }
+    // Self-healing ledger assert: a lock row written once from one ephemeral
+    // instance can be lost (auth-pending queue, lambda freeze). Re-persist the
+    // active lock row at most once a minute until the cycle ends; the write is
+    // idempotent by doc id, so a duplicate assert converges on the same row.
+    if (now - lastLockRowAssertMs >= 6e4) {
+      lastLockRowAssertMs = now;
+      const assertSigId = `sig_lock_${active15mCycle.intervalStart}`;
+      const assertRow = persistentSignalLogs.find((s) => s.id === assertSigId);
+      if (assertRow && assertRow.status === "LOCKED") {
+        try { await persistSingleSignalLog(assertRow); } catch {}
+      }
     }
     if (isExtremeDisplacement && isProbabilityCollapsed && isGuardianPanic) {
       active15mCycle.isCriticallyInvalidated = true;
@@ -14063,6 +14423,10 @@ app.get("/api/live-engine/health", (req, res) => {
     lastMarketUpdate: new Date(lastMarketUpdateTs).toISOString(),
     lastKalshiUpdate: new Date(lastKalshiUpdateTs).toISOString(),
     lastPredictionUpdate: new Date(lastPredictionUpdateTs).toISOString(),
+    // Whether this process is permitted to write to Firestore, and why. Makes
+    // the dev/prod separation observable instead of something you infer from
+    // whether writes happen to be failing.
+    persistenceWriteGuard: getPersistenceWriteGuardState(),
   });
 });
 let globalSequenceNumber = 1e3;
@@ -14432,7 +14796,54 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     : "WATCH";
   const lockTierVal =
     latestBtc15mPipeline?.lockQualityTier === "SKIP" ? "NONE" : "STANDARD";
+  // REAL feed health for the terminal status bar.
+  //
+  // The terminal previously rendered a hardcoded "LATENCY: 0.8s", a hardcoded
+  // "VENUES 4 / 4 SYNCED" and a hardcoded "BINANCE" price label. None of the
+  // three were connected to anything: there was no latency, venue-count or
+  // price-source field on this payload at all. The 0.8s was rendered in green
+  // directly beside a MARKET FEED indicator reading STALE.
+  //
+  // Everything below is observed. dataAgeMs is the real age of the last
+  // successful market tick. priceSource is the venue that actually served the
+  // price this tick (the BTC chain is Coinbase -> Kraken -> CoinGecko ->
+  // Binance, first success wins), and is null when no venue answered.
+  // venuesLive counts the feeds that genuinely returned data on the last tick;
+  // it is not a capability count.
+  const feedDataAgeMs = Math.max(0, Date.now() - lastMarketUpdateTs);
+  const kalshiFresh = Boolean(
+    lastKalshiUpdateTs && Date.now() - lastKalshiUpdateTs < 12e4,
+  );
+  const feedHealth = {
+    dataAgeMs: feedDataAgeMs,
+    status:
+      engineFeedStatus !== "CONNECTED"
+        ? feedDataAgeMs <= 15e3
+          ? "DEGRADED"
+          : "OFFLINE"
+        : feedDataAgeMs <= 3e3
+          ? "LIVE"
+          : feedDataAgeMs <= 7e3
+            ? "DEGRADED"
+            : feedDataAgeMs <= 15e3
+              ? "STALE"
+              : "OFFLINE",
+    priceSource: marketFeedHealth.priceSource,
+    venuesLive:
+      (marketFeedHealth.btcFresh ? 1 : 0) +
+      (marketFeedHealth.ethFresh ? 1 : 0) +
+      (marketFeedHealth.solFresh ? 1 : 0) +
+      (kalshiFresh ? 1 : 0),
+    venuesTotal: 4,
+    venues: {
+      btc: marketFeedHealth.btcFresh,
+      eth: marketFeedHealth.ethFresh,
+      sol: marketFeedHealth.solFresh,
+      kalshi: kalshiFresh,
+    },
+  };
   const decisionObj = {
+    feedHealth,
     cycleId,
     contractId,
     decisionId,
@@ -14480,6 +14891,22 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     contradictionScore: chopScore,
     protectionStatus: protectionStat,
     lockTier: lockTierVal,
+    // The REAL gate the engine is applying right now. lockTier above is a legacy
+    // binary (SKIP -> NONE, else STANDARD) kept for shape compatibility; it does
+    // not reflect the adaptive EARLY/STANDARD/LATE schedule. This does.
+    lockGate: active15mCycle.lockEligibility
+      ? {
+          tier: active15mCycle.lockEligibility.lockTier ?? null,
+          minLockQuality: active15mCycle.lockEligibility.minLockQuality ?? null,
+          minEvidenceAgreement: active15mCycle.lockEligibility.minEvidenceAgreement ?? null,
+          minMtfAligned: active15mCycle.lockEligibility.minMtfAligned ?? null,
+          eligible: active15mCycle.lockEligibility.eligible ?? null,
+          reason: active15mCycle.lockEligibility.reason ?? null,
+          strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
+          lockRule: active15mCycle.lockEligibility.lockRule ?? null,
+          strikeSide: active15mCycle.lockEligibility.strikeSide ?? null,
+        }
+      : null,
     lockEvaluation: latestLockEvaluation || {
       qualified: true,
       score: 50,
@@ -14845,8 +15272,26 @@ app.get(
       serverLearningEngine.lastWeightUpdateTs,
     ).toISOString();
     const minSamplesNeeded = 500;
-    const spot = asset === "BTC" ? currentBtcPrice : 100;
-    await checkAndSettle15mCycle(spot);
+    // The 15M cycle this endpoint reports on is BTC-only: the cycle id, strike,
+    // lock state and Kalshi market state below all describe BTC. `spot` is
+    // therefore always the authoritative BTC price, whatever asset was asked
+    // for. It previously read
+    //   asset === "BTC" ? currentBtcPrice : 100
+    // so any non-BTC request produced a literal sentinel of 100 and fed it to
+    // checkAndSettle15mCycle, which is authoritative for the ledger: that
+    // settled the live BTC cycle at $100 (forcing actualOutcome DOWN) and set
+    // the next cycle's strike to 100. It was reachable from the product --
+    // LiveDashboard and StarterDeskView call useLiveSignal(selectedAsset), so
+    // choosing the ETH or SOL tab issued /api/signal?asset=ETH.
+    const spot = currentBtcPrice;
+    // NO SETTLEMENT FROM A READ ENDPOINT.
+    //
+    // This used to call checkAndSettle15mCycle(spot). That was the corruption
+    // vector above, and it was redundant: settlement is driven by the 3s
+    // setInterval(runMarketEngineTickTracked) while an instance is warm, and by
+    // the cold-instance hydration guard at the top of this same handler, which
+    // runs a full engine tick. Both settle with the freshly fetched price.
+    // A GET must not mutate the ledger.
     const market15mState = getKalshi15mMarketState(spot);
     const kalshiStrike = active15mCycle.isLocked
       ? active15mCycle.lockedStrike || market15mState.strikePrice
@@ -15028,6 +15473,12 @@ app.get(
       sessionId: SERVER_SESSION_ID,
       market: "BTC_KALSHI_15M",
       asset,
+      // The 15M engine is BTC-only. When another asset is requested the cycle
+      // fields in this response still describe BTC, so say so rather than
+      // letting the caller assume otherwise.
+      requestedAsset: asset,
+      cycleAsset: "BTC",
+      cycleAssetMatchesRequest: asset === "BTC",
       desk,
       currentPrice: spot,
       strike: kalshiStrike,
@@ -15698,14 +16149,76 @@ app.get("/api/signal/backtest-replay", (req, res) => {
     sampleCycles: cycleDetails.slice(0, 15),
   });
 });
+// ----------------------------------------------------------------------------
+// /api/radar -- REAL data for the ORDERBOOK & LIQUIDITY RADAR.
+// ----------------------------------------------------------------------------
+// The radar component in production drew its depth ladder from sin/cos of the
+// spot price and its whale tape from Math.random(), with the buy/sell skew
+// generated FROM the engine's own direction and then shown to users as
+// corroborating order flow. This endpoint replaces every one of those with an
+// observed value from Coinbase Exchange, or an explicit failure. Nothing here
+// is estimated, decorated or defaulted.
+//
+// Aggressor side: Coinbase reports `side` as the MAKER side. A "sell" maker
+// means the taker BOUGHT (up-tick); a "buy" maker means the taker SOLD. The
+// tape reports takerSide accordingly. (/api/whales below had this inverted.)
+const RADAR_WHALE_MIN_USD = 1e4;
+app.get("/api/radar", async (req, res) => {
+  const rawSymbol = String(req.query.asset || "BTC").toUpperCase().replace("USDT", "").replace("-USD", "");
+  const t0 = Date.now();
+  try {
+    const [bookRes, tradesRes] = await Promise.all([
+      fetchWithTimeout(`https://api.exchange.coinbase.com/products/${rawSymbol}-USD/book?level=2`),
+      fetchWithTimeout(`https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=100`),
+    ]);
+    if (!bookRes.ok || !tradesRes.ok) {
+      return res.status(503).json({ error: "RADAR_UNAVAILABLE", book: bookRes.ok, trades: tradesRes.ok, source: "COINBASE_EXCHANGE" });
+    }
+    const book = await bookRes.json();
+    const trades = await tradesRes.json();
+    const level = (rows, n) => { let cum = 0; return rows.slice(0, n).map((r) => { const price = parseFloat(r[0]), size = parseFloat(r[1]); cum += size; return { price, size, cumulative: Math.round(cum * 1e4) / 1e4 }; }); };
+    const bids = level(book.bids || [], 8), asks = level(book.asks || [], 8);
+    const depth = (rows, n) => rows.slice(0, n).reduce((a, r) => a + parseFloat(r[1]), 0);
+    const bidDepthBTC = Math.round(depth(book.bids || [], 30) * 1e3) / 1e3;
+    const askDepthBTC = Math.round(depth(book.asks || [], 30) * 1e3) / 1e3;
+    const tape = (Array.isArray(trades) ? trades : [])
+      .map((t) => { const price = parseFloat(t.price), size = parseFloat(t.size); return { tradeId: t.trade_id, timeMs: Date.parse(t.time), price, size, usd: Math.round(price * size), takerSide: t.side === "sell" ? "BUY" : "SELL", venue: "COINBASE" }; })
+      .filter((t) => Number.isFinite(t.price) && Number.isFinite(t.size));
+    let takerBuyBTC = 0, takerSellBTC = 0;
+    for (const t of tape) { if (t.takerSide === "BUY") takerBuyBTC += t.size; else takerSellBTC += t.size; }
+    const whales = tape.filter((t) => t.usd >= RADAR_WHALE_MIN_USD).slice(0, 12);
+    const newest = tape.length ? Math.max(...tape.map((t) => t.timeMs)) : null;
+    return res.json({
+      symbol: rawSymbol, source: "COINBASE_EXCHANGE", fetchedAt: Date.now(), fetchMs: Date.now() - t0,
+      book: {
+        bids, asks,
+        bestBid: bids[0]?.price ?? null, bestAsk: asks[0]?.price ?? null,
+        spreadUSD: bids[0] && asks[0] ? Math.round((asks[0].price - bids[0].price) * 100) / 100 : null,
+        bidDepthBTC, askDepthBTC,
+        ratio: askDepthBTC > 0 ? Math.round((bidDepthBTC / askDepthBTC) * 100) / 100 : null,
+        levelsRead: { bids: Math.min(30, (book.bids || []).length), asks: Math.min(30, (book.asks || []).length) },
+      },
+      tape: whales,
+      skew: {
+        window: { trades: tape.length, oldestMs: tape.length ? Math.min(...tape.map((t) => t.timeMs)) : null, newestMs: newest },
+        takerBuyBTC: Math.round(takerBuyBTC * 1e4) / 1e4, takerSellBTC: Math.round(takerSellBTC * 1e4) / 1e4,
+        takerBuyShare: takerBuyBTC + takerSellBTC > 0 ? Math.round((takerBuyBTC / (takerBuyBTC + takerSellBTC)) * 1000) / 1000 : null,
+      },
+      lastTradeAgeMs: newest ? Math.max(0, Date.now() - newest) : null,
+    });
+  } catch (err) {
+    return res.status(503).json({ error: "RADAR_UNAVAILABLE", source: "COINBASE_EXCHANGE", reason: String(err?.message || err).slice(0, 120) });
+  }
+});
 app.get("/api/whales", async (req, res) => {
   const rawSymbol = (req.query.asset || "BTC")
     .toUpperCase()
     .replace("USDT", "")
     .replace("-USD", "");
+  const minUSD = Math.max(1e4, Number(req.query.min) || 1e4);
   try {
     const cbRes = await fetchWithTimeout(
-      `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=50`,
+      `https://api.exchange.coinbase.com/products/${rawSymbol}-USD/trades?limit=100`,
     );
     if (cbRes.ok) {
       const trades = await cbRes.json();
@@ -15716,99 +16229,50 @@ app.get("/api/whales", async (req, res) => {
             id: `wh-${t.trade_id}`,
             time: new Date(t.time).toLocaleTimeString(),
             asset: rawSymbol,
-            action: t.side === "buy" ? "BUY_SWEEP" : "SELL_DUMP",
+            // Coinbase `side` is the MAKER side: a "buy" maker means the taker
+            // SOLD. This previously read `t.side === "buy" ? "BUY_SWEEP"`, i.e.
+            // every print was labelled with the wrong aggressor.
+            action: t.side === "sell" ? "BUY_SWEEP" : "SELL_DUMP",
             sizeUSD,
             price: parseFloat(t.price),
             contractPrice: `${rawSymbol} Spot $${parseFloat(t.price).toLocaleString()}`,
-            venue: "Coinbase Pro",
-            confidence: Math.round(88 + Math.min(10, sizeUSD / 5e4)),
-            entityName:
-              sizeUSD > 1e5
-                ? "Institutional Block Router"
-                : "Algorithmic Sweeper",
-            impact:
-              sizeUSD > 2e5 ? "CRITICAL" : sizeUSD > 1e5 ? "EXTREME" : "HIGH",
+            venue: "Coinbase",
+            takerSide: t.side === "sell" ? "BUY" : "SELL",
+            // Labeled deterministic size tier over the observed notional. The
+            // old fields here were fiction: nobody knows the entity behind a
+            // print, and a size-derived number is not a "confidence".
+            sizeTier:
+              sizeUSD >= 1e6 ? "$1M+" : sizeUSD >= 25e4 ? "$250k+" : sizeUSD >= 1e5 ? "$100k+" : "$10k+",
             timestamp: new Date(t.time).getTime(),
           };
         })
-        .filter((t) => t.sizeUSD >= 1e4)
+        .filter((t) => t.sizeUSD >= minUSD)
         .slice(0, 20);
-      if (whaleTrades.length > 0) {
-        return res.json({
-          symbol: rawSymbol,
-          count: whaleTrades.length,
-          orders: whaleTrades,
-          timestamp: Date.now(),
-        });
-      }
+      const buyUSD = whaleTrades.filter((t) => t.takerSide === "BUY").reduce((a, t) => a + t.sizeUSD, 0);
+      const sellUSD = whaleTrades.filter((t) => t.takerSide === "SELL").reduce((a, t) => a + t.sizeUSD, 0);
+      const newestMs = whaleTrades.length ? Math.max(...whaleTrades.map((t) => t.timestamp)) : null;
+      // An empty result is an honest result: no prints above the threshold in
+      // the scanned tape. It is NOT a failure and must never be padded. The
+      // fabricated fallback that used to live below this point (invented
+      // entities, venues and confidences, served with HTTP 200) is gone.
+      return res.json({
+        symbol: rawSymbol,
+        source: "COINBASE_EXCHANGE",
+        count: whaleTrades.length,
+        orders: whaleTrades,
+        thresholdUSD: minUSD,
+        tradesScanned: Array.isArray(trades) ? trades.length : 0,
+        takerBuyUSD: buyUSD,
+        takerSellUSD: sellUSD,
+        takerBuyShare: buyUSD + sellUSD > 0 ? Math.round((buyUSD / (buyUSD + sellUSD)) * 1000) / 1000 : null,
+        lastTradeAgeMs: newestMs !== null ? Math.max(0, Date.now() - newestMs) : null,
+        timestamp: Date.now(),
+      });
     }
-  } catch (err) {}
-  const now = Date.now();
-  const currentPrice = currentBtcPrice || 63900;
-  const fallbackOrders = [
-    {
-      id: `wh-live-${now}-1`,
-      time: "Just now",
-      asset: rawSymbol,
-      action: "BUY_SWEEP",
-      sizeUSD: 248e4,
-      price: currentPrice,
-      contractPrice: `${rawSymbol} Spot $${currentPrice.toLocaleString()}`,
-      venue: "Kalshi",
-      confidence: 94,
-      entityName: "Institutional Volume Cluster #02",
-      impact: "CRITICAL",
-      timestamp: now,
-    },
-    {
-      id: `wh-live-${now}-2`,
-      time: "2 mins ago",
-      asset: rawSymbol,
-      action: "STRIKE_DEFENSE",
-      sizeUSD: 185e4,
-      price: currentPrice - 50,
-      contractPrice: `${rawSymbol} Floor Defense`,
-      venue: "Polymarket",
-      confidence: 91,
-      entityName: "Apex Quant Liquidity #14",
-      impact: "EXTREME",
-      timestamp: now - 12e4,
-    },
-    {
-      id: `wh-live-${now}-3`,
-      time: "5 mins ago",
-      asset: rawSymbol,
-      action: "BUY_SWEEP",
-      sizeUSD: 312e4,
-      price: currentPrice + 20,
-      contractPrice: `${rawSymbol} Spot $${(currentPrice + 20).toLocaleString()}`,
-      venue: "Coinbase Pro",
-      confidence: 95,
-      entityName: "BlackRock Custody Bridge",
-      impact: "CRITICAL",
-      timestamp: now - 3e5,
-    },
-    {
-      id: `wh-live-${now}-4`,
-      time: "8 mins ago",
-      asset: rawSymbol,
-      action: "ICEBERG_ACCUMULATION",
-      sizeUSD: 94e4,
-      price: currentPrice - 30,
-      contractPrice: `${rawSymbol} Iceberg Bid`,
-      venue: "Derive",
-      confidence: 89,
-      entityName: "Satoshi Era Cluster #089",
-      impact: "HIGH",
-      timestamp: now - 48e4,
-    },
-  ];
-  res.json({
-    symbol: rawSymbol,
-    count: fallbackOrders.length,
-    orders: fallbackOrders,
-    timestamp: now,
-  });
+    return res.status(503).json({ error: "WHALES_UNAVAILABLE", source: "COINBASE_EXCHANGE", status: cbRes.status });
+  } catch (err) {
+    return res.status(503).json({ error: "WHALES_UNAVAILABLE", source: "COINBASE_EXCHANGE", reason: String(err?.message || err).slice(0, 120) });
+  }
 });
 app.get("/api/orderflow", async (req, res) => {
   const rawSymbol = (req.query.asset || "BTC")
@@ -16652,6 +17116,73 @@ app.all("/api/cron/settle", async (req, res) => {
   if (persistentSignalLogs.length === 0) {
     hydration = await ensureLedgerHydrated().catch(() => null);
   }
+  // RECONCILIATION: the claim transaction writes active_cycle_lock/<cycleId>
+  // durably, but the ledger row was historically written once, fire-and-forget,
+  // from whichever instance won the claim — so a lock could be adopted and
+  // displayed everywhere while signal_logs never received its row (observed
+  // 2026-09-09: locks at 13:45Z, 14:15Z and 14:45Z shown live, absent from the
+  // ledger). Rebuild missing rows from the claim docs for the last 8 hours so
+  // the late sweep below grades them from the real settlement candle. Rows are
+  // provenance-tagged and an existing row is never touched.
+  const reconciliation: any = { probed: 0, rebuilt: 0, skippedNoStrike: 0, rows: [] as any[] };
+  if (canAttemptFirestoreRead("active_cycle_lock_reconciliation")) {
+    const cycleMs = 15 * 60 * 1e3;
+    const openMs = Math.floor(nowMs / cycleMs) * cycleMs;
+    for (let k = 1; k <= 32; k++) {
+      const startMs = openMs - k * cycleMs;
+      const rowId = `sig_lock_${startMs}`;
+      if (persistentSignalLogs.some((s) => s.id === rowId)) continue;
+      const cid = `15M-${new Date(startMs).toISOString()}`;
+      reconciliation.probed += 1;
+      let claim = null;
+      try {
+        const claimSnap = await getDoc(doc(db, "active_cycle_lock", cid));
+        if (claimSnap && claimSnap.exists()) claim = claimSnap.data() || null;
+      } catch {
+        continue; // unreadable is not "no lock"; leave for the next run
+      }
+      if (!claim || (claim.direction !== "UP" && claim.direction !== "DOWN")) continue;
+      const claimStrike = Number(claim.strike);
+      if (!Number.isFinite(claimStrike) || claimStrike <= 1e3) {
+        // A row without a plausible strike cannot be graded honestly; skip it
+        // rather than let the sweep invalidate a reconstruction of our own.
+        reconciliation.skippedNoStrike += 1;
+        continue;
+      }
+      const row: any = {
+        id: rowId,
+        market: "BTC",
+        ticker: "BTC/USD",
+        intervalStart: new Date(startMs).toISOString(),
+        intervalEnd: new Date(startMs + cycleMs).toISOString(),
+        direction: claim.direction,
+        probability: claim.probability ?? null,
+        confidence: claim.confidence ?? null,
+        targetStrike: claimStrike,
+        spotAtLock: claim.spot ?? null,
+        btcPriceAtLock: claim.spot ?? null,
+        lockedAt: claim.lockedAt || null,
+        expiresAt: new Date(startMs + cycleMs).toISOString(),
+        status: "LOCKED",
+        modelVersion: claim.modelVersion || null,
+        dataSource: "ACTIVE_CYCLE_LOCK_CLAIM",
+        cycleId: cid,
+        timeframe: "15M",
+        decision: claim.direction === "UP" ? "BUY_UP" : "BUY_DOWN",
+        entryPrice: claim.spot ?? null,
+        strike: claimStrike,
+        confidencePct: claim.confidence ?? null,
+        lockedProbability: claim.probability ?? null,
+        lockedReason: claim.lockedReason || null,
+        reconstructedFrom: "ACTIVE_CYCLE_LOCK_CLAIM",
+      };
+      persistentSignalLogs.unshift(row);
+      try { await persistSingleSignalLog(row); } catch {}
+      reconciliation.rebuilt += 1;
+      reconciliation.rows.push({ id: rowId, dir: row.direction, conf: row.confidence, strike: claimStrike });
+      console.log(`[VIXY_SETTLE_RECONCILIATION] rebuilt ledger row ${rowId} from active_cycle_lock claim (${row.direction} ${row.confidence}% strike=${claimStrike})`);
+    }
+  }
   const settled = persistentSignalLogs.filter(
     (s) => s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED",
   );
@@ -16762,6 +17293,7 @@ app.all("/api/cron/settle", async (req, res) => {
     overdueUnsettled: overdue.length,
     overdueCycleIds: overdue.slice(0, 10).map((s) => s.cycleId || s.id),
     lateSettlement,
+    reconciliation,
     settledSampleSize: serverLearningEngine.settledHistory.length,
     historicalAccuracyPct: serverLearningEngine.historicalAccuracy,
     calibrationStatus: latestCalibrationState.calibrationStatus,
@@ -16812,6 +17344,11 @@ let lastLoggedDiagnosticHash = "";
 let lastLoggedCycleHash = "";
 let lastLoggedLockMonitorHash = "";
 let lastHeartbeatLogTs = 0;
+let lastLockRowAssertMs = 0;
+// Layer 5 shadow records: cycleId -> what the standalone strike-side rule
+// would have done this cycle, per instance. Observation only; attached to the
+// ledger row at settlement so old-vs-new runs live while the flag stays off.
+const shadowL5ByCycle = new Map();
 let wssClientsCount = 0;
 const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];

@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
   Layers,
-  TrendingUp,
   ShieldAlert,
   Zap,
   Filter,
-  DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
   RefreshCw,
-  Eye,
-  CheckCircle2,
   Lock,
   Radio,
-  Sliders,
-  ExternalLink,
   ChevronRight
 } from 'lucide-react';
 
 import { AlertSettings } from '../types';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
+
+// Every value on this page is an observed venue fact (Coinbase public tape and
+// L2 book via /api/whales and /api/radar) or a labeled deterministic rule over
+// observed facts. The previous version rendered an invented "institutional
+// block stream" (fake entities including a real company name, fake venues,
+// per-row "confidence", $64k-era strike walls, a hardcoded +$42.1M volume and
+// a static 89% sentiment). None of that may return: if the venue is down, the
+// page says the venue is down.
 
 interface WhaleTrackerViewProps {
   onSelectAssetAndNavigate?: (symbol: string) => void;
@@ -30,106 +30,59 @@ interface WhaleTrackerViewProps {
 
 interface WhaleOrder {
   id: string;
-  time: string;
   asset: string;
-  action: 'BUY_SWEEP' | 'SELL_DUMP' | 'STRIKE_DEFENSE' | 'ICEBERG_ACCUMULATION';
+  action: 'BUY_SWEEP' | 'SELL_DUMP';
+  takerSide: 'BUY' | 'SELL';
   sizeUSD: number;
+  price: number;
   contractPrice: string;
-  venue: 'Kalshi' | 'Polymarket' | 'Derive' | 'Coinbase Pro' | 'Binance';
-  confidence: number;
-  entityName: string;
-  impact: 'HIGH' | 'EXTREME' | 'CRITICAL';
+  venue: string;
+  sizeTier: string;
+  timestamp: number;
 }
 
-const INITIAL_WHALE_ORDERS: WhaleOrder[] = [
-  {
-    id: 'wh-998',
-    time: 'Just now',
-    asset: 'BTC',
-    action: 'BUY_SWEEP',
-    sizeUSD: 2480000,
-    contractPrice: '$64,500 Strike YES',
-    venue: 'Kalshi',
-    confidence: 94,
-    entityName: 'Institutional Volume Cluster #02',
-    impact: 'CRITICAL',
-  },
-  {
-    id: 'wh-997',
-    time: '2 mins ago',
-    asset: 'BTC',
-    action: 'STRIKE_DEFENSE',
-    sizeUSD: 1850000,
-    contractPrice: '$64,000 Floor Support',
-    venue: 'Polymarket',
-    confidence: 91,
-    entityName: 'Apex Quant Liquidity #14',
-    impact: 'EXTREME',
-  },
-  {
-    id: 'wh-996',
-    time: '4 mins ago',
-    asset: 'ETH',
-    action: 'ICEBERG_ACCUMULATION',
-    sizeUSD: 920000,
-    contractPrice: '$3,400 Strike YES',
-    venue: 'Derive',
-    confidence: 88,
-    entityName: 'Satoshi Era Whale #089',
-    impact: 'HIGH',
-  },
-  {
-    id: 'wh-995',
-    time: '7 mins ago',
-    asset: 'SOL',
-    action: 'BUY_SWEEP',
-    sizeUSD: 1450000,
-    contractPrice: '$195 Strike YES',
-    venue: 'Kalshi',
-    confidence: 89,
-    entityName: 'Solana Foundation Bridge',
-    impact: 'EXTREME',
-  },
-  {
-    id: 'wh-994',
-    time: '11 mins ago',
-    asset: 'NVDA',
-    action: 'STRIKE_DEFENSE',
-    sizeUSD: 3100000,
-    contractPrice: '$135 Strike YES',
-    venue: 'Kalshi',
-    confidence: 96,
-    entityName: 'CME Block Router #08',
-    impact: 'CRITICAL',
-  },
-  {
-    id: 'wh-993',
-    time: '15 mins ago',
-    asset: 'BTC',
-    action: 'BUY_SWEEP',
-    sizeUSD: 4200000,
-    contractPrice: '$97,000 Strike YES',
-    venue: 'Coinbase Pro',
-    confidence: 95,
-    entityName: 'BlackRock Custody Bridge',
-    impact: 'CRITICAL',
-  },
-];
+interface WhaleFeedStats {
+  tradesScanned: number;
+  thresholdUSD: number;
+  takerBuyUSD: number;
+  takerSellUSD: number;
+  lastTradeAgeMs: number | null;
+}
 
-const STRIKE_WALLS = [
-  { asset: 'BTC', strike: '$64,000', type: 'SUPPORT FLOOR', volume: '$18.4M', whaleBias: 92, status: 'HEAVILY DEFENDED' },
-  { asset: 'BTC', strike: '$97,500', type: 'RESISTANCE CEILING', volume: '$12.1M', whaleBias: 38, status: 'TESTING LIQUIDITY' },
-  { asset: 'ETH', strike: '$3,400', type: 'SUPPORT FLOOR', volume: '$8.9M', whaleBias: 86, status: 'WHALE ACCUMULATING' },
-  { asset: 'SOL', strike: '$190', type: 'SUPPORT FLOOR', volume: '$6.2M', whaleBias: 88, status: 'HEAVILY DEFENDED' },
-  { asset: 'NVDA', strike: '$135', type: 'SUPPORT FLOOR', volume: '$14.5M', whaleBias: 94, status: 'INSTITUTIONAL LOCK' },
-];
+interface BookLevel {
+  price: number;
+  size: number;
+  cumulative: number;
+}
 
-const TOP_WHALE_ENTITIES = [
-  { name: 'Institutional Volume Cluster #02', winRate: '92.4%', activeSize: '$28.4M', bias: 'BULLISH', topAsset: 'BTC', accuracyScore: 98 },
-  { name: 'CME Block Router #08', winRate: '89.7%', activeSize: '$41.2M', bias: 'BULLISH', topAsset: 'NVDA / SPY', accuracyScore: 96 },
-  { name: 'Apex Quant Liquidity #14', winRate: '87.1%', activeSize: '$19.8M', bias: 'NEUTRAL-BULL', topAsset: 'BTC', accuracyScore: 93 },
-  { name: 'Satoshi Era Cluster #089', winRate: '94.0%', activeSize: '$15.5M', bias: 'BULLISH', topAsset: 'ETH', accuracyScore: 97 },
-];
+interface RadarBook {
+  bids: BookLevel[];
+  asks: BookLevel[];
+  bestBid: number | null;
+  bestAsk: number | null;
+  spreadUSD: number | null;
+  bidDepthBTC: number;
+  askDepthBTC: number;
+  ratio: number | null;
+}
+
+interface CycleContext {
+  cycleId: string | null;
+  currentState: string | null;
+  currentSpot: number | null;
+  openStrike: number | null;
+  secondsRemaining: number | null;
+}
+
+const POLL_ASSETS = ['BTC', 'ETH', 'SOL'];
+const POLL_MS = 5000;
+
+const relTime = (ts: number): string => {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return `${s}s ago`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s ago`;
+  return `${Math.floor(s / 3600)}h ago`;
+};
 
 export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   onSelectAssetAndNavigate,
@@ -138,40 +91,108 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
   onOpenDiscordModal,
 }) => {
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');
-  const [minSizeFilter, setMinSizeFilter] = useState<number>(100000);
-  const [orders, setOrders] = useState<WhaleOrder[]>(INITIAL_WHALE_ORDERS);
+  const [minSizeFilter, setMinSizeFilter] = useState<number>(10000);
+  const [orders, setOrders] = useState<WhaleOrder[]>([]);
+  const [feedStats, setFeedStats] = useState<WhaleFeedStats | null>(null);
+  const [feedState, setFeedState] = useState<'LOADING' | 'LIVE' | 'UNAVAILABLE'>('LOADING');
+  const [book, setBook] = useState<RadarBook | null>(null);
+  const [bookState, setBookState] = useState<'LOADING' | 'LIVE' | 'UNAVAILABLE'>('LOADING');
+  const [cycle, setCycle] = useState<CycleContext | null>(null);
   const [isLiveStreaming, setIsLiveStreaming] = useState<boolean>(true);
-  const [lastUpdated, setLastUpdated] = useState<string>('Just now');
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string>('—');
 
   const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
   const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
-  // Real live whale order feed effect from /api/whales
+  // Live prints from /api/whales (real Coinbase tape; 503 or empty is honest).
   useEffect(() => {
     if (!isLiveStreaming) return;
-
     let isSubscribed = true;
+
     const fetchWhaleData = async () => {
+      const assets = selectedAssetFilter === 'ALL' ? POLL_ASSETS : [selectedAssetFilter];
       try {
-        const assetParam = selectedAssetFilter === 'ALL' ? 'BTC' : selectedAssetFilter;
-        const res = await fetch(`/api/whales?asset=${assetParam}`);
-        if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
-          const data = await res.json();
-          if (isSubscribed && Array.isArray(data.orders) && data.orders.length > 0) {
-            setOrders(data.orders);
-            setLastUpdated(new Date().toLocaleTimeString());
+        const results = await Promise.all(
+          assets.map((a) =>
+            fetch(`/api/whales?asset=${a}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .catch(() => null),
+          ),
+        );
+        if (!isSubscribed) return;
+        const ok = results.filter((r) => r && Array.isArray(r.orders));
+        if (ok.length === 0) {
+          setFeedState('UNAVAILABLE');
+          setOrders([]);
+          setFeedStats(null);
+          return;
+        }
+        const merged: WhaleOrder[] = ok
+          .flatMap((r) => r.orders)
+          .sort((a, b) => b.timestamp - a.timestamp)
+          .slice(0, 30);
+        const stats: WhaleFeedStats = {
+          tradesScanned: ok.reduce((s, r) => s + (r.tradesScanned || 0), 0),
+          thresholdUSD: ok[0].thresholdUSD ?? 10000,
+          takerBuyUSD: ok.reduce((s, r) => s + (r.takerBuyUSD || 0), 0),
+          takerSellUSD: ok.reduce((s, r) => s + (r.takerSellUSD || 0), 0),
+          lastTradeAgeMs: ok.reduce<number | null>(
+            (m, r) => (r.lastTradeAgeMs === null || r.lastTradeAgeMs === undefined ? m : m === null ? r.lastTradeAgeMs : Math.min(m, r.lastTradeAgeMs)),
+            null,
+          ),
+        };
+        setOrders(merged);
+        setFeedStats(stats);
+        setFeedState('LIVE');
+        setLastUpdated(new Date().toLocaleTimeString());
+      } catch {
+        if (isSubscribed) setFeedState('UNAVAILABLE');
+      }
+    };
+
+    // Resting L2 depth from /api/radar, and the live 15M cycle for context.
+    const fetchBookAndCycle = async () => {
+      const bookAsset = selectedAssetFilter === 'ALL' ? 'BTC' : selectedAssetFilter;
+      try {
+        const r = await fetch(`/api/radar?asset=${bookAsset}`);
+        if (isSubscribed) {
+          if (r.ok) {
+            const j = await r.json();
+            setBook(j.book || null);
+            setBookState(j.book ? 'LIVE' : 'UNAVAILABLE');
+          } else {
+            setBook(null);
+            setBookState('UNAVAILABLE');
           }
         }
-      } catch (err) {
-        console.warn('Live whale stream update failed', err);
+      } catch {
+        if (isSubscribed) setBookState('UNAVAILABLE');
+      }
+      try {
+        const r = await fetch('/api/vixy/15m/current');
+        if (isSubscribed && r.ok) {
+          const j = await r.json();
+          setCycle({
+            cycleId: j.cycleId ?? null,
+            currentState: j.currentState ?? null,
+            currentSpot: j.currentSpot ?? null,
+            openStrike: j.openStrike ?? null,
+            secondsRemaining: j.secondsRemaining ?? null,
+          });
+        }
+      } catch {
+        /* cycle context is supplementary; the panel shows unavailable */
       }
     };
 
     fetchWhaleData();
-    const interval = setInterval(fetchWhaleData, 5000);
+    fetchBookAndCycle();
+    const interval = setInterval(() => {
+      fetchWhaleData();
+      fetchBookAndCycle();
+    }, POLL_MS);
 
     return () => {
       isSubscribed = false;
@@ -185,7 +206,19 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
     return matchesAsset && matchesSize;
   });
 
-  const totalWhaleVolume24h = orders.reduce((sum, o) => sum + o.sizeUSD, 0) + 42100000;
+  // Sum over the prints currently in view — a window statistic, not a claim
+  // about 24h volume (the old page added a hardcoded +$42.1M here).
+  const visibleVolumeUSD = filteredOrders.reduce((sum, o) => sum + o.sizeUSD, 0);
+  const takerTotal = (feedStats?.takerBuyUSD || 0) + (feedStats?.takerSellUSD || 0);
+  const takerBuySharePct = takerTotal > 0 ? Math.round(((feedStats!.takerBuyUSD) / takerTotal) * 100) : null;
+  const strikeDistance =
+    cycle && cycle.currentSpot != null && cycle.openStrike != null && cycle.openStrike > 0
+      ? cycle.currentSpot - cycle.openStrike
+      : null;
+  const strikeDistanceBps =
+    strikeDistance !== null && cycle!.openStrike! > 0
+      ? Math.round((strikeDistance / cycle!.openStrike!) * 10000 * 10) / 10
+      : null;
 
   return (
     <div className="space-y-6 font-sans pb-12">
@@ -197,31 +230,34 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
         <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-400/30 text-purple-200 text-xs font-mono font-bold">
-              <Radio className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>LIVE INSTITUTIONAL BLOCK STREAM</span>
+              <Radio className={`w-3.5 h-3.5 ${feedState === 'LIVE' ? 'text-emerald-400 animate-pulse' : 'text-amber-400'}`} />
+              <span>COINBASE PUBLIC TAPE</span>
               <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
-              <span className="text-emerald-300">250ms BRIDGE LATENCY</span>
+              <span className={feedState === 'LIVE' ? 'text-emerald-300' : 'text-amber-300'}>
+                {feedState === 'LIVE' ? `POLLED EVERY ${POLL_MS / 1000}s` : feedState === 'LOADING' ? 'CONNECTING' : 'VENUE UNAVAILABLE'}
+              </span>
             </div>
             <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight">
-              Whale Order Flow & Dark Pool Tracker
+              Whale Order Flow & Liquidity Tracker
             </h1>
             <p className="text-xs sm:text-sm text-purple-200/80 max-w-2xl leading-relaxed">
-              Track multi-million dollar institutional sweeps, iceberg orders, and strike defense walls in real-time across Kalshi, Polymarket, Derive, and top liquidity bridges.
+              Large prints from the real Coinbase tape and resting order-book depth, refreshed every few seconds. Every number here is observed from the venue — none is modelled or simulated.
             </p>
           </div>
 
-          {/* Quick Metrics Pills */}
+          {/* Quick Metrics Pills — window statistics, labelled as such */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
-              <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Tracked Volume (24h)</span>
+              <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Visible Prints Volume</span>
               <span className="text-base sm:text-lg font-black text-emerald-400">
-                ${(totalWhaleVolume24h / 1000000).toFixed(1)}M
+                {feedState === 'LIVE' ? `$${(visibleVolumeUSD / 1000000).toFixed(2)}M` : '—'}
               </span>
             </div>
             <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
-              <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Whale Sentiment</span>
+              <span className="text-[10px] text-purple-300/60 uppercase font-bold block">Taker Buy Share</span>
               <span className="text-base sm:text-lg font-black text-purple-200 flex items-center gap-1">
-                89% <span className="text-emerald-400 text-xs font-sans font-bold">BULL DEFENSE</span>
+                {takerBuySharePct !== null ? `${takerBuySharePct}%` : '—'}
+                <span className="text-purple-300/50 text-[9px] font-sans font-bold">of scanned prints ≥ ${((feedStats?.thresholdUSD ?? 10000) / 1000).toFixed(0)}k</span>
               </span>
             </div>
             <div className="col-span-2 sm:col-span-1 p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/60 font-mono">
@@ -231,7 +267,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                 className="mt-0.5 inline-flex items-center gap-1.5 text-xs font-extrabold text-white hover:text-emerald-300 transition-colors"
               >
                 <span className={`w-2 h-2 rounded-full ${isLiveStreaming ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
-                {isLiveStreaming ? 'STREAMING ACTIVE' : 'PAUSED'}
+                {isLiveStreaming ? 'POLLING' : 'PAUSED'}
               </button>
             </div>
           </div>
@@ -240,12 +276,12 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
 
       {/* FILTER & CONTROL TOOLBAR */}
       <div className="p-4 rounded-2xl bg-[#0c0620]/90 border border-purple-900/40 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
-        {/* Asset Filter Pills */}
+        {/* Asset Filter Pills — only assets with a real Coinbase feed */}
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-purple-300/60 font-bold uppercase text-[10px] mr-1 flex items-center gap-1">
             <Filter className="w-3 h-3 text-purple-400" /> Asset:
           </span>
-          {['ALL', 'BTC', 'ETH', 'SOL', 'NVDA', 'SPY', 'TSLA'].map((sym) => (
+          {['ALL', 'BTC', 'ETH', 'SOL'].map((sym) => (
             <button
               key={sym}
               onClick={() => setSelectedAssetFilter(sym)}
@@ -260,11 +296,12 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
           ))}
         </div>
 
-        {/* Order Size Threshold Dropdown / Selector */}
+        {/* Order Size Threshold */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 bg-[#0a0518] p-1 rounded-xl border border-purple-950">
             <span className="text-[10px] text-purple-300/60 uppercase font-bold px-2">Min Size:</span>
             {[
+              { label: '$10k+', value: 10000 },
               { label: '$50k+', value: 50000 },
               { label: '$100k+', value: 100000 },
               { label: '$500k+', value: 500000 },
@@ -285,7 +322,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
           </div>
 
           <div className="text-[11px] text-purple-300/50 flex items-center gap-1">
-            <RefreshCw className="w-3 h-3 animate-spin text-purple-400" />
+            <RefreshCw className={`w-3 h-3 text-purple-400 ${isLiveStreaming ? 'animate-spin' : ''}`} />
             <span>Updated: {lastUpdated}</span>
           </div>
         </div>
@@ -298,12 +335,11 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
         userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="WHALE RADAR INTELLIGENCE LOCKED"
-        subtitle="Verify your VIXY Vault Discord membership to unlock live institutional block trades, iceberg accumulation alerts, and strike walls."
+        subtitle="Verify your VIXY Vault Discord membership to unlock the live Coinbase tape, large-print stream, and resting-depth walls."
       >
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* COLUMN 1 & 2: LIVE WHALE ORDERS STREAM (2 COLS) */}
+        {/* COLUMN 1 & 2: LIVE PRINT STREAM */}
         <div className="lg:col-span-2 space-y-4">
-          {/* VIXY ELITE WHALE ALERT FUNNEL CONVERSION BOX */}
           <div className="bg-gradient-to-r from-[#170a33] via-[#0f0624] to-[#14082e] p-4 rounded-2xl border border-amber-500/50 space-y-2 font-mono text-xs shadow-lg">
             <div className="flex items-center justify-between">
               <span className="font-extrabold text-amber-300 flex items-center gap-2 text-sm">
@@ -315,7 +351,7 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
               </span>
             </div>
             <p className="text-purple-200/90 font-sans text-xs">
-              Whale alerts deliver real-time directional delta updates. Upgrade to <strong>VIXY ELITE AI</strong> to view complete strike defense targets, iceberg entry zones, and automated stop-loss execution levels.
+              Whale alerts deliver real-time large-print updates. Upgrade to <strong>VIXY ELITE AI</strong> for alerting on the full stream.
             </p>
           </div>
 
@@ -323,36 +359,44 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
             <div className="flex items-center gap-2">
               <Layers className="w-5 h-5 text-purple-400" />
               <h2 className="text-lg font-black text-white tracking-wide">
-                Live Block Execution Stream
+                Live Large-Print Stream
               </h2>
               <span className="px-2 py-0.5 rounded-full bg-purple-900/40 text-purple-300 text-[10px] font-mono border border-purple-800/40">
-                {filteredOrders.length} Recent Sweeps
+                {filteredOrders.length} prints
               </span>
             </div>
             <span className="text-xs text-purple-300/60 font-mono">
-              Auto-syncing websocket feed
+              Coinbase tape · last {feedStats?.tradesScanned ?? '—'} trades scanned
             </span>
           </div>
 
           <div className="space-y-2.5">
-            {filteredOrders.length === 0 ? (
+            {feedState === 'UNAVAILABLE' ? (
+              <div className="p-12 text-center rounded-2xl bg-[#0a0518] border border-amber-700/40 text-amber-300/90 font-mono text-xs">
+                COINBASE UNAVAILABLE — no live tape to show. Nothing here is simulated; the stream resumes when the venue answers.
+              </div>
+            ) : feedState === 'LOADING' ? (
               <div className="p-12 text-center rounded-2xl bg-[#0a0518] border border-purple-900/30 text-purple-300/60 font-mono text-xs">
-                No whale block orders match current filter criteria.
+                Connecting to the Coinbase public tape…
+              </div>
+            ) : filteredOrders.length === 0 ? (
+              <div className="p-12 text-center rounded-2xl bg-[#0a0518] border border-purple-900/30 text-purple-300/60 font-mono text-xs">
+                No prints ≥ ${(minSizeFilter / 1000).toFixed(0)}k in the last {feedStats?.tradesScanned ?? 0} trades scanned. An empty window is an honest window.
               </div>
             ) : (
               filteredOrders.map((order, index) => {
-                const isCritical = order.impact === 'CRITICAL';
+                const isBuy = order.takerSide === 'BUY';
+                const isLarge = order.sizeUSD >= 250000;
                 return (
                   <div
-                    key={`${order.id || 'wh'}-${order.time || ''}-${index}`}
+                    key={`${order.id || 'wh'}-${index}`}
                     className={`p-4 rounded-2xl border transition-all duration-200 group hover:border-purple-500/60 ${
-                      isCritical
+                      isLarge
                         ? 'bg-gradient-to-r from-[#170a33] via-[#0d0620] to-[#12072b] border-purple-500/50 shadow-lg shadow-purple-950/40'
                         : 'bg-[#0a0518] border-purple-900/40'
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      {/* Left: Asset Icon & Action Badge */}
                       <div className="flex items-start sm:items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-purple-800 to-purple-950 flex items-center justify-center text-white font-black font-mono shadow-md border border-purple-500/30 shrink-0">
                           {order.asset}
@@ -361,18 +405,16 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-black text-white font-mono">
-                              {order.contractPrice}
+                              ${order.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
                             </span>
                             <span
                               className={`px-2 py-0.5 rounded-xl text-[10px] font-mono font-extrabold ${
-                                order.action === 'BUY_SWEEP'
+                                isBuy
                                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                  : order.action === 'STRIKE_DEFENSE'
-                                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                                  : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                               }`}
                             >
-                              {order.action.replace('_', ' ')}
+                              TAKER {order.takerSide}
                             </span>
                             <span className="text-[10px] font-mono text-purple-300/50">
                               via {order.venue}
@@ -380,22 +422,18 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
                           </div>
 
                           <div className="text-xs text-purple-300/70 flex items-center gap-2">
-                            <span>Entity: <strong className="text-purple-200">{order.entityName}</strong></span>
-                            <span>•</span>
-                            <span className="text-[11px] text-purple-400 font-mono">{order.time}</span>
+                            <span className="text-[11px] text-purple-400 font-mono">{relTime(order.timestamp)}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Right: Dollar Amount & Confidence */}
                       <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-purple-900/30">
                         <div className="text-right">
-                          <div className="text-base font-black text-emerald-400 font-mono">
-                            ${(order.sizeUSD / 1000).toLocaleString()}k
+                          <div className={`text-base font-black font-mono ${isBuy ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            ${(order.sizeUSD / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k
                           </div>
-                          <div className="text-[10px] font-mono text-purple-300/60 flex items-center justify-end gap-1">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                            <span>{order.confidence}% Quant Edge</span>
+                          <div className="text-[10px] font-mono text-purple-300/60">
+                            {order.sizeTier} print
                           </div>
                         </div>
 
@@ -417,95 +455,111 @@ export const WhaleTrackerView: React.FC<WhaleTrackerViewProps> = ({
           </div>
         </div>
 
-        {/* COLUMN 3: WHALE STRIKE WALLS & TOP TRACKED ENTITIES */}
+        {/* COLUMN 3: RESTING BOOK DEPTH + 15M CYCLE CONTEXT */}
         <div className="space-y-6">
-          {/* WHALE STRIKE DEFENSE WALLS */}
+          {/* RESTING BOOK DEPTH — real Coinbase L2. Resting depth is NOT
+              aggressor flow and is never labelled defense or sentiment. */}
           <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="w-4 h-4 text-cyan-400" />
                 <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">
-                  Whale Strike Defense Walls
+                  Resting Book Depth
                 </h3>
               </div>
-              <span className="text-[10px] text-purple-300/60 font-mono">Orderbook Depth</span>
+              <span className="text-[10px] text-purple-300/60 font-mono">
+                Coinbase L2 · {selectedAssetFilter === 'ALL' ? 'BTC' : selectedAssetFilter}
+              </span>
             </div>
 
-            <div className="space-y-3 font-mono text-xs">
-              {STRIKE_WALLS.map((wall, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-2xl bg-[#0c0620]/80 border border-purple-900/40 space-y-2 hover:border-purple-600/40 transition-all"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-white text-sm">{wall.asset}</span>
-                      <span className="text-purple-300 font-bold">{wall.strike}</span>
-                      <span className="px-1.5 py-0.2 rounded bg-purple-950 text-cyan-300 text-[9px] font-bold border border-cyan-500/30">
-                        {wall.type}
-                      </span>
-                    </div>
-                    <span className="font-black text-emerald-400">{wall.volume}</span>
-                  </div>
-
-                  {/* Progress Bar of Whale Defense Strength */}
+            {bookState !== 'LIVE' || !book ? (
+              <div className="p-6 text-center text-[11px] font-mono text-purple-300/60">
+                {bookState === 'LOADING' ? 'Loading order book…' : 'BOOK UNAVAILABLE — Coinbase did not answer.'}
+              </div>
+            ) : (
+              <div className="space-y-3 font-mono text-xs">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-purple-300/70">
+                    Spread: <strong className="text-white">{book.spreadUSD !== null ? `$${book.spreadUSD}` : '—'}</strong>
+                  </span>
+                  <span className="text-purple-300/70">
+                    Bid/Ask depth (30 lvl): <strong className="text-emerald-400">{book.bidDepthBTC}</strong> / <strong className="text-rose-400">{book.askDepthBTC}</strong>
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden flex">
-                      <div
-                        className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-full"
-                        style={{ width: `${wall.whaleBias}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[10px] text-purple-300/60">
-                      <span>{wall.status}</span>
-                      <span>{wall.whaleBias}% Bull Defense</span>
-                    </div>
+                    <div className="text-[9px] uppercase font-bold text-emerald-400/80">Bids (resting)</div>
+                    {book.bids.slice(0, 5).map((l, i) => (
+                      <div key={i} className="flex justify-between p-1.5 rounded bg-emerald-950/30 border border-emerald-900/30">
+                        <span className="text-emerald-300">${l.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        <span className="text-purple-200/80">{l.size.toFixed(3)}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[9px] uppercase font-bold text-rose-400/80">Asks (resting)</div>
+                    {book.asks.slice(0, 5).map((l, i) => (
+                      <div key={i} className="flex justify-between p-1.5 rounded bg-rose-950/30 border border-rose-900/30">
+                        <span className="text-rose-300">${l.price.toLocaleString(undefined, { maximumFractionDigits: 0 })}</span>
+                        <span className="text-purple-200/80">{l.size.toFixed(3)}</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-            </div>
+                <p className="text-[9px] text-purple-300/50 leading-relaxed font-sans">
+                  Resting limit orders can be pulled at any moment. Depth is not aggressor flow and implies no directional "defense".
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* TOP TRACKED INSTITUTIONAL VAULTS */}
+          {/* 15M CYCLE CONTEXT — observation only; nothing here feeds the engine */}
           <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-4">
             <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-purple-400" />
                 <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">
-                  Top Monitored Vaults
+                  Live 15M Cycle Context
                 </h3>
               </div>
-              <span className="text-[10px] text-purple-300/60 font-mono">24h Radar</span>
+              <span className="text-[10px] text-purple-300/60 font-mono">BTC · observation</span>
             </div>
 
-            <div className="space-y-3 font-mono text-xs">
-              {TOP_WHALE_ENTITIES.map((entity, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-2xl bg-[#0c0620] border border-purple-900/40 flex items-center justify-between gap-3"
-                >
-                  <div className="space-y-0.5">
-                    <div className="font-extrabold text-purple-200 text-xs">
-                      {entity.name}
-                    </div>
-                    <div className="text-[10px] text-purple-300/60 flex items-center gap-2">
-                      <span>Top Focus: <strong className="text-white">{entity.topAsset}</strong></span>
-                      <span>•</span>
-                      <span>Active: <strong className="text-emerald-400">{entity.activeSize}</strong></span>
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="text-xs font-black text-emerald-400">
-                      {entity.winRate} WIN
-                    </div>
-                    <div className="text-[9px] text-purple-300/50">
-                      Score: {entity.accuracyScore}/100
-                    </div>
-                  </div>
+            {!cycle || cycle.currentSpot === null ? (
+              <div className="p-6 text-center text-[11px] font-mono text-purple-300/60">
+                Cycle context unavailable.
+              </div>
+            ) : (
+              <div className="space-y-2 font-mono text-xs">
+                <div className="flex justify-between">
+                  <span className="text-purple-300/70">State</span>
+                  <span className="font-black text-white">{cycle.currentState ?? '—'}</span>
                 </div>
-              ))}
-            </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-300/70">Spot</span>
+                  <span className="font-black text-white">${cycle.currentSpot.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-300/70">Cycle strike (open)</span>
+                  <span className="font-black text-white">{cycle.openStrike ? `$${cycle.openStrike.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '—'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-300/70">Distance from strike</span>
+                  <span className={`font-black ${strikeDistance !== null && strikeDistance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {strikeDistance !== null ? `${strikeDistance >= 0 ? '+' : ''}$${strikeDistance.toFixed(2)} (${strikeDistanceBps} bps)` : '—'}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-purple-300/70">Time remaining</span>
+                  <span className="font-black text-white">
+                    {cycle.secondsRemaining !== null ? `${Math.floor(cycle.secondsRemaining / 60)}:${String(cycle.secondsRemaining % 60).padStart(2, '0')}` : '—'}
+                  </span>
+                </div>
+                <p className="text-[9px] text-purple-300/50 leading-relaxed font-sans pt-1">
+                  Read-only view of the canonical 15M engine. The tape on this page does not feed the engine's decisions.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

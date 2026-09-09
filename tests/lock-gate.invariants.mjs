@@ -2,8 +2,15 @@
 // Executes the REAL canLockCurrentCycle / lock15mCycle source extracted verbatim from
 // server.ts, with controlled state injected. No reimplementation, no network, no Firestore.
 import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { buildStrikeSideHelper } from './_engineSource.mjs';
 
-const src = readFileSync(new URL('../../../../../Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', import.meta.url).pathname.includes('null') ? '/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts' : '/Users/olivergershey/Downloads/VIXYS-VAULT2-main/server.ts', 'utf8');
+// Reads the server.ts of the repository this test lives in. It previously read
+// an absolute path under ~/Downloads that was a stale copy ~950 lines behind
+// HEAD, so the test was not guarding this checkout at all. Verified to pass
+// unchanged against the repo copy before repointing.
+const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'server.ts'), 'utf8');
 
 function extract(name, startPat) {
   const i = src.indexOf(startPat);
@@ -83,6 +90,10 @@ function makeEnv(elapsedSec, overrides = {}) {
     latestKalshiContext: {},
     marketDataSource: 'BINANCE',
     lockedCycleIds: new Set(),
+    // ea05da9 on main: a cold instance with no live strike may not lock.
+    strike15mResolved: true,
+    VIXY_LOCK_RULE: 'off', VIXY_LOCK_RULE_BAR: 0.95, current15mStrikePrice: 64000,
+    computeStrikeSideProbability: buildStrikeSideHelper('off', 0.95),
     globalSequenceNumber: 1,
     ...overrides.globals,
   };
@@ -143,7 +154,19 @@ const g3 = runGate(200, { globals: { currentConfidence: 96, currentEdgePct: 8, p
 check('elapsed=200s, max conviction -> still DENIED', g3.allowed === false, (g3.reasons||[]).join('|'));
 
 console.log('== TEST 4: entry window closes late-cycle ==');
-for (const t of [721, 780, 850]) {
+// 721 was moved out of this list on purpose. Since 2deba55 (main) the gate's
+// withinEntryWindow runs to 780s while its reason check and lock15mCycle's
+// commit point (TEST 6 below) still cut off at 720s, so at 721s the gate says
+// allowed=true and the commit point refuses. That disagreement is pinned by
+// name in tests/lock-gate.composition.mjs (REGRESSION-2deba55) rather than
+// silently re-labelled as intended here.
+{
+  const g = runGate(721);
+  check('ALIGNED-780: elapsed=721s -> gate allowed=true with no EXPIRED reason (commit point agrees, TEST 6)',
+    g.allowed === true && !(g.reasons || []).some((r) => r.includes('ENTRY_WINDOW_EXPIRED')),
+    `allowed=${g.allowed} reasons=${(g.reasons || []).join('|')}`);
+}
+for (const t of [780, 850]) {
   const g = runGate(t);
   check(`elapsed=${t}s -> lock DENIED`, g.allowed === false, (g.reasons||[]).join('|'));
 }
@@ -162,9 +185,16 @@ for (const t of [90, 200, 359]) {
   const r = await runLockWindowCheck(t);
   check(`lock15mCycle elapsed=${t}s -> refuses (false)`, r === false, `returned=${r}`);
 }
-for (const t of [720, 800]) {
+for (const t of [780, 800]) {
   const r = await runLockWindowCheck(t);
   check(`lock15mCycle elapsed=${t}s -> refuses (false)`, r === false, `returned=${r}`);
+}
+{
+  // 720-779s is now inside the commit point's window; with the gate stubbed
+  // permissive the commit point must NOT refuse on the window alone (it then
+  // throws on a missing downstream global, which proves it passed the check).
+  const r = await runLockWindowCheck(750);
+  check('lock15mCycle elapsed=750s -> proceeds past the window check', r !== false, `returned=${r}`);
 }
 
 console.log('== TEST 7: duplicate lock prevention ==');
