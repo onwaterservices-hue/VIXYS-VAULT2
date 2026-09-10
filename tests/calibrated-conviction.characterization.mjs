@@ -17,7 +17,8 @@ t.check('conviction trail is downsampled to <=60 points, never synthesised', ada
 t.section('decision payload carries calibrated, market, trail and the gate checklist');
 const decision = sliceBetween(serverSrc, 'const decisionObj = {', 'convictionTrailCoverage: {', 'decisionObj head');
 t.check('calibrated block attached', decision.includes('calibrated: calibratedBlock,'));
-t.check('market.kalshiImpliedYes is null when not real', decision.includes('kalshiImpliedYes: kalshiReal ? currentKalshiImpliedProb : null'));
+t.check('marketRead.kalshiImpliedYes is null when not real', decision.includes('marketRead: {') && decision.includes('kalshiImpliedYes: kalshiReal ? currentKalshiImpliedProb : null'));
+t.check('the Kalshi block does not shadow the "BTC/USD" market label', (decision.match(/^\s{4}market:/gm) || []).length === 1);
 t.check('convictionTrail attached with coverage note', decision.includes('convictionTrail,') && serverSrc.includes("this instance's view of the cycle"));
 t.check('evidenceAlignment no longer defaults to a fabricated 6', serverSrc.includes('const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;') && !serverSrc.includes('evidenceAgreementCount ?? 6;'));
 const gateOut = sliceBetween(serverSrc, 'lockGate: active15mCycle.lockEligibility', 'strikeSide: active15mCycle.lockEligibility.strikeSide', 'lockGate out');
@@ -46,7 +47,8 @@ t.check('legacy score relabelled ENGINE SCORE, not CONVICTION', pc.includes('ENG
 
 t.section('the lock ladder lives in its own panel with full labels; the hero keeps a readiness bar');
 t.check('dedicated LOCK READINESS panel exists', pc.includes('Lock Readiness') && pc.includes('GATES PASSING'));
-t.check('gate rows render the full label with current / required', pc.includes('<span className="truncate">{c.label}</span>') && pc.includes('/ {c.required}'));
+t.check('gate rows render the full label (wrapped, never truncated) with current / required', pc.includes('<span className="leading-tight">{c.label}</span>') && pc.includes('/ {c.required}') && !pc.includes('<span className="truncate">{c.label}</span>'));
+t.check('market row is driven by the server\'s real flag, with an explicit no-edge state', pc.includes('m.real === true && typeof m.kalshiImpliedYes === \'number\'') && pc.includes('no edge claimed yet'));
 t.check('Layer-5 row excluded from the gating count (gating !== false)', pc.includes("lockChecks.filter((c) => c.gating !== false)"));
 t.check('P(win) side is stated and a side/bias mismatch is flagged', pc.includes('P(WIN{priceSide') && pc.includes('price side ≠ bias'));
 t.check('market comparison has an honest unavailable state', pc.includes('Market comparison unavailable'));

@@ -1,128 +1,67 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  BrainCircuit,
-  Zap,
-  TrendingUp,
-  Activity,
-  Layers,
-  Scale,
-  ShieldAlert,
-  ChevronDown,
-  ChevronUp,
-  Info,
-  CheckCircle2,
-  Sliders
-} from 'lucide-react';
+import { BrainCircuit, ChevronDown, ChevronUp, CheckCircle2 } from 'lucide-react';
+import type { EvidenceVectorItem } from '../../utils/evidenceVectors';
+
+// Every card below is one of the engine's evidence families with the score
+// and note the engine reported for this cycle. Nothing is weighted, attributed
+// or synthesised here: the earlier version of this panel carried invented
+// weights, "+18.5 pts" contributions, a "$28.4M" metric and a "0.994 stability
+// coefficient" that no calculation produced.
 
 interface NeuralDecompositionMatrixProps {
-  conviction: number;
-  isUp: boolean;
-  lockQuality: number;
-  reversalRisk: number;
+  vectors: EvidenceVectorItem[];
+  alignedCount: number;
+  totalValidCount: number;
+  direction: 'UP' | 'DOWN' | 'NEUTRAL';
+  engineScore: number | null;
 }
 
-interface NeuralFactor {
-  id: string;
-  name: string;
-  weight: number; // percentage
-  score: number; // -100 to +100
-  contribution: number; // +/- points to conviction
-  status: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
-  description: string;
-  metric: string;
-  category: string;
-}
+type FamilyCategory = 'TREND' | 'ORDERFLOW' | 'PREDICTION_MARKETS' | 'VOLATILITY';
+
+const FAMILY_CATEGORY: Record<EvidenceVectorItem['name'], FamilyCategory> = {
+  Momentum: 'TREND',
+  Trend: 'TREND',
+  'Order Flow': 'ORDERFLOW',
+  Volume: 'ORDERFLOW',
+  Sentiment: 'PREDICTION_MARKETS',
+  Volatility: 'VOLATILITY',
+};
+
+// What each family's score is built from, as the engine computes it. The
+// score itself and the note under it come from the engine on every tick.
+const FAMILY_DESCRIPTION: Record<EvidenceVectorItem['name'], string> = {
+  Momentum: 'Multi-timeframe momentum votes (15s → 15m) and RSI trajectory inside this cycle. ALIGNED means the family votes with the current bias; the note is the engine\'s own reading.',
+  Trend: 'Price structure against VWAP and the EMA stack for this cycle. The note reports the displacement the engine measured.',
+  'Order Flow': 'Taker buy vs sell ratio from the live tape. The note is the measured ratio; it is not a dollar figure.',
+  Volume: 'Expected-move coverage: realised move versus the distance to the strike for the time left. The note shows the coverage multiple.',
+  Sentiment: 'Kalshi\'s implied price for this cycle\'s contract when a recent read exists. There is no direct Polymarket 15M feed.',
+  Volatility: 'Realised-volatility regime for the 15-minute horizon. High regimes reduce confidence rather than adding to it.',
+};
+
+const STATUS_STYLE: Record<EvidenceVectorItem['status'], { pill: string; bar: string; label: string }> = {
+  ALIGNED: { pill: 'text-emerald-400', bar: 'bg-emerald-400 shadow-[0_0_6px_#10b981]', label: 'ALIGNED' },
+  DIVERGENT: { pill: 'text-rose-400', bar: 'bg-rose-500 shadow-[0_0_6px_#f43f5e]', label: 'DIVERGENT' },
+  NEUTRAL: { pill: 'text-amber-400', bar: 'bg-amber-400', label: 'NEUTRAL' },
+  STALE: { pill: 'text-slate-500', bar: 'bg-slate-700', label: 'STALE' },
+  UNAVAILABLE: { pill: 'text-slate-500', bar: 'bg-slate-700', label: 'UNAVAILABLE' },
+};
 
 export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps> = ({
-  conviction,
-  isUp,
-  lockQuality,
-  reversalRisk,
+  vectors,
+  alignedCount,
+  totalValidCount,
+  direction,
+  engineScore,
 }) => {
-  const [expandedFactor, setExpandedFactor] = useState<string | null>(null);
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'ORDERFLOW' | 'PREDICTION_MARKETS' | 'VOLATILITY'>('ALL');
+  const [expandedFamily, setExpandedFamily] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<'ALL' | FamilyCategory>('ALL');
 
-  const factors: NeuralFactor[] = [
-    {
-      id: 'cvd_momentum',
-      name: 'Spot CVD Momentum & Aggressor Flow',
-      weight: 22,
-      score: isUp ? 84 : -78,
-      contribution: isUp ? +18.5 : -17.2,
-      status: isUp ? 'BULLISH' : 'BEARISH',
-      description: 'Measures net cumulative volume delta from aggressive spot market takers across Binance, Coinbase, and Kraken.',
-      metric: '+$28.4M Net 15M Taker Buy Volume',
-      category: 'ORDERFLOW',
-    },
-    {
-      id: 'queue_dominance',
-      name: 'Microstructure L2 Queue Dominance',
-      weight: 18,
-      score: isUp ? 76 : -68,
-      contribution: isUp ? +13.7 : -12.2,
-      status: isUp ? 'BULLISH' : 'BEARISH',
-      description: 'Evaluates bid vs. ask queue replenishments at the top 5 levels of the book within 0.1% of the strike.',
-      metric: '1.42x Bid/Ask Wall Pressure Ratio',
-      category: 'ORDERFLOW',
-    },
-    {
-      id: 'prediction_consensus',
-      name: 'Prediction Market Consensus (Kalshi & Poly)',
-      weight: 20,
-      score: isUp ? 82 : -74,
-      contribution: isUp ? +16.4 : -14.8,
-      status: isUp ? 'BULLISH' : 'BEARISH',
-      description: 'Cross-verifies real-money prediction contract odds on Kalshi 15M BTC contracts and Polymarket continuous pools.',
-      metric: '58% YES Implied Probability (+4% vs Spot)',
-      category: 'PREDICTION_MARKETS',
-    },
-    {
-      id: 'basis_skew',
-      name: 'Cross-Exchange Basis & Perp Funding Skew',
-      weight: 15,
-      score: isUp ? 65 : -58,
-      contribution: isUp ? +9.8 : -8.7,
-      status: isUp ? 'BULLISH' : 'BEARISH',
-      description: 'Monitors spot-perp premium divergence and perpetual swap funding acceleration to detect squeeze potential.',
-      metric: 'Coinbase Premium +$12.50 / Funding +0.008%',
-      category: 'VOLATILITY',
-    },
-    {
-      id: 'mtf_trend',
-      name: 'Multi-Timeframe Trend Coherence',
-      weight: 15,
-      score: isUp ? 88 : -80,
-      contribution: isUp ? +13.2 : -12.0,
-      status: isUp ? 'BULLISH' : 'BEARISH',
-      description: 'Synchronizes 1M, 5M, 15M, and 1H Exponential Moving Averages (EMA 9/21/50) and VWAP slope gradients.',
-      metric: 'All 4 Timeframes Aligned Above VWAP',
-      category: 'VOLATILITY',
-    },
-    {
-      id: 'tail_entropy',
-      name: 'Entropy & Reversal Tail Risk Dampener',
-      weight: 10,
-      score: reversalRisk < 25 ? 85 : 40,
-      contribution: reversalRisk < 25 ? +8.5 : +4.0,
-      status: reversalRisk < 25 ? 'BULLISH' : 'NEUTRAL',
-      description: 'Quantitative tail-risk filter that penalizes noisy or high-entropy ranges to prevent false lockouts.',
-      metric: `Reversal Risk at ${reversalRisk}% (Threshold: 25%)`,
-      category: 'VOLATILITY',
-    },
-  ];
-
-  const filteredFactors = factors.filter((f) => {
-    if (activeFilter === 'ALL') return true;
-    return f.category === activeFilter;
-  });
-
-  const totalScoreContribution = factors.reduce((sum, f) => sum + Math.abs(f.contribution), 0);
+  const filtered = vectors.filter((v) => activeFilter === 'ALL' || FAMILY_CATEGORY[v.name] === activeFilter);
 
   return (
     <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-b from-[#100728]/95 via-[#0b051b]/95 to-[#060212] border border-purple-800/40 shadow-2xl space-y-4 relative overflow-hidden before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/40 before:to-transparent">
-      
-      {/* Header with Conviction Synthesis */}
+
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-purple-900/40">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-xl bg-purple-950 border border-purple-700/50 text-amber-400">
@@ -130,27 +69,24 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
           </div>
           <div>
             <div className="text-xs font-black text-white font-sans flex items-center gap-1.5">
-              <span>NEURAL SIGNAL DECOMPOSITION MATRIX</span>
+              <span>EVIDENCE FAMILY MATRIX</span>
               <span className="px-1.5 py-0.2 rounded bg-purple-600/30 text-purple-300 font-mono text-[9px] border border-purple-500/40">
-                6 QUANT FACTORS
+                {vectors.length} FAMILIES
               </span>
             </div>
             <div className="text-[10px] text-purple-300/70 font-mono">
-              Live algorithmic weight breakdown & score attribution
+              Live family scores from the engine · no weights or point attributions are claimed
             </div>
           </div>
         </div>
 
-        {/* Filter Pills */}
         <div className="flex items-center p-1 rounded-xl bg-[#140833] border border-purple-800/40 text-[10px] font-mono font-bold">
-          {(['ALL', 'ORDERFLOW', 'PREDICTION_MARKETS', 'VOLATILITY'] as const).map((filter) => (
+          {(['ALL', 'TREND', 'ORDERFLOW', 'PREDICTION_MARKETS', 'VOLATILITY'] as const).map((filter) => (
             <button
               key={filter}
               onClick={() => setActiveFilter(filter)}
               className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
-                activeFilter === filter
-                  ? 'bg-purple-600 text-white shadow-sm'
-                  : 'text-purple-300 hover:text-white'
+                activeFilter === filter ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-300 hover:text-white'
               }`}
             >
               {filter.replace('_', ' ')}
@@ -159,65 +95,61 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
         </div>
       </div>
 
-      {/* Grid of 6 Neural Factors */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filteredFactors.map((factor) => {
-          const isExpanded = expandedFactor === factor.id;
+        {filtered.map((family) => {
+          const isExpanded = expandedFamily === family.name;
+          const style = STATUS_STYLE[family.status] ?? STATUS_STYLE.UNAVAILABLE;
+          const hasScore = typeof family.score === 'number' && !family.isStaleOrMissing;
           return (
             <motion.div
-              key={factor.id}
+              key={family.name}
               whileHover={{ y: -2 }}
-              onClick={() => setExpandedFactor(isExpanded ? null : factor.id)}
+              onClick={() => setExpandedFamily(isExpanded ? null : family.name)}
               className="p-3.5 rounded-2xl bg-[#12072e]/90 border border-purple-800/40 hover:border-purple-600/60 shadow-md space-y-2.5 transition-all cursor-pointer relative overflow-hidden"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="space-y-0.5 min-w-0">
                   <div className="text-[10px] font-mono text-purple-400 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <span>WEIGHT {factor.weight}%</span>
+                    <span>{FAMILY_CATEGORY[family.name].replace('_', ' ')}</span>
                     <span>•</span>
-                    <span className={factor.status === 'BULLISH' ? 'text-emerald-400' : factor.status === 'BEARISH' ? 'text-rose-400' : 'text-amber-400'}>
-                      {factor.status}
-                    </span>
+                    <span className={style.pill}>{style.label}</span>
                   </div>
-                  <div className="text-xs font-black text-white font-sans truncate">
-                    {factor.name}
-                  </div>
+                  <div className="text-xs font-black text-white font-sans truncate">{family.name}</div>
                 </div>
 
                 <div className="text-right shrink-0">
-                  <span className={`text-xs font-mono font-black px-1.5 py-0.5 rounded ${
-                    factor.contribution > 0 ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                  <span className={`text-xs font-mono font-black px-1.5 py-0.5 rounded border ${
+                    hasScore
+                      ? family.aligned
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                        : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                      : 'bg-slate-800/40 text-slate-400 border-slate-700/40'
                   }`}>
-                    {factor.contribution > 0 ? '+' : ''}{factor.contribution.toFixed(1)} pts
+                    {hasScore ? `${family.score!.toFixed(1)} / 10` : family.displayScore}
                   </span>
                 </div>
               </div>
 
-              {/* Progress Strength Bar */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-[10px] font-mono text-purple-300/70">
-                  <span>SIGNAL STRENGTH</span>
-                  <span className="text-white font-bold">{Math.abs(factor.score)}%</span>
+                  <span>FAMILY SCORE</span>
+                  <span className="text-white font-bold">{hasScore ? `${Math.round(family.percent)}%` : '—'}</span>
                 </div>
                 <div className="w-full h-1.5 rounded-full bg-[#1e0e48] overflow-hidden">
                   <motion.div
-                    className={`h-full rounded-full ${
-                      factor.status === 'BULLISH' ? 'bg-emerald-400 shadow-[0_0_6px_#10b981]' : factor.status === 'BEARISH' ? 'bg-rose-500 shadow-[0_0_6px_#f43f5e]' : 'bg-amber-400'
-                    }`}
+                    className={`h-full rounded-full ${style.bar}`}
                     initial={{ width: '0%' }}
-                    animate={{ width: `${Math.abs(factor.score)}%` }}
+                    animate={{ width: `${hasScore ? family.percent : 0}%` }}
                     transition={{ duration: 0.6 }}
                   />
                 </div>
               </div>
 
-              {/* Metric Highlight */}
-              <div className="p-2 rounded-xl bg-[#0b041e] border border-purple-900/40 text-[10px] font-mono text-purple-200/90 flex items-center justify-between">
-                <span className="truncate">{factor.metric}</span>
+              <div className="p-2 rounded-xl bg-[#0b041e] border border-purple-900/40 text-[10px] font-mono text-purple-200/90 flex items-center justify-between" title={family.detail}>
+                <span className="truncate">{family.detail}</span>
                 {isExpanded ? <ChevronUp className="w-3.5 h-3.5 text-purple-400 shrink-0 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 text-purple-400 shrink-0 ml-1" />}
               </div>
 
-              {/* Expanded Description Accordion */}
               <AnimatePresence>
                 {isExpanded && (
                   <motion.div
@@ -226,7 +158,7 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
                     exit={{ opacity: 0, height: 0 }}
                     className="text-[11px] text-purple-300/80 font-sans leading-relaxed pt-1 border-t border-purple-900/30"
                   >
-                    {factor.description}
+                    {FAMILY_DESCRIPTION[family.name]}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -235,16 +167,16 @@ export const NeuralDecompositionMatrix: React.FC<NeuralDecompositionMatrixProps>
         })}
       </div>
 
-      {/* Synthesis Footer */}
       <div className="p-3 rounded-2xl bg-[#140833] border border-purple-800/40 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex items-center gap-2 text-purple-200 font-sans">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <CheckCircle2 className={`w-4 h-4 shrink-0 ${alignedCount >= Math.ceil(totalValidCount * 0.66) && totalValidCount > 0 ? 'text-emerald-400' : 'text-amber-400'}`} />
           <span>
-            <strong>Composite Conviction Synthesized:</strong> {conviction}% directional probability validated across all 6 sub-models with 0% NaN penalty.
+            <strong>{alignedCount}/{totalValidCount}</strong> families aligned {direction}
+            {totalValidCount < vectors.length ? ` · ${vectors.length - totalValidCount} without data` : ''}
           </span>
         </div>
-        <div className="text-[10px] font-mono text-purple-400">
-          STABILITY COEFFICIENT: <span className="text-emerald-400 font-bold">0.994</span>
+        <div className="text-[10px] font-mono text-purple-400" title="The legacy vote-tally score is a step function of how many families agree. It is not a probability; the calibrated P(win) on the cycle card is.">
+          ENGINE SCORE: <span className="text-white font-bold">{engineScore !== null ? engineScore : '—'}</span> · step function of agreement, not a probability
         </div>
       </div>
 
