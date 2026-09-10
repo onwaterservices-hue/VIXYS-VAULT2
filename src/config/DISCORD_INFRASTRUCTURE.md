@@ -30,7 +30,6 @@ src/
 │   ├── index.ts                # Discord.js bot lifecycle, client login, and slash commands
 │   ├── client.ts               # Gateway client instance & invite builder
 │   └── services/
-│       ├── automationScheduler.ts # Automated cron publisher (Market Pulse, Whale Alerts, AI Lessons)
 │       └── marketData.ts       # Real-time ticker & order flow data aggregator
 ```
 
@@ -100,21 +99,14 @@ All environment variables are validated at startup via `src/config/env.config.ts
 
 ## 4. Automation & Scheduled Tasks
 
-The `AutomationScheduler` (`src/bot/services/automationScheduler.ts`) executes automated background triggers:
-
-1. **Hourly Market Pulse (`0 * * * *`)**:
-   - Posts overall bias, confidence score, key resistance levels.
-   - Embeds a locked trade setup card directing free members to upgrade.
-2. **15-Minute Signal Scan (`*/15 * * * *`)**:
-   - Analyzes real-time order flow and publishes high-level market structure updates.
-3. **Whale Tracker Alerts (Real-Time Event Driven)**:
-   - Posts transactions over `$1,000,000 USD` with VIXY AI confidence shifts.
-4. **Breaking News Alerts (Real-Time)**:
-   - Posts macro market developments with instantaneous VIXY recalculation notices.
-5. **AI Educational Lessons**:
-   - Explains funding rates, order blocks, and taker delta sweeps to demonstrate AI sophistication.
-6. **Status Heartbeat (`*/1 * * * *`)**:
-   - Publishes real-time telemetry (24 active models, 154 monitored markets, 84.2% 30D win rate).
+There is no timer-driven publisher. The former `AutomationScheduler`
+(`src/bot/services/automationScheduler.ts`) was imported by `server.ts` but
+never started, and its templates carried hardcoded figures ("24 active
+models", "84.2% 30D win rate"); it was removed in SESSION 7 along with the
+OG client-side engine. The only live publisher is `broadcastSignalToDiscord`
+in `server.ts`, called from the canonical 15M engine at lock time with
+claim-then-publish idempotency (`shouldBroadcastCycle` →
+`claimBroadcastAtomically` → send → `markBroadcastOutcome`).
 
 ---
 
