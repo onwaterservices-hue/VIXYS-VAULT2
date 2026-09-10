@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { lockQualityLabel, alignmentLabel, evidenceState } from '../lib/engineSemantics';
+import { lockQualityLabel, alignmentLabel, evidenceState, headline } from '../lib/engineSemantics';
 import { fetchResolvedLogApi } from '../services/api';
 import {
   Sparkles,
@@ -199,8 +199,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [priceTickDelta, setPriceTickDelta] = useState<string | null>(null);
   const [lockBeamActive, setLockBeamActive] = useState<boolean>(false);
 
-  // Dynamic Confidence & Reversal Risk from canonical engine
-  const [displayConfidence, setDisplayConfidence] = useState<number>(78);
+  // Dynamic Confidence & Reversal Risk from canonical engine. No seeded 78:
+  // until the first payload lands the score is null and renders as a dash.
+  const [displayConfidence, setDisplayConfidence] = useState<number | null>(null);
   const [displayReversalRisk, setDisplayReversalRisk] = useState<number>(28);
 
   // Synchronize state with real-time canonicalDecision from backend
@@ -429,8 +430,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? null;
   const lockQualityScore: number | null =
     rawLockScore === null ? null : rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
-  // Headline number for the ring: the calibrated P(win) when it exists, else the engine score.
-  const headlineNumber: number = calibrated?.pWin !== null && calibrated?.pWin !== undefined ? Math.round(calibrated.pWin * 100) : displayConfidence;
+  // Headline number for the ring, from the one semantics helper every surface
+  // (V2 rail, hub hero, Command Center ring) reads: calibrated P(win) when a
+  // cell matches, else the engine score, else nothing.
+  const hl = headline(canonicalDecision);
+  const headlineNumber: number | null = hl.value ?? displayConfidence;
 
   // Derive Canonical Cycle Presentation State
   const isActuallyLocked = useMemo(() => {
@@ -443,7 +447,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
   const isEarlyLockQualified = useMemo(() => {
     return (
-      displayConfidence >= 75 &&
+      (displayConfidence ?? 0) >= 75 &&
       lockQualityScore !== null &&
       lockQualityScore >= 78 &&
       displayReversalRisk <= 25
@@ -558,7 +562,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       spotPrice,
       spotChange,
       displayReversalRisk,
-      displayConfidence,
+      displayConfidence ?? 0,
       canonicalDecision?.direction || (isUp ? 'UP' : isDown ? 'DOWN' : 'SKIP')
     );
   }, [chartCandles, spotPrice, spotChange, displayReversalRisk, displayConfidence, canonicalDecision?.direction, isUp, isDown]);
@@ -1056,7 +1060,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     )}
                     <div className="text-[10px] font-bold mt-0.5 text-slate-400 flex items-center gap-1 whitespace-nowrap">
                       <span className="font-mono font-black text-slate-300">
-                        {displayConfidence}
+                        {displayConfidence ?? '—'}
                       </span>
                       <span className="text-purple-300/60 font-sans text-[9px] uppercase tracking-wider" title="Legacy vote-tally score (11 evidence families). Not a probability.">ENGINE SCORE</span>
                     </div>
@@ -1080,13 +1084,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       stroke="currentColor"
                       fill="none"
                       initial={{ strokeDasharray: '0, 100' }}
-                      animate={{ strokeDasharray: `${headlineNumber}, 100` }}
+                      animate={{ strokeDasharray: `${headlineNumber ?? 0}, 100` }}
                       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                   </svg>
-                  <span className="absolute font-black text-white font-mono text-[10px] text-center" title={calibrated?.pWin != null ? 'Calibrated P(win)' : 'Engine score (no calibrated cell)'}>
-                    {headlineNumber}%
+                  <span className="absolute font-black text-white font-mono text-[10px] text-center" title={hl.kind === 'PWIN' ? `Calibrated P(win) · ${hl.word}` : hl.kind === 'ENGINE_SCORE' ? `Engine score (no calibrated cell) · ${hl.word}` : 'No number from the engine yet'}>
+                    {headlineNumber !== null ? `${headlineNumber}%` : '—'}
                   </span>
                 </div>
               </div>
@@ -1833,7 +1837,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       predictedDirection={isUp ? 'UP' : 'DOWN'}
                       modelSignal={{
                         direction: isUp ? 'UP' : 'DOWN',
-                        confidence: displayConfidence,
+                        confidence: displayConfidence ?? 0,
                         targetPrice: targetPrice,
                         pWin: calibrated?.pWin ?? null,
                         pWinN: calibrated?.n ?? null,
@@ -1912,7 +1916,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               strikePrice={targetPrice}
               asset={selectedAsset}
               isUp={isUp}
-              conviction={displayConfidence}
+              conviction={displayConfidence ?? 0}
             />
           </div>
 
@@ -2041,7 +2045,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             spotPrice={spotPrice}
             strikePrice={targetPrice}
             asset={selectedAsset}
-            baseConviction={displayConfidence}
+            baseConviction={displayConfidence ?? 0}
             baseLockQuality={lockQualityScore ?? 0}
             baseReversalRisk={displayReversalRisk}
             isUp={isUp}
@@ -2050,7 +2054,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           <AutonomousExecutionGuard
             spotPrice={spotPrice}
             strikePrice={targetPrice}
-            conviction={displayConfidence}
+            conviction={displayConfidence ?? 0}
             reversalRisk={displayReversalRisk}
             isActuallyLocked={isActuallyLocked}
             asset={selectedAsset}

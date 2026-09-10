@@ -102,3 +102,74 @@ export function alignmentLabel(evidenceAlignment: number | null | undefined): st
   if (n >= 4) return 'WEAK';
   return 'CONFLICTED';
 }
+
+/**
+ * Word for a calibrated P(win) percent. Unlike the engine score this IS a
+ * probability (the strike-side table's empirical frequency for the current
+ * side of the open strike), so the words describe the edge over a coin flip
+ * and say when the current side is the one history bets against.
+ */
+export function pWinLabel(pct: number | null | undefined): string {
+  const p = num(pct);
+  if (p === null) return 'NO MATCHING HISTORY';
+  if (p >= 95) return 'AT LAYER-5 BAR';
+  if (p >= 85) return 'STRONG EDGE';
+  if (p >= 70) return 'CLEAR EDGE';
+  if (p >= 58) return 'MODEST EDGE';
+  if (p >= 42) return 'COIN FLIP';
+  return 'AGAINST CURRENT SIDE';
+}
+
+export type HeadlineKind = 'PWIN' | 'ENGINE_SCORE' | 'NONE';
+
+export interface Headline {
+  kind: HeadlineKind;
+  /** integer percent, or null when the engine has published nothing */
+  value: number | null;
+  /** what the number is: "P(WIN UP) · n=1026", "ENGINE SCORE", or "NO DATA" */
+  label: string;
+  /** sample size behind a P(win); null otherwise */
+  n: number | null;
+  /** the side P(win) is for (current side of the strike); null otherwise */
+  side: 'UP' | 'DOWN' | null;
+  /** the word for the number, from the matching scale above */
+  word: string;
+}
+
+/**
+ * The ONE headline number for a cycle. Every surface that shows "the number"
+ * (Prediction Center ring, V2 right rail, hub hero, Command Center ring) reads
+ * it from here so they cannot disagree: the calibrated P(win) when the table
+ * has a matching cell, else the legacy engine score labelled as such, else
+ * nothing. Never a default.
+ */
+export function headline(
+  decision:
+    | {
+        confidence?: number | null;
+        calibrated?: { pWin?: number | null; n?: number | null; currentSide?: string | null } | null;
+      }
+    | null
+    | undefined,
+): Headline {
+  const p = num(decision?.calibrated?.pWin);
+  if (p !== null) {
+    const n = num(decision?.calibrated?.n);
+    const rawSide = decision?.calibrated?.currentSide;
+    const side: 'UP' | 'DOWN' | null = rawSide === 'UP' || rawSide === 'DOWN' ? rawSide : null;
+    const pct = Math.round(p * 100);
+    return {
+      kind: 'PWIN',
+      value: pct,
+      label: `P(WIN${side ? ` ${side}` : ''})${n !== null ? ` · n=${n}` : ''}`,
+      n,
+      side,
+      word: pWinLabel(pct),
+    };
+  }
+  const c = num(decision?.confidence);
+  if (c !== null) {
+    return { kind: 'ENGINE_SCORE', value: Math.round(c), label: 'ENGINE SCORE', n: null, side: null, word: confidenceLabel(c) };
+  }
+  return { kind: 'NONE', value: null, label: 'NO DATA', n: null, side: null, word: 'NO DATA' };
+}

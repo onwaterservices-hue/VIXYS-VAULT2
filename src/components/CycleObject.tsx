@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { useCanonical15mDecision } from "../hooks/useCanonical15mDecision";
 import type { NormalizedLifecycleState } from "../hooks/useCanonical15mDecision";
+import { headline } from "../lib/engineSemantics";
 
 /**
  * VIXY VAULT - CYCLE OBJECT
@@ -65,7 +66,9 @@ export default function CycleObject({ compact = false }: { compact?: boolean }) 
   }, [feedBad, isLoading, remaining]);
 
   const dir: string | null = decision?.direction === "UP" || decision?.direction === "DOWN" ? decision.direction : null;
-  const conf: number | null = Number.isFinite(decision?.confidence) ? Math.round(Number(decision.confidence)) : null;
+  // Same headline as the Prediction Center ring and the V2 rail: calibrated
+  // P(win) when a table cell matches, else the engine score labelled as such.
+  const hl = headline(decision);
   const showCall = phase === "LOCKED" || phase === "PROTECTED" || phase === "SETTLED";
   const outcome: string | null = phase === "SETTLED" && decision?.finalOutcome ? String(decision.finalOutcome) : null;
   const dirColor = dir === "UP" ? "var(--vx-up)" : dir === "DOWN" ? "var(--vx-down)" : "var(--vx-text-2)";
@@ -109,8 +112,8 @@ export default function CycleObject({ compact = false }: { compact?: boolean }) 
             )}
 
             {!isLoading && showCall && dir && (
-              <span className="font-mono text-white/70" style={{ fontSize: compact ? 11 : 14 }}>
-                {conf !== null ? conf + "% confidence" : "\u2014"}
+              <span className="font-mono text-white/70" style={{ fontSize: compact ? 11 : 14 }} title={hl.word}>
+                {hl.value !== null ? hl.value + "% " + hl.label.toLowerCase() : "\u2014"}
               </span>
             )}
             {!isLoading && showCall && (

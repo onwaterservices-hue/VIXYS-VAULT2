@@ -53,6 +53,17 @@ Read first: `ENGINE_PROGRESS.md` (SESSION 5 = the 52% root cause),
   `convictionTrail`. Pinned by `tests/calibrated-conviction.characterization.mjs`.
   Observation only — nothing gates on it until L5 passes falsification.
 
+- **One headline, everywhere (SESSION 7)** — `engineSemantics.headline()` is
+  the single source of "the number": calibrated P(win) (labelled with side
+  and n, worded by `pWinLabel`) when the table has a cell, else ENGINE SCORE
+  (worded by `confidenceLabel`), else "—". Prediction Center ring, V2 rail,
+  hub hero and Command Center ring all read it; the hub's seeded defaults
+  (78 / 87 / 22 / TRENDING_BULL / $64,591.20) are gone. The Prediction Center
+  page carries no invented figures (PR #42); the chart draws the engine's
+  real locks and settlements. Engine-count audit: ONE live engine
+  (`runMarketEngineTick`); the OG client engine is dead code slated for
+  removal.
+
 ### NEXT (in order; each research-gated)
 1. **L5 falsification** (`L5_FALSIFICATION_MISSION.md`) on the 21-day trade
    data — untouched final OOS, threshold perturbation, dimension ablation,
