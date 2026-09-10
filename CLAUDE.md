@@ -166,10 +166,16 @@ when a copy of it does.
   75 / 6 / 3; LATE ≥660s 68 / 5 / 3. `strike15mResolved` is a separate term
   in `allowed`. The real applied bar is on the canonical payload as `lockGate`;
   top-level `lockTier` is a legacy binary and does not reflect it.
-- **Known regression on main (`2deba55`), pinned by name, not fixed:** for
-  720–779s the gate returns `allowed=true` while emitting `ENTRY_WINDOW_EXPIRED`
-  and `lock15mCycle`'s commit point refuses. The tests will FAIL when it is
-  fixed — update them deliberately when you do.
+- **REGRESSION-2deba55 is FIXED (ALIGNED-780):** the gate window, its reason
+  check and `lock15mCycle`'s commit point all agree at 780s, pinned by
+  `tests/lock-gate.composition.mjs` ("ALIGNED-780") and
+  `tests/lock-gate.invariants.mjs` TEST 6. Only the lifecycle label flips to
+  `ENTRY_WINDOW_CLOSED` at 720s when no lock happened (cosmetic).
+- **`VIXY_LOCK_RULE=strike_side` is a FILTER, not the stand-alone rule.** It
+  can only add a denial to the engine's own gate. The stand-alone policy that
+  was falsified on untouched data (`L5_PROMOTION_REPORT.md`) would need a
+  `strike_side_only` mode; that is a lock-gate change and requires the
+  owner's explicit authorization before it is written.
 - **Layer 5 (strike-side probability) is observation-first and flag-gated.**
   `computeStrikeSideProbability` always runs and is exposed as
   `lockGate.strikeSide` on the canonical payload; it changes `allowed` only
