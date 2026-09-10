@@ -61,8 +61,13 @@ Read first: `ENGINE_PROGRESS.md` (SESSION 5 = the 52% root cause),
   (78 / 87 / 22 / TRENDING_BULL / $64,591.20) are gone. The Prediction Center
   page carries no invented figures (PR #42); the chart draws the engine's
   real locks and settlements. Engine-count audit: ONE live engine
-  (`runMarketEngineTick`); the OG client engine is dead code slated for
-  removal.
+  (`runMarketEngineTick`); the OG client engine was removed (PR #44).
+- **Layer-5 shadow is durable (SESSION 7)** — `shadow_l5/<cycleId>` merges
+  every instance's slice; settlement attaches the merged record
+  (`SHADOW_L5_v2`); `GET /api/research/shadow-l5` grades rule would-locks
+  against settled outcomes. This is the data NEXT #1 (falsification, item 7)
+  and NEXT #7 (live shadow) depend on; v1 rows (2 of 200, partial) are not
+  comparable and must not be pooled.
 
 ### NEXT (in order; each research-gated)
 1. **L5 falsification** (`L5_FALSIFICATION_MISSION.md`) on the 21-day trade
