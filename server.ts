@@ -15233,7 +15233,12 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     active15mCycle.intervalEnd ||
     Date.now() + 900000;
   const timeRemaining = market15mState.timeRemaining || 900;
-  const strike = market15mState.strikePrice || spot;
+  // Never substitute the spot for a missing strike. A cold instance whose Kalshi
+  // poll has not answered yet has current15mStrikePrice 0, and "price to beat =
+  // spot" is a fabricated 0-bps distance (seen on the payload right after the
+  // PR #58 deploy: openStrike 77,118.93 = spot, strikeSource PLACEHOLDER).
+  // null here makes the terminal fall back to REFERENCE (CYCLE OPEN).
+  const strike = market15mState.strikePrice > 0 ? market15mState.strikePrice : null;
   const lockedPred = isLocked
     ? {
         direction: active15mCycle.lockedDirection || "UP",

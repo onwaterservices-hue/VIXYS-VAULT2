@@ -51,4 +51,13 @@ t.check('storage key bumped so seeded v1 items are dropped', hook.includes("'vix
 t.section('chart engine events land on the containing bar');
 t.check('lock/settle markers use the last candle whose open <= t', cc.includes('if (ct <= tMs) hit = i;'));
 
+
+t.section('canonical payload: a missing strike is null, never the spot');
+{
+  const s = readRepoFile('server.ts');
+  t.check('openStrike falls back to null when the instance has no strike', s.includes('const strike = market15mState.strikePrice > 0 ? market15mState.strikePrice : null;'));
+  t.check('no spot-as-strike fallback remains', !s.includes('const strike = market15mState.strikePrice || spot;'));
+  t.check('openStrike is the guarded value', s.includes('openStrike: strike,'));
+}
+
 t.done();

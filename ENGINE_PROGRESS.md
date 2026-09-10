@@ -1585,3 +1585,29 @@ on the same span (losses 16:15, 17:00, 17:45 — all BUY_UP against a falling
 tape; the rule was silent on all three). The 15:45 and 16:00 SKIP rows carry
 `strikeSource: SHADOW_MERGED` (PR #55); the 18:00 row's 77,270 is the
 pre-#56 placeholder the report above explains.
+
+**Shipped: PR #57 → main `01ad2d6` (projection), PR #58 → main `d44fd92`,
+deploy success 18:52:28Z. PRODUCTION VERIFIED:** `/api/vixy/15m/current`
+for cycle 15M-2026-09-10T18:45Z answered `lockGate.strikeSource: "KALSHI"`
+with `openStrike 77,118.93` (a Kalshi floor strike, not a round placeholder)
+on 10 consecutive probes; the served bundle `assets/index-JMuZl64S.js`
+contains "PLACEHOLDER · KALSHI STRIKE PENDING" ×1, "PRICE TO BEAT (KALSHI
+STRIKE)" ×1 and reads `strikeSource` ×1. The rendered page still needs a
+signed-in session; the Chrome tab in this session is signed out.
+
+## PR #59 — a missing strike is null, never the spot
+
+One probe in the minute after the PR #58 deploy answered `strikeSource:
+PLACEHOLDER` with `openStrike 77,118.93` — the spot. Cause: the payload
+builder had `const strike = market15mState.strikePrice || spot`, and a
+cold instance's `current15mStrikePrice` is 0 until its Kalshi poll (which
+runs on even engine ticks only) answers — the rollover assignment of the
+round placeholder only fires on a cycle transition, so a mid-cycle boot has
+no strike at all for its first tick or two. For that window the "price to
+beat" shown was the spot itself: a fabricated 0-bps distance. Now
+`openStrike` is `null` when the instance has no strike, and the terminal
+falls back to "REFERENCE (CYCLE OPEN)" from the candle open, which is what
+that number actually is. The only other consumer, `lockedPred.strike`,
+prefers `lockedStrike` and is unaffected. The gate was never affected
+(strike 0 → `NO_PRICE_OR_STRIKE`, fail closed). Pinned in
+`tests/prediction-center-honesty.characterization.mjs`.
