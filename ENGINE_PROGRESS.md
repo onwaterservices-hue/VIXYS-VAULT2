@@ -1611,3 +1611,29 @@ that number actually is. The only other consumer, `lockedPred.strike`,
 prefers `lockedStrike` and is unaffected. The gate was never affected
 (strike 0 → `NO_PRICE_OR_STRIKE`, fail closed). Pinned in
 `tests/prediction-center-honesty.characterization.mjs`.
+
+**Shipped: PR #59 → main `8b01e83`, deploy success 19:01:02Z. PRODUCTION
+VERIFIED:** 12 consecutive probes of `/api/vixy/15m/current` in the minute
+after the deploy (cycle 15M-2026-09-10T19:00Z, 75–78s in) answered
+`strikeSource: KALSHI`, `openStrike 77,216.28` against spot 77,182.78 —
+the strike is a Kalshi floor strike and no longer equal to the spot. The
+cold-instance null itself was not caught in those probes (every answer came
+from an instance whose poll had already run); the pin in
+`tests/prediction-center-honesty.characterization.mjs` covers the code path.
+
+## PR #60 — today's record from the real ledger (`/api/signal/daily-tally`)
+
+HaydBot publishes "TODAY'S RECORD, resets at midnight". VIXY now publishes
+the same thing from the ledger, server-computed, with the evidence beside it:
+`GET /api/signal/daily-tally[?day=YYYY-MM-DD]` → for the UTC day, the
+engine's graded locks (`record "W–L"`, `hitRatePct`, `resolved`, `skips`,
+`pending`, `coveragePct` of cycles elapsed) and, on the SAME rows, the
+strike-side rule's shadow would-locks graded against the settled strike —
+only rows with a settled price and a Kalshi-sourced strike count (`graded`,
+`fired`, `ungradeable`, `since` = earliest gradeable row). Demo rows and
+`DATA_INVALID_STRIKE` rows are excluded; an empty day is `0–0` with null
+rates. The prediction center polls it once a minute and shows one chip in
+the LOCK READINESS header: `TODAY · ENGINE 6–3 (67%) · 2 SKIP · RULE 7–0
+(100%)`, with the day, cycles elapsed and the "since" time in the tooltip.
+`tests/daily-tally.characterization.mjs` executes the real route against
+fixture rows (29 checks). Nothing on the chip is derived client-side.
