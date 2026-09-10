@@ -1237,3 +1237,137 @@ every earlier run said.
 The replay is not the production ledger (round strike vs Kalshi floor
 strike; seeded PRNG; no cross-asset feed). It is the shipped code path on
 data the table never saw.
+
+## Shipped: PR #52 → main `65c0b36`, deploy success 14:42:48Z, PRODUCTION VERIFIED
+
+Live payload (`/api/vixy/15m/current`, cycle 15M-2026-09-10T14:30Z):
+`lockGate.lockRule: "off"`, `lockPolicy: "ENGINE_GATE"`, `lockRuleDecides:
+false`; new `FEED` row `3061ms / <10s` gating:true; every engine row
+gating:true; `CALIBRATED_P` gating:false labelled "(Layer 5, flag off)".
+Production behaviour is unchanged, as intended: the mode exists and is off.
+The rendered LOCK READINESS panel could not be re-checked visually in this
+session — the Chrome tab's session had signed out (the page shows the
+public shell and `/api/research/shadow-l5` answers AUTHENTICATION_REQUIRED);
+the panel's strings are pinned by `tests/strike-side-only.behaviour.mjs`.
+
+## "THE REAL BTC MODEL" — v2 candidates, pre-registered, one look at TEST
+
+`scripts/replay15m/research/strikeSideV2.ts`. Protocol fixed before any
+number was seen: FIT → VAL (2026-09-06/07, 191 cycles) selects by "VAL win
+≥ 0.95, Wilson-lo ≥ 0.90, ≥ 30 locks, then highest lock rate, then fewer
+dims"; the chosen candidate is scored ONCE on TEST (2026-09-08 → 09-10,
+209 cycles, trade prints — the same untouched window v1 was falsified on).
+Candidates are empirical tables (minN 30) keyed by decision-time features:
+`cp|dist7|vol` (v1 structure), `cp|dist7`, `+trend60`, `+trend300`,
+`vol+trend60`, `+flow60` (taker buy share, trades only), `dist12` (finer
+bins), `dist12+trend60`, `dist12+vol`. Policy identical to the shipped one.
+
+**Run A — FIT on 12 days of trade prints (Aug 25 → Sep 5, 1,144 cycles).**
+```
+candidate                    VAL locks  VAL win   VAL wilsonLo | TEST locks  TEST win
+M0 shipped v1 (candles 27d)     56/191  100.0%     93.6%      |   95/209     98.9%   (published)
+M1 cp|dist7|vol (trades)        58      98.3%      90.9%      |   95         94.7%   [88.3, 97.7]
+M2 cp|dist7                     25     100.0%      86.7%      |   --
+M3 +trend60                     35     100.0%      90.1%      |   --
+M4 +trend300                    25     100.0%      86.7%      |   --
+M5 vol+trend60                  30     100.0%      88.6%      |   --
+M6 +flow60                      33     100.0%      89.6%      |   --
+M7 dist12                       34     100.0%      89.8%      |   --
+M8 dist12+trend60               34      97.1%      85.1%      |   --
+M9 dist12+vol                   57     100.0%      93.7%      |   --
+```
+Chosen M1 (highest VAL lock rate among eligible). On TEST: the same 95
+locks as the shipped table, **94.7% vs 98.9%** — worse. Every feature
+variant cut coverage on VAL without adding precision.
+
+**Run B — FIT on 56 days of candles (Jul 12 → Sep 5, 5,376 cycles; 140
+chunks fetched from Coinbase, 0 missing).**
+```
+candidate                    VAL locks  VAL win   VAL wilsonLo | TEST locks  TEST win
+M0 shipped v1 (candles 27d)     43/191  100.0%     91.8%      |   95/209     98.9%   (published)
+M1 cp|dist7|vol (candles 56d)   63      98.4%      91.5%      |  110         95.5%   [89.8, 98.0]
+M5 vol+trend60                  53     100.0%      93.2%      |   --
+M9 dist12+vol                   54     100.0%      93.4%      |   --
+M8 dist12+trend60               51     100.0%      93.0%      |   --
+M3 +trend60                     45     100.0%      92.1%      |   --
+(M2, M4, M7: 43–44 locks, 100%)
+```
+Chosen M1 again. On TEST: **110 locks (52.6%) at 95.5%** vs the shipped
+95 (45.5%) at 98.9%. Its 0.95+ cells are calibrated (predicted 97.7%,
+realised 98.2%): the extra locks come from cells that only cross minN with
+more history, and those cells sit nearer the bar.
+
+**Conclusion (measured, not chosen):** no candidate beats the shipped table
+on data none of them saw. Features computable at decision time (momentum
+relative to the side, 5-minute momentum, taker flow, finer distance bins)
+add no precision; they only shrink coverage. More history buys coverage
+(+15 locks) at a precision cost (−3.5 pts) — a trade the bar already offers
+(`VIXY_LOCK_RULE_BAR=0.93` gave 59% coverage at 93.5% in the perturbation
+table). **v2 is NOT promoted.** The "real BTC model" for the product's own
+criterion is the one already shipped; the levers that move outcomes are the
+bar (coverage vs precision) and, once measured, the Kalshi price at lock
+(edge vs market), not a new feature set. Both candidate tables were left in
+the session scratch for the record; neither is checked in.
+
+## LIVE SHADOW vs REPLAY — the reconciliation the mission asked for (item 7)
+
+Public ledger (`/api/signal/resolved-log?limit=200`, rows 2026-09-08 22:45 →
+09-10 14:45Z) against a replay of the SHIPPED `strike_side_only` gate on
+trade prints fetched for 2026-09-10 04:00 → 14:45Z (43 cycles, a −2% day).
+
+```
+replay, shipped mode, today       locks 22/43 (51.2%)   20W / 2L = 90.9%   Brier 0.086
+   losses: 05:15 DOWN@720s (lost by $19.64), 12:15 DOWN@720s (lost by $40)
+live shadow would-locks (19)      gradeable 10          8W / 2L = 80.0%
+   9 could not be graded: their SKIP rows carry targetStrike 0
+```
+
+Cycle-by-cycle the two disagree in a way that is diagnostic, not noise:
+
+- **13:00Z** replay: lock DOWN at 774s → WIN. Live: rule fired **UP at 604s**
+  in cell `600|3|M` (p 0.958, n 48) → LOSS. **13:30Z** replay: lock UP at
+  669s → WIN under the replay's rounded strike 76,890; live: rule fired UP at
+  600s in `600|3|M`; the real Kalshi strike was 76,925.65 and it settled at
+  76,911.41 → LOSS.
+- Every replay lock is in an **H** vol cell; the live shadow fires **M** cells
+  the replay never reaches. Cause: `cycleHigh/cycleLow` are instance memory,
+  and a cold instance (most of the 60–140 per cycle) sees only the range
+  since its own boot → smaller range → lower vol tercile → a thinner cell at
+  a thinner lead (3–6 bps) than the measured policy would take. That is a
+  real precision leak in the shipped code path, not a regime story.
+- The replay's strike is `round(spot/10)*10`; Kalshi's floor strike is not.
+  On 13:30Z that $35 difference flipped the outcome. The replay must take
+  the real strike where the ledger has it (todo: `--strikes <ledger.json>`).
+- 9 of 19 live would-locks were ungradeable because SKIP rows are written
+  with `active15mCycle.strikePrice`, which is 0 on a cold instance (78 of
+  the last 112 SKIP rows). The live readout therefore only ever graded the
+  biased subset where the engine ALSO locked.
+
+### Fixed at the source (this branch)
+
+- **Cold-instance range hydration.** On its first tick, an instance marks
+  `rangeSource = instance_from_open` (≤60s into the cycle) or
+  `instance_partial`; a partial instance hydrates the range since open ONCE
+  from Coinbase 1-minute candles (the table's own source; 4s timeout;
+  single-flight; retried after 20s; discarded on rollover). Until that lands,
+  `computeStrikeSideProbability` returns `PARTIAL_CYCLE_RANGE` — unknown,
+  never low — so neither the shadow nor `strike_side_only` can act on a
+  known-partial range. Tests, replay and warm instances (no `rangeSource`)
+  are unchanged.
+- **SKIP rows carry the real strike and a `settledSide`.** The gate keeps
+  `active15mCycle.strikePrice` current while the entry window is open, both
+  SKIP writers use it, and the rollover writer records the settled side of
+  the strike (`actualOutcome` stays NEUTRAL: the engine made no call).
+- **The shadow would-lock is self-contained**: `strike`, `spot`,
+  `rangeSource`, `rangeBps` at fire time. The research grader grades lock
+  rows by `actualOutcome`, SKIP rows by `settledSide`, then by the
+  would-lock's own strike vs settlement price, and never against a strike-0
+  placeholder.
+- The lifecycle label `ENTRY_WINDOW_CLOSED` now flips at 780s with the gate.
+
+**What this means for flag-on:** the 97.3% replay number is for the FULL
+range. Live, before this fix, the rule was firing on partial ranges and
+running 8/10 today. Keep the shadow running with these fixes deployed and
+re-read `/api/research/shadow-l5` (now gradeable on skipped cycles) before
+setting `VIXY_LOCK_RULE=strike_side_only`. Pinned in
+`tests/cycle-range-and-skip-ledger.invariants.mjs`.

@@ -487,6 +487,22 @@ if (hi && lo) {
   const unk = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.cycleHigh = 0; e.active15mCycle.cycleLow = 0; });
   t.eq('rule mode: p unknown -> DENIED (fail closed)', unk.g.allowed, false);
   t.check('rule mode: cites STRIKE_SIDE_UNKNOWN', unk.g.reasons.some((r) => r.includes('STRIKE_SIDE_UNKNOWN')));
+  // A cold instance that has not yet hydrated the cycle range must not act on
+  // the partial range it has (it bins volatility low and lands in cells the
+  // measured policy never reaches). Same inputs as ruleOn, range marked partial.
+  const partial = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.rangeSource = 'instance_partial'; });
+  t.eq('rule mode: partial cycle range -> DENIED', partial.g.allowed, false);
+  t.eq('rule mode: partial cycle range -> lockRuleDecides false', partial.g.lockRuleDecides, false);
+  t.check('rule mode: partial cycle range cites PARTIAL_CYCLE_RANGE', partial.g.reasons.some((r) => r.includes('STRIKE_SIDE_UNKNOWN (PARTIAL_CYCLE_RANGE)')), partial.g.reasons.join('|'));
+  const hydrated = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.rangeSource = 'candles+instance'; });
+  t.eq('rule mode: hydrated range -> ALLOWED again', hydrated.g.allowed, true);
+  const fromOpen = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.rangeSource = 'instance_from_open'; });
+  t.eq('rule mode: range seen from open -> ALLOWED', fromOpen.g.allowed, true);
+  // Same fail-closed behaviour is visible in observation mode: p is unknown, never low.
+  const partialOff = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'off')(e); e.active15mCycle.rangeSource = 'instance_partial'; });
+  t.eq('flag OFF: partial range -> strikeSide.p null (observation says unknown)', partialOff.env.active15mCycle.lockEligibility.strikeSide.p, null);
+  t.eq('flag OFF: partial range -> reason PARTIAL_CYCLE_RANGE', partialOff.env.active15mCycle.lockEligibility.strikeSide.reason, 'PARTIAL_CYCLE_RANGE');
+  t.eq('flag OFF: partial range does not change allowed (engine gate unchanged)', partialOff.g.allowed, true);
   const early = runGateSpot(200, withRule(hi[0], 'UP', RULE));
   t.eq('rule mode: 200s -> DENIED (observation floor is hard)', early.g.allowed, false);
   t.check('rule mode: 200s cites OBSERVATION_TIME_INSUFFICIENT', early.g.reasons.some((r) => r.includes('OBSERVATION_TIME_INSUFFICIENT')));
