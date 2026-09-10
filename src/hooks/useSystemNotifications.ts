@@ -15,95 +15,25 @@ export interface SystemAlertItem {
   actionTab?: string;
 }
 
-const STORAGE_KEY = 'vixy_system_notifications_v1';
+// v2: the v1 store seeded every browser with invented items ("1,250 BTC
+// transferred to Binance", "+$28.4M Taker Buy delta") and a timer added a
+// random templated "whale" alert every 75s. Bumping the key drops those from
+// existing browsers; only engine transitions create alerts now.
+const STORAGE_KEY = 'vixy_system_notifications_v2';
 const SOUND_STORAGE_KEY = 'vixy_sound_alerts_enabled';
-
-// Sample whale & order flow templates to enrich live stream
-const WHALE_EVENT_TEMPLATES = [
-  {
-    title: 'Whale Inflow Detected',
-    description: '1,250 BTC transferred to Binance ($100.4M)',
-    type: 'WHALE' as const,
-    priority: 'HIGH' as const,
-    actionTab: 'crypto_prediction_center',
-  },
-  {
-    title: 'Order Flow Delta Spike',
-    description: '+$28.4M Taker Buy delta absorbed across Coinbase & Binance',
-    type: 'ORDERFLOW' as const,
-    priority: 'MEDIUM' as const,
-    actionTab: 'crypto_prediction_center',
-  },
-  {
-    title: 'Large Buy Wall Absorption',
-    description: '850 BTC Ask depth absorbed at key $80,400 pivot',
-    type: 'WHALE' as const,
-    priority: 'MEDIUM' as const,
-    actionTab: 'crypto_prediction_center',
-  },
-  {
-    title: 'Multi-Venue Sentiment Surge',
-    description: 'Kalshi & Polymarket YES consensus shifted +6.2%',
-    type: 'ORDERFLOW' as const,
-    priority: 'NORMAL' as const,
-    actionTab: 'crypto_prediction_center',
-  },
-  {
-    title: 'Volatility Squeeze Release',
-    description: 'Bollinger Bandwidth 2.1% — directional breakout underway',
-    type: 'REGIME' as const,
-    priority: 'MEDIUM' as const,
-    actionTab: 'crypto_prediction_center',
-  }
-];
 
 export function useSystemNotifications(canonicalDecision?: Canonical15mDecision) {
   const [notifications, setNotifications] = useState<SystemAlertItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch (e) {
       // ignore
     }
-
-    // Default rich initial live notifications
-    const now = Date.now();
-    return [
-      {
-        id: 'initial_15m_lock',
-        type: '15M_LOCK',
-        title: '15M BTC Cycle Locked',
-        description: 'Direction: UP | Conviction 91% | Strike: $80,350',
-        timestamp: now - 3 * 60 * 1000,
-        read: false,
-        priority: 'HIGH',
-        direction: 'UP',
-        confidence: 91,
-        actionTab: 'crypto_prediction_center',
-      },
-      {
-        id: 'initial_whale_inflow',
-        type: 'WHALE',
-        title: 'Whale Inflow Detected',
-        description: '1,250 BTC transferred to Binance ($100.4M)',
-        timestamp: now - 7 * 60 * 1000,
-        read: false,
-        priority: 'HIGH',
-        actionTab: 'crypto_prediction_center',
-      },
-      {
-        id: 'initial_orderflow',
-        type: 'ORDERFLOW',
-        title: 'Order Flow Delta Spike',
-        description: '+$28.4M Taker Buy delta absorbed across venues',
-        timestamp: now - 14 * 60 * 1000,
-        read: true,
-        priority: 'MEDIUM',
-        actionTab: 'crypto_prediction_center',
-      },
-    ];
+    return [];
   });
 
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
@@ -116,7 +46,6 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
   });
 
   const lastProcessedCycleRef = useRef<{ id: string; state: string }>({ id: '', state: '' });
-  const audioContextReadyRef = useRef<boolean>(false);
 
   // Persist notifications
   useEffect(() => {
@@ -159,7 +88,7 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
     }
   }, [soundEnabled]);
 
-  // Sync real-time 15M Decision locks & state transitions
+  // Real engine transitions only: lock, protection, settlement, skip.
   useEffect(() => {
     if (!canonicalDecision || !canonicalDecision.decisionId) return;
 
@@ -167,32 +96,33 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
     const currentState = canonicalDecision.currentState || '';
     const last = lastProcessedCycleRef.current;
 
-    // Check if this cycle & state transition has already triggered an alert
     if (last.id === cycleId && last.state === currentState) {
       return;
     }
 
     lastProcessedCycleRef.current = { id: cycleId, state: currentState };
 
-    const conf = canonicalDecision.confidence || 91;
-    const dir = canonicalDecision.direction || 'UP';
-    const spot = canonicalDecision.currentSpot ? `$${canonicalDecision.currentSpot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '$80,350';
+    const conf = typeof canonicalDecision.confidence === 'number' ? canonicalDecision.confidence : null;
+    const dir = canonicalDecision.direction === 'UP' || canonicalDecision.direction === 'DOWN' ? canonicalDecision.direction : null;
+    const spot = typeof canonicalDecision.currentSpot === 'number' && canonicalDecision.currentSpot > 0
+      ? `$${canonicalDecision.currentSpot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : null;
 
-    if (currentState === 'LOCKED_UP' || currentState === 'LOCKED_DOWN') {
+    if ((currentState === 'LOCKED_UP' || currentState === 'LOCKED_DOWN') && dir) {
       addNotification({
         type: '15M_LOCK',
         title: `15M BTC Cycle Locked — ${dir}`,
-        description: `Direction: ${dir} | Conviction ${conf}% | Spot Pivot: ${spot}`,
+        description: [`Direction: ${dir}`, conf !== null ? `Engine score ${conf}` : null, spot ? `Spot at lock: ${spot}` : null].filter(Boolean).join(' | '),
         priority: 'HIGH',
-        direction: dir as 'UP' | 'DOWN',
-        confidence: conf,
+        direction: dir,
+        confidence: conf ?? undefined,
         actionTab: 'crypto_prediction_center',
       });
     } else if (currentState === 'PROTECTED') {
       addNotification({
         type: 'PROTECTION',
         title: 'VIXY Protection Activated',
-        description: `Autonomous capital preservation shield engaged. Volatility defense active.`,
+        description: 'Reversal veto engaged for this cycle.',
         priority: 'HIGH',
         actionTab: 'crypto_prediction_center',
       });
@@ -200,7 +130,7 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
       addNotification({
         type: '15M_SETTLED',
         title: `15M Cycle Settled (${canonicalDecision.finalOutcome || 'RESOLVED'})`,
-        description: `Settlement verified against canonical benchmark index.`,
+        description: 'Settled against the ledger settlement price.',
         priority: 'MEDIUM',
         actionTab: 'crypto_prediction_center',
       });
@@ -208,23 +138,12 @@ export function useSystemNotifications(canonicalDecision?: Canonical15mDecision)
       addNotification({
         type: 'REGIME',
         title: '15M Cycle Skipped',
-        description: 'Multi-venue confluence criteria not met. Capital preserved.',
+        description: 'Lock gate not met this cycle. No position.',
         priority: 'NORMAL',
         actionTab: 'crypto_prediction_center',
       });
     }
   }, [canonicalDecision, addNotification]);
-
-  // Periodic simulated live whale & order flow stream (every 60-90s)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Pick random whale template
-      const template = WHALE_EVENT_TEMPLATES[Math.floor(Math.random() * WHALE_EVENT_TEMPLATES.length)];
-      addNotification(template);
-    }, 75000);
-
-    return () => clearInterval(interval);
-  }, [addNotification]);
 
   const markAllAsRead = useCallback(() => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));

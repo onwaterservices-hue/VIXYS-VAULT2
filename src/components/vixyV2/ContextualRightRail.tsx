@@ -24,6 +24,7 @@ import { Canonical15mDecision } from '../../types/canonicalDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 import { computeEvidenceVectors } from '../../utils/evidenceVectors';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
+import { fetchResolvedLogApi } from '../../services/api';
 
 interface ContextualRightRailProps {
   decision?: Canonical15mDecision;
@@ -67,10 +68,64 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
     return computeEvidenceVectors(decision);
   }, [decision]);
 
-  const reversalRisk = decision?.reversalRisk ?? 28;
+  // No invented 28: when the engine has not reported a reversal risk the
+  // panel says so instead of grading a number nobody computed.
+  const reversalRiskRaw: number | null =
+    typeof decision?.reversalRisk === 'number' && Number.isFinite(decision.reversalRisk) ? decision.reversalRisk : null;
   const reversalAssessment = useMemo(() => {
-    return getReversalRiskAssessment(reversalRisk);
-  }, [reversalRisk]);
+    return getReversalRiskAssessment(reversalRiskRaw ?? 0);
+  }, [reversalRiskRaw]);
+
+  // Engine event feed: settled cycles from the ledger (polled every 60s) plus
+  // this cycle's lock. Replaces a list of templated "whale" lines that were
+  // never measured.
+  const [ledgerRows, setLedgerRows] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const j: any = await fetchResolvedLogApi();
+        if (cancelled || !j) return;
+        const rows = Array.isArray(j.recentResolved)
+          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 4)
+          : [];
+        setLedgerRows(rows);
+      } catch {
+        // The panel shows its empty state; nothing is invented to fill it.
+      }
+    };
+    load();
+    const id = setInterval(load, 60000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const feedItems = useMemo(() => {
+    const items: Array<{ key: string; text: string; tMs: number; tone: 'up' | 'down' | 'skip' | 'lock' }> = [];
+    if (decision && (decision.currentState === 'LOCKED_UP' || decision.currentState === 'LOCKED_DOWN') && typeof decision.lockedAt === 'number') {
+      items.push({
+        key: 'lock',
+        text: `Locked ${decision.direction} this cycle${confidence !== null ? ` · engine score ${confidence}` : ''}`,
+        tMs: decision.lockedAt,
+        tone: 'lock',
+      });
+    }
+    for (const r of ledgerRows) {
+      const t = r.intervalEnd ? Date.parse(r.intervalEnd) : r.resolvedAt ? Date.parse(r.resolvedAt) : NaN;
+      if (!Number.isFinite(t)) continue;
+      if (r.decision === 'SKIP') {
+        items.push({ key: `s-${t}`, text: 'Cycle skipped — lock gate not met', tMs: t, tone: 'skip' });
+      } else {
+        const px = typeof r.settlementPrice === 'number' && r.settlementPrice > 0 ? ` @ $${Math.round(r.settlementPrice).toLocaleString()}` : '';
+        items.push({ key: `r-${t}`, text: `${r.direction} lock settled ${r.wasCorrect ? 'WIN' : 'LOSS'}${px}`, tMs: t, tone: r.wasCorrect ? 'up' : 'down' });
+      }
+    }
+    return items.sort((a, b) => b.tMs - a.tMs).slice(0, 4);
+  }, [decision, ledgerRows, confidence]);
+
+  const ago = (t: number) => {
+    const m = Math.max(0, Math.round((nowMs - t) / 60000));
+    return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ago`;
+  };
 
   return (
     <aside className={`w-[320px] shrink-0 space-y-3.5 font-mono select-none ${className}`}>
@@ -228,41 +283,39 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
             </div>
 
             <div className="text-right shrink-0">
-              <div className="text-sm font-black text-slate-100 font-mono">{reversalAssessment.score}%</div>
-              <div className={`text-[8.5px] font-bold uppercase ${reversalAssessment.colorClass}`}>
-                {reversalAssessment.label}
+              <div className="text-sm font-black text-slate-100 font-mono">{reversalRiskRaw === null ? '—' : `${reversalAssessment.score}%`}</div>
+              <div className={`text-[8.5px] font-bold uppercase ${reversalRiskRaw === null ? 'text-slate-500' : reversalAssessment.colorClass}`}>
+                {reversalRiskRaw === null ? 'NO DATA' : reversalAssessment.label}
               </div>
             </div>
           </div>
 
           <div className="p-2 rounded-lg bg-[#080512] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono">
             <span className="text-slate-400">SHIELD STATUS:</span>
-            <span className={`font-bold ${reversalAssessment.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
-              {reversalAssessment.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
+            <span className={`font-bold ${reversalRiskRaw === null ? 'text-slate-500' : reversalAssessment.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
+              {reversalRiskRaw === null ? 'NO DATA' : reversalAssessment.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
             </span>
           </div>
         </div>
       </V2Panel>
 
-      {/* 5. LIVE MARKET FEED */}
-      <V2Panel title="LIVE MARKET FEED" icon={Zap} padding="sm">
+      {/* 5. ENGINE EVENT FEED — real locks and settlements from the ledger */}
+      <V2Panel title="ENGINE EVENT FEED" icon={Zap} padding="sm">
         <div className="space-y-1.5 text-[10.5px]">
-          <div className="flex items-center justify-between p-2 rounded-lg bg-[#080512] border border-purple-900/30 gap-2">
-            <span className="text-slate-300 truncate">BTC momentum turned bullish</span>
-            <span className="text-[9px] text-slate-500 shrink-0 font-mono">2m ago</span>
-          </div>
-          <div className="flex items-center justify-between p-2 rounded-lg bg-[#080512] border border-purple-900/30 gap-2">
-            <span className="text-slate-300 truncate">Large buyer detected (Binance)</span>
-            <span className="text-[9px] text-slate-500 shrink-0 font-mono">3m ago</span>
-          </div>
-          <div className="flex items-center justify-between p-2 rounded-lg bg-[#080512] border border-purple-900/30 gap-2">
-            <span className="text-slate-300 truncate">Funding rate remains neutral</span>
-            <span className="text-[9px] text-slate-500 shrink-0 font-mono">4m ago</span>
-          </div>
-          <div className="flex items-center justify-between p-2 rounded-lg bg-[#080512] border border-purple-900/30 gap-2">
-            <span className="text-slate-300 truncate">Whale wallet moved 1,250 BTC</span>
-            <span className="text-[9px] text-slate-500 shrink-0 font-mono">8m ago</span>
-          </div>
+          {feedItems.length === 0 ? (
+            <div className="p-2 rounded-lg bg-[#080512] border border-purple-900/30 text-slate-500">
+              No engine events loaded yet.
+            </div>
+          ) : (
+            feedItems.map((it) => (
+              <div key={it.key} className="flex items-center justify-between p-2 rounded-lg bg-[#080512] border border-purple-900/30 gap-2">
+                <span className={`truncate ${it.tone === 'up' ? 'text-emerald-300' : it.tone === 'down' ? 'text-rose-300' : it.tone === 'lock' ? 'text-cyan-300' : 'text-amber-300'}`}>
+                  {it.text}
+                </span>
+                <span className="text-[9px] text-slate-500 shrink-0 font-mono">{ago(it.tMs)}</span>
+              </div>
+            ))
+          )}
         </div>
       </V2Panel>
     </aside>

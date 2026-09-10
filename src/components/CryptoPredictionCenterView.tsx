@@ -164,6 +164,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const gatesPassing = gateRows.filter((c) => c.pass).length;
   const l5Row = lockChecks.find((c) => c.id === 'CALIBRATED_P') ?? null;
   const priceSide: 'UP' | 'DOWN' | null = calibrated?.currentSide === 'UP' || calibrated?.currentSide === 'DOWN' ? calibrated.currentSide : null;
+  // Kalshi's implied YES price, shown only when the server marks the read
+  // as real (fresh within its own window); never a default.
+  const marketRead = (() => {
+    const m = (canonicalDecision as any)?.marketRead;
+    return m && m.real === true && typeof m.kalshiImpliedYes === 'number' ? (m as { kalshiImpliedYes: number; ageMs: number | null }) : null;
+  })();
   const trail =(((canonicalDecision as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null; s: number; d: number | null }>);
   const distBinLabel = (() => {
     const bins: Array<[number, number | null]> = [[0, 3], [3, 6], [6, 10], [10, 15], [15, 25], [25, 40], [40, null]];
@@ -564,6 +570,34 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [recentSettled, setRecentSettled] = useState<{
     rows: any[]; winRatePct: number | null; brier: number | null; total: number | null;
   } | null>(null);
+  // Coinbase L2 + tape snapshot for the cross-venue card: the same endpoint the
+  // radar polls. A failed read leaves the rows saying "unavailable".
+  const [radarSnap, setRadarSnap] = useState<{
+    book: { bidDepthBTC: number; askDepthBTC: number; ratio: number; spreadUSD: number } | null;
+    skew: { takerBuyBTC: number; takerSellBTC: number; takerBuyShare: number; window?: { trades?: number } } | null;
+    fetchedAt: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/radar?asset=${encodeURIComponent(selectedAsset)}&_t=${Date.now()}`, { cache: 'no-store' });
+        const body: any = await res.json();
+        if (cancelled) return;
+        if (!res.ok || body?.error) { setRadarSnap(null); return; }
+        setRadarSnap({
+          book: body.book && typeof body.book.bidDepthBTC === 'number' && typeof body.book.askDepthBTC === 'number' ? body.book : null,
+          skew: body.skew && typeof body.skew.takerBuyShare === 'number' ? body.skew : null,
+          fetchedAt: typeof body.fetchedAt === 'number' ? body.fetchedAt : null,
+        });
+      } catch {
+        if (!cancelled) setRadarSnap(null);
+      }
+    };
+    poll();
+    const id = setInterval(poll, 6000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [selectedAsset]);
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -1001,7 +1035,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                         invented: P(win) is an empirical frequency (n shown), and
                         when no cell matches the line says so. */}
                     {calibrated?.pWin !== null && calibrated?.pWin !== undefined ? (
-                      <div className="text-[10px] font-bold mt-1 text-slate-300 flex items-center gap-1 whitespace-nowrap">
+                      <div className="text-[10px] font-bold mt-1 text-slate-300 flex items-center gap-1 flex-wrap min-w-0">
                         <span className={`font-mono font-black text-sm ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
                           {Math.round(calibrated.pWin * 100)}%
                         </span>
@@ -1015,7 +1049,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                         )}
                       </div>
                     ) : (
-                      <div className="text-[10px] font-bold mt-1 text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                      <div className="text-[10px] font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap min-w-0">
                         <span className="font-mono font-black text-sm text-slate-500">—</span>
                         <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">P(WIN) · no matching history yet</span>
                       </div>
@@ -1403,10 +1437,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               {/* Gate rows — full labels, current vs required */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
                 {gateRows.map((c) => (
-                  <div key={c.id} className="flex items-center justify-between gap-3 text-[11px] font-mono py-0.5 border-b border-purple-900/20">
-                    <span className={`flex items-center gap-1.5 min-w-0 ${c.pass ? 'text-emerald-200' : 'text-slate-400'}`}>
-                      <span className={`inline-flex w-3.5 h-3.5 rounded-full items-center justify-center text-[9px] border ${c.pass ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300' : 'bg-black/40 border-purple-800/60 text-purple-500'}`}>{c.pass ? '✓' : ''}</span>
-                      <span className="truncate">{c.label}</span>
+                  <div key={c.id} className="flex items-start justify-between gap-3 text-[11px] font-mono py-1 border-b border-purple-900/20" title={`${c.label}: ${c.current} (need ${c.required})`}>
+                    <span className={`flex items-start gap-1.5 min-w-0 ${c.pass ? 'text-emerald-200' : 'text-slate-400'}`}>
+                      <span className={`inline-flex shrink-0 mt-[1px] w-3.5 h-3.5 rounded-full items-center justify-center text-[9px] border ${c.pass ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300' : 'bg-black/40 border-purple-800/60 text-purple-500'}`}>{c.pass ? '✓' : ''}</span>
+                      <span className="leading-tight">{c.label}</span>
                     </span>
                     <span className="shrink-0 text-right">
                       <span className={c.pass ? 'text-emerald-300 font-bold' : 'text-slate-200 font-bold'}>{String(c.current)}</span>
@@ -1439,10 +1473,19 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </div>
                 </div>
 
-                {calibrated?.marketForSide !== null && calibrated?.marketForSide !== undefined && calibrated?.edgeVsMarketPct !== null && calibrated?.edgeVsMarketPct !== undefined ? (
-                  <div className="flex items-center justify-between rounded-xl bg-black/40 border border-purple-900/50 px-3 py-2 text-[11px] font-mono">
-                    <span className="text-purple-200">Kalshi prices {priceSide ?? 'this side'} at <strong className="text-white">{Math.round((calibrated.marketForSide as number) * 100)}%</strong></span>
-                    <span className={`font-bold ${calibrated.edgeVsMarketPct >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>table − market {calibrated.edgeVsMarketPct >= 0 ? '+' : ''}{calibrated.edgeVsMarketPct} pts</span>
+                {marketRead ? (
+                  <div className="flex items-center justify-between gap-2 rounded-xl bg-black/40 border border-purple-900/50 px-3 py-2 text-[11px] font-mono">
+                    <span className="text-purple-200">
+                      Kalshi prices UP <strong className="text-white">{Math.round(marketRead.kalshiImpliedYes * 100)}%</strong>
+                      <span className="text-purple-400/70"> · DOWN {Math.round((1 - marketRead.kalshiImpliedYes) * 100)}%</span>
+                    </span>
+                    {calibrated?.edgeVsMarketPct !== null && calibrated?.edgeVsMarketPct !== undefined ? (
+                      <span className={`font-bold shrink-0 ${calibrated.edgeVsMarketPct >= 0 ? 'text-emerald-300' : 'text-rose-300'}`} title="Calibrated P(win) for the current price side minus Kalshi's price for that side">
+                        table − market {calibrated.edgeVsMarketPct >= 0 ? '+' : ''}{calibrated.edgeVsMarketPct} pts
+                      </span>
+                    ) : (
+                      <span className="text-purple-300/60 shrink-0" title="No calibrated cell for this checkpoint yet, so no edge is claimed">no edge claimed yet</span>
+                    )}
                   </div>
                 ) : (
                   <div className="rounded-xl bg-black/30 border border-purple-900/40 px-3 py-2 text-[10px] font-mono text-purple-300/60">
@@ -1893,68 +1936,103 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             </p>
 
             <div className="p-3 rounded-2xl bg-[#120930] border border-purple-800/30 space-y-1 text-xs">
-              <div className="text-[10px] text-amber-300 font-bold">PRIMARY HYPOTHESIS</div>
+              <div className="text-[10px] text-amber-300 font-bold">WHERE THIS CYCLE STANDS</div>
               <div className="text-white font-medium">
-                Buyers absorbing ask volume at strike support ($64,495), maintaining momentum vector +14.2.
+                {(() => {
+                  const dist = typeof calibrated?.distBps === 'number' ? Math.abs(calibrated.distBps) : null;
+                  const biasWord = isUp ? 'UP' : isDown ? 'DOWN' : 'NEUTRAL';
+                  const aligned = `${evidenceSummary.alignedCount}/${evidenceSummary.totalValidCount} evidence families aligned ${biasWord}`;
+                  if (dist !== null && priceSide) {
+                    const p = calibrated?.pWin;
+                    const pTxt = typeof p === 'number'
+                      ? `calibrated P(win ${priceSide}) ${Math.round(p * 100)}% (n=${calibrated?.n ?? 0})`
+                      : 'no calibrated cell yet at this checkpoint';
+                    return `Price is ${dist} bps ${priceSide === 'UP' ? 'above' : 'below'} the strike; ${aligned}; ${pTxt}.`;
+                  }
+                  return `Strike or price side not resolved yet this cycle; ${aligned}.`;
+                })()}
               </div>
             </div>
           </div>
 
-          {/* CROSS-VENUE EVIDENCE MATRIX WITH SMOOTH SYNC HIGHLIGHTS */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
-            <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
-              <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
-                <Layers className="w-4 h-4 text-cyan-400" />
-                <span>CROSS-VENUE EVIDENCE</span>
+          {/* CROSS-VENUE EVIDENCE — every row is a live read or says it is not.
+              Coinbase depth/tape come from /api/radar, Kalshi from the engine's
+              market block (only when the server marks the read recent). There is
+              no direct Polymarket 15M feed, so that row shows none. */}
+          {(() => {
+            const book = radarSnap?.book ?? null;
+            const skew = radarSnap?.skew ?? null;
+            const liveRows = (book ? 1 : 0) + (skew ? 1 : 0) + (marketRead ? 1 : 0);
+            const toneClass = (tone: 'up' | 'down' | 'neutral' | 'off') =>
+              tone === 'up' ? 'text-emerald-400' : tone === 'down' ? 'text-rose-400' : tone === 'neutral' ? 'text-white' : 'text-slate-500';
+            const rows: Array<{ key: string; label: string; value: string; tone: 'up' | 'down' | 'neutral' | 'off'; note: string }> = [
+              {
+                key: 'depth',
+                label: 'Coinbase L2 resting depth (top levels)',
+                note: 'Resting bid vs ask size on the top levels of the Coinbase Exchange book. Resting depth, not taker flow.',
+                value: book ? `${book.bidDepthBTC.toFixed(2)} / ${book.askDepthBTC.toFixed(2)} BTC · ${book.ratio.toFixed(2)}x bid` : 'unavailable',
+                tone: book ? (book.ratio >= 1.1 ? 'up' : book.ratio <= 0.9 ? 'down' : 'neutral') : 'off',
+              },
+              {
+                key: 'skew',
+                label: `Coinbase taker skew${skew?.window?.trades ? ` (last ${skew.window.trades} prints)` : ''}`,
+                note: 'Share of recent Coinbase prints that were taker buys, from the live tape.',
+                value: skew ? `${Math.round(skew.takerBuyShare * 100)}% buy · ${skew.takerBuyBTC.toFixed(2)} vs ${skew.takerSellBTC.toFixed(2)} BTC` : 'unavailable',
+                tone: skew ? (skew.takerBuyShare >= 0.55 ? 'up' : skew.takerBuyShare <= 0.45 ? 'down' : 'neutral') : 'off',
+              },
+              {
+                key: 'kalshi',
+                label: 'Kalshi 15M YES (implied)',
+                note: "Kalshi's implied YES price for this cycle's contract; shown only when the server marks the read as recent.",
+                value: marketRead ? `${Math.round(marketRead.kalshiImpliedYes * 100)}% YES` : 'no recent read',
+                tone: marketRead ? 'neutral' : 'off',
+              },
+              {
+                key: 'poly',
+                label: 'Polymarket 15M',
+                note: 'There is no direct Polymarket feed for the 15-minute contract, so no number is shown rather than a derived one.',
+                value: 'no direct feed',
+                tone: 'off',
+              },
+            ];
+            return (
+              <div className="p-4 sm:p-5 rounded-3xl bg-[#0b061d] border border-purple-800/40 space-y-3 shadow-xl">
+                <div className="flex items-center justify-between pb-2 border-b border-purple-900/40">
+                  <div className="flex items-center gap-2 text-xs font-black text-white font-sans">
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    <span>CROSS-VENUE EVIDENCE</span>
+                  </div>
+                  <span className={`text-[10px] font-bold flex items-center gap-1 ${liveRows >= 3 ? 'text-emerald-400' : liveRows > 0 ? 'text-amber-300' : 'text-slate-500'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${liveRows >= 3 ? 'bg-emerald-400 animate-ping' : liveRows > 0 ? 'bg-amber-300' : 'bg-slate-600'}`} />
+                    <span>LIVE ({liveRows}/4)</span>
+                  </span>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  {rows.map((r) => (
+                    <motion.div
+                      key={r.key}
+                      whileHover={{ x: 2 }}
+                      title={r.note}
+                      className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
+                    >
+                      <span className="text-purple-300 min-w-0 truncate">{r.label}</span>
+                      <span className={`font-black shrink-0 ${toneClass(r.tone)}`}>{r.value}</span>
+                    </motion.div>
+                  ))}
+                </div>
               </div>
-              <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                <span>SYNCHRONIZED (4/4)</span>
-              </span>
-            </div>
-
-            <div className="space-y-2 text-xs">
-              <motion.div
-                whileHover={{ x: 2 }}
-                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-              >
-                <span className="text-purple-300">Binance Spot Taker Delta</span>
-                <span className="text-emerald-400 font-black">+$28.4M BUY</span>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ x: 2 }}
-                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-              >
-                <span className="text-purple-300">Coinbase Premium Index</span>
-                <span className="text-emerald-400 font-black">+$12.50</span>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ x: 2 }}
-                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-              >
-                <span className="text-purple-300">Kalshi 15M YES Probability</span>
-                <span className="text-white font-black">57% YES</span>
-              </motion.div>
-
-              <motion.div
-                whileHover={{ x: 2 }}
-                className="flex items-center justify-between p-2 rounded-xl bg-[#120930] border border-purple-800/30 transition-all"
-              >
-                <span className="text-purple-300">Polymarket 15M Odds</span>
-                <span className="text-white font-black">59% YES</span>
-              </motion.div>
-            </div>
-          </div>
+            );
+          })()}
         </div>
 
-        {/* NEURAL SIGNAL DECOMPOSITION MATRIX (6 Factors Attribution) */}
+        {/* EVIDENCE FAMILY MATRIX — the engine's real family scores, no weights */}
         <NeuralDecompositionMatrix
-          conviction={displayConfidence}
-          isUp={isUp}
-          lockQuality={lockQualityScore ?? 0}
-          reversalRisk={displayReversalRisk}
+          vectors={evidenceSummary.vectors}
+          alignedCount={evidenceSummary.alignedCount}
+          totalValidCount={evidenceSummary.totalValidCount}
+          direction={isUp ? 'UP' : isDown ? 'DOWN' : 'NEUTRAL'}
+          engineScore={typeof displayConfidence === 'number' ? displayConfidence : null}
         />
 
         {/* QUANTITATIVE SCENARIOS & AUTONOMOUS EXECUTION 2-COLUMN GRID */}

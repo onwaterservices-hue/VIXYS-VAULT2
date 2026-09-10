@@ -15097,7 +15097,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     evidenceAlignment: evidenceAlign,
     // Calibrated conviction that BUILDS: see calibratedBlock above.
     calibrated: calibratedBlock,
-    market: {
+    // `market` above is the "BTC/USD" label; the Kalshi read lives under its
+    // own key so the two never collide (they did, and the label was lost).
+    marketRead: {
       kalshiImpliedYes: kalshiReal ? currentKalshiImpliedProb : null,
       ageMs: kalshiImpliedAtMs > 0 ? Date.now() - kalshiImpliedAtMs : null,
       real: kalshiReal,

@@ -865,10 +865,19 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       {showTikTokAiOverlay && engineEvents && visibleCandles.length > 0 && (
         <g>
           {(() => {
+            // The bar that CONTAINS the event time (last candle whose open
+            // time is <= t), so a lock at 02:37 sits on the 02:30 bar of a
+            // 15m chart rather than the one after it.
             const idxForTime = (tMs: number | null): number => {
               if (!tMs) return -1;
-              const i = visibleCandles.findIndex((c) => typeof c.time === 'number' && (c.time as number) >= tMs);
-              return i;
+              let hit = -1;
+              for (let i = 0; i < visibleCandles.length; i++) {
+                const ct = visibleCandles[i]?.time;
+                if (typeof ct !== 'number') continue;
+                if (ct <= tMs) hit = i;
+                else break;
+              }
+              return hit;
             };
             const marks: React.ReactNode[] = [];
             // Settled locks (ledger truth): ✓ win / ✗ loss / ○ skip at the settlement bar.
