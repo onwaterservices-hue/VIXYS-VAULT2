@@ -3799,7 +3799,15 @@ function canLockCurrentCycle(livePrice) {
       const cp = typeof strikeSide.checkpointSec === "number" ? strikeSide.checkpointSec : null;
       if (cp !== null && cp !== sh.lastSeenCheckpoint) { checkpointChanged = sh.lastSeenCheckpoint !== undefined; sh.lastSeenCheckpoint = cp; }
       if (!sh.wouldLock && strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780) {
-        sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key };
+        // Mission item 8: the market's price for this state at the moment the
+        // rule fires. Only a REAL recent Kalshi read counts; the 0.54 seed and
+        // the pipeline's `|| 0.52` are not prices and are recorded as null.
+        const kalshiRealNow = kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3;
+        sh.wouldLock = {
+          atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key,
+          kalshiYes: kalshiRealNow ? currentKalshiImpliedProb : null,
+          kalshiAgeMs: kalshiRealNow ? Date.now() - kalshiImpliedAtMs : null,
+        };
         lockJustSet = true;
       }
     }

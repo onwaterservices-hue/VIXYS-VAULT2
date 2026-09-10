@@ -13,6 +13,7 @@ t.check('a write is triggered only when the rule fires or a >=30s-old instance c
 const recorderCode = recorder.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 t.check('the recorder never references the gate verdict (code, not comments)', !/\ballowed\b/.test(recorderCode));
 t.check('would-lock still requires p >= bar inside the legal window', recorder.includes('strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780'));
+t.check('would-lock captures the Kalshi implied price only when the read is real (never the seed)', recorder.includes('kalshiYes: kalshiRealNow ? currentKalshiImpliedProb : null') && recorder.includes('kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3'));
 
 t.section('persistShadowL5: throttled, guarded, merge-write, no queue');
 const persist = sliceBetween(serverSrc, 'async function persistShadowL5(', '__name(persistShadowL5', 'persistShadowL5');
