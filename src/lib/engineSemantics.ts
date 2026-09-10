@@ -167,8 +167,10 @@ export function headline(
       word: pWinLabel(pct),
     };
   }
+  // The engine never scores 0 (its floor is 40–42); 0 is the client
+  // placeholder before the first payload, so it is "no number", not a score.
   const c = num(decision?.confidence);
-  if (c !== null) {
+  if (c !== null && c > 0) {
     return { kind: 'ENGINE_SCORE', value: Math.round(c), label: 'ENGINE SCORE', n: null, side: null, word: confidenceLabel(c) };
   }
   return { kind: 'NONE', value: null, label: 'NO DATA', n: null, side: null, word: 'NO DATA' };

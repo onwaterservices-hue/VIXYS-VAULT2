@@ -410,7 +410,6 @@ import {
   createDiscordLinkStatusHandler,
   createDiscordUnlinkHandler,
 } from "./src/bot/discordOAuth";
-import { AutomationScheduler } from "./src/bot/services/automationScheduler";
 // Statically imported so esbuild embeds this config directly into the
 // bundled dist/server.cjs -- a runtime fs.readFileSync(process.cwd() + ...)
 // depends on this exact file being present at that path in the deployed

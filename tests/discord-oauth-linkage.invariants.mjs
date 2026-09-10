@@ -195,7 +195,8 @@ check('restored settings drop the cached Discord identity',
 check('a bare spread of the cached object is not returned',
   !/if \(saved\) return JSON\.parse\(saved\);/.test(app));
 // Gating itself must still require BOTH signals (historical bug #3).
-for (const f of ['src/components/OneHourDeskView.tsx','src/components/ExplainabilityVaultView.tsx','src/components/LiveDashboard.tsx']) {
+// (LiveDashboard.tsx was removed with the OG client engine in SESSION 7 — it was never mounted.)
+for (const f of ['src/components/OneHourDeskView.tsx','src/components/ExplainabilityVaultView.tsx']) {
   check(`${f.split('/').pop()} requires discordLinked AND guildMember`,
     /discordLinked[\s\S]{0,60}&&[\s\S]{0,60}guildMember/.test(R(f)));
 }

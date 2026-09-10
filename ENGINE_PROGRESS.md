@@ -388,12 +388,35 @@ importers outside itself), `testing/vixyBidirectionalTestHarness.ts` →
 `VixyLearningPanel.tsx` (never mounted), and the OG views `LiveDashboard.tsx`
 / `StarterDeskView.tsx` / `ExecutiveCommandCenter.tsx` + `useLiveSignal`
 (imported in App.tsx, never rendered). `AutomationScheduler` is imported by
-server.ts and never started. **Removal is the next PR** (trim
-`canonicalDecisionEngine.ts` to the epoch helper + placeholder factory,
-delete the rest, fix the two tests that read `LiveDashboard.tsx`).
+server.ts and never started. **Removed (PR after #43, 16 files / 6,552 lines
+deleted):** `canonicalDecisionEngine.ts` is trimmed to the epoch helper and
+the client placeholder (now all-zero / NEUTRAL, `serverSource:
+CLIENT_PLACEHOLDER`, so a cold screen shows dashes — `headline()` treats a
+0 score as "no number" because the engine's floor is 40–42); the
+`intelligence/*` tree, the daemon, the bounded tick, the bidirectional
+harness, `VixyLearningPanel`, `LiveDashboard`, `StarterDeskView`,
+`ExecutiveCommandCenter`, `useLiveSignal` and `automationScheduler` are
+gone, with their imports in `App.tsx` / `server.ts`.
+`tests/calibration-and-tiers` PART B1/B2 (which pinned the DEAD client
+engine's tiers — EARLY 120–300s, bars 90/82/74 — as if they were
+production's) is replaced by PART B0 asserting the engine is gone; the real
+tiers stay pinned in PART B3 and `tests/lock-gate.*.mjs`.
+
+**PR #43 production-verified (Chrome, live payload `confidence 91,
+calibrated.pWin 0.747, n 75, side UP`):** hub hero "UP 75% · P(WIN UP) ·
+n=75 · CLEAR EDGE" with the derived sentence, metric card "P(WIN) 75%", lock
+quality "75 / 100 · 9/11 families aligned"; Prediction Center ring "75%"
+(title "Calibrated P(win) · CLEAR EDGE"), "P(WIN UP) · n=75", ENGINE SCORE
+shown beneath (88→91), never as the headline. The V2 rail could not be
+screenshotted this session (the Chrome window was minimized, 0×0, so the
+`aside` is not in the DOM); it reads the same `headline()` call and is
+pinned by the tests.
 
 **Still fabricated on OTHER pages (not yet touched):** `OneHourDeskView.tsx:692`
 "Taker Delta +$28.4M", `ReplayCenterView.tsx:123` `binanceDelta: '+$28.4M'`.
+**Placeholder note:** for the ≤3s before the first payload the hub's LOCK
+QUALITY / alignment cards read "0 / 100" and "0/11" from the neutral
+placeholder rather than a dash; the headline, ring and hero already show "—".
 
 ---
 

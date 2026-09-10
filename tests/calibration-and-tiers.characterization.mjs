@@ -23,7 +23,9 @@
 //     minLockScore 90/82/74. Not wired into the live decision.
 // The canonical payload's top-level `lockTier` is STILL a legacy binary
 // (SKIP -> NONE, else STANDARD); the real applied bar is exposed as `lockGate`.
-import { serverSrc, readRepoFile, sliceBetween, createHarness } from './_engineSource.mjs';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { serverSrc, readRepoFile, sliceBetween, createHarness, ROOT } from './_engineSource.mjs';
 import { transformSync } from 'esbuild';
 // getCalibratedConfidence carries TS annotations; transpile types away only.
 const stripTypes = (src) => transformSync(src, { loader: 'ts', format: 'cjs' }).code;
@@ -140,59 +142,22 @@ t.eq('LOCKED (unsettled) logs are excluded',
   makeCalib(Array.from({ length: 20 }, () => ({ status: 'LOCKED', confidence: 87, wasCorrect: true })))(87).sampleSize, 0);
 
 // ---------------------------------------------------------------------------
-// PART B -- lock-tier selection by observation seconds (client engine)
+// PART B -- lock tiers. PART B1/B2 used to pin LOCK_POLICIES and tier
+// selection in src/services/intelligence/continuousIntelligenceEngine.ts —
+// the OG CLIENT-SIDE engine, which nothing mounted or imported and which was
+// removed in SESSION 7 (engine-count audit: production has one engine,
+// runMarketEngineTick in server.ts). Those tiers (EARLY 120–300s, bars
+// 90/82/74) were never the tiers production applied; the real ones are
+// pinned below and in tests/lock-gate.*.mjs.
 // ---------------------------------------------------------------------------
-const engineSrc = readRepoFile('src/services/intelligence/continuousIntelligenceEngine.ts');
-
-t.section('PART B1: LOCK_POLICIES thresholds as shipped');
-const policiesSrc = sliceBetween(engineSrc, 'export const LOCK_POLICIES', 'export type SkipReasonCode', 'LOCK_POLICIES');
-const LOCK_POLICIES = new Function(
-  `${policiesSrc.replace('export const LOCK_POLICIES: Record<LockTier, LockPolicyTierConfig> =', 'const LOCK_POLICIES =').replace(/;\s*$/, '')}; return LOCK_POLICIES;`,
-)();
-
-const EXPECTED_POLICIES = {
-  EARLY:    { minObservationSeconds: 120, maxObservationSeconds: 300, minLockScore: 90, minConviction: 88, maxReversalRisk: 10 },
-  STANDARD: { minObservationSeconds: 300, maxObservationSeconds: 480, minLockScore: 82, minConviction: 80, maxReversalRisk: 20 },
-  LATE:     { minObservationSeconds: 480, maxObservationSeconds: 840, minLockScore: 74, minConviction: 72, maxReversalRisk: 30 },
-  NONE:     { minObservationSeconds: 0,   maxObservationSeconds: 900, minLockScore: 100, minConviction: 100, maxReversalRisk: 0 },
-};
-for (const [tier, expected] of Object.entries(EXPECTED_POLICIES)) {
-  for (const [field, value] of Object.entries(expected)) {
-    t.eq(`${tier}.${field}`, LOCK_POLICIES[tier][field], value);
-  }
-}
-
-t.section('PART B2: tier selection by observationSeconds');
-const tierSrc = sliceBetween(engineSrc, "  let activeTier: LockTier = 'NONE';", '  const policy = LOCK_POLICIES[targetTier];', 'tier selection');
-function selectTier(observationSeconds) {
-  const js = tierSrc.replace(/: LockTier/g, '');
-  return new Function('observationSeconds', `${js}; return { activeTier, targetTier };`)(observationSeconds);
-}
-const TIER_CASES = [
-  [0,   'NONE',     'EARLY'],
-  [119, 'NONE',     'EARLY'],
-  [120, 'EARLY',    'EARLY'],
-  [299, 'EARLY',    'EARLY'],
-  [300, 'STANDARD', 'STANDARD'],
-  [479, 'STANDARD', 'STANDARD'],
-  [480, 'LATE',     'LATE'],
-  [840, 'LATE',     'LATE'],
-  [841, 'NONE',     'LATE'],
-  [899, 'NONE',     'LATE'],
-];
-for (const [secs, activeTier, targetTier] of TIER_CASES) {
-  const r = selectTier(secs);
-  t.eq(`observationSeconds=${secs} -> activeTier ${activeTier}`, r.activeTier, activeTier);
-  t.eq(`observationSeconds=${secs} -> targetTier ${targetTier}`, r.targetTier, targetTier);
-}
-// PINNED-AS-IS: targetTier never resolves to NONE, so the NONE policy's
-// deliberately unreachable thresholds (minLockScore 100) are never applied.
-// Below 120s the EARLY policy is used, and past 840s the LATE policy is used --
-// i.e. the LOOSEST policy governs the end of the cycle.
-t.eq('PINNED-AS-IS: past the LATE window, policy falls back to LATE not NONE', selectTier(880).targetTier, 'LATE');
-t.eq('PINNED-AS-IS: before the EARLY window, policy is already EARLY', selectTier(10).targetTier, 'EARLY');
-t.check('PINNED-AS-IS: targetTier is never NONE at any second of the cycle',
-  Array.from({ length: 901 }, (_, s) => selectTier(s).targetTier).every((x) => x !== 'NONE'));
+t.section('PART B0: the OG client engine is gone and nothing imports it');
+t.check('continuousIntelligenceEngine.ts no longer exists',
+  !existsSync(join(ROOT, 'src/services/intelligence/continuousIntelligenceEngine.ts')));
+t.check('no source imports services/intelligence',
+  !readRepoFile('src/hooks/useCanonical15mDecision.ts').includes('services/intelligence') &&
+  !readRepoFile('src/services/engine/canonicalDecisionEngine.ts').includes("from '../intelligence"));
+t.check('the client placeholder no longer carries engine/tick/settle paths',
+  !readRepoFile('src/services/engine/canonicalDecisionEngine.ts').includes('executeCanonical15mTick'));
 
 t.section('PART B3: server gate tiers vs the canonical payload');
 // The gate computes the adaptive tier (2deba55)...
