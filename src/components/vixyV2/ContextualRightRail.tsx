@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   ChevronRight
 } from 'lucide-react';
+import { confidenceLabel } from '../../lib/engineSemantics';
 import { 
   V2Panel, 
   V2Button, 
@@ -48,7 +49,9 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
   }, []);
 
   const direction = decision?.direction || 'UP';
-  const confidence = decision?.confidence || 78;
+  // No invented 78: the rail shows the engine's number or none at all.
+  const confidence: number | null =
+    typeof decision?.confidence === 'number' && Number.isFinite(decision.confidence) ? decision.confidence : null;
   const isUp = direction === 'UP';
 
   const secondsRemaining = useMemo(() => {
@@ -94,12 +97,12 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-base font-black text-white">{direction}</span>
-                  <V2Badge variant={confidence >= 75 ? 'emerald' : 'amber'} size="xs">
-                    {confidence}%
+                  <V2Badge variant={(confidence ?? 0) >= 75 ? 'emerald' : 'amber'} size="xs">
+                    {confidence !== null ? `${confidence}%` : '—'}
                   </V2Badge>
                 </div>
                 <div className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold truncate">
-                  {confidence >= 75 ? 'HIGH CONFIDENCE' : 'MODERATE CONFIDENCE'}
+                  {confidenceLabel(confidence)}
                 </div>
               </div>
             </div>

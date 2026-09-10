@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { lockQualityLabel, alignmentLabel, evidenceState } from '../lib/engineSemantics';
+import { fetchResolvedLogApi } from '../services/api';
 import {
   Sparkles,
   TrendingUp,
@@ -137,6 +139,15 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     | undefined;
   const lockGateMin: number | null = typeof lockGate?.minLockQuality === 'number' ? lockGate.minLockQuality : null;
   const lockGateTier: string | null = lockGate?.tier ?? null;
+  // The gate's own verdict. The old "EARLY LOCK READY" chip was a client-side
+  // guess (conf>=75 && lq>=78 && rr<=25) that could light up while the real
+  // gate was refusing; now the chip only appears when the engine says eligible.
+  const gateEligible: boolean = Boolean(
+    (canonicalDecision as any)?.lockEligibility?.eligible ?? (canonicalDecision as any)?.lockGate?.eligible ?? false,
+  );
+  const evidenceAlignmentCount: number | null =
+    typeof (canonicalDecision as any)?.evidenceAlignment === 'number' ? (canonicalDecision as any).evidenceAlignment : null;
+  const alignmentWord = alignmentLabel(evidenceAlignmentCount);
   const feedHealth = (canonicalDecision as any)?.feedHealth as
     | { dataAgeMs: number; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
     | undefined;
@@ -512,14 +523,62 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     );
   }, [chartCandles, spotPrice, spotChange, displayReversalRisk, displayConfidence, canonicalDecision?.direction, isUp, isDown]);
 
-  // Recent 15M Cycle Settlement Strip
-  const recentCycles = useMemo(() => [
-    { id: '#48291', dir: 'UP', conf: displayConfidence, price: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, status: 'ACTIVE', pnl: '+2.4%' },
-    { id: '#48290', dir: 'UP', conf: 75, price: '$64,480.10', status: 'WIN', pnl: '+1.8%' },
-    { id: '#48289', dir: 'DOWN', conf: 82, price: '$64,210.00', status: 'WIN', pnl: '+2.1%' },
-    { id: '#48288', dir: 'UP', conf: 72, price: '$64,100.50', status: 'WIN', pnl: '+1.5%' },
-    { id: '#48287', dir: 'SKIP', conf: 52, price: '$63,980.00', status: 'SKIPPED', pnl: '0.0%' },
-  ], [displayConfidence, spotPrice]);
+  // Recent 15M settlements — REAL rows from the shared ledger, or an honest
+  // empty state. This strip used to be five hardcoded rows ($64k-era prices,
+  // invented WIN/pnl) under a literal "SESSION WIN RATE: 78% / BRIER 0.142".
+  // Measured reality at the time: 49.5% / 0.377.
+  const [recentSettled, setRecentSettled] = useState<{
+    rows: any[]; winRatePct: number | null; brier: number | null; total: number | null;
+  } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const j: any = await fetchResolvedLogApi();
+        if (cancelled || !j) return;
+        const rows = Array.isArray(j.recentResolved)
+          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 4)
+          : [];
+        setRecentSettled({
+          rows,
+          winRatePct: typeof j.stats?.winRatePct === 'number' ? j.stats.winRatePct : null,
+          brier: typeof j.stats?.avgBrierScore === 'number' ? j.stats.avgBrierScore : null,
+          total: typeof j.stats?.total === 'number' ? j.stats.total : null,
+        });
+      } catch {
+        if (!cancelled) setRecentSettled({ rows: [], winRatePct: null, brier: null, total: null });
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [canonicalDecision?.cycleId]);
+
+  const recentCycles = useMemo(() => {
+    const live = {
+      id: String(canonicalDecision?.cycleId || '').slice(15, 20) || 'LIVE',
+      dir: isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN',
+      conf: displayConfidence as number | null,
+      price: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+      status: 'ACTIVE',
+      outcome: 'LIVE',
+    };
+    const settled = (recentSettled?.rows || []).map((r: any) => {
+      const isSkipRow = r.decision === 'SKIP';
+      const strike = Number(r.strike ?? r.targetStrike ?? 0);
+      const settle = Number(r.settlementPrice ?? 0);
+      return {
+        id: String(r.cycleId || '').slice(15, 20) || '—',
+        dir: r.direction === 'UP' || r.direction === 'DOWN' ? r.direction : 'SKIP',
+        conf: typeof r.confidence === 'number' ? r.confidence : null,
+        price: isSkipRow
+          ? 'no lock'
+          : `${strike > 0 ? `$${strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'} → ${settle > 0 ? `$${settle.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}`,
+        status: isSkipRow ? 'SKIP' : r.wasCorrect ? 'WIN' : 'LOSS',
+        outcome: isSkipRow ? 'SKIPPED' : r.wasCorrect ? 'WIN' : 'LOSS',
+      };
+    });
+    return [live, ...settled];
+  }, [canonicalDecision?.cycleId, isSkip, isUp, displayConfidence, spotPrice, recentSettled]);
 
   return (
     <motion.div
@@ -866,9 +925,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   <span>VIXY BIAS</span>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  {isEarlyLockQualified && !isActuallyLocked && (
+                  {gateEligible && !isActuallyLocked && (
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-mono font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse whitespace-nowrap">
-                      ⚡ EARLY LOCK READY
+                      ⚡ LOCK GATE OPEN
                     </span>
                   )}
                   <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase whitespace-nowrap ${
@@ -946,8 +1005,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 <Activity className="w-3 h-3 text-emerald-400 shrink-0" />
                 <span className="text-[9px] sm:text-[10px]">MARKET ALIGNMENT</span>
               </div>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold font-mono text-[9px] tracking-wide uppercase whitespace-nowrap shrink-0 shadow-[0_0_8px_rgba(16,185,129,0.15)]">
-                STRONG
+              <span className={`px-1.5 py-0.5 rounded font-bold font-mono text-[9px] tracking-wide uppercase whitespace-nowrap shrink-0 border ${
+                alignmentWord === 'STRONG'
+                  ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300 shadow-[0_0_8px_rgba(16,185,129,0.15)]'
+                  : alignmentWord === 'MODERATE'
+                  ? 'bg-amber-500/15 border-amber-500/30 text-amber-300'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+              }`}>
+                {alignmentWord}{typeof evidenceAlignmentCount === 'number' ? ` ${evidenceAlignmentCount}/11` : ''}
               </span>
             </div>
           </div>
@@ -1115,7 +1180,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </div>
 
               <div className="text-base sm:text-lg font-black text-white font-sans tracking-tight leading-tight">
-                {lockQualityScore === null ? 'AWAITING ENGINE DATA' : lockQualityScore >= 80 ? 'OPTIMAL LOCK' : lockQualityScore >= 70 ? 'QUALIFIED LOCK' : lockQualityScore >= 50 ? 'STRONG EVIDENCE' : 'BUILDING EVIDENCE'}
+                {lockQualityLabel(lockQualityScore, lockGateMin)}
               </div>
 
               {/* High Precision Gradient Progress Bar */}
@@ -1743,8 +1808,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             <span>RECENT VIXY LOCK SETTLEMENTS</span>
           </div>
           <div className="flex items-center gap-3 text-xs font-bold">
-            <span className="text-purple-300">SESSION WIN RATE: <span className="text-emerald-400 font-mono font-black">78%</span></span>
-            <span className="text-purple-300">BRIER SCORE: <span className="text-amber-300 font-mono font-black">0.142</span></span>
+            {/* Real ledger statistics, or a dash. Never a literal. */}
+            <span className="text-purple-300">
+              LEDGER WIN RATE{recentSettled?.total != null ? ` (n=${recentSettled.total})` : ''}:{' '}
+              <span className={`font-mono font-black ${recentSettled?.winRatePct != null && recentSettled.winRatePct >= 50 ? 'text-emerald-400' : 'text-amber-300'}`}>
+                {recentSettled?.winRatePct != null ? `${recentSettled.winRatePct}%` : '—'}
+              </span>
+            </span>
+            <span className="text-purple-300">
+              BRIER: <span className="text-amber-300 font-mono font-black">{recentSettled?.brier != null ? recentSettled.brier.toFixed(3) : '—'}</span>
+            </span>
           </div>
         </div>
 
@@ -1758,13 +1831,15 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   ? 'bg-purple-900/30 border-purple-500/50 text-white shadow-[0_2px_12px_rgba(168,85,247,0.2),inset_0_1px_0_rgba(255,255,255,0.08)]'
                   : c.status === 'WIN'
                   ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200 shadow-[0_2px_12px_rgba(16,185,129,0.15),inset_0_1px_0_rgba(255,255,255,0.06)]'
+                  : c.status === 'LOSS'
+                  ? 'bg-rose-950/30 border-rose-500/40 text-rose-200 shadow-[0_2px_12px_rgba(244,63,94,0.15),inset_0_1px_0_rgba(255,255,255,0.06)]'
                   : 'bg-amber-950/20 border-amber-500/30 text-amber-200 shadow-[0_2px_12px_rgba(245,158,11,0.12),inset_0_1px_0_rgba(255,255,255,0.06)]'
               }`}
             >
               <div className="flex items-center justify-between text-[10px] font-bold">
                 <span>{c.id}</span>
                 <span className={`px-1.5 py-0.2 rounded ${
-                  c.status === 'ACTIVE' ? 'bg-purple-600 text-white font-black' : c.status === 'WIN' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-300'
+                  c.status === 'ACTIVE' ? 'bg-purple-600 text-white font-black' : c.status === 'WIN' ? 'bg-emerald-500/20 text-emerald-400' : c.status === 'LOSS' ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'
                 }`}>
                   {c.status}
                 </span>
@@ -1774,9 +1849,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   className="font-black font-sans whitespace-nowrap truncate"
                   style={{ fontSize: 'clamp(0.75rem, 3vw, 0.875rem)' }}
                 >
-                  {c.dir} {c.conf}%
+                  {c.dir}{c.conf !== null && c.conf !== undefined ? ` ${c.conf}%` : ''}
                 </span>
-                <span className="text-xs font-bold font-mono shrink-0">{c.pnl}</span>
+                <span className="text-xs font-bold font-mono shrink-0">{c.outcome}</span>
               </div>
               <div
                 className="text-[10px] text-purple-300/70 mt-0.5 truncate font-mono"
