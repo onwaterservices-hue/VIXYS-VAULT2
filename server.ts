@@ -3788,23 +3788,28 @@ function canLockCurrentCycle(livePrice) {
     }
     sh.ticks += 1;
     sh.lastSec = effElapsed;
-    let cellChanged = false;
+    let checkpointChanged = false;
     let lockJustSet = false;
     if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
       const key = strikeSide.key ?? null;
       if (!sh.lastEval || sh.lastEval.key !== key || sh.lastEval.side !== strikeSide.currentSide) {
-        cellChanged = true;
         if (sh.evals.length < 60) sh.evals.push({ atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key });
       }
       sh.lastEval = { atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key };
+      const cp = typeof strikeSide.checkpointSec === "number" ? strikeSide.checkpointSec : null;
+      if (cp !== null && cp !== sh.lastSeenCheckpoint) { checkpointChanged = sh.lastSeenCheckpoint !== undefined; sh.lastSeenCheckpoint = cp; }
       if (!sh.wouldLock && strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780) {
         sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key };
         lockJustSet = true;
       }
     }
-    // Durable copy: write when the cell changes or the rule fires (forced),
-    // throttled inside persistShadowL5. Fire-and-forget; the gate never waits.
-    if (cellChanged || lockJustSet) void persistShadowL5(sh, lockJustSet);
+    // Durable copy. Production fans out across ~60 short-lived instances per
+    // cycle (61 merged on the first v2 row), so writing on every instance's
+    // first evaluation would cost ~15k Firestore writes/day and could trip the
+    // shared quota circuit that also guards the ledger. Write only when the
+    // rule fires (forced) or when an instance that has been alive >=30s
+    // crosses a checkpoint boundary; settlement flushes the rest.
+    if (lockJustSet || (checkpointChanged && sh.ticks >= 10)) void persistShadowL5(sh, lockJustSet);
   } catch {}
   // ── CONVICTION TRAIL (observation only) ──────────────────────────────────
   // The per-tick trajectory of the calibrated P(win), the engine score and the

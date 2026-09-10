@@ -9,7 +9,7 @@ const t = createHarness('l5-shadow-durable.invariants');
 t.section('the recorder writes a durable slice, but never waits and never decides');
 const recorder = sliceBetween(serverSrc, '// ── LAYER 5 SHADOW (observation only', '// ── CONVICTION TRAIL (observation only)', 'shadow recorder');
 t.check('slice carries coverage (firstSec/lastSec) and a downsampled eval trail', recorder.includes('firstSec: effElapsed, lastSec: effElapsed, evals: []') && recorder.includes('if (sh.evals.length < 60) sh.evals.push('));
-t.check('a write is triggered only when the cell changes or the rule fires', recorder.includes('if (cellChanged || lockJustSet) void persistShadowL5(sh, lockJustSet);'));
+t.check('a write is triggered only when the rule fires or a >=30s-old instance crosses a checkpoint (no first-eval write storm)', recorder.includes('if (lockJustSet || (checkpointChanged && sh.ticks >= 10)) void persistShadowL5(sh, lockJustSet);') && recorder.includes('checkpointChanged = sh.lastSeenCheckpoint !== undefined'));
 const recorderCode = recorder.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
 t.check('the recorder never references the gate verdict (code, not comments)', !/\ballowed\b/.test(recorderCode));
 t.check('would-lock still requires p >= bar inside the legal window', recorder.includes('strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780'));
