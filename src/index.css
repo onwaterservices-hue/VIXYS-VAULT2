@@ -544,12 +544,15 @@ a[role="button"]:active {
   transform: scale(0.985);
 }
 
-/* Soft enter transition every time the active view changes. */
+/* Soft enter transition every time the active view changes.
+   Opacity only — never animate transform here: a transform on the main column
+   makes it the containing block for position:fixed descendants (AdminPanel,
+   module focus modals, provenance modals) and pins them inside the column. */
 @keyframes vxPageEnter {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
-.vx-page-enter { animation: vxPageEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.vx-page-enter { animation: vxPageEnter 0.28s ease-out both; }
 
 /* Referenced by App overlays but never defined until now. */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
