@@ -148,6 +148,28 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const evidenceAlignmentCount: number | null =
     typeof (canonicalDecision as any)?.evidenceAlignment === 'number' ? (canonicalDecision as any).evidenceAlignment : null;
   const alignmentWord = alignmentLabel(evidenceAlignmentCount);
+  // Calibrated conviction (server-computed from strikeSideTable every tick):
+  // pWin is an empirical frequency of similar historical states or null when
+  // no cell matches. The gate checklist and the per-tick trail are the engine's
+  // own state; nothing here is derived client-side.
+  const calibrated = (canonicalDecision as any)?.calibrated as
+    | { pWin: number | null; n: number; reason: string | null; checkpointSec: number | null; distBps: number | null; distBin: number | null; volBin: string | null; currentSide: string | null; marketForSide: number | null; edgeVsMarketPct: number | null; bar: number | null }
+    | null
+    | undefined;
+  const lockChecks = (((canonicalDecision as any)?.lockGate?.checks ?? []) as Array<{ id: string; label: string; pass: boolean; current: string | number; required: string; gating?: boolean }>);
+  const trail = (((canonicalDecision as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null; s: number; d: number | null }>);
+  const distBinLabel = (() => {
+    const bins: Array<[number, number | null]> = [[0, 3], [3, 6], [6, 10], [10, 15], [15, 25], [25, 40], [40, null]];
+    const b = typeof calibrated?.distBin === 'number' ? bins[calibrated.distBin] : undefined;
+    return b ? (b[1] === null ? `${b[0]}+ bps` : `${b[0]}–${b[1]} bps`) : null;
+  })();
+  const trailPath = (() => {
+    const pts = trail.filter((x) => typeof x.p === 'number');
+    if (pts.length < 2) return null;
+    const w = 120, h = 28;
+    const t0 = 0, t1 = 900;
+    return pts.map((x, i) => `${i === 0 ? 'M' : 'L'}${((Math.max(t0, Math.min(t1, x.t)) - t0) / (t1 - t0) * w).toFixed(1)},${(h - (x.p as number) * h).toFixed(1)}`).join(' ');
+  })();
   const feedHealth = (canonicalDecision as any)?.feedHealth as
     | { dataAgeMs: number; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
     | undefined;
@@ -391,6 +413,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? null;
   const lockQualityScore: number | null =
     rawLockScore === null ? null : rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
+  // Headline number for the ring: the calibrated P(win) when it exists, else the engine score.
+  const headlineNumber: number = calibrated?.pWin !== null && calibrated?.pWin !== undefined ? Math.round(calibrated.pWin * 100) : displayConfidence;
 
   // Derive Canonical Cycle Presentation State
   const isActuallyLocked = useMemo(() => {
@@ -961,11 +985,29 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       {biasLabel}
                     </div>
                     
-                    <div className="text-[10px] font-bold mt-1 text-slate-300 flex items-center gap-1 whitespace-nowrap">
-                      <span className={`font-mono font-black ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
-                        {displayConfidence}%
+                    {/* The headline is the CALIBRATED P(win) when the engine has a
+                        matching historical cell; the legacy vote-tally score is
+                        shown beneath it, labelled as what it is. Neither is
+                        invented: P(win) is an empirical frequency (n shown), and
+                        when no cell matches the line says so. */}
+                    {calibrated?.pWin !== null && calibrated?.pWin !== undefined ? (
+                      <div className="text-[10px] font-bold mt-1 text-slate-300 flex items-center gap-1 whitespace-nowrap">
+                        <span className={`font-mono font-black text-sm ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
+                          {Math.round(calibrated.pWin * 100)}%
+                        </span>
+                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">P(WIN) · n={calibrated.n}</span>
+                      </div>
+                    ) : (
+                      <div className="text-[10px] font-bold mt-1 text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                        <span className="font-mono font-black text-sm text-slate-500">—</span>
+                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">P(WIN) · no matching history yet</span>
+                      </div>
+                    )}
+                    <div className="text-[10px] font-bold mt-0.5 text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                      <span className="font-mono font-black text-slate-300">
+                        {displayConfidence}
                       </span>
-                      <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">CONVICTION</span>
+                      <span className="text-purple-300/60 font-sans text-[9px] uppercase tracking-wider" title="Legacy vote-tally score (11 evidence families). Not a probability.">ENGINE SCORE</span>
                     </div>
                   </div>
                 </div>
@@ -987,15 +1029,56 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       stroke="currentColor"
                       fill="none"
                       initial={{ strokeDasharray: '0, 100' }}
-                      animate={{ strokeDasharray: `${displayConfidence}, 100` }}
+                      animate={{ strokeDasharray: `${headlineNumber}, 100` }}
                       transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                       d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                     />
                   </svg>
-                  <span className="absolute font-black text-white font-mono text-[10px] text-center">
-                    {displayConfidence}%
+                  <span className="absolute font-black text-white font-mono text-[10px] text-center" title={calibrated?.pWin != null ? 'Calibrated P(win)' : 'Engine score (no calibrated cell)'}>
+                    {headlineNumber}%
                   </span>
                 </div>
+              </div>
+
+              {/* WHERE THE BOT IS IN THE LOCKING PROCESS — the gate's own
+                  checklist (current vs required) and the calibrated P(win)
+                  trail across this cycle. Both are engine state, not a countdown. */}
+              <div className="mt-2 pt-2 border-t border-purple-900/30 space-y-1.5 relative z-10">
+                <div className="flex items-center justify-between text-[9px] font-mono text-purple-300/70 uppercase tracking-wider">
+                  <span>Lock ladder · {lockChecks.filter((c) => c.pass && !c.gating).length}/{lockChecks.filter((c) => !c.gating).length} gates passing</span>
+                  {calibrated && (
+                    <span title="Checkpoint × distance bin × volatility tercile of the matching historical cell">
+                      {calibrated.checkpointSec ? `t${calibrated.checkpointSec}` : ''}{distBinLabel ? ` · ${distBinLabel}` : ''}{calibrated.volBin ? ` · vol ${calibrated.volBin}` : ''}
+                    </span>
+                  )}
+                </div>
+                {trailPath && (
+                  <div className="flex items-center gap-2">
+                    <svg viewBox="0 0 120 28" className="w-[120px] h-[28px] shrink-0" aria-label="Calibrated P(win) across this cycle">
+                      <line x1="0" y1="14" x2="120" y2="14" stroke="rgba(168,85,247,0.25)" strokeWidth="0.5" strokeDasharray="2,2" />
+                      <path d={trailPath} fill="none" stroke={isUp ? '#34d399' : isDown ? '#fb7185' : '#c4b5fd'} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+                    </svg>
+                    <span className="text-[9px] text-purple-300/60 font-mono">P(win) trail · {trail.filter((x) => typeof x.p === 'number').length} ticks</span>
+                  </div>
+                )}
+                {lockChecks.length > 0 && (
+                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
+                    {lockChecks.filter((c) => ['WINDOW', 'LOCK_QUALITY', 'AGREEMENT', 'MTF', 'REVERSAL', 'STABILITY', 'EVIDENCE', 'CALIBRATED_P'].includes(c.id)).map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-1 text-[9px] font-mono min-w-0" title={`${c.label}: ${c.current} (need ${c.required})`}>
+                        <span className={`truncate ${c.pass ? 'text-emerald-300/90' : c.gating === false ? 'text-purple-300/50' : 'text-slate-400'}`}>
+                          {c.pass ? '✓' : '·'} {c.label.replace(/ \(.*\)$/, '')}
+                        </span>
+                        <span className={`shrink-0 ${c.pass ? 'text-emerald-400' : 'text-slate-500'}`}>{String(c.current)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {calibrated?.edgeVsMarketPct !== null && calibrated?.edgeVsMarketPct !== undefined && calibrated?.marketForSide !== null && (
+                  <div className="text-[9px] font-mono text-purple-300/70 flex items-center justify-between">
+                    <span>Kalshi prices this side at {Math.round((calibrated.marketForSide as number) * 100)}%</span>
+                    <span className={calibrated.edgeVsMarketPct >= 0 ? 'text-emerald-300' : 'text-rose-300'}>edge {calibrated.edgeVsMarketPct >= 0 ? '+' : ''}{calibrated.edgeVsMarketPct}%</span>
+                  </div>
+                )}
               </div>
             </div>
 
