@@ -176,6 +176,22 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     const b = typeof calibrated?.distBin === 'number' ? bins[calibrated.distBin] : undefined;
     return b ? (b[1] === null ? `${b[0]}+ bps` : `${b[0]}–${b[1]} bps`) : null;
   })();
+  // Why there is no P(win) right now, in the engine's own terms. The server
+  // carries the cell coordinates even when the cell is empty, so "no history"
+  // can say which cell and how short it is (minN is 30 in strike-side-v1).
+  const calibratedReasonText = (() => {
+    const base = 'no matching history yet';
+    const n = typeof calibrated?.n === 'number' ? calibrated.n : 0;
+    switch (calibrated?.reason) {
+      case 'INSUFFICIENT_SAMPLE': return `${base} · ${n} of 30 needed in this cell`;
+      case 'BEFORE_FIRST_CHECKPOINT': return `${base} · before the first checkpoint (60s)`;
+      case 'NO_PRICE_OR_STRIKE': return `${base} · strike not resolved`;
+      case 'AT_STRIKE': return `${base} · price exactly at strike`;
+      case 'NO_CYCLE_RANGE': return `${base} · no cycle range yet`;
+      case 'NO_DIST_BIN': return `${base} · distance outside the table`;
+      default: return base;
+    }
+  })();
   const trailPath = (() => {
     const pts = trail.filter((x) => typeof x.p === 'number');
     if (pts.length < 2) return null;
@@ -1055,7 +1071,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     ) : (
                       <div className="text-[10px] font-bold mt-1 text-slate-400 flex items-center gap-1 flex-wrap min-w-0">
                         <span className="font-mono font-black text-sm text-slate-500">—</span>
-                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">P(WIN) · no matching history yet</span>
+                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider" title={calibrated?.reason ? `Engine reason: ${calibrated.reason}` : undefined}>P(WIN) · {calibratedReasonText}</span>
                       </div>
                     )}
                     <div className="text-[10px] font-bold mt-0.5 text-slate-400 flex items-center gap-1 whitespace-nowrap">
@@ -1432,7 +1448,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">{calibrated.checkpointSec ? `t=${calibrated.checkpointSec}s` : 't=—'}</span>
                   <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">{distBinLabel ?? '— bps'}</span>
                   <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">vol {calibrated.volBin ?? '—'}</span>
-                  <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">n={calibrated.n}</span>
+                  <span className={`px-1.5 py-0.5 rounded bg-black/40 border ${calibrated.pWin === null && calibrated.reason === 'INSUFFICIENT_SAMPLE' ? 'border-amber-500/40 text-amber-300' : 'border-purple-900/50 text-purple-200'}`} title={calibrated.pWin === null && calibrated.reason === 'INSUFFICIENT_SAMPLE' ? 'Fewer than 30 historical samples in this cell, so no P(win) is claimed' : undefined}>
+                    n={calibrated.n}{calibrated.pWin === null && calibrated.reason === 'INSUFFICIENT_SAMPLE' ? ' (<30)' : ''}
+                  </span>
                 </div>
               )}
             </div>

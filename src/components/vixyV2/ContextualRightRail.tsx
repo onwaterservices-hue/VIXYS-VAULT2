@@ -163,10 +163,11 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
                   </V2Badge>
                 </div>
                 <div
-                  className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold truncate"
+                  className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold leading-tight"
                   title={hl.kind === 'PWIN' ? 'Calibrated P(win): empirical frequency for the current side of the strike' : hl.kind === 'ENGINE_SCORE' ? 'Legacy vote-tally score. Not a probability.' : undefined}
                 >
-                  {hl.label} · {hl.word}
+                  <div className="truncate">{hl.label}</div>
+                  <div className={`truncate ${hl.kind === 'PWIN' ? 'text-purple-300/80' : 'text-slate-500'}`}>{hl.word}</div>
                 </div>
               </div>
             </div>

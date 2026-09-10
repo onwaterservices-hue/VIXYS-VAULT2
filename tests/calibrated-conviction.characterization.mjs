@@ -14,6 +14,11 @@ t.check('market probability is gated on a recent real Kalshi read', adapter.incl
 t.check('no literal probability fallbacks in the calibrated block', !/\?\? 0\.5\d/.test(adapter) && !/\|\| 0\.5\d/.test(adapter));
 t.check('conviction trail is downsampled to <=60 points, never synthesised', adapter.includes('trailRaw.length > 60 ? Math.ceil(trailRaw.length / 60) : 1'));
 
+t.section('an empty table cell still reports its coordinates');
+const strikeFn = sliceBetween(serverSrc, 'function computeStrikeSideProbability(', '__name(computeStrikeSideProbability', 'computeStrikeSideProbability');
+t.check('INSUFFICIENT_SAMPLE carries checkpoint, bins, side and n (never a p)', /reason: "INSUFFICIENT_SAMPLE", key, checkpointSec: cp, distBps: [^,]+, distBin: d, volBin: v/.test(strikeFn) && strikeFn.includes('pLockedSide: null, protectSignal: null'));
+t.check('the card says which cell fell short and by how much', readRepoFile('src/components/CryptoPredictionCenterView.tsx').includes('of 30 needed in this cell') && readRepoFile('src/components/CryptoPredictionCenterView.tsx').includes("' (<30)'"));
+
 t.section('decision payload carries calibrated, market, trail and the gate checklist');
 const decision = sliceBetween(serverSrc, 'const decisionObj = {', 'convictionTrailCoverage: {', 'decisionObj head');
 t.check('calibrated block attached', decision.includes('calibrated: calibratedBlock,'));
@@ -73,7 +78,7 @@ const heroSrc = strip(readRepoFile('src/components/CryptoPredictionCenterView.ts
 t.check('semantics layer exports headline() and pWinLabel()', sem.includes('export function headline(') && sem.includes('export function pWinLabel('));
 t.check('headline prefers calibrated.pWin, then confidence, then nothing', sem.includes("kind: 'PWIN'") && sem.includes("kind: 'ENGINE_SCORE'") && sem.includes("kind: 'NONE'") && !/value:\s*(50|78|91)\b/.test(sem));
 t.check('Prediction Center ring reads headline()', heroSrc.includes('const hl = headline(canonicalDecision)') && heroSrc.includes('hl.value ?? displayConfidence'));
-t.check('V2 rail badge reads headline() and labels it', rail.includes('const hl = headline(decision)') && rail.includes('{hl.label} · {hl.word}') && !rail.includes('confidenceLabel(confidence)'));
+t.check('V2 rail badge reads headline() and labels it (label and word on their own lines)', rail.includes('const hl = headline(decision)') && rail.includes('<div className="truncate">{hl.label}</div>') && rail.includes('{hl.word}</div>') && !rail.includes('confidenceLabel(confidence)'));
 t.check('Command Center ring reads headline() and no longer says "% confidence"', ring.includes('const hl = headline(decision)') && !ring.includes('"% confidence"') && ring.includes('hl.label.toLowerCase()'));
 t.check('hub hero reads headline() and has no seeded defaults', hub.includes('const hl = headline(canonical15m)') && !hub.includes('?? 78') && !hub.includes('?? 87') && !hub.includes('?? 22') && !hub.includes("'TRENDING_BULL'") && !hub.includes('64591.20') && !hub.includes('|| 1.85') && !hub.includes('spotPrice - 38') && !hub.includes('?? 8}/10'));
 t.check('hub hero has no canned hypothesis sentence', !hub.includes('Multi-venue taker flow alignment synchronized'));
