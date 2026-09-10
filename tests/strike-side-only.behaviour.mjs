@@ -107,6 +107,7 @@ t.section('mode plumbing');
 t.check('unknown VIXY_LOCK_RULE values are logged and fall through to observation-only', serverSrc.includes('const VIXY_LOCK_RULE_MODES = ["off", "strike_side", "strike_side_only"];') && serverSrc.includes('unknown mode'));
 const gateOut = sliceBetween(serverSrc, 'lockGate: active15mCycle.lockEligibility', 'strikeSide: active15mCycle.lockEligibility.strikeSide', 'lockGate out');
 t.check('canonical payload exposes lockPolicy and lockRuleDecides', gateOut.includes('lockPolicy: active15mCycle.lockEligibility.lockPolicy ?? null,') && gateOut.includes('lockRuleDecides: Boolean(active15mCycle.lockEligibility.lockRuleDecides),'));
+t.check('canonical payload exposes strikeSource (PR #56 set it on lockEligibility only; the projection dropped it)', gateOut.includes('strikeSource: active15mCycle.lockEligibility.strikeSource ?? null,'));
 const pc = (await import('fs')).readFileSync(new URL('../src/components/CryptoPredictionCenterView.tsx', import.meta.url), 'utf8');
 t.check('prediction center reads lockPolicy from the server, never guesses', pc.includes("lockGate?.lockPolicy === 'STRIKE_SIDE_RULE'") && pc.includes('RULE DECIDES · P(WIN) ≥'));
 t.check('prediction center shows engine-opinion rows as observation in rule mode', pc.includes("c.gating === false && c.id !== 'CALIBRATED_P'") && pc.includes('Engine opinion · observation only, not gating'));

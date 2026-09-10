@@ -1289,7 +1289,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             <div className="mt-3 pt-2 border-t border-purple-900/30 grid grid-cols-2 gap-2 text-[10px] font-mono relative z-10">
               <div className="min-w-0">
                 <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">
-                  {selectedAsset === 'BTC' && (canonicalDecision?.openStrike ?? 0) > 0 ? 'PRICE TO BEAT (KALSHI STRIKE)' : 'REFERENCE (CYCLE OPEN)'}
+                  {selectedAsset === 'BTC' && (canonicalDecision?.openStrike ?? 0) > 0 ? ((canonicalDecision as any)?.lockGate?.strikeSource === 'PLACEHOLDER' ? 'PRICE TO BEAT (PLACEHOLDER · KALSHI STRIKE PENDING)' : 'PRICE TO BEAT (KALSHI STRIKE)') : 'REFERENCE (CYCLE OPEN)'}
                 </span>
                 <span className="font-bold text-white text-[10px] whitespace-nowrap block">
                   {targetPrice > 0 ? `$${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}

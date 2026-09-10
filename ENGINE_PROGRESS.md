@@ -1532,7 +1532,9 @@ Kalshi poll overwrites it with the real floor strike. They differ by ~$30
 (4 bps) — a different strike-side cell. Consequences and fixes:
 
 - `current15mStrikeSource` is now `"PLACEHOLDER"` at rollover and
-  `"KALSHI"` once the poll answers; exposed on `lockGate.strikeSource`.
+  `"KALSHI"` once the poll answers; set on `lockEligibility.strikeSource` — the
+  canonical `lockGate` projection dropped it until PR #57 (found by the
+  post-deploy probe: `lockGate` keys had no `strikeSource`).
 - The gate records the cycle strike, the shadow slice records its strike,
   and the shadow records a would-lock ONLY from a Kalshi read. The SKIP
   writer PREFERS the shadow's majority strike (Kalshi-only by construction)
@@ -1557,3 +1559,29 @@ PRODUCTION VERIFIED on the served bundle (`assets/index-DGZwdb8j.js`):
 REAL LEDGER` ×1, `Signal endpoint unavailable` ×1; `REPLAY_SCENARIOS` ×0,
 `Verified WIN +$360.50` ×0, `settledCount:148` ×0. The rendered pages need a
 signed-in session to view; the Chrome tab in this session was signed out.
+
+**Shipped: PR #56 → main `14f1d8c`, deploy success 18:40:23Z.** Post-deploy
+probe of `/api/vixy/15m/current` (cycle 15M-2026-09-10T18:30Z): `lockGate`
+keys = tier, minLockQuality, minEvidenceAgreement, eligible, checks,
+minMtfAligned, reason, strikeResolved, lockRule, lockPolicy, lockRuleDecides,
+strikeSide — **no `strikeSource`**. The gate sets it on `lockEligibility`
+but the canonical projection enumerates fields explicitly and did not carry
+it. Corrected above; the projection line landed in PR #57, the pin, the label and this record in PR #58.
+
+## PR #57 + PR #58 — `strikeSource` on the canonical payload; placeholder label
+
+- `lockGate.strikeSource: KALSHI | PLACEHOLDER` on `/api/vixy/15m/current` (PR #57)
+  (`strikeSource: active15mCycle.lockEligibility.strikeSource ?? null`),
+  pinned in `tests/strike-side-only.behaviour.mjs`.
+- Prediction center PRICE TO BEAT strip reads it: "PRICE TO BEAT
+  (PLACEHOLDER · KALSHI STRIKE PENDING)" until the poll answers, then
+  "(KALSHI STRIKE)". Server-declared; nothing inferred client-side.
+
+**Live rule tally, gradeable rows 15:30 → 18:15Z (read 18:44Z from
+`/api/signal/resolved-log`):** rule would-locks 7/7 (15:30 UP, 16:00 DOWN,
+16:30 UP, 16:45 UP, 17:15 UP, 18:00 DOWN, 18:15 UP; Kalshi at fire 0.95 /
+0.05 / 0.95 / 0.941 / 0.95 / 0.05 / 0.95); engine locks 6 wins / 9 resolved
+on the same span (losses 16:15, 17:00, 17:45 — all BUY_UP against a falling
+tape; the rule was silent on all three). The 15:45 and 16:00 SKIP rows carry
+`strikeSource: SHADOW_MERGED` (PR #55); the 18:00 row's 77,270 is the
+pre-#56 placeholder the report above explains.

@@ -97,3 +97,33 @@ criterion, with the sample size, on a stated window. Not "95% confidence".
 4. Kalshi price at lock is now captured on every would-lock. Once it has a
    few days of data it answers the only question their panel dodges: is the
    contract already priced at the model's probability (no edge) or not.
+
+## Update — 2026-09-10 18:47Z (second public reading, same day)
+
+**HaydBot "TODAY'S RECORD" at 18:47Z:** BTC **30–21 (59%)**, ETH 31–20
+(61%), SOL 37–14 (73%), XRP 30–21 (59%), BNB 37–14 (73%), HYPE 31–20 (61%),
+DOGE 30–21 (59%), GOLD 7–5, COIN-RACE 14–26 (35%). 51 BTC calls by 18:47Z
+= 75 cycles elapsed → **68% coverage at 59%**. Between the two readings
+(15:00 → 18:47Z, 15 cycles) they went 10–5. Their coverage rose through
+the day and their hit rate stayed in the high 50s — the profile of a model
+that names the current side at minute 8 with little selection.
+
+**VIXY, same clock, live production ledger (`/api/signal/resolved-log`):**
+the strike-side rule's would-locks since the range fix deployed (15:30 →
+18:15Z) are **7 for 7** (UP ×5, DOWN ×2), while the engine gate went 6/9
+on the same span with all three losses BUY_UP into a falling tape that the
+rule never called. Seven graded calls is a few hours, not a verdict; it
+matches the 97.3% replay of the shipped mode on 208 untouched cycles.
+
+Standing comparison for Saturday, on the contract's own criterion:
+
+| bot | coverage | hit rate | evidence |
+|---|---|---|---|
+| HaydBot BTC (their board) | ~68% | 59% | their public scoreboard, 51 calls, 2026-09-10 |
+| VIXY engine gate (production today) | ~8% | 74% | ledger, 132 resolved lifetime rows |
+| VIXY `strike_side_only` (replayed, shipped code) | 53% | 97.3% | 208 untouched cycles, Sep 8–10 |
+| VIXY `strike_side_only` (live shadow since fix) | — | 7/7 | ledger rows 15:30–18:15Z |
+
+The mode is shipped and off. Flipping `VIXY_LOCK_RULE=strike_side_only`
+on Vercel is the owner's action, and it is what would put the 53%/97%
+profile on the board instead of 8%/74%.
