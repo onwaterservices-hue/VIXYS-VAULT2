@@ -51,7 +51,7 @@ export function createSniperAlertEmbed(data: MarketOverview) {
         name: ' ',
         value:
           '🚀 Unlock live entries, exits, VIXY Protection™, and institutional intelligence inside VIXY ELITE.\n\n' +
-          `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '')}/#pricing)**`,
+          `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '')}/vixy-live)**`,
         inline: false,
       }
     )

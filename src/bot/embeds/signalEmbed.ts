@@ -39,7 +39,7 @@ export function createFreeSignalEmbed(data: MarketOverview) {
         name: ' ',
         value:
           `🚀 Unlock live entries, exits, VIXY Protection™, and institutional intelligence inside VIXY ELITE.\n\n` +
-          `👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/#pricing)**`,
+          `👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/vixy-live)**`,
         inline: false,
       }
     )
