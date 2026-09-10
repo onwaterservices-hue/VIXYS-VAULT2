@@ -1371,3 +1371,53 @@ running 8/10 today. Keep the shadow running with these fixes deployed and
 re-read `/api/research/shadow-l5` (now gradeable on skipped cycles) before
 setting `VIXY_LOCK_RULE=strike_side_only`. Pinned in
 `tests/cycle-range-and-skip-ledger.invariants.mjs`.
+
+**Shipped: PR #53 → main `ef2e6c5`, deploy success 15:22:33Z.** First
+production read after deploy (cycle 15:15Z, 640–643s, three separate
+instances): every instance reported the SAME range, 29.2 bps / vol bin H,
+cells `600|4|H` / `600|5|H`. Before the fix, instances in the same cycle
+disagreed by bin (the live shadow's `600|3|M` fires). Skip-row strike and
+`settledSide` are verified on the first SKIP row written by new-code
+instances (see below).
+
+## "FIX ALL THE MODELS" — the surfaces that were not models at all
+
+The owner's instruction after the competitor teardown. Two subscriber
+surfaces presented fixed numbers as model output:
+
+- **1-hour desk** (`OneHourDeskView.tsx`): there is no 1-hour model. The
+  server's `/api/signal` ignores `desk` and returns the 15-minute cycle, no
+  1-hour Kalshi feed exists, and the page filled the gap with literals —
+  `YES 72¢ / NO 28¢`, `MODEL WIN PROB 94% / 88% / 42%`, `NET 1H EDGE
+  +18.2%`, a `74 → 91.6%` "conviction timeline", `0.118 BRIER (HIGH)`,
+  `+2,840 BTC Net Sweep`, `Taker Delta +$28.4M`, `3/3 PASSED`, `92.4%
+  momentum persistence`, `14.2% reversal risk`, `BULLISH`. Rewritten to what
+  is real: live spot, the hourly clock, round strikes with their distance
+  from spot (arithmetic), a position sizer driven by numbers the USER types
+  (labelled "not a model output"), and an explicit "1H MODEL: NOT BUILT ·
+  STRUCTURE ONLY" state pointing at the measured 15-minute engine. The
+  three chart components it embedded (`ScalpDecisionChart` — random candles
+  on fetch failure and literal probabilities — `NeuralRibbonChart`,
+  `LiveScalpChart`) and `AIBrainMemoryVault` (a fixed "vote" list) are no
+  longer mounted here; they remain on the 15-second scalping desk and are
+  flagged as a follow-up task.
+- **Replay Center** (`ReplayCenterView.tsx`): replayed two SCRIPTED cycles
+  ("Today • 14:15 UTC … Verified WIN +$360.50 … Audit hash recorded") with
+  invented prices, taker deltas and premiums. Rewritten to replay REAL
+  cycles from `/api/signal/resolved-log`: frames are the recorded strike,
+  the Layer-5 rule's would-lock (side, p, n, cell, Kalshi price at that
+  moment, graded against settlement), the engine's lock (side, confidence,
+  spot, reason, policy, snapshot) or its skip reason, and the settlement.
+  Anything the engine did not record says "not recorded". Header tallies
+  the engine and the rule from the same rows.
+- **API fallbacks** (`services/api.ts`): when `/api/model-status` or
+  `/api/signal` did not answer, the client returned a LIVE model with Brier
+  0.168, 18,427 observations, 71.8% accuracy, a 0.54 Kalshi price and a set
+  of order-flow "features" — and every badge rendered them. Now nulls /
+  `hasActiveModel:false` / "Signal endpoint unavailable".
+  `ModelStatusBadge` no longer prints `0.168` when Brier is absent;
+  `AIBrainMemoryVault` no longer defaults to 148 settled / 0.182 Brier /
+  18,427 observations.
+
+Pinned in `tests/desk-honesty.characterization.mjs`. Competitor analysis:
+`COMPETITOR_TEARDOWN.md`.

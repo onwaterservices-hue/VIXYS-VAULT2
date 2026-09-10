@@ -1017,19 +1017,21 @@ export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15
   });
   if (data) return data;
 
+  // The endpoint did not answer. Say so; do not invent a live model with a
+  // Brier score and 18,427 observations (which is what this fallback used
+  // to return, and what every badge then displayed as fact).
   return {
-    settledCount: 148,
+    settledCount: 0,
     minRequired: 500,
-    hasActiveModel: true,
-    activeModelBrier: 0.168,
-    activeModelTrainedAt: new Date().toISOString(),
-    lifetimeObservations: 18427,
-    modelVersion: 'v4.3-INCREMENTAL',
-    historicalAccuracy: 71.8,
-    currentRegime: 'TRENDING_BULL_VOLATILITY',
-    lastWeightUpdateSecAgo: 4,
-    memoryPersistence: 'ACTIVE',
-    incrementalTraining: 'ON',
+    hasActiveModel: false,
+    activeModelBrier: null,
+    activeModelTrainedAt: null,
+    lifetimeObservations: 0,
+    modelVersion: 'UNAVAILABLE',
+    historicalAccuracy: undefined,
+    currentRegime: undefined,
+    memoryPersistence: 'UNKNOWN',
+    incrementalTraining: 'UNKNOWN',
   };
 }
 
@@ -1055,25 +1057,14 @@ export async function fetchApiSignal(asset: string = 'BTC', desk: string = '15m'
       disclaimer: 'Not financial advice. Vixy Vault displays live market data for informational purposes only.',
       action: 'HOLD',
       modelProbability: null,
-      kalshiImpliedProbability: 0.54,
+      // The endpoint did not answer: no market read, no features. The old
+      // fallback carried a 0.54 Kalshi price, a $64,161.40 spot and a set of
+      // order-flow "features" that were literals, and consumers rendered them.
+      kalshiImpliedProbability: null,
       edge: null,
-      status: 'Collecting data (0/500 settled contracts needed)',
-      features: {
-        asset,
-        desk,
-        orderBookImbalance: 0.184,
-        momentum5m: 0.0032,
-        momentum15m: 0.0085,
-        volatility15m: 0.0041,
-        crossVenue: {
-          spot: 64161.4,
-          kalshiStrike: 64100,
-          kalshiImpliedProb: 0.54,
-          polymarketImpliedProb: 0.52,
-          spreadPct: 0.02,
-        },
-      },
-      latencyMs: elapsed || 12,
+      status: 'Signal endpoint unavailable',
+      features: null,
+      latencyMs: elapsed,
     };
 }
 
