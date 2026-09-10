@@ -116,17 +116,52 @@ becomes a measured number over the coming days rather than an assumption.
 - 209 cycles is two days. The 7-day disjoint refit (127 locks, 97.6%) and this
   run agree; neither is a month of mixed regimes.
 
-## Decisions for the owner (prepare-and-stop)
+## Decisions for the owner (prepare-and-stop) — CORRECTED after reading the gate
 
-1. **Flag-on:** `VIXY_LOCK_RULE=strike_side` (Vercel env; bar `VIXY_LOCK_RULE_BAR`
-   default 0.95). Expected effect from the measurements: lock rate ~13–45% of
-   cycles depending on regime, precision ≥95% on the product criterion, median
-   lock ~660s. This replaces the current engine's ~7.7% (replay) / ~50%-win
-   (production ledger) behaviour on the lock path. Skips stay skips.
-2. **REGRESSION-2deba55:** `lock15mCycle`'s commit point refuses 720–779s while
-   the gate allows it. On this window a large share of qualifying locks fire at
-   exactly 720s (counts in SESSION 7). Aligning both to 780 is a gate change
-   that needs explicit sign-off; with it unaligned, flag-on forfeits those locks.
-3. Keep the shadow running for ≥3 days after flag-on and compare
-   `/api/research/shadow-l5` against this report before claiming anything to
-   subscribers.
+**Correction 1 — what the existing flag actually does.** `VIXY_LOCK_RULE=
+strike_side` is a FILTER, not the measured policy: in `canLockCurrentCycle`
+it can only ADD a denial (`allowed = !alreadyLocked && validationPassed &&
+strike15mResolved && !strikeRuleBlocks`; it also refuses when the rule's side
+disagrees with the engine's candidate). Turning it on today therefore gives
+"the engine's own locks, filtered to p ≥ 0.95 and side agreement" — higher
+precision on FEWER locks than the engine makes now (engine gate in replay:
+16 of 209 cycles). It does NOT give the 95-locks-at-98.9% behaviour above,
+which was measured for the rule ALONE.
+
+**Correction 2 — REGRESSION-2deba55 is already fixed on main.** The gate
+window, the reason check and `lock15mCycle`'s commit point are all at 780s
+(`ALIGNED-780` in `tests/lock-gate.composition.mjs`; commit point
+`effElapsed < 360 || effElapsed >= 780`). The 720s locks are NOT forfeited.
+Only the lifecycle label still flips to `ENTRY_WINDOW_CLOSED` at 720s when no
+lock has happened — cosmetic; a lock at 720–779s still commits.
+
+**What reproducing the measured policy requires — a new mode, prepared, not
+applied.** `VIXY_LOCK_RULE=strike_side_only`, in which the rule DECIDES:
+inside the legal window, the first tick whose cell has p ≥ bar on a definite
+side locks THAT side, with only the hard safety terms kept (not already
+locked, live strike, fresh data, current cycle, cycle not expired); the lock
+carries the table's p as its confidence and `STRIKE_SIDE_RULE (p, n, cell)`
+as its reason; `strike_side` and `off` are untouched. The exact edits (gate
+`allowed`/`dir` branch, `lockRuleDecides/P/N/Cell` on the gate's return,
+`lock15mCycle` taking the rule's side/probability, the CALIBRATED_P ladder
+row gating in both modes, and the updated pin in
+`tests/lock-gate.composition.mjs`) were drafted in SESSION 7 and **blocked by
+the tooling's permission classifier as a lock-gate change**, consistent with
+`CLAUDE.md` ("never let it loosen another gate"). This is the owner's call:
+
+1. **Authorize the `strike_side_only` mode explicitly** (default stays `off`;
+   nothing changes in production until the Vercel env var is set). Then set
+   `VIXY_LOCK_RULE=strike_side_only` (bar `VIXY_LOCK_RULE_BAR`, default 0.95).
+   Expected from the measurements: lock rate ~13–45% of cycles depending on
+   regime, precision ≥95% on the product criterion, median lock ~660s; the
+   live tick (3s) can also fire between checkpoints, which uses the last
+   checkpoint's cell for a state closer to settlement — conservative, but a
+   small departure from the checkpoint-only replay that the live shadow will
+   measure.
+2. Or **use the filter mode now** (`VIXY_LOCK_RULE=strike_side`): fewer locks
+   than today, each with p ≥ 0.95; no code change needed, env var only.
+3. Either way, keep the shadow running ≥3 days and compare
+   `/api/research/shadow-l5` (now with `wouldLock.kalshiYes`) against this
+   report before claiming anything to subscribers. Without a market-edge
+   number, the honest claim is precision on the contract's own criterion —
+   not an edge over Kalshi.

@@ -74,9 +74,12 @@ Read first: `ENGINE_PROGRESS.md` (SESSION 5 = the 52% root cause),
   95 locks (45.5%), **98.9%** [94.3, 99.8], UP 42/42, DOWN 52/53; monotone
   in the bar; calibrated within 4 pts; checkpoint dimension essential, vol
   tercile nearly free. `L5_PROMOTION_REPORT.md` (DRAFT) carries the tables,
-  caveats and the two owner decisions (flag-on; 720/780 commit-point
-  alignment — 40% of OOS locks fire at 720s). Regime slices (item 6) remain
-  thin; live shadow (7) and Kalshi-at-lock (8) are now being collected.
+  caveats and the owner decision: the existing `strike_side` flag is a
+  FILTER on the engine's own locks; reproducing the measured stand-alone
+  policy needs a `strike_side_only` mode (drafted, blocked by the permission
+  classifier as a gate change — needs explicit authorization). 720/780 is
+  already aligned on main. Regime slices (item 6) remain thin; live shadow
+  (7) and Kalshi-at-lock (8) are now being collected.
 
 ### NEXT (in order; each research-gated)
 1. **L5 falsification — remaining items**: regime slices on a longer window,

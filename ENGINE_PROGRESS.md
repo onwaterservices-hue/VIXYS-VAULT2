@@ -479,10 +479,23 @@ Caveats in `L5_PROMOTION_REPORT.md` (DRAFT): two days / one regime (H-vol
 dominated, hence the 45% lock rate vs 13–19% in the 7-day run); replay strike
 is round-10 not Kalshi; the live vol bin uses the tick range while the
 table's terciles came from checkpoint ranges (ablation says vol barely
-matters); no forecasting skill claimed. **40% of the qualifying locks fire at
-exactly 720s — the band `lock15mCycle`'s commit point still refuses
-(REGRESSION-2deba55).** Flag-on (`VIXY_LOCK_RULE=strike_side`) and the
-720/780 alignment are owner decisions; prepared, not executed.
+matters); no forecasting skill claimed. 40% of the qualifying locks fire at
+exactly 720s; that band is legal on main (ALIGNED-780 — gate window, reason
+check and `lock15mCycle`'s commit point all at 780; only the lifecycle label
+still says ENTRY_WINDOW_CLOSED at 720 when no lock happened).
+
+**Two corrections made while preparing flag-on:** (1) the existing
+`VIXY_LOCK_RULE=strike_side` is a FILTER (it can only add a denial to the
+engine's own gate and refuses when the rule's side disagrees with the
+engine) — it does not reproduce the measured stand-alone policy; (2) the
+stand-alone policy needs a new mode, `strike_side_only` (the rule decides:
+first qualifying tick in the window locks the current side with the table's
+p as confidence; hard safety terms only). The exact edits were drafted and
+**blocked by the tooling's permission classifier as a lock-gate change**
+(the repo's `CLAUDE.md` forbids letting Layer 5 loosen another gate), so
+the tree was left untouched. Owner decision, spelled out in
+`L5_PROMOTION_REPORT.md`: authorize the mode explicitly, or use the filter
+mode via env var now. Nothing was flipped.
 
 ---
 
