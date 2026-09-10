@@ -171,11 +171,21 @@ when a copy of it does.
   `tests/lock-gate.composition.mjs` ("ALIGNED-780") and
   `tests/lock-gate.invariants.mjs` TEST 6. Only the lifecycle label flips to
   `ENTRY_WINDOW_CLOSED` at 720s when no lock happened (cosmetic).
-- **`VIXY_LOCK_RULE=strike_side` is a FILTER, not the stand-alone rule.** It
-  can only add a denial to the engine's own gate. The stand-alone policy that
-  was falsified on untouched data (`L5_PROMOTION_REPORT.md`) would need a
-  `strike_side_only` mode; that is a lock-gate change and requires the
-  owner's explicit authorization before it is written.
+- **`VIXY_LOCK_RULE` has three modes.** `off` (default, observation only);
+  `strike_side` — a FILTER that can only add a denial to the engine's own
+  gate; `strike_side_only` — THE RULE DECIDES (owner-authorized 2026-09-10
+  after the falsification in `L5_PROMOTION_REPORT.md`): inside the legal
+  window the first tick whose cell has p ≥ bar on a definite side locks that
+  side, only the hard safety terms (`hardSafetyPassed`: floor, window, fresh
+  connected feed, latency, current unexpired cycle + live strike + not
+  locked) still gate, and the lock carries the table's p as its confidence
+  with reason `STRIKE_SIDE_RULE (p, n, cell, table)` and
+  `lockPolicy: STRIKE_SIDE_RULE` on the ledger row. The engine-mode `allowed`
+  expression is byte-for-byte unchanged; the switch is one ternary on
+  `ruleMode`. Pinned in `tests/lock-gate.composition.mjs` (hard-safety
+  conjunct set + PART B8) and `tests/strike-side-only.behaviour.mjs`. The
+  authorization covers this mode only — not loosening gates in general.
+  Switching production to it is an env-var change the owner performs.
 - **Layer 5 (strike-side probability) is observation-first and flag-gated.**
   `computeStrikeSideProbability` always runs and is exposed as
   `lockGate.strikeSide` on the canonical payload; it changes `allowed` only

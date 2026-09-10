@@ -31,11 +31,12 @@ t.check('lockGate exposes eligible and checks', gateOut.includes('eligible: Bool
 
 t.section('the lock ladder is the gate\'s own booleans, not a countdown');
 const gate = sliceBetween(serverSrc, 'active15mCycle.lockEligibility = {', 'predictionDirection: dir,', 'lockEligibility');
-for (const id of ['WINDOW', 'STRIKE', 'LOCK_QUALITY', 'AGREEMENT', 'MTF', 'STRIKE_FEASIBLE', 'REVERSAL', 'EVIDENCE', 'STABILITY', 'NO_CONFLICT', 'STABLE_SIGNAL', 'PROTECTION', 'DATA_QUALITY', 'NOT_CHOPPY', 'PERSISTENCE', 'NOT_LOCKED', 'CALIBRATED_P']) {
+for (const id of ['WINDOW', 'STRIKE', 'FEED', 'LOCK_QUALITY', 'AGREEMENT', 'MTF', 'STRIKE_FEASIBLE', 'REVERSAL', 'EVIDENCE', 'STABILITY', 'NO_CONFLICT', 'STABLE_SIGNAL', 'PROTECTION', 'DATA_QUALITY', 'NOT_CHOPPY', 'PERSISTENCE', 'NOT_LOCKED', 'CALIBRATED_P']) {
   t.check(`check ${id} present`, gate.includes(`id: "${id}"`));
 }
 t.check('LOCK_QUALITY check uses the real pass boolean and tier bar', gate.includes('pass: lockQualityPass') && gate.includes('required: `≥${minLockQuality} (${lockTier})`'));
-t.check('CALIBRATED_P check is marked non-gating unless the flag is on', gate.includes('gating: VIXY_LOCK_RULE === "strike_side"'));
+t.check('CALIBRATED_P check is marked non-gating unless a flag mode is on', gate.includes('gating: VIXY_LOCK_RULE !== "off"'));
+t.check('engine-opinion rows gate only outside strike_side_only; hard rows always gate', gate.includes('gating: engineGating') && gate.includes('gating: hardGating') && serverSrc.includes('const engineGating = !ruleMode;') && serverSrc.includes('const hardGating = true;'));
 
 t.section('conviction trail is recorded per tick from real values');
 const trail = sliceBetween(serverSrc, '// ── CONVICTION TRAIL (observation only)', '// Flag-gated Layer 5.', 'trail');

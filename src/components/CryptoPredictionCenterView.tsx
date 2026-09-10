@@ -134,11 +134,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // talking to a backend that predates the field, in which case the status bar
   // renders "--" rather than inventing a latency or a venue count.
   const lockGate = (canonicalDecision as any)?.lockGate as
-    | { tier: string | null; minLockQuality: number | null; minEvidenceAgreement: number | null; minMtfAligned: number | null }
+    | { tier: string | null; minLockQuality: number | null; minEvidenceAgreement: number | null; minMtfAligned: number | null; lockPolicy?: string | null; lockRule?: string | null; lockRuleDecides?: boolean }
     | null
     | undefined;
   const lockGateMin: number | null = typeof lockGate?.minLockQuality === 'number' ? lockGate.minLockQuality : null;
   const lockGateTier: string | null = lockGate?.tier ?? null;
+  // Which policy is deciding locks on the server right now. Server-declared:
+  // ENGINE_GATE (default), ENGINE_GATE_FILTERED (Layer 5 can only deny) or
+  // STRIKE_SIDE_RULE (Layer 5 decides; owner-authorized). Nothing here guesses.
+  const lockPolicy: 'ENGINE_GATE' | 'ENGINE_GATE_FILTERED' | 'STRIKE_SIDE_RULE' | null =
+    lockGate?.lockPolicy === 'STRIKE_SIDE_RULE' || lockGate?.lockPolicy === 'ENGINE_GATE_FILTERED' || lockGate?.lockPolicy === 'ENGINE_GATE' ? lockGate.lockPolicy : null;
   // The gate's own verdict. The old "EARLY LOCK READY" chip was a client-side
   // guess (conf>=75 && lq>=78 && rr<=25) that could light up while the real
   // gate was refusing; now the chip only appears when the engine says eligible.
@@ -158,11 +163,18 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     | undefined;
   const lockChecks = (((canonicalDecision as any)?.lockGate?.checks ?? []) as Array<{ id: string; label: string; pass: boolean; current: string | number; required: string; gating?: boolean }>);
   // Rows that actually gate the lock today (the Layer-5 row carries
-  // gating:false while the flag is off and is shown separately).
+  // gating:false while the flag is off and is shown separately). In
+  // STRIKE_SIDE_RULE mode the server marks the engine-opinion rows
+  // gating:false; they are still shown, under their own heading, as observation.
   const gateRows = lockChecks.filter((c) => c.gating !== false);
+  const observationRows = lockChecks.filter((c) => c.gating === false && c.id !== 'CALIBRATED_P');
   const gatesTotal = gateRows.length;
   const gatesPassing = gateRows.filter((c) => c.pass).length;
   const l5Row = lockChecks.find((c) => c.id === 'CALIBRATED_P') ?? null;
+  const l5RowLabel =
+    lockPolicy === 'STRIKE_SIDE_RULE' ? 'Layer 5 decides the lock (strike-side rule)'
+    : lockPolicy === 'ENGINE_GATE_FILTERED' ? 'Layer 5 filter on (can only deny)'
+    : 'Layer 5 (observation only, flag off)';
   const priceSide: 'UP' | 'DOWN' | null = calibrated?.currentSide === 'UP' || calibrated?.currentSide === 'DOWN' ? calibrated.currentSide : null;
   // Kalshi's implied YES price, shown only when the server marks the read
   // as real (fresh within its own window); never a default.
@@ -1449,6 +1461,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${gateEligible ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-purple-900/40 border-purple-700/40 text-purple-200'}`}>
                   {gateEligible ? 'GATE OPEN' : `${gatesPassing}/${gatesTotal} GATES PASSING`}
                 </span>
+                {lockPolicy === 'STRIKE_SIDE_RULE' && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border bg-cyan-500/10 border-cyan-400/40 text-cyan-200" title="The server's lock policy: the calibrated strike-side rule decides the side and the timing; the engine score is observation only">
+                    RULE DECIDES · P(WIN) ≥ {l5Row?.required?.replace('≥', '') ?? 'bar'}
+                  </span>
+                )}
+                {lockPolicy === 'ENGINE_GATE_FILTERED' && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border bg-purple-500/10 border-purple-400/40 text-purple-200" title="Layer 5 filter on: the engine's own lock is refused unless the calibrated P(win) clears the bar on the same side">
+                    L5 FILTER ON
+                  </span>
+                )}
               </div>
               {calibrated && (
                 <div className="flex items-center gap-1.5 text-[10px] font-mono text-purple-300/80">
@@ -1475,6 +1497,23 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     <span className="shrink-0 text-right">
                       <span className={c.pass ? 'text-emerald-300 font-bold' : 'text-slate-200 font-bold'}>{String(c.current)}</span>
                       <span className="text-purple-400/60"> / {c.required}</span>
+                    </span>
+                  </div>
+                ))}
+                {observationRows.length > 0 && (
+                  <div className="sm:col-span-2 pt-2 text-[10px] font-mono uppercase tracking-wider text-purple-400/70" title="In strike-side rule mode these engine conditions are computed and shown but do not gate the lock">
+                    Engine opinion · observation only, not gating
+                  </div>
+                )}
+                {observationRows.map((c) => (
+                  <div key={c.id} className="flex items-start justify-between gap-3 text-[11px] font-mono py-1 border-b border-purple-900/10 opacity-70" title={`${c.label}: ${c.current} (engine bar ${c.required}; not gating in rule mode)`}>
+                    <span className={`flex items-start gap-1.5 min-w-0 ${c.pass ? 'text-purple-200' : 'text-slate-500'}`}>
+                      <span className={`inline-flex shrink-0 mt-[1px] w-3.5 h-3.5 rounded-full items-center justify-center text-[9px] border ${c.pass ? 'bg-purple-500/15 border-purple-400/40 text-purple-300' : 'bg-black/40 border-purple-900/50 text-purple-600'}`}>{c.pass ? '·' : ''}</span>
+                      <span className="leading-tight">{c.label}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="text-purple-200/80">{String(c.current)}</span>
+                      <span className="text-purple-400/50"> / {c.required}</span>
                     </span>
                   </div>
                 ))}
@@ -1524,8 +1563,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 )}
 
                 {l5Row && (
-                  <div className="flex items-center justify-between rounded-xl bg-black/30 border border-purple-900/40 px-3 py-2 text-[10px] font-mono">
-                    <span className="text-purple-300/80">Layer 5 (observation only, flag off)</span>
+                  <div className={`flex items-center justify-between rounded-xl bg-black/30 border px-3 py-2 text-[10px] font-mono ${lockPolicy === 'STRIKE_SIDE_RULE' ? 'border-cyan-500/40' : 'border-purple-900/40'}`}>
+                    <span className={lockPolicy === 'STRIKE_SIDE_RULE' ? 'text-cyan-200' : 'text-purple-300/80'}>{l5RowLabel}</span>
                     <span className={l5Row.pass ? 'text-emerald-300 font-bold' : 'text-slate-300'}>{String(l5Row.current)} <span className="text-purple-400/60">/ {l5Row.required}</span></span>
                   </div>
                 )}
