@@ -13,7 +13,7 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
 }) => {
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
-  const [liveObservations, setLiveObservations] = useState<number>(18427);
+  const [liveObservations, setLiveObservations] = useState<number>(0);
   const [reasoningStep, setReasoningStep] = useState<number>(0);
 
   useEffect(() => {
@@ -49,9 +49,11 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const settled = modelStatus?.settledCount ?? 148;
+  // Real values or nothing. These used to default to 148 settled and a 0.182
+  // Brier score whenever the endpoint had not answered.
+  const settled = modelStatus?.settledCount ?? 0;
   const minRequired = modelStatus?.minRequired ?? 500;
-  const brier = modelStatus?.activeModelBrier ?? 0.182;
+  const brier: number | null = typeof modelStatus?.activeModelBrier === 'number' ? modelStatus.activeModelBrier : null;
 
   const algoVotes = [
     { algo: 'Order Flow Delta', bias: 'BULLISH', weight: '+0.18', icon: '⚡' },
@@ -86,7 +88,7 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400 font-mono">
-              Continuous Incremental Learning • Multi-Algorithm Voting Engine • Brier Score: {brier.toFixed(3)}
+              Continuous Incremental Learning • Multi-Algorithm Voting Engine • Brier Score: {brier === null ? '—' : brier.toFixed(3)}
             </p>
           </div>
         </div>

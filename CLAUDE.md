@@ -204,6 +204,23 @@ when a copy of it does.
   terminal come from `feedHealth` on `/api/vixy/15m/current` and show `--` when
   absent. They were previously the literals `0.8s`, `4 / 4 SYNCED` and
   `BINANCE`.
+- **There is no 1-hour model.** `/api/signal` ignores `desk` and returns the
+  15-minute cycle; no 1-hour Kalshi feed exists. `OneHourDeskView` shows
+  structure only (spot, hourly clock, strike distances, a user-input position
+  sizer) and says so. Do not add probabilities to it without a fitted and
+  falsified 1-hour table. The 15-second scalping desk components
+  (`ScalpDecisionChart`, `NeuralRibbonChart`, `LiveScalpChart`,
+  `AIBrainMemoryVault`) still carry literals and random fallbacks — flagged
+  as a follow-up; do not reuse them elsewhere.
+- **The Replay Center replays the real ledger.** `ReplayCenterView` builds
+  frames from `/api/signal/resolved-log` rows only (strike, Layer-5 would-lock,
+  engine lock or skip, settlement); anything not recorded says so.
+- **Cycle range provenance.** `cycleHigh/cycleLow` are instance memory. A cold
+  instance marks `rangeSource=instance_partial`, hydrates the range since open
+  from Coinbase 1-minute candles, and until then the strike-side probability is
+  `PARTIAL_CYCLE_RANGE` (unknown, never low). SKIP rows carry the real strike
+  and `settledSide`; the shadow would-lock carries `strike`/`spot`/`rangeSource`.
+  Pinned in `tests/cycle-range-and-skip-ledger.invariants.mjs`.
 
 ## The replay harness
 
