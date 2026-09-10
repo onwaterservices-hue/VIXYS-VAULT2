@@ -1637,3 +1637,23 @@ the LOCK READINESS header: `TODAY · ENGINE 6–3 (67%) · 2 SKIP · RULE 7–0
 (100%)`, with the day, cycles elapsed and the "since" time in the tooltip.
 `tests/daily-tally.characterization.mjs` executes the real route against
 fixture rows (29 checks). Nothing on the chip is derived client-side.
+
+**Shipped: the daily tally rode into main inside PR #60
+(`polish/vixy-premium-feel`, merge `449e4ff`, deploy success 19:16:28Z).**
+A concurrent session on the same checkout switched branches while this
+session's pipeline was between its edits and its commit, so commit
+`9c1bfd5` landed on that session's branch and merged with its PR; the
+intended PR was never opened. PRODUCTION VERIFIED at 19:29Z:
+`/api/signal/daily-tally` → engine `28–13` (68.3%, 41 resolved, 36 skips,
+1 pending, coverage 54.5% of 77 cycles), rule shadow `14–2` (87.5%, 16
+graded of 29 fired, since 05:45Z); the served bundle
+`assets/index-DQ3p_IpQ.js` carries "TODAY · ENGINE" ×1 and polls
+`api/signal/daily-tally` ×1. The numbers match a snapshot computed from
+`/api/signal/resolved-log` ten minutes earlier (engine 28–13, rule 13–2)
+plus the 19:00Z cycle that settled in between. The rule's two losses today
+both predate the range fix (PR #53, 15:22Z); since it the shadow is 8/8.
+
+Process note: four Claude sessions were active on this machine and one
+shares this working directory. Branch work from this session now runs in
+a separate git worktree (`../VIXYS-VAULT2-wt-*`) so a checkout in the main
+tree cannot move a pipeline's HEAD again.
