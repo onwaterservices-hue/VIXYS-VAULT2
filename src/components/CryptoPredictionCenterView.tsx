@@ -1653,6 +1653,16 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           const isPhase4Active = isActuallyLocked || elapsedSec >= 720;
           const isLockedEarly = isActuallyLocked && elapsedSec < 720;
 
+          // Progress through one phase's own window, as a measured fraction of
+          // that window. An early lock completes every prior phase by
+          // definition, so those rails read full rather than frozen mid-way.
+          const phasePct = (startSec: number, endSec: number) => {
+            if (isActuallyLocked && endSec <= 720) return 100;
+            if (elapsedSec <= startSec) return 0;
+            if (elapsedSec >= endSec) return 100;
+            return ((elapsedSec - startSec) / (endSec - startSec)) * 100;
+          };
+
           return (
             <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-b from-[#12072c]/95 via-[#0b051b]/95 to-[#060212] border border-purple-800/50 shadow-[0_4px_25px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.09),inset_0_0_24px_rgba(168,85,247,0.04)] relative overflow-hidden space-y-3.5 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-cyan-400/35 before:to-transparent before:pointer-events-none">
               {/* Subtle matrix overlay */}
@@ -1685,18 +1695,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               {/* High-Definition Glowing Progress Track */}
               <div className="relative w-full h-2.5 rounded-full bg-[#180838] border border-purple-800/50 p-0.5 overflow-hidden shadow-inner">
                 <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
+                  className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-purple-500 via-cyan-400 to-emerald-400 shadow-[0_0_15px_rgba(34,211,238,0.4)]"
                   initial={{ width: '0%' }}
                   animate={{ width: `${progressPct}%` }}
                   transition={{ duration: 0.6, ease: 'easeOut' }}
-                />
+                >
+                  {!isActuallyLocked && <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>}
+                </motion.div>
               </div>
 
               {/* 4 Phase Nodes (VIXY Vault Micro-Cards) */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3 relative z-10 pt-1">
                 
                 {/* Phase 1: CALIBRATING (0-2m) */}
-                <div className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                <div className={`relative p-2.5 sm:p-3 rounded-xl border transition-all ${isPhase1Active ? 'hud-corners' : ''} ${
                   isPhase1Active
                     ? 'bg-purple-950/80 border-purple-500/80 shadow-[0_0_15px_rgba(168,85,247,0.25)] ring-1 ring-purple-500/30'
                     : isPhase1Done
@@ -1713,10 +1725,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </div>
                   <div className="text-xs font-black text-white font-sans">CALIBRATING</div>
                   <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">Tick feed synch & volatility base</div>
+                  <div className="vx-rail mt-2"><div className={`vx-rail-fill ${isPhase1Done && !isPhase1Active ? 'done' : ''}`} style={{ width: `${phasePct(0, 120)}%` }} /></div>
+                  {isPhase1Active && <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>}
                 </div>
 
                 {/* Phase 2: ANALYZING (2-6m) */}
-                <div className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                <div className={`relative p-2.5 sm:p-3 rounded-xl border transition-all ${isPhase2Active ? 'hud-corners' : ''} ${
                   isPhase2Active
                     ? 'bg-cyan-950/80 border-cyan-500/80 shadow-[0_0_15px_rgba(6,182,212,0.25)] ring-1 ring-cyan-500/30'
                     : isPhase2Done
@@ -1733,10 +1747,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </div>
                   <div className="text-xs font-black text-white font-sans">ANALYZING</div>
                   <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">Order flow delta & whale sweeps</div>
+                  <div className="vx-rail mt-2"><div className={`vx-rail-fill ${isPhase2Done && !isPhase2Active ? 'done' : ''}`} style={{ width: `${phasePct(120, 360)}%` }} /></div>
+                  {isPhase2Active && <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>}
                 </div>
 
                 {/* Phase 3: CONVERGENCE (6-12m) */}
-                <div className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                <div className={`relative p-2.5 sm:p-3 rounded-xl border transition-all ${isPhase3Active ? 'hud-corners amber' : ''} ${
                   isPhase3Active
                     ? 'bg-amber-950/80 border-amber-500/80 shadow-[0_0_15px_rgba(245,158,11,0.25)] ring-1 ring-amber-500/30'
                     : isPhase3Done
@@ -1759,10 +1775,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       'Multi-timeframe confluence'
                     )}
                   </div>
+                  <div className="vx-rail mt-2"><div className={`vx-rail-fill ${isPhase3Done && !isPhase3Active ? 'done' : ''}`} style={{ width: `${phasePct(360, 720)}%` }} /></div>
+                  {isPhase3Active && <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>}
                 </div>
 
                 {/* Phase 4: IMMUTABLE LOCK (12-15m / Early Lock) */}
-                <div className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                <div className={`relative p-2.5 sm:p-3 rounded-xl border transition-all ${isPhase4Active ? 'hud-corners' : ''} ${
                   isPhase4Active
                     ? isUp
                       ? 'bg-emerald-950/90 border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.35)] ring-1 ring-emerald-500/40'
@@ -1781,6 +1799,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">
                     {isActuallyLocked ? 'Autonomous defense engaged' : 'Decision committed & guarded'}
                   </div>
+                  <div className="vx-rail mt-2"><div className="vx-rail-fill" style={{ width: `${phasePct(720, 900)}%` }} /></div>
                 </div>
 
               </div>

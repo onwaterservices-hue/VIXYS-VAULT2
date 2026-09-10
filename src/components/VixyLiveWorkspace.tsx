@@ -732,7 +732,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                   /* ================= EMPTY BOX CONTAINER ================= */
                   <div
                     onClick={() => setActivePickerBoxId(box.id)}
-                    className="relative group cursor-pointer bg-[#0d091b]/50 hover:bg-[#120c27]/70 border-2 border-dashed border-purple-900/40 hover:border-purple-500/70 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all duration-200 min-h-[170px] h-full shadow-[inset_0_0_20px_rgba(147,51,234,0.03)]"
+                    className="vx-holo-slot relative group cursor-pointer bg-[#0d091b]/50 hover:bg-[#120c27]/70 border-2 border-dashed border-purple-900/40 hover:border-purple-500/70 rounded-2xl p-6 flex flex-col items-center justify-center text-center transition-all duration-200 min-h-[170px] h-full shadow-[inset_0_0_20px_rgba(147,51,234,0.03)]"
                   >
                     {/* Top right box controls for empty container */}
                     <div
