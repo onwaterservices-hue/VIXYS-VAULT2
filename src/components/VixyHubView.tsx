@@ -33,6 +33,7 @@ import {
 import { TAB_TO_PATH } from '../utils/routePaths';
 import { BTCTicker } from '../types';
 import CycleObject from './CycleObject';
+import { headline } from '../lib/engineSemantics';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 
@@ -72,11 +73,19 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
   const isDown = rawDirection === 'DOWN' || (rawDirection as any) === 'NO';
   const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
 
-  const calibrationConfidence = canonical15m.confidence ?? 78;
-  const lockScoreRaw = canonical15m.lockScore ?? (canonical15m.lockEvaluation?.lockScore ?? 87);
-  const lockQuality = lockScoreRaw <= 10 ? Math.round(lockScoreRaw * 10) : Math.round(lockScoreRaw);
-  const reversalRisk = canonical15m.reversalRisk ?? 22;
-  const regime = canonical15m.regime || 'TRENDING_BULL';
+  // The same headline the Prediction Center ring and the V2 rail show:
+  // calibrated P(win) when the table has a cell, else the engine score
+  // labelled as such. The old `?? 78`, `?? 87`, `?? 22` and 'TRENDING_BULL'
+  // defaults painted a healthy-looking hub over a payload that said nothing.
+  const hl = headline(canonical15m);
+  const lockScoreRaw: number | null =
+    typeof canonical15m.lockScore === 'number' ? canonical15m.lockScore
+    : typeof canonical15m.lockEvaluation?.lockScore === 'number' ? canonical15m.lockEvaluation.lockScore
+    : null;
+  const lockQuality: number | null =
+    lockScoreRaw === null ? null : lockScoreRaw <= 10 ? Math.round(lockScoreRaw * 10) : Math.round(lockScoreRaw);
+  const reversalRisk: number | null = typeof canonical15m.reversalRisk === 'number' ? canonical15m.reversalRisk : null;
+  const regime: string | null = canonical15m.regime || null;
   const lifecycle = getNormalizedLifecycleState(canonical15m);
   const isLocked = lifecycle === 'LOCKED' || lifecycle === 'PROTECTED';
 
@@ -89,8 +98,10 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
     return formatCountdownMmSs(secondsRemaining);
   }, [secondsRemaining]);
 
-  const spotPrice = ticker.price || canonical15m.currentSpot || 64591.20;
-  const spotChange = ticker.change24h || 1.85;
+  // No invented $64,591.20 / +1.85%: the pill shows the live ticker, the
+  // engine's spot, or a dash.
+  const spotPrice: number | null = ticker.price || canonical15m.currentSpot || null;
+  const spotChange: number | null = typeof ticker.change24h === 'number' && Number.isFinite(ticker.change24h) ? ticker.change24h : null;
 
   const handleNavigate = (e: React.MouseEvent, id: string, isProOnly: boolean) => {
     e.preventDefault();
@@ -191,16 +202,18 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
                 <span className="text-purple-200 font-bold">BTC/USD</span>
               </div>
               <div className="h-3.5 w-px bg-purple-900/50" />
-              <span className="text-white font-mono font-bold">${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${spotChange >= 0 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950/80 text-rose-400 border border-rose-800/40'}`}>
-                {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}%
-              </span>
+              <span className="text-white font-mono font-bold">{spotPrice !== null ? `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</span>
+              {spotChange !== null && (
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${spotChange >= 0 ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950/80 text-rose-400 border border-rose-800/40'}`}>
+                  {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}%
+                </span>
+              )}
             </div>
 
             {/* Market Regime Pill */}
             <div className="px-3 py-1.5 rounded-xl bg-[#090614] border border-purple-900/40 flex items-center gap-2 text-xs font-mono">
               <span className="text-[10px] text-purple-400 font-bold uppercase">REGIME:</span>
-              <span className="text-white font-bold text-[11px] whitespace-nowrap">{regime.replace('_', ' ')}</span>
+              <span className="text-white font-bold text-[11px] whitespace-nowrap">{regime ? regime.replace('_', ' ') : '—'}</span>
             </div>
 
             {/* System Health */}
@@ -271,12 +284,21 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
                       {rawDirection}
                     </span>
                     <span className="text-xl sm:text-2xl lg:text-3xl font-mono font-bold text-white">
-                      {calibrationConfidence}%
+                      {hl.value !== null ? `${hl.value}%` : '—'}
                     </span>
-                    <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider whitespace-nowrap">CALIBRATION CONFIDENCE</span>
+                    <span
+                      className="text-[11px] font-mono text-slate-400 uppercase tracking-wider whitespace-nowrap"
+                      title={hl.kind === 'PWIN' ? 'Calibrated P(win): empirical frequency for the current side of the strike' : hl.kind === 'ENGINE_SCORE' ? 'Legacy vote-tally score. Not a probability.' : undefined}
+                    >
+                      {hl.label}
+                    </span>
                   </div>
                   <p className="text-xs sm:text-sm text-slate-300 font-sans mt-1 leading-relaxed max-w-xl">
-                    {canonical15m.gemini?.primaryHypothesis || 'Multi-venue taker flow alignment synchronized with 15M cycle policy.'}
+                    {hl.kind === 'PWIN'
+                      ? `In this state, history settles on the current side of the strike ${hl.value}% of the time (n=${hl.n ?? 0}) — ${hl.word.toLowerCase()}.`
+                      : hl.kind === 'ENGINE_SCORE'
+                        ? `No matching historical cell yet this cycle; the engine score ${hl.value} is a vote tally across evidence families, not a probability.`
+                        : 'Waiting for the engine to publish this cycle.'}
                   </p>
                 </div>
               </div>
@@ -285,25 +307,25 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
             {/* Right: Key Authoritative Metrics Cards (Equal Visual Weight) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 lg:gap-3 w-full lg:w-auto font-mono shrink-0">
               
-              {/* Metric 1: Calibration Confidence */}
+              {/* Metric 1: the headline number (P(win) or engine score) */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
-                <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">CALIBRATION</span>
-                <span className="text-lg sm:text-xl font-black text-white py-1">{calibrationConfidence}%</span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">Model Conviction</span>
+                <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">{hl.kind === 'PWIN' ? 'P(WIN)' : 'ENGINE SCORE'}</span>
+                <span className="text-lg sm:text-xl font-black text-white py-1">{hl.value !== null ? `${hl.value}%` : '—'}</span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">{hl.kind === 'PWIN' ? `n=${hl.n ?? 0} · ${hl.word}` : hl.word}</span>
               </div>
 
               {/* Metric 2: Lock Quality */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">LOCK QUALITY</span>
-                <span className="text-lg sm:text-xl font-black text-slate-200 py-1">{lockQuality} <span className="text-xs font-normal text-slate-500">/ 100</span></span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">{canonical15m.evidenceAlignment ?? 8}/10 Aligned</span>
+                <span className="text-lg sm:text-xl font-black text-slate-200 py-1">{lockQuality ?? '—'} <span className="text-xs font-normal text-slate-500">/ 100</span></span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">{typeof canonical15m.evidenceAlignment === 'number' ? `${canonical15m.evidenceAlignment}/11 families aligned` : 'alignment unavailable'}</span>
               </div>
 
               {/* Metric 3: Reversal Risk */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">REVERSAL RISK</span>
-                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>{reversalRisk}%</span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk < 30 ? 'Low Hazard' : 'Moderate'}</span>
+                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk === null ? 'text-slate-500' : reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>{reversalRisk === null ? '—' : `${reversalRisk}%`}</span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk === null ? 'No data' : reversalRisk < 30 ? 'Low Hazard' : 'Moderate'}</span>
               </div>
 
               {/* Metric 4: Cycle Expiry */}
@@ -338,7 +360,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
             <div className="flex items-center gap-3 text-[11px] sm:text-xs text-slate-400 font-mono">
               <span className="truncate">CONTRACT: <strong className="text-slate-200 font-mono">{canonical15m.contractId || canonical15m.decisionId || 'BTC-15M-CANONICAL'}</strong></span>
               <span className="text-purple-900">•</span>
-              <span className="whitespace-nowrap">STRIKE: <strong className="text-slate-200 font-mono">${(canonical15m.openStrike || (spotPrice - 38)).toFixed(2)}</strong></span>
+              <span className="whitespace-nowrap">STRIKE: <strong className="text-slate-200 font-mono">{typeof canonical15m.openStrike === 'number' && canonical15m.openStrike > 0 ? `$${canonical15m.openStrike.toFixed(2)}` : '—'}</strong></span>
             </div>
           </div>
         </div>

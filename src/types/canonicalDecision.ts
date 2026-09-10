@@ -240,6 +240,35 @@ export interface Canonical15mDecision {
     orderflow?: string;
     trades?: string;
   };
+
+  // 9. Calibrated conviction (strike-side table) and the Kalshi read, as
+  // emitted by /api/vixy/15m/current. Optional because older payloads omit
+  // them; a missing block means "no number", never a default.
+  calibrated?: CalibratedConviction | null;
+  marketRead?: {
+    kalshiImpliedYes: number | null;
+    ageMs: number | null;
+    real: boolean;
+  } | null;
+}
+
+/** P(settle on the current side of the open strike), from strikeSideTable. */
+export interface CalibratedConviction {
+  pWin: number | null;          // 0..1 empirical frequency, or null (see reason)
+  n: number;                    // samples behind pWin (0 when null)
+  reason: string | null;        // why pWin is null, e.g. NO_PRICE_OR_STRIKE
+  checkpointSec: number | null;
+  distBps: number | null;
+  distBin: number | null;
+  volBin: string | null;
+  currentSide: string | null;   // 'UP' | 'DOWN' | null
+  pLockedSide?: number | null;
+  protectSignal?: boolean | null;
+  tableVersion?: string | null;
+  bar?: number | null;
+  marketForSide: number | null;
+  edgeVsMarketPct: number | null;
+  criterion?: string;
 }
 
 /**

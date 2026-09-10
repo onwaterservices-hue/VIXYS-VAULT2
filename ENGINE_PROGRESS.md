@@ -321,6 +321,80 @@ On this local run with production credentials in `.env`, the guard blocked
 `reason: "not running inside a deployment (VERCEL unset)"` at
 `/api/live-engine/health`. Phase B working as built.
 
+## SESSION 7 — clean lock-readiness, honest chart, fabrication sweep, ONE headline
+
+**Owner's asks:** (1) the "random text" under the hero ring must be clean, a
+"true VIXY feeling"; (2) verify the chart's calls are real and the orderbook &
+liquidity radar visual is in; (3) confirm there is only ONE 15-minute decision
+engine (the OG VIXY Live / OG crypto terminal set-up may have left two); (4)
+make the V2 rail and the Command Center ring show the same headline number as
+the Prediction Center hero (calibrated P(win) when it exists, else ENGINE
+SCORE, never a default).
+
+**Shipped and production-verified through Chrome:**
+- **PR #39** — hero keeps one compact "Lock readiness n/N gates" bar; the full
+  gate ladder moved to a dedicated **LOCK READINESS** panel (full labels,
+  current / required per gate, wider P(win) trail with 50%/95% guides, Kalshi
+  comparison with an honest unavailable state, Layer-5 row shown separately).
+  P(WIN) names its side and flags "price side ≠ bias". Chart: pattern markers
+  are named as patterns (BREAKOUT ▲ / BREAKDOWN ▼ / DOJI @ SUPPORT|RESISTANCE,
+  "confirmed next bar"), the invented `|| 0.91` live-bar confidence and ±120
+  target fallbacks are gone, and the dead "TIKTOK AI PILOT" control now
+  toggles **VIXY ENGINE EVENTS**: this cycle's LOCK marker plus settled locks
+  (✓ win / ✗ loss / ○ skip) from the ledger, drawn on the containing bar.
+  Seen live: ○ SKIP, ✗ UP LOSS, ✓ UP WIN ×2 on the 15m chart. Radar verified
+  live: Coinbase Exchange L2 30+30 levels, 100 prints, depth ladder / whale
+  tape / delta skew tabs.
+- **PR #42 (honesty sweep of the Prediction Center page)** — removed the last
+  literals reaching customers: CROSS-VENUE EVIDENCE ("+$28.4M BUY", "+$12.50",
+  "57% YES", "59% YES", "SYNCHRONIZED (4/4)") now reads `/api/radar` resting
+  depth + taker skew and the real-flagged Kalshi read, with Polymarket shown
+  as "no direct feed" (the server's `polymarketImpliedProb` is Kalshi − 2c,
+  not a feed); the "PRIMARY HYPOTHESIS … $64,495 … +14.2" sentence is now
+  built from strike distance, price side, family alignment and P(win); the
+  six-factor "NEURAL SIGNAL DECOMPOSITION MATRIX" (invented weights, "+18.5
+  pts", "$28.4M", "0.994 stability coefficient") is now the engine's real
+  evidence families with no weights claimed; the right rail's "LIVE MARKET
+  FEED" (four templated lines with fake "2m ago") is an **ENGINE EVENT FEED**
+  from the ledger; `useSystemNotifications` no longer seeds "1,250 BTC" /
+  "+$28.4M" alerts nor injects a random template every 75s (storage key
+  bumped to v2). Also fixed: the Kalshi block was emitted under `market`,
+  shadowing the "BTC/USD" label — it is now `marketRead`. Live after merge:
+  "LIVE (3/4) · 4.91 / 4.64 BTC · 1.06x bid · 83% buy (last 100 prints) ·
+  Kalshi 8% YES · no direct feed".
+- **This PR — one headline for every surface.** `engineSemantics.headline()`
+  returns `{kind: PWIN | ENGINE_SCORE | NONE, value, label, n, side, word}`;
+  `pWinLabel()` gives P(win) its own words (≥95 AT LAYER-5 BAR, ≥85 STRONG
+  EDGE, ≥70 CLEAR EDGE, ≥58 MODEST EDGE, ≥42 COIN FLIP, else AGAINST CURRENT
+  SIDE). The Prediction Center ring, the V2 rail badge, the hub hero and the
+  Command Center ring (`CycleObject`) all read it. Hub defaults removed:
+  `confidence ?? 78`, `lockScore ?? 87`, `reversalRisk ?? 22`,
+  `'TRENDING_BULL'`, `$64,591.20`, `+1.85%`, `openStrike || spot − 38`,
+  `evidenceAlignment ?? 8`, and the canned "Multi-venue taker flow alignment"
+  sentence. The hero's `useState(78)` seed is now `null` → "—" until the
+  first payload. `Canonical15mDecision` now types `calibrated` and
+  `marketRead`. Pinned by `tests/engine-semantics.invariants.mjs` (44) and
+  `tests/calibrated-conviction.characterization.mjs` (61).
+
+**Engine-count audit (owner ask #3): there is ONE live engine.** Every
+decision route — `/api/vixy/15m/current`, `/api/signal`, `/api/signal/latest`,
+`/api/live-engine`, `/api/vixy/state` — reads the same `active15mCycle`
+produced by `runMarketEngineTick` (3s interval + cron). The OG client-side
+engine is dead code: `src/services/engine/canonicalDecisionEngine.ts`
+(tick/settle with its own Firestore writes; only `createInitial15mDecision`
+is imported, by the hook), `boundedEngineTick.ts`, `daemon/continuousEngineDaemon.ts`
+(no importers), the whole `services/intelligence/*` tree (2,700 lines, no
+importers outside itself), `testing/vixyBidirectionalTestHarness.ts` →
+`VixyLearningPanel.tsx` (never mounted), and the OG views `LiveDashboard.tsx`
+/ `StarterDeskView.tsx` / `ExecutiveCommandCenter.tsx` + `useLiveSignal`
+(imported in App.tsx, never rendered). `AutomationScheduler` is imported by
+server.ts and never started. **Removal is the next PR** (trim
+`canonicalDecisionEngine.ts` to the epoch helper + placeholder factory,
+delete the rest, fix the two tests that read `LiveDashboard.tsx`).
+
+**Still fabricated on OTHER pages (not yet touched):** `OneHourDeskView.tsx:692`
+"Taker Delta +$28.4M", `ReplayCenterView.tsx:123` `binanceDelta: '+$28.4M'`.
+
 ---
 
 ## COMPLETED

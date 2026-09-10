@@ -11,7 +11,7 @@
  * Run: node tests/engine-semantics.invariants.mjs
  */
 import {
-  evidenceState, confidenceLabel, lockQualityLabel, alignmentLabel,
+  evidenceState, confidenceLabel, lockQualityLabel, alignmentLabel, headline, pWinLabel,
 } from "../src/lib/engineSemantics.ts";
 import { readRepoFile, createHarness } from "./_engineSource.mjs";
 
@@ -64,5 +64,21 @@ t.check("no || 'TRENDING_BULL' regime fallback", !mc.includes("|| 'TRENDING_BULL
 t.check("no invented edge scanner figures (+6.4% / +1.85 R:R / 7.2% / +18.4% EV)", !mc.includes("EDGE: +6.4%") && !mc.includes("+1.85 R:R") && !mc.includes("by 7.2%") && !mc.includes("EV (FAVORABLE)"));
 const rr = code(readRepoFile("src/components/vixyV2/ContextualRightRail.tsx"));
 t.check("right rail has no || 78 confidence fallback", !rr.includes("|| 78"));
+
+t.section("headline(): the one number every surface shows");
+const live = headline({ confidence: 52, calibrated: { pWin: 0.605, n: 261, currentSide: "UP" } });
+t.check("prefers calibrated P(win) over the engine score", live.kind === "PWIN" && live.value === 61 && live.n === 261 && live.side === "UP");
+t.check("labels it P(WIN <side>) · n=", live.label === "P(WIN UP) · n=261");
+t.check("word comes from the P(win) scale, not the score scale", live.word === "MODEST EDGE");
+const noCell = headline({ confidence: 52, calibrated: { pWin: null, n: 0, currentSide: null } });
+t.check("falls back to the engine score, labelled as such", noCell.kind === "ENGINE_SCORE" && noCell.value === 52 && noCell.label === "ENGINE SCORE");
+t.check("the score keeps its honest word (52 is UNCERTAIN)", noCell.word === "UNCERTAIN");
+const nothing = headline({ confidence: null, calibrated: null });
+t.check("no number when the engine published none — never a default", nothing.kind === "NONE" && nothing.value === null && nothing.label === "NO DATA");
+t.check("an absent decision is NONE too", headline(undefined).kind === "NONE" && headline(null).value === null);
+t.check("P(win) side is only UP/DOWN", headline({ calibrated: { pWin: 0.5, n: 40, currentSide: "FLAT" } }).side === null);
+t.check("pWinLabel tiers: 95 AT LAYER-5 BAR / 85 STRONG / 70 CLEAR / 58 MODEST / 42 COIN FLIP / below AGAINST",
+  pWinLabel(96) === "AT LAYER-5 BAR" && pWinLabel(85) === "STRONG EDGE" && pWinLabel(70) === "CLEAR EDGE" && pWinLabel(58) === "MODEST EDGE" && pWinLabel(50) === "COIN FLIP" && pWinLabel(30) === "AGAINST CURRENT SIDE");
+t.check("pWinLabel(null) says there is no matching history", pWinLabel(null) === "NO MATCHING HISTORY");
 
 t.done();

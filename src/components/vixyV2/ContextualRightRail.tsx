@@ -12,7 +12,7 @@ import {
   AlertTriangle,
   ChevronRight
 } from 'lucide-react';
-import { confidenceLabel } from '../../lib/engineSemantics';
+import { headline } from '../../lib/engineSemantics';
 import { 
   V2Panel, 
   V2Button, 
@@ -53,6 +53,9 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
   // No invented 78: the rail shows the engine's number or none at all.
   const confidence: number | null =
     typeof decision?.confidence === 'number' && Number.isFinite(decision.confidence) ? decision.confidence : null;
+  // The same headline the Prediction Center ring shows: calibrated P(win)
+  // when the table has a cell, else the engine score labelled as such.
+  const hl = headline(decision);
   const isUp = direction === 'UP';
 
   const secondsRemaining = useMemo(() => {
@@ -152,12 +155,18 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="text-base font-black text-white">{direction}</span>
-                  <V2Badge variant={(confidence ?? 0) >= 75 ? 'emerald' : 'amber'} size="xs">
-                    {confidence !== null ? `${confidence}%` : '—'}
+                  <V2Badge
+                    variant={hl.value !== null && hl.value >= (hl.kind === 'PWIN' ? 58 : 75) ? 'emerald' : 'amber'}
+                    size="xs"
+                  >
+                    {hl.value !== null ? `${hl.value}%` : '—'}
                   </V2Badge>
                 </div>
-                <div className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold truncate">
-                  {confidenceLabel(confidence)}
+                <div
+                  className="text-[9.5px] text-slate-400 uppercase tracking-wider font-bold truncate"
+                  title={hl.kind === 'PWIN' ? 'Calibrated P(win): empirical frequency for the current side of the strike' : hl.kind === 'ENGINE_SCORE' ? 'Legacy vote-tally score. Not a probability.' : undefined}
+                >
+                  {hl.label} · {hl.word}
                 </div>
               </div>
             </div>
