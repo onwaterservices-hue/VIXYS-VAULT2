@@ -110,13 +110,21 @@ the volatile slice. Three disjoint windows now agree on precision at the
 bar: 97.9% (986 locks, pre-fit month), 98.9% (95, post-fit checkpoint-only),
 97.3% (111, post-fit shipped gate on trade prints).
 
-## 7–8. Live shadow and market edge — now collectable
+## 7–8. Live shadow and market edge — first measurements
 
-`SHADOW_L5_v2` (PR #46/#47) merges every instance's slice per cycle and grades
-would-locks against the settled side at `GET /api/research/shadow-l5`. The
-Kalshi implied price at would-lock time is captured alongside it (next PR), so
-"edge vs the market" — whether Kalshi already prices these cells at 0.95+ —
-becomes a measured number over the coming days rather than an assumption.
+`SHADOW_L5_v2` (PR #46/#47) merges every instance's slice per cycle; PR #53
+made cold instances hydrate the cycle range and PR #55 made every SKIP row
+gradeable. **Live shadow, 2026-09-10, gradeable rows before the range fix:
+8/10.** Its two losses fired in `600|3|M` cells on partial ranges (3–6 bps
+leads) that the full-range replay never reaches — the defect, not the table.
+Re-read after a full day on the fixed code.
+
+**Market edge, first 20 live reads (Kalshi price captured at the rule's
+fire):** median price for the rule's side 90.6¢; 12/20 already ≥ 90¢; mean
+table − market +7.5 pts; the two largest nominal edges (+31.8, +11.8) were
+the day's two losses. The honest claim remains precision on the contract's
+own criterion, not an edge over Kalshi — the market usually agrees by the
+time the rule fires, and where it disagreed most today it was right.
 
 ## What this does NOT claim
 
@@ -171,15 +179,19 @@ byte-for-byte the old expression. Pinned in `tests/lock-gate.composition.mjs`
 
 1. **To run the measured policy:** set `VIXY_LOCK_RULE=strike_side_only`
    (bar `VIXY_LOCK_RULE_BAR`, default 0.95) on Vercel and redeploy. Expected
-   from the measurements: lock rate ~13–45% of cycles depending on regime,
-   precision ≥95% on the product criterion, median lock ~660s. The live tick
-   (3s) can fire between checkpoints, using the last checkpoint's cell for a
-   state closer to settlement; the replay of the SHIPPED gate in this mode
-   (`npm run replay:15m -- --source trades --offline --lock-rule
-   strike_side_only`) measures that departure — see ENGINE_PROGRESS SESSION 8.
-   **Consequence to know:** Elite auto-trading (`executeAutoTradesForSignal`)
-   fires on every lock, so the lock RATE change (≈8% → up to 45% of cycles)
-   is also a position-count change for auto-traders.
+   from the measurements: lock rate ~33–53% of cycles depending on regime,
+   precision 93–98% on the product criterion (97.9% on 986 pre-fit locks,
+   97.3% for the shipped gate on 111 post-fit locks; ~93% in volatile
+   regimes), median lock ~660s. **Read this first:** the live shadow ran
+   8/10 on 2026-09-10 BEFORE PR #53 because cold instances binned volatility
+   on a partial range; PR #53 hydrates the range from candles and PR #55
+   makes every SKIP row gradeable. Let the shadow run for a full day on the
+   fixed code and confirm on `/api/research/shadow-l5` (or the Replay
+   Center's tally, which grades the same rows) that the live rule sits at
+   or above the bar before flipping the env var. **Consequence to know:**
+   Elite auto-trading (`executeAutoTradesForSignal`) fires on every lock, so
+   the lock RATE change (≈8% → up to 50% of cycles) is also a position-count
+   change for auto-traders.
 2. Or **use the filter mode** (`VIXY_LOCK_RULE=strike_side`): fewer locks
    than today, each with p ≥ 0.95.
 3. Either way, keep the shadow running ≥3 days and compare

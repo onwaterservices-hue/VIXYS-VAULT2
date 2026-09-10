@@ -182,6 +182,9 @@ let current15mStrikePrice = 0;
 // live strike. In replay every cycle is given its strike at beginCycle, so the
 // faithful value is true. (It is set false only to simulate a cold instance.)
 let strike15mResolved = true;
+// The replay's strike is given at beginCycle and stands in for the Kalshi
+// read; production distinguishes it from the rollover placeholder.
+let current15mStrikeSource = "KALSHI";
 // Layer 5 (strike-side rule) inputs. Off unless the harness is asked to test it.
 const VIXY_LOCK_RULE = __LOCK_RULE__;
 const VIXY_LOCK_RULE_BAR = __LOCK_RULE_BAR__;

@@ -2897,6 +2897,7 @@ async function runMarketEngineTick() {
                 : null);
             if (strikeVal && strikeVal > 0) {
               current15mStrikePrice = strikeVal;
+              current15mStrikeSource = "KALSHI";
               strike15mResolved = true;
             }
             const yesAsk = m.yes_ask_dollars
@@ -3387,6 +3388,13 @@ app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
 let current15mIntervalStart =
   Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
 let current15mStrikePrice = 0;
+// Where current15mStrikePrice came from. The rollover assigns a
+// round(livePrice/10)*10 PLACEHOLDER and marks the strike "resolved"; the
+// Kalshi poll overwrites it with the real floor strike when it answers. The
+// two are ~$30 (4 bps) apart, which is a different strike-side cell, so the
+// Layer-5 rule must only act on — and the shadow must only record — a
+// KALSHI strike. Observation elsewhere; engine-mode locks are unchanged.
+let current15mStrikeSource = "PLACEHOLDER";
 let strike15mResolved = false;
 const processedSettlements = new Set();
 const lockedCycleIds = new Set();
@@ -3842,8 +3850,9 @@ function canLockCurrentCycle(livePrice) {
   // cycle that never locked was recorded with strike 0 and could not be
   // graded. Bounded to the entry window so a next-market strike that Kalshi
   // lists early can never overwrite this cycle's. Observation only.
-  if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {
+  if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {
     active15mCycle.strikePrice = current15mStrikePrice;
+    active15mCycle.strikeSource = "KALSHI";
   }
   // Range provenance: undefined (tests, replay, warm instance before its first
   // tick) and "instance_from_open"/"candles+instance" are complete;
@@ -3872,10 +3881,12 @@ function canLockCurrentCycle(livePrice) {
     }
     sh.ticks += 1;
     sh.lastSec = effElapsed;
-    if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;
+    if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;
     let checkpointChanged = false;
     let lockJustSet = false;
-    if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
+    // A would-lock is only meaningful against the real Kalshi strike; the
+    // rollover placeholder sits ~4 bps away, i.e. in a different cell.
+    if (current15mStrikeSource === "KALSHI" && strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
       const key = strikeSide.key ?? null;
       if (!sh.lastEval || sh.lastEval.key !== key || sh.lastEval.side !== strikeSide.currentSide) {
         if (sh.evals.length < 60) sh.evals.push({ atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key });
@@ -3957,7 +3968,8 @@ function canLockCurrentCycle(livePrice) {
     else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
     else if (strikeSide.currentSide !== dirTarget) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_DISAGREES (engine=${dirTarget}, price is ${strikeSide.currentSide} of strike)`); }
   } else if (VIXY_LOCK_RULE === "strike_side_only") {
-    if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
+    if (current15mStrikeSource !== "KALSHI") { strikeRuleBlocks = true; reasons.push("STRIKE_SIDE_PLACEHOLDER_STRIKE (this instance has not read the Kalshi strike yet)"); }
+    else if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
     else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
     else if (strikeSide.currentSide !== "UP" && strikeSide.currentSide !== "DOWN") { strikeRuleBlocks = true; reasons.push("STRIKE_SIDE_NO_SIDE (price has no definite side of the strike)"); }
     else lockRuleDecides = true;
@@ -4017,6 +4029,7 @@ function canLockCurrentCycle(livePrice) {
     minEvidenceAgreement,
     minMtfAligned,
     strikeResolved: strike15mResolved,
+    strikeSource: current15mStrikeSource,
     lockRule: VIXY_LOCK_RULE,
     strikeSide,
     // The lock ladder: every condition the gate is applying RIGHT NOW, with
@@ -4571,6 +4584,7 @@ async function checkAndSettle15mCycle(livePrice) {
     const prevIntervalStart = current15mIntervalStart;
     current15mIntervalStart = intervalStart;
     current15mStrikePrice = Math.round(livePrice / 10) * 10;
+    current15mStrikeSource = "PLACEHOLDER";
     strike15mResolved = true;
     if (prevIntervalStart > 0) {
       const prevSigId = `sig_lock_${prevIntervalStart}`;
@@ -4817,11 +4831,13 @@ async function checkAndSettle15mCycle(livePrice) {
           const shMerged = mergeShadowL5Record(shRemote, shLocal, "SKIP");
           if (shMerged) skippedLog.shadowL5 = shMerged;
           if (shLocal) shadowL5ByCycle.delete(shCycleId);
-          // An instance that booted after 780s never recorded this cycle's
-          // strike on its own cycle object (the gate only records it inside
-          // the entry window). Fall back to the strike the OTHER instances
-          // recorded on the shared shadow doc, then to the would-lock's own.
-          if (!(skippedLog.targetStrike > 0)) {
+          // The cycle object's own strike can be the rollover PLACEHOLDER
+          // (round(livePrice/10)*10; observed 77,270 vs Kalshi 77,303.66 on
+          // 2026-09-10 18:00Z) or 0 on an instance that booted after 780s.
+          // The shadow's majority strike is recorded only from instances with
+          // a real Kalshi read, so it is preferred whenever it exists; the
+          // would-lock's own strike is the next fallback. Never invented.
+          {
             const mergedStrike = shMerged && typeof shMerged.strike === "number" && shMerged.strike > 0
               ? shMerged.strike
               : shMerged && shMerged.wouldLock && typeof shMerged.wouldLock.strike === "number" && shMerged.wouldLock.strike > 0
@@ -4832,6 +4848,8 @@ async function checkAndSettle15mCycle(livePrice) {
               skippedLog.strike = mergedStrike;
               skippedLog.settledSide = livePrice > 0 ? (livePrice >= mergedStrike ? "UP" : "DOWN") : null;
               skippedLog.strikeSource = shMerged.strike > 0 ? "SHADOW_MERGED" : "SHADOW_WOULD_LOCK";
+            } else if (skippedLog.targetStrike > 0) {
+              skippedLog.strikeSource = active15mCycle.strikeSource === "KALSHI" ? "CYCLE_KALSHI" : "CYCLE_PLACEHOLDER";
             }
           }
         }

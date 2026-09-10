@@ -1470,6 +1470,87 @@ records the strike. Fixed in the next PR by carrying the strike on the
 shadow slice (any instance that saw it) and using the merged shadow's strike
 as the SKIP row's fallback.
 
+## MARKET EDGE AT THE RULE'S FIRE (mission item 8) — first 20 live reads
+
+Every live would-lock since PR #48 that captured a fresh Kalshi read
+(public ledger, 2026-09-10 05:00 → 15:15Z, n = 20):
+
+```
+Kalshi price for the rule's side at fire   min 64¢   median 90.6¢   max 95¢
+priced >= 90¢ by the market                12 of 20
+priced <  80¢                               2 of 20   (13:30Z 64¢, 05:45Z 73¢)
+table p − market price, mean               +7.5 pts
+```
+Largest nominal "edges": 13:30Z UP +31.8 pts (LOSS), 05:45Z UP +22.8 (WIN),
+13:15Z UP +15.8 (WIN), 14:30Z DOWN +12.8 (ungradeable pre-#55), 13:00Z UP
++11.8 (LOSS). The two losses of the day are the two cells where the table
+disagreed most with the market — the partial-range `600|3|M` fires that
+PR #53 removed. Read: on the contract's own criterion the rule is right
+~97% of the time on full-range cells, but by the time it fires Kalshi is
+usually already at 90¢+, so the measured edge over the market is thin
+(~7 pts nominal, less after the loss cases) and the largest apparent edges
+were the market being right. Twenty reads is a day; the capture continues,
+and after PR #55 every would-lock is gradeable.
+
+**Shipped: PR #55 (SKIP strike from the shared shadow) → main `6b0b517`,
+deploy success 15:37:39Z. PRODUCTION VERIFIED** on the first SKIP row the
+fixed code wrote (cycle 15:45Z): `targetStrike 77198.63, settledSide UP,
+strikeSource SHADOW_MERGED`, shadow `strike 77198.63` from 127 instances.
+Every row since carries the shadow strike and `rangeSource
+candles+instance` on its would-lock.
+
+**Live rule since the range fix (PR #53 deploy 15:22Z), all gradeable
+rows 15:30 → 18:15Z:**
+```
+15:30 UP  p.955 @720s  kalshi .95   WIN     engine BUY_UP WIN
+16:00 DOWN p.986 @587s kalshi .05   WIN     engine SKIP
+16:30 UP  p.955 @720s  kalshi .95   WIN     engine BUY_UP WIN
+16:45 UP  p.950 @673s  kalshi .941  WIN     engine BUY_UP WIN
+17:15 UP  p.966 @736s  kalshi .95   WIN     engine BUY_UP WIN
+18:00 DOWN p.957 @600s kalshi .05   WIN     engine SKIP
+18:15 UP  p.955 @757s  kalshi .95   WIN     engine BUY_UP WIN
+rule 7/7 · engine 6/9 over the same span · 0 ungradeable
+```
+Seven is a few hours, not a verdict; it is consistent with the replay (97%)
+and unlike the 8/10 before the fix. Note that Kalshi already had every one
+of these at 94–95¢ (or 5¢ for DOWN) when the rule fired.
+
+One residual: the 18:00Z SKIP row's own `targetStrike` was 77,270 (a
+round-10 number) while the shadow's majority strike was 77,303.66. The
+cycle object's `strikePrice` can be the `round(livePrice/10)*10`
+placeholder the settle path assigns when Kalshi has not resolved; the
+shadow strike is only recorded by instances with a RESOLVED Kalshi read.
+Next PR: prefer the shadow's majority strike whenever it exists.
+
+## PLACEHOLDER STRIKES — named, and never fed to the rule (PR #56)
+
+Reading the settle path for the 18:00Z discrepancy: at every rollover
+`checkAndSettle15mCycle` assigns `current15mStrikePrice =
+round(livePrice/10)*10` **and sets `strike15mResolved = true`**, so from the
+first tick of every cycle the "resolved" strike is a placeholder until the
+Kalshi poll overwrites it with the real floor strike. They differ by ~$30
+(4 bps) — a different strike-side cell. Consequences and fixes:
+
+- `current15mStrikeSource` is now `"PLACEHOLDER"` at rollover and
+  `"KALSHI"` once the poll answers; exposed on `lockGate.strikeSource`.
+- The gate records the cycle strike, the shadow slice records its strike,
+  and the shadow records a would-lock ONLY from a Kalshi read. The SKIP
+  writer PREFERS the shadow's majority strike (Kalshi-only by construction)
+  over the cycle object's, then the would-lock's, and names the source
+  (`SHADOW_MERGED` / `SHADOW_WOULD_LOCK` / `CYCLE_KALSHI` /
+  `CYCLE_PLACEHOLDER`).
+- `strike_side_only` refuses to act on a placeholder strike
+  (`STRIKE_SIDE_PLACEHOLDER_STRIKE`). Engine-mode locks are unchanged: they
+  already lock against `current15mStrikePrice` at lock time, and every lock
+  row in the ledger carries a non-round strike, so the poll lands well
+  before 360s in practice — but the `STRIKE` ladder row ("Strike resolved")
+  is true from the first tick and does not distinguish the two. Left as is
+  (engine gate; outside the authorization) and noted here.
+- `tests/lock-gate.composition.mjs` now runs the shadow recorder for real
+  (its globals are injected instead of being swallowed by the try/catch):
+  placeholder → no would-lock and no slice strike; Kalshi → would-lock with
+  strike, spot, and `kalshiYes: null` without a fresh read.
+
 **Shipped: PR #54 (desk honesty) → main `4aa173b`, deploy success.**
 PRODUCTION VERIFIED on the served bundle (`assets/index-DGZwdb8j.js`):
 `1H MODEL: NOT BUILT` ×1, `NOT A MODEL OUTPUT` ×1, `15-MINUTE CYCLE REPLAY ·

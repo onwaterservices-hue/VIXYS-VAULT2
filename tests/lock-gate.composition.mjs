@@ -97,8 +97,8 @@ t.check('strike_side_only: allowed = !alreadyLocked && hardSafetyPassed && strik
   /\? !alreadyLocked && hardSafetyPassed && strike15mResolved && lockRuleDecides\n/.test(gateSrc));
 t.check('the switch is exactly ruleMode = (VIXY_LOCK_RULE === "strike_side_only")',
   gateSrc.includes('const ruleMode = VIXY_LOCK_RULE === "strike_side_only";') && gateSrc.includes('const allowed = ruleMode\n'));
-t.check('strikeRuleBlocks is only ever set inside the two flag checks',
-  (gateSrc.match(/strikeRuleBlocks = true/g) || []).length === 6 && /if \(VIXY_LOCK_RULE === "strike_side"\)/.test(gateSrc) && /else if \(VIXY_LOCK_RULE === "strike_side_only"\)/.test(gateSrc));
+t.check('strikeRuleBlocks is only ever set inside the two flag checks (3 filter denials + 4 rule-mode denials)',
+  (gateSrc.match(/strikeRuleBlocks = true/g) || []).length === 7 && /if \(VIXY_LOCK_RULE === "strike_side"\)/.test(gateSrc) && /else if \(VIXY_LOCK_RULE === "strike_side_only"\)/.test(gateSrc));
 t.check('lockRuleDecides is set true in exactly one place (the strike_side_only branch)',
   (gateSrc.match(/lockRuleDecides = true/g) || []).length === 1);
 
@@ -189,6 +189,15 @@ function makeEnv(elapsedSec, mutate) {
     latestCrossAssetContext: { state: 'ALIGNED', riskPenalty: 0, directionalAgreementRatio: 1 },
     // ea05da9 on main: a cold instance with no live strike may not lock.
     strike15mResolved: true,
+    // The strike in every case below is a real Kalshi read; the placeholder
+    // case is exercised explicitly in PART B8.
+    current15mStrikeSource: 'KALSHI',
+    // Layer-5 shadow recorder globals, so the observation path runs for real
+    // instead of being swallowed by its try/catch.
+    shadowL5ByCycle: new Map(),
+    kalshiImpliedAtMs: 0,
+    currentKalshiImpliedProb: 0.5,
+    persistShadowL5: () => {},
     // Layer 5 inputs. Flag OFF by default so every case above pins the
     // unchanged behaviour; the flag-on section below overrides these.
     VIXY_LOCK_RULE: 'off',
@@ -496,6 +505,26 @@ if (hi && lo) {
   t.check('rule mode: partial cycle range cites PARTIAL_CYCLE_RANGE', partial.g.reasons.some((r) => r.includes('STRIKE_SIDE_UNKNOWN (PARTIAL_CYCLE_RANGE)')), partial.g.reasons.join('|'));
   const hydrated = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.rangeSource = 'candles+instance'; });
   t.eq('rule mode: hydrated range -> ALLOWED again', hydrated.g.allowed, true);
+  // The rollover assigns a round(spot/10)*10 placeholder strike and marks it
+  // resolved; the rule must not act until the real Kalshi strike is read.
+  const placeholder = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.current15mStrikeSource = 'PLACEHOLDER'; });
+  t.eq('rule mode: placeholder strike -> DENIED', placeholder.g.allowed, false);
+  t.eq('rule mode: placeholder strike -> lockRuleDecides false', placeholder.g.lockRuleDecides, false);
+  t.check('rule mode: placeholder strike cites STRIKE_SIDE_PLACEHOLDER_STRIKE', placeholder.g.reasons.some((r) => r.includes('STRIKE_SIDE_PLACEHOLDER_STRIKE')), placeholder.g.reasons.join('|'));
+  t.eq('rule mode: payload names the strike source', placeholder.env.active15mCycle.lockEligibility.strikeSource, 'PLACEHOLDER');
+  const placeholderOff = runGateSpot(720, (e) => { withRule(hi[0], 'UP', 'off')(e); e.current15mStrikeSource = 'PLACEHOLDER'; });
+  t.eq('flag OFF: placeholder strike does not change the engine gate (pre-existing behaviour)', placeholderOff.g.allowed, true);
+  const shPlaceholder = placeholderOff.env.shadowL5ByCycle.get('BTC-15M-TEST');
+  t.check('flag OFF: the shadow still ticks on a placeholder strike', Boolean(shPlaceholder) && shPlaceholder.ticks === 1, JSON.stringify(shPlaceholder));
+  t.eq('flag OFF: placeholder strike -> no shadow would-lock recorded', shPlaceholder ? shPlaceholder.wouldLock : undefined, null);
+  t.eq('flag OFF: placeholder strike -> no strike stamped on the shadow slice', shPlaceholder ? (shPlaceholder.strike ?? null) : undefined, null);
+  const kalshiOff = runGateSpot(720, withRule(hi[0], 'UP', 'off'));
+  const shKalshi = kalshiOff.env.shadowL5ByCycle.get('BTC-15M-TEST');
+  t.check('flag OFF: Kalshi strike in a >=0.95 cell -> shadow would-lock recorded', Boolean(shKalshi && shKalshi.wouldLock), JSON.stringify(shKalshi));
+  t.eq('flag OFF: would-lock carries the strike it fired against', shKalshi?.wouldLock?.strike, 64000);
+  t.check('flag OFF: would-lock carries the spot it fired at', typeof shKalshi?.wouldLock?.spot === 'number' && shKalshi.wouldLock.spot > 64000);
+  t.eq('flag OFF: would-lock kalshiYes is null without a fresh Kalshi read (never the 0.5 seed)', shKalshi?.wouldLock?.kalshiYes, null);
+  t.eq('flag OFF: shadow slice stamped with the Kalshi strike', shKalshi?.strike, 64000);
   const fromOpen = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.rangeSource = 'instance_from_open'; });
   t.eq('rule mode: range seen from open -> ALLOWED', fromOpen.g.allowed, true);
   // Same fail-closed behaviour is visible in observation mode: p is unknown, never low.
