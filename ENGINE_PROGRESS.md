@@ -429,6 +429,24 @@ label/word now sit on two lines instead of truncating to "HIGH CONF…".
 QUALITY / alignment cards read "0 / 100" and "0/11" from the neutral
 placeholder rather than a dash; the headline, ring and hero already show "—".
 
+### Layer-5 shadow made durable (`SHADOW_L5_v2`)
+Found while probing the ledger from the browser: only **2 of 200** settled
+rows carried `shadowL5`, one with `ticks: 17` for a full cycle. The v1
+recorder lived in `shadowL5ByCycle` (one instance's memory) and the settling
+instance is rarely the watching one, so the live falsification data for the
+strike-side rule was being discarded. Now: each instance merge-writes its
+slice (`ticks`, `firstSec`/`lastSec`, `lastEval`, `wouldLock`, ≤60 `evals`)
+to `shadow_l5/<cycleId>` under `byInstance.<id>` when the cell changes or
+the rule fires (throttled 30s/instance, guarded by `canAttemptFirestoreWrite`,
+no pending queue — observation only); settlement, SKIP and the settle-cron
+reconciliation flush the local slice, read the doc back and attach
+`mergeShadowL5Record()` (earliest would-lock, latest eval, summed ticks,
+`instances`, coverage envelope, `engineDecision`). `GET /api/research/shadow-l5`
+(OWNER/ADMIN) reports rule would-locks graded against the settled side,
+engine locks/wins, the agreement matrix and per-cycle rows. Nothing touches
+the gate's `allowed`; pinned by `tests/l5-shadow-durable.invariants.mjs`
+(behavioural merge tests included). v1 rows must not be pooled with v2 rows.
+
 ---
 
 ## COMPLETED

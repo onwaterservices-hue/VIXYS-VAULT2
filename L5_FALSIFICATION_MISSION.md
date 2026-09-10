@@ -48,12 +48,23 @@ known, and the report must keep saying it:
    the rule's operating points. LOW-vol 3–6 bps at t=720 was 90.8% vs
    HIGH-vol 69.6% — find every such cell where the blended number hides a
    weak regime.
-7. **Live shadow reconciliation.** PR #28 now records `shadowL5` on every
-   settled ledger row (wouldLock time/side/p vs engine decision vs outcome,
-   `recordedBy: SHADOW_L5_v1`; per-instance `ticks` says coverage). After a
-   few days of deployment, compare shadow-would-lock outcomes against the
+7. **Live shadow reconciliation.** PR #28 recorded `shadowL5` in one
+   instance's memory (`SHADOW_L5_v1`), and the instance that settles a cycle
+   is rarely the one that watched it: on 2026-09-10 only **2 of 200** ledger
+   rows carried the record, one with `ticks: 17` for a whole cycle. SESSION 7
+   made it durable (`SHADOW_L5_v2`): every instance merges its slice into
+   `shadow_l5/<cycleId>` (write on cell change or when the rule fires,
+   throttled to one per 30s per instance; observation only, no queue), and
+   settlement / skip / reconciliation read the doc back and merge every
+   instance's slice (earliest would-lock, latest evaluation, summed `ticks`,
+   `instances`, coverage envelope). Read it at
+   `GET /api/research/shadow-l5` (OWNER/ADMIN): rule would-lock count,
+   wins/losses graded against the settled side, engine locks/wins, the
+   agreement matrix and per-cycle rows. A cycle is fully covered at ~300
+   ticks. After a few days, compare shadow-would-lock outcomes against the
    replay's prediction for the same cycles. Divergence = the harness is
-   missing something production does.
+   missing something production does. Rows recorded before the v2 deploy
+   remain v1 partial views and must not be pooled with v2 rows.
 8. **Kalshi implied price at t** (free API, still unmeasured): the rule's p
    minus the market's implied p IS the edge claim. If Kalshi already prices
    these cells at 0.95+, the product is honest selection with no market edge

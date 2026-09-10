@@ -3779,7 +3779,7 @@ function canLockCurrentCycle(livePrice) {
   try {
     let sh = shadowL5ByCycle.get(cycleId);
     if (!sh) {
-      sh = { cycleId, bar: VIXY_LOCK_RULE_BAR, tableVersion: strikeSide.tableVersion ?? null, wouldLock: null, lastEval: null, ticks: 0 };
+      sh = { cycleId, bar: VIXY_LOCK_RULE_BAR, tableVersion: strikeSide.tableVersion ?? null, wouldLock: null, lastEval: null, ticks: 0, firstSec: effElapsed, lastSec: effElapsed, evals: [] };
       shadowL5ByCycle.set(cycleId, sh);
       if (shadowL5ByCycle.size > 6) {
         const oldest = shadowL5ByCycle.keys().next().value;
@@ -3787,12 +3787,24 @@ function canLockCurrentCycle(livePrice) {
       }
     }
     sh.ticks += 1;
+    sh.lastSec = effElapsed;
+    let cellChanged = false;
+    let lockJustSet = false;
     if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
-      sh.lastEval = { atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key: strikeSide.key ?? null };
+      const key = strikeSide.key ?? null;
+      if (!sh.lastEval || sh.lastEval.key !== key || sh.lastEval.side !== strikeSide.currentSide) {
+        cellChanged = true;
+        if (sh.evals.length < 60) sh.evals.push({ atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key });
+      }
+      sh.lastEval = { atSec: effElapsed, p: strikeSide.p, side: strikeSide.currentSide, key };
       if (!sh.wouldLock && strikeSide.p >= VIXY_LOCK_RULE_BAR && effElapsed >= 360 && effElapsed < 780) {
-        sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key: strikeSide.key ?? null };
+        sh.wouldLock = { atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key };
+        lockJustSet = true;
       }
     }
+    // Durable copy: write when the cell changes or the rule fires (forced),
+    // throttled inside persistShadowL5. Fire-and-forget; the gate never waits.
+    if (cellChanged || lockJustSet) void persistShadowL5(sh, lockJustSet);
   } catch {}
   // ── CONVICTION TRAIL (observation only) ──────────────────────────────────
   // The per-tick trajectory of the calibrated P(win), the engine score and the
@@ -4490,13 +4502,18 @@ async function checkAndSettle15mCycle(livePrice) {
             totalHistory >= latestCalibrationState.calibrationMinimumSamples
               ? "ACTIVE"
               : "WARMING_UP";
-          // Attach this instance's Layer 5 shadow record to the settled row
-          // (observation only) so the live old-vs-new comparison rides the
-          // ledger. Missing when another instance settles a cycle it watched.
-          const shSettle = shadowL5ByCycle.get(prevLog.cycleId || `15M-${new Date(prevIntervalStart).toISOString()}`);
-          if (shSettle) {
-            prevLog.shadowL5 = { ...shSettle, engineDecision: prevLog.decision || null, recordedBy: "SHADOW_L5_v1" };
-            shadowL5ByCycle.delete(shSettle.cycleId);
+          // Attach the Layer 5 shadow record (observation only). v2: flush this
+          // instance's slice, read shadow_l5/<cycleId> back and merge every
+          // instance's slice, so the record no longer depends on the settling
+          // instance being the one that watched the cycle.
+          {
+            const shCycleId = prevLog.cycleId || `15M-${new Date(prevIntervalStart).toISOString()}`;
+            const shLocal = shadowL5ByCycle.get(shCycleId) || null;
+            if (shLocal) { try { await persistShadowL5(shLocal, true); } catch {} }
+            const shRemote = await readShadowL5Doc(shCycleId);
+            const shMerged = mergeShadowL5Record(shRemote, shLocal, prevLog.decision || null);
+            if (shMerged) prevLog.shadowL5 = shMerged;
+            if (shLocal) shadowL5ByCycle.delete(shCycleId);
           }
           let isDuplicate = false;
           try {
@@ -4580,10 +4597,14 @@ async function checkAndSettle15mCycle(livePrice) {
         };
         // Same shadow attachment for engine SKIPs: this is where the rule and
         // the engine most often diverge, so the SKIP rows carry it too.
-        const shSkip = shadowL5ByCycle.get(active15mCycle.cycleId);
-        if (shSkip) {
-          skippedLog.shadowL5 = { ...shSkip, engineDecision: "SKIP", recordedBy: "SHADOW_L5_v1" };
-          shadowL5ByCycle.delete(shSkip.cycleId);
+        {
+          const shCycleId = active15mCycle.cycleId;
+          const shLocal = shadowL5ByCycle.get(shCycleId) || null;
+          if (shLocal) { try { await persistShadowL5(shLocal, true); } catch {} }
+          const shRemote = await readShadowL5Doc(shCycleId);
+          const shMerged = mergeShadowL5Record(shRemote, shLocal, "SKIP");
+          if (shMerged) skippedLog.shadowL5 = shMerged;
+          if (shLocal) shadowL5ByCycle.delete(shCycleId);
         }
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) {
@@ -17397,6 +17418,10 @@ app.all("/api/cron/settle", async (req, res) => {
         lockedReason: claim.lockedReason || null,
         reconstructedFrom: "ACTIVE_CYCLE_LOCK_CLAIM",
       };
+      // A rebuilt row can still carry the durable shadow record.
+      const shRemote = await readShadowL5Doc(cid);
+      const shMerged = mergeShadowL5Record(shRemote, null, row.decision);
+      if (shMerged) row.shadowL5 = shMerged;
       persistentSignalLogs.unshift(row);
       try { await persistSingleSignalLog(row); } catch {}
       reconciliation.rebuilt += 1;
@@ -17570,6 +17595,105 @@ let lastLockRowAssertMs = 0;
 // would have done this cycle, per instance. Observation only; attached to the
 // ledger row at settlement so old-vs-new runs live while the flag stays off.
 const shadowL5ByCycle = new Map();
+// SHADOW_L5_v2 — durable copy of the shadow. v1 lived only in the Map above,
+// and the instance that settles a cycle is rarely the one that watched it, so
+// the record reached the ledger on 2 of 200 settled rows (ticks: 17 on a full
+// cycle). Now each instance merges its own slice into shadow_l5/<cycleId>
+// (throttled; observation only, no pending queue — a blocked write is simply
+// retried on the next change) and settlement reads the doc back and merges
+// every instance's slice.
+const SHADOW_INSTANCE_ID = Math.random().toString(36).slice(2, 8);
+const SHADOW_L5_WRITE_MIN_INTERVAL_MS = 30e3;
+const shadowL5LastWriteMs = new Map();
+function shadowL5InstanceSlice(sh) {
+  return {
+    ticks: sh.ticks ?? 0,
+    firstSec: sh.firstSec ?? null,
+    lastSec: sh.lastSec ?? null,
+    lastEval: sh.lastEval ?? null,
+    wouldLock: sh.wouldLock ?? null,
+    evals: Array.isArray(sh.evals) ? sh.evals.slice(0, 60) : [],
+  };
+}
+__name(shadowL5InstanceSlice, "shadowL5InstanceSlice");
+async function persistShadowL5(sh, force = false) {
+  if (!sh || !sh.cycleId) return;
+  const now = Date.now();
+  const last = shadowL5LastWriteMs.get(sh.cycleId) || 0;
+  if (!force && now - last < SHADOW_L5_WRITE_MIN_INTERVAL_MS) return;
+  if (!canAttemptFirestoreWrite(`shadow_l5/${sh.cycleId}`)) return;
+  shadowL5LastWriteMs.set(sh.cycleId, now);
+  if (shadowL5LastWriteMs.size > 12) {
+    const oldest = shadowL5LastWriteMs.keys().next().value;
+    if (oldest !== sh.cycleId) shadowL5LastWriteMs.delete(oldest);
+  }
+  try {
+    await ensureFirestoreNetworkEnabled();
+    await withTimeout(
+      setDoc(
+        doc(db, "shadow_l5", sh.cycleId),
+        sanitizeForFirestore({
+          cycleId: sh.cycleId,
+          bar: sh.bar,
+          tableVersion: sh.tableVersion ?? null,
+          recordedBy: "SHADOW_L5_v2",
+          updatedAt: new Date(now).toISOString(),
+          byInstance: { [SHADOW_INSTANCE_ID]: shadowL5InstanceSlice(sh) },
+        }),
+        { merge: true },
+      ),
+      5e3,
+      "RESOURCE_EXHAUSTED: shadow_l5 timeout",
+    );
+    lastFirestoreWriteTimeMs = Date.now();
+    firestoreWriteCountTotal += 1;
+  } catch (err) {
+    handleFirestoreWriteError(err, `shadow_l5/${sh.cycleId}`);
+  }
+}
+__name(persistShadowL5, "persistShadowL5");
+async function readShadowL5Doc(cycleId) {
+  if (!cycleId || !canAttemptFirestoreRead("shadow_l5")) return null;
+  try {
+    const snap = await withTimeout(getDoc(doc(db, "shadow_l5", cycleId)), 4e3, "shadow_l5 read timeout");
+    return snap && snap.exists() ? snap.data() || null : null;
+  } catch (err) {
+    handleFirestoreReadError(err, `shadow_l5/${cycleId}`);
+    return null;
+  }
+}
+__name(readShadowL5Doc, "readShadowL5Doc");
+// Merge every instance's slice into one record: the EARLIEST would-lock (the
+// rule fires once, at its first qualifying evaluation), the LATEST evaluation,
+// summed ticks and the coverage envelope. Never invents a would-lock.
+function mergeShadowL5Record(remote, local, engineDecision) {
+  const slices = { ...((remote && remote.byInstance) || {}) };
+  if (local) slices[SHADOW_INSTANCE_ID] = shadowL5InstanceSlice(local);
+  const entries = Object.values(slices).filter((e) => e && typeof e === "object");
+  if (entries.length === 0) return null;
+  let wouldLock = null, lastEval = null, ticks = 0, firstSec = null, lastSec = null;
+  for (const e of entries) {
+    ticks += Number(e.ticks) || 0;
+    if (e.wouldLock && typeof e.wouldLock.atSec === "number" && (!wouldLock || e.wouldLock.atSec < wouldLock.atSec)) wouldLock = e.wouldLock;
+    if (e.lastEval && typeof e.lastEval.atSec === "number" && (!lastEval || e.lastEval.atSec > lastEval.atSec)) lastEval = e.lastEval;
+    if (typeof e.firstSec === "number" && (firstSec === null || e.firstSec < firstSec)) firstSec = e.firstSec;
+    if (typeof e.lastSec === "number" && (lastSec === null || e.lastSec > lastSec)) lastSec = e.lastSec;
+  }
+  return {
+    cycleId: (remote && remote.cycleId) || (local && local.cycleId) || null,
+    bar: (remote && typeof remote.bar === "number") ? remote.bar : (local && typeof local.bar === "number") ? local.bar : VIXY_LOCK_RULE_BAR,
+    tableVersion: (remote && remote.tableVersion) || (local && local.tableVersion) || null,
+    wouldLock,
+    lastEval,
+    ticks,
+    instances: entries.length,
+    firstSec,
+    lastSec,
+    engineDecision: engineDecision ?? null,
+    recordedBy: "SHADOW_L5_v2",
+  };
+}
+__name(mergeShadowL5Record, "mergeShadowL5Record");
 let wssClientsCount = 0;
 const pendingTelemetryQueue = [];
 const pendingSignalLogsQueue = [];
@@ -17731,6 +17855,90 @@ function isCircuitOpen() {
   return firestoreRetryAtMs > 0 && Date.now() < firestoreRetryAtMs;
 }
 __name(isCircuitOpen, "isCircuitOpen");
+// Research readout for the Layer-5 shadow (observation only): joins every
+// ledger row that carries a shadow record with its settled outcome so the
+// live old-vs-new comparison is a measured number. Admin-gated; nothing here
+// feeds a decision.
+app.get("/api/research/shadow-l5", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
+  if (persistentSignalLogs.length === 0) {
+    try { await ensureLedgerHydrated(); } catch {}
+  }
+  const rows = persistentSignalLogs.filter(
+    (s) => s && s.shadowL5 && (s.status === "RESOLVED" || s.status === "NO_TRADE" || s.status === "SKIPPED"),
+  );
+  const out: any = {
+    generatedAt: new Date().toISOString(),
+    tableVersion: null,
+    bar: VIXY_LOCK_RULE_BAR,
+    rowsWithShadow: rows.length,
+    ledgerRows: persistentSignalLogs.length,
+    v1: 0,
+    v2: 0,
+    coverage: { ticksMedian: null, fullCycleTicks: 300, instancesMean: null },
+    rule: { wouldLock: 0, wins: 0, losses: 0, ungraded: 0 },
+    engine: { locks: 0, wins: 0, losses: 0 },
+    agreement: { bothLockSameSide: 0, bothLockOppositeSide: 0, ruleOnly: 0, engineOnly: 0, neither: 0 },
+    cycles: [] as any[],
+  };
+  const ticksArr: number[] = [];
+  let instSum = 0;
+  let instN = 0;
+  for (const s of rows) {
+    const sh = s.shadowL5;
+    if (sh.recordedBy === "SHADOW_L5_v2") out.v2 += 1; else out.v1 += 1;
+    if (!out.tableVersion && sh.tableVersion) out.tableVersion = sh.tableVersion;
+    if (typeof sh.ticks === "number") ticksArr.push(sh.ticks);
+    if (typeof sh.instances === "number") { instSum += sh.instances; instN += 1; }
+    const engineLocked = s.decision === "BUY_UP" || s.decision === "BUY_DOWN";
+    const engineSide = s.decision === "BUY_UP" ? "UP" : s.decision === "BUY_DOWN" ? "DOWN" : null;
+    const outcome = s.actualOutcome === "UP" || s.actualOutcome === "DOWN" ? s.actualOutcome : null;
+    if (engineLocked) {
+      out.engine.locks += 1;
+      if (outcome) { if (s.wasCorrect) out.engine.wins += 1; else out.engine.losses += 1; }
+    }
+    const wl = sh.wouldLock && (sh.wouldLock.side === "UP" || sh.wouldLock.side === "DOWN") ? sh.wouldLock : null;
+    let ruleResult: string | null = null;
+    if (wl) {
+      out.rule.wouldLock += 1;
+      if (outcome) {
+        ruleResult = wl.side === outcome ? "WIN" : "LOSS";
+        if (ruleResult === "WIN") out.rule.wins += 1; else out.rule.losses += 1;
+      } else {
+        out.rule.ungraded += 1;
+      }
+    }
+    if (wl && engineLocked) {
+      if (wl.side === engineSide) out.agreement.bothLockSameSide += 1; else out.agreement.bothLockOppositeSide += 1;
+    } else if (wl) {
+      out.agreement.ruleOnly += 1;
+    } else if (engineLocked) {
+      out.agreement.engineOnly += 1;
+    } else {
+      out.agreement.neither += 1;
+    }
+    out.cycles.push({
+      cycleId: s.cycleId || null,
+      intervalEnd: s.intervalEnd || null,
+      engine: s.decision || null,
+      engineResult: engineLocked && outcome ? (s.wasCorrect ? "WIN" : "LOSS") : null,
+      outcome,
+      rule: wl ? { side: wl.side, atSec: wl.atSec, p: wl.p, n: wl.n ?? null, key: wl.key ?? null } : null,
+      ruleResult,
+      ticks: sh.ticks ?? null,
+      instances: typeof sh.instances === "number" ? sh.instances : sh.recordedBy === "SHADOW_L5_v1" ? 1 : null,
+      lastEval: sh.lastEval ?? null,
+      recordedBy: sh.recordedBy || null,
+    });
+  }
+  ticksArr.sort((a, b) => a - b);
+  out.coverage.ticksMedian = ticksArr.length ? ticksArr[Math.floor(ticksArr.length / 2)] : null;
+  out.coverage.instancesMean = instN ? Math.round((instSum / instN) * 100) / 100 : null;
+  out.note =
+    "Observation only. A cycle is fully covered at ~300 ticks (3s tick x 15 min); v1 rows reflect one instance's partial view. " +
+    "The rule's live win rate is only meaningful once wouldLock and coverage are large; read it next to the OOS replay in L5_FALSIFICATION_MISSION.md, never alone.";
+  res.json(out);
+});
+
 function canAttemptFirestoreWrite(writeTarget = "unknown") {
   if (!db || persistenceState === "RESOURCE_EXHAUSTED" || firestoreNetworkDisabled) return false;
   // Auth-readiness gate. Without this, writes issued between `db` being assigned and the
