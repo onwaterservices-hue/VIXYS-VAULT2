@@ -210,7 +210,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const [showMarketRegimeModal, setShowMarketRegimeModal] = useState<boolean>(false);
 
   // Motion & Dynamic State Trackers
-  const prevSpotPriceRef = useRef<number>(64591.20);
+  const prevSpotPriceRef = useRef<number>(0);
   const [priceFlash, setPriceFlash] = useState<'UP' | 'DOWN' | 'NONE'>('NONE');
   const [priceTickDelta, setPriceTickDelta] = useState<string | null>(null);
   const [lockBeamActive, setLockBeamActive] = useState<boolean>(false);
@@ -310,8 +310,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   }, [cycleSecondsRemaining]);
 
   // Spot Price & Direction Calculations for active selected asset
-  const spotPrice = liveTicker?.price || (canonicalDecision as any)?.spotPrice || (selectedAsset === 'ETH' ? 3480 : selectedAsset === 'SOL' ? 185 : 64591.20);
-  const spotChange = liveTicker?.change24h || 1.85;
+  // No invented $64,591.20 / $3,480 / $185 / +1.85%: the live ticker, then
+  // the engine's spot, then 0 (rendered as a dash) until a real number lands.
+  const spotPrice: number = liveTicker?.price || (canonicalDecision?.currentSpot as number) || (canonicalDecision as any)?.spotPrice || 0;
+  const spotChange: number = typeof liveTicker?.change24h === 'number' && Number.isFinite(liveTicker.change24h) ? liveTicker.change24h : 0;
 
   // Ask / Target Strike Reference Price for the selected crypto
   const targetPrice = useMemo(() => {
@@ -1183,7 +1185,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </div>
 
               <div className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight leading-none whitespace-nowrap">
-                ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {spotPrice > 0 ? `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
               </div>
 
               <div className="flex items-center justify-between gap-1 pt-0.5">
@@ -1268,18 +1270,24 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </div>
             </div>
 
-            {/* Bottom 24H Range Strip */}
+            {/* Bottom strip: the PRICE TO BEAT and where spot sits against it —
+                the only two numbers a 15-minute contract is graded on. The old
+                "24H HIGH / LOW" here were spot × 1.018 and spot × 0.982. */}
             <div className="mt-3 pt-2 border-t border-purple-900/30 grid grid-cols-2 gap-2 text-[10px] font-mono relative z-10">
               <div className="min-w-0">
-                <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">24H HIGH</span>
+                <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">
+                  {selectedAsset === 'BTC' && (canonicalDecision?.openStrike ?? 0) > 0 ? 'PRICE TO BEAT (KALSHI STRIKE)' : 'REFERENCE (CYCLE OPEN)'}
+                </span>
                 <span className="font-bold text-white text-[10px] whitespace-nowrap block">
-                  ${(spotPrice * 1.018).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {targetPrice > 0 ? `$${targetPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
                 </span>
               </div>
               <div className="border-l border-purple-900/40 pl-2 min-w-0">
-                <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">24H LOW</span>
-                <span className="font-bold text-white text-[10px] whitespace-nowrap block">
-                  ${(spotPrice * 0.982).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <span className="text-purple-400/80 block text-[9px] whitespace-nowrap">SPOT VS STRIKE</span>
+                <span className={`font-bold text-[10px] whitespace-nowrap block ${spotPrice > 0 && targetPrice > 0 ? (spotPrice >= targetPrice ? 'text-emerald-300' : 'text-rose-300') : 'text-slate-500'}`}>
+                  {spotPrice > 0 && targetPrice > 0
+                    ? `${spotPrice >= targetPrice ? '+' : '−'}$${Math.abs(spotPrice - targetPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · ${Math.abs(((spotPrice - targetPrice) / targetPrice) * 1e4).toFixed(1)} bps ${spotPrice >= targetPrice ? 'above' : 'below'}`
+                    : '—'}
                 </span>
               </div>
             </div>
