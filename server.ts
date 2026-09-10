@@ -2492,11 +2492,26 @@ function evaluateBtc15mHighConvictionPipeline(
   const agreementCount = families.filter((f) => f.agreement).length;
   const kalshiImpliedProb = currentKalshiImpliedProb || 0.52;
   const agreementBonus = (agreementCount - 6) * 0.05;
+  // Moneyness must be direction-neutral. The previous form awarded +0.04 to
+  // every UP candidate and charged -0.04 to every DOWN candidate whenever the
+  // spot sat more than $5 from the strike but short of in-the-money, so two
+  // cycles with identical evidence produced P(side) 8 points apart depending
+  // only on which side was being considered. Measured in production on
+  // 2026-09-09: 68 of the last 74 locks were UP and every one of the 12
+  // locks broadcast that evening was UP. The reward now follows whether the
+  // spot is on the candidate's side of the strike, which is what "moneyness"
+  // means, and applies with the same magnitude to both sides.
+  const onCandidateSide =
+    candidateDir === "UP"
+      ? distFromStrike > 0
+      : candidateDir === "DOWN"
+        ? distFromStrike < 0
+        : false;
   const moneynessBonus = isITM
     ? 0.1
     : distFromStrikeAbs < 5
       ? 0
-      : candidateDir === "UP"
+      : onCandidateSide
         ? 0.04
         : -0.04;
   const rawDirectionalBias =
@@ -3884,7 +3899,7 @@ function canLockCurrentCycle(livePrice) {
   };
 }
 __name(canLockCurrentCycle, "canLockCurrentCycle");
-async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, reason) {
+async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, reason, probability, lockedAt) {
   // FREE and ELITE are delivered independently. Each tier has its own claim key
   // (`${cycleId}#FREE` / `${cycleId}#ELITE`) so one tier failing or already
   // being claimed can never suppress the other. The canonical decision inputs
@@ -3924,8 +3939,13 @@ async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, r
           edgePct: currentEdgePct,
           currentPrice: spot,
           targetPrice: strike,
-          reasoning: reason || "High-conviction taker delta absorption detected.",
+          // The lock-rule code that fired (e.g. QUALIFIED_AUTHORITATIVE_ENTRY).
+          // The previous fallback sentence ("High-conviction taker delta
+          // absorption detected.") described a measurement nobody made.
+          reasoning: reason || "AUTHORITATIVE_LOCK",
           tier,
+          probability: Number.isFinite(probability) ? probability : undefined,
+          lockedAt: lockedAt || undefined,
         });
       } catch (err) {
         console.error(`[Discord] Automated broadcast failed (tier=${label}):`, err);
@@ -4202,7 +4222,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     };
   }
 
-  await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason);
+  await attemptDiscordSignalBroadcast(cycleId, finalDir, finalConf, finalSpot, finalStrike, finalReason, finalProb, finalLockedTime);
 
   // The ledger row must land regardless of which instance won the claim
   // transaction: the row id is deterministic (sig_lock_<intervalStart>) and a
@@ -5138,6 +5158,8 @@ async function checkAndSettle15mCycle(livePrice) {
       lockedSrc.spot ?? lockedSrc.spotAtLock,
       lockedSrc.strike,
       lockedSrc.reason || "AUTHORITATIVE_LOCK_SYNC",
+      lockedSrc.probability ?? active15mCycle.lockedProbability,
+      lockedSrc.lockedAt ?? active15mCycle.lockedAt,
     );
   }
   active15mCycle.sequence = globalSequenceNumber;

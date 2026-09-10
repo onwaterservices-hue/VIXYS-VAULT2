@@ -22,6 +22,14 @@ export interface MarketOverview {
     brierScore: number;
     accuracy: number;
     totalSettled: number;
+    // Authoritative lock facts, present only when the embed is built from a
+    // real VIXY lock (broadcastSignalToDiscord). The slash-command path that
+    // builds a MarketOverview from a live ticker leaves them undefined and the
+    // embeds omit the corresponding fields rather than invent them.
+    lockedProbability?: number;
+    lockedAt?: string;
+    lockRule?: string;
+    strike?: number;
   };
 }
 

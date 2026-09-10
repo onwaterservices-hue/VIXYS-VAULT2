@@ -206,7 +206,7 @@ async function handleInteraction(interaction: Interaction) {
 
     await interaction.reply({ embeds: [embed] });
   } else if (commandName === 'vip') {
-    const baseUrl = (process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '');
+    const baseUrl = (process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '');
     await interaction.reply({
       content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\n👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/#pricing)**`,
       ephemeral: true,

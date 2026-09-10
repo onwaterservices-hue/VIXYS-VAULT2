@@ -5,16 +5,26 @@ export function createFreeSignalEmbed(data: MarketOverview) {
   const isBull = data.prediction.direction === 'BULLISH';
   const color = 0x0f1f18; // Dark charcoal green
 
-  const baseUrl = (process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '');
+  const baseUrl = (process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '');
+  const lock = describeLock(data);
 
   return new EmbedBuilder()
     .setTitle(`🧠 VIXY AI • 15m Market Scan`)
     .setColor(color)
-    .setDescription(`Institutional activity has increased across ${data.asset} during the current 15-minute cycle.`)
+    // Derived from the lock itself. The previous sentence ("Institutional
+    // activity has increased ...") was a constant printed on every cycle
+    // regardless of what the engine measured.
+    .setDescription(lock.description)
     .addFields(
       { name: 'Current AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
       { name: 'Market Bias', value: `\`${isBull ? 'Bullish' : 'Bearish'}\``, inline: true },
-      { name: 'Probability Score', value: `\`${(data.prediction.confidence * 0.96).toFixed(1)}%\``, inline: true },
+      // The engine's locked probability for the chosen side. Previously this
+      // slot printed confidence * 0.96 under the name "Probability Score", a
+      // number no model produced. When no locked probability exists the field
+      // is omitted rather than filled with a derived stand-in.
+      ...(lock.probabilityPct !== null
+        ? [{ name: 'Locked P(win)', value: `\`${lock.probabilityPct}%\``, inline: true }]
+        : []),
       {
         name: '🔒 Full trade released to VIXY ELITE',
         value:
@@ -37,9 +47,35 @@ export function createFreeSignalEmbed(data: MarketOverview) {
     .setTimestamp();
 }
 
+// Facts about the lock that both embeds print. Everything here is read from
+// the MarketOverview the caller built from the authoritative lock; nothing is
+// estimated in this file.
+function describeLock(data: MarketOverview) {
+  const p = data.prediction;
+  const side = p.direction === 'BULLISH' ? 'UP' : p.direction === 'BEARISH' ? 'DOWN' : 'NEUTRAL';
+  const probabilityPct =
+    typeof p.lockedProbability === 'number' && p.lockedProbability > 0 && p.lockedProbability <= 1
+      ? Math.round(p.lockedProbability * 1000) / 10
+      : null;
+  const lockedAtUtc = p.lockedAt ? new Date(p.lockedAt) : null;
+  const lockedAtLabel =
+    lockedAtUtc && !Number.isNaN(lockedAtUtc.getTime())
+      ? `${lockedAtUtc.toISOString().slice(11, 19)} UTC`
+      : null;
+  const spot = Number.isFinite(data.price) && data.price > 0 ? `$${data.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : null;
+  const strike = typeof p.strike === 'number' && p.strike > 0 ? `$${p.strike.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : null;
+  const parts = [`VIXY locked **${side}** on ${data.asset}`];
+  if (lockedAtLabel) parts.push(`at ${lockedAtLabel}`);
+  let description = parts.join(' ') + '.';
+  if (spot && strike) description += ` Spot at lock ${spot} vs strike ${strike}.`;
+  else if (spot) description += ` Spot at lock ${spot}.`;
+  return { side, probabilityPct, lockedAtLabel, spot, strike, description };
+}
+
 export function createVipSignalEmbed(data: MarketOverview) {
   const isBull = data.prediction.direction === 'BULLISH';
   const color = 0x8B5CF6; // Royal VIP Purple
+  const lock = describeLock(data);
 
   const spot = data.price;
   const entry = Math.round(spot * (isBull ? 0.9995 : 1.0005) * 100) / 100;
@@ -49,14 +85,21 @@ export function createVipSignalEmbed(data: MarketOverview) {
   return new EmbedBuilder()
     .setTitle(`💎 VIXY AI CORE • INSTANT PREMIUM SIGNAL`)
     .setColor(color)
-    .setDescription(`⚡ **INSTANT VIP BROADCAST** • *Sub-Second Orderbook Execution Signal*`)
+    .setDescription(`⚡ **INSTANT VIP BROADCAST** • ${lock.description}`)
     .addFields(
       { name: 'Asset', value: `**${data.asset}**`, inline: true },
       { name: 'Direction', value: `**${isBull ? '🐂 BULLISH (YES)' : '🐻 BEARISH (NO)'}**`, inline: true },
       { name: 'AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
-      { name: '🎯 ENTRY', value: `\`$${entry.toLocaleString()}\``, inline: true },
-      { name: '🛑 STOP LOSS', value: `\`$${stop.toLocaleString()}\``, inline: true },
-      { name: '🏁 TARGET PROFIT', value: `\`$${target.toLocaleString()}\``, inline: true },
+      ...(lock.probabilityPct !== null
+        ? [{ name: 'Locked P(win)', value: `\`${lock.probabilityPct}%\``, inline: true }]
+        : []),
+      // Entry / stop / target are fixed offsets from the spot at lock
+      // (-0.05% / -0.35% / +0.65% for a bullish call, mirrored for bearish).
+      // They are a house rule, not a model output, and are labelled as such so
+      // a subscriber cannot read them as an independent engine opinion.
+      { name: `🎯 ENTRY (spot ${isBull ? '−' : '+'}0.05%)`, value: `\`$${entry.toLocaleString()}\``, inline: true },
+      { name: `🛑 STOP LOSS (house rule ${isBull ? '−' : '+'}0.35%)`, value: `\`$${stop.toLocaleString()}\``, inline: true },
+      { name: `🏁 TARGET (house rule ${isBull ? '+' : '−'}0.65%)`, value: `\`$${target.toLocaleString()}\``, inline: true },
       // These three fields were previously hardcoded string literals
       // ("+1,820 BTC Taker Buying", "+8.4% vs Kalshi Odds", "0.168 (Optimal)")
       // and were therefore identical on every signal regardless of market
@@ -69,7 +112,10 @@ export function createVipSignalEmbed(data: MarketOverview) {
       ...(data.prediction.brierScore
         ? [{ name: '🎯 Brier Score', value: `\`${data.prediction.brierScore.toFixed(3)}\``, inline: true }]
         : []),
-      { name: '🧠 Institutional Reasoning', value: data.prediction.reasoning, inline: false }
+      // The value here is the engine's deterministic lock-rule code (for
+      // example QUALIFIED_AUTHORITATIVE_ENTRY), not a written rationale, so it
+      // is labelled as the rule that fired rather than as "reasoning".
+      { name: '🔐 Lock rule', value: `\`${data.prediction.lockRule || data.prediction.reasoning}\``, inline: false }
     )
     .setFooter({ text: 'VIXY AI Core VIP Channel • Confidential Member Signal' })
     .setTimestamp();
