@@ -401,7 +401,7 @@ export const PerformanceLabView: React.FC = () => {
                 <tr key={b.name} className={`hover:bg-purple-950/30 transition-colors ${
                   b.status === 'PRODUCTION' ? 'bg-purple-900/20 font-bold' : ''
                 }`}>
-                  <td className="py-3 font-black text-white flex items-center gap-2">
+                  <td className={`py-3 font-black text-white flex items-center gap-2 ${b.status === 'PRODUCTION' ? 'vx-live-edge' : ''}`}>
                     {b.status === 'PRODUCTION' && <Flame className="w-3.5 h-3.5 text-purple-400" />}
                     {b.name}
                   </td>

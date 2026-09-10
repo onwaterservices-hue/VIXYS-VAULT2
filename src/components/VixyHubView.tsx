@@ -35,6 +35,7 @@ import { BTCTicker } from '../types';
 import CycleObject from './CycleObject';
 import { headline } from '../lib/engineSemantics';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
+import { auraClassFor } from '../lib/engineSemantics';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
 
 interface VixyHubViewProps {
@@ -117,6 +118,15 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
   };
 
   // Ambient glow styles based on direction
+  // The hero card's bloom is the lifecycle readout: colour says which phase the
+  // engine is in, pulse rate says how urgent it is, and a still card means the
+  // feed is not LIVE. Direction alone is not enough -- a CALIBRATING UP and a
+  // LOCKED UP used to look identical.
+  const heroAuraClass = auraClassFor(lifecycle, {
+    feedHealth: dataHealthStatus,
+    direction: rawDirection,
+  });
+
   const ambientGlowClass = isUp
     ? 'border-emerald-500/40 shadow-[0_0_40px_rgba(16,185,129,0.08)] bg-gradient-to-b from-[#06140d]/60 via-[#0a0718]/80 to-[#070512]'
     : isDown
@@ -247,7 +257,11 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
           </div>
         </section>
         {/* Flagship Hero Card: "CANONICAL 15M CYCLE" */}
-        <div className={`p-5 sm:p-7 rounded-3xl border transition-all duration-300 ${ambientGlowClass}`}>
+        <div className={`relative p-5 sm:p-7 rounded-3xl border transition-all duration-300 ${ambientGlowClass} ${heroAuraClass}`}>
+          {/* Streams only while the engine is still deciding; goes quiet once committed. */}
+          {heroAuraClass && !isLocked && (
+            <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>
+          )}
           <div className="flex flex-col lg:flex-row justify-between gap-6 items-stretch lg:items-center">
             
             {/* Left: Direction & Calibration Confidence */}

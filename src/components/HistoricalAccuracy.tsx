@@ -4,6 +4,7 @@ import {
   Sparkles, ArrowUpRight, ArrowDownRight, Layers, Terminal, Shield, Zap, X, FileText, Database, Check, ExternalLink
 } from 'lucide-react';
 import { fetchResolvedLogApi, fetchVixyStateApi } from '../services/api';
+import { auraClassFor } from '../lib/engineSemantics';
 
 // Mirrors latestCalibrationState.calibrationMinimumSamples in server.ts, the
 // sample size at which the backend flips calibration from WARMING_UP to ACTIVE.
@@ -478,7 +479,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               return (
                 <div 
                   onClick={() => setActiveProvenance(liveLogObject)}
-                  className={`col-span-1 md:col-span-2 border-2 rounded-2xl p-5 sm:p-6 relative overflow-hidden shadow-2xl transition-all duration-300 cursor-pointer ${
+                  className={`col-span-1 md:col-span-2 border-2 rounded-2xl p-5 sm:p-6 relative overflow-hidden shadow-2xl transition-all duration-300 cursor-pointer ${auraClassFor(
+                    isSkip ? 'SKIPPED' : isLocked ? 'LOCKED' : stageName === 'VERIFYING LOCK' ? 'CONFIRMING' : 'BUILDING',
+                    { direction: isUpDir ? 'UP' : 'DOWN' }
+                  )} ${
                   isSkip
                     ? 'bg-gradient-to-br from-[#200842] via-[#120429] to-[#0a0217] border-purple-400 shadow-[0_0_30px_rgba(168,85,247,0.3)] hover:border-purple-300'
                     : isLocked
@@ -489,6 +493,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     ? 'bg-gradient-to-br from-[#0a1533] via-[#050b1c] to-[#02050e] border-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.35)] hover:border-cyan-300'
                     : 'bg-gradient-to-br from-[#0c0d24] via-[#060714] to-[#020208] border-purple-500/80 shadow-[0_0_25px_rgba(168,85,247,0.2)] hover:border-purple-400'
                 }`}>
+                  {/* Streams only while this cycle is still open. Once VIXY has
+                      committed or skipped, the beam stops: motion here means
+                      "still deciding", never decoration. */}
+                  {!isLocked && !isSkip && (
+                    <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>
+                  )}
+
                   {/* Glowing Edge Bar */}
                   <div className={`absolute top-0 left-0 right-0 h-[3px] ${
                     isSkip ? 'bg-gradient-to-r from-transparent via-purple-400 to-transparent shadow-[0_0_12px_rgba(168,85,247,0.9)]' :

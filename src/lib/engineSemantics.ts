@@ -175,3 +175,37 @@ export function headline(
   }
   return { kind: 'NONE', value: null, label: 'NO DATA', n: null, side: null, word: 'NO DATA' };
 }
+
+/**
+ * Maps an engine lifecycle state onto its holographic aura class.
+ *
+ * The aura is a readout, not decoration, so it is only ever returned when the
+ * feed is genuinely LIVE. On a stale, disconnected or errored feed this
+ * returns '' and the surface sits perfectly still -- stillness is how the
+ * terminal says "I am not receiving right now", and that has to stay
+ * unambiguous. Direction only matters once a decision is committed, which is
+ * why it splits LOCKED and nothing else.
+ */
+export function auraClassFor(
+  lifecycle: string | null | undefined,
+  opts: { feedHealth?: string | null; direction?: string | null } = {}
+): string {
+  const { feedHealth, direction } = opts;
+  if (feedHealth && feedHealth !== 'LIVE') return '';
+  const isUp = direction === 'UP' || direction === 'YES';
+  const isDown = direction === 'DOWN' || direction === 'NO';
+
+  switch (lifecycle) {
+    case 'CALIBRATING': return 'vx-aura vx-aura-calibrating';
+    case 'BUILDING':    return 'vx-aura vx-aura-building';
+    case 'CONFIRMING':  return 'vx-aura vx-aura-confirming';
+    case 'LOCKED':
+      if (isUp) return 'vx-aura vx-aura-locked-up';
+      if (isDown) return 'vx-aura vx-aura-locked-down';
+      return 'vx-aura vx-aura-confirming';
+    case 'PROTECTED':   return 'vx-aura vx-aura-protected';
+    case 'SETTLED':     return 'vx-aura vx-aura-settled';
+    case 'SKIPPED':     return 'vx-aura vx-aura-skipped';
+    default:            return '';
+  }
+}

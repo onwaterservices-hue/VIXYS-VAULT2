@@ -564,3 +564,155 @@ a[role="button"]:active {
   body::before, body::after { animation: none !important; }
   button:not(:disabled):active { transform: none; }
 }
+
+/* ===========================================================================
+   VIXY HOLOGRAPHIC STATE LAYER (2026-09-10)
+
+   One rule governs every class below: a glow is a READOUT, never decoration.
+   Each is applied only when the engine has actually reported the state it
+   represents. Two consequences worth stating out loud:
+
+     - A card that is NOT breathing means the feed is not LIVE. Stillness is
+       the honest signal for stale / disconnected, so never apply an aura on a
+       surface whose data health is anything other than LIVE.
+     - Pulse rate encodes urgency, not taste: PROTECTED (risk actively watched)
+       is fastest, SETTLED (finished) is slowest.
+   =========================================================================== */
+
+/* --- Lifecycle aura ------------------------------------------------------
+   One ambient bloom per NormalizedLifecycleState. Colour is the state; you
+   can read where the cycle is from across the room without reading a word. */
+.vx-aura {
+  --vx-aura-c: 168, 85, 247;
+  --vx-aura-speed: 3.4s;
+  animation: vxAuraBreathe var(--vx-aura-speed) ease-in-out infinite;
+}
+@keyframes vxAuraBreathe {
+  0%, 100% {
+    box-shadow:
+      0 0 30px -8px rgba(var(--vx-aura-c), 0.30),
+      0 0 68px -22px rgba(var(--vx-aura-c), 0.18),
+      inset 0 0 26px -20px rgba(var(--vx-aura-c), 0.55);
+  }
+  50% {
+    box-shadow:
+      0 0 50px -8px rgba(var(--vx-aura-c), 0.48),
+      0 0 96px -22px rgba(var(--vx-aura-c), 0.30),
+      inset 0 0 42px -20px rgba(var(--vx-aura-c), 0.78);
+  }
+}
+.vx-aura-calibrating { --vx-aura-c: 124, 139, 161; --vx-aura-speed: 5.2s; }
+.vx-aura-building    { --vx-aura-c: 96, 165, 250;  --vx-aura-speed: 4.0s; }
+.vx-aura-confirming  { --vx-aura-c: 167, 139, 250; --vx-aura-speed: 2.6s; }
+.vx-aura-locked-up   { --vx-aura-c: 16, 185, 129;  --vx-aura-speed: 3.0s; }
+.vx-aura-locked-down { --vx-aura-c: 244, 63, 94;   --vx-aura-speed: 3.0s; }
+.vx-aura-protected   { --vx-aura-c: 251, 191, 36;  --vx-aura-speed: 2.1s; }
+.vx-aura-settled     { --vx-aura-c: 52, 211, 153;  --vx-aura-speed: 6.5s; }
+.vx-aura-skipped     { --vx-aura-c: 148, 163, 184; --vx-aura-speed: 6.5s; }
+
+/* --- Scan beam -----------------------------------------------------------
+   A sweep across a surface that is genuinely streaming right now. Rendered as
+   a child (not a pseudo-element) so it composes with .hud-corners, which
+   already owns ::before and ::after. */
+.vx-beam-wrap {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.vx-scan-beam {
+  position: absolute;
+  inset: 0;
+  --vx-beam-c: 34, 211, 238;
+  background: linear-gradient(
+    105deg,
+    transparent 34%,
+    rgba(var(--vx-beam-c), 0.08) 46%,
+    rgba(var(--vx-beam-c), 0.20) 50%,
+    rgba(var(--vx-beam-c), 0.08) 54%,
+    transparent 66%
+  );
+  transform: translateX(-110%);
+  animation: vxBeamSweep 3.4s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+@keyframes vxBeamSweep {
+  0%        { transform: translateX(-110%); }
+  55%, 100% { transform: translateX(110%); }
+}
+
+/* --- Phase rail ----------------------------------------------------------
+   Progress through one lifecycle phase. Width is always a measured fraction
+   of that phase's own window, never an animation for its own sake. */
+.vx-rail {
+  position: relative;
+  height: 2px;
+  border-radius: 999px;
+  background: rgba(168, 85, 247, 0.14);
+  overflow: hidden;
+}
+.vx-rail-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(168, 85, 247, 0.65), rgba(34, 211, 238, 0.95));
+  box-shadow: 0 0 9px rgba(34, 211, 238, 0.55);
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vx-rail-fill.done {
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.55), rgba(52, 211, 153, 0.85));
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.45);
+}
+
+/* --- Holographic empty slot ---------------------------------------------
+   For a container that is genuinely empty and waiting to be filled. Reads as
+   a projection field rather than a dashed placeholder. */
+.vx-holo-slot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(168, 85, 247, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(168, 85, 247, 0.16) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 8%, transparent 74%);
+  mask-image: radial-gradient(ellipse at center, #000 8%, transparent 74%);
+  opacity: 0.45;
+  transition: opacity 0.3s ease;
+}
+.vx-holo-slot:hover::before { opacity: 1; }
+
+/* --- Live edge marker ----------------------------------------------------
+   Marks the one row in a table that is the measured production model. Every
+   other row is a benchmark and stays flat. */
+.vx-live-edge {
+  position: relative;
+  padding-left: 11px !important;
+}
+.vx-live-edge::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, transparent, #c084fc, transparent);
+  box-shadow: 0 0 10px rgba(192, 132, 252, 0.85);
+  animation: vxEdgePulse 2.8s ease-in-out infinite;
+}
+@keyframes vxEdgePulse {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vx-aura { animation: none !important; }
+  .vx-scan-beam { animation: none !important; opacity: 0 !important; }
+  .vx-live-edge::before { animation: none !important; opacity: 0.9 !important; }
+  .vx-rail-fill { transition: none !important; }
+}
