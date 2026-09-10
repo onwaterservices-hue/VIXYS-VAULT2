@@ -198,6 +198,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       case 'INSUFFICIENT_SAMPLE': return `${base} · ${n} of 30 needed in this cell`;
       case 'BEFORE_FIRST_CHECKPOINT': return `${base} · before the first checkpoint (60s)`;
       case 'NO_PRICE_OR_STRIKE': return `${base} · strike not resolved`;
+      case 'PARTIAL_CYCLE_RANGE': return `${base} · this server instance joined mid-cycle and is still recovering the cycle's range`;
       case 'AT_STRIKE': return `${base} · price exactly at strike`;
       case 'NO_CYCLE_RANGE': return `${base} · no cycle range yet`;
       case 'NO_DIST_BIN': return `${base} · distance outside the table`;

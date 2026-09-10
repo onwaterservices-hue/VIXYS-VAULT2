@@ -3495,10 +3495,15 @@ if (!VIXY_LOCK_RULE_MODES.includes(VIXY_LOCK_RULE)) {
   console.error(`[VIXY_LOCK_RULE] unknown mode "${VIXY_LOCK_RULE}" — valid: ${VIXY_LOCK_RULE_MODES.join(", ")}. Treated as observation only (no mode matches).`);
 }
 const VIXY_LOCK_RULE_BAR = Math.min(0.999, Math.max(0.5, Number(process.env.VIXY_LOCK_RULE_BAR || 0.95)));
-function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow, lockedSide = null) {
+function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow, lockedSide = null, rangeComplete = true) {
   const T = (strikeSideTableV1 as any);
   const unknown = (reason) => ({ p: null, n: 0, reason, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR });
   if (!(spot > 0) || !(strike > 0)) return unknown("NO_PRICE_OR_STRIKE");
+  // A range this instance knows to be partial (it booted mid-cycle and the
+  // candle hydration has not landed) would bin volatility LOW and land in a
+  // cell the table never meant — the live shadow fired 600|3|M cells the
+  // full-range replay never reached (SESSION 8). Unknown, not low.
+  if (!rangeComplete) return unknown("PARTIAL_CYCLE_RANGE");
   const distBps = ((spot - strike) / strike) * 1e4;
   if (distBps === 0) return unknown("AT_STRIKE");
   const cps = T.checkpointSecs;
@@ -3523,6 +3528,56 @@ function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycle
   return { p: cell.p, n: cell.n, reason: null, key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide, lockedSide, pLockedSide, protectSignal: pLockedSide !== null ? pLockedSide < 0.5 : null, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
 }
 __name(computeStrikeSideProbability, "computeStrikeSideProbability");
+// ── CYCLE RANGE HYDRATION for cold instances ────────────────────────────────
+// active15mCycle.cycleHigh/cycleLow are instance memory. Production fans out
+// over 60–140 short-lived instances per cycle, so most instances see only the
+// part of the cycle after their own boot and bin volatility LOW for the
+// strike-side table, which was fitted on the range since cycle open. Measured
+// 2026-09-10 (ENGINE_PROGRESS SESSION 8): the live shadow fired 600|3|M cells
+// the full-range replay never reached and lost two of them. An instance whose
+// first tick arrives with the cycle already >60s old hydrates the range since
+// open ONCE from Coinbase 1-minute candles (the table's own source); until
+// that lands its range is marked partial and the strike-side probability is
+// unknown. Single-flight per cycle, retried after 20s if the promise was cut
+// short by the platform; a rollover during the fetch discards the result.
+let _rangeHydrateCycleId = null;
+let _rangeHydrateStartedMs = 0;
+async function hydrateCycleRangeFromCandles(cycleId, intervalStartMs) {
+  _rangeHydrateCycleId = cycleId;
+  _rangeHydrateStartedMs = Date.now();
+  try {
+    const start = new Date(intervalStartMs).toISOString();
+    const end = new Date(Math.min(Date.now(), intervalStartMs + 15 * 60e3)).toISOString();
+    const r = await fetchWithTimeout(
+      `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      {},
+      4000,
+    );
+    if (!r.ok) throw new Error(`candles HTTP ${r.status}`);
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error("no candles returned");
+    let hi = 0, lo = 0;
+    for (const c of rows) {
+      const h = parseFloat(c[2]), l = parseFloat(c[1]);
+      if (h > 0) hi = Math.max(hi, h);
+      if (l > 0) lo = lo > 0 ? Math.min(lo, l) : l;
+    }
+    if (active15mCycle.cycleId !== cycleId) return;   // rolled over meanwhile
+    if (hi > 0 && lo > 0) {
+      active15mCycle.cycleHigh = Math.max(active15mCycle.cycleHigh || 0, hi);
+      active15mCycle.cycleLow = active15mCycle.cycleLow > 0 ? Math.min(active15mCycle.cycleLow, lo) : lo;
+      active15mCycle.rangeSource = "candles+instance";
+      active15mCycle.rangeCandles = rows.length;
+      console.log(`[VIXY_RANGE_HYDRATED] ${cycleId} ${rows.length} candles since open hi=${hi} lo=${lo}`);
+    } else {
+      throw new Error("candles carried no usable high/low");
+    }
+  } catch (e) {
+    if (active15mCycle.cycleId === cycleId) active15mCycle.rangeHydrateError = String((e && e.message) || e);
+    console.warn(`[VIXY_RANGE_HYDRATE_FAILED] ${cycleId}: ${(e && e.message) || e}`);
+  }
+}
+__name(hydrateCycleRangeFromCandles, "hydrateCycleRangeFromCandles");
 function canLockCurrentCycle(livePrice) {
   const now = Date.now();
   const reasons = [];
@@ -3781,9 +3836,23 @@ function canLockCurrentCycle(livePrice) {
   const alreadyLocked = active15mCycle.isLocked || lockedCycleIds.has(cycleId);
   if (alreadyLocked) reasons.push("ALREADY_LOCKED");
   if (!strike15mResolved) reasons.push("STRIKE_UNRESOLVED (no live strike yet this instance)");
+  // Keep the cycle's own strike current while the entry window is open. The
+  // cycle object is created with whatever current15mStrikePrice was at
+  // rollover (0 on a cold instance), and the SKIP writers read it back, so a
+  // cycle that never locked was recorded with strike 0 and could not be
+  // graded. Bounded to the entry window so a next-market strike that Kalshi
+  // lists early can never overwrite this cycle's. Observation only.
+  if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {
+    active15mCycle.strikePrice = current15mStrikePrice;
+  }
+  // Range provenance: undefined (tests, replay, warm instance before its first
+  // tick) and "instance_from_open"/"candles+instance" are complete;
+  // "instance_partial" is a cold instance still hydrating.
+  const rangeComplete = active15mCycle.rangeSource !== "instance_partial";
   const strikeSide = computeStrikeSideProbability(
     livePrice, current15mStrikePrice, effElapsed, active15mCycle.cycleHigh, active15mCycle.cycleLow,
     active15mCycle.isLocked ? active15mCycle.lockedDirection : null,
+    rangeComplete,
   );
   // ── LAYER 5 SHADOW (observation only — never touches `allowed`) ──────────
   // While the flag is off, record per cycle what the standalone strike-side
@@ -3822,6 +3891,15 @@ function canLockCurrentCycle(livePrice) {
           atSec: effElapsed, side: strikeSide.currentSide, p: strikeSide.p, n: strikeSide.n ?? null, key,
           kalshiYes: kalshiRealNow ? currentKalshiImpliedProb : null,
           kalshiAgeMs: kalshiRealNow ? Date.now() - kalshiImpliedAtMs : null,
+          // The strike and spot the rule fired against, so the would-lock can
+          // be graded from the settlement price alone. SKIP rows carried
+          // targetStrike 0 on 78 of the last 112 (cold instances create the
+          // cycle before the Kalshi strike resolves), which left every rule
+          // would-lock on a skipped cycle ungradeable — a biased live sample.
+          strike: current15mStrikePrice > 0 ? current15mStrikePrice : null,
+          spot: livePrice > 0 ? livePrice : null,
+          rangeSource: active15mCycle.rangeSource ?? null,
+          rangeBps: typeof strikeSide.rangeBps === "number" ? strikeSide.rangeBps : null,
         };
         lockJustSet = true;
       }
@@ -4687,7 +4765,11 @@ async function checkAndSettle15mCycle(livePrice) {
           direction: "NEUTRAL",
           probability: active15mCycle.livePrediction?.probability || 50,
           confidence: active15mCycle.livePrediction?.confidence || 0,
-          targetStrike: active15mCycle.strikePrice,
+          // The cycle's strike is kept current by canLockCurrentCycle while
+          // the entry window is open; it was 0 on 78 of the last 112 SKIP rows
+          // (cold instances create the cycle before the strike resolves),
+          // which made the rule's would-locks on skipped cycles ungradeable.
+          targetStrike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
           spotAtLock: active15mCycle.livePrediction?.spot || livePrice,
           btcPriceAtLock: active15mCycle.livePrediction?.spot || livePrice,
           ethPriceAtLock: currentEthPrice,
@@ -4702,6 +4784,11 @@ async function checkAndSettle15mCycle(livePrice) {
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
+          // Which side of the strike the cycle actually settled on. The engine
+          // made no call (actualOutcome stays NEUTRAL, wasCorrect false), but
+          // the settled side is a fact of the cycle and is what grades the
+          // Layer-5 shadow's would-lock on this row. null when no strike.
+          settledSide: active15mCycle.strikePrice > 0 && livePrice > 0 ? (livePrice >= active15mCycle.strikePrice ? "UP" : "DOWN") : null,
           wasCorrect: false,
           brierScore: 0,
           qualificationReason:
@@ -4712,7 +4799,7 @@ async function checkAndSettle15mCycle(livePrice) {
           timeframe: "15M",
           decision: "SKIP",
           entryPrice: active15mCycle.livePrediction?.spot || livePrice,
-          strike: active15mCycle.strikePrice,
+          strike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
           confidencePct: active15mCycle.livePrediction?.confidence || 0,
           lockedProbability: active15mCycle.livePrediction?.probability || 50,
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -4926,6 +5013,19 @@ async function checkAndSettle15mCycle(livePrice) {
   if (livePrice > 0) {
     active15mCycle.cycleHigh = Math.max(active15mCycle.cycleHigh || 0, livePrice);
     active15mCycle.cycleLow = active15mCycle.cycleLow > 0 ? Math.min(active15mCycle.cycleLow, livePrice) : livePrice;
+  }
+  // Range provenance. An instance whose first tick lands within the first
+  // minute has the range from open; one that joins later has a partial range
+  // and hydrates the missing part from candles (see hydrateCycleRangeFromCandles).
+  if (!active15mCycle.rangeSource) {
+    active15mCycle.rangeSource = elapsedSeconds <= 60 ? "instance_from_open" : "instance_partial";
+  }
+  if (
+    active15mCycle.rangeSource === "instance_partial" &&
+    typeof hydrateCycleRangeFromCandles === "function" &&
+    (_rangeHydrateCycleId !== active15mCycle.cycleId || now - _rangeHydrateStartedMs > 20e3)
+  ) {
+    void hydrateCycleRangeFromCandles(active15mCycle.cycleId, intervalStart);
   }
   active15mCycle.calibrationWindowMs = elapsedMs;
   active15mCycle.calibrationDataAgeMs = now - lastMarketUpdateTs;
@@ -5200,7 +5300,12 @@ async function checkAndSettle15mCycle(livePrice) {
           lockReason,
         );
       }
-    } else if (elapsedSeconds >= 720 && !active15mCycle.isLocked) {
+    } else if (elapsedSeconds >= 780 && !active15mCycle.isLocked) {
+      // Aligned with the gate's window (ALIGNED-780). This label flipped at
+      // 720s while the gate and the commit point still accepted locks until
+      // 780s, so the terminal said ENTRY_WINDOW_CLOSED during the minute in
+      // which 37% of the strike-side rule's locks are taken (41/111 at 720s+
+      // in the SESSION 8 replay). Label only; no decision reads it.
       active15mCycle.status = "ANALYZING";
       active15mCycle.stage = "ANALYZING";
       active15mCycle.qualificationStatus = "ENTRY_WINDOW_CLOSED";
@@ -5229,7 +5334,7 @@ async function checkAndSettle15mCycle(livePrice) {
             currentConfidence ||
             null,
           reversalRisk: reversalThreat,
-          targetStrike: active15mCycle.strikePrice,
+          targetStrike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
           spotAtLock: active15mCycle.livePrediction?.spot || livePrice,
           btcPriceAtLock: active15mCycle.livePrediction?.spot || livePrice,
           ethPriceAtLock: currentEthPrice,
@@ -5254,7 +5359,7 @@ async function checkAndSettle15mCycle(livePrice) {
           timeframe: "15M",
           decision: "SKIP",
           entryPrice: active15mCycle.livePrediction?.spot || livePrice,
-          strike: active15mCycle.strikePrice,
+          strike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
           confidencePct:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
@@ -18043,7 +18148,15 @@ app.get("/api/research/shadow-l5", requireRole(["OWNER", "ADMIN"]), async (req, 
     if (typeof sh.instances === "number") { instSum += sh.instances; instN += 1; }
     const engineLocked = s.decision === "BUY_UP" || s.decision === "BUY_DOWN";
     const engineSide = s.decision === "BUY_UP" ? "UP" : s.decision === "BUY_DOWN" ? "DOWN" : null;
-    const outcome = s.actualOutcome === "UP" || s.actualOutcome === "DOWN" ? s.actualOutcome : null;
+    // The settled side of the strike. Lock rows carry it as actualOutcome;
+    // SKIP rows carry settledSide (their actualOutcome is NEUTRAL because the
+    // engine made no call). Older SKIP rows have neither and stay ungraded —
+    // grading them against their strike-0 placeholder would call every
+    // DOWN would-lock a loss.
+    const outcome = s.actualOutcome === "UP" || s.actualOutcome === "DOWN" ? s.actualOutcome
+      : s.settledSide === "UP" || s.settledSide === "DOWN" ? s.settledSide
+      : (s.shadowL5?.wouldLock?.strike > 0 && s.settlementPrice > 0) ? (s.settlementPrice >= s.shadowL5.wouldLock.strike ? "UP" : "DOWN")
+      : null;
     if (engineLocked) {
       out.engine.locks += 1;
       if (outcome) { if (s.wasCorrect) out.engine.wins += 1; else out.engine.losses += 1; }
