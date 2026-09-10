@@ -155,6 +155,80 @@ ingestion session; the 21-day trade ingestion continues there.
   the permission classifier in every form — **the owner must click merge**;
   Vercel auto-deploys main via the GitHub integration.
 
+## SESSION 5 — WHY IT SITS AT 50–52 (root cause, live-proven) + the semantic layer
+
+**The question the owner asked:** why is conviction ~52% at minute 9–10 after
+countless updates and 5-minute cycle tracking? Traced frontend → API → engine →
+formula, and watched a live cycle (01:30Z, 2026-09-10).
+
+**Display chain.** Card "% CONVICTION" = `canonicalDecision.confidence` =
+engine `currentConfidence` = `latestBtc15mPipeline.edgeVsConfidence.calibratedConfidencePct`
+= `calibratedConf` (server.ts ~2544). Recomputed every 3s tick pre-lock; frozen
+at lock. It is NOT the empirical `getCalibratedConfidence` map (that only
+serves `/api/signal/calibrated-confidence`); "calibrated" in its name is a
+misnomer — it is a hand-set step function.
+
+**The formula (verbatim structure):**
+```
+dataQuality ≠ OPTIMAL                     → 42
+agree ≥ 8 && !chop && !reversalVeto        → 70 + (agree−8)·5 + (aligned−3)·3 + ITM·5   ∈ [68, 96]
+agree ≥ 6 && !chop && !reversalVeto        → 66 + (aligned−3)·2                         ∈ [66, 74]
+otherwise                                  → 42 + 2·agree − 0.1·chopScore               ∈ [40, 58]   ← the 50–52 band
+reversalVeto = threatScore ≥ 30 || momentum REVERSING
+threatScore  = 15 + (5 − aligned)·6 + absorption + chop·0.25 + crossAssetPen
+aligned      = # of the 5 momentum votes (15s / 30s / 1m / 5m / 15m lookbacks) agreeing
+agree        = # of 11 "evidence families" with agreement:true
+```
+**The exact mechanism:** whenever price pauses for a few seconds the 15s/30s/1m
+votes go NEUTRAL → `aligned` drops to 2–3 → `(5−aligned)·6` alone pushes
+`threatScore` ≥ 30 → `reversalVetoActive` → the two upper tiers are skipped
+and confidence is pinned to the floor band: 42 + 2·6 − 2 = **52** (agree 6),
+54 (agree 7), 50 (agree 6, chop 40). It is memoryless: nothing accumulates
+across the cycle; the 5-minute observations feed only VETOES (`signalUnstable`,
+`flipsPenalty`), never evidence. Distance from strike — the one input the
+research shows predicts the product outcome — enters only as `isITM` (±$10) in
+a tier the veto makes unreachable, and as one family of eleven.
+
+**Live series that proves it (cycle 01:30Z, DOWN candidate):**
+```
+elapsed  conf  LQ  agree  stab  spot−strike
+ 142s     50   39    6     60     −$63
+ 162s     50   39    6     60     −$53
+ 182s     54   51    7     75     −$53
+ 203s     50   39    6     60    −$100   ← evidence strengthened, number fell
+ 435s     52   44    6     75    −$152   ← 19 bps beyond the strike, 7:41 left; gate: score=0 tier=SKIP
+```
+Table 1 puts the 435s state at ≈90%+ P(current side wins). The engine scored
+it 52 because short-window momentum happened to be flat. Answering the brief's
+ten questions: confidence is NOT frozen pre-lock (2); it IS recalculated (2);
+new observations enter only as vetoes (3/4); evidence IS double-counted
+(ORDER_FLOW / VOLATILITY / STRIKE are moneyness restated; LIQUIDITY duplicates
+DATA_QUALITY; TIME is a free vote) (5); distance is largely ignored (6); the
+"calibration layer" is a step function, not calibration (7); the gate reads
+lockQuality/agree/aligned, not this number, but all derive from the same
+inputs (8); confidence and lock quality are distinct outputs of one vote tally
+(9); the UI was not stale — it rendered the engine faithfully (10).
+Full field map: `ENGINE_DATAFLOW.md`.
+
+**What changed this session (no threshold or decision touched):**
+- `src/lib/engineSemantics.ts` — single source of truth for evidence words,
+  tied to the real gate bar; used by the Prediction Center, VIXY Live
+  modules and the V2 right rail. "STRONG EVIDENCE" at LQ 50–69, the hardcoded
+  "MARKET ALIGNMENT: STRONG" chip, "MODERATE CONFIDENCE" at 52 and the
+  client-guessed "EARLY LOCK READY" are gone; "LOCK GATE OPEN" now means the
+  engine said eligible. Pinned by `tests/engine-semantics.invariants.mjs`.
+- Fabrications removed: the card's five hardcoded settlement rows + literal
+  "SESSION WIN RATE 78% / BRIER 0.142" (now real ledger rows + real stats);
+  VIXY Live `?? 87`, "98.4% RETENTION", "+$28.4M", "64.8% BUY SIDE", "$184.50",
+  "4.1% EXPANDING", "BULL CONTINUATION", "EXPANSION DRIFT", "+18.4 / RSI 64.2 /
+  +2.4σ", "EMA 9>21>50 / 8.4/10", "$1.42B / $0.10 (TIGHT)", `|| 'TRENDING_BULL'`;
+  right rail `|| 78`; server family details "top-of-book depth verified
+  (spread < 0.03%)" and "Perp basis: Congruent" (never measured).
+- `15M_ENGINE_MASTER_MISSION.md` — the owner's standing brief with a DONE /
+  NEXT ledger. The confidence rebuild itself (calibrated probability, temporal
+  evidence as evidence, distance as a first-class feature) is research-gated
+  behind flag + shadow per that brief; nothing here raises a displayed number.
+
 ### CORRECTION to earlier notes
 The original brief's description of `getCalibratedConfidence` with
 `INSUFFICIENT_SAMPLE` at n<15, and server lock tiers EARLY <480s / STANDARD

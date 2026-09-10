@@ -2396,15 +2396,19 @@ function evaluateBtc15mHighConvictionPipeline(
     details: `Vol: ${realizedVol15mPct}% (${volRegime}) | Exp: $${expectedMoveUSD} vs Req: $${requiredMoveUSD}`,
   });
   const liquidityAgrees = dataQualityStatus === "OPTIMAL";
+  // Honest labelling: nothing here reads an order book. `liquidityAgrees` is
+  // the same feed-quality flag DATA_QUALITY uses, so this family is a proxy and
+  // says so. The previous details string claimed "top-of-book depth verified
+  // (spread < 0.03%)" as a fact on every tick — a measurement that was never made.
   families.push({
     name: "LIQUIDITY",
-    label: "Execution Liquidity",
-    bias: candidateDir,
-    status: "OPTIMAL_DEPTH",
-    score: 90,
+    label: "Feed Quality (liquidity proxy)",
+    bias: liquidityAgrees ? candidateDir : "NEUTRAL",
+    status: liquidityAgrees ? "FEED_OPTIMAL" : "FEED_DEGRADED",
+    score: liquidityAgrees ? 90 : 40,
     weight: 0.08,
     agreement: liquidityAgrees,
-    details: "Kalshi & Coinbase top-of-book depth verified (spread < 0.03%)",
+    details: `Feed quality: ${dataQualityStatus} (proxy — no venue depth is read here)`,
   });
   const regimeAgrees = !isChopFiltered && dynamicRegime !== "CHOP";
   families.push({
@@ -2455,7 +2459,9 @@ function evaluateBtc15mHighConvictionPipeline(
     score: crossMarketAgrees ? 85 : 45,
     weight: 0.08,
     agreement: crossMarketAgrees,
-    details: `Perp basis: Congruent | Risk penalty: ${latestCrossAssetContext?.riskPenalty || 0}`,
+    // "Perp basis: Congruent" was a literal — no perp basis is computed. Only
+    // the cross-asset risk penalty is a measured input.
+    details: `Cross-asset risk penalty: ${latestCrossAssetContext?.riskPenalty || 0} (${crossMarketAgrees ? "no divergence flagged" : "divergence flagged"})`,
   });
   const reversalAgrees = !reversalVetoActive && threatScore < 30;
   families.push({

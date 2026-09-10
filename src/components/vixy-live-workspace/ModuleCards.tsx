@@ -36,6 +36,7 @@ import {
 import { ModuleRenderProps } from '../../config/vixyLiveModules';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
+import { lockQualityLabel } from '../../lib/engineSemantics';
 
 // ================= CORE MODULES =================
 
@@ -166,8 +167,15 @@ export const CalibrationConfidenceModule: React.FC<ModuleRenderProps> = ({ canon
 };
 
 export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const rawLockScore = canonical15m.lockScore ?? (canonical15m.lockEvaluation?.lockScore ?? 87);
-  const lockQuality = rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
+  // No invented 87 and no invented "98.4% RETENTION": the score is the engine's
+  // or it is unavailable, the word comes from the shared semantics against the
+  // real gate bar, and the footer shows the engine's own temporal stability.
+  const c: any = canonical15m as any;
+  const raw = c?.lockScore ?? c?.lockEvaluation?.lockScore ?? null;
+  const lockQuality: number | null =
+    typeof raw === 'number' && Number.isFinite(raw) ? (raw <= 10 ? Math.round(raw * 10) : Math.round(raw)) : null;
+  const gateMin: number | null = typeof c?.lockGate?.minLockQuality === 'number' ? c.lockGate.minLockQuality : null;
+  const stability: number | null = typeof c?.temporalStability === 'number' ? c.temporalStability : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -178,24 +186,29 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">LOCK QUALITY</span>
         </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-black">{lockQuality} / 100</span>
+        <span className="text-emerald-400 font-mono text-[10px] font-black">{lockQuality ?? '—'} / 100</span>
       </div>
 
       <div>
         <div className="text-xl font-black text-white font-sans">
-          {lockQuality >= 80 ? 'OPTIMAL LOCK' : lockQuality >= 60 ? 'STRONG LOCK' : 'MODERATE LOCK'}
+          {lockQualityLabel(lockQuality, gateMin)}
         </div>
         <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
           <div
             className="h-full rounded-full bg-gradient-to-r from-purple-600 to-emerald-400"
-            style={{ width: `${Math.min(100, Math.max(0, lockQuality))}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, lockQuality ?? 0))}%` }}
           />
         </div>
+        {gateMin !== null && (
+          <div className="text-[10px] text-slate-500 font-mono mt-1">Gate bar this tier: {gateMin}</div>
+        )}
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>PROTECTION STABILITY</span>
-        <span className="text-emerald-400 font-bold">98.4% RETENTION</span>
+        <span>TEMPORAL STABILITY</span>
+        <span className={stability !== null && stability >= 70 ? 'text-emerald-400 font-bold' : 'text-slate-300 font-bold'}>
+          {stability !== null ? `${stability}%` : '—'}
+        </span>
       </div>
     </div>
   );
@@ -510,24 +523,26 @@ export const MomentumModule: React.FC<ModuleRenderProps> = () => {
 
       <div className="space-y-1">
         <div className="flex items-baseline justify-between">
-          <span className="text-2xl font-black text-emerald-400 font-mono">+18.4</span>
-          <span className="text-xs text-slate-400 font-mono">RSI (14): 64.2</span>
+          {/* "+18.4", "RSI (14): 64.2" and the absorption sentence were literals. */}
+          <span className="text-2xl font-black text-slate-500 font-mono">—</span>
+          <span className="text-xs text-slate-400 font-mono">RSI: not computed</span>
         </div>
         <p className="text-[11px] text-slate-300 font-sans">
-          Aggressive buyer absorption pushing past VWAP band.
+          Short-window momentum votes live inside the 15M engine (see the Prediction Center evidence panel); this module does not measure them separately.
         </p>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
         <span>ACCELERATION</span>
-        <span className="text-cyan-400 font-bold">+2.4σ BULL BURST</span>
+        <span className="text-slate-400 font-bold">NOT MEASURED HERE</span>
       </div>
     </div>
   );
 };
 
 export const TrendModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const regime = canonical15m.regime || 'TRENDING_BULL';
+  // No invented 'TRENDING_BULL': the regime is the engine's or it is unavailable.
+  const regime: string | null = typeof (canonical15m as any)?.regime === 'string' ? (canonical15m as any).regime : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
@@ -543,16 +558,20 @@ export const TrendModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
 
       <div className="space-y-1">
         <div className="text-xl font-black text-white font-mono uppercase">
-          {regime.replace('_', ' ')}
+          {regime ? regime.replace(/_/g, ' ') : 'REGIME UNAVAILABLE'}
         </div>
+        {/* "EMA 9 > 21 > 50 stacked bullish" and "8.4 / 10 STRONG" were literals;
+            no EMA stack or continuity score is computed anywhere. */}
         <p className="text-[11px] text-slate-300 font-sans">
-          EMA 9 &gt; 21 &gt; 50 stacked bullish on 15M / 1H frames.
+          Regime as classified by the 15M engine this tick. No EMA stack is computed here.
         </p>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>CONTINUITY SCORE</span>
-        <span className="text-emerald-400 font-bold">8.4 / 10 STRONG</span>
+        <span>TEMPORAL STABILITY</span>
+        <span className="text-slate-300 font-bold">
+          {typeof (canonical15m as any)?.temporalStability === 'number' ? `${(canonical15m as any).temporalStability}%` : '—'}
+        </span>
       </div>
     </div>
   );
@@ -571,16 +590,18 @@ export const VolumeModule: React.FC<ModuleRenderProps> = () => {
         <span className="text-purple-300 font-mono text-[10px] font-bold">LIQUIDITY</span>
       </div>
 
+      {/* "$1.42B 24h turnover" and "$0.10 (TIGHT)" were literals. Real resting
+          depth and spread are measured on the Whales tab from the Coinbase L2. */}
       <div>
-        <div className="text-2xl font-black text-white font-mono">$1.42B</div>
+        <div className="text-2xl font-black text-slate-500 font-mono">—</div>
         <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-          24h Spot Turnover • Deep Book
+          Volume and depth: not measured on this module
         </div>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>BID / ASK SPREAD</span>
-        <span className="text-emerald-400 font-bold">$0.10 (TIGHT)</span>
+        <span>SOURCE</span>
+        <span className="text-amber-300 font-bold">UNAVAILABLE — see Whales tab for live L2 depth</span>
       </div>
     </div>
   );
@@ -599,22 +620,31 @@ export const OrderFlowModule: React.FC<ModuleRenderProps> = () => {
         <span className="text-cyan-400 font-mono text-[10px] font-bold">CROSS-VENUE</span>
       </div>
 
+      {/* No cross-venue CVD is computed anywhere in this app. The previous
+          "+$28.4M" and "64.8% BUY SIDE" were literals. Real taker flow lives on
+          the whale tracker (/api/whales, /api/radar); until it is wired here this
+          module says so instead of inventing a number. */}
       <div>
-        <div className="text-2xl font-black text-emerald-400 font-mono">+$28.4M</div>
-        <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-          Net Taker Buy Volume Delta (CVD)
+        <div className="text-2xl font-black text-slate-500 font-mono">—</div>
+        <div className="text-[11px] text-slate-400 font-sans mt-0.5">
+          Net taker delta: not measured on this module yet
         </div>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>BUY / SELL RATIO</span>
-        <span className="text-emerald-400 font-bold">64.8% BUY SIDE</span>
+        <span>SOURCE</span>
+        <span className="text-amber-300 font-bold">UNAVAILABLE — see Whales tab for the live tape</span>
       </div>
     </div>
   );
 };
 
-export const VolatilityModule: React.FC<ModuleRenderProps> = () => {
+export const VolatilityModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  // The engine publishes its regime and contradiction score; "$184.50 ATR" and
+  // "4.1% EXPANDING" were literals with no source. Show what is real.
+  const c: any = canonical15m as any;
+  const regime: string | null = typeof c?.regime === 'string' ? c.regime : null;
+  const contradiction: number | null = typeof c?.contradictionScore === 'number' ? c.contradictionScore : null;
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
       <div className="flex items-center justify-between">
@@ -622,21 +652,23 @@ export const VolatilityModule: React.FC<ModuleRenderProps> = () => {
           <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
             <Activity className="w-4 h-4 text-amber-400" />
           </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">VOLATILITY INDEX</span>
+          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">VOLATILITY REGIME</span>
         </div>
-        <span className="text-amber-400 font-mono text-[10px] font-bold">ATR 14</span>
+        <span className="text-amber-400 font-mono text-[10px] font-bold">ENGINE</span>
       </div>
 
       <div>
-        <div className="text-2xl font-black text-white font-mono">$184.50</div>
+        <div className="text-2xl font-black text-white font-mono">{regime ? regime.replace(/_/g, ' ') : '—'}</div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          15M Bollinger Bandwidth: <strong className="text-amber-400">4.1% EXPANDING</strong>
+          Regime as classified by the 15M engine this tick
         </div>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>VOLATILITY REGIME</span>
-        <span className="text-emerald-400 font-bold">FAVORABLE (CLEAN MOVES)</span>
+        <span>CONTRADICTION SCORE</span>
+        <span className={contradiction !== null && contradiction >= 40 ? 'text-amber-300 font-bold' : 'text-slate-300 font-bold'}>
+          {contradiction !== null ? `${contradiction}/100` : '—'}
+        </span>
       </div>
     </div>
   );
@@ -650,23 +682,30 @@ export const MarketRegimeModule: React.FC<ModuleRenderProps> = ({ canonical15m }
           <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
             <Grid className="w-4 h-4 text-purple-300" />
           </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">MACRO REGIME</span>
+          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">MARKET REGIME</span>
         </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">BULL CONTINUATION</span>
+        <span className="text-purple-300 font-mono text-[10px] font-bold">
+          {typeof (canonical15m as any)?.regime === 'string' ? String((canonical15m as any).regime).replace(/_/g, ' ') : '—'}
+        </span>
       </div>
 
+      {/* "BULL CONTINUATION", "EXPANSION DRIFT", "steady bid support across
+          Coinbase and Binance" and "HIGH CONFIDENCE" were literals. The engine's
+          regime and temporal stability are the real, published values. */}
       <div className="space-y-1">
         <div className="text-xl font-bold text-white font-sans">
-          EXPANSION DRIFT
+          {typeof (canonical15m as any)?.regime === 'string' ? String((canonical15m as any).regime).replace(/_/g, ' ') : 'REGIME UNAVAILABLE'}
         </div>
         <p className="text-[11px] text-slate-300 font-sans">
-          Steady bid support across Coinbase and Binance spot order books.
+          Classified by the 15M engine from price structure, VWAP and realized volatility. No order-book data is read here.
         </p>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>REGIME STABILITY</span>
-        <span className="text-emerald-400 font-bold">HIGH CONFIDENCE</span>
+        <span>TEMPORAL STABILITY</span>
+        <span className="text-slate-300 font-bold">
+          {typeof (canonical15m as any)?.temporalStability === 'number' ? `${(canonical15m as any).temporalStability}%` : '—'}
+        </span>
       </div>
     </div>
   );
@@ -916,19 +955,25 @@ export const EdgeScannerModule: React.FC<ModuleRenderProps> = () => {
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">EDGE SCANNER</span>
         </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">EDGE: +6.4%</span>
+        <span className="text-slate-400 font-mono text-[10px] font-bold">EDGE: —</span>
       </div>
 
+      {/* Every figure this module showed was a literal: an edge, an R:R
+          asymmetry, an "under-pricing by 7.2%" and an expected value. An edge
+          exists only as (calibrated model probability − live market price) with
+          both sides real and synchronized; the Kalshi implied price at t is not
+          yet measured (see 15M_ENGINE_MASTER_MISSION.md, NEXT #2). Until then
+          this module reports that honestly instead of inventing one. */}
       <div>
-        <div className="text-2xl font-black text-emerald-400 font-mono">+1.85 R:R ASYMMETRY</div>
+        <div className="text-2xl font-black text-slate-500 font-mono">NOT MEASURED</div>
         <p className="text-[11px] text-slate-300 font-sans mt-0.5">
-          Prediction price under-pricing VIXY model probability by 7.2%.
+          Edge vs. the prediction market needs a live market price alongside a calibrated model probability. Neither is displayed until both are real.
         </p>
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
         <span>EXPECTED VALUE</span>
-        <span className="text-emerald-400 font-bold">+18.4% EV (FAVORABLE)</span>
+        <span className="text-slate-400 font-bold">UNAVAILABLE</span>
       </div>
     </div>
   );
