@@ -72,6 +72,44 @@ import { AuthToast, AuthToastData } from './components/AuthToast';
 import ReferralCongratsToast from './components/ReferralCongratsToast';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
+// Human titles for each internal tab key (mirrors the sidebar + hub labels).
+const TAB_TITLES: Record<string, string> = {
+  hub: 'Command Center',
+  landing: 'VIXY Vault',
+  terminal: 'Crypto Prediction Center',
+  vixylive: 'VIXY Live',
+  compare: 'Asset Compare',
+  scalping: '15-second Desk',
+  onehour: '1-hour Desk',
+  history: 'VIXY Locks',
+  scanner: 'Edge Scanner',
+  markets: 'Markets',
+  patterns: 'Pattern Engine',
+  whales: 'Whale Tracker',
+  explainability: 'Explainability Vault',
+  perflab: 'Performance War Room',
+  coach: 'VIXY Coach',
+  replay: 'Replay Center',
+  journal: 'Trade Journal',
+  alerts: 'Alerts',
+  settings: 'Settings',
+  refer: 'Refer to Earn',
+  admin: 'Admin',
+  pricing: 'Membership',
+  auth: 'Sign In',
+  terms: 'Terms of Service',
+  privacy: 'Privacy Policy',
+  risk: 'Risk Disclosure',
+  refunds: 'Refund Policy',
+  contact: 'Contact & Support',
+  about: 'About',
+  'discord-bot': 'Discord Bot Hub',
+  'vixy-learning': 'Learning Center',
+  leaderboard: 'Leaderboard',
+  changelog: 'System Status',
+  'design-system': 'Design System',
+};
+
 export default function App() {
   const canonical15m = useCanonical15mDecision();
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -520,6 +558,13 @@ export default function App() {
       window.history.pushState(null, '', path);
     }
   };
+
+  // Browser tab title follows the active view so the terminal reads correctly
+  // in a crowded tab bar and in history.
+  useEffect(() => {
+    const label = TAB_TITLES[activeTab];
+    document.title = label ? `${label} · VIXY Vault` : 'VIXY Vault · Decision Intelligence Terminal';
+  }, [activeTab]);
 
   // Sync with browser back/forward and direct URL navigation
   useEffect(() => {
@@ -1214,6 +1259,7 @@ export default function App() {
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
         spotPrices={spotPrices}
+        regime={canonical15m.decision?.regime ?? null}
       />
 
       {/* Main Layout Container (Sidebar + Content Area) */}
@@ -1237,7 +1283,8 @@ export default function App() {
         {/* Main Content Workspace Area */}
         <main className={`flex-1 overflow-x-hidden ${activeTab === 'landing' ? 'p-0 w-full' : 'p-4 sm:p-6'}`}>
           <div className="flex gap-6">
-            <div className="flex-1 min-w-0">
+            {/* keyed by activeTab so every view change gets the same soft enter transition */}
+            <div key={activeTab} className="flex-1 min-w-0 vx-page-enter">
           {/* 1. Public Pages always accessible */}
             {activeTab === 'hub' && (
             <VixyHubView

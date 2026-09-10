@@ -14756,6 +14756,53 @@ app.get("/api/signal/resolved-log", async (req, res) => {
     },
   });
 });
+// Per-UTC-day record from the real ledger — the way a scoreboard should be
+// read. Two tallies on the SAME rows: the engine's graded locks (what the
+// product did) and the strike-side rule's shadow would-locks (what the
+// authorized strike_side_only mode would have done), graded only where the
+// row carries a settled price and a Kalshi-sourced strike. Nothing here is
+// smoothed, seeded, or carried over from a previous day; an empty day is 0–0.
+app.get("/api/signal/daily-tally", async (req, res) => {
+  try { await ensureLedgerFresh(); } catch {}
+  const today = new Date().toISOString().slice(0, 10);
+  const day = typeof req.query.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.day) ? req.query.day : today;
+  const isDemo = (s) => { const id = String(s.id || "").toLowerCase(); return id.startsWith("mock_") || id.startsWith("test_"); };
+  const dayRows = persistentSignalLogs.filter((s) => !isDemo(s) && typeof s.intervalStart === "string" && s.intervalStart.slice(0, 10) === day);
+  const isSkipRow = (s) => s.status === "NO_TRADE" || s.status === "SKIPPED";
+  const engineResolved = dayRows.filter((s) => (s.status === "RESOLVED" || s.status === "CRITICALLY_INVALIDATED") && s.exitReason !== "DATA_INVALID_STRIKE");
+  const engineWins = engineResolved.filter((s) => s.wasCorrect === true).length;
+  const engineLosses = engineResolved.length - engineWins;
+  const skips = dayRows.filter(isSkipRow).length;
+  const pending = dayRows.filter((s) => s.status === "LOCKED").length;
+  // A SKIP row's strike is gradeable only when a Kalshi-sourced strike was
+  // recorded on it (PR #55/#56); a lock row's strike is the lock strike.
+  const KALSHI_SOURCES = ["SHADOW_MERGED", "SHADOW_WOULD_LOCK", "CYCLE_KALSHI"];
+  const ruleFired = dayRows.filter((s) => s.shadowL5 && s.shadowL5.wouldLock && (s.shadowL5.wouldLock.side === "UP" || s.shadowL5.wouldLock.side === "DOWN"));
+  const ruleRows = ruleFired.filter((s) => typeof s.settlementPrice === "number" && s.settlementPrice > 0 && typeof s.targetStrike === "number" && s.targetStrike > 0 && (!isSkipRow(s) || KALSHI_SOURCES.includes(s.strikeSource)));
+  const ruleWins = ruleRows.filter((s) => (s.shadowL5.wouldLock.side === "UP") === (s.settlementPrice >= s.targetStrike)).length;
+  const ruleSince = ruleRows.length ? ruleRows.map((s) => s.intervalStart).sort()[0] : null;
+  const pct = (w, n) => (n > 0 ? Math.round((w / n) * 1e3) / 10 : null);
+  const cyclesElapsed = day === today ? Math.max(0, Math.min(96, Math.floor((Date.now() - Date.parse(`${day}T00:00:00Z`)) / 900e3))) : 96;
+  res.json({
+    day,
+    cyclesElapsed,
+    ledgerRows: dayRows.length,
+    lockRule: VIXY_LOCK_RULE,
+    engine: {
+      wins: engineWins, losses: engineLosses, resolved: engineResolved.length, skips, pending,
+      record: `${engineWins}–${engineLosses}`, hitRatePct: pct(engineWins, engineResolved.length),
+      coveragePct: pct(engineResolved.length + pending, cyclesElapsed),
+    },
+    rule: {
+      wins: ruleWins, losses: ruleRows.length - ruleWins, graded: ruleRows.length, fired: ruleFired.length,
+      ungradeable: ruleFired.length - ruleRows.length,
+      record: `${ruleWins}–${ruleRows.length - ruleWins}`, hitRatePct: pct(ruleWins, ruleRows.length), since: ruleSince,
+      note: "strike-side rule SHADOW would-locks graded against the settled strike; only rows with a settled price and a Kalshi-sourced strike count",
+    },
+    source: "persistentSignalLogs (the same ledger as /api/signal/resolved-log)",
+    generatedAt: new Date().toISOString(),
+  });
+});
 app.get("/api/telemetry/history", (req, res) => {
   const limit2 = Math.min(300, parseInt(req.query.limit || "50", 10));
   const observations = persistentTelemetryObservations.slice(0, limit2);

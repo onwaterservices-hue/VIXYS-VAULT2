@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { lockQualityLabel, alignmentLabel, evidenceState, headline } from '../lib/engineSemantics';
-import { fetchResolvedLogApi } from '../services/api';
+import { fetchResolvedLogApi, fetchDailyTallyApi } from '../services/api';
 import {
   Sparkles,
   TrendingUp,
@@ -654,6 +654,25 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     };
     void load();
     return () => { cancelled = true; };
+  }, [canonicalDecision?.cycleId]);
+
+  // Today's record from the real ledger (UTC day), polled once a minute. Two
+  // tallies on the same rows: the engine's graded locks and the strike-side
+  // rule's shadow. Server-computed; nothing here is derived client-side.
+  const [dailyTally, setDailyTally] = useState<{ day: string; cyclesElapsed: number; engine: { record: string; hitRatePct: number | null; resolved: number; skips: number; pending: number }; rule: { record: string; hitRatePct: number | null; graded: number; since: string | null } } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const j: any = await fetchDailyTallyApi();
+        if (cancelled) return;
+        if (!j || typeof j.day !== 'string' || !j.engine || !j.rule) { setDailyTally(null); return; }
+        setDailyTally(j);
+      } catch { if (!cancelled) setDailyTally(null); }
+    };
+    void load();
+    const id = setInterval(load, 60_000);
+    return () => { cancelled = true; clearInterval(id); };
   }, [canonicalDecision?.cycleId]);
 
   const recentCycles = useMemo(() => {
@@ -1470,6 +1489,11 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 {lockPolicy === 'ENGINE_GATE_FILTERED' && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border bg-purple-500/10 border-purple-400/40 text-purple-200" title="Layer 5 filter on: the engine's own lock is refused unless the calibrated P(win) clears the bar on the same side">
                     L5 FILTER ON
+                  </span>
+                )}
+                {dailyTally && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border bg-black/40 border-purple-800/50 text-purple-200" title={`UTC day ${dailyTally.day}, ${dailyTally.cyclesElapsed} cycles elapsed. ENGINE: graded locks from the ledger (${dailyTally.engine.resolved} resolved, ${dailyTally.engine.pending} pending). RULE: the strike-side rule's shadow would-locks graded against the settled strike, gradeable rows only${dailyTally.rule.since ? `, since ${dailyTally.rule.since.slice(11, 16)}Z` : ''}.`}>
+                    TODAY · ENGINE {dailyTally.engine.record}{dailyTally.engine.hitRatePct !== null ? ` (${Math.round(dailyTally.engine.hitRatePct)}%)` : ''} · {dailyTally.engine.skips} SKIP · RULE {dailyTally.rule.graded > 0 ? `${dailyTally.rule.record} (${Math.round(dailyTally.rule.hitRatePct ?? 0)}%)` : 'no graded rows yet'}
                   </span>
                 )}
               </div>

@@ -1734,6 +1734,17 @@ export async function fetchResolvedLogApi(): Promise<any> {
   return data;
 }
 
+// Today's record (UTC day) from the real ledger, server-computed: the engine's
+// graded locks and the strike-side rule's shadow, on the same rows.
+export async function fetchDailyTallyApi(day?: string): Promise<any> {
+  const q = day ? `day=${encodeURIComponent(day)}&` : '';
+  const data = await safeFetchJson<any>(`/api/signal/daily-tally?${q}_t=${Date.now()}`, {
+    cache: 'no-store',
+    headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
+  });
+  return data;
+}
+
 /**
  * Canonical 15M decision fetch.
  *

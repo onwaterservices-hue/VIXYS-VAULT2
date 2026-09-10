@@ -11,6 +11,13 @@ const CALIBRATION_TARGET_SAMPLES = 50;
 
 import { BacktestPanel } from './BacktestPanel';
 
+
+/** Signed percentage for engine edge values: "+0.42%", "-0.033%", never "+-0.033%". */
+const fmtSignedPct = (v: unknown): string | null => {
+  const n = Number(v);
+  if (v === null || v === undefined || v === '' || !Number.isFinite(n)) return null;
+  return `${n > 0 ? '+' : ''}${n}%`;
+};
 export const HistoricalAccuracy: React.FC<any> = () => {
   const [liveState, setLiveState] = useState<any>(null);
   const [resolvedLog, setResolvedLog] = useState<any[]>([]);
@@ -594,7 +601,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       </div>
                       <div className="bg-black/60 border border-purple-900/40 rounded-xl p-2.5">
                         <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Statistical Edge</div>
-                        <div className="text-sm text-purple-300 font-bold">{edge ? `+${edge}%` : '—'}</div>
+                        <div className="text-sm text-purple-300 font-bold">{fmtSignedPct(edge) ?? '—'}</div>
                       </div>
                       <div className="bg-black/60 border border-purple-900/40 rounded-xl p-2.5">
                         <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Entry Spot</div>
@@ -966,7 +973,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
                 <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Statistical Edge</div>
-                <div className="text-purple-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.edge)) ? `+${activeProvenance.edge}%` : '--'}</div>
+                <div className="text-purple-300 font-black text-sm">{fmtSignedPct(activeProvenance.edge) ?? '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
