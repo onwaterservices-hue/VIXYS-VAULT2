@@ -32,6 +32,26 @@ export interface ModelSignalInfo {
   confidence: number;
   targetPrice?: number;
   n?: number;
+  /** calibrated P(win) from the strike-side table, or null when no cell matches */
+  pWin?: number | null;
+  pWinN?: number | null;
+}
+
+/**
+ * The engine's REAL events for this chart: the cycle's strike, the lock (if
+ * any) and settled outcomes from the shared ledger. These are the calls that
+ * have measured outcomes; the pattern markers are rule-based annotations and
+ * are labelled as such.
+ */
+export interface EngineEvents {
+  strike: number | null;
+  cycleStartMs: number | null;
+  cycleEndMs: number | null;
+  lockedAtMs: number | null;
+  lockedSpot: number | null;
+  lockedDirection: 'UP' | 'DOWN' | null;
+  isSkip: boolean;
+  settled: Array<{ tMs: number; direction: 'UP' | 'DOWN' | null; win: boolean | null; skip: boolean; strike: number | null; settle: number | null }>;
 }
 
 export interface CandleChartProps {
@@ -44,6 +64,7 @@ export interface CandleChartProps {
   dataSource?: 'mock' | 'live';
   modelSignal?: ModelSignalInfo;
   venue?: string;
+  engineEvents?: EngineEvents | null;
 }
 
 const THEME = {
@@ -229,10 +250,12 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         price: c.close,
         type: 'breakout',
         priority: 2,
-        title: 'BUY UP ENTRY',
-        subtitle: 'Breakout',
+        // Honest naming: a close above the 10-bar high is a BREAKOUT pattern,
+        // not a validated entry. No performance has been measured for it.
+        title: 'BREAKOUT ▲',
+        subtitle: '10-bar high',
         timeLabel: formattedTime,
-        label: 'BUY UP ENTRY',
+        label: 'BREAKOUT ▲',
         detail: `Close ($${c.close.toFixed(1)}) crossed above 10-bar resistance ($${trailingHigh.toFixed(1)}).`,
         color: '#10b981',
         symbol: '▲',
@@ -245,10 +268,10 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
         price: c.close,
         type: 'breakdown',
         priority: 2,
-        title: 'ENTRY WATCH DOWN',
-        subtitle: 'Breakdown',
+        title: 'BREAKDOWN ▼',
+        subtitle: '10-bar low',
         timeLabel: formattedTime,
-        label: 'ENTRY WATCH DOWN',
+        label: 'BREAKDOWN ▼',
         detail: `Close ($${c.close.toFixed(1)}) broke below 10-bar support ($${trailingLow.toFixed(1)}).`,
         color: '#f43f5e',
         symbol: '▼',
@@ -277,10 +300,12 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
           price: c.close,
           type: 'doji_reversal_bull',
           priority: 2,
-          title: 'REVERSAL WATCH',
-          subtitle: 'Support Turn',
+          // Uses the NEXT candle's close, so this is a hindsight-confirmed
+          // pattern, not a live call. The label says so.
+          title: 'DOJI @ SUPPORT',
+          subtitle: 'confirmed next bar',
           timeLabel: formattedTime,
-          label: 'REVERSAL WATCH',
+          label: 'DOJI @ SUPPORT',
           detail: `Doji pause near support ($${trailingLow.toFixed(1)}) with bullish follow-through.`,
           color: '#10b981',
           symbol: '◈',
@@ -292,10 +317,10 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
           price: c.close,
           type: 'doji_reversal_bear',
           priority: 2,
-          title: 'RISK / EXIT',
-          subtitle: 'Resistance Fall',
+          title: 'DOJI @ RESISTANCE',
+          subtitle: 'confirmed next bar',
           timeLabel: formattedTime,
-          label: 'RISK / EXIT',
+          label: 'DOJI @ RESISTANCE',
           detail: `Doji pause near resistance ($${trailingHigh.toFixed(1)}) with bearish follow-through.`,
           color: '#f43f5e',
           symbol: '◈',
@@ -307,10 +332,10 @@ function buildChartSignals(candles: Candle[], dataSource: string = 'live'): Char
           price: c.close,
           type: 'doji_hold',
           priority: 3,
-          title: 'ENTRY WATCH',
-          subtitle: 'Key Level Pause',
+          title: 'DOJI @ KEY LEVEL',
+          subtitle: 'unconfirmed',
           timeLabel: formattedTime,
-          label: 'ENTRY WATCH',
+          label: 'DOJI @ KEY LEVEL',
           detail: `Doji indecision candle near key level. Pending confirmation.`,
           color: '#f59e0b',
           symbol: '◆',
@@ -343,6 +368,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   currentPrice,
   timeframe = '15M',
   onTimeframeChange,
+  engineEvents = null,
   predictedDirection = 'YES',
   dataSource = 'live',
   modelSignal,
@@ -775,7 +801,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             const isBullish = activeSignal.direction === 'YES';
             const lastCandleX = x(visibleCandles.length - 1);
             const lastCandleY = y(latestClose);
-            const targetY = y(activeSignal.targetPrice || (isBullish ? latestClose + 120 : latestClose - 120));
+            // No invented ±$120 target: the projection goes to the real strike
+            // when there is one, otherwise it stays flat at the last close.
+            const targetY = y(activeSignal.targetPrice || latestClose);
             const endX = marginLeft + plotWidth;
             const midX = lastCandleX + (endX - lastCandleX) * 0.5;
             const projPathD = `M ${lastCandleX} ${lastCandleY} C ${midX} ${lastCandleY}, ${midX} ${targetY}, ${endX} ${targetY}`;
@@ -826,6 +854,63 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                 </g>
               </g>
             );
+          })()}
+        </g>
+      )}
+
+      {/* VIXY ENGINE EVENTS — the real calls with measured outcomes: this
+          cycle's lock marker and settled locks from the ledger, placed on the
+          bar whose time they happened. Toggled by the overlay button that used
+          to be the "AI PILOT" control (which rendered nothing). */}
+      {showTikTokAiOverlay && engineEvents && visibleCandles.length > 0 && (
+        <g>
+          {(() => {
+            const idxForTime = (tMs: number | null): number => {
+              if (!tMs) return -1;
+              const i = visibleCandles.findIndex((c) => typeof c.time === 'number' && (c.time as number) >= tMs);
+              return i;
+            };
+            const marks: React.ReactNode[] = [];
+            // Settled locks (ledger truth): ✓ win / ✗ loss / ○ skip at the settlement bar.
+            engineEvents.settled.forEach((e, k) => {
+              const i = idxForTime(e.tMs);
+              if (i < 0) return;
+              const px = e.settle ?? e.strike;
+              if (!px) return;
+              const cx = x(i);
+              const cy = y(px);
+              const isWin = e.win === true;
+              const isSkip = e.skip;
+              const col = isSkip ? '#f59e0b' : isWin ? '#34d399' : '#fb7185';
+              marks.push(
+                <g key={`settled-${k}`}>
+                  <circle cx={cx} cy={cy} r="7" fill="#090317" stroke={col} strokeWidth="1.5" />
+                  <text x={cx} y={cy + 3} fontSize="8" textAnchor="middle" fill={col} fontFamily="monospace" fontWeight="700">
+                    {isSkip ? '○' : isWin ? '✓' : '✗'}
+                  </text>
+                  <text x={cx} y={cy - 11} fontSize="7" textAnchor="middle" fill={col} fontFamily="monospace">
+                    {isSkip ? 'SKIP' : `${e.direction ?? ''} ${isWin ? 'WIN' : 'LOSS'}`}
+                  </text>
+                </g>,
+              );
+            });
+            // This cycle's lock, if any.
+            const li = idxForTime(engineEvents.lockedAtMs);
+            if (li >= 0 && engineEvents.lockedSpot && engineEvents.lockedDirection) {
+              const cx = x(li);
+              const cy = y(engineEvents.lockedSpot);
+              const col = engineEvents.lockedDirection === 'UP' ? '#34d399' : '#fb7185';
+              marks.push(
+                <g key="lock">
+                  <line x1={cx} y1={marginTop} x2={cx} y2={marginTop + chartHeight} stroke={col} strokeWidth="1" strokeDasharray="3 3" strokeOpacity="0.6" />
+                  <rect x={cx - 26} y={cy - 22} width="52" height="14" rx="3" fill="#090317" stroke={col} strokeWidth="1.2" />
+                  <text x={cx} y={cy - 12} fontSize="8" textAnchor="middle" fill={col} fontFamily="monospace" fontWeight="700">
+                    LOCK {engineEvents.lockedDirection}
+                  </text>
+                </g>,
+              );
+            }
+            return <g>{marks}</g>;
           })()}
         </g>
       )}
@@ -986,16 +1071,27 @@ export const CandleChart: React.FC<CandleChartProps> = ({
                   if (isMobile && matchingSig && matchingSig.priority > 2) return null;
 
                   const isLastCandle = i === visibleCandles.length - 1;
+                  // The live-bar badge states the engine's bias and its REAL number:
+                  // the calibrated P(win) when a cell matches, else the engine score
+                  // labelled as such. The old `|| 0.91` painted "Conf 91%" whenever
+                  // the number was missing.
+                  const liveNumber: string = (() => {
+                    const pw = (activeSignal as any).pWin;
+                    if (typeof pw === 'number') return `P(win) ${Math.round(pw * 100)}%`;
+                    const c = activeSignal.confidence;
+                    if (typeof c === 'number' && c > 0) return `score ${Math.round(c > 1 ? c : c * 100)}`;
+                    return 'no number';
+                  })();
                   const sigTitle = matchingSig
                     ? matchingSig.title
                     : isLastCandle
-                    ? `VIXY: ${activeSignal.direction || (isBull ? 'BUY UP' : 'BUY DOWN')}`
-                    : (isBull ? 'BUY UP ENTRY' : 'ENTRY WATCH DOWN');
+                    ? `VIXY: ${activeSignal.direction || (isBull ? 'UP' : 'DOWN')}`
+                    : (isBull ? 'PATTERN ▲' : 'PATTERN ▼');
 
                   const sigSubtitle = matchingSig
                     ? matchingSig.subtitle || matchingSig.timeLabel
                     : isLastCandle
-                    ? `Conf ${Math.round((activeSignal.confidence || 0.91) * 100)}%`
+                    ? liveNumber
                     : '';
 
                   const sigColor = matchingSig
@@ -1519,7 +1615,10 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         }`}
       >
         <Flame className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-        <span>⚡ TIKTOK AI PILOT (BUY UP / DOWN)</span>
+        {/* Was "TIKTOK AI PILOT (BUY UP / DOWN)" — a toggle nothing rendered.
+            It now shows/hides the engine's REAL events: the cycle strike, the
+            lock, and settled outcomes from the ledger. */}
+        <span>⚡ VIXY ENGINE EVENTS (STRIKE · LOCK · SETTLED)</span>
       </button>
 
       <button
@@ -1706,7 +1805,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </div>
         <div className="flex items-center gap-1 text-purple-300/60">
           <ShieldCheck className="w-3 h-3 text-teal-400" />
-          <span>Institutional Feed • Sub-second Live OHLC Validation</span>
+          {/* "Sub-second Live OHLC Validation" was decor. This is the real source. */}
+          <span>Coinbase Exchange candles (Binance fallback) · polled · patterns are rule-based, unmeasured</span>
         </div>
       </div>
     </div>

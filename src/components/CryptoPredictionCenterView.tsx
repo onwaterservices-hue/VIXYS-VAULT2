@@ -157,7 +157,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     | null
     | undefined;
   const lockChecks = (((canonicalDecision as any)?.lockGate?.checks ?? []) as Array<{ id: string; label: string; pass: boolean; current: string | number; required: string; gating?: boolean }>);
-  const trail = (((canonicalDecision as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null; s: number; d: number | null }>);
+  // Rows that actually gate the lock today (the Layer-5 row carries
+  // gating:false while the flag is off and is shown separately).
+  const gateRows = lockChecks.filter((c) => c.gating !== false);
+  const gatesTotal = gateRows.length;
+  const gatesPassing = gateRows.filter((c) => c.pass).length;
+  const l5Row = lockChecks.find((c) => c.id === 'CALIBRATED_P') ?? null;
+  const priceSide: 'UP' | 'DOWN' | null = calibrated?.currentSide === 'UP' || calibrated?.currentSide === 'DOWN' ? calibrated.currentSide : null;
+  const trail =(((canonicalDecision as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null; s: number; d: number | null }>);
   const distBinLabel = (() => {
     const bins: Array<[number, number | null]> = [[0, 3], [3, 6], [6, 10], [10, 15], [15, 25], [25, 40], [40, null]];
     const b = typeof calibrated?.distBin === 'number' ? bins[calibrated.distBin] : undefined;
@@ -406,6 +413,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const isUp = rawDirection === 'YES' || rawDirection === 'UP';
   const isDown = rawDirection === 'NO' || rawDirection === 'DOWN';
   const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
+  // P(win) is for the side price is currently on; flag when the engine's bias
+  // is the other side so the two numbers are never read as one claim.
+  const sideMismatch = Boolean(priceSide && (isUp || isDown) && priceSide !== (isUp ? 'UP' : 'DOWN'));
 
   const biasLabel = isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN';
   // No invented 87: if the canonical payload carries no lock score, the card
@@ -995,7 +1005,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                         <span className={`font-mono font-black text-sm ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
                           {Math.round(calibrated.pWin * 100)}%
                         </span>
-                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">P(WIN) · n={calibrated.n}</span>
+                        <span className="text-purple-300/70 font-sans text-[9px] uppercase tracking-wider">
+                          P(WIN{priceSide ? ` ${priceSide}` : ''}) · n={calibrated.n}
+                        </span>
+                        {sideMismatch && (
+                          <span className="ml-1 px-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono text-[8px] uppercase" title="P(win) is for the side price is currently on; the engine's bias is the other side.">
+                            price side ≠ bias
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <div className="text-[10px] font-bold mt-1 text-slate-400 flex items-center gap-1 whitespace-nowrap">
@@ -1040,45 +1057,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </div>
               </div>
 
-              {/* WHERE THE BOT IS IN THE LOCKING PROCESS — the gate's own
-                  checklist (current vs required) and the calibrated P(win)
-                  trail across this cycle. Both are engine state, not a countdown. */}
-              <div className="mt-2 pt-2 border-t border-purple-900/30 space-y-1.5 relative z-10">
-                <div className="flex items-center justify-between text-[9px] font-mono text-purple-300/70 uppercase tracking-wider">
-                  <span>Lock ladder · {lockChecks.filter((c) => c.pass && !c.gating).length}/{lockChecks.filter((c) => !c.gating).length} gates passing</span>
-                  {calibrated && (
-                    <span title="Checkpoint × distance bin × volatility tercile of the matching historical cell">
-                      {calibrated.checkpointSec ? `t${calibrated.checkpointSec}` : ''}{distBinLabel ? ` · ${distBinLabel}` : ''}{calibrated.volBin ? ` · vol ${calibrated.volBin}` : ''}
-                    </span>
-                  )}
+              {/* Compact readiness bar only. The full gate ladder, the P(win)
+                  trail and the market comparison live in the LOCK READINESS
+                  panel below the grid, where they have room to breathe. */}
+              <div className="mt-2 pt-2 border-t border-purple-900/30 relative z-10">
+                <div className="flex items-center justify-between text-[9px] font-mono text-purple-300/70 uppercase tracking-wider mb-1">
+                  <span>Lock readiness</span>
+                  <span className={gateEligible ? 'text-emerald-300' : 'text-slate-300'}>{gatesTotal ? `${gatesPassing}/${gatesTotal} gates` : '—'}</span>
                 </div>
-                {trailPath && (
-                  <div className="flex items-center gap-2">
-                    <svg viewBox="0 0 120 28" className="w-[120px] h-[28px] shrink-0" aria-label="Calibrated P(win) across this cycle">
-                      <line x1="0" y1="14" x2="120" y2="14" stroke="rgba(168,85,247,0.25)" strokeWidth="0.5" strokeDasharray="2,2" />
-                      <path d={trailPath} fill="none" stroke={isUp ? '#34d399' : isDown ? '#fb7185' : '#c4b5fd'} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
-                    </svg>
-                    <span className="text-[9px] text-purple-300/60 font-mono">P(win) trail · {trail.filter((x) => typeof x.p === 'number').length} ticks</span>
-                  </div>
-                )}
-                {lockChecks.length > 0 && (
-                  <div className="grid grid-cols-2 gap-x-2 gap-y-0.5">
-                    {lockChecks.filter((c) => ['WINDOW', 'LOCK_QUALITY', 'AGREEMENT', 'MTF', 'REVERSAL', 'STABILITY', 'EVIDENCE', 'CALIBRATED_P'].includes(c.id)).map((c) => (
-                      <div key={c.id} className="flex items-center justify-between gap-1 text-[9px] font-mono min-w-0" title={`${c.label}: ${c.current} (need ${c.required})`}>
-                        <span className={`truncate ${c.pass ? 'text-emerald-300/90' : c.gating === false ? 'text-purple-300/50' : 'text-slate-400'}`}>
-                          {c.pass ? '✓' : '·'} {c.label.replace(/ \(.*\)$/, '')}
-                        </span>
-                        <span className={`shrink-0 ${c.pass ? 'text-emerald-400' : 'text-slate-500'}`}>{String(c.current)}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {calibrated?.edgeVsMarketPct !== null && calibrated?.edgeVsMarketPct !== undefined && calibrated?.marketForSide !== null && (
-                  <div className="text-[9px] font-mono text-purple-300/70 flex items-center justify-between">
-                    <span>Kalshi prices this side at {Math.round((calibrated.marketForSide as number) * 100)}%</span>
-                    <span className={calibrated.edgeVsMarketPct >= 0 ? 'text-emerald-300' : 'text-rose-300'}>edge {calibrated.edgeVsMarketPct >= 0 ? '+' : ''}{calibrated.edgeVsMarketPct}%</span>
-                  </div>
-                )}
+                <div className="w-full h-1.5 rounded-full bg-purple-950/80 overflow-hidden border border-purple-900/50">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${gateEligible ? 'bg-emerald-400' : 'bg-gradient-to-r from-purple-600 via-purple-400 to-cyan-400'}`}
+                    style={{ width: `${gatesTotal ? Math.round((gatesPassing / gatesTotal) * 100) : 0}%` }}
+                  />
+                </div>
               </div>
             </div>
 
@@ -1380,6 +1372,94 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
             );
           })()}
         </div>
+
+        {/* 2.5 LOCK READINESS — where the bot is in the locking process.
+            Every row is one of the gate's own conditions with its current value
+            and the bar it must clear; the trail is the calibrated P(win) across
+            this cycle; the Layer-5 row is shown separately because it does not
+            gate while the flag is off. Nothing here is a countdown or a guess. */}
+        {(lockChecks.length > 0 || trail.length > 0) && (
+          <div className="rounded-2xl border border-purple-700/40 bg-gradient-to-b from-[#12082a]/90 via-[#0b0519]/95 to-[#070312] p-4 sm:p-5 relative overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.06)] before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/40 before:to-transparent before:pointer-events-none">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-purple-900/40">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-cyan-300" />
+                <span className="text-xs font-black text-white font-sans uppercase tracking-wider">Lock Readiness</span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${gateEligible ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-purple-900/40 border-purple-700/40 text-purple-200'}`}>
+                  {gateEligible ? 'GATE OPEN' : `${gatesPassing}/${gatesTotal} GATES PASSING`}
+                </span>
+              </div>
+              {calibrated && (
+                <div className="flex items-center gap-1.5 text-[10px] font-mono text-purple-300/80">
+                  <span className="uppercase tracking-wider text-purple-400/70">Matched cell</span>
+                  <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">{calibrated.checkpointSec ? `t=${calibrated.checkpointSec}s` : 't=—'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">{distBinLabel ?? '— bps'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">vol {calibrated.volBin ?? '—'}</span>
+                  <span className="px-1.5 py-0.5 rounded bg-black/40 border border-purple-900/50 text-purple-200">n={calibrated.n}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 pt-3">
+              {/* Gate rows — full labels, current vs required */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
+                {gateRows.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between gap-3 text-[11px] font-mono py-0.5 border-b border-purple-900/20">
+                    <span className={`flex items-center gap-1.5 min-w-0 ${c.pass ? 'text-emerald-200' : 'text-slate-400'}`}>
+                      <span className={`inline-flex w-3.5 h-3.5 rounded-full items-center justify-center text-[9px] border ${c.pass ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300' : 'bg-black/40 border-purple-800/60 text-purple-500'}`}>{c.pass ? '✓' : ''}</span>
+                      <span className="truncate">{c.label}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className={c.pass ? 'text-emerald-300 font-bold' : 'text-slate-200 font-bold'}>{String(c.current)}</span>
+                      <span className="text-purple-400/60"> / {c.required}</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Trail + market comparison + Layer 5 (observation) */}
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center justify-between text-[10px] font-mono text-purple-300/70 uppercase tracking-wider mb-1">
+                    <span>Calibrated P(win) across this cycle</span>
+                    <span>{trail.filter((x) => typeof x.p === 'number').length} ticks</span>
+                  </div>
+                  <div className="rounded-xl bg-black/40 border border-purple-900/50 p-2">
+                    <svg viewBox="0 0 120 40" className="w-full h-[72px]" aria-label="Calibrated P(win) trail">
+                      <line x1="0" y1="20" x2="120" y2="20" stroke="rgba(168,85,247,0.3)" strokeWidth="0.5" strokeDasharray="2,2" />
+                      <line x1="0" y1="2" x2="120" y2="2" stroke="rgba(52,211,153,0.35)" strokeWidth="0.5" strokeDasharray="1,2" />
+                      <text x="1" y="6" fontSize="4" fill="rgba(52,211,153,0.8)" fontFamily="monospace">95%</text>
+                      <text x="1" y="23" fontSize="4" fill="rgba(196,181,253,0.8)" fontFamily="monospace">50%</text>
+                      {trailPath ? (
+                        <path d={trailPath.replace(/,(\d+\.?\d*)/g, (_m, y) => `,${(Number(y) * (40 / 28)).toFixed(1)}`)} fill="none" stroke={isUp ? '#34d399' : isDown ? '#fb7185' : '#c4b5fd'} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+                      ) : (
+                        <text x="60" y="22" fontSize="5" textAnchor="middle" fill="rgba(196,181,253,0.6)" fontFamily="monospace">no matching history yet this cycle</text>
+                      )}
+                      <text x="118" y="38" fontSize="4" textAnchor="end" fill="rgba(139,132,168,0.9)" fontFamily="monospace">0 → 15:00</text>
+                    </svg>
+                  </div>
+                </div>
+
+                {calibrated?.marketForSide !== null && calibrated?.marketForSide !== undefined && calibrated?.edgeVsMarketPct !== null && calibrated?.edgeVsMarketPct !== undefined ? (
+                  <div className="flex items-center justify-between rounded-xl bg-black/40 border border-purple-900/50 px-3 py-2 text-[11px] font-mono">
+                    <span className="text-purple-200">Kalshi prices {priceSide ?? 'this side'} at <strong className="text-white">{Math.round((calibrated.marketForSide as number) * 100)}%</strong></span>
+                    <span className={`font-bold ${calibrated.edgeVsMarketPct >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>table − market {calibrated.edgeVsMarketPct >= 0 ? '+' : ''}{calibrated.edgeVsMarketPct} pts</span>
+                  </div>
+                ) : (
+                  <div className="rounded-xl bg-black/30 border border-purple-900/40 px-3 py-2 text-[10px] font-mono text-purple-300/60">
+                    Market comparison unavailable — no recent Kalshi read for this cycle.
+                  </div>
+                )}
+
+                {l5Row && (
+                  <div className="flex items-center justify-between rounded-xl bg-black/30 border border-purple-900/40 px-3 py-2 text-[10px] font-mono">
+                    <span className="text-purple-300/80">Layer 5 (observation only, flag off)</span>
+                    <span className={l5Row.pass ? 'text-emerald-300 font-bold' : 'text-slate-300'}>{String(l5Row.current)} <span className="text-purple-400/60">/ {l5Row.required}</span></span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 3. CONTEXTUAL INTELLIGENCE STRIP: "WHAT IS HAPPENING?" */}
         <div className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-[#14082c]/95 via-[#0e0622]/95 to-[#070314] border border-purple-700/50 flex flex-wrap items-center justify-between gap-3 text-xs shadow-[0_4px_20px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08),inset_0_0_18px_rgba(168,85,247,0.05)] relative z-10 before:absolute before:inset-x-0 before:top-0 before:h-[1px] before:bg-gradient-to-r before:from-transparent before:via-purple-400/35 before:to-transparent before:pointer-events-none">
@@ -1712,6 +1792,25 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                         direction: isUp ? 'UP' : 'DOWN',
                         confidence: displayConfidence,
                         targetPrice: targetPrice,
+                        pWin: calibrated?.pWin ?? null,
+                        pWinN: calibrated?.n ?? null,
+                      }}
+                      engineEvents={{
+                        strike: typeof (canonicalDecision as any)?.openStrike === 'number' ? (canonicalDecision as any).openStrike : null,
+                        cycleStartMs: (canonicalDecision as any)?.cycleStart ? Number(new Date((canonicalDecision as any).cycleStart)) : null,
+                        cycleEndMs: (canonicalDecision as any)?.cycleEnd ? Number(new Date((canonicalDecision as any).cycleEnd)) : null,
+                        lockedAtMs: (canonicalDecision as any)?.lockedAt ? Number(new Date((canonicalDecision as any).lockedAt)) : null,
+                        lockedSpot: typeof (canonicalDecision as any)?.spotAtLock === 'number' ? (canonicalDecision as any).spotAtLock : null,
+                        lockedDirection: isActuallyLocked ? (isUp ? 'UP' : 'DOWN') : null,
+                        isSkip,
+                        settled: (recentSettled?.rows || []).map((r: any) => ({
+                          tMs: r.intervalEnd ? Number(new Date(r.intervalEnd)) : r.resolvedAt ? Number(new Date(r.resolvedAt)) : null,
+                          direction: r.direction === 'UP' || r.direction === 'DOWN' ? r.direction : null,
+                          win: r.decision === 'SKIP' ? null : Boolean(r.wasCorrect),
+                          skip: r.decision === 'SKIP',
+                          strike: Number(r.strike ?? r.targetStrike ?? 0) || null,
+                          settle: Number(r.settlementPrice ?? 0) || null,
+                        })).filter((e: any) => e.tMs),
                       }}
                       venue={selectedVenue}
                     />
