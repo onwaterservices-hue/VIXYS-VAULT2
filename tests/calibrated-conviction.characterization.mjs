@@ -40,7 +40,24 @@ t.check('reset on cycle transition', serverSrc.includes('convictionTrail: [],'))
 t.section('the card shows P(win) with n and labels the legacy score honestly');
 const pc = readRepoFile('src/components/CryptoPredictionCenterView.tsx').replace(/\/\*[\s\S]*?\*\//g, '');
 t.check('P(win) rendered from calibrated.pWin', pc.includes('Math.round(calibrated.pWin * 100)'));
-t.check('sample size shown beside P(win)', pc.includes('P(WIN) · n={calibrated.n}'));
+t.check('sample size shown beside P(win)', pc.includes(') · n={calibrated.n}'));
 t.check('honest empty state when no cell matches', pc.includes('no matching history yet'));
 t.check('legacy score relabelled ENGINE SCORE, not CONVICTION', pc.includes('ENGINE SCORE') && !pc.includes('uppercase tracking-wider">CONVICTION</span>'));
+
+t.section('the lock ladder lives in its own panel with full labels; the hero keeps a readiness bar');
+t.check('dedicated LOCK READINESS panel exists', pc.includes('Lock Readiness') && pc.includes('GATES PASSING'));
+t.check('gate rows render the full label with current / required', pc.includes('<span className="truncate">{c.label}</span>') && pc.includes('/ {c.required}'));
+t.check('Layer-5 row excluded from the gating count (gating !== false)', pc.includes("lockChecks.filter((c) => c.gating !== false)"));
+t.check('P(win) side is stated and a side/bias mismatch is flagged', pc.includes('P(WIN{priceSide') && pc.includes('price side ≠ bias'));
+t.check('market comparison has an honest unavailable state', pc.includes('Market comparison unavailable'));
+t.check('chart receives calibrated pWin and the real engine events', pc.includes('pWin: calibrated?.pWin ?? null') && pc.includes('engineEvents={{'));
+
+t.section('the chart tells the truth about its markers');
+const cc = readRepoFile('src/components/CandleChart.tsx').replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
+t.check('no || 0.91 confidence fallback', !cc.includes('|| 0.91'));
+t.check('pattern markers are named as patterns, not entries', !cc.includes("'BUY UP ENTRY'") && !cc.includes("'ENTRY WATCH DOWN'") && !cc.includes("'RISK / EXIT'") && cc.includes("'BREAKOUT ▲'") && cc.includes("'BREAKDOWN ▼'"));
+t.check('hindsight doji markers say so', cc.includes("'confirmed next bar'"));
+t.check('no "Sub-second Live OHLC Validation" decor', !cc.includes('Sub-second Live OHLC Validation'));
+t.check('no dead "TIKTOK AI PILOT" control', !cc.includes('TIKTOK AI PILOT'));
+t.check('live-bar badge shows P(win) or a labelled score, never an invented number', cc.includes("return `P(win) ${Math.round(pw * 100)}%`") && cc.includes("return 'no number'"));
 t.done();

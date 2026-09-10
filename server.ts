@@ -15097,7 +15097,6 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           eligible: Boolean(active15mCycle.lockEligibility.eligible),
           checks: Array.isArray(active15mCycle.lockEligibility.checks) ? active15mCycle.lockEligibility.checks : [],
           minMtfAligned: active15mCycle.lockEligibility.minMtfAligned ?? null,
-          eligible: active15mCycle.lockEligibility.eligible ?? null,
           reason: active15mCycle.lockEligibility.reason ?? null,
           strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
           lockRule: active15mCycle.lockEligibility.lockRule ?? null,
