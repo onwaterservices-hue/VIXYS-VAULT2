@@ -563,7 +563,10 @@ export default function App() {
   // in a crowded tab bar and in history.
   useEffect(() => {
     const label = TAB_TITLES[activeTab];
-    document.title = label ? `${label} · VIXY Vault` : 'VIXY Vault · Decision Intelligence Terminal';
+    document.title =
+      !label || label === 'VIXY Vault'
+        ? 'VIXY Vault · Decision Intelligence Terminal'
+        : `${label} · VIXY Vault`;
   }, [activeTab]);
 
   // Sync with browser back/forward and direct URL navigation
