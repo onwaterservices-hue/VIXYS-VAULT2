@@ -3480,10 +3480,20 @@ let active15mCycle = {
 // is the product's own win criterion (Kalshi/Polymarket 15m contracts settle
 // against the strike fixed at cycle open), measured on 2,591 real cycles and
 // cross-validated on 3.0M trade prints. It is ALWAYS computed and exposed as an
-// observation. It only affects `allowed` when VIXY_LOCK_RULE=strike_side, and
-// then it can only DENY (p unknown, p below the bar, or the engine's direction
-// disagreeing with the side price is on). It can never loosen another gate.
+// observation. VIXY_LOCK_RULE selects what it may do to `allowed`:
+//   off              (default) observation only.
+//   strike_side      FILTER — can only DENY the engine's own lock (p unknown,
+//                    p below the bar, or the engine's direction disagreeing
+//                    with the side price is on). Never loosens another gate.
+//   strike_side_only THE RULE DECIDES — owner-authorized 2026-09-10 after the
+//                    falsification run on untouched data (L5_PROMOTION_REPORT:
+//                    95 locks / 209 cycles, 98.9% on the product criterion).
+//                    See canLockCurrentCycle for exactly which terms remain.
 const VIXY_LOCK_RULE = process.env.VIXY_LOCK_RULE || "off";
+const VIXY_LOCK_RULE_MODES = ["off", "strike_side", "strike_side_only"];
+if (!VIXY_LOCK_RULE_MODES.includes(VIXY_LOCK_RULE)) {
+  console.error(`[VIXY_LOCK_RULE] unknown mode "${VIXY_LOCK_RULE}" — valid: ${VIXY_LOCK_RULE_MODES.join(", ")}. Treated as observation only (no mode matches).`);
+}
 const VIXY_LOCK_RULE_BAR = Math.min(0.999, Math.max(0.5, Number(process.env.VIXY_LOCK_RULE_BAR || 0.95)));
 function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycleLow, lockedSide = null) {
   const T = (strikeSideTableV1 as any);
@@ -3845,15 +3855,56 @@ function canLockCurrentCycle(livePrice) {
       if (trail.length > 320) trail.splice(0, trail.length - 320);
     }
   } catch {}
-  // Flag-gated Layer 5. Off by default; when on it can only add a denial.
+  // Flag-gated Layer 5. Three modes, default off.
+  //   off              — observation only (recorded above; never touches `allowed`).
+  //   strike_side      — FILTER: can only add a denial to the engine's own lock.
+  //   strike_side_only — THE RULE DECIDES. Owner-authorized 2026-09-10 after the
+  //                      falsification run on untouched data (L5_PROMOTION_REPORT:
+  //                      95 locks / 209 cycles, 98.9%). Inside the legal window
+  //                      the first tick whose cell has p >= bar on a definite
+  //                      side locks THAT side. Only the HARD SAFETY terms remain
+  //                      (hardSafetyPassed below): observation floor, entry
+  //                      window, fresh connected feed, acceptable latency,
+  //                      current unexpired cycle, live strike, not already
+  //                      locked. The engine's score, evidence families, MTF,
+  //                      chop, persistence and guardian rows become observation
+  //                      only — the rule was measured ALONE and this is the
+  //                      policy that was measured. They are still computed and
+  //                      still shown; they just do not gate.
   let strikeRuleBlocks = false;
+  let lockRuleDecides = false;
   if (VIXY_LOCK_RULE === "strike_side") {
     if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
     else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
     else if (strikeSide.currentSide !== dirTarget) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_DISAGREES (engine=${dirTarget}, price is ${strikeSide.currentSide} of strike)`); }
+  } else if (VIXY_LOCK_RULE === "strike_side_only") {
+    if (strikeSide.p === null) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_UNKNOWN (${strikeSide.reason})`); }
+    else if (strikeSide.p < VIXY_LOCK_RULE_BAR) { strikeRuleBlocks = true; reasons.push(`STRIKE_SIDE_BELOW_BAR (p=${strikeSide.p} < ${VIXY_LOCK_RULE_BAR} at ${strikeSide.key}, n=${strikeSide.n})`); }
+    else if (strikeSide.currentSide !== "UP" && strikeSide.currentSide !== "DOWN") { strikeRuleBlocks = true; reasons.push("STRIKE_SIDE_NO_SIDE (price has no definite side of the strike)"); }
+    else lockRuleDecides = true;
   }
-  const allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;
-  const dir =
+  const ruleMode = VIXY_LOCK_RULE === "strike_side_only";
+  // The hard safety terms: the subset of validationPassed that is about the
+  // clock and the data, not about the engine's opinion. They hold in EVERY mode.
+  const hardSafetyPassed = Boolean(
+    minimumObservationWindowPassed &&
+    withinEntryWindow &&
+    dataFresh &&
+    cryptoTracking &&
+    currentCycle &&
+    cycleExpiryFuture &&
+    latencyAcceptable &&
+    predictionComputedFromCurrentCycle,
+  );
+  const allowed = ruleMode
+    ? !alreadyLocked && hardSafetyPassed && strike15mResolved && lockRuleDecides
+    : !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;
+  // In rule mode only the hard-safety and rule reasons are blockers. The
+  // engine-opinion reasons are still computed above (observation) but must not
+  // be reported as the blocker of a lock they do not gate.
+  const RULE_MODE_REASON_PREFIXES = ["OBSERVATION_TIME_INSUFFICIENT", "ENTRY_WINDOW_EXPIRED", "DATA_STALE", "cryptoTracking=false", "currentCycle=false", "cycleExpiryFuture=false", "latencyAcceptable=false", "PREDICTION_CYCLE_MISMATCH", "ALREADY_LOCKED", "STRIKE_UNRESOLVED", "STRIKE_SIDE_"];
+  const gateReasons = ruleMode ? reasons.filter((r) => RULE_MODE_REASON_PREFIXES.some((p) => r.startsWith(p))) : reasons;
+  const engineDir =
     currentDirection === "DOWN"
       ? "DOWN"
       : currentDirection === "UP"
@@ -3861,9 +3912,19 @@ function canLockCurrentCycle(livePrice) {
         : currentModelProbability >= 0.5
           ? "UP"
           : "DOWN";
+  // The side a lock would take: the rule's side when the rule decides, else
+  // the engine's. In filter mode the two agree by construction (or it denies).
+  const dir = ruleMode && lockRuleDecides ? strikeSide.currentSide : engineDir;
+  const lockPolicy = ruleMode ? "STRIKE_SIDE_RULE" : VIXY_LOCK_RULE === "strike_side" ? "ENGINE_GATE_FILTERED" : "ENGINE_GATE";
+  // Which rows gate in THIS mode. Observation rows are still rendered; the
+  // terminal counts only gating rows toward "x/y gates".
+  const hardGating = true;
+  const engineGating = !ruleMode;
   active15mCycle.lockEligibility = {
     eligible: allowed,
-    reason: reasons[0] || "QUALIFIED_ENTRY_WINDOW",
+    reason: gateReasons[0] || (ruleMode ? "STRIKE_SIDE_RULE_QUALIFIED" : "QUALIFIED_ENTRY_WINDOW"),
+    lockPolicy,
+    lockRuleDecides,
     elapsedSeconds,
     remainingSeconds,
     minimumElapsedSeconds: 360,
@@ -3885,29 +3946,39 @@ function canLockCurrentCycle(livePrice) {
     // terminal can show where in the locking process the engine actually is
     // instead of a countdown-driven guess.
     checks: [
-      { id: "WINDOW", label: "Entry window 6:00–13:00", pass: effElapsed >= 360 && effElapsed < 780, current: Math.round(effElapsed), required: "360–780s" },
-      { id: "STRIKE", label: "Strike resolved", pass: Boolean(strike15mResolved), current: strike15mResolved ? "yes" : "no", required: "yes" },
-      { id: "LOCK_QUALITY", label: "Lock quality", pass: lockQualityPass, current: Math.round(latestBtc15mPipeline.lockQuality), required: `≥${minLockQuality} (${lockTier})` },
-      { id: "AGREEMENT", label: "Evidence families agreeing", pass: evidenceAgreementPass, current: `${latestBtc15mPipeline.evidenceAgreementCount}/11`, required: `≥${minEvidenceAgreement}` },
-      { id: "MTF", label: "Timeframes aligned", pass: mtfPass, current: `${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5`, required: `≥${minMtfAligned}` },
-      { id: "STRIKE_FEASIBLE", label: "Expected move covers strike", pass: strikeFeasiblePass, current: `${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x`, required: "feasible" },
-      { id: "REVERSAL", label: "Reversal threat", pass: reversalThreatPass, current: `${latestBtc15mPipeline.reversalAssessment.threatScore}%`, required: "<30% & no veto" },
-      { id: "EVIDENCE", label: "Engine score", pass: evidenceSufficient, current: Math.round(currentConfidence), required: "≥66" },
-      { id: "STABILITY", label: "Stable last 3 observations", pass: rollingStabilityPassed, current: `${last3Obs.filter((o) => o.candidateDir === dirTarget && o.conf >= 65.5).length}/3`, required: "3/3" },
-      { id: "NO_CONFLICT", label: "No evidence conflict", pass: !active15mCycle.hasConflict, current: active15mCycle.hasConflict ? "conflict" : "clear", required: "clear" },
-      { id: "STABLE_SIGNAL", label: "Signal not fluctuating", pass: !active15mCycle.signalUnstable, current: active15mCycle.signalUnstable ? "unstable" : "stable", required: "stable" },
-      { id: "PROTECTION", label: "Guardian approves", pass: protectionApproved, current: latestGuardianDecision?.action ?? "n/a", required: "not EXIT/PROTECT" },
-      { id: "DATA_QUALITY", label: "Feed quality", pass: dataQualityPass, current: latestBtc15mPipeline.dataQuality.status, required: "OPTIMAL" },
-      { id: "NOT_CHOPPY", label: "Not chop-filtered", pass: isNotChoppy, current: isNotChoppy ? "clear" : String(latestBtc15mPipeline.chopAnalytics.reason || active15mCycle.choppyReason || "chop"), required: "clear" },
-      { id: "PERSISTENCE", label: "Direction persisted", pass: signalPersistent, current: `${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s`, required: "≥6s" },
-      { id: "NOT_LOCKED", label: "No lock yet this cycle", pass: !alreadyLocked, current: alreadyLocked ? "locked" : "open", required: "open" },
-      // Layer 5 is observation-only while VIXY_LOCK_RULE is off; shown so the
-      // user can see the calibrated bar even though it does not gate today.
-      { id: "CALIBRATED_P", label: `Calibrated P(win) ≥ ${VIXY_LOCK_RULE_BAR} (Layer 5${VIXY_LOCK_RULE === "strike_side" ? "" : ", flag off"})`, pass: strikeSide.p !== null && strikeSide.p >= VIXY_LOCK_RULE_BAR, current: strikeSide.p === null ? `— (${strikeSide.reason || "no cell"})` : String(strikeSide.p), required: `≥${VIXY_LOCK_RULE_BAR}`, gating: VIXY_LOCK_RULE === "strike_side" },
+      { id: "WINDOW", label: "Entry window 6:00–13:00", pass: effElapsed >= 360 && effElapsed < 780, current: Math.round(effElapsed), required: "360–780s", gating: hardGating },
+      { id: "STRIKE", label: "Strike resolved", pass: Boolean(strike15mResolved), current: strike15mResolved ? "yes" : "no", required: "yes", gating: hardGating },
+      { id: "FEED", label: "Feed connected & fresh", pass: dataFresh && cryptoTracking && latencyAcceptable, current: `${Math.round(dataAgeMs)}ms`, required: "<10s", gating: hardGating },
+      { id: "LOCK_QUALITY", label: "Lock quality", pass: lockQualityPass, current: Math.round(latestBtc15mPipeline.lockQuality), required: `≥${minLockQuality} (${lockTier})`, gating: engineGating },
+      { id: "AGREEMENT", label: "Evidence families agreeing", pass: evidenceAgreementPass, current: `${latestBtc15mPipeline.evidenceAgreementCount}/11`, required: `≥${minEvidenceAgreement}`, gating: engineGating },
+      { id: "MTF", label: "Timeframes aligned", pass: mtfPass, current: `${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5`, required: `≥${minMtfAligned}`, gating: engineGating },
+      { id: "STRIKE_FEASIBLE", label: "Expected move covers strike", pass: strikeFeasiblePass, current: `${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x`, required: "feasible", gating: engineGating },
+      { id: "REVERSAL", label: "Reversal threat", pass: reversalThreatPass, current: `${latestBtc15mPipeline.reversalAssessment.threatScore}%`, required: "<30% & no veto", gating: engineGating },
+      { id: "EVIDENCE", label: "Engine score", pass: evidenceSufficient, current: Math.round(currentConfidence), required: "≥66", gating: engineGating },
+      { id: "STABILITY", label: "Stable last 3 observations", pass: rollingStabilityPassed, current: `${last3Obs.filter((o) => o.candidateDir === dirTarget && o.conf >= 65.5).length}/3`, required: "3/3", gating: engineGating },
+      { id: "NO_CONFLICT", label: "No evidence conflict", pass: !active15mCycle.hasConflict, current: active15mCycle.hasConflict ? "conflict" : "clear", required: "clear", gating: engineGating },
+      { id: "STABLE_SIGNAL", label: "Signal not fluctuating", pass: !active15mCycle.signalUnstable, current: active15mCycle.signalUnstable ? "unstable" : "stable", required: "stable", gating: engineGating },
+      { id: "PROTECTION", label: "Guardian approves", pass: protectionApproved, current: latestGuardianDecision?.action ?? "n/a", required: "not EXIT/PROTECT", gating: engineGating },
+      { id: "DATA_QUALITY", label: "Feed quality", pass: dataQualityPass, current: latestBtc15mPipeline.dataQuality.status, required: "OPTIMAL", gating: engineGating },
+      { id: "NOT_CHOPPY", label: "Not chop-filtered", pass: isNotChoppy, current: isNotChoppy ? "clear" : String(latestBtc15mPipeline.chopAnalytics.reason || active15mCycle.choppyReason || "chop"), required: "clear", gating: engineGating },
+      { id: "PERSISTENCE", label: "Direction persisted", pass: signalPersistent, current: `${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s`, required: "≥6s", gating: engineGating },
+      { id: "NOT_LOCKED", label: "No lock yet this cycle", pass: !alreadyLocked, current: alreadyLocked ? "locked" : "open", required: "open", gating: hardGating },
+      // Layer 5: observation-only while VIXY_LOCK_RULE is off, a filter in
+      // strike_side, THE decision in strike_side_only. Always shown.
+      { id: "CALIBRATED_P", label: `Calibrated P(win) ≥ ${VIXY_LOCK_RULE_BAR} (Layer 5${ruleMode ? ", decides" : VIXY_LOCK_RULE === "strike_side" ? ", filter" : ", flag off"})`, pass: strikeSide.p !== null && strikeSide.p >= VIXY_LOCK_RULE_BAR, current: strikeSide.p === null ? `— (${strikeSide.reason || "no cell"})` : String(strikeSide.p), required: `≥${VIXY_LOCK_RULE_BAR}`, gating: VIXY_LOCK_RULE !== "off" },
     ],
   };
   return {
     allowed,
+    lockPolicy,
+    // strike_side_only: what the rule decided, for lock15mCycle to commit. All
+    // null unless the rule fired on a definite side at or above the bar.
+    lockRuleDecides,
+    lockRuleSide: lockRuleDecides ? strikeSide.currentSide : null,
+    lockRuleP: lockRuleDecides ? strikeSide.p : null,
+    lockRuleN: lockRuleDecides ? (strikeSide.n ?? null) : null,
+    lockRuleCell: lockRuleDecides ? (strikeSide.key ?? null) : null,
+    lockRuleTable: lockRuleDecides ? (strikeSide.tableVersion ?? null) : null,
     cycleId,
     calibrationComplete,
     analysisComplete,
@@ -3926,7 +3997,7 @@ function canLockCurrentCycle(livePrice) {
     predictionDirection: dir,
     predictionProbability: currentModelProbability,
     predictionConfidence: currentConfidence,
-    reasons: reasons.length > 0 ? reasons : ["READY_TO_LOCK"],
+    reasons: gateReasons.length > 0 ? gateReasons : ["READY_TO_LOCK"],
   };
 }
 __name(canLockCurrentCycle, "canLockCurrentCycle");
@@ -4039,7 +4110,17 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     return false;
   }
   const lockedTime = new Date().toISOString();
-  const dir =
+  // strike_side_only (owner-authorized 2026-09-10): the rule's side and its
+  // measured p ARE the decision. The engine's direction and score are not
+  // consulted for the lock, and the confidence shown to subscribers is the
+  // table's empirical win rate for the matched cell (n on the ledger row) —
+  // not the engine score, and not clamped into the engine's 65–96 band.
+  const ruleDecides =
+    VIXY_LOCK_RULE === "strike_side_only" &&
+    gate.lockRuleDecides === true &&
+    (gate.lockRuleSide === "UP" || gate.lockRuleSide === "DOWN") &&
+    typeof gate.lockRuleP === "number" && gate.lockRuleP > 0 && gate.lockRuleP <= 1;
+  const engineDir =
     currentDirection === "DOWN"
       ? "DOWN"
       : currentDirection === "UP"
@@ -4047,14 +4128,25 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
         : currentModelProbability >= 0.5
           ? "UP"
           : "DOWN";
+  const dir = ruleDecides ? gate.lockRuleSide : engineDir;
   const decision = dir === "UP" ? "BUY UP" : "BUY DOWN";
-  const conf = Math.max(65, Math.min(96, Math.round(currentConfidence)));
-  const directionalProb =
-    dir === "UP"
+  const conf = ruleDecides
+    ? Math.round(gate.lockRuleP * 100)
+    : Math.max(65, Math.min(96, Math.round(currentConfidence)));
+  const directionalProb = ruleDecides
+    ? gate.lockRuleP
+    : dir === "UP"
       ? Math.max(0.6, Math.min(0.96, currentModelProbability))
       : Math.max(0.6, Math.min(0.96, 1 - currentModelProbability));
   const prob = Math.round(directionalProb * 1e3) / 1e3;
   const strike = current15mStrikePrice;
+  const ruleReason = ruleDecides
+    ? `STRIKE_SIDE_RULE (p=${gate.lockRuleP}, n=${gate.lockRuleN}, cell=${gate.lockRuleCell}, table=${gate.lockRuleTable})`
+    : null;
+  const lockPolicy = ruleDecides ? "STRIKE_SIDE_RULE" : (gate.lockPolicy === "ENGINE_GATE_FILTERED" ? "ENGINE_GATE_FILTERED" : "ENGINE_GATE");
+  const lockModelVersion = ruleDecides
+    ? `STRIKE_SIDE_RULE_${gate.lockRuleTable || "table"}`
+    : (serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5");
 
   let lockDataToUse = {
     direction: dir,
@@ -4063,10 +4155,14 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     strike: strike,
     spot: livePrice,
     lockedAt: lockedTime,
-    lockedReason: forcedReason || "FRESH_AUTHORITATIVE_LOCK",
+    lockedReason: ruleReason || forcedReason || "FRESH_AUTHORITATIVE_LOCK",
     decision: decision,
     originalDecision: decision,
     lockedEdgePct: currentEdgePct,
+    lockPolicy,
+    lockRuleP: ruleDecides ? gate.lockRuleP : null,
+    lockRuleN: ruleDecides ? gate.lockRuleN : null,
+    lockRuleCell: ruleDecides ? gate.lockRuleCell : null,
   };
 
   let transactionSucceeded = false;
@@ -4112,7 +4208,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   let finalSpot = livePrice;
   let finalLockedTime = lockedTime;
   let finalDecision = decision;
-  let finalReason = forcedReason || "FRESH_AUTHORITATIVE_LOCK";
+  let finalReason = ruleReason || forcedReason || "FRESH_AUTHORITATIVE_LOCK";
 
   if (!transactionSucceeded && existingLockData) {
     finalDir = existingLockData.direction || dir;
@@ -4156,6 +4252,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   active15mCycle.lockedSpot = finalSpot;
   active15mCycle.lockedEdgePct = currentEdgePct;
   active15mCycle.lockedReason = finalReason;
+  active15mCycle.lockPolicy = lockPolicy;
   active15mCycle.originalDecision = finalDecision;
   active15mCycle.isCriticallyInvalidated = false;
   active15mCycle.calibrationStatus = "COMPLETE";
@@ -4183,8 +4280,12 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       lockedAt: finalLockedTime,
       expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
       status: "LOCKED",
-      modelVersion:
-        serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
+      modelVersion: lockModelVersion,
+      lockPolicy,
+      lockRuleP: ruleDecides ? gate.lockRuleP : null,
+      lockRuleN: ruleDecides ? gate.lockRuleN : null,
+      lockRuleCell: ruleDecides ? gate.lockRuleCell : null,
+      lockedReason: finalReason,
       dataSource: "COINBASE_KRAKEN_CASCADE",
       latencyMs: 12,
       cycleId,
@@ -4215,8 +4316,12 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
     logItem.strike = finalStrike;
     logItem.confidencePct = finalConf;
     logItem.lockedProbability = finalProb;
-    logItem.modelVersion =
-      serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5";
+    logItem.modelVersion = lockModelVersion;
+    logItem.lockPolicy = lockPolicy;
+    logItem.lockRuleP = ruleDecides ? gate.lockRuleP : null;
+    logItem.lockRuleN = ruleDecides ? gate.lockRuleN : null;
+    logItem.lockRuleCell = ruleDecides ? gate.lockRuleCell : null;
+    logItem.lockedReason = finalReason;
   }
   active15mCycle.lockedSnapshot = {
     direction: finalDir,
@@ -4242,6 +4347,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       lockedSpot: active15mCycle.lockedSpot ?? null,
       lockedEdgePct: active15mCycle.lockedEdgePct ?? null,
       lockedReason: active15mCycle.lockedReason ?? null,
+      lockPolicy,
       calibrationStatus: active15mCycle.calibrationStatus ?? null,
       analysisStatus: active15mCycle.analysisStatus ?? null,
       calibrationSamples: active15mCycle.calibrationSamples ?? null,
@@ -15191,6 +15297,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           reason: active15mCycle.lockEligibility.reason ?? null,
           strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
           lockRule: active15mCycle.lockEligibility.lockRule ?? null,
+          lockPolicy: active15mCycle.lockEligibility.lockPolicy ?? null,
+          lockRuleDecides: Boolean(active15mCycle.lockEligibility.lockRuleDecides),
           strikeSide: active15mCycle.lockEligibility.strikeSide ?? null,
         }
       : null,

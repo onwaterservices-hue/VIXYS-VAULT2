@@ -52,8 +52,13 @@ export interface SandboxOptions {
    * Phase 8 requires, without checking anything out.
    */
   engineSourcePath?: string;
-  /** Layer 5 strike-side rule: 'off' (default) or 'strike_side'. */
-  lockRule?: 'off' | 'strike_side';
+  /**
+   * Layer 5 strike-side rule: 'off' (default), 'strike_side' (filter on the
+   * engine's own lock) or 'strike_side_only' (the rule decides; the real gate's
+   * strike_side_only branch is what runs here, so the replay measures the
+   * shipped code path, not a reimplementation).
+   */
+  lockRule?: 'off' | 'strike_side' | 'strike_side_only';
   /** Bar for the rule (default 0.95). */
   lockRuleBar?: number;
   /** Alternative strike-side table (e.g. a refit on a disjoint window). */

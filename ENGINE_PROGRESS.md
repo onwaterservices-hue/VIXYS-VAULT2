@@ -1139,3 +1139,101 @@ is one regime. Ingestion cost is ~420 requests per day of history.
 Ingestion cost, measured: ~4.9 trades/sec, ~420k/day, 1000 trades per request,
 so ~420 requests/day of history walking back from now. 3 days ≈ 1150 requests
 ≈ 7 minutes.
+
+---
+
+# SESSION 8 — 2026-09-10 (continued): `strike_side_only` shipped; the rule as the decider
+
+Owner authorization, verbatim: "WRITE THE strike_side_only MODE, I AUTHORIZE
+IT, COOK UP AND THAN DO THE REAL BTC MODEL". This lifts the CLAUDE.md fence
+for THIS mode only. Default stays `off`; production changes nothing until the
+owner sets `VIXY_LOCK_RULE=strike_side_only` on Vercel.
+
+## What the mode is (server.ts `canLockCurrentCycle` / `lock15mCycle`)
+
+- Gate: `allowed = ruleMode ? !alreadyLocked && hardSafetyPassed &&
+  strike15mResolved && lockRuleDecides : <old expression, unchanged>`.
+  `hardSafetyPassed` = `minimumObservationWindowPassed && withinEntryWindow &&
+  dataFresh && cryptoTracking && currentCycle && cycleExpiryFuture &&
+  latencyAcceptable && predictionComputedFromCurrentCycle` — the clock-and-data
+  subset of `validationPassed`, pinned structurally (8 conjuncts, each also a
+  `validationPassed` conjunct). `lockRuleDecides` is true only in the
+  `strike_side_only` branch when `p !== null && p >= bar && currentSide ∈
+  {UP, DOWN}`.
+- Reasons: in rule mode only hard-safety / rule reasons are reported as
+  blockers (`RULE_MODE_REASON_PREFIXES`); the engine-opinion reasons are still
+  computed but must not be shown as the blocker of a lock they do not gate.
+  Eligibility reason when green: `STRIKE_SIDE_RULE_QUALIFIED`.
+- Ladder: every row now carries `gating` — hard rows (`WINDOW`, `STRIKE`, new
+  `FEED`, `NOT_LOCKED`) always; engine rows `!ruleMode`; `CALIBRATED_P`
+  `VIXY_LOCK_RULE !== "off"`. The prediction center counts only gating rows
+  toward "x/y gates" and renders the engine rows under "Engine opinion ·
+  observation only, not gating" in rule mode. Header chip: `RULE DECIDES ·
+  P(WIN) ≥ 0.95`. All server-declared (`lockGate.lockPolicy`), nothing guessed.
+- Commit (`lock15mCycle`): when `gate.lockRuleDecides` and the mode is on,
+  `dir = gate.lockRuleSide`, `conf = round(p×100)` (NOT clamped to 65–96),
+  `prob = p`, reason `STRIKE_SIDE_RULE (p=, n=, cell=, table=)`, ledger row
+  `lockPolicy: STRIKE_SIDE_RULE`, `lockRuleP/N/Cell`, `modelVersion:
+  STRIKE_SIDE_RULE_strike-side-v1`. Engine locks are untouched (still clamped,
+  still `VIXY_AUTHORITATIVE_NEURAL_v5`, `lockPolicy: ENGINE_GATE` or
+  `ENGINE_GATE_FILTERED`).
+- Unknown `VIXY_LOCK_RULE` values are logged once at boot and behave as `off`.
+- Replay harness: `--lock-rule strike_side_only` runs the SHIPPED gate in the
+  mode and grades the rule's side/p (report prints locks by policy, by minute,
+  and by cell).
+
+## Tests
+
+`tests/lock-gate.composition.mjs` — engine-mode expression pin kept (it must
+still appear verbatim), new pins for the rule-mode expression, the single
+`ruleMode` switch, the hard-safety conjunct set, and PART B8: 40+ behavioural
+checks (engine against the price side → allowed on the price side; every
+engine-opinion gate failing → still allowed with no engine reason reported;
+p < bar / unknown / 200s / 780s / stale feed / disconnected / unresolved
+strike / already locked / ledger / stale cycle → denied; DOWN symmetric).
+`tests/strike-side-only.behaviour.mjs` (new) — executes the real decision
+block of `lock15mCycle`: rule side beats engine side, conf 96 for p=0.962,
+100 for p=1.0 (unclamped), engine locks still clamped 65–96, `off`/filter
+modes never let the rule decide, malformed gate never decides; ledger/
+snapshot/payload plumbing pinned. `tests/calibrated-conviction` pins updated
+(`FEED` row, `gating` derivation).
+
+## Consequence the owner should know before flipping the env var
+
+Elite auto-trading (`executeAutoTradesForSignal`) fires on every lock. The
+measured lock RATE in this mode is 13–45% of cycles by regime versus ~8% for
+the engine gate, so it is also a position-count change for auto-traders.
+
+## Replay of the SHIPPED mode — the real gate, `strike_side_only`, untouched window
+
+`npx tsx scripts/replay15m.ts --source trades --offline --start 2026-09-08T00:00:00Z
+--end 2026-09-10T04:00:00Z --lock-rule strike_side_only --bar 0.95` — the
+gate sliced verbatim from this branch's server.ts, ticked every 3s on real
+trade prints, 208 cycles, 0 lookahead violations, 0 coverage skips.
+
+```
+                         locks  lock%   graded  WIN%    UP      DOWN    med t-lock  Brier  calib err
+shipped gate (3s ticks)    111  53.4%    110    97.3%  48/50   59/60     669s      0.027   1.7 pts
+checkpoint-only eval        95  45.5%     95    98.9%  42/42   52/53     660s        --      --
+current engine gate         16   7.7%     16   100.0%   9/9     7/7      480s        --      --
+```
+Wilson 95% for 107/110: [92.3%, 99.0%]. Locks by minute: 420s×4, 480s×2,
+600s×18, 660s×46, 720s×41 (earliest 420s, latest 777s). Cells hit:
+`660|4|H` 45/46, `720|3|H` 36/38, `600|5|H` 18/18, `420|6|H` 4/4,
+`720|4|H` 2/2, `480|6|H` 2/2. 97 cycles ended `ENTRY_WINDOW_EXPIRED` (the
+rule never reached the bar — that is the SKIP).
+
+**What the departure from the checkpoint-only number is.** The live gate
+evaluates every 3s and uses the LAST checkpoint's cell with the CURRENT
+distance, so it can fire between checkpoints; and its vol bin is the full
+tick range (every hit is an H cell). That produced 16 more locks and 2 more
+losses than the checkpoint-only policy: 53% of cycles at 97.3% instead of
+45% at 98.9%. Both sit above the 0.95 bar; the confidence carried on the
+lock (avg 95.6) under-states the realised rate by 1.7 points — calibrated,
+not inflated. Post-lock directional accuracy is 44.5% and 110/110 locks
+name the side price had already moved to: selection, not forecasting, as
+every earlier run said.
+
+The replay is not the production ledger (round strike vs Kalshi floor
+strike; seeded PRNG; no cross-asset feed). It is the shipped code path on
+data the table never saw.

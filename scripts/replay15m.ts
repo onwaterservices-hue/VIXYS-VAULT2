@@ -95,8 +95,10 @@ const ENGINE_SOURCE = args['engine-source'] ? resolve(String(args['engine-source
 // after the cycle closes. One completed cycle therefore yields ~14 labelled
 // samples instead of one. Nothing here feeds back into the decision.
 const SNIPPETS_PATH = args.snippets ? resolve(String(args.snippets)) : null;
-// --lock-rule strike_side [--bar 0.95]: evaluate Layer 5 INSIDE the real gate.
-const LOCK_RULE: 'off' | 'strike_side' = args['lock-rule'] === 'strike_side' ? 'strike_side' : 'off';
+// --lock-rule strike_side|strike_side_only [--bar 0.95]: evaluate Layer 5
+// INSIDE the real gate — as a filter on the engine's lock, or as the decider.
+const LOCK_RULE: 'off' | 'strike_side' | 'strike_side_only' =
+  args['lock-rule'] === 'strike_side' ? 'strike_side' : args['lock-rule'] === 'strike_side_only' ? 'strike_side_only' : 'off';
 const LOCK_RULE_BAR = args.bar ? Number(args.bar) : 0.95;
 // --table <path>: use an alternative strike-side table (e.g. a disjoint-window refit).
 const TABLE_PATH = args.table ? resolve(String(args.table)) : undefined;
@@ -157,6 +159,10 @@ interface CycleRecord {
   lockConfidence: number | null;
   lockQualityAtLock: number | null;
   lockSpot: number | null;
+  /** Which policy produced the lock: ENGINE_GATE, or STRIKE_SIDE_RULE in strike_side_only mode. */
+  lockPolicy: string | null;
+  lockRuleCell: string | null;
+  lockRuleP: number | null;
   directionFlips: number;
   firstBlocker: string | null;
   blockerAtClose: string | null;
@@ -315,7 +321,7 @@ async function main() {
       cycleId, intervalStart: cs, intervalEnd: cs + CYCLE_MS, strike,
       ticks: 0, coverageMinutes: cycleTicks.length,
       locked: false, lockTSec: null, lockDirection: null, lockConfidence: null,
-      lockQualityAtLock: null, lockSpot: null,
+      lockQualityAtLock: null, lockSpot: null, lockPolicy: null, lockRuleCell: null, lockRuleP: null,
       directionFlips: 0, firstBlocker: null, blockerAtClose: null,
       settlementPrice: null, actualOutcome: null, wasCorrect: null, brierScore: null,
       maxAdverseExcursion: null, maxFavorableExcursion: null,
@@ -414,8 +420,18 @@ async function main() {
       if (gate.allowed && !rec.locked) {
         rec.locked = true;
         rec.lockTSec = Math.floor((tickNow - cs) / 1000);
-        rec.lockDirection = st.direction;
-        rec.lockConfidence = st.confidence;
+        // strike_side_only: the gate returns the rule's side and p, and
+        // lock15mCycle commits exactly those (side = rule side, confidence =
+        // round(p*100)). Mirror that here so the replay grades the shipped
+        // policy, not the engine's opinion of the same tick.
+        const ruleDecides = gate.lockRuleDecides === true
+          && (gate.lockRuleSide === 'UP' || gate.lockRuleSide === 'DOWN')
+          && typeof gate.lockRuleP === 'number';
+        rec.lockDirection = ruleDecides ? gate.lockRuleSide : st.direction;
+        rec.lockConfidence = ruleDecides ? Math.round(gate.lockRuleP * 100) : st.confidence;
+        rec.lockPolicy = ruleDecides ? 'STRIKE_SIDE_RULE' : 'ENGINE_GATE';
+        rec.lockRuleCell = ruleDecides ? (gate.lockRuleCell ?? null) : null;
+        rec.lockRuleP = ruleDecides ? gate.lockRuleP : null;
         rec.lockQualityAtLock = st.lockQuality;
         rec.lockSpot = spot;
         sandbox.read().cycle.isLocked = true;
@@ -503,6 +519,21 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; sourc
   console.log(`locks                    : ${locked.length}  (${show(pct(locked.length, records.length), '% of cycles')})`);
   console.log(`graded locks (n)         : ${graded.length}`);
   console.log(`win rate                 : ${show(pct(wins.length, graded.length), '%')}  (${wins.length}W / ${graded.length - wins.length}L)`);
+  {
+    // Which policy produced the locks (strike_side_only makes this the rule).
+    const byPolicy = new Map<string, { n: number; w: number }>();
+    for (const r of graded) { const k = r.lockPolicy ?? 'ENGINE_GATE'; const c = byPolicy.get(k) ?? { n: 0, w: 0 }; c.n++; if (r.wasCorrect) c.w++; byPolicy.set(k, c); }
+    for (const [k, c] of byPolicy) console.log(`  by policy ${k.padEnd(18)}: ${c.n} graded, win ${show(pct(c.w, c.n), '%')}`);
+    const ruleLocks = locked.filter((r) => r.lockPolicy === 'STRIKE_SIDE_RULE');
+    if (ruleLocks.length) {
+      const ts = ruleLocks.map((r) => r.lockTSec!).sort((a, b) => a - b);
+      const hist = new Map<number, number>(); for (const s of ts) { const b = Math.floor(s / 60) * 60; hist.set(b, (hist.get(b) ?? 0) + 1); }
+      console.log(`  rule locks by minute     : ${[...hist.entries()].sort((a, b) => a[0] - b[0]).map(([b, n]) => `${b}s×${n}`).join('  ')}  (median ${ts[Math.floor(ts.length / 2)]}s)`);
+      const cells = new Map<string, { n: number; w: number }>();
+      for (const r of ruleLocks) { if (r.wasCorrect === null) continue; const c = cells.get(r.lockRuleCell ?? '?') ?? { n: 0, w: 0 }; c.n++; if (r.wasCorrect) c.w++; cells.set(r.lockRuleCell ?? '?', c); }
+      console.log(`  rule cells hit           : ${[...cells.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 12).map(([k, c]) => `${k}=${c.w}/${c.n}`).join('  ')}`);
+    }
+  }
 
   const brierVals = graded.map((r) => r.brierScore!).filter((b) => typeof b === 'number');
   const avgBrier = brierVals.length

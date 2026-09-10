@@ -28,7 +28,12 @@ SESSION 7). Bars fixed a priori; nothing refitted.
 policy                 locks  lock%    WIN%    Wilson95        boot95 (2,000 cycle resamples)  skips  med t-lock   UP      DOWN
 rule bar >=0.95 (shipped)  95  45.5%   98.9%  [94.3, 99.8]    [96.5, 100.0]                    114     660s      42/42   52/53
 current engine gate        16   7.7%  100.0%  [80.6, 100.0]        --                          193     480s        9/9     7/7
+SHIPPED GATE, mode on     111  53.4%   97.3%  [92.3, 99.0]         --                           97     669s      48/50   59/60
 ```
+The last row is the real `canLockCurrentCycle` in `strike_side_only` mode,
+ticked every 3s on the same trade prints (208 cycles; ENGINE_PROGRESS
+SESSION 8). It fires between checkpoints and bins vol on the full tick range,
+which adds 16 locks and 2 losses versus the checkpoint-only policy.
 
 The single loss: `15M-2026-09-08T19:15Z`, DOWN at 720s, cell `720|3|H`
 (p 0.955, n 335).
@@ -135,31 +140,38 @@ window, the reason check and `lock15mCycle`'s commit point are all at 780s
 Only the lifecycle label still flips to `ENTRY_WINDOW_CLOSED` at 720s when no
 lock has happened — cosmetic; a lock at 720–779s still commits.
 
-**What reproducing the measured policy requires — a new mode, prepared, not
-applied.** `VIXY_LOCK_RULE=strike_side_only`, in which the rule DECIDES:
-inside the legal window, the first tick whose cell has p ≥ bar on a definite
-side locks THAT side, with only the hard safety terms kept (not already
-locked, live strike, fresh data, current cycle, cycle not expired); the lock
-carries the table's p as its confidence and `STRIKE_SIDE_RULE (p, n, cell)`
-as its reason; `strike_side` and `off` are untouched. The exact edits (gate
-`allowed`/`dir` branch, `lockRuleDecides/P/N/Cell` on the gate's return,
-`lock15mCycle` taking the rule's side/probability, the CALIBRATED_P ladder
-row gating in both modes, and the updated pin in
-`tests/lock-gate.composition.mjs`) were drafted in SESSION 7 and **blocked by
-the tooling's permission classifier as a lock-gate change**, consistent with
-`CLAUDE.md` ("never let it loosen another gate"). This is the owner's call:
+**The measured policy is now a shipped mode — `VIXY_LOCK_RULE=strike_side_only`
+(owner-authorized 2026-09-10: "WRITE THE strike_side_only MODE, I AUTHORIZE
+IT").** In it the rule DECIDES: inside the legal window, the first tick whose
+cell has p ≥ bar on a definite side locks THAT side. Only the hard safety
+terms remain in `allowed` (`hardSafetyPassed`: observation floor, entry
+window, fresh connected feed, acceptable latency, current unexpired cycle;
+plus live strike and not-already-locked). The engine's score, evidence
+families, MTF, chop, persistence, guardian and stability rows are computed
+and shown but do not gate (`gating:false` on the ladder). The lock carries
+the table's p as its confidence (`round(p×100)`, NOT clamped into the
+engine's 65–96 band), the cell p as its probability, and
+`STRIKE_SIDE_RULE (p=, n=, cell=, table=)` as its reason; the ledger row
+records `lockPolicy: STRIKE_SIDE_RULE`, `lockRuleP/N/Cell` and
+`modelVersion: STRIKE_SIDE_RULE_strike-side-v1`. `off` and `strike_side` are
+byte-for-byte the old expression. Pinned in `tests/lock-gate.composition.mjs`
+(PART A hard-safety set, PART B8 behaviour) and
+`tests/strike-side-only.behaviour.mjs` (the commit path). The default stays
+`off`; nothing changes in production until the Vercel env var is set.
 
-1. **Authorize the `strike_side_only` mode explicitly** (default stays `off`;
-   nothing changes in production until the Vercel env var is set). Then set
-   `VIXY_LOCK_RULE=strike_side_only` (bar `VIXY_LOCK_RULE_BAR`, default 0.95).
-   Expected from the measurements: lock rate ~13–45% of cycles depending on
-   regime, precision ≥95% on the product criterion, median lock ~660s; the
-   live tick (3s) can also fire between checkpoints, which uses the last
-   checkpoint's cell for a state closer to settlement — conservative, but a
-   small departure from the checkpoint-only replay that the live shadow will
-   measure.
-2. Or **use the filter mode now** (`VIXY_LOCK_RULE=strike_side`): fewer locks
-   than today, each with p ≥ 0.95; no code change needed, env var only.
+1. **To run the measured policy:** set `VIXY_LOCK_RULE=strike_side_only`
+   (bar `VIXY_LOCK_RULE_BAR`, default 0.95) on Vercel and redeploy. Expected
+   from the measurements: lock rate ~13–45% of cycles depending on regime,
+   precision ≥95% on the product criterion, median lock ~660s. The live tick
+   (3s) can fire between checkpoints, using the last checkpoint's cell for a
+   state closer to settlement; the replay of the SHIPPED gate in this mode
+   (`npm run replay:15m -- --source trades --offline --lock-rule
+   strike_side_only`) measures that departure — see ENGINE_PROGRESS SESSION 8.
+   **Consequence to know:** Elite auto-trading (`executeAutoTradesForSignal`)
+   fires on every lock, so the lock RATE change (≈8% → up to 45% of cycles)
+   is also a position-count change for auto-traders.
+2. Or **use the filter mode** (`VIXY_LOCK_RULE=strike_side`): fewer locks
+   than today, each with p ≥ 0.95.
 3. Either way, keep the shadow running ≥3 days and compare
    `/api/research/shadow-l5` (now with `wouldLock.kalshiYes`) against this
    report before claiming anything to subscribers. Without a market-edge

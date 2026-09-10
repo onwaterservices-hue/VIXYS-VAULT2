@@ -88,10 +88,30 @@ t.check('no unpinned conjunct added to validationPassed', added.length === 0, `A
 // not lock, whatever the other conditions say.
 // Layer 5 (strike-side rule) adds a fourth term that can only DENY, and only
 // when VIXY_LOCK_RULE=strike_side. With the flag off it is always false.
-t.check('allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks',
-  /const allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;/.test(gateSrc));
-t.check('strikeRuleBlocks is only ever set inside the flag check',
-  (gateSrc.match(/strikeRuleBlocks = true/g) || []).length === 3 && /if \(VIXY_LOCK_RULE === "strike_side"\)/.test(gateSrc));
+// strike_side_only (owner-authorized 2026-09-10): a SEPARATE expression in
+// which the rule decides and only the hard safety terms remain. The engine
+// modes' expression is untouched; the switch is one ternary on ruleMode.
+t.check('engine modes: allowed = !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks',
+  /: !alreadyLocked && validationPassed && strike15mResolved && !strikeRuleBlocks;/.test(gateSrc));
+t.check('strike_side_only: allowed = !alreadyLocked && hardSafetyPassed && strike15mResolved && lockRuleDecides',
+  /\? !alreadyLocked && hardSafetyPassed && strike15mResolved && lockRuleDecides\n/.test(gateSrc));
+t.check('the switch is exactly ruleMode = (VIXY_LOCK_RULE === "strike_side_only")',
+  gateSrc.includes('const ruleMode = VIXY_LOCK_RULE === "strike_side_only";') && gateSrc.includes('const allowed = ruleMode\n'));
+t.check('strikeRuleBlocks is only ever set inside the two flag checks',
+  (gateSrc.match(/strikeRuleBlocks = true/g) || []).length === 6 && /if \(VIXY_LOCK_RULE === "strike_side"\)/.test(gateSrc) && /else if \(VIXY_LOCK_RULE === "strike_side_only"\)/.test(gateSrc));
+t.check('lockRuleDecides is set true in exactly one place (the strike_side_only branch)',
+  (gateSrc.match(/lockRuleDecides = true/g) || []).length === 1);
+
+// The hard safety set is pinned structurally the same way validationPassed is:
+// it must stay the clock-and-data subset, never an engine-opinion term, and
+// never lose one of these.
+const hsSrc = sliceBetween(gateSrc, 'const hardSafetyPassed = Boolean(', 'const allowed = ruleMode', 'hardSafetyPassed');
+const hsConjuncts = hsSrc.slice('const hardSafetyPassed = Boolean('.length).replace(/\);\s*$/, '').split('&&').map((s) => s.trim().replace(/,$/, '')).filter(Boolean);
+const EXPECTED_HARD = ['minimumObservationWindowPassed', 'withinEntryWindow', 'dataFresh', 'cryptoTracking', 'currentCycle', 'cycleExpiryFuture', 'latencyAcceptable', 'predictionComputedFromCurrentCycle'];
+t.eq('hardSafetyPassed has exactly 8 conjuncts', hsConjuncts.length, EXPECTED_HARD.length);
+t.check('no hard-safety conjunct removed', EXPECTED_HARD.every((c) => hsConjuncts.includes(c)), `have: ${hsConjuncts.join(', ')}`);
+t.check('no engine-opinion conjunct added to hard safety', hsConjuncts.every((c) => EXPECTED_HARD.includes(c)), `have: ${hsConjuncts.join(', ')}`);
+t.check('every hard-safety conjunct is also a validationPassed conjunct', EXPECTED_HARD.every((c) => EXPECTED_CONJUNCTS.includes(c)));
 t.check('STRIKE_UNRESOLVED reason is emitted when the strike is unresolved',
   gateSrc.includes('reasons.push("STRIKE_UNRESOLVED'));
 
@@ -399,6 +419,111 @@ if (hi && lo) {
   t.eq('locked DOWN, price above strike (p>=0.95) -> protectSignal true', ss2.protectSignal, true);
   const notLocked = runGateSpot(720, withRule(hi[0], 'UP', 'off'));
   t.eq('not locked -> pLockedSide null', notLocked.env.active15mCycle.lockEligibility.strikeSide.pLockedSide, null);
+  t.eq('flag OFF: lockPolicy ENGINE_GATE', off.g.lockPolicy, 'ENGINE_GATE');
+  t.eq('flag OFF: lockRuleDecides false', off.g.lockRuleDecides, false);
+  t.eq('filter mode: lockPolicy ENGINE_GATE_FILTERED', okRun.g.lockPolicy, 'ENGINE_GATE_FILTERED');
+  t.eq('filter mode: lockRuleDecides stays false (the rule never decides in filter mode)', okRun.g.lockRuleDecides, false);
+  t.eq('filter mode: predictionDirection is still the engine side', okRun.g.predictionDirection, 'UP');
+}
+
+t.section('PART B8: strike_side_only — the rule DECIDES (owner-authorized 2026-09-10)');
+// The policy that was falsified on untouched data (L5_PROMOTION_REPORT): inside
+// the legal window, the first tick whose cell has p >= bar on a definite side
+// locks THAT side. The engine's opinion (score, agreement, MTF, chop, guardian,
+// stability, persistence) is observation only in this mode. The hard safety
+// terms (window, feed, cycle identity, live strike, not already locked) still
+// gate exactly as before.
+if (hi && lo) {
+  const RULE = 'strike_side_only';
+  // Engine says DOWN, price sits ABOVE the strike in a >=0.95 cell.
+  const ruleOn = runGateSpot(720, withRule(hi[0], 'DOWN', RULE));
+  t.eq('rule mode: p >= bar with the engine AGAINST the price side -> ALLOWED (engine opinion does not gate)', ruleOn.g.allowed, true);
+  t.eq('rule mode: lockRuleDecides true', ruleOn.g.lockRuleDecides, true);
+  t.eq('rule mode: lockRuleSide is the PRICE side (UP), not the engine side (DOWN)', ruleOn.g.lockRuleSide, 'UP');
+  t.eq('rule mode: predictionDirection follows the rule', ruleOn.g.predictionDirection, 'UP');
+  t.eq('rule mode: lockRuleP is the matched cell\'s p', ruleOn.g.lockRuleP, hi[1].p);
+  t.eq('rule mode: lockRuleN is the matched cell\'s n', ruleOn.g.lockRuleN, hi[1].n);
+  t.eq('rule mode: lockRuleCell is the matched cell key', ruleOn.g.lockRuleCell, hi[0]);
+  t.eq('rule mode: lockRuleTable is the table version', ruleOn.g.lockRuleTable, table.version);
+  t.eq('rule mode: lockPolicy STRIKE_SIDE_RULE', ruleOn.g.lockPolicy, 'STRIKE_SIDE_RULE');
+  t.eq('rule mode: eligibility reason STRIKE_SIDE_RULE_QUALIFIED', ruleOn.env.active15mCycle.lockEligibility.reason, 'STRIKE_SIDE_RULE_QUALIFIED');
+  t.eq('rule mode: lockEligibility.lockPolicy on the payload', ruleOn.env.active15mCycle.lockEligibility.lockPolicy, 'STRIKE_SIDE_RULE');
+  t.check('rule mode: reasons are READY_TO_LOCK only', ruleOn.g.reasons.length === 1 && ruleOn.g.reasons[0] === 'READY_TO_LOCK', ruleOn.g.reasons.join('|'));
+
+  // Every engine-opinion gate failing at once: still allowed, and none of them
+  // is reported as a blocker of a lock they do not gate.
+  const soft = runGateSpot(720, (e) => {
+    withRule(hi[0], 'UP', RULE)(e);
+    e.latestBtc15mPipeline.lockQuality = 10; e.latestBtc15mPipeline.lockQualityTier = 'SKIP';
+    e.latestBtc15mPipeline.evidenceAgreementCount = 0; e.latestBtc15mPipeline.multiTimeframeAlignment.alignedCount = 0;
+    e.latestBtc15mPipeline.volatilityExpectedMove.isStrikeFeasible = false;
+    e.latestBtc15mPipeline.reversalAssessment = { threatScore: 90, vetoActive: true, primaryTriggers: [] };
+    e.latestBtc15mPipeline.dataQuality.status = 'DEGRADED';
+    e.latestBtc15mPipeline.chopAnalytics.isChopFiltered = true; e.active15mCycle.isChoppy = true;
+    e.currentConfidence = 20; e.currentEdgePct = 0; e.currentModelProbability = 0.5;
+    e.persistenceSeconds = 0; e.active15mCycle.signalPersistence = 0;
+    e.active15mCycle.recentObservations = [];
+    e.active15mCycle.hasConflict = true; e.active15mCycle.signalUnstable = true;
+    e.latestGuardianDecision = { action: 'EXIT', reversalThreat: 90 };
+    e.latestCrossAssetContext = { state: 'BTC_DIVERGENCE', riskPenalty: 8, directionalAgreementRatio: 0 };
+  });
+  t.eq('rule mode: every engine-opinion gate failing -> still ALLOWED', soft.g.allowed, true);
+  t.eq('rule mode: validationPassed is still reported false (observation, not gate)', soft.g.validationPassed, false);
+  t.check('rule mode: no engine-opinion reason reported as a blocker',
+    !soft.g.reasons.some((r) => /LOCK_QUALITY|EVIDENCE_AGREEMENT|MTF_ALIGNMENT|STRIKE_FEASIBILITY|REVERSAL_VETO|INSUFFICIENT_EVIDENCE|STABILITY_WINDOW|SIGNAL_CONFLICT|SIGNAL_UNSTABLE|PROTECTION_VETO|CROSS_ASSET|DATA_QUALITY|CHOPPY|LOW_PERSISTENCE/.test(r)),
+    soft.g.reasons.join('|'));
+  const checks = soft.env.active15mCycle.lockEligibility.checks;
+  const gatingIds = checks.filter((c) => c.gating !== false).map((c) => c.id).sort().join(',');
+  t.eq('rule mode: gating rows are exactly CALIBRATED_P, FEED, NOT_LOCKED, STRIKE, WINDOW', gatingIds, 'CALIBRATED_P,FEED,NOT_LOCKED,STRIKE,WINDOW');
+  t.check('rule mode: engine-opinion rows are still rendered (as observation)', checks.some((c) => c.id === 'LOCK_QUALITY' && c.gating === false && c.pass === false));
+  t.check('rule mode: CALIBRATED_P label says it decides', checks.find((c) => c.id === 'CALIBRATED_P').label.includes(', decides'));
+
+  // Hard safety still gates.
+  const below = runGateSpot(360, withRule(lo[0], 'UP', RULE));
+  t.eq('rule mode: p < bar -> DENIED', below.g.allowed, false);
+  t.eq('rule mode: p < bar -> lockRuleDecides false', below.g.lockRuleDecides, false);
+  t.eq('rule mode: p < bar -> lockRuleSide null', below.g.lockRuleSide, null);
+  t.check('rule mode: cites STRIKE_SIDE_BELOW_BAR', below.g.reasons.some((r) => r.includes('STRIKE_SIDE_BELOW_BAR')), below.g.reasons.join('|'));
+  const unk = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.cycleHigh = 0; e.active15mCycle.cycleLow = 0; });
+  t.eq('rule mode: p unknown -> DENIED (fail closed)', unk.g.allowed, false);
+  t.check('rule mode: cites STRIKE_SIDE_UNKNOWN', unk.g.reasons.some((r) => r.includes('STRIKE_SIDE_UNKNOWN')));
+  const early = runGateSpot(200, withRule(hi[0], 'UP', RULE));
+  t.eq('rule mode: 200s -> DENIED (observation floor is hard)', early.g.allowed, false);
+  t.check('rule mode: 200s cites OBSERVATION_TIME_INSUFFICIENT', early.g.reasons.some((r) => r.includes('OBSERVATION_TIME_INSUFFICIENT')));
+  const hi780 = cellsAt(780).find(([, c]) => c.p >= 0.95);
+  if (hi780) {
+    const late = runGateSpot(780, withRule(hi780[0], 'UP', RULE));
+    t.eq('rule mode: 780s with p >= bar -> DENIED (entry window is hard)', late.g.allowed, false);
+    t.check('rule mode: 780s cites ENTRY_WINDOW_EXPIRED', late.g.reasons.some((r) => r.includes('ENTRY_WINDOW_EXPIRED')));
+  }
+  const stale = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.lastMarketUpdateTs -= 11000; });
+  t.eq('rule mode: stale feed -> DENIED', stale.g.allowed, false);
+  t.check('rule mode: stale feed cites DATA_STALE', stale.g.reasons.some((r) => r.includes('DATA_STALE')));
+  const disc = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.engineFeedStatus = 'DISCONNECTED'; });
+  t.eq('rule mode: feed disconnected -> DENIED', disc.g.allowed, false);
+  const noStrike = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.strike15mResolved = false; });
+  t.eq('rule mode: strike unresolved -> DENIED', noStrike.g.allowed, false);
+  t.check('rule mode: cites STRIKE_UNRESOLVED', noStrike.g.reasons.some((r) => r.includes('STRIKE_UNRESOLVED')));
+  const locked = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.isLocked = true; e.active15mCycle.lockedDirection = 'UP'; });
+  t.eq('rule mode: already locked -> DENIED', locked.g.allowed, false);
+  t.check('rule mode: cites ALREADY_LOCKED', locked.g.reasons.some((r) => r.includes('ALREADY_LOCKED')));
+  const ledger = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.lockedCycleIds = new Set(['BTC-15M-TEST']); });
+  t.eq('rule mode: cycle in lockedCycleIds -> DENIED', ledger.g.allowed, false);
+  const staleCycle = runGateSpot(720, (e) => { withRule(hi[0], 'UP', RULE)(e); e.active15mCycle.intervalStart = EPOCH - CYCLE_MS; });
+  t.eq('rule mode: stale cycle identity -> DENIED', staleCycle.g.allowed, false);
+  // The DOWN side is symmetric: price below the strike locks DOWN whatever the engine says.
+  const dnCell = cellsAt(720).find(([, c]) => c.p >= 0.95);
+  if (dnCell) {
+    const dn = runGateSpot(720, (e) => {
+      withRule(dnCell[0], 'UP', RULE)(e);
+      const [, binStr, vol] = dnCell[0].split('|'); const bps = binMid(Number(binStr)); const range = rangeFor(vol);
+      const spot = 64000 * (1 - bps / 1e4);
+      e.active15mCycle.cycleHigh = 64000; e.active15mCycle.cycleLow = Math.min(spot, 64000 * (1 - range / 1e4));
+      e.__spot = spot;
+    });
+    t.eq('rule mode: price BELOW strike in a >=0.95 cell, engine UP -> ALLOWED on DOWN', dn.g.allowed && dn.g.lockRuleSide, 'DOWN');
+    t.eq('rule mode: DOWN lock carries the cell p', dn.g.lockRuleP, dnCell[1].p);
+  }
 }
 
 t.section('PART B6: lockEligibility side effect');
