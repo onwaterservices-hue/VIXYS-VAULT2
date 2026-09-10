@@ -1631,7 +1631,7 @@ export default function App() {
                   {activeTab === 'design-system' && <DesignSystemShowcase />}
 
                   {activeTab === 'discord-bot' && (
-                    userRole === 'ADMIN' ? (
+                    (userRole === 'ADMIN' || userRole === 'OWNER') ? (
                       <DiscordBotHubView />
                     ) : (
                       <NotFoundView onReturnToTerminal={() => setActiveTab('terminal')} />
@@ -1639,7 +1639,7 @@ export default function App() {
                   )}
 
                   {activeTab === 'vixy-learning' && (
-                    userRole === 'ADMIN' ? (
+                    (userRole === 'ADMIN' || userRole === 'OWNER') ? (
                       <VixyLearningCenter />
                     ) : (
                       <NotFoundView onReturnToTerminal={() => setActiveTab('terminal')} />
