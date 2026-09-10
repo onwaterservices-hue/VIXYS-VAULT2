@@ -59,10 +59,13 @@ interface HeaderProps {
   onOpenSearch?: () => void;
   onOpenMobileMenu?: () => void;
   spotPrices?: Record<string, { price: number; change24h: number }>;
+  /** Live market regime from the canonical 15M decision engine (null = not yet observed). */
+  regime?: string | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
   ticker,
+  regime = null,
   activeTab,
   setActiveTab,
   userRole,
@@ -138,17 +141,21 @@ export const Header: React.FC<HeaderProps> = ({
     dayPassInfo
   });
 
-  const btcPrice = spotPrices?.BTC?.price || ticker.price || 64591.20;
-  const btcChange = spotPrices?.BTC?.change24h ?? ticker.change24h ?? 1.85;
+  // Ticker pills only ever show observed prices. No placeholder numbers, no
+  // ratio-derived ETH/SOL guesses — if a feed has not reported yet we show "—".
+  const btcPrice: number | null = spotPrices?.BTC?.price ?? (Number.isFinite(ticker?.price) && ticker.price > 0 ? ticker.price : null);
+  const btcChange: number | null = spotPrices?.BTC?.change24h ?? (Number.isFinite(ticker?.change24h) ? ticker.change24h : null);
 
-  const ethPrice = spotPrices?.ETH?.price ?? Math.round((btcPrice * 0.0435) * 100) / 100;
-  const ethChange = spotPrices?.ETH?.change24h ?? 2.43;
-  const solPrice = spotPrices?.SOL?.price ?? Math.round((btcPrice * 0.00245) * 100) / 100;
-  const solChange = spotPrices?.SOL?.change24h ?? 3.12;
+  const ethPrice: number | null = spotPrices?.ETH?.price ?? null;
+  const ethChange: number | null = spotPrices?.ETH?.change24h ?? null;
+  const solPrice: number | null = spotPrices?.SOL?.price ?? null;
+  const solChange: number | null = spotPrices?.SOL?.change24h ?? null;
+  const fmtUsd = (p: number | null) =>
+    p == null ? '—' : `$${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const isBtcPositive = btcChange >= 0;
-  const isEthPositive = ethChange >= 0;
-  const isSolPositive = solChange >= 0;
+  const isBtcPositive = (btcChange ?? 0) >= 0;
+  const isEthPositive = (ethChange ?? 0) >= 0;
+  const isSolPositive = (solChange ?? 0) >= 0;
 
   // Filter notifications by category
   const filteredNotifications = useMemo(() => {
@@ -213,10 +220,12 @@ export const Header: React.FC<HeaderProps> = ({
               ₿
             </div>
             <span className="text-slate-400 font-sans">BTC</span>
-            <span className="text-white font-mono font-bold">${btcPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${isBtcPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
-              {isBtcPositive ? '+' : ''}{btcChange.toFixed(2)}%
-            </span>
+            <span className="text-white font-mono font-bold tabular-nums">{fmtUsd(btcPrice)}</span>
+            {btcChange != null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md tabular-nums ${isBtcPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
+                {isBtcPositive ? '+' : ''}{btcChange.toFixed(2)}%
+              </span>
+            )}
           </div>
 
           {/* ETH Ticker Pill */}
@@ -225,10 +234,12 @@ export const Header: React.FC<HeaderProps> = ({
               Ξ
             </div>
             <span className="text-slate-400 font-sans">ETH</span>
-            <span className="text-white font-mono font-bold">${ethPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${isEthPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
-              {isEthPositive ? '+' : ''}{ethChange.toFixed(2)}%
-            </span>
+            <span className="text-white font-mono font-bold tabular-nums">{fmtUsd(ethPrice)}</span>
+            {ethChange != null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md tabular-nums ${isEthPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
+                {isEthPositive ? '+' : ''}{ethChange.toFixed(2)}%
+              </span>
+            )}
           </div>
 
           {/* SOL Ticker Pill */}
@@ -237,20 +248,39 @@ export const Header: React.FC<HeaderProps> = ({
               S
             </div>
             <span className="text-slate-400 font-sans">SOL</span>
-            <span className="text-white font-mono font-bold">${solPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md ${isSolPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
-              {isSolPositive ? '+' : ''}{solChange.toFixed(2)}%
-            </span>
+            <span className="text-white font-mono font-bold tabular-nums">{fmtUsd(solPrice)}</span>
+            {solChange != null && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md tabular-nums ${isSolPositive ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/50' : 'bg-rose-950/80 text-rose-400 border border-rose-800/50'}`}>
+                {isSolPositive ? '+' : ''}{solChange.toFixed(2)}%
+              </span>
+            )}
           </div>
 
-          {/* Market Status Pill */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-[11px] font-bold shadow-sm">
-            <span className="text-purple-300/60 text-[10px] uppercase tracking-wider font-mono">REGIME</span>
-            <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span>BULLISH</span>
-            </span>
-          </div>
+          {/* Market Regime Pill — driven by the canonical 15M decision engine, same source as the Command Center */}
+          {(() => {
+            const r = String(regime || '').toUpperCase();
+            const meta =
+              r === 'TRENDING_BULL' ? { label: 'TRENDING BULL', cls: 'text-emerald-400', dot: 'bg-emerald-400' } :
+              r === 'TRENDING_BEAR' ? { label: 'TRENDING BEAR', cls: 'text-rose-400', dot: 'bg-rose-400' } :
+              r === 'RANGE_BOUND' ? { label: 'RANGE BOUND', cls: 'text-cyan-300', dot: 'bg-cyan-400' } :
+              r === 'CHOPPY' ? { label: 'CHOPPY', cls: 'text-amber-300', dot: 'bg-amber-400' } :
+              r === 'HIGH_VOLATILITY' ? { label: 'HIGH VOL', cls: 'text-amber-400', dot: 'bg-amber-400' } :
+              r === 'TRANSITION' ? { label: 'TRANSITION', cls: 'text-purple-300', dot: 'bg-purple-400' } :
+              r ? { label: r.replace(/_/g, ' '), cls: 'text-purple-200', dot: 'bg-purple-400' } :
+              { label: '—', cls: 'text-slate-500', dot: 'bg-slate-600' };
+            return (
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-[11px] font-bold shadow-sm"
+                title="Live market regime observed by the 15-minute decision engine"
+              >
+                <span className="text-purple-300/60 text-[10px] uppercase tracking-wider font-mono">REGIME</span>
+                <span className={`flex items-center gap-1.5 font-bold ${meta.cls}`}>
+                  <span className={`w-2 h-2 rounded-full ${meta.dot} ${r ? 'animate-pulse' : ''}`} />
+                  <span>{meta.label}</span>
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Right Section: UTC Clock + Live System Notifications + Account Area */}
@@ -481,7 +511,7 @@ export const Header: React.FC<HeaderProps> = ({
                     {authState.user?.name || 'VIXY MEMBER'}
                   </div>
                   <div className="text-[9.5px] text-amber-300 font-extrabold tracking-wide uppercase">
-                    {userRole === 'ADMIN' ? 'MASTER ADMIN' : userRole === 'ELITE' ? 'VIXY ELITE' : userRole === 'PRO' ? 'VIXY PRO' : passCountdownFormatted ? `PASS: ${passCountdownFormatted}` : 'FREE MEMBER'}
+                    {userRole === 'ADMIN' ? 'MASTER ADMIN' : userRole === 'OWNER' ? 'VAULT OWNER' : userRole === 'ELITE' ? 'VIXY ELITE' : userRole === 'PRO' ? 'VIXY PRO' : userRole === 'STARTER' ? 'VIXY STARTER' : passCountdownFormatted ? `PASS: ${passCountdownFormatted}` : 'FREE MEMBER'}
                   </div>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-purple-400" />

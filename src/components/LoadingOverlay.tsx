@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Logo } from './Logo';
 import { Sparkles, ShieldCheck, Zap, Activity, CheckCircle2 } from 'lucide-react';
 
@@ -10,38 +10,42 @@ export const LoadingOverlay: React.FC<LoadingOverlayProps> = ({ onComplete }) =>
   const [progress, setProgress] = useState(0);
   const [statusIndex, setStatusIndex] = useState(0);
 
+  // Boot steps mirror what the shell actually does on load: mount the terminal,
+  // restore the persisted session, subscribe to the 15M engine + spot feeds, launch.
   const statusMessages = [
-    'Establishing Kalshi L2 WebSocket Feed...',
-    'Calibrating 15-Minute Reversal Engine...',
-    'Syncing Polymarket & DraftKings Micro Odds...',
-    'Loading SHA-256 Vault Signal Hash Matrix...',
-    'Initializing Decision Intelligence Engine...',
+    'Mounting terminal shell...',
+    'Restoring your vault session...',
+    'Subscribing to the 15-minute decision engine...',
+    'Syncing Coinbase spot & Kalshi cycle feeds...',
+    'Launching decision terminal...',
   ];
 
+  // Keep the latest onComplete in a ref so the boot timer never restarts when the
+  // parent re-renders (App re-renders on every ticker/engine update; the old
+  // [onComplete] dependency reset the interval on each render and starved the bar).
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
+
   useEffect(() => {
+    const BOOT_MS = 1300;
+    const start = performance.now();
+    let done = false;
     const interval = setInterval(() => {
-      setProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setTimeout(() => {
-            onComplete();
-          }, 300);
-          return 100;
-        }
-        const next = prev + 15;
-        const bounded = Math.min(100, next);
-
-        if (bounded > 20 && bounded < 45) setStatusIndex(1);
-        else if (bounded >= 45 && bounded < 70) setStatusIndex(2);
-        else if (bounded >= 70 && bounded < 90) setStatusIndex(3);
-        else if (bounded >= 90) setStatusIndex(4);
-
-        return bounded;
-      });
-    }, 180);
-
+      const elapsed = performance.now() - start;
+      const pct = Math.min(100, Math.round((elapsed / BOOT_MS) * 100));
+      setProgress(pct);
+      if (pct > 20 && pct < 45) setStatusIndex(1);
+      else if (pct >= 45 && pct < 70) setStatusIndex(2);
+      else if (pct >= 70 && pct < 90) setStatusIndex(3);
+      else if (pct >= 90) setStatusIndex(4);
+      if (pct >= 100 && !done) {
+        done = true;
+        clearInterval(interval);
+        setTimeout(() => onCompleteRef.current(), 260);
+      }
+    }, 40);
     return () => clearInterval(interval);
-  }, [onComplete]);
+  }, []);
 
   return (
     <div className="fixed inset-0 z-50 bg-[#070312] flex flex-col items-center justify-center p-6 text-purple-100 font-mono select-none overflow-hidden">

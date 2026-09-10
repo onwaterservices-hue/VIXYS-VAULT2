@@ -513,3 +513,51 @@
 @media (prefers-reduced-motion: reduce) {
   .radar-outer-glow, .radar-orbit, .radar-sweep-ring, .radar-glint { animation: none !important; }
 }
+
+/* ===========================================================================
+   VIXY premium feel layer (2026-09-10). Additive, global, no component
+   restyling: text rendering, stable numerals, brand selection colour, focus
+   rings, press feedback, soft view transitions. Respects reduced motion.
+   =========================================================================== */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  scroll-behavior: smooth;
+}
+
+/* Prices and countdowns must not jitter as digits change. */
+body { font-variant-numeric: tabular-nums; }
+
+::selection { background: rgba(168, 85, 247, 0.55); color: #ffffff; }
+
+/* Keyboard focus is visible and on-brand; mouse focus stays quiet. */
+:focus-visible {
+  outline: 2px solid rgba(192, 132, 252, 0.75);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* Tactile press feedback on every interactive control. */
+button:not(:disabled):active,
+a[role="button"]:active {
+  transform: scale(0.985);
+}
+
+/* Soft enter transition every time the active view changes. */
+@keyframes vxPageEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.vx-page-enter { animation: vxPageEnter 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+/* Referenced by App overlays but never defined until now. */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.animate-fadeIn { animation: fadeIn 0.25s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .vx-page-enter, .animate-fadeIn { animation: none !important; }
+  body::before, body::after { animation: none !important; }
+  button:not(:disabled):active { transform: none; }
+}
