@@ -60,5 +60,37 @@ console.log('== symmetry: mirrored inputs must produce mirrored sides ==');
 t('mirror UP',   decide(P('A', 'UP',   0.72, +6)), 'UP');
 t('mirror DOWN', decide(P('A', 'DOWN', 0.28, +6)), 'DOWN');
 
+console.log('== cold-instance seeds carry no directional opinion ==');
+//
+// Guards the defect fixed in fix/direction-pinned-up. These module-level values
+// are read directly by the lock gate. Seeded as direction "UP" / confidence 88.5
+// / P(up) 0.685 / edge 14.5 / persistence 18, a freshly booted instance already
+// satisfied confidenceValid, edgeValid and PERSISTENCE on values nothing had
+// measured, and production runs ~100 instances per 15-minute cycle.
+const seed = (name) => {
+  const m = src.match(new RegExp(`^let ${name} = ([^;]+);`, 'm'));
+  if (!m) throw new Error(`declaration for ${name} not found`);
+  return m[1].trim();
+};
+t('currentDirection seeds NEUTRAL, not a side', seed('currentDirection'), '"NEUTRAL"');
+t('currentConfidence seeds 0, below the 66 gate', Number(seed('currentConfidence')) < 66, true);
+t('currentModelProbability seeds even', Number(seed('currentModelProbability')), 0.5);
+t('currentEdgePct seeds below the 1.5 edge bar', Math.abs(Number(seed('currentEdgePct'))) < 1.5, true);
+t('persistenceSeconds seeds below the 6s bar', Number(seed('persistenceSeconds')) < 6, true);
+
+console.log('== direction never depends on the engine\'s own recent output ==');
+//
+// The `historicalConflict` vote raised a conflict whenever 2 or fewer of the last
+// 10 ledger rows carried the side under consideration. That is a one-way ratchet:
+// once the ledger leans one way the other side permanently carries an extra
+// conflict vote, which suppresses it, which keeps the ledger leaning. Measured in
+// production on 2026-09-10: 97 of the last 97 locks were UP and none were DOWN
+// over ~42 hours, while the Layer-5 shadow recorded the spot below the strike in
+// 34 of 65 cycles.
+t('no historicalConflict variable remains', /\bhistoricalConflict\b/.test(src.replace(/\/\/[^\n]*/g, '')), false);
+t('conflictCount has no self-referential vote', /if \(historicalConflict\) conflictCount\+\+/.test(src), false);
+// historicalSimilarityPct stays: it is displayed, it must not gate.
+t('historicalSimilarityPct still computed for display', /active15mCycle\.historicalSimilarityPct = historicalSimilarityPct;/.test(src), true);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
