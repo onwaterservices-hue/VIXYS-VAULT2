@@ -262,6 +262,14 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             )}
           </button>
 
+          {/* The arithmetic that makes the ladder legible, at the one moment the
+              visitor is actively choosing how to get back in. Both numbers are
+              live prices, not projections: 3 x $9.99 = $29.97 vs Starter $29. */}
+          <p className="text-[10.5px] text-purple-300/75 font-sans text-center leading-relaxed px-1">
+            Buying a pass three times costs <strong className="text-purple-100 font-mono">$29.97</strong>.
+            The Starter plan is <strong className="text-purple-100 font-mono">$29</strong> and keeps the terminal open all month.
+          </p>
+
           {/* View Plans */}
           <button
             onClick={onViewPricing}

@@ -1335,8 +1335,22 @@ let lastKalshiUpdateTs = 0;
 let engineFeedStatus = "CONNECTED";
 let engineState = "MONITORING";
 let activeContractSymbol = "BTC-15M";
-let currentDirection = "UP";
-let currentConfidence = 88.5;
+// Cold-instance seeds carry NO opinion.
+//
+// Every module-level value below is read by the lock gate. Seeded as they were
+// -- direction "UP", confidence 88.5, P(up) 0.685, edge 14.5%, 18s of
+// persistence -- a freshly booted instance held a complete, gate-passing
+// bullish signal before a single tick of market data had been read: edgeValid
+// (|14.5| >= 1.5), confidenceValid (88.5 in 66..99) and PERSISTENCE (18 >= 6)
+// all passed on values nothing measured. Production runs ~100 instances per
+// 15-minute cycle, so this boot state is entered constantly.
+//
+// They are now seeded to "no reading yet": NEUTRAL, zero confidence, an even
+// 0.5 probability, zero edge and zero persistence. Each is overwritten by
+// runMarketEngineTick from the real pipeline; until then the gate correctly
+// sees an instance that knows nothing rather than one that is sure of UP.
+let currentDirection = "NEUTRAL";
+let currentConfidence = 0;
 let currentBullVolumePct = 50;
 // REAL market-feed health, populated by runMarketEngineTick.
 // The BTC price comes from a fallback chain (Coinbase -> Kraken -> CoinGecko ->
@@ -1392,14 +1406,14 @@ function hasTelemetryChangedSignificantly(newObs, prevObs) {
   return false;
 }
 __name(hasTelemetryChangedSignificantly, "hasTelemetryChangedSignificantly");
-let currentModelProbability = 0.685;
+let currentModelProbability = 0.5;
 let currentKalshiImpliedProb = 0.54;
 // When the Kalshi market was last actually read. The seed above is not a
 // market price; anything downstream that claims "market probability" must
 // check this stamp is recent before using currentKalshiImpliedProb.
 let kalshiImpliedAtMs = 0;
-let currentEdgePct = 14.5;
-let persistenceSeconds = 18;
+let currentEdgePct = 0;
+let persistenceSeconds = 0;
 const requiredPersistenceSeconds = 15;
 let errorCount = 0;
 const SERVER_SESSION_ID = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -5119,7 +5133,6 @@ async function checkAndSettle15mCycle(livePrice) {
     (s) => (s.status === "RESOLVED" || s.status === "LOCKED") && s.direction,
   );
   let historicalSimilarityPct = 84;
-  let historicalConflict = false;
   if (resolvedLogs.length > 0) {
     const recentResolved = resolvedLogs.slice(0, 10);
     const matchingDirCount = recentResolved.filter(
@@ -5128,9 +5141,26 @@ async function checkAndSettle15mCycle(livePrice) {
     historicalSimilarityPct = Math.round(
       75 + (matchingDirCount / recentResolved.length) * 20,
     );
-    if (matchingDirCount <= 2 && recentResolved.length >= 5) {
-      historicalConflict = true;
-    }
+    // A `historicalConflict` vote used to be raised here whenever 2 or fewer of
+    // the last 10 ledger rows carried the side now being considered. That made
+    // the engine's direction a function of its own recent output, and it is a
+    // one-way ratchet: once the ledger leans one way, the OTHER side
+    // permanently carries an extra conflict vote, which suppresses it, which
+    // keeps the ledger leaning. Nothing about the market is measured by it.
+    //
+    // Measured in production 2026-09-10: the last 200 ledger rows contained 97
+    // locks, ALL of them UP and none DOWN, over ~42 hours; the settled rows
+    // show 23 of those 97 settled DOWN, so the missing side was reachable and
+    // simply could not be expressed. The Layer-5 shadow, which records which
+    // side of the strike the spot actually sat on, was near even over the same
+    // window (31 UP / 34 DOWN) -- so the imbalance was the engine's, not the
+    // market's. In the 34 cycles where price sat BELOW the strike the engine
+    // returned 24 SKIP and 10 BUY_UP, and zero BUY_DOWN.
+    //
+    // The same class of defect (direction derived from the engine's own
+    // scoreboard) was removed from the probability blend above; this was the
+    // remaining path. `historicalSimilarityPct` is unchanged and stays
+    // observation-only -- it is displayed, it no longer gates.
   }
   active15mCycle.historicalSimilarityPct = historicalSimilarityPct;
   const currentOrderFlow =
@@ -5150,7 +5180,6 @@ async function checkAndSettle15mCycle(livePrice) {
   if (momentumConflict) conflictCount++;
   if (crossAssetConflict) conflictCount++;
   if (reversalThreatConflict) conflictCount++;
-  if (historicalConflict) conflictCount++;
   const hasConflict =
     conflictCount >= 2 || (crossAssetConflict && reversalThreatConflict);
   active15mCycle.hasConflict = hasConflict;
