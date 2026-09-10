@@ -15437,6 +15437,10 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           minMtfAligned: active15mCycle.lockEligibility.minMtfAligned ?? null,
           reason: active15mCycle.lockEligibility.reason ?? null,
           strikeResolved: active15mCycle.lockEligibility.strikeResolved ?? null,
+          // PLACEHOLDER (rollover's round(spot/10)*10) or KALSHI (real floor
+          // strike from the poll). "resolved" above is true from the first
+          // tick of every cycle and does not distinguish them.
+          strikeSource: active15mCycle.lockEligibility.strikeSource ?? null,
           lockRule: active15mCycle.lockEligibility.lockRule ?? null,
           lockPolicy: active15mCycle.lockEligibility.lockPolicy ?? null,
           lockRuleDecides: Boolean(active15mCycle.lockEligibility.lockRuleDecides),
