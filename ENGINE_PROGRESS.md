@@ -446,6 +446,43 @@ reconciliation flush the local slice, read the doc back and attach
 engine locks/wins, the agreement matrix and per-cycle rows. Nothing touches
 the gate's `allowed`; pinned by `tests/l5-shadow-durable.invariants.mjs`
 (behavioural merge tests included). v1 rows must not be pooled with v2 rows.
+Write throttle (PR #47): the first v2 row merged **61 instances / 1,073
+ticks** in a 286s window — production fans out across ~60 short-lived
+instances per cycle — so instances now write only when the rule fires or when
+a ≥30s-old instance crosses a checkpoint boundary (settlement still flushes),
+keeping Firestore writes far below the shared quota circuit. The would-lock
+record now also captures the Kalshi implied YES price at that moment when the
+read is real (`kalshiYes`, `kalshiAgeMs`), so "edge vs the market" (mission
+item 8) accumulates live.
+
+### ★★★★★★★ FALSIFICATION ON UNTOUCHED DATA — the shipped table, trade prints, 209 cycles
+Owner asked "could you make a BETTER 15-minute algorithm?" The candidate has
+existed since SESSION 3; what it lacked was a test on data it had never seen.
+`scripts/replay15m/research/evalShippedTable.ts` evaluates the EXACT artifact
+production loads (`strikeSideTable.v1.json`, fitted on candles Aug 12 →
+Sep 7 23:30Z) on every later cycle, replayed from **real trade prints** (3s
+buckets; Sep 8 00:00 → Sep 10 04:00Z, 209 cycles, 2,926 checkpoint rows).
+Bars fixed a priori; nothing refitted.
+```
+policy                    locks  lock%   WIN%   Wilson95      boot95        med t-lock  UP     DOWN
+rule bar>=0.95 (shipped)    95   45.5%  98.9%  [94.3,99.8]  [96.5,100.0]     660s     42/42  52/53
+current engine gate         16    7.7% 100.0%  [80.6,100.0]      --          480s       9/9    7/7
+bars 0.85/0.90/0.93/0.97: 86.5% / 90.3% / 93.5% / 100% (171/155/124/23 locks) — monotone
+windows 360-720 → 57 locks 100%; 420-780, 480-780, 600-780 → identical to 360-780
+ablation: pool over vol → 92 locks 98.9%; pool over checkpoint → 32 locks 96.9%
+calibration (p bucket → realised): <.60 56.4→58.1 · .60-.70 65.7→64.8 · .70-.80 74.4→70.5
+  · .80-.90 84.0→80.5 · .90-.95 92.1→91.7 · .95-1 97.6→98.5 (n 451/574/478/559/412/410)
+t-lock: 420×1 480×1 540×3 600×18 660×34 720×38 · vol H×89 M×6 · dist bins 3:31 4:42 5:16 6:6
+```
+One loss (`15M-2026-09-08T19:15Z`, DOWN at 720s, cell 720|3|H p .955 n 335).
+Caveats in `L5_PROMOTION_REPORT.md` (DRAFT): two days / one regime (H-vol
+dominated, hence the 45% lock rate vs 13–19% in the 7-day run); replay strike
+is round-10 not Kalshi; the live vol bin uses the tick range while the
+table's terciles came from checkpoint ranges (ablation says vol barely
+matters); no forecasting skill claimed. **40% of the qualifying locks fire at
+exactly 720s — the band `lock15mCycle`'s commit point still refuses
+(REGRESSION-2deba55).** Flag-on (`VIXY_LOCK_RULE=strike_side`) and the
+720/780 alignment are owner decisions; prepared, not executed.
 
 ---
 

@@ -69,10 +69,20 @@ Read first: `ENGINE_PROGRESS.md` (SESSION 5 = the 52% root cause),
   and NEXT #7 (live shadow) depend on; v1 rows (2 of 200, partial) are not
   comparable and must not be pooled.
 
+- **L5 falsification items 1–5 PASSED on untouched data (SESSION 7)** —
+  shipped table on 209 trade-replayed cycles after its fit window: bar 0.95 →
+  95 locks (45.5%), **98.9%** [94.3, 99.8], UP 42/42, DOWN 52/53; monotone
+  in the bar; calibrated within 4 pts; checkpoint dimension essential, vol
+  tercile nearly free. `L5_PROMOTION_REPORT.md` (DRAFT) carries the tables,
+  caveats and the two owner decisions (flag-on; 720/780 commit-point
+  alignment — 40% of OOS locks fire at 720s). Regime slices (item 6) remain
+  thin; live shadow (7) and Kalshi-at-lock (8) are now being collected.
+
 ### NEXT (in order; each research-gated)
-1. **L5 falsification** (`L5_FALSIFICATION_MISSION.md`) on the 21-day trade
-   data — untouched final OOS, threshold perturbation, dimension ablation,
-   UP/DOWN splits, bootstrap CIs, shadow-vs-replay reconciliation.
+1. **L5 falsification — remaining items**: regime slices on a longer window,
+   live shadow-vs-replay reconciliation (`/api/research/shadow-l5`), Kalshi
+   implied price at would-lock (market edge). Then the owner's flag-on
+   decision.
 2. **Kalshi implied price at t** (free API) → measured edge vs market; kill
    the `|| 0.52` fallback by making edge `null` when the market price is
    absent.

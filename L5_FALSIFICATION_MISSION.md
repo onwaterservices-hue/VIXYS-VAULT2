@@ -70,6 +70,21 @@ known, and the report must keep saying it:
    these cells at 0.95+, the product is honest selection with no market edge
    — which changes what may be claimed to subscribers, not whether to ship.
 
+## RESULTS 2026-09-10 (SESSION 7) — items 1–5 survived on untouched data
+
+`scripts/replay15m/research/evalShippedTable.ts` on the shipped
+`strikeSideTable.v1.json` over 209 trade-replayed cycles the table never saw
+(Sep 8 00:00 → Sep 10 04:00Z): bar 0.95 → **95 locks (45.5%), 98.9%**
+(Wilson [94.3, 99.8], bootstrap [96.5, 100.0]), UP 42/42, DOWN 52/53;
+threshold perturbation monotone (0.85 → 86.5%, 0.90 → 90.3%, 0.93 → 93.5%,
+0.97 → 100% n=23); window bounds below 600s irrelevant; ablation: checkpoint
+dimension essential, vol tercile nearly free (92 locks / 98.9% without it);
+calibration within 4 pts in every p bucket (0.95–1 bucket realised 98.5%,
+n=410). Item 6 thin (two days, H-vol dominated); items 7–8 now collected
+live via `SHADOW_L5_v2` + `/api/research/shadow-l5` (Kalshi at would-lock
+being added). Full tables and caveats: `L5_PROMOTION_REPORT.md` (DRAFT).
+40% of the OOS locks fire at 720s — the commit-point band (REGRESSION-2deba55).
+
 ## Promotion gate
 
 Only if the result survives 1–6: write `L5_PROMOTION_REPORT.md` — what the
