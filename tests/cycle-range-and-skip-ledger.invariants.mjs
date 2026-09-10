@@ -29,7 +29,7 @@ t.section('2. the gate passes range provenance and only "instance_partial" is pa
 const gateSrc = extractFn('canLockCurrentCycle', 'function canLockCurrentCycle(livePrice)');
 t.check('gate derives rangeComplete from active15mCycle.rangeSource', gateSrc.includes('const rangeComplete = active15mCycle.rangeSource !== "instance_partial";'));
 t.check('gate passes rangeComplete into the helper', /active15mCycle\.isLocked \? active15mCycle\.lockedDirection : null,\s*rangeComplete,\s*\)/.test(gateSrc));
-t.check('gate keeps the cycle strike current inside the entry window only', gateSrc.includes('if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {'));
+t.check('gate keeps the cycle strike current inside the entry window only, from a Kalshi read only', gateSrc.includes('if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {'));
 
 t.section('3. cold-boot hydration from candles: single-flight, cycle-identity checked, retried');
 const hyd = sliceBetween(serverSrc, 'async function hydrateCycleRangeFromCandles(cycleId, intervalStartMs) {', '__name(hydrateCycleRangeFromCandles', 'hydrate');
@@ -62,7 +62,7 @@ t.section('4b. a late-booting instance still writes the real strike (from the sh
 // self-contained would-lock (strike 77,312.26) but targetStrike 0: the writer
 // had booted after 780s, when the gate no longer records the strike. The
 // strike now rides on every instance's shadow slice and the merged record.
-t.check('recorder stamps the strike on the instance slice inside the entry window', serverSrc.includes('if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;'));
+t.check('recorder stamps the strike on the instance slice inside the entry window, from a Kalshi read only', serverSrc.includes('if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;'));
 t.check('instance slice carries strike (null when unseen)', serverSrc.includes('strike: typeof sh.strike === "number" && sh.strike > 0 ? sh.strike : null,'));
 const mergeSrc = sliceBetween(serverSrc, 'function mergeShadowL5Record(remote, local, engineDecision) {', '__name(mergeShadowL5Record', 'merge');
 t.check('merge takes the majority strike across slices', mergeSrc.includes('strikeVotes.set(e.strike, (strikeVotes.get(e.strike) || 0) + 1);') && mergeSrc.includes('strikeInstances: strikeN,'));
@@ -76,8 +76,19 @@ t.check('merge takes the majority strike across slices', mergeSrc.includes('stri
   const none = merge({ cycleId: 'c', byInstance: { a: { ticks: 1 } } }, null, 'SKIP');
   t.eq('no slice saw the strike -> null, never invented', none.strike, null);
 }
-const rollFallback = sliceBetween(serverSrc, 'if (!(skippedLog.targetStrike > 0)) {', 'skippedLog.strikeSource = ', 'skip strike fallback');
-t.check('rollover SKIP: strike-0 row takes the merged shadow strike, then the would-lock strike', rollFallback.includes('shMerged.strike') && rollFallback.includes('shMerged.wouldLock.strike') && rollFallback.includes('skippedLog.settledSide = livePrice > 0 ? (livePrice >= mergedStrike ? "UP" : "DOWN") : null;'));
+const rollFbStart = serverSrc.indexOf('const mergedStrike = shMerged && typeof shMerged.strike === "number" && shMerged.strike > 0');
+const rollFallback = rollFbStart >= 0 ? serverSrc.slice(rollFbStart, rollFbStart + 1400) : '';
+t.check('rollover SKIP: the merged shadow strike is PREFERRED over the cycle strike (which can be the rollover placeholder), then the would-lock strike', rollFbStart >= 0 && rollFallback.includes('shMerged.wouldLock.strike') && rollFallback.includes('skippedLog.settledSide = livePrice > 0 ? (livePrice >= mergedStrike ? "UP" : "DOWN") : null;') && rollFallback.includes('"CYCLE_PLACEHOLDER"'));
+
+t.section('4c. placeholder strikes are named and never fed to the rule');
+t.check('rollover assigns a PLACEHOLDER strike and says so', serverSrc.includes('current15mStrikePrice = Math.round(livePrice / 10) * 10;\n    current15mStrikeSource = "PLACEHOLDER";'));
+t.check('the Kalshi poll marks the strike KALSHI', serverSrc.includes('current15mStrikePrice = strikeVal;\n              current15mStrikeSource = "KALSHI";'));
+t.check('the gate records the cycle strike only from a Kalshi read', serverSrc.includes('if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780 && active15mCycle.strikePrice !== current15mStrikePrice) {'));
+t.check('the shadow slice records the strike only from a Kalshi read', serverSrc.includes('if (strike15mResolved && current15mStrikeSource === "KALSHI" && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;'));
+t.check('the shadow would-lock is recorded only against a Kalshi strike', serverSrc.includes('if (current15mStrikeSource === "KALSHI" && strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {'));
+t.check('strike_side_only refuses to act on a placeholder strike', serverSrc.includes('if (current15mStrikeSource !== "KALSHI") { strikeRuleBlocks = true; reasons.push("STRIKE_SIDE_PLACEHOLDER_STRIKE'));
+t.check('payload exposes strikeSource', serverSrc.includes('strikeSource: current15mStrikeSource,'));
+t.check('replay sandbox declares the strike source as KALSHI (its strike is given at beginCycle)', (await import('fs')).readFileSync(new URL('../scripts/replay15m/engineSandbox.ts', import.meta.url), 'utf8').includes('let current15mStrikeSource = "KALSHI";'));
 
 t.section('5. the shadow would-lock is self-contained and the research grader uses the settled side');
 const wl = sliceBetween(serverSrc, 'sh.wouldLock = {', 'lockJustSet = true;', 'wouldLock');

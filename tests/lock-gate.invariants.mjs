@@ -92,7 +92,7 @@ function makeEnv(elapsedSec, overrides = {}) {
     lockedCycleIds: new Set(),
     // ea05da9 on main: a cold instance with no live strike may not lock.
     strike15mResolved: true,
-    VIXY_LOCK_RULE: 'off', VIXY_LOCK_RULE_BAR: 0.95, current15mStrikePrice: 64000,
+    VIXY_LOCK_RULE: 'off', VIXY_LOCK_RULE_BAR: 0.95, current15mStrikePrice: 64000, current15mStrikeSource: 'KALSHI',
     computeStrikeSideProbability: buildStrikeSideHelper('off', 0.95),
     globalSequenceNumber: 1,
     ...overrides.globals,
