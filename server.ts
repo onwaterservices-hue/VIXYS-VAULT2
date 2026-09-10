@@ -197,6 +197,7 @@ import {
   query as _clientQuery,
   limit as _clientLimit,
   where as _clientWhere,
+  orderBy as _clientOrderBy,
   runTransaction as _clientRunTransaction,
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
@@ -322,11 +323,15 @@ function where(field: string, op: any, value: any): any {
 function limit(n: number): any {
   return _adminActive ? { __vixyLimit: n } : _clientLimit(n);
 }
+function orderBy(field: string, direction: "asc" | "desc" = "asc"): any {
+  return _adminActive ? { __vixyOrderBy: [field, direction] } : _clientOrderBy(field, direction);
+}
 function query(collOrRef: any, ...constraints: any[]): any {
   if (!_adminActive) return (_clientQuery as any)(collOrRef, ...constraints);
   let q: any = collOrRef;
   for (const c of constraints) {
     if (c && c.__vixyWhere) q = q.where(c.__vixyWhere[0], c.__vixyWhere[1], c.__vixyWhere[2]);
+    else if (c && c.__vixyOrderBy) q = q.orderBy(c.__vixyOrderBy[0], c.__vixyOrderBy[1]);
     else if (c && typeof c.__vixyLimit === "number") q = q.limit(c.__vixyLimit);
   }
   return q;
@@ -14272,8 +14277,13 @@ async function hydrateSignalHistoryFromFirestore() {
   // reported NO_FIRESTORE_HANDLE against the very same collection.
   if (!_adminActive && !db) return { hydrated: 0, reason: "NO_FIRESTORE_HANDLE" };
   try {
+    // NEWEST 300 by cycle start. An un-ordered limit(300) returned an
+    // arbitrary 300 documents — in practice the OLDEST by id — so once the
+    // collection passed 300 rows the most recent settlements would never
+    // have been hydrated. intervalStart is on every row (locks, skips and
+    // reconciliation rebuilds alike).
     const snap = await getDocs(
-      query(collection(db, "signal_logs"), limit(300)),
+      query(collection(db, "signal_logs"), orderBy("intervalStart", "desc"), limit(300)),
     );
     const records = [];
     snap.forEach((d) => {
@@ -14314,6 +14324,7 @@ async function hydrateSignalHistoryFromFirestore() {
       brierScore: item.brierScore,
     }));
     recomputeAccuracyFromSettledHistory();
+    _ledgerLastHydrateMs = Date.now();
     console.log(
       `[VIXY_LEDGER_HYDRATE] Restored ${persistentSignalLogs.length} lock(s) from Firestore (${settled.length} settled). Accuracy=${serverLearningEngine.historicalAccuracy}%`,
     );
@@ -14383,6 +14394,29 @@ function ensureLedgerHydrated() {
   return _ledgerHydrationPromise;
 }
 __name(ensureLedgerHydrated, "ensureLedgerHydrated");
+// A warm instance hydrates once at boot and then serves its in-memory ledger
+// for its whole life, so /api/signal/resolved-log and the research readout
+// could miss settlements written by other instances (observed: a row settled
+// 15 minutes earlier absent from the answering instance). Readers now ask for
+// a ledger no older than LEDGER_FRESH_MS; the refresh is single-flight and
+// hydration merges by id, so nothing in memory is lost or duplicated.
+const LEDGER_FRESH_MS = 4 * 60e3;
+let _ledgerLastHydrateMs = 0;
+let _ledgerRefreshPromise = null;
+function ensureLedgerFresh(maxAgeMs = LEDGER_FRESH_MS) {
+  if (persistentSignalLogs.length === 0) return ensureLedgerHydrated();
+  if (Date.now() - _ledgerLastHydrateMs < maxAgeMs) return Promise.resolve({ hydrated: 0, reason: "FRESH" });
+  if (!_ledgerRefreshPromise) {
+    _ledgerRefreshPromise = hydrateSignalHistoryFromFirestore()
+      .catch((err) => {
+        console.error("[VIXY_LEDGER_HYDRATE] refresh failed:", err && err.message);
+        return { hydrated: 0, reason: "REFRESH_FAILED" };
+      })
+      .finally(() => { _ledgerRefreshPromise = null; });
+  }
+  return _ledgerRefreshPromise;
+}
+__name(ensureLedgerFresh, "ensureLedgerFresh");
 
 recomputeAccuracyFromSettledHistory();
 // Start hydration at boot; readers await the same promise.
@@ -14390,11 +14424,9 @@ ensureLedgerHydrated();
 
 app.get("/api/signal/resolved-log", async (req, res) => {
   // Await the shared hydration so a cold instance reports the real ledger
-  // instead of an empty one. Without this the endpoint returned total:0 while
-  // a warm sibling instance held 59 settled cycles.
-  if (persistentSignalLogs.length === 0) {
-    await ensureLedgerHydrated();
-  }
+  // instead of an empty one, and refresh a warm instance's copy when it is
+  // older than LEDGER_FRESH_MS so settlements written elsewhere show up.
+  try { await ensureLedgerFresh(); } catch {}
   const limit2 = Math.min(200, parseInt(req.query.limit || "200", 10));
   const isDemo = __name((s) => {
     const idLower = (s.id || "").toLowerCase();
@@ -17368,9 +17400,10 @@ app.all("/api/cron/backtest-refresh", async (req, res) => {
 app.all("/api/cron/settle", async (req, res) => {
   const nowMs = Date.now();
   let hydration = null;
-  if (persistentSignalLogs.length === 0) {
-    hydration = await ensureLedgerHydrated().catch(() => null);
-  }
+  // A fresh view matters here: the reconciliation below rebuilds any lock row
+  // this instance cannot see, so a stale in-memory ledger would re-create rows
+  // that another instance already wrote.
+  hydration = await ensureLedgerFresh().catch(() => null);
   // RECONCILIATION: the claim transaction writes active_cycle_lock/<cycleId>
   // durably, but the ledger row was historically written once, fire-and-forget,
   // from whichever instance won the claim — so a lock could be adopted and
@@ -17873,9 +17906,7 @@ __name(isCircuitOpen, "isCircuitOpen");
 // live old-vs-new comparison is a measured number. Admin-gated; nothing here
 // feeds a decision.
 app.get("/api/research/shadow-l5", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
-  if (persistentSignalLogs.length === 0) {
-    try { await ensureLedgerHydrated(); } catch {}
-  }
+  try { await ensureLedgerFresh(); } catch {}
   const rows = persistentSignalLogs.filter(
     (s) => s && s.shadowL5 && (s.status === "RESOLVED" || s.status === "NO_TRADE" || s.status === "SKIPPED"),
   );

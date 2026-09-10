@@ -497,6 +497,24 @@ the tree was left untouched. Owner decision, spelled out in
 `L5_PROMOTION_REPORT.md`: authorize the mode explicitly, or use the filter
 mode via env var now. Nothing was flipped.
 
+### Ledger freshness + hydration cap (the `resolved-log hydration TTL` chip)
+Seen live: `/api/research/shadow-l5` answered from an instance whose
+in-memory ledger stopped at 04:30Z while a row settled at 04:45Z existed in
+Firestore — a warm instance hydrates once at boot and then serves its copy
+for life. Second, latent defect: boot hydration used an UN-ORDERED
+`limit(300)`, which returns an arbitrary 300 docs (the oldest by id in
+practice); `signal_logs` was at 263 rows, so within days the newest
+settlements would silently stop hydrating. Fixed: the Firestore shim gained
+`orderBy` (Admin + client paths); hydration reads the newest 300 by
+`intervalStart desc` and still merges by id; `ensureLedgerFresh()` (4-minute
+TTL, single-flight, empty-ledger fallback to the boot promise) is awaited by
+`/api/signal/resolved-log`, `/api/research/shadow-l5` and `/api/cron/settle`
+(whose reconciliation would otherwise rebuild rows another instance wrote).
+Pinned by `tests/ledger-freshness.invariants.mjs`. Cost note for the owner:
+every cold instance already reads 300 docs at boot; with ~60 instance boots
+per 5 minutes observed, that is the dominant Firestore read cost today, not
+this TTL.
+
 ---
 
 ## COMPLETED
