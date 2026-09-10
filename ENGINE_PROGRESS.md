@@ -407,10 +407,21 @@ calibrated.pWin 0.747, n 75, side UP`):** hub hero "UP 75% · P(WIN UP) ·
 n=75 · CLEAR EDGE" with the derived sentence, metric card "P(WIN) 75%", lock
 quality "75 / 100 · 9/11 families aligned"; Prediction Center ring "75%"
 (title "Calibrated P(win) · CLEAR EDGE"), "P(WIN UP) · n=75", ENGINE SCORE
-shown beneath (88→91), never as the headline. The V2 rail could not be
-screenshotted this session (the Chrome window was minimized, 0×0, so the
-`aside` is not in the DOM); it reads the same `headline()` call and is
-pinned by the tests.
+shown beneath (88→91), never as the headline. **V2 rail verified after the
+owner resized Chrome:** "UP 74% · P(WIN UP) · n=46 · CLEAR EDGE" on the same
+cycle the hero showed, and on a later cycle with an empty cell both read
+"UP 88% ENGINE SCORE · HIGH CONFIDENCE". One caveat: the rail is fed by
+`App.tsx`'s `useCanonical15mDecision()` while the Prediction Center runs its
+own instance, so at a cycle boundary the two can be one 3-second poll apart
+(seen once: hero 81% P(win) n=104 on the old cycle vs rail 91% ENGINE SCORE
+on the new one, converged on the next poll).
+
+**Follow-up (same day):** `computeStrikeSideProbability` now keeps the cell
+coordinates on `INSUFFICIENT_SAMPLE` (checkpoint, distance bin, vol tercile,
+side, n) so the card reads "P(WIN) · no matching history yet · 6 of 30
+needed in this cell" and the MATCHED CELL chips show the coordinates with
+"n=6 (<30)" in amber instead of "t=— · — bps · vol —". The rail's
+label/word now sit on two lines instead of truncating to "HIGH CONF…".
 
 **Still fabricated on OTHER pages (not yet touched):** `OneHourDeskView.tsx:692`
 "Taker Delta +$28.4M", `ReplayCenterView.tsx:123` `binanceDelta: '+$28.4M'`.

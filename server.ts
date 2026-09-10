@@ -3496,8 +3496,10 @@ function computeStrikeSideProbability(spot, strike, effElapsed, cycleHigh, cycle
   if (rangeBps === null) return unknown("NO_CYCLE_RANGE");
   const vt = T.volTercilesBps; const v = rangeBps < vt.L_below ? "L" : rangeBps < vt.H_atOrAbove ? "M" : "H";
   const key = `${cp}|${d}|${v}`; const cell = T.cells[key];
-  if (!cell || cell.p === null) return { p: null, n: cell ? cell.n : 0, reason: "INSUFFICIENT_SAMPLE", key, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
   const currentSide = distBps > 0 ? "UP" : "DOWN";
+  // An empty cell still has coordinates. Carry them so the UI can say WHICH
+  // cell had too few samples (and how many) instead of a bare "no history".
+  if (!cell || cell.p === null) return { p: null, n: cell ? cell.n : 0, reason: "INSUFFICIENT_SAMPLE", key, checkpointSec: cp, distBps: Math.round(distBps * 10) / 10, distBin: d, volBin: v, rangeBps: Math.round(rangeBps * 10) / 10, currentSide, lockedSide, pLockedSide: null, protectSignal: null, tableVersion: T.version, bar: VIXY_LOCK_RULE_BAR };
   // After a lock, the number that matters is the probability that the LOCKED
   // side wins, which is p if price is still on that side and 1-p if it has
   // crossed. Exposed as an observation only (PROTECT research: a locked-side
