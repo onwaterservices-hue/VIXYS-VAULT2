@@ -229,6 +229,57 @@ Full field map: `ENGINE_DATAFLOW.md`.
   evidence as evidence, distance as a first-class feature) is research-gated
   behind flag + shadow per that brief; nothing here raises a displayed number.
 
+## SESSION 6 — the conviction that BUILDS: calibrated P(win), lock ladder, trail
+
+**Owner's question:** "why isn't the conviction growing as the bot moves through
+the locking process?" Answer from SESSION 5: the displayed number is a
+memoryless vote tally pinned to [40,58] by the reversal veto. The number that
+*does* build honestly already existed and was never shown: the strike-side
+table `strikeSideTable.v1.json` (2,591 cycles, 35,944 samples, 14 checkpoints
+60–840s × 7 distance bins × 3 volatility terciles, minN 30, OOS-stable), which
+the gate already evaluates every tick as `lockEligibility.strikeSide`.
+
+**Shipped (observation only; no threshold, gate outcome or decision changed):**
+- Canonical payload now carries:
+  - `calibrated` — `pWin` (the table's empirical frequency for the current
+    state, or `null` with `reason` when no cell has ≥30 samples), `n`,
+    `checkpointSec`, `distBps`, `distBin`, `volBin`, `currentSide`,
+    `pLockedSide`, `protectSignal`, `tableVersion`, `bar`, `marketForSide`
+    and `edgeVsMarketPct` — the last two ONLY when the Kalshi market was read
+    within 120s (`kalshiImpliedAtMs`); otherwise `null`. Criterion stated in
+    the payload: P(settle on the current side of the open strike).
+  - `market` — `{kalshiImpliedYes|null, ageMs, real}`; the 0.54 seed and the
+    pipeline's `|| 0.52` are no longer presented as a market price anywhere.
+  - `lockGate.eligible` and `lockGate.checks[]` — the gate's own 16 booleans
+    (window, strike resolved, lock quality vs tier bar, agreement, MTF,
+    strike feasibility, reversal, engine score ≥66, 3-observation stability,
+    conflict, signal stability, guardian, feed quality, chop, persistence,
+    not-locked) plus the Layer-5 `CALIBRATED_P` row marked `gating:false`
+    while the flag is off. Each carries `current` and `required`.
+  - `convictionTrail` — per-tick `{t, p, s, d, side}` (P(win), engine
+    score, distance bps), capped 320, reset at cycle open, downsampled to ≤60
+    for transport, with `convictionTrailCoverage` (per-instance view).
+  - `evidenceAlignment` no longer defaults to a fabricated 6 (`?? null`).
+- Prediction Center hero card: **P(WIN) n=…** is the headline (ring + number)
+  when a cell matches; "P(WIN) — no matching history yet" when it doesn't;
+  the legacy score is shown beneath, relabelled **ENGINE SCORE** (with a
+  tooltip saying it is a vote tally, not a probability). Under the bias row:
+  the **lock ladder** (8 key gates as ✓/· with current values, "n/N gates
+  passing"), the **P(win) trail sparkline** across the cycle, and — only when
+  the Kalshi read is real — "Kalshi prices this side at X% · edge ±Y%".
+- Pinned by `tests/calibrated-conviction.characterization.mjs` (39 checks):
+  no fabricated fallbacks in the calibrated block, edge null unless both
+  sides are real, checklist derived from the real gate booleans, trail never
+  synthesised, card labels honest.
+
+**What this does and does not claim.** P(win) is the product criterion
+measured on history (which side of the open strike settles), replicated on
+trades and stable across chronological halves. It is not directional
+forecasting skill (still ~coin flip post-lock) and it is one month of one
+regime; the L5 falsification mission remains the gate before the rule is
+allowed to *decide*. Displaying it changes what the user sees, not what the
+engine does.
+
 ### CORRECTION to earlier notes
 The original brief's description of `getCalibratedConfidence` with
 `INSUFFICIENT_SAMPLE` at n<15, and server lock tiers EARLY <480s / STANDARD

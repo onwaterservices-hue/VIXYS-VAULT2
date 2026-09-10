@@ -43,6 +43,16 @@ Read first: `ENGINE_PROGRESS.md` (SESSION 5 = the 52% root cause),
   ablation (not predictive), intracycle-feature ablation (no incremental
   value), regime slices.
 
+- **Calibrated conviction surfaced (SESSION 6)** — the strike-side table's
+  P(win) is the hero headline with sample size and provenance (checkpoint ×
+  distance bin × vol tercile), an honest "no matching history" state, the
+  legacy score relabelled ENGINE SCORE, the gate's own 16-condition **lock
+  ladder** with current-vs-required values, a per-tick **P(win) trail**
+  sparkline, and edge-vs-Kalshi shown only when the market read is real.
+  Payload: `calibrated`, `market`, `lockGate.checks/eligible`,
+  `convictionTrail`. Pinned by `tests/calibrated-conviction.characterization.mjs`.
+  Observation only — nothing gates on it until L5 passes falsification.
+
 ### NEXT (in order; each research-gated)
 1. **L5 falsification** (`L5_FALSIFICATION_MISSION.md`) on the 21-day trade
    data — untouched final OOS, threshold perturbation, dimension ablation,

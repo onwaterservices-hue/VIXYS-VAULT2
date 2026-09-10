@@ -1390,6 +1390,10 @@ function hasTelemetryChangedSignificantly(newObs, prevObs) {
 __name(hasTelemetryChangedSignificantly, "hasTelemetryChangedSignificantly");
 let currentModelProbability = 0.685;
 let currentKalshiImpliedProb = 0.54;
+// When the Kalshi market was last actually read. The seed above is not a
+// market price; anything downstream that claims "market probability" must
+// check this stamp is recent before using currentKalshiImpliedProb.
+let kalshiImpliedAtMs = 0;
 let currentEdgePct = 14.5;
 let persistenceSeconds = 18;
 const requiredPersistenceSeconds = 15;
@@ -2888,8 +2892,10 @@ async function runMarketEngineTick() {
                 : null;
             if (yesAsk && yesAsk > 0) {
               currentKalshiImpliedProb = Math.min(0.95, Math.max(0.05, yesAsk));
+              kalshiImpliedAtMs = Date.now();
             } else if (yesBid && yesBid > 0) {
               currentKalshiImpliedProb = Math.min(0.95, Math.max(0.05, yesBid));
+              kalshiImpliedAtMs = Date.now();
             }
           }
         }
@@ -3772,6 +3778,27 @@ function canLockCurrentCycle(livePrice) {
       }
     }
   } catch {}
+  // ── CONVICTION TRAIL (observation only) ──────────────────────────────────
+  // The per-tick trajectory of the calibrated P(win), the engine score and the
+  // distance to the strike, so the terminal can show conviction BUILDING (or
+  // not) across the cycle instead of one memoryless snapshot. Per-instance
+  // memory; capped at 320 points (16 minutes at the 3s tick).
+  try {
+    if (!Array.isArray(active15mCycle.convictionTrail)) active15mCycle.convictionTrail = [];
+    const trail = active15mCycle.convictionTrail;
+    const last = trail[trail.length - 1];
+    const tSec = Math.round(effElapsed);
+    if (!last || last.t !== tSec) {
+      trail.push({
+        t: tSec,
+        p: strikeSide.p === null || strikeSide.p === undefined ? null : strikeSide.p,
+        s: Math.round(currentConfidence),
+        d: typeof strikeSide.distBps === "number" ? strikeSide.distBps : null,
+        side: strikeSide.currentSide ?? null,
+      });
+      if (trail.length > 320) trail.splice(0, trail.length - 320);
+    }
+  } catch {}
   // Flag-gated Layer 5. Off by default; when on it can only add a denial.
   let strikeRuleBlocks = false;
   if (VIXY_LOCK_RULE === "strike_side") {
@@ -3806,6 +3833,32 @@ function canLockCurrentCycle(livePrice) {
     strikeResolved: strike15mResolved,
     lockRule: VIXY_LOCK_RULE,
     strikeSide,
+    // The lock ladder: every condition the gate is applying RIGHT NOW, with
+    // the current value and the bar it must clear. Observation only — this is
+    // the same set of booleans that produced `allowed` above, exposed so the
+    // terminal can show where in the locking process the engine actually is
+    // instead of a countdown-driven guess.
+    checks: [
+      { id: "WINDOW", label: "Entry window 6:00–13:00", pass: effElapsed >= 360 && effElapsed < 780, current: Math.round(effElapsed), required: "360–780s" },
+      { id: "STRIKE", label: "Strike resolved", pass: Boolean(strike15mResolved), current: strike15mResolved ? "yes" : "no", required: "yes" },
+      { id: "LOCK_QUALITY", label: "Lock quality", pass: lockQualityPass, current: Math.round(latestBtc15mPipeline.lockQuality), required: `≥${minLockQuality} (${lockTier})` },
+      { id: "AGREEMENT", label: "Evidence families agreeing", pass: evidenceAgreementPass, current: `${latestBtc15mPipeline.evidenceAgreementCount}/11`, required: `≥${minEvidenceAgreement}` },
+      { id: "MTF", label: "Timeframes aligned", pass: mtfPass, current: `${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5`, required: `≥${minMtfAligned}` },
+      { id: "STRIKE_FEASIBLE", label: "Expected move covers strike", pass: strikeFeasiblePass, current: `${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x`, required: "feasible" },
+      { id: "REVERSAL", label: "Reversal threat", pass: reversalThreatPass, current: `${latestBtc15mPipeline.reversalAssessment.threatScore}%`, required: "<30% & no veto" },
+      { id: "EVIDENCE", label: "Engine score", pass: evidenceSufficient, current: Math.round(currentConfidence), required: "≥66" },
+      { id: "STABILITY", label: "Stable last 3 observations", pass: rollingStabilityPassed, current: `${last3Obs.filter((o) => o.candidateDir === dirTarget && o.conf >= 65.5).length}/3`, required: "3/3" },
+      { id: "NO_CONFLICT", label: "No evidence conflict", pass: !active15mCycle.hasConflict, current: active15mCycle.hasConflict ? "conflict" : "clear", required: "clear" },
+      { id: "STABLE_SIGNAL", label: "Signal not fluctuating", pass: !active15mCycle.signalUnstable, current: active15mCycle.signalUnstable ? "unstable" : "stable", required: "stable" },
+      { id: "PROTECTION", label: "Guardian approves", pass: protectionApproved, current: latestGuardianDecision?.action ?? "n/a", required: "not EXIT/PROTECT" },
+      { id: "DATA_QUALITY", label: "Feed quality", pass: dataQualityPass, current: latestBtc15mPipeline.dataQuality.status, required: "OPTIMAL" },
+      { id: "NOT_CHOPPY", label: "Not chop-filtered", pass: isNotChoppy, current: isNotChoppy ? "clear" : String(latestBtc15mPipeline.chopAnalytics.reason || active15mCycle.choppyReason || "chop"), required: "clear" },
+      { id: "PERSISTENCE", label: "Direction persisted", pass: signalPersistent, current: `${Math.max(persistenceSeconds, active15mCycle.signalPersistence)}s`, required: "≥6s" },
+      { id: "NOT_LOCKED", label: "No lock yet this cycle", pass: !alreadyLocked, current: alreadyLocked ? "locked" : "open", required: "open" },
+      // Layer 5 is observation-only while VIXY_LOCK_RULE is off; shown so the
+      // user can see the calibrated bar even though it does not gate today.
+      { id: "CALIBRATED_P", label: `Calibrated P(win) ≥ ${VIXY_LOCK_RULE_BAR} (Layer 5${VIXY_LOCK_RULE === "strike_side" ? "" : ", flag off"})`, pass: strikeSide.p !== null && strikeSide.p >= VIXY_LOCK_RULE_BAR, current: strikeSide.p === null ? `— (${strikeSide.reason || "no cell"})` : String(strikeSide.p), required: `≥${VIXY_LOCK_RULE_BAR}`, gating: VIXY_LOCK_RULE === "strike_side" },
+    ],
   };
   return {
     allowed,
@@ -4568,6 +4621,7 @@ async function checkAndSettle15mCycle(livePrice) {
       provisionalBias: "NEUTRAL_BIAS",
       historicalSimilarityPct: 85,
       recentObservations: [],
+      convictionTrail: [],
       cycleHigh: 0,
       cycleLow: 0,
       calibrationCount: 0,
@@ -14873,7 +14927,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     ? lockedPred?.confidence || 75
     : livePred.confidence || 75;
   const regimeVal = active15mCycle.isChoppy ? "CHOPPY" : "RANGE_BOUND";
-  const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? 6;
+  // No invented 6: if the pipeline has not run, the count is unknown.
+  const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;
   const chopScore = latestBtc15mPipeline?.chopAnalytics?.chopScore ?? 0;
   const temporalStabilityVal = Math.max(0, Math.min(100, 100 - chopScore));
   const protectionStat = [
@@ -14933,6 +14988,46 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       kalshi: kalshiFresh,
     },
   };
+  // "Market probability" is only real when the Kalshi market was read recently.
+  // The module-level 0.54 seed and the pipeline's `|| 0.52` are NOT prices.
+  const kalshiReal = kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3;
+  const strikeSideNow = active15mCycle.lockEligibility?.strikeSide ?? null;
+  const calibratedBlock = strikeSideNow
+    ? (() => {
+        const pWin = typeof strikeSideNow.p === "number" ? strikeSideNow.p : null;
+        const side = strikeSideNow.currentSide === "UP" || strikeSideNow.currentSide === "DOWN" ? strikeSideNow.currentSide : null;
+        // Kalshi's yes-price is P(UP). Edge is only computed when BOTH sides
+        // are real and for the same side; otherwise it is null, never a
+        // number derived from an invented market price.
+        const marketForSide = kalshiReal && side ? (side === "UP" ? currentKalshiImpliedProb : 1 - currentKalshiImpliedProb) : null;
+        const edgeVsMarketPct = pWin !== null && marketForSide !== null ? Math.round((pWin - marketForSide) * 1000) / 10 : null;
+        return {
+          // P(the current side of the open strike is the settled side) — the
+          // empirical frequency of historically similar states (checkpoint ×
+          // distance bin × volatility tercile) from strikeSideTable, fitted on
+          // 2,591 cycles and out-of-sample stable. It is the product criterion
+          // ("did the lock win"), not a forecast of continuation.
+          criterion: "P(settle on the current side of the open strike)",
+          pWin,
+          n: typeof strikeSideNow.n === "number" ? strikeSideNow.n : 0,
+          reason: strikeSideNow.reason ?? null,
+          checkpointSec: strikeSideNow.checkpointSec ?? null,
+          distBps: typeof strikeSideNow.distBps === "number" ? strikeSideNow.distBps : null,
+          distBin: strikeSideNow.distBin ?? null,
+          volBin: strikeSideNow.volBin ?? null,
+          currentSide: side,
+          pLockedSide: typeof strikeSideNow.pLockedSide === "number" ? strikeSideNow.pLockedSide : null,
+          protectSignal: typeof strikeSideNow.protectSignal === "boolean" ? strikeSideNow.protectSignal : null,
+          tableVersion: strikeSideNow.tableVersion ?? null,
+          bar: typeof strikeSideNow.bar === "number" ? strikeSideNow.bar : null,
+          marketForSide,
+          edgeVsMarketPct,
+        };
+      })()
+    : null;
+  const trailRaw = Array.isArray(active15mCycle.convictionTrail) ? active15mCycle.convictionTrail : [];
+  const trailStep = trailRaw.length > 60 ? Math.ceil(trailRaw.length / 60) : 1;
+  const convictionTrail = trailRaw.filter((_, i) => i % trailStep === 0 || i === trailRaw.length - 1);
   const decisionObj = {
     feedHealth,
     cycleId,
@@ -14978,6 +15073,15 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     capitalPreserved: latestGuardianDecision?.action === "PROTECT",
     regime: regimeVal,
     evidenceAlignment: evidenceAlign,
+    // Calibrated conviction that BUILDS: see calibratedBlock above.
+    calibrated: calibratedBlock,
+    market: {
+      kalshiImpliedYes: kalshiReal ? currentKalshiImpliedProb : null,
+      ageMs: kalshiImpliedAtMs > 0 ? Date.now() - kalshiImpliedAtMs : null,
+      real: kalshiReal,
+    },
+    convictionTrail,
+    convictionTrailCoverage: { points: trailRaw.length, fromSec: trailRaw[0]?.t ?? null, toSec: trailRaw[trailRaw.length - 1]?.t ?? null, note: "this instance's view of the cycle" },
     temporalStability: temporalStabilityVal,
     contradictionScore: chopScore,
     protectionStatus: protectionStat,
@@ -14990,6 +15094,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           tier: active15mCycle.lockEligibility.lockTier ?? null,
           minLockQuality: active15mCycle.lockEligibility.minLockQuality ?? null,
           minEvidenceAgreement: active15mCycle.lockEligibility.minEvidenceAgreement ?? null,
+          eligible: Boolean(active15mCycle.lockEligibility.eligible),
+          checks: Array.isArray(active15mCycle.lockEligibility.checks) ? active15mCycle.lockEligibility.checks : [],
           minMtfAligned: active15mCycle.lockEligibility.minMtfAligned ?? null,
           eligible: active15mCycle.lockEligibility.eligible ?? null,
           reason: active15mCycle.lockEligibility.reason ?? null,
