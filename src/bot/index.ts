@@ -157,7 +157,7 @@ async function handleInteraction(interaction: Interaction) {
         `• **Full Trade Parameters**: Exact Entry, Stop-Loss, and Take-Profit Targets\n` +
         `• **Flow-Forge Core**: Order blocks, liquidity sweeps, and taker absorption\n` +
         `• **Final-Lock Predictions**: Highest-confidence contract settlement calls\n\n` +
-        `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://vixy.ai').replace(/\/$/, '')}/#pricing)**`,
+        `👉 **[ Launch VIXY Vault AI Dashboard → ](${(process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '')}/#pricing)**`,
       ephemeral: true,
     });
   } else if (commandName === 'leaderboard') {
@@ -284,6 +284,11 @@ export async function broadcastSignalToDiscord(signalData: {
   // embed and routes to premium-signals. Defaults to ELITE so any existing
   // caller that omits it keeps its previous behavior.
   tier?: 'FREE' | 'ELITE';
+  // Authoritative lock facts (lockedSnapshot / signal_logs row). Optional so
+  // the Bot Hub test route keeps working; when absent the embeds omit the
+  // corresponding fields instead of deriving stand-ins.
+  probability?: number;
+  lockedAt?: string;
 }): Promise<{ success: boolean; method: string; message: string }> {
   const tier = signalData.tier === 'FREE' ? 'FREE' : 'ELITE';
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
@@ -310,7 +315,11 @@ export async function broadcastSignalToDiscord(signalData: {
       targetPrice: signalData.targetPrice || signalData.currentPrice,
       brierScore: 0,
       accuracy: 0,
-      totalSettled: 0
+      totalSettled: 0,
+      lockedProbability: Number.isFinite(signalData.probability) ? signalData.probability : undefined,
+      lockedAt: signalData.lockedAt || undefined,
+      lockRule: signalData.reasoning,
+      strike: Number.isFinite(signalData.targetPrice) && signalData.targetPrice > 0 ? signalData.targetPrice : undefined,
     },
   };
 
