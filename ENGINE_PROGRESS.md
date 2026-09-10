@@ -1204,4 +1204,36 @@ Elite auto-trading (`executeAutoTradesForSignal`) fires on every lock. The
 measured lock RATE in this mode is 13–45% of cycles by regime versus ~8% for
 the engine gate, so it is also a position-count change for auto-traders.
 
-## Replay of the SHIPPED mode (filled in below after the run)
+## Replay of the SHIPPED mode — the real gate, `strike_side_only`, untouched window
+
+`npx tsx scripts/replay15m.ts --source trades --offline --start 2026-09-08T00:00:00Z
+--end 2026-09-10T04:00:00Z --lock-rule strike_side_only --bar 0.95` — the
+gate sliced verbatim from this branch's server.ts, ticked every 3s on real
+trade prints, 208 cycles, 0 lookahead violations, 0 coverage skips.
+
+```
+                         locks  lock%   graded  WIN%    UP      DOWN    med t-lock  Brier  calib err
+shipped gate (3s ticks)    111  53.4%    110    97.3%  48/50   59/60     669s      0.027   1.7 pts
+checkpoint-only eval        95  45.5%     95    98.9%  42/42   52/53     660s        --      --
+current engine gate         16   7.7%     16   100.0%   9/9     7/7      480s        --      --
+```
+Wilson 95% for 107/110: [92.3%, 99.0%]. Locks by minute: 420s×4, 480s×2,
+600s×18, 660s×46, 720s×41 (earliest 420s, latest 777s). Cells hit:
+`660|4|H` 45/46, `720|3|H` 36/38, `600|5|H` 18/18, `420|6|H` 4/4,
+`720|4|H` 2/2, `480|6|H` 2/2. 97 cycles ended `ENTRY_WINDOW_EXPIRED` (the
+rule never reached the bar — that is the SKIP).
+
+**What the departure from the checkpoint-only number is.** The live gate
+evaluates every 3s and uses the LAST checkpoint's cell with the CURRENT
+distance, so it can fire between checkpoints; and its vol bin is the full
+tick range (every hit is an H cell). That produced 16 more locks and 2 more
+losses than the checkpoint-only policy: 53% of cycles at 97.3% instead of
+45% at 98.9%. Both sit above the 0.95 bar; the confidence carried on the
+lock (avg 95.6) under-states the realised rate by 1.7 points — calibrated,
+not inflated. Post-lock directional accuracy is 44.5% and 110/110 locks
+name the side price had already moved to: selection, not forecasting, as
+every earlier run said.
+
+The replay is not the production ledger (round strike vs Kalshi floor
+strike; seeded PRNG; no cross-asset feed). It is the shipped code path on
+data the table never saw.

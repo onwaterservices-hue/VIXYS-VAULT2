@@ -28,7 +28,12 @@ SESSION 7). Bars fixed a priori; nothing refitted.
 policy                 locks  lock%    WIN%    Wilson95        boot95 (2,000 cycle resamples)  skips  med t-lock   UP      DOWN
 rule bar >=0.95 (shipped)  95  45.5%   98.9%  [94.3, 99.8]    [96.5, 100.0]                    114     660s      42/42   52/53
 current engine gate        16   7.7%  100.0%  [80.6, 100.0]        --                          193     480s        9/9     7/7
+SHIPPED GATE, mode on     111  53.4%   97.3%  [92.3, 99.0]         --                           97     669s      48/50   59/60
 ```
+The last row is the real `canLockCurrentCycle` in `strike_side_only` mode,
+ticked every 3s on the same trade prints (208 cycles; ENGINE_PROGRESS
+SESSION 8). It fires between checkpoints and bins vol on the full tick range,
+which adds 16 locks and 2 losses versus the checkpoint-only policy.
 
 The single loss: `15M-2026-09-08T19:15Z`, DOWN at 720s, cell `720|3|H`
 (p 0.955, n 335).
