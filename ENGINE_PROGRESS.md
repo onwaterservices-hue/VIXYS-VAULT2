@@ -1421,3 +1421,58 @@ surfaces presented fixed numbers as model output:
 
 Pinned in `tests/desk-honesty.characterization.mjs`. Competitor analysis:
 `COMPETITOR_TEARDOWN.md`.
+
+## A SECOND UNTOUCHED WINDOW — the month BEFORE the fit (mission item 6, widened)
+
+The 56-day candle pull for the v2 research made 30 days of cycles available
+that precede the shipped table's fit window (`15M-2026-07-12T00:00Z →
+08-11T23:45Z`, 2,976 cycles, 41,664 checkpoint rows). The shipped table was
+fitted on Aug 12 → Sep 7 and had never seen them.
+`evalShippedTable.ts`, bars fixed a priori, nothing refitted:
+
+```
+policy                    locks  lock%   WIN%    Wilson95       boot95         UP        DOWN     med t-lock
+rule bar >=0.95            986   33.1%   97.9%  [96.8, 98.6]  [96.9, 98.7]   486/491   479/495    660s
+bar 0.85 / 0.90 / 0.93    2131 / 1833 / 1312   89.3% / 91.4% / 95.5%
+bar 0.97                   226    7.6%  100.0%  [98.3, 100]
+window 360-720             568   19.1%   97.9%   (the 720-779s minute holds 42% of the locks)
+pool over vol (cp x dist)  980   32.9%   98.0%   (vol tercile: nearly free, again)
+distance only              284    9.5%   96.8%   (checkpoint dimension: essential, again)
+engine gate (replay)        48    1.6%  100.0%
+```
+Calibration on 40,902 known-cell rows: every bucket within 1.8 points
+(`0.95+`: predicted 97.7%, realised 98.6%, n 4,590). The lock RATE is lower
+than the September window (33% vs 45–53%) — a calmer month — and the
+precision is the same. Three disjoint windows now agree: Jul 12–Aug 11
+(986 locks, 97.9%), Sep 8–10 checkpoint-only (95, 98.9%), Sep 8–10 shipped
+gate on trade prints (111, 97.3%).
+
+**Regime slices** (`regimeSlices.ts` on the 56-day file; table fitted on
+its TRAIN half, TEST 2,784 cycles):
+```
+prior-4-cycle trend     ranging 434 locks 95.4%   middle 584 97.3%   trending 841 93.1%
+prior-4-cycle vol       calm    400 locks 97.8%   middle 421 96.2%   volatile 1038 93.4%
+UTC block               00-08   601 95.2%         08-16  635 94.2%   16-24   623 95.5%
+lock timing             calm median 720s          volatile median 600s
+```
+Trending / volatile regimes lock more often (77–80% of cycles) at lower
+precision (93%); calm / ranging lock less (48–57%) at 95–98%. No regime
+falls near the coin flip. Today's −2% day (90.9% in replay, 8/10 live
+before the range fix) sits where the volatile slice says it should.
+
+**Production check of PR #53 on the first SKIP row written after deploy
+(cycle 15:15Z):** the would-lock is self-contained — `side DOWN, p 0.957 at
+634s, spot 77,100.995, strike 77,312.26, rangeBps 29.1, rangeSource
+candles+instance, kalshiYes 0.05` — so it is gradeable (settled 77,078.455 →
+DOWN → rule WIN). The row's own `targetStrike` is still 0: the rollover
+writer ran on an instance that booted after 780s, when the gate no longer
+records the strike. Fixed in the next PR by carrying the strike on the
+shadow slice (any instance that saw it) and using the merged shadow's strike
+as the SKIP row's fallback.
+
+**Shipped: PR #54 (desk honesty) → main `4aa173b`, deploy success.**
+PRODUCTION VERIFIED on the served bundle (`assets/index-DGZwdb8j.js`):
+`1H MODEL: NOT BUILT` ×1, `NOT A MODEL OUTPUT` ×1, `15-MINUTE CYCLE REPLAY ·
+REAL LEDGER` ×1, `Signal endpoint unavailable` ×1; `REPLAY_SCENARIOS` ×0,
+`Verified WIN +$360.50` ×0, `settledCount:148` ×0. The rendered pages need a
+signed-in session to view; the Chrome tab in this session was signed out.

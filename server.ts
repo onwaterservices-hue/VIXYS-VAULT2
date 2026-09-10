@@ -3872,6 +3872,7 @@ function canLockCurrentCycle(livePrice) {
     }
     sh.ticks += 1;
     sh.lastSec = effElapsed;
+    if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;
     let checkpointChanged = false;
     let lockJustSet = false;
     if (strikeSide.p !== null && (strikeSide.currentSide === "UP" || strikeSide.currentSide === "DOWN")) {
@@ -4816,6 +4817,23 @@ async function checkAndSettle15mCycle(livePrice) {
           const shMerged = mergeShadowL5Record(shRemote, shLocal, "SKIP");
           if (shMerged) skippedLog.shadowL5 = shMerged;
           if (shLocal) shadowL5ByCycle.delete(shCycleId);
+          // An instance that booted after 780s never recorded this cycle's
+          // strike on its own cycle object (the gate only records it inside
+          // the entry window). Fall back to the strike the OTHER instances
+          // recorded on the shared shadow doc, then to the would-lock's own.
+          if (!(skippedLog.targetStrike > 0)) {
+            const mergedStrike = shMerged && typeof shMerged.strike === "number" && shMerged.strike > 0
+              ? shMerged.strike
+              : shMerged && shMerged.wouldLock && typeof shMerged.wouldLock.strike === "number" && shMerged.wouldLock.strike > 0
+                ? shMerged.wouldLock.strike
+                : 0;
+            if (mergedStrike > 0) {
+              skippedLog.targetStrike = mergedStrike;
+              skippedLog.strike = mergedStrike;
+              skippedLog.settledSide = livePrice > 0 ? (livePrice >= mergedStrike ? "UP" : "DOWN") : null;
+              skippedLog.strikeSource = shMerged.strike > 0 ? "SHADOW_MERGED" : "SHADOW_WOULD_LOCK";
+            }
+          }
         }
         persistentSignalLogs.unshift(skippedLog);
         if (persistentSignalLogs.length > 300) {
@@ -17871,6 +17889,10 @@ function shadowL5InstanceSlice(sh) {
     lastSec: sh.lastSec ?? null,
     lastEval: sh.lastEval ?? null,
     wouldLock: sh.wouldLock ?? null,
+    // The cycle's Kalshi strike as this instance saw it inside the entry
+    // window. Any instance that saw it contributes, so a SKIP row written by
+    // an instance that booted after 780s can still carry the real strike.
+    strike: typeof sh.strike === "number" && sh.strike > 0 ? sh.strike : null,
     evals: Array.isArray(sh.evals) ? sh.evals.slice(0, 60) : [],
   };
 }
@@ -17931,19 +17953,27 @@ function mergeShadowL5Record(remote, local, engineDecision) {
   const entries = Object.values(slices).filter((e) => e && typeof e === "object");
   if (entries.length === 0) return null;
   let wouldLock = null, lastEval = null, ticks = 0, firstSec = null, lastSec = null;
+  // The cycle's strike, as the instances that saw it inside the entry window
+  // recorded it. Majority vote across slices; ties → the earliest-recorded.
+  const strikeVotes = new Map();
   for (const e of entries) {
     ticks += Number(e.ticks) || 0;
     if (e.wouldLock && typeof e.wouldLock.atSec === "number" && (!wouldLock || e.wouldLock.atSec < wouldLock.atSec)) wouldLock = e.wouldLock;
     if (e.lastEval && typeof e.lastEval.atSec === "number" && (!lastEval || e.lastEval.atSec > lastEval.atSec)) lastEval = e.lastEval;
     if (typeof e.firstSec === "number" && (firstSec === null || e.firstSec < firstSec)) firstSec = e.firstSec;
     if (typeof e.lastSec === "number" && (lastSec === null || e.lastSec > lastSec)) lastSec = e.lastSec;
+    if (typeof e.strike === "number" && e.strike > 0) strikeVotes.set(e.strike, (strikeVotes.get(e.strike) || 0) + 1);
   }
+  let strike = null, strikeN = 0;
+  for (const [k, n] of strikeVotes) if (n > strikeN) { strike = k; strikeN = n; }
   return {
     cycleId: (remote && remote.cycleId) || (local && local.cycleId) || null,
     bar: (remote && typeof remote.bar === "number") ? remote.bar : (local && typeof local.bar === "number") ? local.bar : VIXY_LOCK_RULE_BAR,
     tableVersion: (remote && remote.tableVersion) || (local && local.tableVersion) || null,
     wouldLock,
     lastEval,
+    strike,
+    strikeInstances: strikeN,
     ticks,
     instances: entries.length,
     firstSec,

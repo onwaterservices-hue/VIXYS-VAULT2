@@ -57,6 +57,28 @@ const markerStart = serverSrc.indexOf('const sigId = `sig_skip_${active15mCycle.
 const marker = markerStart >= 0 ? serverSrc.slice(markerStart, serverSrc.indexOf('persistentSignalLogs.unshift(skippedLog);', markerStart)) : '';
 t.check('mid-cycle SKIP marker: targetStrike/strike use the same guard', marker.includes('targetStrike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,') && marker.includes('strike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,'));
 
+t.section('4b. a late-booting instance still writes the real strike (from the shared shadow)');
+// First production SKIP row after PR #53 (cycle 2026-09-10T15:15Z) carried a
+// self-contained would-lock (strike 77,312.26) but targetStrike 0: the writer
+// had booted after 780s, when the gate no longer records the strike. The
+// strike now rides on every instance's shadow slice and the merged record.
+t.check('recorder stamps the strike on the instance slice inside the entry window', serverSrc.includes('if (strike15mResolved && current15mStrikePrice > 0 && effElapsed < 780) sh.strike = current15mStrikePrice;'));
+t.check('instance slice carries strike (null when unseen)', serverSrc.includes('strike: typeof sh.strike === "number" && sh.strike > 0 ? sh.strike : null,'));
+const mergeSrc = sliceBetween(serverSrc, 'function mergeShadowL5Record(remote, local, engineDecision) {', '__name(mergeShadowL5Record', 'merge');
+t.check('merge takes the majority strike across slices', mergeSrc.includes('strikeVotes.set(e.strike, (strikeVotes.get(e.strike) || 0) + 1);') && mergeSrc.includes('strikeInstances: strikeN,'));
+{
+  const sliceFn = sliceBetween(serverSrc, 'function shadowL5InstanceSlice(sh) {', '__name(shadowL5InstanceSlice', 'slice');
+  const merge = new Function('SHADOW_INSTANCE_ID', 'VIXY_LOCK_RULE_BAR', `${sliceFn}; ${mergeSrc}; return mergeShadowL5Record;`)('me', 0.95);
+  const remote = { cycleId: 'c', byInstance: { a: { ticks: 10, strike: 77312.26 }, b: { ticks: 5, strike: 77312.26 }, c: { ticks: 3, strike: 77300 }, d: { ticks: 1 } } };
+  const m = merge(remote, { cycleId: 'c', ticks: 2 }, 'SKIP');
+  t.eq('merged strike is the majority value', m.strike, 77312.26);
+  t.eq('merged strikeInstances counts the voters', m.strikeInstances, 2);
+  const none = merge({ cycleId: 'c', byInstance: { a: { ticks: 1 } } }, null, 'SKIP');
+  t.eq('no slice saw the strike -> null, never invented', none.strike, null);
+}
+const rollFallback = sliceBetween(serverSrc, 'if (!(skippedLog.targetStrike > 0)) {', 'skippedLog.strikeSource = ', 'skip strike fallback');
+t.check('rollover SKIP: strike-0 row takes the merged shadow strike, then the would-lock strike', rollFallback.includes('shMerged.strike') && rollFallback.includes('shMerged.wouldLock.strike') && rollFallback.includes('skippedLog.settledSide = livePrice > 0 ? (livePrice >= mergedStrike ? "UP" : "DOWN") : null;'));
+
 t.section('5. the shadow would-lock is self-contained and the research grader uses the settled side');
 const wl = sliceBetween(serverSrc, 'sh.wouldLock = {', 'lockJustSet = true;', 'wouldLock');
 t.check('would-lock records the strike it fired against', wl.includes('strike: current15mStrikePrice > 0 ? current15mStrikePrice : null,'));

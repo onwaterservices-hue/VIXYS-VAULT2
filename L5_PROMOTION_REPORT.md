@@ -92,13 +92,23 @@ p bucket     rows   predicted  realised  gap
 ```
 When the table says 95%+, reality behaved like 98.5% on data it never saw.
 
-## 6. Regime slices — THIN on this window
+## 6. Regime slices — now measured on a second untouched window
 
-Two days, one regime. The earlier 7-day trade run (ENGINE_PROGRESS "LAYER 5
-INSIDE THE REAL GATE") found LOW-vol `t=720 |mny| 3–6 bps` at 90.8% vs HIGH-vol
-69.6% — the blended cell hides a weak regime — and this OOS window is dominated
-by the H vol tercile. Treat the lock RATE (45.5% here vs 12.9–19% in the 7-day
-run) as regime-dependent; the precision at the bar has held in both.
+**A month BEFORE the fit (Jul 12 → Aug 11, 2,976 candle cycles the table never
+saw):** bar 0.95 → **986 locks (33.1%), 97.9%** [96.8, 98.6], UP 486/491, DOWN
+479/495; bars monotone (0.85→89.3%, 0.90→91.4%, 0.93→95.5%, 0.97→100% on
+226); calibration within 1.8 points in every bucket (`0.95+` predicted
+97.7%, realised 98.6%, n 4,590). Checkpoint dimension essential, vol tercile
+nearly free — the same ablation result as the September window.
+
+**Slices** (56-day candle file, TEST half 2,784 cycles, ENGINE_PROGRESS
+SESSION 8): trending 93.1% on 77% coverage vs ranging 95.4% on 57%;
+volatile 93.4% on 80% vs calm 97.8% on 48%; UTC blocks 94.2–95.5%. Higher
+volatility buys coverage and costs ~4 points of precision; no regime is
+near the coin flip. Today's −2% day (90.9% in the trade replay) sits inside
+the volatile slice. Three disjoint windows now agree on precision at the
+bar: 97.9% (986 locks, pre-fit month), 98.9% (95, post-fit checkpoint-only),
+97.3% (111, post-fit shipped gate on trade prints).
 
 ## 7–8. Live shadow and market edge — now collectable
 
