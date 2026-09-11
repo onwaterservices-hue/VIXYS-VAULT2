@@ -1851,7 +1851,7 @@ async function updateCrossAssetFeeds() {
     rollingCorrelation: Math.round(avgCorr * 1e3) / 1e3,
     directionalAgreementRatio: Math.round(agreementRatio * 100) / 100,
     divergenceMagnitude: Math.round(divergence * 100) / 100,
-    regime: serverLearningEngine.currentRegime || "RANGING_NEUTRAL",
+    regime: serverLearningEngine.currentRegime ?? null,
     contextContribution: contextContrib,
     riskPenalty,
     evidenceSummary: summary,
@@ -1970,6 +1970,7 @@ let latestBtc15mPipeline = {
   evidenceAgreementCount: 0,
   totalEvidenceFamilies: 11,
   evidenceFamilies: [],
+  regime: null,
   multiTimeframeAlignment: {
     tf15m: "NEUTRAL",
     tf5m: "NEUTRAL",
@@ -2839,6 +2840,8 @@ function evaluateBtc15mHighConvictionPipeline(
     evidenceAgreementCount: agreementCount,
     totalEvidenceFamilies: 11,
     evidenceFamilies: families,
+    // The regime the REGIME family voted with (structure + VWAP + momentum).
+    regime: dynamicRegime,
     multiTimeframeAlignment: {
       tf15m: tf15mVote,
       tf5m: tf5mVote,
@@ -3128,16 +3131,13 @@ async function runMarketEngineTick() {
       intervalMomentum,
       latestCrossAssetContext?.riskPenalty || 0,
     );
+    // One regime: the one the pipeline's REGIME family voted with, shown as
+    // CHOP while the chop filter holds that vote neutral. The tick used to
+    // relabel it -- any spot 0.04% above the strike was "TRENDING_BULL" --
+    // which is strike position, not a trend, and not what the engine voted.
     const dynamicRegime = latestBtc15mPipeline.chopAnalytics.isChopFiltered
       ? "CHOP"
-      : latestBtc15mPipeline.volatilityExpectedMove.volatilityRegime ===
-          "EXTREME"
-        ? "HIGH_VOLATILITY"
-        : moneynessPct > 0.04 || intervalMomentum > 0.05
-          ? "TRENDING_BULL"
-          : moneynessPct < -0.04 || intervalMomentum < -0.05
-            ? "TRENDING_BEAR"
-            : "RANGING_NEUTRAL";
+      : latestBtc15mPipeline.regime ?? null;
     serverLearningEngine.currentRegime = dynamicRegime;
     active15mCycle.isChoppy = latestBtc15mPipeline.chopAnalytics.isChopFiltered;
     active15mCycle.choppyReason = latestBtc15mPipeline.chopAnalytics.reason;
@@ -4444,7 +4444,7 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
   const lockPolicy = ruleDecides ? "STRIKE_SIDE_RULE" : (gate.lockPolicy === "ENGINE_GATE_FILTERED" ? "ENGINE_GATE_FILTERED" : "ENGINE_GATE");
   const lockModelVersion = ruleDecides
     ? `STRIKE_SIDE_RULE_${gate.lockRuleTable || "table"}`
-    : (serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5");
+    : (serverLearningEngine.modelVersion);
 
   let lockDataToUse = {
     direction: dir,
@@ -4860,33 +4860,11 @@ async function checkAndSettle15mCycle(livePrice) {
           serverLearningEngine.todaySettledCount += 1;
           serverLearningEngine.lifetimeObservations += 1;
 
-          // --- SHADOW CALIBRATION ---
-          // Calibration ONLY observes the settled outcome. It MUST NOT modify the live decision.
-          try {
-            const rawProb = prevLog.probability || (prevLog.confidence / 100);
-            const regime = serverLearningEngine.currentRegime || "RANGING_NEUTRAL"; // was a bullish "TRENDING_BULL" default
-            let regimeFactor = 1.0;
-            if (regime === 'TRENDING_BEAR' && prevLog.direction === 'DOWN') regimeFactor = 1.04;
-            else if (regime === 'TRENDING_BULL' && prevLog.direction === 'UP') regimeFactor = 1.04;
-            else if (regime === 'CHOPPY' || regime === 'CHOP') regimeFactor = 0.88;
-            
-            const baseCalibrated = 0.5 + (rawProb - 0.5) * 0.88 * regimeFactor;
-            const calibratedProbability = Math.min(0.92, Math.max(0.08, Math.round(baseCalibrated * 1000) / 1000));
-            const adjustmentPct = Math.round((calibratedProbability - rawProb) * 1000) / 10;
-            
-            prevLog.shadowCalibration = {
-              predictedProbability: rawProb,
-              calibratedProbability,
-              confidenceBucket: prevLog.confidence >= 90 ? "90-100" : (prevLog.confidence >= 80 ? "80-90" : "70-80"),
-              calibrationError: Math.round(Math.abs(calibratedProbability - (prevLog.wasCorrect ? 1 : 0)) * 1000) / 1000,
-              adjustmentPct,
-              sampleSize: serverLearningEngine.lifetimeObservations,
-              regime
-            };
-          } catch (e) {
-            console.error("[SHADOW_CALIBRATION] Failed to attach shadow calibration:", e);
-          }
-          // --- END SHADOW CALIBRATION ---
+          // No shadow calibration is written onto the row. It was
+          // 0.5 + (p - 0.5) * 0.88 * a hand-set regime factor (1.04 / 0.88), not fit
+          // to any outcome, stamped with the regime of the tick doing the settling
+          // rather than the regime at lock. Measured calibration is served by
+          // /api/signal/calibration-report.
           serverLearningEngine.lastWeightUpdateTs = now;
           serverLearningEngine.settledHistory.unshift({
             id: prevLog.id,
@@ -4991,7 +4969,7 @@ async function checkAndSettle15mCycle(livePrice) {
           expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
           status: "NO_TRADE",
           modelVersion:
-            serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
+            serverLearningEngine.modelVersion,
           dataSource: marketFeedHealth.priceSource || null,
           latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -5564,7 +5542,7 @@ async function checkAndSettle15mCycle(livePrice) {
           expiresAt: new Date(active15mCycle.intervalEnd).toISOString(),
           status: "NO_TRADE",
           modelVersion:
-            serverLearningEngine.modelVersion || "VIXY_AUTHORITATIVE_NEURAL_v5",
+            serverLearningEngine.modelVersion,
           dataSource: marketFeedHealth.priceSource || null,
           latencyMs: null,   // was a literal 12; not measured here
           resolvedAt: new Date(active15mCycle.intervalEnd).toISOString(),
@@ -14897,7 +14875,11 @@ const serverLearningEngine = {
   // served as a training time. It booted 4s in the past, as if weights had just
   // been updated.
   lastWeightUpdateTs: null,
-  modelVersion: "v4.3-INCREMENTAL",
+  // Names the deterministic 15m engine gate and the deployed commit that ran
+  // it. It was "v4.3-INCREMENTAL", with fallbacks "VIXY_AUTHORITATIVE_NEURAL_v5"
+  // and "VIXY_HIGH_CONVICTION_v5": no model is trained, updated incrementally
+  // or neural (/api/model-status reports hasActiveModel: false).
+  modelVersion: `VIXY_15M_ENGINE_GATE@${String(process.env.VERCEL_GIT_COMMIT_SHA || "local").slice(0, 7)}`,
   historicalAccuracy: null,
   currentRegime: null,
   // featureWeights / featureContributions / incrementalTrainingActive were
@@ -17115,7 +17097,7 @@ app.get("/api/signal/calibration-report", async (req, res) => {
   res.json({
     timestamp: new Date().toISOString(),
     modelVersion:
-      serverLearningEngine.modelVersion || "VIXY_HIGH_CONVICTION_v5",
+      serverLearningEngine.modelVersion,
     calibrationStatus: totalSettled >= 30 ? "ACTIVE" : "WARMING_UP",
     sampleSize: totalSettled,
     overallWinRatePct,
