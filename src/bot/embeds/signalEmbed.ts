@@ -138,3 +138,22 @@ export function createVipSignalEmbed(data: MarketOverview) {
     .setFooter({ text: 'VIXY AI Core VIP Channel • Confidential Member Signal' })
     .setTimestamp();
 }
+
+
+// Bot Hub delivery test. Carries no engine score, probability, entry, stop or
+// target, so it cannot be read as a lock in a subscriber channel.
+export function createTestSignalEmbed(data: MarketOverview, tier: 'FREE' | 'ELITE') {
+  const spot =
+    Number.isFinite(data.price) && data.price > 0
+      ? `$${data.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+      : null;
+  return new EmbedBuilder()
+    .setTitle('🧪 TEST BROADCAST • NOT A SIGNAL')
+    .setColor(0x64748b)
+    .setDescription(
+      `Bot Hub delivery test for the ${tier} channel. No lock was made and nothing in this message is a trade.` +
+        (spot ? ` Live spot when sent: ${spot}.` : ''),
+    )
+    .setFooter({ text: 'VIXY AI • Delivery test' })
+    .setTimestamp();
+}

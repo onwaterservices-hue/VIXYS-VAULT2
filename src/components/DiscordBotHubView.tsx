@@ -103,14 +103,13 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
     setSendingTest(true);
     setTestResponse(null);
     try {
+      // No invented prices, confidence or rationale: the server fills the live
+      // price and posts a TEST embed that cannot be read as a lock.
       const res = await sendDiscordTestBroadcastApi({
         symbol: testSymbol,
         direction: testDirection,
-        confidence: 89,
-        currentPrice: 64821.5,
-        targetPrice: testDirection === 'YES' ? 65120 : 64500,
-        reasoning: 'Institutional taker buy delta spike (+1,420 BTC) & Kalshi odds underpriced.',
         webhookUrl: customWebhook || undefined,
+        test: true,
       });
       setTestResponse(res);
       await loadStatus();
@@ -468,7 +467,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2 transition-all"
             >
               <Send className={`w-4 h-4 ${sendingTest ? 'animate-bounce' : ''}`} />
-              <span>{sendingTest ? 'Dispatching Embed to Discord...' : 'Broadcast Live Signal Embed to Discord Channel'}</span>
+              <span>{sendingTest ? 'Dispatching Embed to Discord...' : 'Send TEST message to Discord (not a signal)'}</span>
             </button>
 
             {testResponse && (
@@ -519,71 +518,15 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 </div>
               </div>
 
-              {/* Rich Embed Card - Free Channel vs Elite Unlocked */}
-              <div className={`ml-12 border-l-4 rounded-r-lg bg-[#2B2D31] p-3 space-y-2.5 shadow-inner ${
-                testDirection === 'YES' ? 'border-l-emerald-500' : 'border-l-rose-500'
-              }`}>
-                <div className="font-bold text-sm text-white flex items-center justify-between">
-                  <span>📊 VIXY AI Market Pulse: {testSymbol}</span>
-                  <span className="text-xs text-emerald-400 font-mono font-bold">🟢 Overall Bias: {testDirection === 'YES' ? 'BULLISH' : 'BEARISH'}</span>
+              {/* Preview of what a test sends. This card showed a staged signal ($64,821.50
+                  spot, 89.4% confidence, $65,120 resistance, "+1,420 BTC" rationale);
+                  a test now posts a TEST embed with the live spot only. */}
+              <div className="ml-12 border-l-4 border-l-slate-500 rounded-r-lg bg-[#2B2D31] p-3 space-y-2 shadow-inner">
+                <div className="font-bold text-sm text-white">🧪 TEST BROADCAST • NOT A SIGNAL</div>
+                <div className="text-xs text-slate-300">
+                  Bot Hub delivery test for the ELITE channel. No lock was made and nothing in this message is a trade. Live spot when sent is filled in by the server.
                 </div>
-
-                <div className="grid grid-cols-3 gap-2 py-1 text-xs font-mono bg-[#1E1F22] p-2 rounded">
-                  <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Spot Price</span>
-                    <span className="text-white font-bold">$64,821.50</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Confidence</span>
-                    <span className="text-amber-400 font-bold">89.4%</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 text-[10px] block uppercase">Resistance</span>
-                    <span className="text-cyan-400 font-bold">$65,120.00</span>
-                  </div>
-                </div>
-
-                <div className="bg-[#1E1F22] p-2.5 rounded text-xs text-slate-300 font-mono">
-                  <span className="text-slate-400 block text-[10px] font-bold uppercase mb-0.5">Market Rationale:</span>
-                  Institutional taker buy delta spike (+1,420 BTC) & Kalshi odds underpriced. Institutional buyers accumulating beneath support.
-                </div>
-
-                {/* FUNNEL INFORMATION GAP - LOCKED SETUP */}
-                <div className="bg-[#18191c] border border-amber-500/40 p-2.5 rounded text-xs font-mono space-y-1.5">
-                  <div className="flex items-center justify-between font-bold text-amber-300">
-                    <span className="flex items-center gap-1">
-                      <Lock className="w-3.5 h-3.5 text-amber-400" />
-                      Detailed Trade Setup
-                    </span>
-                    <span className="text-[9px] bg-purple-900/60 px-1.5 py-0.5 rounded text-purple-300">VIXY ELITE AI</span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 text-[11px] text-slate-400">
-                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
-                      <span>Full Entry:</span>
-                      <span className="text-amber-400 font-bold">🔒 Locked</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
-                      <span>Stop Loss:</span>
-                      <span className="text-amber-400 font-bold">🔒 Locked</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
-                      <span>Profit Targets:</span>
-                      <span className="text-amber-400 font-bold">🔒 Locked</span>
-                    </div>
-                    <div className="flex items-center justify-between bg-[#2B2D31] px-2 py-1 rounded">
-                      <span>Risk Score:</span>
-                      <span className="text-amber-400 font-bold">🔒 Locked</span>
-                    </div>
-                  </div>
-                  <div className="text-[10px] text-amber-300/90 pt-0.5 font-sans font-semibold text-center">
-                    ⭐ Upgrade to <strong>VIXY ELITE AI</strong> to unlock the complete trade setup!
-                  </div>
-                </div>
-
-                <div className="text-[10px] text-slate-400 pt-1 flex justify-between items-center border-t border-slate-700/50">
-                  <span>VIXY AI • Sales Funnel & Decision Engine</span>
-                  <span>{new Date().toLocaleTimeString()}</span>
-                </div>
+                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-700/50">VIXY AI • Delivery test</div>
               </div>
             </div>
           </div>
