@@ -836,9 +836,9 @@ export interface ApiSignalResponse {
   features?: any;
   hasActiveModel?: boolean;
   latencyMs?: number;
-  lastMarketUpdateTs?: number;
-  marketTimestamp?: number;
-  dataAgeMs?: number;
+  lastMarketUpdateTs?: number | null; // null: this instance has not recorded a market update
+  marketTimestamp?: number | null;
+  dataAgeMs?: number | null;
   calibratedProbability?: number;
   calibrationStatus?: string;
   calibrationSampleSize?: number;
@@ -1142,11 +1142,11 @@ export interface AdminDiagnosticsResponse {
   marketFeed: {
     status: 'CONNECTED' | 'DEGRADED' | 'STALE' | 'DISCONNECTED';
     latencyMs: number;
-    lastUpdateSecAgo: number;
+    lastUpdateSecAgo: number | null; // null: no market update recorded on the answering instance
   };
   predictionEngine: {
     status: string;
-    lastModelRunSecAgo: number;
+    lastModelRunSecAgo: number | null;
     state: string;
     cycleId: number;
     direction: 'UP' | 'DOWN' | 'NEUTRAL';

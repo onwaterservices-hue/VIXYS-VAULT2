@@ -65,7 +65,9 @@ t.section('/api/vixy/health');
   const r = route('/api/vixy/health');
   t.check('no literal healthy: true', !/healthy: true,/.test(r));
   t.check('no confidence default 75', !/lockedConfidence \|\| 75/.test(r));
-  t.check('signal health from update recency', r.includes('healthy: now - lastSignalUpdateTs < 3e4,'));
+  // lastSignalUpdateTs now boots at 0 (never); the recency check must not read
+  // 0 as a timestamp (see boot-freshness-honesty.characterization).
+  t.check('signal health from update recency', r.includes('healthy: lastSignalUpdateTs > 0 && now - lastSignalUpdateTs < 3e4,'));
   t.check('no request time presented as a snapshot time', r.includes('lastSnapshotAt: null,'));
 }
 

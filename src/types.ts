@@ -380,10 +380,10 @@ export interface EvidenceFamilyState {
 }
 
 export interface Btc15mDataQualityState {
-  feedFreshnessMs: number;
+  feedFreshnessMs: number | null; // null: the instance has never recorded a market update
   websocketStatus: 'CONNECTED' | 'RECONNECTING' | 'DISCONNECTED';
   staleTickDetected: boolean;
-  driftMs: number;
+  driftMs: number | null;
   status: 'OPTIMAL' | 'DEGRADED' | 'STALE' | 'OFFLINE';
   score: number;
 }

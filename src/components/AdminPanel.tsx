@@ -1468,8 +1468,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             FEED FRESHNESS
                           </span>
                           <span className="text-emerald-400 font-bold">
-                            {diagnosticsData?.marketFeed?.lastUpdateSecAgo || 0}
-                            s AGO
+                            {typeof diagnosticsData?.marketFeed?.lastUpdateSecAgo === "number"
+                              ? `${diagnosticsData.marketFeed.lastUpdateSecAgo}s AGO`
+                              : "NO UPDATE YET"}
                           </span>
                         </div>
                       </div>
