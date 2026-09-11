@@ -191,6 +191,119 @@ interface AdminPanelProps {
   setTickets?: React.Dispatch<React.SetStateAction<SupportTicket[]>>;
 }
 
+/**
+ * Quant Controls: the thresholds the live 15-minute lock gate is applying this
+ * tick, read from /api/vixy/15m/current. Read-only. It used to show a fixed
+ * confidence bar and persistence window that the engine does not use.
+ */
+export const QuantControlsLive: React.FC = () => {
+  const [gate, setGate] = useState<any>(null);
+  const [status, setStatus] = useState<"LOADING" | "LIVE" | "UNAVAILABLE">("LOADING");
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch("/api/vixy/15m/current", { cache: "no-store" });
+        const body = res.ok ? await res.json() : null;
+        if (!alive) return;
+        if (body && body.lockGate && typeof body.lockGate === "object") {
+          setGate({ ...body.lockGate, cycleState: body.currentState ?? null, elapsed: typeof body.timeRemainingSec === "number" ? 900 - body.timeRemainingSec : null });
+          setStatus("LIVE");
+        } else {
+          setGate(null);
+          setStatus("UNAVAILABLE");
+        }
+        setCheckedAt(Date.now());
+      } catch {
+        if (alive) setStatus("UNAVAILABLE");
+      }
+    };
+    load();
+    const timer = setInterval(load, 10000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  const checks: Array<{ id: string; label: string; pass: boolean; current: string | number; required: string; gating?: boolean }> =
+    Array.isArray(gate?.checks) ? gate.checks.filter((c: any) => c && typeof c.label === "string") : [];
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const tiles: Array<[string, string]> = [
+    ["LOCK POLICY", typeof gate?.lockPolicy === "string" ? gate.lockPolicy : "—"],
+    ["LAYER 5 RULE FLAG", typeof gate?.lockRule === "string" ? gate.lockRule : "—"],
+    ["LOCK TIER NOW", typeof gate?.lockTier === "string" ? gate.lockTier : "—"],
+    ["MIN LOCK QUALITY (THIS TIER)", num(gate?.minLockQuality) !== null ? String(gate.minLockQuality) : "—"],
+    ["MIN EVIDENCE FAMILIES", num(gate?.minEvidenceAgreement) !== null ? `${gate.minEvidenceAgreement} of 11` : "—"],
+    ["MIN TIMEFRAMES ALIGNED", num(gate?.minMtfAligned) !== null ? `${gate.minMtfAligned} of 5` : "—"],
+  ];
+
+  return (
+    <div className="space-y-4 vixy-card hud-corners p-5">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
+        <Sliders className="w-5 h-5 text-purple-400" />
+        <span>15M Lock Gate · Live Thresholds</span>
+      </h2>
+      <p className="text-[11px] text-slate-400 font-mono">
+        Read-only. Values come from the live engine payload
+        {checkedAt ? `, checked ${new Date(checkedAt).toLocaleTimeString()}` : ""}. Changing a threshold requires a server deploy.
+      </p>
+
+      {status === "UNAVAILABLE" ? (
+        <div className="p-4 bg-slate-950/60 border border-rose-900/50 rounded-xl text-xs font-mono text-rose-300">
+          The engine endpoint did not answer. No thresholds are shown.
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+            {tiles.map(([label, value]) => (
+              <div key={label} className="p-3 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1">
+                <div className="font-bold text-slate-400 text-[10px]">{label}</div>
+                <div className="text-sm font-black text-purple-300">{status === "LOADING" ? "…" : value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs font-mono">
+              <thead>
+                <tr className="text-slate-500 border-b border-slate-800">
+                  <th className="p-2">Check</th>
+                  <th className="p-2">Required</th>
+                  <th className="p-2">Current</th>
+                  <th className="p-2">Gating</th>
+                  <th className="p-2">Now</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checks.length === 0 ? (
+                  <tr>
+                    <td className="p-2 text-slate-500" colSpan={5}>
+                      {status === "LOADING" ? "Loading…" : "The engine did not send its gate checks this tick."}
+                    </td>
+                  </tr>
+                ) : (
+                  checks.map((c) => (
+                    <tr key={c.id} className="border-b border-slate-900">
+                      <td className="p-2 text-slate-200">{c.label}</td>
+                      <td className="p-2 text-slate-300">{c.required}</td>
+                      <td className="p-2 text-white">{String(c.current)}</td>
+                      <td className="p-2 text-slate-400">{c.gating === false ? "observation" : "yes"}</td>
+                      <td className={`p-2 font-bold ${c.pass ? "text-emerald-400" : "text-amber-300"}`}>{c.pass ? "PASS" : "NOT MET"}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   onClose,
   currentUserId,
@@ -3040,40 +3153,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* ========================================================================= */}
         {/* 10. QUANT CONTROLS SECTION */}
         {/* ========================================================================= */}
-        {activeSection === "quant_controls" && (
-          <div className="space-y-4 vixy-card hud-corners p-5">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
-              <Sliders className="w-5 h-5 text-purple-400" />
-              <span>VIXY AI Model Tuning & 15M Candle Lock Thresholds</span>
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-                <div className="font-bold text-slate-300">
-                  MINIMUM CONFIDENCE THRESHOLD
-                </div>
-                <div className="text-lg font-black text-purple-400">70.0%</div>
-                <p className="text-[11px] text-slate-400">
-                  Signals below 70.0% confidence remain in NEUTRAL advisory
-                  state and are withheld from auto-execution.
-                </p>
-              </div>
-
-              <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-                <div className="font-bold text-slate-300">
-                  15M PERSISTENCE WINDOW
-                </div>
-                <div className="text-lg font-black text-emerald-400">
-                  12 SECONDS (3s for 50/50 Pull)
-                </div>
-                <p className="text-[11px] text-slate-400">
-                  Requires 12 consecutive seconds of edge persistence prior to
-                  candle close before triggering lock.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
+        {activeSection === "quant_controls" && <QuantControlsLive />}
       </main>
 
       {/* USER INSPECTOR MODAL / DRAWER */}
