@@ -3174,13 +3174,7 @@ async function runMarketEngineTick() {
       currentDirection = pipelineDirection;
     }
     const historyLen = serverLearningEngine.settledHistory.length;
-    const avgBrier =
-      historyLen > 0
-        ? serverLearningEngine.settledHistory.reduce(
-            (sum, item) => sum + item.brierScore,
-            0,
-          ) / historyLen
-        : null; // no settled history -> no Brier score (was an invented 0.168)
+    const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
     latestCalibrationState = {
       rawModelProbability:
         latestBtc15mPipeline.edgeVsConfidence.modelProbability,
@@ -4847,17 +4841,9 @@ async function checkAndSettle15mCycle(livePrice) {
             totalHistory > 0
               ? Math.round((wins / totalHistory) * 1e3) / 10
               : null; // no settled history -> no accuracy (was an invented 71.8)
+          const updatedBrierMean = meanBrier(serverLearningEngine.settledHistory).mean;
           const updatedAvgBrier =
-            totalHistory > 0
-              ? Math.round(
-                  (serverLearningEngine.settledHistory.reduce(
-                    (acc, h) => acc + h.brierScore,
-                    0,
-                  ) /
-                    totalHistory) *
-                    1e3,
-                ) / 1e3
-              : null; // no settled history -> no Brier (was an invented 0.168)
+            updatedBrierMean === null ? null : Math.round(updatedBrierMean * 1e3) / 1e3;
           serverLearningEngine.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.brierScore = updatedAvgBrier;
@@ -14918,6 +14904,28 @@ async function hydrateSignalHistoryFromFirestore() {
 }
 __name(hydrateSignalHistoryFromFirestore, "hydrateSignalHistoryFromFirestore");
 
+// Mean Brier score over the rows that actually carry one.
+//
+// A settled row without a finite brierScore has no graded probability. The
+// averages used to handle that two wrong ways: `sum + item.brierScore` turned
+// the whole mean into NaN (JSON-serialized as null, so /api/model-status showed
+// no Brier with 147 settled rows), and `acc + (x.brierScore || 0)` counted the
+// row as 0 -- a PERFECT forecast -- which flattered calibration. Both now use
+// this: finite scores only, with the count of rows that contributed.
+function meanBrier(rows) {
+  let sum = 0;
+  let n = 0;
+  for (const r of rows || []) {
+    const b = r && r.brierScore;
+    if (typeof b === "number" && Number.isFinite(b)) {
+      sum += b;
+      n += 1;
+    }
+  }
+  return n > 0 ? { mean: sum / n, n } : { mean: null, n: 0 };
+}
+__name(meanBrier, "meanBrier");
+
 // Accuracy is DERIVED from settled outcomes, never assigned a literal.
 // With no settled cycles yet, accuracy is null (unknown) rather than a
 // flattering default, and calibration reports WARMING_UP.
@@ -14936,10 +14944,8 @@ function recomputeAccuracyFromSettledHistory() {
   }
   const wins = history.filter((h) => h.prediction === h.actualOutcome).length;
   const accuracy = Math.round((wins / total) * 1e3) / 10;
-  const avgBrier =
-    Math.round(
-      (history.reduce((acc, h) => acc + (h.brierScore || 0), 0) / total) * 1e3,
-    ) / 1e3;
+  const brierMean = meanBrier(history).mean; // a row without a score is not a perfect 0
+  const avgBrier = brierMean === null ? null : Math.round(brierMean * 1e3) / 1e3;
   serverLearningEngine.historicalAccuracy = accuracy;
   latestCalibrationState.historicalAccuracy = accuracy;
   latestCalibrationState.brierScore = avgBrier;
@@ -15044,11 +15050,14 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   const winCount = resolved.filter((s) => s.wasCorrect).length;
   const lossCount = resolved.length - winCount;
   const totalCount = resolved.length;
+  // Nothing settled -> no win rate and no Brier (these were 0 and 0, i.e. a 0%
+  // record and a perfect forecast). Brier averages only rows that carry one.
   const winRatePct =
-    totalCount > 0 ? Math.round((winCount / totalCount) * 1e3) / 10 : 0;
-  const brierSum = resolved.reduce((acc, s) => acc + (s.brierScore || 0), 0);
+    totalCount > 0 ? Math.round((winCount / totalCount) * 1e3) / 10 : null;
+  const brierAgg = meanBrier(resolved);
   const avgBrierScore =
-    totalCount > 0 ? Math.round((brierSum / totalCount) * 1e3) / 1e3 : 0;
+    brierAgg.mean === null ? null : Math.round(brierAgg.mean * 1e3) / 1e3;
+  const brierScoredCount = brierAgg.n;
   const skipped = persistentSignalLogs.filter(
     (s) => (s.status === "NO_TRADE" || s.status === "SKIPPED") && !isDemo(s),
   ).length;
@@ -15084,6 +15093,7 @@ app.get("/api/signal/resolved-log", async (req, res) => {
       upWins,
       downWins,
       avgBrierScore,
+      brierScoredCount,
       skipped,
       excludedNoTrade: skipped,
       excludedPending: pending,
@@ -15238,13 +15248,7 @@ app.get("/api/model-status", async (req, res) => {
   let lifetimeObservations = serverLearningEngine.lifetimeObservations;
   let hasActiveModel = true;
   const historyLen = serverLearningEngine.settledHistory.length;
-  const avgBrier =
-    historyLen > 0
-      ? serverLearningEngine.settledHistory.reduce(
-          (sum, item) => sum + item.brierScore,
-          0,
-        ) / historyLen
-      : null; // no settled history -> no Brier (was an invented 0.168)
+  const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
   let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
   let activeModelTrainedAt = new Date(
     serverLearningEngine.lastWeightUpdateTs,
@@ -16186,13 +16190,7 @@ app.get(
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
     let hasActiveModel = true;
     const historyLen = serverLearningEngine.settledHistory.length;
-    const avgBrier =
-      historyLen > 0
-        ? serverLearningEngine.settledHistory.reduce(
-            (sum, item) => sum + item.brierScore,
-            0,
-          ) / historyLen
-        : null; // no settled history -> no Brier (was an invented 0.168)
+    const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
     let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
     let activeModelTrainedAt = new Date(
       serverLearningEngine.lastWeightUpdateTs,
@@ -17861,7 +17859,10 @@ app.get("/api/performance-stats", (req, res) => {
   }
   const wins = settled.filter((e) => e.outcome === "WIN").length;
   const winRate = Math.round((wins / sampleSize) * 1e3) / 10;
-  res.json({ winRate, brierScore: 0.185, sampleSize, verified: true });
+  // Journal entries carry an outcome but no forecast probability, so no Brier
+  // score can be computed here. This returned a literal 0.185 beside
+  // verified: true.
+  res.json({ winRate, brierScore: null, sampleSize, verified: true });
 });
 
 // A journal belongs to the signed-in account. Entries used to be keyed by a
