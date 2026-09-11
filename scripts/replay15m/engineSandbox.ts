@@ -270,7 +270,7 @@ return {
       recentObservations: [],
       isLocked: false, lockCount: 0, lockedAt: null,
       kalshiStrike: null,
-      historicalSimilarityPct: 84,
+      historicalSimilarityPct: null,
       status: "ACTIVE", stage: "OBSERVING", qualificationStatus: "PENDING",
       protectionStatus: "WATCH",
       isCriticallyInvalidated: false,

@@ -89,8 +89,9 @@ console.log('== direction never depends on the engine\'s own recent output ==');
 // 34 of 65 cycles.
 t('no historicalConflict variable remains', /\bhistoricalConflict\b/.test(src.replace(/\/\/[^\n]*/g, '')), false);
 t('conflictCount has no self-referential vote', /if \(historicalConflict\) conflictCount\+\+/.test(src), false);
-// historicalSimilarityPct stays: it is displayed, it must not gate.
-t('historicalSimilarityPct still computed for display', /active15mCycle\.historicalSimilarityPct = historicalSimilarityPct;/.test(src), true);
+// historicalSimilarityPct is null: no similarity model exists. It was a 75-95
+// rescaling of the same ledger share the ratchet above read.
+t('historicalSimilarityPct is null, not a rescaled ledger share', /active15mCycle\.historicalSimilarityPct = null;/.test(src) && !/75 \+ \(matchingDirCount/.test(src), true);
 
 console.log('== cold-boot price history is real, not invented ==');
 //
