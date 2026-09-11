@@ -169,6 +169,20 @@ console.log('\n[3c] Site-wide announcement is driven by the server offer');
   check('the banner shows no hardcoded duration', !/\b3 days\b|\b72\b|\b1 day\b|\b24 hours\b/.test(bannerSrc));
   check('the banner is mounted site-wide in App', /<TagTrialPromoBanner/.test(appSrc));
   check('the offer card no longer defaults to 72 hours', !/durationHours \?\? 72/.test(cardSrc));
+  // "Sat 12:00 AM EDT" read as Saturday night. Both surfaces show the last
+  // minute a claim still counts instead.
+  const lastMinute = new Date(Date.parse(TAG_TRIAL_PROMO_ENDS_AT) - 60 * 1000).toLocaleString('en-US', {
+    timeZone: 'America/New_York', weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short',
+  });
+  check('the launch deadline renders as the last valid minute (Fri, 11:59 PM EDT), not "Sat 12:00 AM"', lastMinute === 'Fri, 11:59 PM EDT', lastMinute);
+  check('the card and banner both format the deadline through formatClaimDeadline (ms - 60s)',
+    /export function formatClaimDeadline[\s\S]{0,200}new Date\(ms - 60 \* 1000\)/.test(cardSrc) &&
+    /formatClaimDeadline\(offer\.promo\.endsAt\)/.test(cardSrc) && /formatClaimDeadline\(endsMs\)/.test(bannerSrc) &&
+    !/weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' \}\)/.test(bannerSrc));
+  check('the card tells people exactly where the tag is set in Discord',
+    /User Settings → Profiles → Server Tag/.test(cardSrc) && /TAG_NOT_EQUIPPED:[^\n]*User Settings → Profiles → Server Tag/.test(cardSrc));
+  check('the card states the removal rule and that it is checked hourly',
+    /we check it every hour, and removing it[\s\S]{0,20}ends the trial/.test(cardSrc));
 }
 check('every Stripe/payment field is null', ['stripePaymentStatus', 'stripePaymentLink', 'stripePaymentId', 'stripeCheckoutSessionId', 'stripeEventId', 'stripePriceId'].every((k) => k in rec && rec[k] === null));
 check('carries no grace/compensation flag', !('troubleshootingGraceApplied' in rec) && !('compensationApplied' in rec));

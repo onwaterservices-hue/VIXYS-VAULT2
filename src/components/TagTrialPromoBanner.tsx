@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Clock, Gift, Tag, X } from 'lucide-react';
 import { getReferralProgramApi, getTagTrialOfferApi, ReferralProgram, TagTrialOffer } from '../services/api';
-import { DiscordTagTrialOffer, formatFreeTime } from './DiscordTagTrialOffer';
+import { DiscordTagTrialOffer, formatClaimDeadline, formatFreeTime } from './DiscordTagTrialOffer';
 
 // Site-wide announcement bar with two segments:
 //  - the Discord server-tag launch promo, shown only while the server reports
@@ -110,9 +110,7 @@ export const TagTrialPromoBanner: React.FC<TagTrialPromoBannerProps> = ({
 
   const promoLabel = offer ? formatFreeTime(offer.promo.durationHours) : '';
   const standardLabel = offer ? formatFreeTime(offer.standardDurationHours) : '';
-  const endsLabel = Number.isFinite(endsMs)
-    ? new Date(endsMs).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-    : '';
+  const endsLabel = Number.isFinite(endsMs) ? formatClaimDeadline(endsMs) : '';
 
   return (
     <>
@@ -135,7 +133,7 @@ export const TagTrialPromoBanner: React.FC<TagTrialPromoBannerProps> = ({
                 </span>
                 <span className="hidden lg:flex items-center gap-1 text-[11px] text-indigo-100/90 shrink-0">
                   <Clock className="w-3.5 h-3.5 shrink-0" />
-                  Ends {endsLabel}. After that the tag unlocks {standardLabel}.
+                  Claim by {endsLabel}. After that, claims get {standardLabel}.
                 </span>
                 <button
                   type="button"
