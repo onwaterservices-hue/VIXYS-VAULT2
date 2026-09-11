@@ -135,7 +135,7 @@ export interface CanonicalProtectionData {
   capitalPreservationScore: number;  // 0 to 100% (higher = stronger reason to stay out)
   capitalPreserved: boolean;
   lateCycleProtectionActive: boolean;
-  protectionStatus: 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED';
+  protectionStatus: 'SAFE' | 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED' | null;
   lockTier: LockTier;
   lockEvaluation: LockEvaluationFields;
   checklist: {
@@ -192,7 +192,7 @@ export interface Canonical15mDecision {
   evidenceAlignment: number;  // 0 to 10
   temporalStability: number;  // 0 to 100
   contradictionScore: number; // 0 to 100
-  protectionStatus: string;   // 'CLEAR' | 'WATCH' | 'EVALUATING' | 'VETOED' | 'PROTECTED'
+  protectionStatus: string | null;   // 'SAFE' | 'VETOED' from the engine; null when unknown
   lockTier?: LockTier;
   lockEvaluation?: LockEvaluationFields;
   

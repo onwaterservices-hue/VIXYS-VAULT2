@@ -16049,7 +16049,11 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;
   const chopScore = latestBtc15mPipeline?.chopAnalytics?.chopScore ?? 0;
   const temporalStabilityVal = Math.max(0, Math.min(100, 100 - chopScore));
+  // The engine sets protectionStatus to SAFE or VETOED (the reversal veto).
+  // SAFE was missing from this list, so every non-vetoed tick was served as
+  // "WATCH", a status the engine never reported. An unknown value is null.
   const protectionStat = [
+    "SAFE",
     "CLEAR",
     "WATCH",
     "EVALUATING",
@@ -16057,7 +16061,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     "PROTECTED",
   ].includes(active15mCycle.protectionStatus)
     ? active15mCycle.protectionStatus
-    : "WATCH";
+    : null;
   const lockTierVal =
     latestBtc15mPipeline?.lockQualityTier === "SKIP" ? "NONE" : "STANDARD";
   // REAL feed health for the terminal status bar.
