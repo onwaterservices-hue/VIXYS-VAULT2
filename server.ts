@@ -6910,12 +6910,54 @@ app.get("/api/referral/leaderboard", async (req, res) => {
   }
 });
 
+// ---- One run per window for heavy cron routes ----
+// Cron routes are public URLs: no CRON_SECRET is configured, so a Vercel cron
+// request cannot be told apart from anyone else's. Routes that do real external
+// work on every call take a claim document so they run at most once per window
+// whoever calls; a repeat call gets the recorded result instead of redoing the
+// work. Fails OPEN (the job runs, as before) if the claim cannot be made.
+async function claimCronWindow(job, windowMs) {
+  if (!db && !_adminActive) return { claimed: true, ref: null };
+  const windowStart = Math.floor(Date.now() / windowMs) * windowMs;
+  const ref = doc(db, "cron_run_claims", `${job}_${windowStart}`);
+  try {
+    const outcome = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists()) return { claimed: false, prior: snap.data() };
+      tx.set(ref, { job, windowStart, status: "RUNNING", startedAt: new Date().toISOString() });
+      return { claimed: true };
+    });
+    if (!outcome) return { claimed: true, ref: null };
+    return { ...outcome, ref };
+  } catch (err) {
+    console.warn(`[CRON] ${job} window claim failed, running anyway:`, err?.message || err);
+    return { claimed: true, ref: null };
+  }
+}
+__name(claimCronWindow, "claimCronWindow");
+
+async function recordCronWindowResult(claim, result) {
+  if (!claim || !claim.ref) return;
+  try {
+    await setDoc(claim.ref, { status: "DONE", finishedAt: new Date().toISOString(), result }, { merge: true });
+  } catch {
+    /* the run already happened; a missing record only means a repeat call re-runs */
+  }
+}
+__name(recordCronWindowResult, "recordCronWindowResult");
+
 // Rebuild the precomputed leaderboard. Admin-triggered or cron-triggered.
 // Deliberately NOT computed per page load: a per-render collection scan would
 // compound the existing polling load from the 15m cycle endpoint.
 app.all("/api/cron/referral-leaderboard", async (req, res) => {
+  const claim = await claimCronWindow("referral_leaderboard", 10 * 60 * 1000);
+  if (!claim.claimed) {
+    return res.json({ ok: true, skipped: true, reason: "ALREADY_RAN_THIS_WINDOW", lastRun: claim.prior || null });
+  }
   try {
-    res.json(await rebuildLeaderboard(db));
+    const rebuilt = await rebuildLeaderboard(db);
+    await recordCronWindowResult(claim, { ok: true });
+    res.json(rebuilt);
   } catch (e) {
     console.error("[REFERRAL] leaderboard rebuild failed", e);
     res.status(503).json({ ok: false });
@@ -18171,6 +18213,13 @@ app.all("/api/cron/backtest-refresh", async (req, res) => {
   // has no reason to re-run that often, and this route uses a smaller trailing
   // window (180d, ~58 requests) plus a hard time budget so it can never come
   // close to the shared 60s function timeout, even on a slow day for Coinbase.
+  //
+  // At most one run per 6 hours whoever calls (see claimCronWindow): each run is
+  // ~58 Coinbase requests, and the live engine reads Coinbase too.
+  const claim = await claimCronWindow("backtest_refresh", 6 * 60 * 60 * 1000);
+  if (!claim.claimed) {
+    return res.json({ success: true, skipped: true, reason: "ALREADY_RAN_THIS_WINDOW", lastRun: claim.prior || null });
+  }
   try {
     const { candles, reqCount, errCount } = await fetchBacktestCandles(180, 4e4);
     if (candles.length < 100) {
@@ -18189,7 +18238,9 @@ app.all("/api/cron/backtest-refresh", async (req, res) => {
     } catch (err) {
       persistError = err?.message || String(err);
     }
-    res.json({ success: true, candleCount: candles.length, reqCount, errCount, persisted, persistError, winRatePct: summary.winRatePct });
+    const refreshResult = { success: true, candleCount: candles.length, reqCount, errCount, persisted, persistError, winRatePct: summary.winRatePct };
+    await recordCronWindowResult(claim, refreshResult);
+    res.json(refreshResult);
   } catch (err) {
     res.status(200).json({ success: false, error: "BACKTEST_REFRESH_FAILED", message: err?.message || String(err) });
   }
