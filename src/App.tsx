@@ -70,6 +70,7 @@ import { VixyLockView } from './components/VixyLockView';
 import { VixyLiveView } from './components/VixyLiveView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
 import ReferralCongratsToast from './components/ReferralCongratsToast';
+import { DayPassUpgradePrompt } from './components/DayPassUpgradePrompt';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 // Human titles for each internal tab key (mirrors the sidebar + hub labels).
@@ -1195,6 +1196,15 @@ export default function App() {
     <>
       <AuthToast toast={authToast} onClose={() => setAuthToast(null)} />
       <ReferralCongratsToast />
+
+      {/* Asks a day-pass holder to subscribe while their pass is still running
+          and still delivering value, rather than only after it has expired. */}
+      <DayPassUpgradePrompt
+        dayPassInfo={dayPassInfo}
+        userRole={userRole}
+        activeTab={activeTab}
+        onViewPricing={() => setActiveTab('pricing')}
+      />
       {isVerifyingPayment && (
         <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-4 bg-[#05020F]/95 backdrop-blur-md animate-fadeIn font-mono text-center">
           <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(34,211,238,0.4)]" />
