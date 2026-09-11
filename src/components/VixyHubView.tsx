@@ -156,10 +156,10 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
       group: "INTELLIGENCE",
       cardHeight: "h-auto sm:min-h-[136px]",
       items: [
-        { id: "markets", label: "Markets", icon: TrendingUp, desc: "Broad market internals & cross-venue delta", isPro: false },
+        { id: "markets", label: "Markets", icon: TrendingUp, desc: "Live spot per asset, labelled with its venue", isPro: false },
         { id: "patterns", label: "Pattern Engine", icon: Sparkles, desc: "Algorithmic cluster analysis & regime detection", isPro: true, badge: "PRO" },
         { id: "whales", label: "Whale Tracker", icon: Layers, desc: "Large Coinbase prints & resting book depth", isPro: true, badge: "PRO" },
-        { id: "scanner", label: "Edge Scanner", icon: Target, desc: "Liquidity imbalance & statistical edge radar", isPro: true, badge: "+EV" },
+        { id: "scanner", label: "Edge Scanner", icon: Target, desc: "Which assets have a measured 15M read (BTC only)", isPro: true, badge: "15M" },
         { id: "explainability", label: "News & Sentiment", icon: BrainCircuit, desc: "The evidence behind each engine call", isPro: false },
         { id: "history", label: "VIXY Locks", icon: BarChart2, desc: "Every recorded 15M lock and how it settled", isPro: false, badge: "LEDGER" },
       ]
