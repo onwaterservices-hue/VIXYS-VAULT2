@@ -62,14 +62,16 @@ t.eq('a 21% different 24h open changes bullVolPct not at all',
   withOpenA.currentBullVolumePct, withOpenB.currentBullVolumePct);
 t.eq('...nor momentum', withOpenA.intervalMomentum, withOpenB.intervalMomentum);
 
-t.section('PINNED-AS-IS: "taker bull volume" is computed from price, not volume');
-// currentBullVolumePct is presented to users as order flow -- the pipeline
-// renders `Taker: ${bullVolPct}% Bull | Delta: N BTC` and derives a
-// bidAskImbalancePct from it -- but it is:
+t.section('"taker bull volume" is computed from price, not volume');
+// currentBullVolumePct is:
 //   min(90, max(10, round(50 + moneynessPct*25 + intervalMomentum*15)))
-// with both terms functions of (spot - strike) / strike.
-t.check('server renders bullVolPct as a taker/flow figure',
-  serverSrc.includes('`Taker: ${bullVolPct}% Bull'));
+// with both terms functions of (spot - strike) / strike, and the pipeline
+// derives a bidAskImbalancePct from it. FIXED (was PINNED-AS-IS): it was
+// rendered as `Taker: ${bullVolPct}% Bull | Delta: N BTC`; it is now labelled
+// a spot-vs-strike proxy. It still feeds the ORDER_FLOW family vote.
+t.check('server labels bullVolPct as a price-derived proxy, not taker flow',
+  !serverSrc.includes('`Taker: ${bullVolPct}% Bull') &&
+  serverSrc.includes('Spot-vs-strike flow proxy (no trade tape): ${bullVolPct}% bull'));
 t.check('bidAskImbalancePct is derived from bullVolPct',
   /const bidAskImbalancePct = Math\.round\(\(bullVolPct - 50\)/.test(serverSrc));
 
