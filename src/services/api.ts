@@ -87,6 +87,9 @@ export async function safeFetchJson<T>(url: string, options?: RequestInit): Prom
   return promise;
 }
 
+/** The venue a ticker row actually came from. */
+export type TickerSource = 'Coinbase' | 'Binance';
+
 export interface CryptoTickerData {
   symbol: string;
   price: number;
@@ -95,6 +98,15 @@ export interface CryptoTickerData {
   low24h: number;
   volume24h: number;
   timestamp: number;
+  /** set by fetchAllCryptoTickers: server route (Coinbase stats) or the Binance fallback */
+  source?: TickerSource;
+}
+
+/** Venue label for a ticker row. Binance rows are USDT pairs, not USD. */
+export function tickerSourceLabel(source: TickerSource | null | undefined): string {
+  if (source === 'Coinbase') return 'Coinbase';
+  if (source === 'Binance') return 'Binance (USDT)';
+  return '—';
 }
 
 export async function fetchBTCTicker(): Promise<BTCTicker> {
@@ -191,7 +203,8 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
       headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' },
     });
     if (data && Array.isArray(data)) {
-      return data;
+      // /api/crypto/all-tickers reads Coinbase product stats only.
+      return data.map((row) => ({ ...row, source: 'Coinbase' as TickerSource }));
     }
   } catch (err) {
     // Fallthrough to direct public endpoint
@@ -215,6 +228,7 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
           low24h: parseFloat(item.lowPrice),
           volume24h: parseFloat(item.volume),
           timestamp: Date.now(),
+          source: 'Binance' as TickerSource,
         }));
     }
   } catch (e) {
@@ -969,8 +983,11 @@ export async function fetchUserAccess(email?: string, uid?: string): Promise<Use
 
 
 export interface ModelStatusResponse {
-  settledCount: number;
-  minRequired: number;
+  /** null when /api/model-status did not answer (see `unavailable`) */
+  settledCount: number | null;
+  minRequired: number | null;
+  /** true only on the client fallback: the endpoint did not answer */
+  unavailable?: boolean;
   hasActiveModel: boolean;
   activeModelBrier: number | null;
   activeModelTrainedAt: string | null;
@@ -996,12 +1013,13 @@ export async function fetchModelStatus(asset: string = 'BTC', desk: string = '15
   // Brier score and 18,427 observations (which is what this fallback used
   // to return, and what every badge then displayed as fact).
   return {
-    settledCount: 0,
-    minRequired: 500,
+    unavailable: true,
+    settledCount: null,
+    minRequired: null,
     hasActiveModel: false,
     activeModelBrier: null,
     activeModelTrainedAt: null,
-    lifetimeObservations: 0,
+    lifetimeObservations: undefined,
     modelVersion: 'UNAVAILABLE',
     historicalAccuracy: undefined,
     currentRegime: undefined,

@@ -727,3 +727,28 @@ a[role="button"]:active {
   .vx-label, .vx-state { font-size: 11px !important; }
   .text-\[11px\], .text-\[11\.5px\] { font-size: 12px !important; }
 }
+
+/* ==== Form fields stop iOS focus zoom (2026-09-11) ====
+   iOS Safari zooms the whole page when a form field under 16px receives focus,
+   and does not zoom back. A 390px audit of the live site found every text field
+   below 16px (Prediction Center 3/3, Compare 2/2, 1-hour desk 4/4, Locks 2/2),
+   and a source scan found no form field at 16px or larger. Phones only. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="hidden"]), select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ==== Touch target minimum on phones (2026-09-11) ====
+   A 390px audit of all 34 live routes found dozens of compact controls at
+   22-33px -- segmented filters (Replay ALL/LOCKS/SKIPS 24px, Pattern and Whale
+   filters 28-29px, Compare pairs 25px), chart toolbars (15M/1H 22px, zoom and
+   fullscreen 23px, indicator chips 22px) and small toggles (Settings "Show"
+   15px). Below 640px every button and select is at least 36x36. Toggle
+   switches keep their shape. Desktop density is untouched. */
+@media (max-width: 639px) {
+  button:not([role="switch"]), select {
+    min-height: 36px;
+    min-width: 36px;
+  }
+}

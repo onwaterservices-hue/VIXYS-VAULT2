@@ -19,6 +19,21 @@ const fmtSignedPct = (v: unknown): string | null => {
   if (v === null || v === undefined || v === '' || !Number.isFinite(n)) return null;
   return `${n > 0 ? '+' : ''}${n}%`;
 };
+
+/**
+ * What a ledger row's `confidence` number is. server.ts lock15mCycle writes
+ * `confidence = round(rule p × 100)` when lockPolicy is STRIKE_SIDE_RULE (the
+ * strike-side table's measured win rate for the matched cell), and otherwise the
+ * engine score clamped to 65–96 (ENGINE_GATE / ENGINE_GATE_FILTERED). Rows
+ * written before lockPolicy existed are engine scores.
+ */
+const ledgerConfidence = (row: any): { label: string; text: string } => {
+  const raw = row?.confidence;
+  const v = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
+  const has = Number.isFinite(v);
+  if (row?.lockPolicy === 'STRIKE_SIDE_RULE') return { label: 'Rule P(win)', text: has ? `${v}%` : '--' };
+  return { label: 'Engine Score', text: has ? `${v} / 100` : '--' };
+};
 export const HistoricalAccuracy: React.FC<any> = () => {
   const [liveState, setLiveState] = useState<any>(null);
   const [resolvedLog, setResolvedLog] = useState<any[]>([]);
@@ -124,10 +139,13 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       ? edgeSamples.reduce((acc, s) => acc + Number(s.edge), 0) / edgeSamples.length
       : null;
     
-    const confSamples = settled.filter(s => Number.isFinite(Number(s.confidence)));
-    const avgConf = confSamples.length > 0
-      ? confSamples.reduce((acc, s) => acc + Number(s.confidence), 0) / confSamples.length
-      : null;
+    // Engine scores (0–100) and rule P(win) percents are different quantities,
+    // so they are never averaged together. A missing confidence is excluded, not 0.
+    const confOf = (s: any) => (typeof s.confidence === 'number' && Number.isFinite(s.confidence) ? s.confidence : null);
+    const engineConf = settled.filter(s => s.lockPolicy !== 'STRIKE_SIDE_RULE').map(confOf).filter((v): v is number => v !== null);
+    const ruleConf = settled.filter(s => s.lockPolicy === 'STRIKE_SIDE_RULE').map(confOf).filter((v): v is number => v !== null);
+    const avgEngineScore = engineConf.length > 0 ? engineConf.reduce((a, v) => a + v, 0) / engineConf.length : null;
+    const avgRulePWin = ruleConf.length > 0 ? ruleConf.reduce((a, v) => a + v, 0) / ruleConf.length : null;
     
     let currentStreak = 0;
     let currentStreakType = 'NONE';
@@ -168,7 +186,8 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       currentStreakType, 
       bestStreak, 
       avgEdge, 
-      avgConf,
+      avgEngineScore,
+      avgRulePWin,
       // Sample state drives the warming-up UI. hasSample is the difference
       // between "no data yet" and a measured 0% -- rendering those identically
       // is how an empty ledger came to look like a track record.
@@ -266,14 +285,11 @@ export const HistoricalAccuracy: React.FC<any> = () => {
             <div>
               <div className="flex items-center gap-2.5">
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">VIXY RESULTS TERMINAL</h1>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded-full border border-purple-500/40 bg-purple-950/60 text-purple-300 font-semibold">v5.2</span>
               </div>
               <div className="flex flex-wrap items-center gap-2.5 text-xs text-zinc-400 mt-1 font-mono">
                 <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ENGINE LIVE
                 </span>
-                <span className="text-zinc-600">•</span>
-                <span className="text-purple-300">VIXY-ENSEMBLE-5.X</span>
               </div>
             </div>
           </div>
@@ -351,8 +367,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
           { label: 'SKIPPED', val: metrics.noTrades, color: 'text-purple-300', bg: 'border-purple-900/40 bg-purple-950/20' },
           { label: 'STREAK', val: `${metrics.currentStreak} ${metrics.currentStreakType}`, color: metrics.currentStreakType === 'WIN' ? 'text-emerald-400' : 'text-zinc-400', bg: 'border-zinc-800 bg-zinc-950/40' },
           { label: 'BEST STREAK', val: `${metrics.bestStreak} W`, color: 'text-amber-400', bg: 'border-zinc-800 bg-zinc-950/40' },
-          { label: 'AVG EDGE', val: metrics.avgEdge === null ? '--' : `+${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' },
-          { label: 'AVG CONF', val: metrics.avgConf === null ? '--' : `${metrics.avgConf.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' }
+          { label: 'AVG EDGE', val: metrics.avgEdge === null ? '--' : `${metrics.avgEdge > 0 ? '+' : ''}${metrics.avgEdge.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' },
+          metrics.avgEngineScore === null && metrics.avgRulePWin !== null
+            ? { label: 'AVG RULE P(WIN)', val: `${metrics.avgRulePWin.toFixed(1)}%`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' }
+            : { label: 'AVG ENGINE SCORE', val: metrics.avgEngineScore === null ? '--' : `${metrics.avgEngineScore.toFixed(1)} / 100`, color: 'text-cyan-400', bg: 'border-zinc-800 bg-zinc-950/40' }
         ].map(m => (
           <div key={m.label} className={`border rounded-xl p-3 text-center ${m.bg}`}>
             <div className="text-[9px] font-bold text-zinc-400 tracking-wider uppercase mb-1">{m.label}</div>
@@ -635,7 +653,8 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="bg-black/60 border border-purple-900/40 rounded-xl p-2.5 flex items-center justify-between">
                         <div>
                           <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Model Identifier</div>
-                          <div className="text-xs text-white font-bold">VIXY-VAULT-v5</div>
+                          {/* /api/vixy/state carries no model version; each settled row below shows its own. */}
+                          <div className="text-xs text-white font-bold">—</div>
                         </div>
                         <Shield className="w-5 h-5 text-purple-400" />
                       </div>
@@ -774,15 +793,15 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     </div>
 
                     <div className="bg-black/50 p-2.5 rounded-xl border border-purple-900/40">
-                      <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">Confidence</div>
-                      <div className="text-cyan-300 font-bold">{Number.isFinite(Number(log.confidence)) ? `${log.confidence}%` : '--'}</div>
+                      <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">{ledgerConfidence(log).label}</div>
+                      <div className="text-cyan-300 font-bold">{ledgerConfidence(log).text}</div>
                     </div>
 
                     <div className="bg-black/50 p-2.5 rounded-xl border border-purple-900/40">
                       <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">{isNoTrade ? 'Reversal Risk' : 'Edge'}</div>
                       <div className="text-purple-300 font-bold">{isNoTrade
                         ? (Number.isFinite(Number(log.reversalRisk)) ? `${log.reversalRisk}%` : '--')
-                        : (log.edge != null && Number.isFinite(Number(log.edge)) ? `${Number(log.edge) >= 0 ? '+' : ''}${log.edge}%` : '--')}</div>
+                        : (fmtSignedPct(log.edge) ?? '--')}</div>
                     </div>
                   </div>
 
@@ -816,7 +835,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   {/* Card Footer */}
                   <div className="mt-3 pt-2 border-t border-zinc-800/60 flex justify-between items-center text-[10px] font-mono text-zinc-400 font-semibold relative z-10">
                     <div>DUR: {durationStr}</div>
-                    <div className="text-purple-300">MDL: VIXY-VAULT-v5</div>
+                    <div className="text-purple-300 truncate max-w-[65%]" title={log.modelVersion || 'No model version recorded on this row'}>MDL: {log.modelVersion || '—'}</div>
                   </div>
                 </div>
               );
@@ -992,8 +1011,8 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
-                <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Engine Score</div>
-                <div className="text-cyan-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.confidence)) ? `${activeProvenance.confidence} / 100` : '--'}</div>
+                <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">{activeProvenance.lockPolicy === 'STRIKE_SIDE_RULE' ? <>Rule P(win)</> : <>Engine Score</>}</div>
+                <div className="text-cyan-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.confidence)) ? (activeProvenance.lockPolicy === 'STRIKE_SIDE_RULE' ? `${activeProvenance.confidence}%` : `${activeProvenance.confidence} / 100`) : '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">

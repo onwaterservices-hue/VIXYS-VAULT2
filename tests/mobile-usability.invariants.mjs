@@ -88,5 +88,18 @@ const oneHour = R('src/components/OneHourDeskView.tsx');
 check('1-hour desk inputs and select are taller on phones', (oneHour.match(/rounded-xl px-3 py-2\.5 sm:py-1\.5 text-white/g) || []).length === 4 && !/rounded-xl px-3 py-1\.5 text-white/.test(oneHour));
 check('Why This Signal? toggle is taller on phones', /px-2\.5 py-2\.5 sm:py-1 rounded-lg bg-purple-950\/60/.test(R('src/components/ScalpingDeskView.tsx')));
 
+console.log('\n[8] Pass 4: iOS focus zoom');
+const css4 = R('src/index.css');
+const zoomBlock = css4.slice(css4.indexOf('Form fields stop iOS focus zoom'));
+check('a phone-only rule sets text fields to 16px', /@media \(max-width: 639px\)\s*\{\s*input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="range"\]\):not\(\[type="hidden"\]\), select, textarea \{\s*font-size: 16px !important;/.test(zoomBlock));
+check('the rule does not apply above the phone breakpoint', !/^input[^{]*\{[^}]*font-size: 16px/m.test(css4.slice(0, css4.indexOf('Form fields stop iOS focus zoom'))));
+
+console.log('\n[9] Pass 4: touch-target minimum on phones');
+const css5 = R('src/index.css');
+const touchBlock = css5.slice(css5.indexOf('Touch target minimum on phones'));
+check('phone buttons and selects are at least 36x36', /@media \(max-width: 639px\)\s*\{\s*button:not\(\[role="switch"\]\), select \{\s*min-height: 36px;\s*min-width: 36px;/.test(touchBlock));
+check('toggle switches are excluded from the minimum', /button:not\(\[role="switch"\]\)/.test(touchBlock));
+check('the minimum is not applied above the phone breakpoint', !/^button[^{]*\{[^}]*min-height: 36px/m.test(css5.slice(0, css5.indexOf('Touch target minimum on phones'))));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

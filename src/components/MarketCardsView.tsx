@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, TrendingUp, ArrowRight, Star, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
-import { fetchAllCryptoTickers, CryptoTickerData } from '../services/api';
-import { headline, EngineDecisionLike } from '../lib/engineSemantics';
+import { fetchAllCryptoTickers, CryptoTickerData, TickerSource, tickerSourceLabel } from '../services/api';
+import { headline, headlineText, EngineDecisionLike } from '../lib/engineSemantics';
 
 interface MarketCardsViewProps {
   onSelectAssetAndNavigate: (symbol: string) => void;
@@ -20,23 +20,28 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
   engineDecision = null,
   engineFeedHealth = null,
 }) => {
-  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({});
+  const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number; source?: TickerSource }>>({});
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
     const assets = Object.values(ASSET_DATABASE);
   const engineHeadline = headline(engineDecision);
   const engineLive = engineFeedHealth === 'LIVE' && engineHeadline.kind !== 'NONE';
   const engineDirection = String(engineDecision?.direction || '').toUpperCase();
+  // The venue the prices actually came from: the server route reads Coinbase,
+  // the client fallback reads Binance.
+  const matrixVenues = Array.from(new Set(Object.values(livePrices).map((p) => tickerSourceLabel(p.source)))).filter((v) => v !== '—');
+  const matrixVenue = matrixVenues.length ? matrixVenues.join(' / ') : '—';
 
   const loadLivePrices = async () => {
     setIsRefreshing(true);
     try {
       const data = await fetchAllCryptoTickers();
-      const priceMap: Record<string, { price: number; change24h: number }> = {};
+      const priceMap: Record<string, { price: number; change24h: number; source?: TickerSource }> = {};
       data.forEach((item) => {
         priceMap[item.symbol] = {
           price: item.price,
           change24h: item.change24h,
+          source: item.source,
         };
       });
       setLivePrices(priceMap);
@@ -61,11 +66,11 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
               <TrendingUp className="w-4 h-4 text-purple-400" />
-              <span>Live Spot Matrix • Coinbase</span>
+              <span>Live Spot Matrix • {matrixVenue}</span>
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">Active Crypto Intelligence Matrix</h1>
             <p className="text-xs text-purple-200/70">
-              Live Coinbase spot for each asset. VIXY's measured model covers BTC 15-minute only; other assets show price without a prediction.
+              Live spot for each asset, labelled with the venue it came from. VIXY's measured model covers BTC 15-minute only; other assets show price without a prediction.
             </p>
           </div>
 
@@ -85,7 +90,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
         {assets.map((asset) => {
           const isFav = favorites.includes(asset.symbol);
           const liveInfo = livePrices[asset.symbol];
-                    // Live Coinbase values only. There is no fallback to the static
+                    // Live venue values only. There is no fallback to the static
           // asset table, which held months-old prices.
           const displayPrice: number | null =
             liveInfo && Number.isFinite(liveInfo.price) && liveInfo.price > 0 ? liveInfo.price : null;
@@ -112,7 +117,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                       <h3 className="text-xl font-black text-white group-hover:text-purple-200 transition-colors">
                         {asset.name}
                       </h3>
-                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}-USD · Coinbase</span>
+                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}-{liveInfo?.source === 'Binance' ? 'USDT' : 'USD'} · {tickerSourceLabel(liveInfo?.source)}</span>
                     </div>
                   </div>
 
@@ -156,7 +161,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                       {isBtc && engineLive ? engineHeadline.label : 'VIXY model'}
                     </div>
                     {isBtc && engineLive ? (
-                      <div className="text-xl font-black text-white tabular-nums">{engineHeadline.value}%</div>
+                      <div className="text-xl font-black text-white tabular-nums">{headlineText(engineHeadline)}</div>
                     ) : (
                       <div className="text-sm font-bold text-purple-300/60">{isBtc ? 'engine not live' : 'no model'}</div>
                     )}

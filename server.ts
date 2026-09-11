@@ -1457,6 +1457,9 @@ let currentKalshiImpliedProb = null;
 // market price; anything downstream that claims "market probability" must
 // check this stamp is recent before using currentKalshiImpliedProb.
 let kalshiImpliedAtMs = 0;
+// close_time of the market the price was read from. A price is only a price
+// for its own window: once that market closes it is not fresh, whatever its age.
+let kalshiImpliedCloseMs = 0;
 // ---- REAL AGGRESSOR FLOW (Coinbase BTC-USD trades) --------------------------
 // The reversal watch and the ORDER_FLOW evidence family read buyers vs sellers
 // from real prints. Coinbase reports `side` as the MAKER side: a "sell" maker
@@ -3187,6 +3190,13 @@ async function runMarketEngineTick() {
     } else if (now - lastMarketUpdateTs > 15e3) {
       engineFeedStatus = "STALE";
     }
+    // The last read belongs to a market that has closed: after a window rolls
+    // over it would otherwise stay "fresh" for up to 120s and be priced against
+    // the next window. Every freshness check requires kalshiImpliedAtMs > 0.
+    if (kalshiImpliedAtMs > 0 && kalshiImpliedCloseMs > 0 && Date.now() >= kalshiImpliedCloseMs) {
+      kalshiImpliedAtMs = 0;
+      currentKalshiImpliedProb = null;
+    }
     if (currentEngineCycleId % 2 === 0) {
       try {
         const baseUrl =
@@ -3248,6 +3258,7 @@ async function runMarketEngineTick() {
             if (yesMid !== null) {
               currentKalshiImpliedProb = Math.round(yesMid * 1e4) / 1e4;
               kalshiImpliedAtMs = Date.now();
+              kalshiImpliedCloseMs = Date.parse(m.close_time);
             }
           }
         }
@@ -4831,7 +4842,8 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       dataAgeMs: active15mCycle.calibrationDataAgeMs ?? null,
       choppyReason: active15mCycle.choppyReason ?? null,
       snapshotVersion: "v1",
-      engineVersion: "VIXY-VAULT-v5",
+      // The version that actually decided this lock (was a literal "VIXY-VAULT-v5").
+      engineVersion: lockModelVersion,
     };
   }
 
@@ -15679,6 +15691,9 @@ app.get("/api/vixy/state", async (req, res) => {
         );
       } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
+        // The locking instance wrote lockPolicy into this document; copy it even when
+        // the other lock fields already match, so served locks say what confidence is.
+        if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
         const adoptedProb = lockData.probability;
@@ -15820,6 +15835,7 @@ app.get("/api/vixy/state", async (req, res) => {
           direction: active15mCycle.lockedDirection,
           probability: active15mCycle.lockedProbability,
           confidence: active15mCycle.lockedConfidence,
+          lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
           lockedAt: active15mCycle.lockedAt,
           spotAtLock: active15mCycle.lockedSpot,
           strike: active15mCycle.lockedStrike,
@@ -15873,6 +15889,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         );
       } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
+        // The locking instance wrote lockPolicy into this document; copy it even when
+        // the other lock fields already match, so served locks say what confidence is.
+        if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
         const adoptedProb = lockData.probability;
@@ -15960,6 +15979,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         direction: active15mCycle.lockedDirection || "NEUTRAL",
         probability: active15mCycle.lockedProbability ?? 0.5,
         confidence: active15mCycle.lockedConfidence ?? 0,
+        lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
         lockedAt: active15mCycle.lockedAt || now,
         spotAtLock: active15mCycle.lockedSpot || spot,
         strike: active15mCycle.lockedStrike || strike,
@@ -16518,6 +16538,9 @@ app.get(
           );
         } else if (lockDocSnap.exists()) {
           const lockData = lockDocSnap.data();
+          // The locking instance wrote lockPolicy into this document; copy it even when
+          // the other lock fields already match, so served locks say what confidence is.
+          if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
           const adoptedDir = lockData.direction;
           const adoptedConf = lockData.confidence;
           const adoptedProb = lockData.probability;
@@ -16831,6 +16854,7 @@ app.get(
             direction: active15mCycle.lockedDirection,
             probability: active15mCycle.lockedProbability,
             confidence: active15mCycle.lockedConfidence,
+            lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
             lockedAt: active15mCycle.lockedAt,
             spotAtLock: active15mCycle.lockedSpot,
             strike: active15mCycle.lockedStrike,

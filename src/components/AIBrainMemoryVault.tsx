@@ -26,6 +26,7 @@ type SignalWithCycle = ApiSignalResponse & {
   lockedDirection?: string | null;
   lockedConfidence?: number | null;
   lockedProbability?: number | null;
+  lockPolicy?: string | null;
   cycleStage?: string | null;
   timeRemainingSec?: number | null;
 };
@@ -63,8 +64,9 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
 
   // Real values or nothing. These used to default to 148 settled and a 0.182
   // Brier score whenever the endpoint had not answered.
-  const settled = modelStatus?.settledCount ?? 0;
-  const minRequired = modelStatus?.minRequired ?? 500;
+  // A failed /api/model-status returns null counts, never 0 / 500.
+  const settled: number | null = typeof modelStatus?.settledCount === 'number' ? modelStatus.settledCount : null;
+  const minRequired: number | null = typeof modelStatus?.minRequired === 'number' ? modelStatus.minRequired : null;
   const brier: number | null = typeof modelStatus?.activeModelBrier === 'number' ? modelStatus.activeModelBrier : null;
   const winRate: number | null = typeof modelStatus?.historicalAccuracy === 'number' ? modelStatus.historicalAccuracy : null;
   const regime = humanize(modelStatus?.currentRegime ?? null);
@@ -73,13 +75,22 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
   const lockedDirection = apiSignal?.lockedDirection ?? null;
   const lockedConfidence = typeof apiSignal?.lockedConfidence === 'number' ? apiSignal.lockedConfidence : null;
   const lockedProbability = typeof apiSignal?.lockedProbability === 'number' ? apiSignal.lockedProbability : null;
+  // lockedConfidence is the engine score (0–100) under ENGINE_GATE. Under
+  // STRIKE_SIDE_RULE, server.ts lock15mCycle stores round(rule p × 100) there
+  // instead. /api/signal does not send lockPolicy today, so this reads as an
+  // engine score unless the payload says the rule decided.
+  const lockPolicy = typeof apiSignal?.lockPolicy === 'string' ? apiSignal.lockPolicy : null;
   const stage = humanize(apiSignal?.cycleStage ?? apiSignal?.signalState ?? null);
   const secondsLeft = typeof apiSignal?.timeRemainingSec === 'number' ? apiSignal.timeRemainingSec : null;
 
   const decisionText =
     isLocked && lockedDirection
       ? `LOCKED ${lockedDirection}` +
-        (lockedConfidence !== null ? ` • confidence ${lockedConfidence}%` : '') +
+        (lockedConfidence !== null
+          ? lockPolicy === 'STRIKE_SIDE_RULE'
+            ? ` • rule P(win) ${lockedConfidence}%`
+            : ` • engine score ${lockedConfidence} / 100`
+          : '') +
         (lockedProbability !== null ? ` • P(win) ${(lockedProbability * 100).toFixed(1)}%` : '')
       : `NO LOCK THIS CYCLE${stage ? ` • ${stage}` : ''}`;
   const decisionTone =
@@ -107,7 +118,7 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
           </div>
         </div>
         <div className="px-3 py-1.5 rounded-xl bg-purple-950/60 border border-purple-500/40 text-purple-200 text-xs font-mono font-bold">
-          {modelStatus ? `${settled} SETTLED LOCKS` : 'LOADING…'}
+          {!modelStatus ? 'LOADING…' : settled !== null ? `${settled} SETTLED LOCKS` : 'MODEL STATUS UNAVAILABLE'}
         </div>
       </div>
 
@@ -123,7 +134,7 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <span className="text-[10px] text-slate-400 font-mono uppercase block">Settled Locks</span>
-              <span className="text-2xl font-black font-mono text-cyan-300 tracking-tight">{modelStatus ? settled : '—'}</span>
+              <span className="text-2xl font-black font-mono text-cyan-300 tracking-tight">{settled !== null ? settled : '—'}</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 font-mono uppercase block">Win Rate</span>
@@ -133,12 +144,12 @@ export const AIBrainMemoryVault: React.FC<AIBrainMemoryVaultProps> = ({
           <div className="space-y-1.5 pt-1">
             <div className="flex justify-between text-[11px] font-mono text-slate-300">
               <span>Toward calibration target</span>
-              <span className="text-amber-400 font-bold">{settled} / {minRequired}</span>
+              <span className="text-amber-400 font-bold">{settled !== null && minRequired !== null ? `${settled} / ${minRequired}` : '—'}</span>
             </div>
             <div className="h-2 w-full bg-slate-900 rounded-full overflow-hidden p-0.5 border border-purple-900/50">
               <div
                 className="h-full bg-gradient-to-r from-amber-600 to-amber-400 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, (settled / Math.max(1, minRequired)) * 100)}%` }}
+                style={{ width: `${settled !== null && minRequired !== null ? Math.min(100, (settled / Math.max(1, minRequired)) * 100) : 0}%` }}
               />
             </div>
           </div>
