@@ -1149,9 +1149,11 @@ export async function deleteJournalEntry(id: string) {
 
 export interface LeaderboardUser {
   rank: number;
-  userId: string;
   traderName: string;
-  badge: string;
+  // Only the owner account's role is known; journal rows carry no plan tier.
+  badge: string | null;
+  // Server-computed from the signed session: true only for the requester's row.
+  isViewer: boolean;
   realizedPnl: number;
   winRate: number;
   totalTrades: number;

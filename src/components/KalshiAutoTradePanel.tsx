@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { KalshiAutoTradeConfig, AutoTradeAuditLog } from '../types';
 import { KalshiAutoTradeService, KalshiHandshakeResponse } from '../services/market/kalshiAutoTradeService';
+import { AUTO_TRADING_LIVE_ENABLED } from '../services/trading/kalshiLiveTradingFlag';
 
 interface KalshiAutoTradePanelProps {
   isEliteOrAdmin: boolean;
@@ -206,7 +207,9 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
         setConfig(res.config);
         setActionSuccessMessage(
           nextState
-            ? '⚡ Kalshi Auto-Trading is now ACTIVE. Orders will execute when locked signals meet your criteria.'
+            ? AUTO_TRADING_LIVE_ENABLED
+              ? '⚡ Kalshi Auto-Trading is now ACTIVE. Orders will execute when locked signals meet your criteria.'
+              : 'Kalshi Auto-Trading armed. Live-capital orders are disabled in the execution engine; only a Demo Sandbox config can place orders.'
             : '⏸️ Kalshi Auto-Trading paused.'
         );
         setTimeout(() => setActionSuccessMessage(null), 4000);
@@ -462,9 +465,16 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
                   onChange={(e) => setEnvironment(e.target.value as any)}
                   className="w-full bg-[#0B061A] border border-cyan-900/60 rounded-lg px-3 py-2 text-cyan-200 focus:outline-none focus:border-cyan-400 text-xs"
                 >
-                  <option value="live">Live DCM Production (CFTC Regulated Real Capital)</option>
+                  <option value="live">
+                    {AUTO_TRADING_LIVE_ENABLED ? 'Live DCM Production (CFTC Regulated Real Capital)' : 'Live Production — live orders DISABLED in execution engine'}
+                  </option>
                   <option value="paper">Demo Sandbox (Paper Simulation)</option>
                 </select>
+                {!AUTO_TRADING_LIVE_ENABLED && (
+                  <p className="mt-1.5 text-[10px] text-amber-300/90 leading-relaxed font-sans">
+                    Live-capital orders are disabled in the VIXY execution engine. An armed config targeting Live is blocked and logged as BLOCKED; nothing is sent to Kalshi. Only a Demo Sandbox config can place orders, on Kalshi's demo exchange with no real capital.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -541,24 +551,26 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
                   onClick={() => handleToggleAutoTradeMaster(!config.enabled)}
                   disabled={savingConfig || (!isConfigured && !config.enabled)}
                   className={`px-3 py-1 rounded-full text-xs font-black transition-all flex items-center gap-1.5 border shadow ${
-                    config.enabled
+                    !config.enabled
+                      ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
+                      : AUTO_TRADING_LIVE_ENABLED
                       ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-emerald-500/30 animate-pulse'
-                      : 'bg-rose-500/20 text-rose-300 border-rose-500/40 hover:bg-rose-500/30'
+                      : 'bg-amber-500/20 text-amber-200 border-amber-500/50'
                   }`}
                 >
                   {config.enabled ? <Play className="w-3 h-3 fill-current" /> : <Pause className="w-3 h-3" />}
-                  <span>{config.enabled ? 'ARMED & ACTIVE' : 'OFF / DISABLED'}</span>
+                  <span>{!config.enabled ? 'OFF / DISABLED' : AUTO_TRADING_LIVE_ENABLED ? 'ARMED & ACTIVE' : 'ARMED · LIVE ORDERS DISABLED'}</span>
                 </button>
               </div>
             </div>
 
             <div className="space-y-4 text-xs">
-              {/* Confidence Threshold Slider */}
+              {/* Engine score gate: compared against the raw 0-100 engine score */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
-                  <label className="text-cyan-300/70 text-[10px]">Signal Confidence Gate</label>
+                  <label className="text-cyan-300/70 text-[10px]">Engine Score Gate</label>
                   <span className="text-xs font-black text-cyan-300 bg-cyan-950/80 px-2 py-0.5 rounded border border-cyan-800">
-                    ≥ {config.confidenceThreshold}%
+                    ≥ {config.confidenceThreshold} / 100
                   </span>
                 </div>
                 <input
@@ -571,10 +583,12 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
                   className="w-full accent-cyan-400 bg-cyan-950 rounded h-1.5 cursor-pointer"
                 />
                 <div className="flex justify-between text-[9px] text-cyan-400/50">
-                  <span>60% (High Volume)</span>
-                  <span>80% (Recommended)</span>
-                  <span>95% (Extreme Conviction)</span>
+                  <span>60</span>
+                  <span>95</span>
                 </div>
+                <p className="text-[9px] text-cyan-400/50 font-sans leading-relaxed">
+                  A locked signal must reach this raw 0–100 engine score to be considered. The score is not a win probability.
+                </p>
               </div>
 
               {/* Stake & Exposure Limit Inputs */}
