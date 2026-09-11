@@ -1064,7 +1064,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                   <History className="w-3.5 h-3.5 text-purple-400" />
                   <span>ENGINE STATE</span>
                 </span>
-                <span className="text-[#00FF88] text-[9px]">LIVE</span>
+                <span className={`text-[9px] ${engineLive ? 'text-[#00FF88]' : 'text-slate-500'}`}>{engineLive ? 'LIVE' : 'NOT LIVE'}</span>
               </div>
 
               <div className="space-y-1.5 text-[10px] font-mono">

@@ -16982,58 +16982,21 @@ app.get(
         ? effectiveDirection === "UP"
           ? Math.round(displayProb * 1e3) / 10
           : Math.round((1 - displayProb) * 1e3) / 10
-        : 50,
+        : null, // was 50 when the feed is not live
       downProbability: isLive
         ? effectiveDirection === "DOWN"
           ? Math.round(displayProb * 1e3) / 10
           : Math.round((1 - displayProb) * 1e3) / 10
-        : 50,
-      evidenceQuality: isLive ? evidenceQuality : 50,
+        : null,
+      evidenceQuality: isLive ? evidenceQuality : null,
       vixyLockState: isLive ? vixyLockState : "ANALYZING",
       decision: isLive ? decision : "PASS",
-      correlationPenalty: "ACTIVE (-3.2%)",
-      evidenceMatrix: isLive
-        ? [
-            {
-              name: "Binance spot momentum",
-              strength: "+++",
-              bias: effectiveDirection,
-            },
-            {
-              name: "Order-flow imbalance",
-              strength: "++",
-              bias: effectiveDirection,
-            },
-            { name: "Short-term volatility", strength: "+", bias: "NEUTRAL" },
-            {
-              name: "Kalshi implied probability",
-              strength: "+++",
-              bias: effectiveDirection,
-            },
-            {
-              name: "Price/strike distance",
-              strength: "++",
-              bias: market15mState.distance >= 0 ? "UP" : "DOWN",
-            },
-            {
-              name: "Momentum acceleration",
-              strength: "+",
-              bias: effectiveDirection,
-            },
-            { name: "Liquidity", strength: "+++", bias: "HIGH" },
-            { name: "Spread quality", strength: "++", bias: "OPTIMAL" },
-            {
-              name: "Market regime",
-              strength: "+",
-              bias: serverLearningEngine.currentRegime,
-            },
-            {
-              name: "Signal persistence",
-              strength: "++",
-              bias: latestLockEvaluation.qualified ? "QUALIFIED" : "CONFLICTED",
-            },
-          ]
-        : [],
+      // Was the literal "ACTIVE (-3.2%)". No correlation penalty is computed.
+      correlationPenalty: null,
+      // Ten rows with fixed strengths ("+++" / "++" / "+") whose bias mostly echoed
+      // the call itself, plus constant "Liquidity HIGH" and "Spread quality OPTIMAL".
+      // Nothing scored them. The real per-family evidence is btc15mPipeline.evidenceFamilies.
+      evidenceMatrix: null,
       kalshiImpliedProbability: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
       edge: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 && typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
       edgePct: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentEdgePct : null,
