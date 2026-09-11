@@ -1405,6 +1405,9 @@ let currentBullVolumePct = 50;
 // stays null rather than defaulting to a plausible venue name.
 let marketFeedHealth = {
   priceSource: null,
+  // The last Kalshi markets request and what came back (OK_MARKET,
+  // NO_CURRENT_WINDOW_MARKET, HTTP_ERROR, EXCEPTION). null = never attempted.
+  kalshiFetch: null,
   btcFresh: false,
   ethFresh: false,
   solFresh: false,
@@ -3216,6 +3219,9 @@ async function runMarketEngineTick() {
           `${baseUrl.replace(/\/trade-api\/v2\/?$/, "")}${apiPath}`,
           { headers },
         );
+        if (!kRes.ok) {
+          marketFeedHealth.kalshiFetch = { atMs: Date.now(), outcome: "HTTP_ERROR", httpStatus: kRes.status, marketsOpen: null };
+        }
         if (kRes.ok) {
           lastKalshiUpdateTs = Date.now();
           const kData = await kRes.json();
@@ -3230,6 +3236,12 @@ async function runMarketEngineTick() {
               const c = Date.parse(mk.close_time || "");
               return Number.isFinite(o) && Number.isFinite(c) && o <= nowMsK && nowMsK < c;
             }) || null;
+          marketFeedHealth.kalshiFetch = {
+            atMs: Date.now(),
+            outcome: m ? "OK_MARKET" : "NO_CURRENT_WINDOW_MARKET",
+            httpStatus: kRes.status,
+            marketsOpen: activeMarkets.length,
+          };
           if (m) {
             const strikeVal =
               m.floor_strike ||
@@ -3269,7 +3281,10 @@ async function runMarketEngineTick() {
             }
           }
         }
-      } catch (kErr) {}
+      } catch (kErr) {
+        // Error name only (e.g. AbortError, TypeError); no message, URL or header content.
+        marketFeedHealth.kalshiFetch = { atMs: Date.now(), outcome: "EXCEPTION", httpStatus: null, marketsOpen: null, error: String(kErr?.name || "Error") };
+      }
     }
     // Real aggressor flow for the reversal watch and the ORDER_FLOW family.
     // Single-flight, at most one Coinbase request per 2.5s, 2.5s timeout; a
@@ -3565,7 +3580,7 @@ async function runMarketEngineTick() {
       btcPrice: livePrice,
       ethPrice: currentEthPrice,
       solPrice: currentSolPrice,
-      kalshiStrike: current15mStrikePrice,
+      kalshiStrike: current15mStrikePrice > 0 ? current15mStrikePrice : null,
       kalshiImpliedProb: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
       modelProb: currentModelProbability,
       edgePct: currentEdgePct,
@@ -15831,12 +15846,13 @@ app.get("/api/vixy/state", async (req, res) => {
         : currentConfidence,
       crossVenue: {
         spot,
-        kalshiStrike: market15mState.strikePrice,
+        // 0 means this instance holds no strike yet: served null, not a price of 0.
+        kalshiStrike: market15mState.strikePrice > 0 ? market15mState.strikePrice : null,
         intervalStart: market15mState.intervalStart,
         intervalEnd: market15mState.intervalEnd,
         timeRemainingSec: market15mState.timeRemaining,
-        distance: Math.round((spot - market15mState.strikePrice) * 100) / 100,
-        distancePct: market15mState.distancePct,
+        distance: market15mState.strikePrice > 0 ? Math.round((spot - market15mState.strikePrice) * 100) / 100 : null,
+        distancePct: market15mState.strikePrice > 0 ? market15mState.distancePct : null,
         kalshiImpliedProb: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
         polymarketImpliedProb: null, // no Polymarket feed
         spreadPct: null,
@@ -16082,6 +16098,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
               ? "STALE"
               : "OFFLINE",
     priceSource: marketFeedHealth.priceSource,
+    kalshiFetch: marketFeedHealth.kalshiFetch ?? null,
     venuesLive:
       (marketFeedHealth.btcFresh ? 1 : 0) +
       (marketFeedHealth.ethFresh ? 1 : 0) +
