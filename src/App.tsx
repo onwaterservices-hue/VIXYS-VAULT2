@@ -1221,6 +1221,7 @@ export default function App() {
         <TagTrialPromoBanner
           isAuthenticated={authState.isAuthenticated}
           onOpenAuth={() => handleOpenAuth('register')}
+          onOpenRefer={() => (authState.isAuthenticated ? setActiveTab('refer') : handleOpenAuth('register'))}
           onViewPricing={() => setActiveTab('pricing')}
           onAccessGranted={() => window.location.assign('/vixy-live')}
         />

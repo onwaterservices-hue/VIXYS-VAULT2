@@ -3653,7 +3653,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       DAY_PASS ($9.99 - 24-Hour Access Pass)
                     </option>
                     <option value="STARTER">
-                      STARTER ($29/mo - Beginner Access)
+                      STARTER ($24/mo - Beginner Access)
                     </option>
                     <option value="NONE">
                       NONE (Unpaid / Beginner)
