@@ -3,7 +3,7 @@ import { Sliders, Sparkles, TrendingUp, ShieldAlert, ArrowRightLeft, Zap, ArrowR
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
 import { AlertSettings } from '../types';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
-import { headline, EngineDecisionLike } from '../lib/engineSemantics';
+import { headline, headlineText, EngineDecisionLike } from '../lib/engineSemantics';
 import { useAssetMarketTape, formatUsdCompact } from '../hooks/useAssetMarketTape';
 
 interface CompareViewProps {
@@ -258,7 +258,7 @@ const AssetComparisonCard: React.FC<{
         {engineLive ? (
           <div className="hud-stat-card bg-[#0c0620] border border-purple-900/40">
             <div className="hud-stat-label">{h.label}</div>
-            <div className="hud-stat-value hud-gradient-text">{h.value}%</div>
+            <div className="hud-stat-value hud-gradient-text">{headlineText(h)}</div>
           </div>
         ) : (
           <p className="text-[11px] leading-relaxed text-purple-300/75 font-sans">

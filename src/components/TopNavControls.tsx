@@ -34,6 +34,7 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
 
   const timeframes = ['15S', '1M', '5M', '15M', '30M', '1H', '4H', '1D'];
   const venues = ['Kalshi', 'Polymarket', 'DraftKings', 'Prediction Matrix', 'Cross Venue'];
+  const selectedHasQuote = typeof spotPrices?.[selectedAsset]?.price === 'number' && (spotPrices?.[selectedAsset]?.price ?? 0) > 0;
 
   // AI Dynamic Summary Generator
   // This banner previously narrated a fixed story per asset ("+1,467 BTC net
@@ -139,8 +140,10 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 p-2.5 rounded-lg bg-[#0e121a] border border-slate-800/80 font-mono text-xs">
         {/* Single Clean Data Stream Indicator */}
         <div className="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-900 border border-slate-800 text-slate-300 font-bold text-xs">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="font-sans text-[11px]">QUANT STREAM ({selectedTimeframe} • Direct Feed)</span>
+          {/* Nothing streams into this chip. The dot only reports whether a
+              live spot quote for the selected asset has been received. */}
+          <span className={`w-2 h-2 rounded-full ${selectedHasQuote ? 'bg-emerald-400' : 'bg-slate-600'}`} />
+          <span className="font-sans text-[11px]">QUANT STREAM ({selectedTimeframe} • {selectedHasQuote ? 'spot quote received' : 'no spot quote'})</span>
         </div>
 
         {/* Venue Selector - Clean Ghost vs Solid Style */}
@@ -164,7 +167,8 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
                     : 'bg-transparent text-slate-400 border border-slate-800 hover:text-white'
                 }`}
               >
-                <div className={`w-1.5 h-1.5 rounded-full ${isDisabled ? 'bg-slate-700' : isSelected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                {/* Selection marker only: no venue feed is connected to this toggle. */}
+                <div className={`w-1.5 h-1.5 rounded-full ${isDisabled ? 'bg-slate-700' : isSelected ? 'bg-slate-300' : 'bg-slate-600'}`} />
                 <span>{isDisabled ? 'DraftKings (Soon)' : v}</span>
               </button>
             );

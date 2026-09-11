@@ -177,6 +177,18 @@ export function headline(
 }
 
 /**
+ * How to print a headline number. Only a calibrated P(win) is a percentage;
+ * the engine score is a 0–100 score and renders "N / 100". Nothing else
+ * renders as a number.
+ */
+export function headlineText(h: Pick<Headline, 'kind' | 'value'> | null | undefined): string {
+  if (!h || h.value === null || !Number.isFinite(h.value)) return '—';
+  if (h.kind === 'PWIN') return `${h.value}%`;
+  if (h.kind === 'ENGINE_SCORE') return `${h.value} / 100`;
+  return '—';
+}
+
+/**
  * Maps an engine lifecycle state onto its holographic aura class.
  *
  * The aura is a readout, not decoration, so it is only ever returned when the

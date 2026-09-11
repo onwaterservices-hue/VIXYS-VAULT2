@@ -37,7 +37,32 @@ import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
-import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
+import { headline, headlineText, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
+
+/** Signed edge in points: "+16.0%", "-10.0%", "0.0%". Never "+-10.0%". */
+export function signedEdgeText(edge: number): string {
+  if (!Number.isFinite(edge)) return '—';
+  return `${edge > 0 ? '+' : ''}${edge.toFixed(1)}%`;
+}
+
+/**
+ * The hero's MARKET STATE chip. The engine's state is shown only while the feed
+ * is LIVE; otherwise the chip reports the feed, and nothing pulses.
+ */
+export function heroMarketState(
+  currentState: string | null | undefined,
+  feed: string | null | undefined,
+): { label: string; tone: string; pulse: boolean } {
+  if (feed !== 'LIVE') {
+    const label = feed === 'CONNECTING' ? 'CONNECTING' : feed === 'STALE' ? 'FEED STALE' : 'FEED OFFLINE';
+    return { label, tone: 'text-slate-300 bg-slate-500/10 border-slate-500/30', pulse: false };
+  }
+  if (currentState === 'LOCKED_UP') return { label: 'LOCKED — UP', tone: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30', pulse: true };
+  if (currentState === 'LOCKED_DOWN') return { label: 'LOCKED — DOWN', tone: 'text-rose-400 bg-rose-500/10 border-rose-500/30', pulse: true };
+  if (currentState === 'CONFIRMING') return { label: 'CONFIRMING ENTRY', tone: 'text-amber-400 bg-amber-500/10 border-amber-500/30', pulse: true };
+  if (currentState === 'SKIP') return { label: 'SKIP (PROTECTED)', tone: 'text-purple-300 bg-purple-500/10 border-purple-500/30', pulse: true };
+  return { label: 'ANALYZING MARKET', tone: 'text-purple-300 bg-purple-500/10 border-purple-500/30', pulse: true };
+}
 
 interface LandingPageProps {
   ticker: BTCTicker;
@@ -90,7 +115,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     window.location.href = url;
   };
 
-  const estimatedEdge = (calcModelProb - calcMarketProb).toFixed(1);
+  // Both inputs are the visitor's own sliders; nothing here is a VIXY model output.
+  const estimatedEdge = calcModelProb - calcMarketProb;
 
   // Live derived values for the hero terminal. Every value is observed or shown
   // as a dash. The previous fallbacks invented a price, a timer, a confidence
@@ -112,23 +138,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       ? `${String(Math.floor(heroRemaining / 60)).padStart(2, '0')}:${String(heroRemaining % 60).padStart(2, '0')}`
       : '--:--';
 
-  const stateDisplayName = canonical15m.currentState === 'LOCKED_UP'
-    ? 'LOCKED — UP'
-    : canonical15m.currentState === 'LOCKED_DOWN'
-    ? 'LOCKED — DOWN'
-    : canonical15m.currentState === 'CONFIRMING'
-    ? 'CONFIRMING ENTRY'
-    : canonical15m.currentState === 'SKIP'
-    ? 'SKIP (PROTECTED)'
-    : 'ANALYZING MARKET';
-
-  const stateColor = canonical15m.currentState === 'LOCKED_UP'
-    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-    : canonical15m.currentState === 'LOCKED_DOWN'
-    ? 'text-rose-400 bg-rose-500/10 border-rose-500/30'
-    : canonical15m.currentState === 'CONFIRMING'
-    ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
-    : 'text-purple-300 bg-purple-500/10 border-purple-500/30';
+  // Was "ANALYZING MARKET" with a pulsing dot for any non-lock state, including
+  // the client placeholder and a disconnected feed.
+  const heroState = heroMarketState(canonical15m.currentState, dataHealthStatus);
 
   // The same headline the Command Center uses: calibrated P(win) with its
   // sample size when a historical cell matches, otherwise the engine score.
@@ -297,13 +309,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 {(() => {
                   const live = dataHealthStatus === 'LIVE';
                   const stale = dataHealthStatus === 'STALE';
-                  const label = live ? 'LIVE' : stale ? 'STALE' : 'OFFLINE';
+                  const connecting = dataHealthStatus === 'CONNECTING';
+                  const label = live ? 'LIVE' : stale ? 'STALE' : connecting ? 'CONNECTING' : 'OFFLINE';
                   const tone = live
                     ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400'
                     : stale
                       ? 'bg-amber-950/80 border-amber-500/40 text-amber-400'
-                      : 'bg-rose-950/80 border-rose-500/40 text-rose-400';
-                  const dot = live ? 'bg-emerald-400 animate-pulse' : stale ? 'bg-amber-400' : 'bg-rose-400';
+                      : connecting
+                        ? 'bg-slate-900/80 border-slate-500/40 text-slate-300'
+                        : 'bg-rose-950/80 border-rose-500/40 text-rose-400';
+                  const dot = live ? 'bg-emerald-400 animate-pulse' : stale ? 'bg-amber-400' : connecting ? 'bg-slate-400' : 'bg-rose-400';
                   return (
                     <span className={`px-2 py-0.5 rounded border text-[10px] font-bold flex items-center gap-1 ${tone}`}>
                       <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
@@ -352,7 +367,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </span>
                 <div className="flex items-baseline justify-between">
                   <span className="text-2xl font-black text-white tabular-nums">
-                    {heroLive ? `${heroHeadline.value}%` : '—'}
+                    {heroLive ? headlineText(heroHeadline) : '—'}
                   </span>
                   {heroLockScore !== null && (
                     <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
@@ -360,7 +375,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </span>
                   )}
                 </div>
-                <div className="w-full h-1.5 bg-purple-950 rounded-full overflow-hidden mt-1">
+                {/* Both a P(win) percent and the engine score sit on a 0–100 scale;
+                    the text above says which one this bar is. */}
+                <div
+                  className="w-full h-1.5 bg-purple-950 rounded-full overflow-hidden mt-1"
+                  aria-label={heroLive ? `${heroHeadline.label} ${headlineText(heroHeadline)}` : 'No engine number'}
+                >
                   <div
                     className="h-full bg-gradient-to-r from-purple-500 via-violet-400 to-cyan-400 rounded-full transition-all duration-500"
                     style={{ width: `${heroLive && typeof heroHeadline.value === 'number' ? Math.min(100, Math.max(0, heroHeadline.value)) : 0}%` }}
@@ -372,9 +392,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
                 <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">MARKET STATE</span>
                 <div className="pt-0.5">
-                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider border ${stateColor}`}>
-                    <span className="w-2 h-2 rounded-full bg-current animate-pulse" />
-                    {stateDisplayName}
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black uppercase tracking-wider border ${heroState.tone}`}>
+                    <span className={`w-2 h-2 rounded-full bg-current ${heroState.pulse ? 'animate-pulse' : ''}`} />
+                    {heroState.label}
                   </span>
                 </div>
                 <span className="text-[10px] text-purple-300/70 block pt-0.5">
@@ -778,8 +798,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
         <div className="bg-[#0a0518] p-5 rounded-2xl border border-purple-900/40 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="text-left">
-            <span className="text-xs text-purple-300/70 block font-bold">ESTIMATED PROBABILITY EDGE (+EV)</span>
-            <span className="text-3xl sm:text-4xl font-black text-emerald-400 tracking-tight">+{estimatedEdge}%</span>
+            <span className="text-xs text-purple-300/70 block font-bold">
+              ESTIMATED PROBABILITY EDGE ({estimatedEdge > 0 ? '+EV' : estimatedEdge < 0 ? '−EV' : 'NO EDGE'})
+            </span>
+            <span
+              className={`text-3xl sm:text-4xl font-black tracking-tight ${
+                estimatedEdge > 0 ? 'text-emerald-400' : estimatedEdge < 0 ? 'text-rose-400' : 'text-slate-300'
+              }`}
+            >
+              {signedEdgeText(estimatedEdge)}
+            </span>
           </div>
           <button
             onClick={onLaunchTerminal}
@@ -789,7 +817,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           </button>
         </div>
         <p className="text-[10px] text-slate-400 italic text-center font-sans">
-          Note: Calculated edge reflects mathematical expected value (+EV) based on model probabilities. Prediction market trading involves financial risk.
+          Note: Calculated edge is your own probability estimate minus the market price, both set with the sliders above. It is not a VIXY model output. Prediction market trading involves financial risk.
         </p>
       </section>
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Target, ChevronRight, ShieldAlert } from 'lucide-react';
 import { ASSET_DATABASE } from '../data/assetData';
-import { fetchAllCryptoTickers } from '../services/api';
-import { headline, EngineDecisionLike } from '../lib/engineSemantics';
+import { fetchAllCryptoTickers, TickerSource, tickerSourceLabel } from '../services/api';
+import { headline, headlineText, EngineDecisionLike } from '../lib/engineSemantics';
 
 /**
  * VIXY VAULT - OPPORTUNITY SCANNER
@@ -14,7 +14,8 @@ import { headline, EngineDecisionLike } from '../lib/engineSemantics';
  *
  * VIXY ranks only what it measures, and today that is the BTC 15-minute
  * engine. BTC therefore shows the live engine readout. Every other asset shows
- * live Coinbase spot and is explicitly unranked until a model exists for it.
+ * live spot (labelled with its venue) and is explicitly unranked until a model
+ * exists for it.
  */
 
 interface OpportunityScannerViewProps {
@@ -33,7 +34,7 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
   engineDecision = null,
   engineFeedHealth = null,
 }) => {
-  const [spot, setSpot] = useState<Record<string, { price: number; change24h: number }>>({});
+  const [spot, setSpot] = useState<Record<string, { price: number; change24h: number; source?: TickerSource }>>({});
   const [spotStatus, setSpotStatus] = useState<SpotStatus>('LOADING');
 
   useEffect(() => {
@@ -42,10 +43,10 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
       try {
         const rows = await fetchAllCryptoTickers();
         if (!alive) return;
-        const map: Record<string, { price: number; change24h: number }> = {};
+        const map: Record<string, { price: number; change24h: number; source?: TickerSource }> = {};
         (Array.isArray(rows) ? rows : []).forEach((r) => {
           if (r && Number.isFinite(r.price) && r.price > 0) {
-            map[r.symbol] = { price: r.price, change24h: r.change24h };
+            map[r.symbol] = { price: r.price, change24h: r.change24h, source: r.source };
           }
         });
         setSpot(map);
@@ -82,7 +83,7 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
           </div>
           <h1 className="text-2xl font-black text-white tracking-tight">Opportunity Scanner</h1>
           <p className="text-xs text-slate-400 font-sans mt-0.5 max-w-2xl">
-            VIXY ranks only what it measures. Today that is the BTC 15-minute engine. Other assets show live Coinbase spot and stay unranked until a model exists for them.
+            VIXY ranks only what it measures. Today that is the BTC 15-minute engine. Other assets show live spot and stay unranked until a model exists for them.
           </p>
         </div>
 
@@ -130,16 +131,17 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
                 </div>
                 <span
                   className={`px-2.5 py-1 rounded text-[10px] font-bold border ${
-                    isBtc ? 'bg-purple-500/20 text-purple-200 border-purple-500/40' : 'bg-slate-800/60 text-slate-400 border-slate-700'
+                    isBtc && engineLive ? 'bg-purple-500/20 text-purple-200 border-purple-500/40' : 'bg-slate-800/60 text-slate-400 border-slate-700'
                   }`}
                 >
-                  {isBtc ? 'MEASURED · 15M' : 'UNRANKED'}
+                  {/* MEASURED only while the engine is actually publishing a number. */}
+                  {isBtc ? (engineLive ? 'MEASURED · 15M' : 'ENGINE NOT LIVE') : 'UNRANKED'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800/80">
                 <div>
-                  <span className="text-[10px] text-slate-400 block uppercase">Spot · Coinbase</span>
+                  <span className="text-[10px] text-slate-400 block uppercase">Spot · {tickerSourceLabel(s?.source)}</span>
                   <span className="text-lg font-black text-white tabular-nums">{fmtPrice(s?.price)}</span>
                   {s && Number.isFinite(s.change24h) && (
                     <span className={`block text-[10px] font-bold tabular-nums ${s.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
@@ -152,7 +154,7 @@ export const OpportunityScannerView: React.FC<OpportunityScannerViewProps> = ({
                   <span className="text-[10px] text-slate-400 block uppercase">{isBtc && engineLive ? h.label : 'VIXY model'}</span>
                   {isBtc && engineLive ? (
                     <>
-                      <span className="text-lg font-black text-white tabular-nums">{h.value}%</span>
+                      <span className="text-lg font-black text-white tabular-nums">{headlineText(h)}</span>
                       <span
                         className={`block text-[10px] font-bold ${
                           direction === 'UP' ? 'text-emerald-400' : direction === 'DOWN' ? 'text-rose-400' : 'text-purple-300'
