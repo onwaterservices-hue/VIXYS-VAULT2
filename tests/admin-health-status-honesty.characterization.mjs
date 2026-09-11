@@ -221,8 +221,8 @@ t.section('the server fields each status reads');
 
   const h = serverSrc.indexOf('["/api/admin/health", "/api/admin/system-health"]');
   const sys = serverSrc.slice(h, serverSrc.indexOf('\n);\n', h));
-  t.check('system-health status is a literal, so the panel does not read it', /status: "HEALTHY",/.test(sys) && !/systemHealth\?\.status/.test(panel));
-  t.check('system-health realtimeConnections is synthesized', /Math\.floor\(Date\.now\(\) \/ 1e4\) % 5/.test(sys));
+  t.check('the panel does not read system-health status', !/systemHealth\?\.status/.test(panel));
+  t.check('system-health no longer synthesizes realtimeConnections', !/Math\.floor\(Date\.now\(\) \/ 1e4\) % 5/.test(sys) && /realtimeConnections: null/.test(sys));
 }
 
 t.done();

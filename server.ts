@@ -1361,10 +1361,16 @@ app.get("/api/health", (req, res) => {
 // "Engine Cycle #287" boot log removed in #99). It is per-instance, not global;
 // the persisted cross-instance counter is globalSequenceNumber.
 let currentEngineCycleId = 0;
-let lastMarketUpdateTs = Date.now();
-let lastModelRunTs = Date.now();
-let lastSignalUpdateTs = Date.now();
-let lastPredictionUpdateTs = Date.now();
+// 0 means "never", the same convention as lastKalshiUpdateTs below. These were
+// Date.now(), so an instance that had never fetched a price or run a prediction
+// reported market data and predictions as fresh from boot (/api/live-engine/health
+// btcFeed CONNECTED with lastMarketUpdate = boot time, /api/vixy/health
+// connected/healthy, admin MARKET_DATA "healthy"). Every reader treats 0 as no
+// update: served ages and timestamps are null, and freshness checks fail.
+let lastMarketUpdateTs = 0;
+let lastModelRunTs = 0;
+let lastSignalUpdateTs = 0;
+let lastPredictionUpdateTs = 0;
 // Initialised to 0, not Date.now(). Seeding this with the boot time made every
 // cold instance claim the Kalshi feed was fresh before a single fetch had
 // happened: /api/live-engine/health reported kalshiFeed "CONNECTED" and
@@ -2114,12 +2120,17 @@ function evaluateBtc15mHighConvictionPipeline(
     Math.floor((currentIntervalStart + 9e5 - now) / 1e3),
   );
   const elapsedSec = 900 - timeRemainingSec;
-  const feedFreshnessMs = Math.max(0, now - lastMarketUpdateTs);
-  const staleTickDetected = feedFreshnessMs > 15e3;
+  // null when this instance has never recorded a market update. That grades as
+  // OFFLINE (no data is not fresh data) and is served as null, not as an age
+  // measured from 1970. Whenever an update exists every value below is unchanged.
+  const feedFreshnessMs =
+    lastMarketUpdateTs > 0 ? Math.max(0, now - lastMarketUpdateTs) : null;
+  const feedNeverUpdated = feedFreshnessMs === null;
+  const staleTickDetected = feedNeverUpdated || feedFreshnessMs > 15e3;
   const isWsConnected =
-    engineFeedStatus === "CONNECTED" && feedFreshnessMs < 3e4;
+    engineFeedStatus === "CONNECTED" && !feedNeverUpdated && feedFreshnessMs < 3e4;
   const dataQualityStatus =
-    feedFreshnessMs > 6e4
+    feedNeverUpdated || feedFreshnessMs > 6e4
       ? "OFFLINE"
       : staleTickDetected
         ? "STALE"
@@ -2138,11 +2149,11 @@ function evaluateBtc15mHighConvictionPipeline(
     feedFreshnessMs,
     websocketStatus: isWsConnected
       ? "CONNECTED"
-      : feedFreshnessMs < 6e4
+      : !feedNeverUpdated && feedFreshnessMs < 6e4
         ? "RECONNECTING"
         : "DISCONNECTED",
     staleTickDetected,
-    driftMs: Math.max(0, feedFreshnessMs - 500),
+    driftMs: feedNeverUpdated ? null : Math.max(0, feedFreshnessMs - 500),
     status: dataQualityStatus,
     score: dataQualityScore,
   };
@@ -2665,7 +2676,9 @@ function evaluateBtc15mHighConvictionPipeline(
     score: dataQualityScore,
     weight: 0.04,
     agreement: dataQualityAgrees,
-    details: `Freshness: ${feedFreshnessMs}ms | WS: ${dataQualityState.websocketStatus} | Drift: ${dataQualityState.driftMs}ms`,
+    details: feedNeverUpdated
+      ? `Freshness: no market update recorded | WS: ${dataQualityState.websocketStatus}`
+      : `Freshness: ${feedFreshnessMs}ms | WS: ${dataQualityState.websocketStatus} | Drift: ${dataQualityState.driftMs}ms`,
   });
   const agreementCount = families.filter((f) => f.agreement).length;
   const kalshiImpliedProb = currentKalshiImpliedProb || 0.52;
@@ -2828,7 +2841,9 @@ function evaluateBtc15mHighConvictionPipeline(
     keyRisks.push(`Reversal threat elevated (${threatScore}% threat level)`);
   if (dataQualityStatus !== "OPTIMAL")
     keyRisks.push(
-      `Data feed degraded (${dataQualityStatus}, freshness ${feedFreshnessMs}ms)`,
+      feedNeverUpdated
+        ? `Data feed degraded (${dataQualityStatus}, no market update recorded)`
+        : `Data feed degraded (${dataQualityStatus}, freshness ${feedFreshnessMs}ms)`,
     );
   if (alignedCount < 3) keyRisks.push("Timeframe divergence detected");
   if (isLateCycle) keyRisks.push("Late cycle expiry window (< 4.5m remaining)");
@@ -3798,8 +3813,11 @@ function canLockCurrentCycle(livePrice) {
     0,
     Math.floor((active15mCycle.intervalEnd - now) / 1e3),
   );
-  const dataAgeMs = now - lastMarketUpdateTs;
-  const latencyMs = Math.max(0, dataAgeMs - 500);
+  // null when this instance has never recorded a market update. dataFresh and
+  // latencyAcceptable below then fail (as a boot-time-seeded age used to pass),
+  // and the gate serves null rather than an age counted from 1970.
+  const dataAgeMs = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
+  const latencyMs = dataAgeMs === null ? null : Math.max(0, dataAgeMs - 500);
   const effElapsed = Math.max(
     elapsedSeconds,
     active15mCycle.cycleObservationDuration || 0,
@@ -3858,10 +3876,15 @@ function canLockCurrentCycle(livePrice) {
       `ENTRY_WINDOW_EXPIRED (elapsed=${effElapsed}s >= 780s / remaining=${effRemaining}s)`,
     );
   }
-  const marketDataFresh = engineFeedStatus === "CONNECTED" && dataAgeMs <= 15e3;
+  const marketDataFresh =
+    engineFeedStatus === "CONNECTED" && dataAgeMs !== null && dataAgeMs <= 15e3;
   const dataFresh = marketDataFresh && dataAgeMs < 1e4;
   if (!dataFresh) {
-    reasons.push(`DATA_STALE (dataAgeMs=${dataAgeMs}ms)`);
+    reasons.push(
+      dataAgeMs === null
+        ? "DATA_STALE (no market update recorded on this instance)"
+        : `DATA_STALE (dataAgeMs=${dataAgeMs}ms)`,
+    );
   }
   const cryptoTracking = engineFeedStatus === "CONNECTED";
   if (!cryptoTracking) reasons.push("cryptoTracking=false");
@@ -3875,9 +3898,11 @@ function canLockCurrentCycle(livePrice) {
     );
   const cycleExpiryFuture = active15mCycle.intervalEnd > now;
   if (!cycleExpiryFuture) reasons.push("cycleExpiryFuture=false");
-  const latencyAcceptable = latencyMs <= 5e3;
+  const latencyAcceptable = latencyMs !== null && latencyMs <= 5e3;
   if (!latencyAcceptable)
-    reasons.push(`latencyAcceptable=false (${latencyMs}ms)`);
+    reasons.push(
+      `latencyAcceptable=false (${latencyMs === null ? "no market update recorded" : `${latencyMs}ms`})`,
+    );
   const calibrationComplete = true;
   if (!calibrationComplete)
     reasons.push(
@@ -4238,7 +4263,7 @@ function canLockCurrentCycle(livePrice) {
     checks: [
       { id: "WINDOW", label: "Entry window 6:00–13:00", pass: effElapsed >= 360 && effElapsed < 780, current: Math.round(effElapsed), required: "360–780s", gating: hardGating },
       { id: "STRIKE", label: "Strike resolved", pass: Boolean(strike15mResolved), current: strike15mResolved ? "yes" : "no", required: "yes", gating: hardGating },
-      { id: "FEED", label: "Feed connected & fresh", pass: dataFresh && cryptoTracking && latencyAcceptable, current: `${Math.round(dataAgeMs)}ms`, required: "<10s", gating: hardGating },
+      { id: "FEED", label: "Feed connected & fresh", pass: dataFresh && cryptoTracking && latencyAcceptable, current: dataAgeMs === null ? "no update yet" : `${Math.round(dataAgeMs)}ms`, required: "<10s", gating: hardGating },
       { id: "LOCK_QUALITY", label: "Lock quality", pass: lockQualityPass, current: Math.round(latestBtc15mPipeline.lockQuality), required: `≥${minLockQuality} (${lockTier})`, gating: engineGating },
       { id: "AGREEMENT", label: "Evidence families agreeing", pass: evidenceAgreementPass, current: `${latestBtc15mPipeline.evidenceAgreementCount}/11`, required: `≥${minEvidenceAgreement}`, gating: engineGating },
       { id: "MTF", label: "Timeframes aligned", pass: mtfPass, current: `${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5`, required: `≥${minMtfAligned}`, gating: engineGating },
@@ -4869,7 +4894,11 @@ async function checkAndSettle15mCycle(livePrice) {
           // to any outcome, stamped with the regime of the tick doing the settling
           // rather than the regime at lock. Measured calibration is served by
           // /api/signal/calibration-report.
-          serverLearningEngine.lastWeightUpdateTs = now;
+          //
+          // No weights are updated by a settlement, so no weight-update time is
+          // stamped here. This line set lastWeightUpdateTs = now, which was then
+          // persisted to calibration_state as a weight update. The settlement
+          // time itself is the row's resolvedAt (settledHistory[0].timestamp).
           serverLearningEngine.settledHistory.unshift({
             id: prevLog.id,
             asset: "BTC",
@@ -5244,7 +5273,10 @@ async function checkAndSettle15mCycle(livePrice) {
     void hydrateCycleRangeFromCandles(active15mCycle.cycleId, intervalStart);
   }
   active15mCycle.calibrationWindowMs = elapsedMs;
-  active15mCycle.calibrationDataAgeMs = now - lastMarketUpdateTs;
+  // null before this instance has recorded a market update (the gate in the same
+  // tick runs before the tick records its fetch), not an age counted from 1970.
+  active15mCycle.calibrationDataAgeMs =
+    lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
   const candidateDir =
     currentDirection === "DOWN"
       ? "DOWN"
@@ -5662,8 +5694,9 @@ async function checkAndSettle15mCycle(livePrice) {
     }
   }
   const timeRemainingSec = Math.max(0, Math.floor((intervalEnd - now) / 1e3));
-  const dataAgeMs = now - lastMarketUpdateTs;
-  const latencyMs = Math.max(0, dataAgeMs - 500);
+  // Log only. null (not an age from 1970) before any market update is recorded.
+  const dataAgeMs = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
+  const latencyMs = dataAgeMs === null ? null : Math.max(0, dataAgeMs - 500);
   const cycleHash = `${active15mCycle.cycleId}:${active15mCycle.status}:${active15mCycle.sequence}:${active15mCycle.isLocked}`;
   if (cycleHash !== lastLoggedCycleHash || now - lastHeartbeatLogTs >= 6e4) {
     lastLoggedCycleHash = cycleHash;
@@ -5763,12 +5796,16 @@ app.get(
     // Measured values only. This used to report a constant 12ms feed latency,
     // an engine that was always "RUNNING", a database that was always
     // "Connected", and deduplication counts invented as users + 2.
-    const lastModelRunSecAgo = Math.round((now - lastModelRunTs) / 100) / 10;
+    // Both timestamps are 0 until this instance records a run / a market update;
+    // that is served as null, not as seconds since 1970.
+    const lastModelRunSecAgo =
+      lastModelRunTs > 0 ? Math.round((now - lastModelRunTs) / 100) / 10 : null;
     res.json({
       marketFeed: {
         status: engineFeedStatus,
         latencyMs: null, // not measured by this server
-        lastUpdateSecAgo: Math.round((now - lastMarketUpdateTs) / 100) / 10,
+        lastUpdateSecAgo:
+          lastMarketUpdateTs > 0 ? Math.round((now - lastMarketUpdateTs) / 100) / 10 : null,
       },
       predictionEngine: {
         status: lastModelRunTs > 0 && lastModelRunSecAgo < 120 ? "RUNNING" : "STALE",
@@ -9701,14 +9738,21 @@ app.get(
     const uptimeSecs = Math.floor(process.uptime());
     const discordDiag = await runDiscordDiagnostics().catch(() => null);
     const services = {
-      DATABASE: { status: "healthy", latencyMs: 2, lastChecked: Date.now() },
+      // Statuses come from real state or configuration; nothing here is timed.
+      // DATABASE/WEBSOCKET were literal "healthy" at 2ms and 14ms, and referral /
+      // entitlement were "healthy" with nothing checked.
+      DATABASE: {
+        status: persistenceState === "HEALTHY_FIRESTORE" ? "healthy" : "degraded",
+        details: persistenceState,
+        latencyMs: null,
+      },
       STRIPE: {
-        status: process.env.STRIPE_SECRET_KEY ? "healthy" : "not_configured",
+        status: process.env.STRIPE_SECRET_KEY ? "configured" : "not_configured",
         details: process.env.STRIPE_SECRET_KEY ? "Key Present" : "Missing Key",
       },
       STRIPE_WEBHOOK: {
         status: process.env.STRIPE_WEBHOOK_SECRET
-          ? "healthy"
+          ? "configured"
           : "not_configured",
         details: process.env.STRIPE_WEBHOOK_SECRET
           ? "Webhook Secret Present"
@@ -9716,53 +9760,60 @@ app.get(
       },
       DISCORD: {
         status: getDiscordBotStatus().isReady ? "healthy" : "degraded",
-        details: discordDiag?.guildAccessible
-          ? "Guild Accessible"
-          : "Bot Initialized",
+        details: discordDiag == null
+          ? "Probe unavailable"
+          : discordDiag.guildAccessible
+            ? "Guild Accessible"
+            : "Guild not accessible",
       },
       GEMINI: {
-        status: !!ai ? "healthy" : "degraded",
-        details: !!ai ? "SDK Ready" : "API Key Missing",
+        status: !!ai ? "configured" : "not_configured",
+        details: !!ai ? "SDK configured" : "API Key Missing",
       },
       PREDICTION_ENGINE: {
         status: engineFeedStatus === "CONNECTED" ? "healthy" : "degraded",
         details: engineState,
       },
-      WEBSOCKET: { status: "healthy", latencyMs: 14 },
+      WEBSOCKET: { status: "not_running", latencyMs: null }, // ws is imported; no server is created
       MARKET_DATA: {
-        status: Date.now() - lastMarketUpdateTs < 6e4 ? "healthy" : "degraded",
-        lastUpdate: lastMarketUpdateTs,
+        // Never updated (0) is not healthy, and has no update time.
+        status:
+          lastMarketUpdateTs > 0 && Date.now() - lastMarketUpdateTs < 6e4
+            ? "healthy"
+            : "degraded",
+        lastUpdate: lastMarketUpdateTs || null,
       },
       REFERRAL_SYSTEM: {
-        status: "healthy",
+        status: "unknown",
         activePromoters: serverReferrals.length,
       },
       ENTITLEMENT_SERVICE: {
-        status: "healthy",
+        status: "unknown",
         profilesTracked: userDiscordProfiles.size,
       },
     };
+    // HEALTHY only when every service that is actually checked is healthy.
+    const checkedServices = [services.DATABASE, services.DISCORD, services.PREDICTION_ENGINE, services.MARKET_DATA];
     res.json({
-      status: "HEALTHY",
-      cpuUsagePct: Math.round(process.cpuUsage().user / 1e6),
+      status: checkedServices.every((svc) => svc.status === "healthy") ? "HEALTHY" : "DEGRADED",
+      // cpuUsage().user is cumulative CPU time, not a percentage.
+      cpuUsagePct: null,
+      cpuUserSeconds: Math.round(process.cpuUsage().user / 1e6),
       ramUsageMb: memUsageMb,
       apiLatencyMs: Math.round(Date.now() - now),
-      databaseLatencyMs: 4,
-      realtimeConnections:
-        serverUsers.length > 0
-          ? serverUsers.length + (Math.floor(Date.now() / 1e4) % 5)
-          : 3,
-      websocketStatus: "CONNECTED",
+      databaseLatencyMs: null,
+      realtimeConnections: null, // was users + clock % 5 (or 3)
+      websocketStatus: "NOT_RUNNING",
       uptimeSecs,
-      discordBotStatus: getDiscordBotStatus().isReady ? "ACTIVE" : "READY",
-      openAiStatus: !!ai ? "OPERATIONAL" : "DEGRADED",
+      discordBotStatus: getDiscordBotStatus().isReady ? "ACTIVE" : "NOT_CONNECTED",
+      openAiStatus: !!ai ? "CONFIGURED" : "NOT_CONFIGURED",
       stripeStatus: !!process.env.STRIPE_SECRET_KEY ? "CONFIGURED" : "STANDBY",
       geminiConnected: !!ai,
       stripeConnected: !!process.env.STRIPE_SECRET_KEY,
-      discordBotGuildAccess: discordDiag?.guildAccessible ?? false,
-      discordRoleHierarchyValid:
-        (discordDiag?.hierarchySufficient && discordDiag?.botHasManageRoles) ??
-        false,
+      discordBotGuildAccess: discordDiag ? discordDiag.guildAccessible : null,
+      discordRoleHierarchyValid: discordDiag
+        ? !!(discordDiag.hierarchySufficient && discordDiag.botHasManageRoles)
+        : null,
       services,
       timestamp: Date.now(),
     });
@@ -15349,6 +15400,12 @@ app.get(
   },
 );
 app.get("/api/model-status", async (req, res) => {
+  // Count the ledger, not whatever this instance happens to hold. Without this a
+  // cold instance answered before its boot hydration finished: production
+  // 2026-09-11 served settledCount 0 / Brier null on 1 of 10 requests while the
+  // other 9 (and 12 of 12 calibration-report requests, which already await this)
+  // served 166. Same single-flight, 4-minute-throttled refresh as its siblings.
+  try { await ensureLedgerFresh(); } catch {}
   const asset = (req.query.asset || "BTC").toUpperCase();
   const desk = req.query.desk || "15m";
   let settledCount = serverLearningEngine.todaySettledCount;
@@ -15385,9 +15442,12 @@ app.get("/api/model-status", async (req, res) => {
 });
 app.get("/api/live-engine/health", (req, res) => {
   const now = Date.now();
-  const btcFeedAge = now - lastMarketUpdateTs;
+  // A timestamp of 0 means this instance has never recorded that update: no age,
+  // no ISO time (new Date(0) is 1970-01-01), and never CONNECTED / ACTIVE.
+  const btcFeedAge = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
   const kalshiFeedAge = now - lastKalshiUpdateTs;
-  const predictionAge = now - lastPredictionUpdateTs;
+  const predictionAge =
+    lastPredictionUpdateTs > 0 ? now - lastPredictionUpdateTs : null;
   res.json({
     // Was the literal "CONNECTED": now read from when the engine last ticked.
     engine:
@@ -15395,15 +15455,23 @@ app.get("/api/live-engine/health", (req, res) => {
         ? now - _engineTickLastRunMs < 15e3 ? "CONNECTED" : "STALE"
         : "NOT_STARTED",
     btcFeed:
-      btcFeedAge < 15e3 ? "CONNECTED" : btcFeedAge < 6e4 ? "DEGRADED" : "STALE",
+      btcFeedAge === null
+        ? "NOT_STARTED"
+        : btcFeedAge < 15e3 ? "CONNECTED" : btcFeedAge < 6e4 ? "DEGRADED" : "STALE",
     kalshiFeed: kalshiFeedAge < 12e4 ? "CONNECTED" : "DEGRADED",
-    predictionEngine: predictionAge < 15e3 ? "ACTIVE" : "STALE", // both branches said ACTIVE
+    predictionEngine:
+      predictionAge === null
+        ? "NOT_STARTED"
+        : predictionAge < 15e3 ? "ACTIVE" : "STALE", // both branches said ACTIVE
     settlementEngine: null, // no in-process settlement heartbeat; settlement runs from the 15-minute cron
     database:
       db && persistenceState === "HEALTHY_FIRESTORE" ? "CONNECTED" : "DEGRADED",
-    lastMarketUpdate: new Date(lastMarketUpdateTs).toISOString(),
-    lastKalshiUpdate: new Date(lastKalshiUpdateTs).toISOString(),
-    lastPredictionUpdate: new Date(lastPredictionUpdateTs).toISOString(),
+    lastMarketUpdate:
+      lastMarketUpdateTs > 0 ? new Date(lastMarketUpdateTs).toISOString() : null,
+    lastKalshiUpdate:
+      lastKalshiUpdateTs > 0 ? new Date(lastKalshiUpdateTs).toISOString() : null,
+    lastPredictionUpdate:
+      lastPredictionUpdateTs > 0 ? new Date(lastPredictionUpdateTs).toISOString() : null,
     // Whether this process is permitted to write to Firestore, and why. Makes
     // the dev/prod separation observable instead of something you infer from
     // whether writes happen to be failing.
@@ -15545,8 +15613,10 @@ app.get("/api/vixy/state", async (req, res) => {
     edge: currentEdgePct / 100,
     lockEvaluation: latestLockEvaluation,
     guardianDecision: latestGuardianDecision,
-    lastMarketUpdateTs,
-    dataFreshness: engineFeedStatus === "CONNECTED" ? "LIVE" : "DEGRADED",
+    // null / not LIVE until this instance has recorded a market update.
+    lastMarketUpdateTs: lastMarketUpdateTs || null,
+    dataFreshness:
+      engineFeedStatus === "CONNECTED" && lastMarketUpdateTs > 0 ? "LIVE" : "DEGRADED",
     features: {
       asset: "BTC",
       desk: "15m",
@@ -15796,14 +15866,19 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // Binance, first success wins), and is null when no venue answered.
   // venuesLive counts the feeds that genuinely returned data on the last tick;
   // it is not a capability count.
-  const feedDataAgeMs = Math.max(0, Date.now() - lastMarketUpdateTs);
+  // null when this instance has never recorded a market update: no age to show,
+  // and the feed reads OFFLINE (what a boot-seeded huge age already produced).
+  const feedDataAgeMs =
+    lastMarketUpdateTs > 0 ? Math.max(0, Date.now() - lastMarketUpdateTs) : null;
   const kalshiFresh = Boolean(
     lastKalshiUpdateTs && Date.now() - lastKalshiUpdateTs < 12e4,
   );
   const feedHealth = {
     dataAgeMs: feedDataAgeMs,
     status:
-      engineFeedStatus !== "CONNECTED"
+      feedDataAgeMs === null
+        ? "OFFLINE"
+        : engineFeedStatus !== "CONNECTED"
         ? feedDataAgeMs <= 15e3
           ? "DEGRADED"
           : "OFFLINE"
@@ -16343,9 +16418,14 @@ app.get(
     const asset = (req.query.asset || "BTC").toUpperCase();
     const desk = req.query.desk || "15m";
     const now = Date.now();
-    const dataAgeMs = now - lastMarketUpdateTs;
+    // null when this instance has never recorded a market update. The status then
+    // stays OFFLINE and isLive is false (a boot-seeded age read as LIVE; a 0 seed
+    // without this guard would read as INVALID with an age counted from 1970).
+    const dataAgeMs = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
     let computedFeedStatus = "OFFLINE";
-    if (engineFeedStatus === "CONNECTED") {
+    if (dataAgeMs === null) {
+      computedFeedStatus = "OFFLINE";
+    } else if (engineFeedStatus === "CONNECTED") {
       if (dataAgeMs <= 3e3) computedFeedStatus = "LIVE";
       else if (dataAgeMs <= 7e3) computedFeedStatus = "DEGRADED";
       else if (dataAgeMs <= 15e3) computedFeedStatus = "STALE";
@@ -16356,7 +16436,7 @@ app.get(
     const isLive =
       computedFeedStatus === "LIVE" ||
       computedFeedStatus === "DEGRADED" ||
-      dataAgeMs <= 15e3;
+      (dataAgeMs !== null && dataAgeMs <= 15e3);
     let settledCount = serverLearningEngine.todaySettledCount;
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
     // Calibrated only once minSamplesNeeded settled locks exist (was literal true).
@@ -16659,7 +16739,7 @@ app.get(
       },
       predictionId: `pred_${currentEngineCycleId}_${now}`,
       predictionTimestamp: now,
-      marketTimestamp: lastMarketUpdateTs,
+      marketTimestamp: lastMarketUpdateTs || null, // null: no market update recorded
       sequenceNumber: currentEngineCycleId,
       sampleSize: settledCount,
       lifetimeObservations,
@@ -16736,7 +16816,7 @@ app.get(
       edgePct: isLive ? currentEdgePct : null,
       engineState: isLive ? engineState : "STALE",
       feedStatus: computedFeedStatus,
-      lastMarketUpdateTs,
+      lastMarketUpdateTs: lastMarketUpdateTs || null,
       lockEvaluation: isLive ? latestLockEvaluation : null,
       // Eight invented "algorithms" with fixed weights and status PASS ("VWAP
       // Floor" voted Bullish unconditionally). No engine computes per-algorithm
@@ -16802,7 +16882,7 @@ app.get(
         confidence: currentConfidence,
         price: spot,
         strike: kalshiStrike,
-        timestamp: lastMarketUpdateTs,
+        timestamp: lastMarketUpdateTs || null,
       },
       calibrationSampleSize: latestCalibrationState.calibrationSampleSize,
       calibrationMinimumSamples:
@@ -16818,8 +16898,11 @@ app.get(
 );
 app.get("/api/vixy/health", (req, res) => {
   const now = Date.now();
-  const tickAgeMs = now - lastMarketUpdateTs;
-  const marketConnected = tickAgeMs < 6e4 && engineFeedStatus === "CONNECTED";
+  // null when this instance has never recorded a market update / signal: not
+  // connected, not healthy, and no ISO time (new Date(0) is 1970-01-01).
+  const tickAgeMs = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
+  const marketConnected =
+    tickAgeMs !== null && tickAgeMs < 6e4 && engineFeedStatus === "CONNECTED";
   const elapsedSec = Math.max(
     0,
     Math.floor((now - active15mCycle.intervalStart) / 1e3),
@@ -16831,7 +16914,8 @@ app.get("/api/vixy/health", (req, res) => {
   res.json({
     marketFeed: {
       connected: marketConnected,
-      lastTickAt: new Date(lastMarketUpdateTs).toISOString(),
+      lastTickAt:
+        lastMarketUpdateTs > 0 ? new Date(lastMarketUpdateTs).toISOString() : null,
       tickAgeMs,
     },
     cycle: {
@@ -16842,13 +16926,15 @@ app.get("/api/vixy/health", (req, res) => {
       remainingSec,
     },
     telemetry: {
-      healthy: tickAgeMs < 3e4,
-      lastUpdateAt: new Date(lastMarketUpdateTs).toISOString(),
+      healthy: tickAgeMs !== null && tickAgeMs < 3e4,
+      lastUpdateAt:
+        lastMarketUpdateTs > 0 ? new Date(lastMarketUpdateTs).toISOString() : null,
     },
     signal: {
       // Was the literal true. Healthy means the signal updated recently.
-      healthy: now - lastSignalUpdateTs < 3e4,
-      lastUpdateAt: new Date(lastSignalUpdateTs).toISOString(),
+      healthy: lastSignalUpdateTs > 0 && now - lastSignalUpdateTs < 3e4,
+      lastUpdateAt:
+        lastSignalUpdateTs > 0 ? new Date(lastSignalUpdateTs).toISOString() : null,
       currentDecision:
         active15mCycle.lockedDecision ||
         active15mCycle.provisionalBias ||
@@ -16866,7 +16952,7 @@ app.get("/api/vixy/health", (req, res) => {
     },
     overall: marketConnected
       ? "LIVE"
-      : tickAgeMs < 12e4
+      : tickAgeMs !== null && tickAgeMs < 12e4
         ? "DEGRADED"
         : "OFFLINE",
   });
@@ -17959,9 +18045,10 @@ app.get("/api/performance-stats", (req, res) => {
   const wins = settled.filter((e) => e.outcome === "WIN").length;
   const winRate = Math.round((wins / sampleSize) * 1e3) / 10;
   // Journal entries carry an outcome but no forecast probability, so no Brier
-  // score can be computed here. This returned a literal 0.185 beside
-  // verified: true.
-  res.json({ winRate, brierScore: null, sampleSize, verified: true });
+  // score can be computed here (this returned a literal 0.185). Nor is this win
+  // rate verified: journal outcomes are what traders typed in, so it was wrong
+  // to serve verified: true once 30 entries existed.
+  res.json({ winRate, brierScore: null, sampleSize, verified: false, source: "SELF_REPORTED_JOURNAL" });
 });
 
 // A journal belongs to the signed-in account. Entries used to be keyed by a
@@ -18996,7 +19083,10 @@ async function persistCalibrationState() {
       learningEngine: {
         lifetimeObservations: serverLearningEngine.lifetimeObservations,
         todaySettledCount: serverLearningEngine.todaySettledCount,
-        lastWeightUpdateTs: serverLearningEngine.lastWeightUpdateTs,
+        // No weights are updated. This persisted the last settlement time under
+        // this name; null clears it (the write merges). Settlement times are in
+        // settledHistory[].timestamp below.
+        lastWeightUpdateTs: null,
         modelVersion: serverLearningEngine.modelVersion,
         historicalAccuracy: serverLearningEngine.historicalAccuracy,
         currentRegime: serverLearningEngine.currentRegime,

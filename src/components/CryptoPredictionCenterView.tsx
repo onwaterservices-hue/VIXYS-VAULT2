@@ -216,7 +216,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     return pts.map((x, i) => `${i === 0 ? 'M' : 'L'}${((Math.max(t0, Math.min(t1, x.t)) - t0) / (t1 - t0) * w).toFixed(1)},${(h - (x.p as number) * h).toFixed(1)}`).join(' ');
   })();
   const feedHealth = (canonicalDecision as any)?.feedHealth as
-    | { dataAgeMs: number; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
+    | { dataAgeMs: number | null; status: string; priceSource: string | null; venuesLive: number; venuesTotal: number }
     | undefined;
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [audioMuted, setAudioMuted] = useState<boolean>(true);

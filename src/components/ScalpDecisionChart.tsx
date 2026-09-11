@@ -799,7 +799,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
           <button
             onClick={() => setAudioEnabled(!audioEnabled)}
-            className={`p-2 rounded-xl border text-xs transition-all cursor-pointer ${
+            className={`p-2.5 rounded-xl border text-xs transition-all cursor-pointer ${
               audioEnabled
                 ? 'bg-purple-950/80 border-purple-400/50 text-purple-200 shadow-[0_0_15px_rgba(168,85,247,0.35)]'
                 : 'bg-slate-900/60 border-slate-800 text-slate-500'
