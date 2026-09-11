@@ -140,6 +140,18 @@ t.check('no 0.54 seed', !code.includes('let currentKalshiImpliedProb = 0.54'));
 t.check('no 5-95c clamp on the quote', !code.includes('Math.min(0.95, Math.max(0.05, yesAsk))') && !code.includes('Math.min(0.95, Math.max(0.05, yesBid))'));
 t.check('Kalshi market chosen by its trading window', code.includes('Date.parse(mk.open_time') && code.includes('Date.parse(mk.close_time') && !code.includes('const m = activeMarkets[0];'));
 t.check('YES price is the bid/ask midpoint', code.includes('(yesAsk + yesBid) / 2'));
+t.check('the read records its market close', code.includes('kalshiImpliedCloseMs = Date.parse(m.close_time);'));
+{
+  // Real tick code: a price whose market has closed stops being fresh.
+  const i = serverSrc.indexOf('    if (kalshiImpliedAtMs > 0 && kalshiImpliedCloseMs > 0 && Date.now() >= kalshiImpliedCloseMs) {');
+  const blk = i > 0 ? serverSrc.slice(i, serverSrc.indexOf('\n    }\n', i) + 7) : '';
+  t.check('close-invalidation block found', blk.length > 0);
+  const runBlk = (atMs, closeMs, nowMs) => new Function('st', 'Date', `let kalshiImpliedAtMs = st.at, kalshiImpliedCloseMs = st.close, currentKalshiImpliedProb = st.p;\n${blk}\nreturn { at: kalshiImpliedAtMs, p: currentKalshiImpliedProb };`)({ at: atMs, close: closeMs, p: 0.37 }, { now: () => nowMs });
+  const closed = runBlk(NOW - 5000, NOW - 1000, NOW);
+  t.check('a 5s-old read from a closed market is dropped', closed.at === 0 && closed.p === null, JSON.stringify(closed));
+  const open = runBlk(NOW - 5000, NOW + 60000, NOW);
+  t.check('a read from the open market is kept', open.at === NOW - 5000 && open.p === 0.37, JSON.stringify(open));
+}
 t.check('tick no longer writes a pipeline price back', !/currentKalshiImpliedProb =\s*\n\s*latestBtc15mPipeline\.edgeVsConfidence\.kalshiImpliedProbability/.test(code));
 t.check('early-entry window requires a fresh price', code.includes('latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability !== null &&'));
 t.check('no invented Polymarket price or spread', !code.includes('currentKalshiImpliedProb - 0.02') && !code.includes('spreadPct: 0.02'));
