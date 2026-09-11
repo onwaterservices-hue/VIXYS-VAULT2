@@ -168,11 +168,17 @@ let latestBtc15mPipeline = null;
 let latestCrossAssetContext = { state: "ALIGNED", riskPenalty: 0, directionalAgreementRatio: 1 };
 let latestGuardianDecision = { action: "HOLD", reversalThreat: 20 };
 let latestCalibrationState = {};
-let serverLearningEngine = { settledHistory: [], historicalAccuracy: null, currentRegime: "TRENDING_BULL", todaySettledCount: 0, lifetimeObservations: 0 };
+let serverLearningEngine = { settledHistory: [], historicalAccuracy: null, currentRegime: null, todaySettledCount: 0, lifetimeObservations: 0 };
 let persistentSignalLogs = [];
 let lockedCycleIds = new Set();
 let cycleVwapAccumulator = { cycleStart: 0, cumulativePv: 0, cumulativeVol: 0, vwap: 0 };
 let rollingBtcTicks = [];
+// Real closed 1m candle closes that getPriceAtAgo falls back to when an
+// instance's own ticks do not reach a lookback (server.ts, PR #70). Every
+// replayed cycle carries full tick history, so the faithful value is empty and
+// the fallback never fires. Missing, the pipeline threw ReferenceError and the
+// replay harness could not run at all after #70.
+let hydratedBtcCloses = [];
 let lastMarketUpdateTs = 0;
 let engineFeedStatus = "CONNECTED";
 let currentBtcPrice = 0;
