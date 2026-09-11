@@ -202,7 +202,7 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
-import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview } from "./src/services/referral/referralRewards";
+import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview, useReferralRewardsDatapath } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
 /**
@@ -6731,6 +6731,11 @@ const discordFirestore = {
   ready: (clientDb) => _adminActive || !!clientDb,
 };
 
+// referralRewards.ts runs on this same Admin-aware datapath (see the module's
+// DATAPATH note). On its own client-SDK imports every read and write was
+// PERMISSION_DENIED in production, where the client SDK is never signed in.
+useReferralRewardsDatapath(discordFirestore);
+
 app.get(
   "/api/discord/connect",
   createDiscordConnectHandler(() => db, authenticateSession, discordFirestore),
@@ -6936,10 +6941,10 @@ async function claimCronWindow(job, windowMs) {
 }
 __name(claimCronWindow, "claimCronWindow");
 
-async function recordCronWindowResult(claim, result) {
+async function recordCronWindowResult(claim, result, status = "DONE") {
   if (!claim || !claim.ref) return;
   try {
-    await setDoc(claim.ref, { status: "DONE", finishedAt: new Date().toISOString(), result }, { merge: true });
+    await setDoc(claim.ref, { status, finishedAt: new Date().toISOString(), result }, { merge: true });
   } catch {
     /* the run already happened; a missing record only means a repeat call re-runs */
   }
@@ -6960,6 +6965,8 @@ app.all("/api/cron/referral-leaderboard", async (req, res) => {
     res.json(rebuilt);
   } catch (e) {
     console.error("[REFERRAL] leaderboard rebuild failed", e);
+    // Record the failure: a claim left at RUNNING reads as a job still in progress.
+    await recordCronWindowResult(claim, { ok: false, error: String((e && e.message) || e) }, "FAILED");
     res.status(503).json({ ok: false });
   }
 });
@@ -18175,11 +18182,13 @@ app.all("/api/cron/backtest-refresh", async (req, res) => {
   try {
     const { candles, reqCount, errCount } = await fetchBacktestCandles(180, 4e4);
     if (candles.length < 100) {
-      return res.status(200).json({
+      const insufficient = {
         success: false,
         error: "INSUFFICIENT_CANDLE_DATA",
         message: `Only fetched ${candles.length} candles (${reqCount} requests, ${errCount} errors).`,
-      });
+      };
+      await recordCronWindowResult(claim, insufficient, "FAILED");
+      return res.status(200).json(insufficient);
     }
     const summary = runMeanReversionBacktest(candles, 0.15);
     let persisted = false;
@@ -18194,7 +18203,9 @@ app.all("/api/cron/backtest-refresh", async (req, res) => {
     await recordCronWindowResult(claim, refreshResult);
     res.json(refreshResult);
   } catch (err) {
-    res.status(200).json({ success: false, error: "BACKTEST_REFRESH_FAILED", message: err?.message || String(err) });
+    const failed = { success: false, error: "BACKTEST_REFRESH_FAILED", message: err?.message || String(err) };
+    await recordCronWindowResult(claim, failed, "FAILED");
+    res.status(200).json(failed);
   }
 });
 

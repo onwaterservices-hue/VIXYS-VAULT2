@@ -27,6 +27,19 @@ import {
   REASON, ReasonCode,
 } from "./referralPolicy";
 
+// DATAPATH: every read and write below used to call the Firebase CLIENT SDK
+// imported above. On the production backend the Admin SDK service account is the
+// datapath and the client SDK is never signed in, so firestore.rules
+// (isBackendSystem) rejected all of it with PERMISSION_DENIED: balances,
+// redemptions, payout tickets, referral rewards, reversals and the leaderboard
+// (observed 2026-09-11: /api/cron/referral-leaderboard -> 503). server.ts now
+// injects its Admin-aware datapath with useReferralRewardsDatapath(); the client
+// SDK stays the default so nothing else changes.
+let fx: any = { doc, getDoc, setDoc, collection, query, where, getDocs, runTransaction };
+export function useReferralRewardsDatapath(datapath: any): void {
+  fx = { ...fx, ...datapath };
+}
+
 export const NEW_COL = {
   REWARDS: "referral_rewards",
   LEDGER: "vxy_ledger",
@@ -45,7 +58,7 @@ async function logEvent(db: Firestore, type: string, payload: Record<string, unk
   const id = Date.now() + "_" + Math.random().toString(36).slice(2, 10);
   console.log("[REFERRAL] " + type, JSON.stringify(payload));
   try {
-    await setDoc(doc(db, NEW_COL.EVENTS, id), { type, ...payload, at: nowIso() });
+    await fx.setDoc(fx.doc(db, NEW_COL.EVENTS, id), { type, ...payload, at: nowIso() });
   } catch (e) {
     console.warn("[REFERRAL] event log write failed", String(e));
   }
@@ -105,11 +118,11 @@ export async function qualifyReferralConversion(
   let awarded = false;
   let blocked: ReasonCode | null = null;
 
-  await runTransaction(db, async (tx) => {
-    const rewardRef = doc(db, NEW_COL.REWARDS, referralId);
+  await fx.runTransaction(db, async (tx) => {
+    const rewardRef = fx.doc(db, NEW_COL.REWARDS, referralId);
     if ((await tx.get(rewardRef)).exists()) return;
 
-    const custRef = doc(db, NEW_COL.REWARDS, "__cust__" + stripeCustomerId);
+    const custRef = fx.doc(db, NEW_COL.REWARDS, "__cust__" + stripeCustomerId);
     const custSeen = await tx.get(custRef);
     if (custSeen.exists() && custSeen.data()?.referralId !== referralId) {
       blocked = REASON.DUPLICATE_CUSTOMER;
@@ -132,7 +145,7 @@ export async function qualifyReferralConversion(
       policyVersion: REFERRAL_POLICY_VERSION,
     });
 
-    tx.set(doc(db, NEW_COL.LEDGER, "earn_" + referralId), {
+    tx.set(fx.doc(db, NEW_COL.LEDGER, "earn_" + referralId), {
       entryId: "earn_" + referralId, userId: referrerUserId, referralId,
       stripeEventId, amountCredits: rewardCredits,
       type: "EARN", status: "PENDING", availableAt,
@@ -164,7 +177,7 @@ export async function qualifyReferralConversion(
 export async function reverseReferralReward(
   db: Firestore, referralId: string, reason: ReasonCode, stripeEventId: string,
 ): Promise<{ ok: boolean; reversedCredits?: number }> {
-  const snap = await getDoc(doc(db, NEW_COL.REWARDS, referralId));
+  const snap = await fx.getDoc(fx.doc(db, NEW_COL.REWARDS, referralId));
   if (!snap.exists()) return { ok: false };
 
   const reward = snap.data() as { amountCredits: number; referrerUserId: string; status: string };
@@ -172,8 +185,8 @@ export async function reverseReferralReward(
 
   const entryId = "rev_" + referralId + "_" + stripeEventId;
 
-  await runTransaction(db, async (tx) => {
-    const revRef = doc(db, NEW_COL.LEDGER, entryId);
+  await fx.runTransaction(db, async (tx) => {
+    const revRef = fx.doc(db, NEW_COL.LEDGER, entryId);
     if ((await tx.get(revRef)).exists()) return;
 
     tx.set(revRef, {
@@ -183,7 +196,7 @@ export async function reverseReferralReward(
       createdAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
     });
 
-    tx.set(doc(db, NEW_COL.REWARDS, referralId), {
+    tx.set(fx.doc(db, NEW_COL.REWARDS, referralId), {
       status: "REVERSED", reversedAt: nowIso(), reversalReason: reason,
     }, { merge: true });
   });
@@ -199,8 +212,8 @@ export interface Balance {
 
 /** Balance is always derived from the ledger. Never read from a stored field. */
 export async function getBalance(db: Firestore, userId: string): Promise<Balance> {
-  const snap = await getDocs(
-    query(collection(db, NEW_COL.LEDGER), where("userId", "==", userId)),
+  const snap = await fx.getDocs(
+    fx.query(fx.collection(db, NEW_COL.LEDGER), fx.where("userId", "==", userId)),
   );
 
   const b: Balance = {
@@ -255,7 +268,7 @@ export async function redeemCreditsForDay(
   }
 
   const entryId = "day_" + userId + "_" + Date.now();
-  await setDoc(doc(db, NEW_COL.LEDGER, entryId), {
+  await fx.setDoc(fx.doc(db, NEW_COL.LEDGER, entryId), {
     entryId, userId, amountCredits: -cost,
     type: "REDEEM_DAY", status: "REDEEMED", daysGranted: wanted,
     createdAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
@@ -281,13 +294,13 @@ export async function openPayoutTicket(
 
   const amount = balance.available;
 
-  await setDoc(doc(db, NEW_COL.LEDGER, "escrow_" + ticketId), {
+  await fx.setDoc(fx.doc(db, NEW_COL.LEDGER, "escrow_" + ticketId), {
     entryId: "escrow_" + ticketId, userId, ticketId,
     amountCredits: -amount, type: "PAYOUT", status: "ESCROWED",
     createdAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
   });
 
-  await setDoc(doc(db, NEW_COL.TICKETS, ticketId), {
+  await fx.setDoc(fx.doc(db, NEW_COL.TICKETS, ticketId), {
     ticketId, userId, credits: amount, status: "REQUESTED",
     createdAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
   });
@@ -302,14 +315,14 @@ export async function resolvePayoutTicket(
   outcome: "FULFILLED" | "DENIED",
   payoutType: string | null, reason: string,
 ): Promise<{ ok: boolean; message?: string }> {
-  const tSnap = await getDoc(doc(db, NEW_COL.TICKETS, ticketId));
+  const tSnap = await fx.getDoc(fx.doc(db, NEW_COL.TICKETS, ticketId));
   if (!tSnap.exists()) return { ok: false, message: "Ticket not found." };
 
   const t = tSnap.data() as { userId: string; credits: number; status: string };
   if (t.status !== "REQUESTED") return { ok: false, message: "Ticket already " + t.status + "." };
 
   if (outcome === "DENIED") {
-    await setDoc(doc(db, NEW_COL.LEDGER, "release_" + ticketId), {
+    await fx.setDoc(fx.doc(db, NEW_COL.LEDGER, "release_" + ticketId), {
       entryId: "release_" + ticketId, userId: t.userId, ticketId,
       amountCredits: Math.abs(t.credits),
       type: "ADJUSTMENT", status: "AVAILABLE",
@@ -317,12 +330,12 @@ export async function resolvePayoutTicket(
       policyVersion: REFERRAL_POLICY_VERSION,
     });
   } else {
-    await setDoc(doc(db, NEW_COL.LEDGER, "escrow_" + ticketId), {
+    await fx.setDoc(fx.doc(db, NEW_COL.LEDGER, "escrow_" + ticketId), {
       status: "REDEEMED", fulfilledAt: nowIso(), adminUserId, payoutType, reason,
     }, { merge: true });
   }
 
-  await setDoc(doc(db, NEW_COL.TICKETS, ticketId), {
+  await fx.setDoc(fx.doc(db, NEW_COL.TICKETS, ticketId), {
     status: outcome, adminUserId, payoutType, reason, resolvedAt: nowIso(),
   }, { merge: true });
 
@@ -345,8 +358,8 @@ export async function reverseRewardsForReferredUser(
 ): Promise<{ ok: boolean; reversed: number }> {
   if (!referredUserId) return { ok: false, reversed: 0 };
 
-  const snap = await getDocs(
-    query(collection(db, NEW_COL.REWARDS), where("referredUserId", "==", referredUserId)),
+  const snap = await fx.getDocs(
+    fx.query(fx.collection(db, NEW_COL.REWARDS), fx.where("referredUserId", "==", referredUserId)),
   );
 
   let reversed = 0;
@@ -377,7 +390,7 @@ export async function reverseRewardsForReferredUser(
 export async function rebuildLeaderboard(
   db: Firestore,
 ): Promise<{ ok: boolean; entries: number }> {
-  const snap = await getDocs(collection(db, NEW_COL.REWARDS));
+  const snap = await fx.getDocs(fx.collection(db, NEW_COL.REWARDS));
   const counts = new Map<string, number>();
   snap.forEach((d) => {
     const r = d.data() as { referrerUserId?: string; status?: string };
@@ -391,7 +404,7 @@ export async function rebuildLeaderboard(
     const handle = stem.slice(0, 2) + "***" + (stem.length > 2 ? stem.slice(-1) : "");
     return { userId, handle, conversions };
   });
-  await setDoc(doc(db, NEW_COL.LEADERBOARD, "current"), {
+  await fx.setDoc(fx.doc(db, NEW_COL.LEADERBOARD, "current"), {
     entries, rebuiltAt: nowIso(), policyVersion: REFERRAL_POLICY_VERSION,
   });
   return { ok: true, entries: entries.length };
@@ -399,7 +412,7 @@ export async function rebuildLeaderboard(
 
 /** Top 10 plus the caller's own rank, even when outside the top 10. */
 export async function getLeaderboardWithRank(db: Firestore, userId: string) {
-  const snap = await getDoc(doc(db, NEW_COL.LEADERBOARD, "current"));
+  const snap = await fx.getDoc(fx.doc(db, NEW_COL.LEADERBOARD, "current"));
   const entries = snap.exists()
     ? ((snap.data()?.entries ?? []) as { userId: string; handle: string; conversions: number }[])
     : [];
@@ -419,8 +432,8 @@ export async function getLeaderboardWithRank(db: Firestore, userId: string) {
  */
 export async function getAdminReferralOverview(db: Firestore) {
   const [ticketSnap, rewardSnap] = await Promise.all([
-    getDocs(collection(db, NEW_COL.TICKETS)),
-    getDocs(collection(db, NEW_COL.REWARDS)),
+    fx.getDocs(fx.collection(db, NEW_COL.TICKETS)),
+    fx.getDocs(fx.collection(db, NEW_COL.REWARDS)),
   ]);
 
   const tickets: Record<string, unknown>[] = [];
