@@ -344,7 +344,7 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
               </button>
             </div>
             <div className="text-[10px] text-purple-300/50 flex items-center justify-center gap-2">
-              <span>✓ Sub-second execution</span>
+              <span>✓ Direct Kalshi API orders</span>
               <span>•</span>
               <span>✓ Idempotent risk caps</span>
               <span>•</span>
