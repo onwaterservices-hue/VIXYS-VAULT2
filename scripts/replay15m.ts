@@ -229,7 +229,7 @@ async function main() {
   console.log(`source     : ${SOURCE}${SOURCE === 'trades' ? ` (${BUCKET_SECONDS}s buckets from real trade prints)` : ' (1-minute candles)'}`);
 
   // Unified observation stream: [tsMs, price] pairs the engine is ticked with.
-  let stream: { tsMs: number; price: number; buyVolume?: number; sellVolume?: number }[] = [];
+  let stream: { tsMs: number; price: number; buyVolume?: number; sellVolume?: number; tradeCount?: number }[] = [];
   let byMinute = new Map<number, Candle>();
   let sourceSummary = '';
   let tradeStats: any = null;
@@ -241,7 +241,7 @@ async function main() {
       onProgress: (m) => process.stdout.write(`\n${m}`),
     });
     tradeStats = stats;
-    stream = ticks.map((t) => ({ tsMs: t.tsMs, price: t.price, buyVolume: t.buyVolume, sellVolume: t.sellVolume }));
+    stream = ticks.map((t) => ({ tsMs: t.tsMs, price: t.price, buyVolume: t.buyVolume, sellVolume: t.sellVolume, tradeCount: t.tradeCount }));
     console.log('');
     console.log(`             ${stats.bucketsTotal} buckets `
       + `(${stats.bucketsWithTrades} with real prints, ${stats.bucketsEmpty} empty), `
@@ -291,7 +291,7 @@ async function main() {
 
   // Group the observation stream into cycles. Only ticks belonging to a cycle
   // are ever visible to that cycle, and they are consumed in time order.
-  const byCycle = new Map<number, { tsMs: number; price: number; buyVolume?: number; sellVolume?: number }[]>();
+  const byCycle = new Map<number, { tsMs: number; price: number; buyVolume?: number; sellVolume?: number; tradeCount?: number }[]>();
   for (const tk of stream) {
     const cs = Math.floor(tk.tsMs / CYCLE_MS) * CYCLE_MS;
     if (!byCycle.has(cs)) byCycle.set(cs, []);
@@ -305,6 +305,27 @@ async function main() {
   const minCoverage = args['min-coverage']
     ? Number(args['min-coverage'])
     : Math.floor(expectedPerCycle * 0.8);
+
+  // Real aggressor flow from the trade buckets, carried across cycles and
+  // measured with the server's rule: >=90% continuous coverage of the window,
+  // >=10 trades and some volume. Candles carry no flow, so candle runs pass
+  // none and the engine treats flow as unmeasured.
+  const flowBuf: { tsMs: number; buy: number; sell: number; trades: number }[] = [];
+  const flowWindow = (nowMs: number, sec: number) => {
+    let buy = 0, sell = 0, trades = 0, earliest = nowMs;
+    for (let i = flowBuf.length - 1; i >= 0; i--) {
+      const x = flowBuf[i];
+      if (x.tsMs <= nowMs - sec * 1000) break;
+      buy += x.buy; sell += x.sell; trades += x.trades; earliest = x.tsMs;
+    }
+    const coverageSec = Math.min(sec, Math.round((nowMs - earliest) / 1000) + BUCKET_SECONDS);
+    const total = buy + sell;
+    return {
+      windowSec: sec, buyBTC: Math.round(buy * 1e3) / 1e3, sellBTC: Math.round(sell * 1e3) / 1e3,
+      buyShare: total > 0 ? Math.round((buy / total) * 1e3) / 1e3 : null, tradeCount: trades, coverageSec, ageMs: 0,
+      measured: coverageSec >= sec * 0.9 && trades >= 10 && total > 0, source: 'REPLAY_TRADE_BUCKETS',
+    };
+  };
 
   for (let cs = startMs; cs < endMs; cs += CYCLE_MS) {
     const cycleTicks = byCycle.get(cs) || [];
@@ -338,7 +359,15 @@ async function main() {
       assertNoLookahead(tickNow, tickNow);
       const spot = tk.price;
 
-      sandbox.tick(spot, tickNow, strike);
+      let realFlow: any = null;
+      if (SOURCE === 'trades') {
+        // A gap in the stream (e.g. a skipped cycle) breaks coverage.
+        if (flowBuf.length && tickNow - flowBuf[flowBuf.length - 1].tsMs > 2 * BUCKET_SECONDS * 1000) flowBuf.length = 0;
+        flowBuf.push({ tsMs: tickNow, buy: tk.buyVolume ?? 0, sell: tk.sellVolume ?? 0, trades: tk.tradeCount ?? 0 });
+        while (flowBuf.length && flowBuf[0].tsMs <= tickNow - 180_000) flowBuf.shift();
+        realFlow = { w60: flowWindow(tickNow, 60), w180: flowWindow(tickNow, 180) };
+      }
+      sandbox.tick(spot, tickNow, strike, realFlow);
       const gate = sandbox.canLock(spot, tickNow);
       const st = sandbox.read();
       rec.ticks++;

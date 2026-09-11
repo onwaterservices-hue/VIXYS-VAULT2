@@ -67,7 +67,7 @@ export interface SandboxOptions {
 
 export interface EngineSandbox {
   /** Advance one tick: run the real pipeline + state derivation at this price/time. */
-  tick(spot: number, nowMs: number, strike: number): void;
+  tick(spot: number, nowMs: number, strike: number, realFlow?: unknown): void;
   /** Run the real canLockCurrentCycle against current state, at replay time nowMs. */
   canLock(spot: number, nowMs?: number): any;
   /** Start a fresh 15-minute cycle. */
@@ -202,7 +202,9 @@ let currentConfidence = 50;
 let currentEdgePct = 0;
 let currentModelProbability = 0.5;
 let currentDirection = "NEUTRAL";
-let currentKalshiImpliedProb = 0.5;
+// The replay has no Kalshi price history: no market price, so no edge.
+let currentKalshiImpliedProb = null;
+let kalshiImpliedAtMs = 0;
 let persistenceSeconds = 0;
 let livePrice = 0;
 let now = 0;
@@ -282,14 +284,14 @@ return {
     cycleVwapAccumulator = { cycleStart: 0, cumulativePv: 0, cumulativeVol: 0, vwap: 0 };
   },
 
-  tick(spot, nowMs, strike) {
+  tick(spot, nowMs, strike, realFlow = null) {
     __nowMs = nowMs;
     currentBtcPrice = spot;
     lastMarketUpdateTs = nowMs;      // the replay feed is never stale
     engineFeedStatus = "CONNECTED";
     __deriveInputs(spot, strike);
     latestBtc15mPipeline = evaluateBtc15mHighConvictionPipeline(
-      spot, strike, nowMs, currentBullVolumePct, currentMomentum, 0,
+      spot, strike, nowMs, currentBullVolumePct, currentMomentum, 0, realFlow,
     );
     __deriveState();
     __recordObservation(spot, nowMs, active15mCycle.intervalStart);

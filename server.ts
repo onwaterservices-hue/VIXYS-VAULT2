@@ -1452,12 +1452,105 @@ function hasTelemetryChangedSignificantly(newObs, prevObs) {
 }
 __name(hasTelemetryChangedSignificantly, "hasTelemetryChangedSignificantly");
 let currentModelProbability = 0.5;
-let currentKalshiImpliedProb = 0.54;
+let currentKalshiImpliedProb = null;
 // When the Kalshi market was last actually read. The seed above is not a
 // market price; anything downstream that claims "market probability" must
 // check this stamp is recent before using currentKalshiImpliedProb.
 let kalshiImpliedAtMs = 0;
-let currentEdgePct = 0;
+// ---- REAL AGGRESSOR FLOW (Coinbase BTC-USD trades) --------------------------
+// The reversal watch and the ORDER_FLOW evidence family read buyers vs sellers
+// from real prints. Coinbase reports `side` as the MAKER side: a "sell" maker
+// means the taker bought. One request returns the newest 1000 trades (about a
+// minute in an active market). Trades are accumulated per instance and
+// deduplicated by trade_id; a window counts as measured only when continuous
+// coverage reaches 90% of it, it holds at least 10 trades, and the last fetch
+// is under 15s old.
+let realTakerTrades = [];
+let realTakerContinuousSinceMs = 0;
+let realTakerFetchedAtMs = 0;
+let realTakerFetchInFlight = null;
+let latestRealFlow = null;
+function mergeRealTakerTrades(held, incoming, nowMs, continuousSinceMs, keepMs = 300e3) {
+  const byId = new Map();
+  let heldNewest = -Infinity;
+  for (const t of held) {
+    byId.set(t.id, t);
+    if (t.tsMs > heldNewest) heldNewest = t.tsMs;
+  }
+  let incomingOldest = Infinity;
+  for (const t of incoming) {
+    if (!t || !Number.isFinite(t.tsMs) || !(t.size > 0) || (t.takerSide !== "BUY" && t.takerSide !== "SELL")) continue;
+    byId.set(t.id, t);
+    if (t.tsMs < incomingOldest) incomingOldest = t.tsMs;
+  }
+  let since = continuousSinceMs;
+  if (incomingOldest !== Infinity && (held.length === 0 || incomingOldest > heldNewest)) {
+    // The new batch does not reach back to anything held: coverage restarts.
+    since = incomingOldest;
+  }
+  const cutoff = nowMs - keepMs;
+  const trades = [...byId.values()].filter((t) => t.tsMs >= cutoff).sort((a, b) => a.tsMs - b.tsMs);
+  if (trades.length && since < trades[0].tsMs) since = trades[0].tsMs;
+  return { trades, continuousSinceMs: trades.length ? since : 0 };
+}
+__name(mergeRealTakerTrades, "mergeRealTakerTrades");
+function summarizeRealTakerFlowFrom(trades, continuousSinceMs, fetchedAtMs, nowMs, windowSec) {
+  const start = nowMs - windowSec * 1e3;
+  let buyBTC = 0;
+  let sellBTC = 0;
+  let tradeCount = 0;
+  for (const t of trades) {
+    if (t.tsMs <= start || t.tsMs > nowMs) continue;
+    tradeCount++;
+    if (t.takerSide === "BUY") buyBTC += t.size;
+    else sellBTC += t.size;
+  }
+  const coverageStart = continuousSinceMs > 0 ? Math.max(start, continuousSinceMs) : nowMs;
+  const coverageSec = trades.length ? Math.min(windowSec, Math.max(0, Math.round((nowMs - coverageStart) / 1e3))) : 0;
+  const ageMs = fetchedAtMs > 0 ? Math.max(0, nowMs - fetchedAtMs) : null;
+  const total = buyBTC + sellBTC;
+  return {
+    windowSec,
+    buyBTC: Math.round(buyBTC * 1e3) / 1e3,
+    sellBTC: Math.round(sellBTC * 1e3) / 1e3,
+    buyShare: total > 0 ? Math.round((buyBTC / total) * 1e3) / 1e3 : null,
+    tradeCount,
+    coverageSec,
+    ageMs,
+    measured: coverageSec >= windowSec * 0.9 && tradeCount >= 10 && total > 0 && ageMs !== null && ageMs < 15e3,
+    source: "COINBASE_TRADES",
+  };
+}
+__name(summarizeRealTakerFlowFrom, "summarizeRealTakerFlowFrom");
+async function refreshRealTakerFlow(nowMs) {
+  if (realTakerFetchInFlight) return realTakerFetchInFlight;
+  if (nowMs - realTakerFetchedAtMs < 2500) return null;
+  realTakerFetchInFlight = (async () => {
+    try {
+      const res = await fetchWithTimeout("https://api.exchange.coinbase.com/products/BTC-USD/trades?limit=1000", {}, 2500);
+      if (!res.ok) return;
+      const raw = await res.json();
+      if (!Array.isArray(raw)) return;
+      const incoming = raw.map((t) => ({
+        id: t.trade_id,
+        tsMs: Date.parse(t.time),
+        size: parseFloat(t.size),
+        takerSide: t.side === "sell" ? "BUY" : t.side === "buy" ? "SELL" : null,
+      }));
+      const merged = mergeRealTakerTrades(realTakerTrades, incoming, Date.now(), realTakerContinuousSinceMs);
+      realTakerTrades = merged.trades;
+      realTakerContinuousSinceMs = merged.continuousSinceMs;
+      realTakerFetchedAtMs = Date.now();
+    } catch {
+      // A failed fetch leaves the last measurement to age out; nothing is filled in.
+    } finally {
+      realTakerFetchInFlight = null;
+    }
+  })();
+  return realTakerFetchInFlight;
+}
+__name(refreshRealTakerFlow, "refreshRealTakerFlow");
+let currentEdgePct = null;
 let persistenceSeconds = 0;
 const requiredPersistenceSeconds = 15;
 let errorCount = 0;
@@ -2011,11 +2104,11 @@ let latestBtc15mPipeline = {
     breakoutState: "RANGE_BOUND",
   },
   orderFlowAnalytics: {
-    takerBuyRatio: 1,
-    netDeltaBTC: 0,
+    takerBuyShare60: null,
+    netDeltaBTC: null,
     bidAskImbalancePct: 0,
-    absorptionState: "NEUTRAL",
-    flowClassification: "NEUTRAL",
+    absorptionState: "UNMEASURED",
+    flowClassification: "UNMEASURED",
   },
   chopAnalytics: {
     chopScore: 0,
@@ -2040,8 +2133,8 @@ let latestBtc15mPipeline = {
   },
   edgeVsConfidence: {
     modelProbability: 0.5,
-    kalshiImpliedProbability: 0.5,
-    realEdgePct: 0,
+    kalshiImpliedProbability: null,
+    realEdgePct: null,
     calibratedConfidencePct: 50,
     pUp: 0.48,
     pDown: 0.48,
@@ -2112,6 +2205,7 @@ function evaluateBtc15mHighConvictionPipeline(
   bullVolPct,
   rawMomentum,
   crossAssetPen = 0,
+  realFlow = null,
 ) {
   const currentIntervalStart =
     Math.floor(now / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
@@ -2399,25 +2493,36 @@ function evaluateBtc15mHighConvictionPipeline(
       highLowStructure = "COMPRESSED";
     }
   }
-  const recentDeltas = rollingBtcTicks.slice(-15).map((t) => t.delta);
-  const netDeltaBTC =
-    Math.round(recentDeltas.reduce((a, b) => a + b, 0) * 10) / 10;
+  // Real aggressor flow: Coinbase taker buys vs sells over the last 60s,
+  // measured server-side each tick. The previous inputs here -- bullVolPct and a
+  // "net delta" summed from it -- were computed from spot vs strike, which is a
+  // restatement of moneyness, not order flow. Unmeasured flow is UNMEASURED and
+  // is scored as the adverse case below.
+  const flow60 =
+    realFlow && realFlow.w60 && realFlow.w60.measured === true && typeof realFlow.w60.buyShare === "number"
+      ? realFlow.w60
+      : null;
+  const flowMeasured = flow60 !== null;
+  const withSideShare = !flowMeasured
+    ? null
+    : candidateDir === "UP"
+      ? flow60.buyShare
+      : candidateDir === "DOWN"
+        ? Math.round((1 - flow60.buyShare) * 1e3) / 1e3
+        : null;
+  const netDeltaBTC = flowMeasured ? Math.round((flow60.buyBTC - flow60.sellBTC) * 10) / 10 : null;
   const bidAskImbalancePct = Math.round((bullVolPct - 50) * 2 * 10) / 10;
-  let absorptionState = "NEUTRAL";
-  if (candidateDir === "UP") {
-    if (bullVolPct >= 65 && spot < localResistance - 10 && mom1mPct < -0.01) {
+  const priceWithSide =
+    candidateDir === "UP" ? mom1mPct > 0.01 : candidateDir === "DOWN" ? mom1mPct < -0.01 : false;
+  let absorptionState = flowMeasured ? "NEUTRAL" : "UNMEASURED";
+  if (withSideShare !== null) {
+    if (withSideShare >= 0.6 && !priceWithSide) {
+      // Our side is aggressing but price is not following: absorbed.
       absorptionState = "ABSORBED";
-    } else if (bullVolPct >= 60 && mom1mPct > 0.02) {
+    } else if (withSideShare >= 0.6) {
       absorptionState = "CONTINUING";
-    } else if (bullVolPct < 45) {
-      absorptionState = "EXHAUSTING";
-    }
-  } else if (candidateDir === "DOWN") {
-    if (bullVolPct <= 35 && spot > localSupport + 10 && mom1mPct > 0.01) {
-      absorptionState = "ABSORBED";
-    } else if (bullVolPct <= 40 && mom1mPct < -0.02) {
-      absorptionState = "CONTINUING";
-    } else if (bullVolPct > 55) {
+    } else if (withSideShare <= 0.4) {
+      // Aggressors are hitting the other side.
       absorptionState = "EXHAUSTING";
     }
   }
@@ -2428,7 +2533,9 @@ function evaluateBtc15mHighConvictionPipeline(
         ? "ABSORPTION"
         : absorptionState === "EXHAUSTING"
           ? "EXHAUSTING"
-          : "NEUTRAL";
+          : absorptionState === "UNMEASURED"
+            ? "UNMEASURED"
+            : "NEUTRAL";
   let dynamicRegime = "RANGING_NEUTRAL";
   if (
     highLowStructure === "HIGHER_HIGHS" &&
@@ -2461,7 +2568,8 @@ function evaluateBtc15mHighConvictionPipeline(
   const flatMomPenalty =
     Math.abs(mom15mPct) < 0.015 && Math.abs(mom1mPct) < 0.01 ? 20 : 0;
   const absorptionPenalty =
-    absorptionState === "ABSORBED" || absorptionState === "EXHAUSTING" ? 20 : 0;
+    // Unmeasured flow counts as the adverse case: an unknown cannot pass.
+    absorptionState === "ABSORBED" || absorptionState === "EXHAUSTING" || absorptionState === "UNMEASURED" ? 20 : 0;
   const chopScore = Math.min(
     100,
     Math.max(
@@ -2482,12 +2590,12 @@ function evaluateBtc15mHighConvictionPipeline(
         : mtfPenalty >= 25
           ? "MULTI_TIMEFRAME_CONFLICT"
           : absorptionPenalty >= 20
-            ? "ORDER_FLOW_ABSORPTION"
+            ? absorptionState === "UNMEASURED" ? "TAKER_FLOW_UNMEASURED" : "ORDER_FLOW_ABSORPTION"
             : "LOW_MOMENTUM_CHOP"
     : null;
   const mtfDisagreement = (5 - alignedCount) * 6;
   const absorptionReversal =
-    absorptionState === "ABSORBED"
+    absorptionState === "ABSORBED" || absorptionState === "UNMEASURED"
       ? 25
       : absorptionState === "EXHAUSTING"
         ? 15
@@ -2517,8 +2625,9 @@ function evaluateBtc15mHighConvictionPipeline(
   const reversalVetoActive =
     threatScore >= 30 || momentumClassification === "REVERSING";
   const primaryTriggers = [];
-  if (absorptionState === "ABSORBED")
-    primaryTriggers.push("ORDER_BOOK_ABSORPTION");
+  if (absorptionState === "ABSORBED") primaryTriggers.push("TAKER_FLOW_ABSORPTION");
+  if (absorptionState === "EXHAUSTING") primaryTriggers.push("TAKER_FLOW_AGAINST_SIDE");
+  if (absorptionState === "UNMEASURED") primaryTriggers.push("TAKER_FLOW_UNMEASURED");
   if (alignedCount < 3) primaryTriggers.push("TIMEFRAME_DIVERGENCE");
   if (isChopFiltered) primaryTriggers.push("CHOP_INDICATOR");
   if (momentumClassification === "REVERSING")
@@ -2541,27 +2650,19 @@ function evaluateBtc15mHighConvictionPipeline(
     agreement: structureAgrees,
     details: `Cycle TWAP (no volume feed): ${vwap.toLocaleString()} (${vwapRelationship}) | Struct: ${highLowStructure} | Breakout: ${breakoutState}`,
   });
-  const flowAgrees =
-    (candidateDir === "UP" &&
-      bullVolPct >= 52 &&
-      netDeltaBTC >= 0 &&
-      absorptionState !== "ABSORBED") ||
-    (candidateDir === "DOWN" &&
-      bullVolPct <= 48 &&
-      netDeltaBTC <= 0 &&
-      absorptionState !== "ABSORBED");
+  const flowAgrees = withSideShare !== null && withSideShare >= 0.52 && absorptionState !== "ABSORBED";
   families.push({
     name: "ORDER_FLOW",
     label: "Order Flow",
     bias: flowAgrees ? candidateDir : "NEUTRAL",
-    status: flowAgrees ? "ALIGNED" : "ABSORPTION_RISK",
+    status: flowAgrees ? "ALIGNED" : absorptionState === "UNMEASURED" ? "UNMEASURED" : "ABSORPTION_RISK",
     score: flowAgrees ? 85 : 40,
     weight: 0.12,
     agreement: flowAgrees,
-    // Not measured order flow: no trade tape or order book is read here.
-    // bullVolPct is computed from (spot - strike) / strike, and netDeltaBTC sums
-    // (bullVolPct - 50) * 1.8 over the last 15 ticks, so the label names a proxy.
-    details: `Spot-vs-strike flow proxy (no trade tape): ${bullVolPct}% bull | est. delta ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC | ${flowClassification}`,
+    // Measured order flow: Coinbase aggressor buys vs sells over the last 60s.
+    details: flowMeasured
+      ? `Coinbase taker flow 60s: buy ${flow60.buyBTC} BTC / sell ${flow60.sellBTC} BTC (${Math.round(flow60.buyShare * 100)}% buyers, ${flow60.tradeCount} trades) | ${flowClassification}`
+      : `Coinbase taker flow unmeasured${realFlow && realFlow.w60 ? ` (${realFlow.w60.coverageSec}s of 60s covered)` : ""}`,
   });
   const momAgrees =
     alignedCount >= 3 &&
@@ -2681,7 +2782,16 @@ function evaluateBtc15mHighConvictionPipeline(
       : `Freshness: ${feedFreshnessMs}ms | WS: ${dataQualityState.websocketStatus} | Drift: ${dataQualityState.driftMs}ms`,
   });
   const agreementCount = families.filter((f) => f.agreement).length;
-  const kalshiImpliedProb = currentKalshiImpliedProb || 0.52;
+  // A real, fresh Kalshi YES price or nothing. The 0.52 substitute produced an
+  // edge against a price nobody quoted, and that edge could pass the gate.
+  const kalshiImpliedProb =
+    kalshiImpliedAtMs > 0 &&
+    now - kalshiImpliedAtMs < 120e3 &&
+    typeof currentKalshiImpliedProb === "number" &&
+    currentKalshiImpliedProb > 0 &&
+    currentKalshiImpliedProb < 1
+      ? currentKalshiImpliedProb
+      : null;
   const agreementBonus = (agreementCount - 6) * 0.05;
   // Moneyness must be direction-neutral. The previous form awarded +0.04 to
   // every UP candidate and charged -0.04 to every DOWN candidate whenever the
@@ -2736,11 +2846,13 @@ function evaluateBtc15mHighConvictionPipeline(
   const directionalProb =
     candidateDir === "UP" ? calibratedModelProb : 1 - calibratedModelProb;
   const realEdgePct =
-    Math.round(
-      (directionalProb -
-        (candidateDir === "UP" ? kalshiImpliedProb : 1 - kalshiImpliedProb)) *
-        1e3,
-    ) / 10;
+    kalshiImpliedProb === null
+      ? null
+      : Math.round(
+          (directionalProb -
+            (candidateDir === "UP" ? kalshiImpliedProb : 1 - kalshiImpliedProb)) *
+            1e3,
+        ) / 10;
   let pUp = 0.48;
   let pDown = 0.48;
   let uncertaintyPct = 0.04;
@@ -2825,7 +2937,7 @@ function evaluateBtc15mHighConvictionPipeline(
     );
   if (flowAgrees)
     keyTailwinds.push(
-      `Spot-vs-strike flow proxy leans ${candidateDir} (${bullVolPct}% bull, est. ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC; derived from price, not trade tape)`,
+      `Coinbase taker flow backs ${candidateDir} (${Math.round(withSideShare * 100)}% of 60s aggressor volume, net ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC)`,
     );
   if (momAgrees)
     keyTailwinds.push(
@@ -2837,6 +2949,7 @@ function evaluateBtc15mHighConvictionPipeline(
       `Strike distance feasible (${coverageRatio}x expected move coverage)`,
     );
   if (isChopFiltered) keyRisks.push(`Chop filter active (${chopReason})`);
+  if (absorptionState === "UNMEASURED") keyRisks.push("Taker flow unmeasured; the reversal watch assumes the adverse case");
   if (reversalVetoActive)
     keyRisks.push(`Reversal threat elevated (${threatScore}% threat level)`);
   if (dataQualityStatus !== "OPTIMAL")
@@ -2849,7 +2962,7 @@ function evaluateBtc15mHighConvictionPipeline(
   if (isLateCycle) keyRisks.push("Late cycle expiry window (< 4.5m remaining)");
   const summaryReason =
     lockQualityTier !== "SKIP"
-      ? `High-conviction ${candidateDir} decision with ${agreementCount}/11 evidence families confirming (Lock Quality: ${rawLockQuality}/100, Edge: ${realEdgePct >= 0 ? "+" : ""}${realEdgePct}%)`
+      ? `High-conviction ${candidateDir} decision with ${agreementCount}/11 evidence families confirming (Lock Quality: ${rawLockQuality}/100, Edge: ${realEdgePct === null ? "no live Kalshi price" : `${realEdgePct >= 0 ? "+" : ""}${realEdgePct}%`})`
       : `Decision skipped due to ${keyRisks[0] || "insufficient multi-family edge"} (Lock Quality: ${rawLockQuality}/100)`;
   return {
     lockQuality: rawLockQuality,
@@ -2891,7 +3004,7 @@ function evaluateBtc15mHighConvictionPipeline(
       breakoutState,
     },
     orderFlowAnalytics: {
-      takerBuyRatio: takerRatio,
+      takerBuyShare60: flowMeasured ? flow60.buyShare : null,
       netDeltaBTC,
       bidAskImbalancePct,
       absorptionState,
@@ -2909,6 +3022,14 @@ function evaluateBtc15mHighConvictionPipeline(
       threatLevel,
       vetoActive: reversalVetoActive,
       primaryTriggers,
+      flowMeasured,
+      absorptionState,
+    },
+    realFlow: {
+      w60: realFlow && realFlow.w60 ? realFlow.w60 : null,
+      w180: realFlow && realFlow.w180 ? realFlow.w180 : null,
+      absorptionState,
+      withSideShare,
     },
     dataQuality: dataQualityState,
     edgeVsConfidence: {
@@ -3082,8 +3203,17 @@ async function runMarketEngineTick() {
           lastKalshiUpdateTs = Date.now();
           const kData = await kRes.json();
           const activeMarkets = kData.markets || [];
-          if (activeMarkets.length > 0) {
-            const m = activeMarkets[0];
+          // The market whose trading window contains now. The open list can
+          // include the next window; the first entry is not guaranteed to be
+          // the current cycle.
+          const nowMsK = Date.now();
+          const m =
+            activeMarkets.find((mk) => {
+              const o = Date.parse(mk.open_time || "");
+              const c = Date.parse(mk.close_time || "");
+              return Number.isFinite(o) && Number.isFinite(c) && o <= nowMsK && nowMsK < c;
+            }) || null;
+          if (m) {
             const strikeVal =
               m.floor_strike ||
               (m.yes_sub_title
@@ -3104,17 +3234,33 @@ async function runMarketEngineTick() {
               : m.yes_bid
                 ? m.yes_bid / 100
                 : null;
-            if (yesAsk && yesAsk > 0) {
-              currentKalshiImpliedProb = Math.min(0.95, Math.max(0.05, yesAsk));
-              kalshiImpliedAtMs = Date.now();
-            } else if (yesBid && yesBid > 0) {
-              currentKalshiImpliedProb = Math.min(0.95, Math.max(0.05, yesBid));
+            // The market's YES price: the bid/ask midpoint when both sides are
+            // quoted, else the one quoted side. No clamp: a 97c market is 97c.
+            const validQuote = (q) => typeof q === "number" && Number.isFinite(q) && q > 0 && q < 1;
+            const yesMid =
+              validQuote(yesAsk) && validQuote(yesBid)
+                ? (yesAsk + yesBid) / 2
+                : validQuote(yesAsk)
+                  ? yesAsk
+                  : validQuote(yesBid)
+                    ? yesBid
+                    : null;
+            if (yesMid !== null) {
+              currentKalshiImpliedProb = Math.round(yesMid * 1e4) / 1e4;
               kalshiImpliedAtMs = Date.now();
             }
           }
         }
       } catch (kErr) {}
     }
+    // Real aggressor flow for the reversal watch and the ORDER_FLOW family.
+    // Single-flight, at most one Coinbase request per 2.5s, 2.5s timeout; a
+    // failed fetch leaves the window to age into UNMEASURED.
+    await refreshRealTakerFlow(now);
+    latestRealFlow = {
+      w60: summarizeRealTakerFlowFrom(realTakerTrades, realTakerContinuousSinceMs, realTakerFetchedAtMs, Date.now(), 60),
+      w180: summarizeRealTakerFlowFrom(realTakerTrades, realTakerContinuousSinceMs, realTakerFetchedAtMs, Date.now(), 180),
+    };
     // A cold instance has no minute history, so its first evaluation read the
     // 5m/15m lookbacks off its own first tick and left realized volatility
     // unmeasured (14 of 24 production responses, 2026-09-11 06:02Z). Wait for
@@ -3147,6 +3293,7 @@ async function runMarketEngineTick() {
       currentBullVolumePct,
       intervalMomentum,
       latestCrossAssetContext?.riskPenalty || 0,
+      latestRealFlow,
     );
     // One regime: the one the pipeline's REGIME family voted with, shown as
     // CHOP while the chop filter holds that vote neutral. The tick used to
@@ -3186,8 +3333,8 @@ async function runMarketEngineTick() {
     currentConfidence =
       latestBtc15mPipeline.edgeVsConfidence.calibratedConfidencePct;
     currentEdgePct = latestBtc15mPipeline.edgeVsConfidence.realEdgePct;
-    currentKalshiImpliedProb =
-      latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability;
+    // currentKalshiImpliedProb is owned by the Kalshi fetch above; the
+    // pipeline no longer writes a substitute price back into it.
     // Direction must come from the model's chosen side, not from the SIZE of its
     // edge.
     //
@@ -3242,7 +3389,9 @@ async function runMarketEngineTick() {
       historicalAccuracy: historicalAccuracyVal,
     };
     const is5050PullWindow =
-      currentKalshiImpliedProb >= 0.38 && currentKalshiImpliedProb <= 0.62;
+      latestBtc15mPipeline.edgeVsConfidence.kalshiImpliedProbability !== null &&
+      currentKalshiImpliedProb >= 0.38 &&
+      currentKalshiImpliedProb <= 0.62;
     const isEarlyLockOpportunity =
       is5050PullWindow &&
       Math.abs(currentEdgePct) >= 2.5 &&
@@ -3281,7 +3430,7 @@ async function runMarketEngineTick() {
     } else if (!isConfPass) {
       reasonText = `Model confidence (${currentConfidence}%) below minimum required 66% threshold`;
     } else if (!isEdgePass) {
-      reasonText = `Minimum edge requirement (+1.5%) not reached (current: ${currentEdgePct >= 0 ? "+" : ""}${currentEdgePct}%)`;
+      reasonText = `Minimum edge requirement (+1.5%) not reached (current: ${currentEdgePct === null ? "no live Kalshi price" : `${currentEdgePct >= 0 ? "+" : ""}${currentEdgePct}%`})`;
     } else if (!isPersistPass) {
       // Names the bar actually in force: 3s only inside the early-entry window,
       // otherwise the standard 12s. This used to say "Early Lock" for both.
@@ -3399,7 +3548,7 @@ async function runMarketEngineTick() {
       ethPrice: currentEthPrice,
       solPrice: currentSolPrice,
       kalshiStrike: current15mStrikePrice,
-      kalshiImpliedProb: currentKalshiImpliedProb,
+      kalshiImpliedProb: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
       modelProb: currentModelProbability,
       edgePct: currentEdgePct,
       confidence: currentConfidence,
@@ -15617,9 +15766,9 @@ app.get("/api/vixy/state", async (req, res) => {
     cycleObservationDuration: active15mCycle.cycleObservationDuration,
     directionChanges: active15mCycle.directionChanges,
     crossAssetContext: latestCrossAssetContext,
-    kalshiImpliedProbability: currentKalshiImpliedProb,
+    kalshiImpliedProbability: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
     edgePct: currentEdgePct,
-    edge: currentEdgePct / 100,
+    edge: typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
     lockEvaluation: latestLockEvaluation,
     guardianDecision: latestGuardianDecision,
     // null / not LIVE until this instance has recorded a market update.
@@ -15660,10 +15809,9 @@ app.get("/api/vixy/state", async (req, res) => {
         timeRemainingSec: market15mState.timeRemaining,
         distance: Math.round((spot - market15mState.strikePrice) * 100) / 100,
         distancePct: market15mState.distancePct,
-        kalshiImpliedProb: currentKalshiImpliedProb,
-        polymarketImpliedProb:
-          Math.round((currentKalshiImpliedProb - 0.02) * 100) / 100,
-        spreadPct: 0.02,
+        kalshiImpliedProb: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
+        polymarketImpliedProb: null, // no Polymarket feed
+        spreadPct: null,
       },
       computedAt: now,
     },
@@ -16150,6 +16298,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     pnlDollar: null,
     stateVersion: globalSequenceNumber,
     updatedAt: now,
+    // Real aggressor flow the reversal watch reads (Coinbase trades). A null or
+    // unmeasured window means this instance has not measured it.
+    realFlow: latestBtc15mPipeline?.realFlow ?? null,
     evidence: {
       // Each sub-score is computed from the live pipeline, scored against the
       // side being called (evidenceDir), or it is null with aligned false.
@@ -16199,19 +16350,20 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         {
           name: "Order Flow",
           ...(() => {
-            // takerBuyRatio is derived from spot vs strike (see the ORDER_FLOW
-            // family), not read from a trade tape.
-            const r = latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio;
-            if (typeof r !== "number" || !(r > 0)) {
-              return { score: null, aligned: false, detail: "No engine reading" };
+            // Coinbase aggressor flow over the last 60s, scored for the side called.
+            const f = latestBtc15mPipeline?.realFlow?.w60;
+            if (!f || f.measured !== true || typeof f.buyShare !== "number") {
+              return { score: null, aligned: false, detail: "Coinbase taker flow unmeasured" };
             }
-            const detail = `Spot-vs-strike flow proxy ${r.toFixed(2)}x (derived from price; no trade tape)`;
+            const detail = `Coinbase taker flow 60s: ${Math.round(f.buyShare * 100)}% buyers (buy ${f.buyBTC} / sell ${f.sellBTC} BTC)`;
             if (evidenceDir !== "UP" && evidenceDir !== "DOWN") return { score: null, aligned: false, detail };
-            const toward = evidenceDir === "UP" ? r : 1 / r;
+            const toward = evidenceDir === "UP" ? f.buyShare : 1 - f.buyShare;
             return {
-              score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (toward - 1) * 4)) * 10) / 10)),
-              aligned: toward > 1,
-              detail,
+              score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + (toward - 0.5) * 9) * 10) / 10)),
+              // Aggression with the side that price is not following (ABSORBED)
+              // is not support; the ORDER_FLOW family withholds its vote too.
+              aligned: toward > 0.5 && latestBtc15mPipeline?.realFlow?.absorptionState !== "ABSORBED",
+              detail: latestBtc15mPipeline?.realFlow?.absorptionState === "ABSORBED" ? `${detail} | absorbed` : detail,
             };
           })(),
         },
@@ -16820,8 +16972,8 @@ app.get(
             },
           ]
         : [],
-      kalshiImpliedProbability: isLive ? currentKalshiImpliedProb : null,
-      edge: isLive ? currentEdgePct / 100 : null,
+      kalshiImpliedProbability: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
+      edge: isLive && typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
       edgePct: isLive ? currentEdgePct : null,
       engineState: isLive ? engineState : "STALE",
       feedStatus: computedFeedStatus,
@@ -16877,10 +17029,9 @@ app.get(
               timeRemainingSec: market15mState.timeRemaining,
               distance: Math.round((spot - kalshiStrike) * 100) / 100,
               distancePct: market15mState.distancePct,
-              kalshiImpliedProb: currentKalshiImpliedProb,
-              polymarketImpliedProb:
-                Math.round((currentKalshiImpliedProb - 0.02) * 100) / 100,
-              spreadPct: 0.02,
+              kalshiImpliedProb: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
+              polymarketImpliedProb: null, // no Polymarket feed
+              spreadPct: null,
             },
             computedAt: new Date().toISOString(),
           }
