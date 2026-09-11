@@ -15669,7 +15669,9 @@ app.get("/api/vixy/state", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || currentBtcPrice === 64161.4) {
+  // Also tick first when this instance has been idle (a thawed lambda would
+  // otherwise serve its pre-idle strike, edge and cycle). Single-flight.
+  if (!engineHydrated || currentBtcPrice === 64161.4 || Date.now() - _engineTickLastRunMs > 15e3) {
     try { await runMarketEngineTickTracked(); } catch {}
   }
   const currentCycleIdForStateSync = active15mCycle.cycleId;
@@ -15782,8 +15784,10 @@ app.get("/api/vixy/state", async (req, res) => {
     directionChanges: active15mCycle.directionChanges,
     crossAssetContext: latestCrossAssetContext,
     kalshiImpliedProbability: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
-    edgePct: currentEdgePct,
-    edge: typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
+    // The edge was computed against the Kalshi price; it is served only while
+    // that price is (an aged-out price served null beside a stale edge).
+    edgePct: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentEdgePct : null,
+    edge: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 && typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
     lockEvaluation: latestLockEvaluation,
     guardianDecision: latestGuardianDecision,
     // null / not LIVE until this instance has recorded a market update.
@@ -15867,7 +15871,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // (spot 64161.4, evidence 0, upProbability 0.48) -- the ~1-in-6 garbage responses
   // users perceived as the terminal "freezing". Run one real tick first, but only when
   // this instance has not hydrated yet, so warm requests pay no latency.
-  if (!engineHydrated || currentBtcPrice === 64161.4) {
+  // Also tick first when this instance has been idle (a thawed lambda would
+  // otherwise serve its pre-idle strike, edge and cycle). Single-flight.
+  if (!engineHydrated || currentBtcPrice === 64161.4 || Date.now() - _engineTickLastRunMs > 15e3) {
     try { await runMarketEngineTickTracked(); } catch {}
   }
   const currentCycleIdForCurrentSync = active15mCycle.cycleId;
@@ -16516,7 +16522,9 @@ app.get(
   async (req, res) => {
     // COLD-INSTANCE HYDRATION GUARD (see /api/vixy/15m/current). Prevents this
     // instance serving seed placeholders on a cold serverless boot.
-    if (!engineHydrated || currentBtcPrice === 64161.4) {
+    // Also tick first when this instance has been idle (a thawed lambda would
+    // otherwise serve its pre-idle strike, edge and cycle). Single-flight.
+    if (!engineHydrated || currentBtcPrice === 64161.4 || Date.now() - _engineTickLastRunMs > 15e3) {
       try { await runMarketEngineTickTracked(); } catch {}
     }
     const currentCycleIdForSignalSync = active15mCycle.cycleId;
@@ -16997,8 +17005,8 @@ app.get(
           ]
         : [],
       kalshiImpliedProbability: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentKalshiImpliedProb : null,
-      edge: isLive && typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
-      edgePct: isLive ? currentEdgePct : null,
+      edge: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 && typeof currentEdgePct === "number" ? currentEdgePct / 100 : null,
+      edgePct: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentEdgePct : null,
       engineState: isLive ? engineState : "STALE",
       feedStatus: computedFeedStatus,
       lastMarketUpdateTs: lastMarketUpdateTs || null,
