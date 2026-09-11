@@ -12068,7 +12068,9 @@ function getUserEntitlement(emailOrUid) {
         startedAt: dayPassRecord.startedAt,
         expiresAt: dayPassRecord.expiresAt,
         secondsRemaining: dayPassSecondsRemaining,
-        stripeSessionId: dayPassRecord.stripeCheckoutSessionId,
+        // A live free server-tag trial must say so; without this the UI labelled
+        // it a paid pass on a Stripe card.
+        stripeSessionId: dayPassRecord.stripeCheckoutSessionId, entitlementType: dayPassRecord.entitlementType || null,
       },
       updatedAt: dayPassRecord.updatedAt || new Date().toISOString(),
     };
