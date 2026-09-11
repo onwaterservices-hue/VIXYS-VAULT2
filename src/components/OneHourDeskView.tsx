@@ -288,7 +288,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs font-mono">
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-purple-300 font-bold">Bankroll ($USD)</span>
-                  <input type="number" value={bankroll} onChange={(e) => setBankroll(Math.max(1, Number(e.target.value)))} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold" />
+                  <input type="number" value={bankroll} onChange={(e) => setBankroll(Math.max(1, Number(e.target.value)))} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-2.5 sm:py-1.5 text-white font-mono text-right font-bold" />
                 </label>
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-purple-300 font-bold">Kelly fraction</span>
@@ -301,11 +301,11 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </label>
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-purple-300 font-bold">Contract price (¢)</span>
-                  <input type="number" min={1} max={99} placeholder="e.g. 72" value={contractPriceCents} onChange={(e) => setContractPriceCents(e.target.value)} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold placeholder:text-purple-700" />
+                  <input type="number" min={1} max={99} placeholder="e.g. 72" value={contractPriceCents} onChange={(e) => setContractPriceCents(e.target.value)} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-2.5 sm:py-1.5 text-white font-mono text-right font-bold placeholder:text-purple-700" />
                 </label>
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-purple-300 font-bold">Your P(win) (%)</span>
-                  <input type="number" min={1} max={99} placeholder="your estimate" value={userWinProbPct} onChange={(e) => setUserWinProbPct(e.target.value)} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold placeholder:text-purple-700" />
+                  <input type="number" min={1} max={99} placeholder="your estimate" value={userWinProbPct} onChange={(e) => setUserWinProbPct(e.target.value)} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-2.5 sm:py-1.5 text-white font-mono text-right font-bold placeholder:text-purple-700" />
                 </label>
               </div>
               <div className="bg-[#0a0518] p-4 rounded-2xl border border-purple-500/40 space-y-2.5 font-mono text-xs mt-2">

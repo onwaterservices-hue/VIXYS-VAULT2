@@ -75,7 +75,8 @@ const seed = (name) => {
 t('currentDirection seeds NEUTRAL, not a side', seed('currentDirection'), '"NEUTRAL"');
 t('currentConfidence seeds 0, below the 66 gate', Number(seed('currentConfidence')) < 66, true);
 t('currentModelProbability seeds even', Number(seed('currentModelProbability')), 0.5);
-t('currentEdgePct seeds below the 1.5 edge bar', Math.abs(Number(seed('currentEdgePct'))) < 1.5, true);
+// null = no edge until a live Kalshi price exists; Math.abs(null) is 0, below the bar.
+t('currentEdgePct seeds null or below the 1.5 edge bar', seed('currentEdgePct') === 'null' || Math.abs(Number(seed('currentEdgePct'))) < 1.5, true);
 t('persistenceSeconds seeds below the 6s bar', Number(seed('persistenceSeconds')) < 6, true);
 
 console.log('== direction never depends on the engine\'s own recent output ==');
@@ -125,7 +126,7 @@ console.log('== cold-boot price history is real, not invented ==');
     const m = Math.round(((spot - strike) / strike) * 1e4) / 100;
     const bv = Math.min(90, Math.max(10, Math.round(50 + ((spot - strike) / strike * 100) * 25 + m * 15)));
     const ctx = { lastMarketUpdateTs: T, engineFeedStatus: 'CONNECTED', cycleVwapAccumulator, rollingBtcTicks, hydratedBtcCloses: [], __name: (f) => f,
-      active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5, persistenceSeconds: 60 };
+      active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5, kalshiImpliedAtMs: 0, persistenceSeconds: 60 };
     const k = Object.keys(ctx);
     return new Function(...k, `${fnSrc}\nreturn evaluateBtc15mHighConvictionPipeline;`)(...k.map((x) => ctx[x]))(spot, strike, T, bv, m, 0);
   };
