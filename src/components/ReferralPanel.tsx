@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   Gift, Copy, Share2, CalendarPlus, MessageSquare, Check, Trophy, Loader2, Lock,
 } from "lucide-react";
+import { getReferralProgramApi, ReferralProgram } from "../services/api";
 
 interface ReferralRow {
   status?: string;
@@ -58,6 +59,18 @@ export default function ReferralPanel() {
   const [error, setError] = useState<string | null>(null);
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
+  // Public program terms (credit per plan, share of price, rules), computed on
+  // the server from referralPolicy.ts -- the only source of referral economics.
+  const [program, setProgram] = useState<ReferralProgram | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    getReferralProgramApi().then((p) => {
+      if (!cancelled) setProgram(p);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [copied, setCopied] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -224,25 +237,62 @@ export default function ReferralPanel() {
   const canPayout = available >= threshold;
 
   return (
-    <div className="max-w-5xl mx-auto px-6 py-8 space-y-5">
+    <div className="max-w-5xl mx-auto px-3 sm:px-6 py-5 sm:py-8 space-y-5">
 
-      <div className="hud-corners rounded-2xl border border-violet-500/25 bg-[#0a0713]/90 p-8">
+      <div className="hud-corners rounded-2xl border border-violet-500/25 bg-[#0a0713]/90 p-5 sm:p-8">
         <div className="flex items-center gap-2 mb-3">
           <Gift className="w-4 h-4 text-violet-300" />
-          <span className="text-[11px] tracking-[0.2em] text-violet-300 font-mono">
+          <span className="text-[12px] tracking-[0.2em] text-violet-300 font-mono">
             INVITE TO EARN
           </span>
         </div>
 
-        <h1 className="hud-gradient-text text-4xl font-semibold mb-2">
+        <h1 className="hud-gradient-text text-3xl sm:text-4xl font-semibold mb-2">
           {lifetime > 0
             ? "You've earned " + usd(lifetime) + " so far."
             : "Turn invites into VIXY credit."}
         </h1>
         <p className="text-sm text-white/55 max-w-xl leading-relaxed">
-          Your friend gets {data?.discountPercent ?? 20}% off. You earn credit when they
-          become a paying member -- not when they click, and not when they sign up.
+          Your friend gets {data?.discountPercent ?? program?.discountPercent}% off their first month. You earn credit when
+          they become a paying member -- not when they click, and not when they sign up.
         </p>
+
+        {program && program.tiers.length > 0 && (
+          <div className="mt-6" aria-label="How much you earn per friend">
+            <div className="text-[12px] tracking-[0.15em] text-white/50 font-mono mb-2">WHAT YOU EARN PER FRIEND</div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {program.tiers.map((t) => (
+                <div key={t.plan} className="rounded-xl border border-violet-500/30 bg-violet-950/20 p-4">
+                  <div className="text-sm font-semibold text-white">
+                    Friend subscribes to {t.label}{" "}
+                    <span className="text-white/50 font-normal">(${(t.monthlyPriceCents / 100).toFixed(2)}/mo)</span>
+                  </div>
+                  <div className="mt-2 text-3xl font-bold text-emerald-300 font-mono">${t.rewardUsd}</div>
+                  <div className="text-xs text-white/60 mt-1">
+                    {t.rewardCredits.toLocaleString()} credits · {t.shareOfMonthlyPricePercent}% of their monthly price
+                  </div>
+                </div>
+              ))}
+            </div>
+            <ul className="mt-4 space-y-1.5 text-[13px] text-white/60 leading-relaxed list-disc pl-5">
+              <li>
+                You earn once per friend, the first time they pay for a plan.
+                {program.sameRewardOnAnnualPlans ? " Annual plans earn the same credit as monthly." : ""}
+                {program.dayPassEarnsCredit ? "" : " Day passes don't earn credit."}
+              </li>
+              {program.rewardCappedAtAmountPaid && (
+                <li>Credit never exceeds what your friend actually paid.</li>
+              )}
+              <li>
+                Credit becomes spendable {program.clawbackHoldDays} days after their payment, in case of a refund.
+              </li>
+              <li>
+                Spend {program.creditsPerFreeDay.toLocaleString()} credits on a free day of access, or request a payout
+                once you reach {usd(program.payoutThresholdCredits)}. Credits expire after {program.creditExpiryDays} days.
+              </li>
+            </ul>
+          </div>
+        )}
 
         {!data?.code ? (
           <div className="mt-6 rounded-xl border border-white/10 bg-black/50 p-5">
@@ -299,7 +349,7 @@ export default function ReferralPanel() {
               </div>
               <button
                 onClick={copyCode}
-                className="px-3 py-2 rounded-lg border border-violet-400/40 bg-violet-600/15 hover:bg-violet-600/30 text-xs tracking-[0.12em] flex items-center gap-2 text-violet-200 font-mono"
+                className="min-h-[44px] px-4 py-2 rounded-lg border border-violet-400/40 bg-violet-600/15 hover:bg-violet-600/30 text-xs tracking-[0.12em] flex items-center gap-2 text-violet-200 font-mono"
               >
                 {copiedCode ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 {copiedCode ? "COPIED" : "COPY CODE"}
@@ -314,19 +364,19 @@ export default function ReferralPanel() {
               YOUR LINK
             </div>
             <div className="flex gap-2 flex-wrap">
-              <div className="flex-1 min-w-[240px] font-mono text-sm bg-black/50 border border-white/12 rounded-lg px-4 py-3 text-white/80 truncate">
+              <div className="w-full sm:w-auto sm:flex-1 sm:min-w-[240px] font-mono text-sm bg-black/50 border border-white/12 rounded-lg px-4 py-3 text-white/80 truncate">
                 {data.link}
               </div>
               <button
                 onClick={copyLink}
-                className="px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center gap-2 text-white/70"
+                className="min-h-[44px] px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center justify-center gap-2 text-white/70 flex-1 sm:flex-none"
               >
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 {copied ? "COPIED" : "COPY"}
               </button>
               <button
                 onClick={shareLink}
-                className="px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center gap-2 text-white/70"
+                className="min-h-[44px] px-4 rounded-lg border border-white/12 hover:bg-white/5 text-xs tracking-[0.12em] flex items-center justify-center gap-2 text-white/70 flex-1 sm:flex-none"
               >
                 <Share2 className="w-4 h-4" /> SHARE
               </button>
@@ -430,7 +480,10 @@ export default function ReferralPanel() {
         {(data?.referrals?.length ?? 0) === 0 ? (
           <div className="rounded-xl border border-white/10 bg-black/50 p-6 text-sm text-white/40">
             {data?.code
-              ? "Share your link to get started. Your first Starter conversion earns 580 credits."
+              ? "Share your link to get started." +
+                (program?.tiers?.[0]
+                  ? " A friend who subscribes to " + program.tiers[0].label + " earns you " + program.tiers[0].rewardCredits.toLocaleString() + " credits ($" + program.tiers[0].rewardUsd + ")."
+                  : "")
               : "Claim a code above to start inviting."}
           </div>
         ) : (

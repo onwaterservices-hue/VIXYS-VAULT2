@@ -198,8 +198,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const plans = {
     STARTER: {
       name: 'VIXY Vault Starter',
-      monthlyPrice: 29,
-      annualPrice: 24,
+      // Live Stripe Payment Links: $24.00/month, or $228.00/year ($19.00/month billed annually).
+      monthlyPrice: 24,
+      annualPrice: 19,
       desc: 'Essential 15m probability intelligence for individual prediction market traders.',
       features: [
         'Real-time 15m Candle Model Forecasts',
@@ -587,7 +588,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                     <span className="text-xs font-mono font-bold text-purple-200">Ends {passEndsLabel}</span>
                   </div>
                   <div className="text-[12px] text-slate-200 font-sans leading-relaxed">
-                    Three day passes cost <strong className="text-white font-mono">$29.97</strong>. Starter is <strong className="text-white font-mono">$29</strong> and runs all 30 days.
+                    Three day passes cost <strong className="text-white font-mono">$29.97</strong>. Starter is <strong className="text-white font-mono">$24</strong> and runs all 30 days.
                   </div>
                 </div>
                 <button
@@ -621,7 +622,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               </button>
             </div>
                 <p className="mt-2.5 text-[11px] text-slate-400 font-sans text-center">
-                  Three day passes cost <strong className="text-slate-200 font-mono">$29.97</strong>. Starter is <strong className="text-slate-200 font-mono">$29</strong> and runs all 30 days.
+                  Three day passes cost <strong className="text-slate-200 font-mono">$29.97</strong>. Starter is <strong className="text-slate-200 font-mono">$24</strong> and runs all 30 days.
                 </p>
               </>
             )}
@@ -904,7 +905,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <thead>
               <tr className="text-purple-300/60">
                 <th className="py-3 px-4">Feature</th>
-                <th className="py-3 px-4">Starter ($29/mo)</th>
+                <th className="py-3 px-4">Starter ($24/mo)</th>
                 <th className="py-3 px-4 text-purple-300 font-bold">Professional ($79/mo)</th>
                 <th className="py-3 px-4 text-violet-300 font-bold">Elite Quant ($199/mo)</th>
               </tr>
