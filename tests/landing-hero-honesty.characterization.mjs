@@ -36,6 +36,7 @@ for (const f of fiction) {
   t.check(`landing hero has no fabricated value: ${f}`, !land.includes(f));
 }
 
+t.check('no sub-second claims for data that is polled', !/sub-second/i.test(land));
 t.check('hero headline uses the Command Center helper', land.includes('headline(canonical15m)'));
 t.check('hero shows nothing unless the feed is live', land.includes("dataHealthStatus === 'LIVE' && heroHeadline.kind !== 'NONE'"));
 t.check('Kalshi price only when the server marks the read real', land.includes('m.real === true'));

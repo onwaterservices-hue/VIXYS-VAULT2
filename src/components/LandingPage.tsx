@@ -510,7 +510,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <div className="px-3 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-900/60 flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                  <span>Sub-Second L2 Depth</span>
+                  <span>Live L2 Depth</span>
                 </div>
                 <div className="px-3 py-1.5 rounded-xl bg-[#0a0518]/90 border border-purple-900/60 flex items-center gap-2 col-span-2 sm:col-span-1">
                   <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -595,7 +595,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <Radio className="w-5 h-5" />
             </div>
             <span className="text-xs font-black text-white tracking-wider">LIVE MARKET INTELLIGENCE</span>
-            <span className="text-[10px] text-purple-300/70 font-sans">Sub-second spot & L2 depth</span>
+            <span className="text-[10px] text-purple-300/70 font-sans">Live spot & L2 depth</span>
           </div>
 
           {/* 3. PROBABILITY EDGE */}
@@ -952,7 +952,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
-                  <span>Real-Time Sub-Second Engine</span>
+                  <span>Real-Time Live Engine</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="w-3.5 h-3.5 text-purple-400 shrink-0" />
