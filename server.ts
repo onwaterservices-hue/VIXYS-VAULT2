@@ -15710,7 +15710,13 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     : livePred.confidence ?? 0;
   // The side the evidence sub-scores are scored against.
   const evidenceDir = isLocked ? lockedPred?.direction : livePred.direction;
-  const regimeVal = active15mCycle.isChoppy ? "CHOPPY" : "RANGE_BOUND";
+  // The regime the engine classified this tick (serverLearningEngine.currentRegime,
+  // set in runMarketEngineTick and served verbatim by /api/vixy/state). This was
+  // `isChoppy ? "CHOPPY" : "RANGE_BOUND"`, a two-value label that could never
+  // report a trend or high volatility: production served RANGE_BOUND here while
+  // /api/vixy/state served TRENDING_BEAR for the same tick (10 of 10 samples,
+  // 2026-09-11). The header, hub, workspace and scalp chart render this value.
+  const regimeVal = serverLearningEngine.currentRegime ?? null;
   // No invented 6: if the pipeline has not run, the count is unknown.
   const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;
   const chopScore = latestBtc15mPipeline?.chopAnalytics?.chopScore ?? 0;
