@@ -607,8 +607,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     {/* Metrics Footer */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 font-mono text-xs">
                       <div className="bg-black/60 border border-purple-900/40 rounded-xl p-2.5">
-                        <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Model Confidence</div>
-                        <div className="text-sm text-cyan-300 font-bold">{conf ? `${conf}%` : '—'}</div>
+                        {/* Was "Model Confidence NN%". It is the engine's score, not a probability:
+                            scores of 80-90 have won 53-62% of settled locks. */}
+                        <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Engine Score</div>
+                        <div className="text-sm text-cyan-300 font-bold">{conf ? `${conf} / 100` : '—'}</div>
                       </div>
                       <div className="bg-black/60 border border-purple-900/40 rounded-xl p-2.5">
                         <div className="text-[9.5px] text-purple-300/70 font-black uppercase tracking-wider mb-0.5">Statistical Edge</div>
@@ -978,8 +980,8 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">
-                <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Model Confidence</div>
-                <div className="text-cyan-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.confidence)) ? `${activeProvenance.confidence}%` : '--'}</div>
+                <div className="text-[9.5px] text-zinc-500 font-bold uppercase mb-1">Engine Score</div>
+                <div className="text-cyan-300 font-black text-sm">{Number.isFinite(Number(activeProvenance.confidence)) ? `${activeProvenance.confidence} / 100` : '--'}</div>
               </div>
 
               <div className="bg-zinc-900/60 p-3 rounded-xl border border-zinc-800">

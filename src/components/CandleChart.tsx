@@ -1543,9 +1543,10 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           {venue.toUpperCase()}
         </span>
 
-        {/* AI Confidence Chip */}
-        <span className="px-2 py-1 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-[10px] font-extrabold text-cyan-300">
-          AI CONF {activeSignal.confidence > 1 ? Math.round(activeSignal.confidence) : Math.round(activeSignal.confidence * 100)}%
+        {/* Engine score chip. Was "AI CONF NN%": the engine's score is not a
+            probability of being right (scores of 80-90 have won 53-62% of settled locks). */}
+        <span className="px-2 py-1 rounded-lg bg-cyan-950/80 border border-cyan-500/50 text-[10px] font-extrabold text-cyan-300" title="Engine score out of 100 — not a probability">
+          ENGINE SCORE {activeSignal.confidence > 1 ? Math.round(activeSignal.confidence) : Math.round(activeSignal.confidence * 100)}/100
         </span>
 
         {/* The edge chip was the literal "+12.2%" for every user at every moment.
