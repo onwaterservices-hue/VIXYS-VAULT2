@@ -85,20 +85,17 @@ if (fon && usd && num) {
 }
 
 t.section('trade journal');
-t.check('empty state exists', tj.includes('No Journal Entries Found'));
+// The view itself was rewritten on main by 2188291 and is pinned in detail by
+// tests/journal-honesty.characterization.mjs; these only keep the literals out.
 t.check('no fixed average implied edge', !tj.includes('+11.4%'));
 t.check('no made-up hash for entries without one', !/0x\$\{idx\}/.test(tj) && !tj.includes('84aef2918'));
-t.check('missing hash renders a dash', tj.includes("SHA256: {hash ? `${hash.substring(0, 14)}...` : '—'}"));
+t.check('a hash is shown only when the entry has one', tj.includes('{hash && ('));
 t.check('no invented stake or odds for missing fields',
-  !/Number\(entry\.stakeUSD\)\s*\|\|\s*100/.test(tj) && !/\/ 100 : 0\.5\)/.test(tj));
-t.check('missing stake and odds render dashes',
-  tj.includes("{stake !== null ? `$${stake}` : '—'} @ {odds !== null ? `${Math.round(odds * 100)}¢` : '—'}"));
+  !/Number\(entry\.stakeUSD\)\s*\|\|\s*100/.test(tj) && !/\/ 100 : 0\.5\)/.test(tj) && !/parseFloat\(stakeUSD\) \|\| 100/.test(tj));
 t.check("no 'Live' in place of a missing timestamp", !tj.includes(": 'Live'"));
-t.check('empty journal win rate is a dash, not 0.0%', tj.includes("{totalTrades > 0 ? `${winRate.toFixed(1)}%` : '—'}"));
+t.check('win rate is a dash when nothing is settled', tj.includes("winRate === null ? '—'"));
 t.check('no "Server Database Persistent" claim', !tj.includes('Server Database Persistent'));
-t.check('storage label comes from the server storageType',
-  tj.includes("storageType === 'IN_MEMORY_NOT_PERSISTED'")
-  && tj.includes("setStorageType(typeof data.storageType === 'string' ? data.storageType : null)"));
+t.check('storage comes from the server storageType', tj.includes("storageType === 'IN_MEMORY_NOT_PERSISTED'"));
 
 t.section('leaderboard personal strip');
 t.check('personal figures come from the server journal', lb.includes('await fetchJournal()'));
