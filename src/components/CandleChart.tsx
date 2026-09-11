@@ -597,15 +597,23 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Active or hovered candle for Top HUD
   const displayCandleIdx = hoveredCandleIndex !== null ? hoveredCandleIndex : visibleCandles.length - 1;
   const displayCandle = visibleCandles[displayCandleIdx] || visibleCandles[visibleCandles.length - 1];
-  const displayOpen = displayCandle?.open || 0;
-  const displayHigh = displayCandle?.high || 0;
-  const displayLow = displayCandle?.low || 0;
-  const displayClose = displayCandle?.close || 0;
-  const displayVolume = displayCandle?.volume || 0;
-  const displayEma9 = ema9Val[displayCandleIdx] || 0;
-  const displayEma21 = ema21Val[displayCandleIdx] || 0;
-  const displayVwap = vwapLine[displayCandleIdx] || 0;
-  const displayRsi = rsiLine[displayCandleIdx] || 50;
+  // Readout values are null when the bar or indicator does not exist yet (RSI-14
+  // needs 15 closes). The old fallbacks printed a neutral RSI and $0 prices as if
+  // measured; the readout shows a dash instead. Real values, including a genuine
+  // zero volume, pass through unchanged.
+  const finiteOrNull = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const readoutUsd = (v: number | null) => (v === null ? '—' : `$${v.toFixed(1)}`);
+  const readoutNum = (v: number | null) => (v === null ? '—' : v.toFixed(1));
+  const displayOpen = finiteOrNull(displayCandle?.open);
+  const displayHigh = finiteOrNull(displayCandle?.high);
+  const displayLow = finiteOrNull(displayCandle?.low);
+  const displayClose = finiteOrNull(displayCandle?.close);
+  const displayVolume = finiteOrNull(displayCandle?.volume);
+  const displayEma9 = finiteOrNull(ema9Val[displayCandleIdx]);
+  const displayEma21 = finiteOrNull(ema21Val[displayCandleIdx]);
+  const displayVwap = finiteOrNull(vwapLine[displayCandleIdx]);
+  const displayRsi = finiteOrNull(rsiLine[displayCandleIdx]);
 
   // Handle SVG Mouse Navigation & Crosshair
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -1728,23 +1736,23 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </span>
         <div>
           <span className="text-[#8b84a8]">O: </span>
-          <span className="font-bold text-white">${displayOpen.toFixed(1)}</span>
+          <span className="font-bold text-white">{readoutUsd(displayOpen)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">H: </span>
-          <span className="font-bold text-emerald-400">${displayHigh.toFixed(1)}</span>
+          <span className="font-bold text-emerald-400">{readoutUsd(displayHigh)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">L: </span>
-          <span className="font-bold text-rose-400">${displayLow.toFixed(1)}</span>
+          <span className="font-bold text-rose-400">{readoutUsd(displayLow)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">C: </span>
-          <span className="font-bold text-white">${displayClose.toFixed(1)}</span>
+          <span className="font-bold text-white">{readoutUsd(displayClose)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">VOL: </span>
-          <span className="font-bold text-purple-300">{displayVolume.toFixed(1)}</span>
+          <span className="font-bold text-purple-300">{readoutNum(displayVolume)}</span>
         </div>
       </div>
 
@@ -1752,19 +1760,19 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         {showEMA && (
           <div>
             <span className="text-purple-400">EMA9: </span>
-            <span className="font-bold text-white">${displayEma9.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutUsd(displayEma9)}</span>
           </div>
         )}
         {showVWAP && (
           <div>
             <span className="text-cyan-400">VWAP: </span>
-            <span className="font-bold text-white">${displayVwap.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutUsd(displayVwap)}</span>
           </div>
         )}
         {showRSI && (
           <div>
             <span className="text-amber-400">RSI: </span>
-            <span className="font-bold text-white">{displayRsi.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutNum(displayRsi)}</span>
           </div>
         )}
       </div>

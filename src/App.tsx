@@ -7,16 +7,12 @@ import {
   Candle,
   UserSubscription,
   AlertSettings,
-  HistoricalPrediction,
-  SupportTicket,
-  AdminStats,
   AuthState,
   JournalEntry,
   ApiKey,
   ExchangeApiKeys,
 } from './types';
 import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi, safeFetchJson, getEntitlementsApi, EntitlementsResponse } from './services/api';
-import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { TopNavControls } from './components/TopNavControls';
@@ -1022,32 +1018,14 @@ export default function App() {
     },
   });
 
-  // Trade Journal Entries
-  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([
-    {
-      id: 'LOG-8812',
-      timestamp: Date.now() - 3600 * 1000 * 2,
-      market: 'BTC/USDT 15M',
-      direction: 'YES',
-      entryPrice: 63980,
-      exitPrice: 64120,
-      targetPrice: 64100,
-      positionSizeUSD: 2500,
-      pnlUSD: 280,
-      pnlPct: 11.2,
-      confidenceScore: 91,
-      tradeGrade: 'A+',
-      notes: 'Clean L2 net delta spike (+1,420 BTC). Kalshi implied odds were severely underpriced at 48%. Easy win.',
-      status: 'WIN',
-    },
-  ]);
+  // Trade Journal Entries. Starts empty: this used to hold an invented winning
+  // trade. Real journal entries live on the server (/api/journal), which
+  // TradeJournalView and LeaderboardView read directly.
+  const [journalEntries, setJournalEntries] = useState<JournalEntry[]>([]);
 
-  // Historical Records State
-  const [history] = useState<HistoricalPrediction[]>(INITIAL_HISTORICAL_PREDICTIONS);
-
-  // Admin Data State
-  const [adminStats] = useState<AdminStats>(INITIAL_ADMIN_STATS);
-  const [supportTickets, setSupportTickets] = useState<SupportTicket[]>(INITIAL_SUPPORT_TICKETS);
+  // The history/admin seed state that lived here came from src/data/mockData.ts
+  // (fake support tickets, zeroed stats). HistoricalAccuracy and AdminPanel
+  // never read those props -- both fetch their own data -- so it was removed.
 
   // Fetch Live Ticker & Klines for Selected Asset and Connect Live WebSocket Stream
   useEffect(() => {
@@ -1369,7 +1347,7 @@ export default function App() {
           )}
 
           {activeTab === 'history' && (
-            <HistoricalAccuracy history={history} />
+            <HistoricalAccuracy />
           )}
 
           {activeTab === 'landing' && (
@@ -1665,7 +1643,7 @@ export default function App() {
                     />
                   )}
 
-                  {activeTab === 'history' && <HistoricalAccuracy history={history} />}
+                  {activeTab === 'history' && <HistoricalAccuracy />}
 
                   {activeTab === 'changelog' && (
                     <ChangelogView
@@ -1676,7 +1654,6 @@ export default function App() {
 
                   {activeTab === 'leaderboard' && (
                     <LeaderboardView
-                      entries={journalEntries}
                       onOpenJournal={() => setActiveTab('journal')}
                     />
                   )}
@@ -1723,7 +1700,7 @@ export default function App() {
 
                   {activeTab === 'admin' && (
                     userRole === 'ADMIN' || authState.user?.role === 'ADMIN' || authState.user?.role === 'OWNER' ? (
-                      <AdminPanel stats={adminStats} tickets={supportTickets} setTickets={setSupportTickets} />
+                      <AdminPanel />
                     ) : (
                       <div className="bg-[#070410] border-2 border-rose-500/40 rounded-2xl p-8 text-center space-y-4 max-w-lg mx-auto my-12 shadow-2xl">
                         <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center mx-auto">
