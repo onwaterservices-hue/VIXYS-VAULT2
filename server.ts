@@ -1353,7 +1353,12 @@ app.get("/api/health", (req, res) => {
     backendAuthReady: typeof backendAuthReady !== "undefined" ? backendAuthReady : null,
   });
 });
-let currentEngineCycleId = 287;
+// Count of engine ticks run by THIS process. It started at 287, so a freshly
+// booted instance reported cycle #287 and /api/signal served sequenceNumber 287+
+// as if hundreds of cycles had already run (the same 287 as the invented
+// "Engine Cycle #287" boot log removed in #99). It is per-instance, not global;
+// the persisted cross-instance counter is globalSequenceNumber.
+let currentEngineCycleId = 0;
 let lastMarketUpdateTs = Date.now();
 let lastModelRunTs = Date.now();
 let lastSignalUpdateTs = Date.now();
