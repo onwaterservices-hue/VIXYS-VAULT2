@@ -603,7 +603,7 @@ export async function executeAutoTradesForSignal(
 
     const userThreshold = config.confidenceThreshold || 80;
     if (confidence < userThreshold) {
-      recordAuditLog({ userId, userEmail: userState.userEmail, signalId, asset, direction, confidence, threshold: userThreshold, stakeUSD: config.maxStakePerTradeUSD || 25, action: 'SKIPPED_THRESHOLD', status: 'SKIPPED', rawResponse: { message: `Signal confidence ${confidence}% is below user threshold ${userThreshold}%` }, details: `Skipped trade: ${confidence}% confidence < ${userThreshold}% threshold` }, firestoreDb);
+      recordAuditLog({ userId, userEmail: userState.userEmail, signalId, asset, direction, confidence, threshold: userThreshold, stakeUSD: config.maxStakePerTradeUSD || 25, action: 'SKIPPED_THRESHOLD', status: 'SKIPPED', rawResponse: { message: `Engine score ${confidence} / 100 is below the user's gate ${userThreshold} / 100` }, details: `Skipped trade: engine score ${confidence} / 100 < gate ${userThreshold} / 100` }, firestoreDb);
       return { status: 'skipped', reason: 'below_threshold' };
     }
 
