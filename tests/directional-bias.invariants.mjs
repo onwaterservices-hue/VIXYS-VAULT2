@@ -186,6 +186,18 @@ console.log('== timeframe lookbacks use real candle history on young instances =
   t('hydrator is single-flight', /_historyHydrateInFlight\) return;/.test(hSrc), true);
   t('hydrator reads real Coinbase 1m candles', /api\.exchange\.coinbase\.com\/products\/BTC-USD\/candles\?granularity=60/.test(hSrc), true);
   t('engine tick triggers hydration before the pipeline', /void hydratePriceHistoryFromCandles\(now\);\s*\n\s*latestBtc15mPipeline = evaluateBtc15mHighConvictionPipeline\(/.test(src), true);
+  // A cold instance waits for the first candle fetch before it evaluates, so its
+  // first 5m/15m votes and realized volatility read real minute history. The wait
+  // sits before the replay sandbox's input slice (which starts at spotStrikeDist)
+  // so the sliced, non-async derivation never contains an await.
+  {
+    const wait = 'if (hydratedBtcCloses.length === 0) await hydratePriceHistoryFromCandles(Date.now());';
+    const wi = src.indexOf(wait);
+    const di = src.indexOf('    const spotStrikeDist = livePrice - current15mStrikePrice;');
+    t('cold instance waits for minute history, only while none is held', wi > 0 && src.indexOf(wait, wi + 1) === -1, true);
+    t('the wait precedes the input derivation and the pipeline', wi > 0 && di > wi && di - wi < 200, true);
+    t('the replay input slice contains no await', /await/.test(src.slice(di, src.indexOf('    void hydratePriceHistoryFromCandles(now);', di)).replace(/\/\/[^\n]*/g, '')), false);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
