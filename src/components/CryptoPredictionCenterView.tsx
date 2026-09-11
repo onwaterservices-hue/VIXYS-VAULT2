@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { lockQualityLabel, alignmentLabel, evidenceState, headline } from '../lib/engineSemantics';
+import { lockQualityLabel, alignmentLabel, evidenceState, headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 import { fetchResolvedLogApi, fetchDailyTallyApi } from '../services/api';
 import {
   Sparkles,
@@ -170,6 +170,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const observationRows = lockChecks.filter((c) => c.gating === false && c.id !== 'CALIBRATED_P');
   const gatesTotal = gateRows.length;
   const gatesPassing = gateRows.filter((c) => c.pass).length;
+  // After a lock the server keeps re-evaluating gates; they are not blockers then.
+  const readinessLock = lockStatusOf(canonicalDecision as any);
+  const readinessOpen = readinessLock.kind === 'OPEN';
   const l5Row = lockChecks.find((c) => c.id === 'CALIBRATED_P') ?? null;
   const l5RowLabel =
     lockPolicy === 'STRIKE_SIDE_RULE' ? 'Layer 5 decides the lock (strike-side rule)'
@@ -1478,8 +1481,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <div className="flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-cyan-300" />
                 <span className="text-xs font-black text-white font-sans uppercase tracking-wider">Lock Readiness</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${gateEligible ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-purple-900/40 border-purple-700/40 text-purple-200'}`}>
-                  {gateEligible ? 'GATE OPEN' : `${gatesPassing}/${gatesTotal} GATES PASSING`}
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border ${gateEligible || !readinessOpen ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-purple-900/40 border-purple-700/40 text-purple-200'}`}>
+                  {!readinessOpen ? lockStatusWord(readinessLock) : gateEligible ? 'GATE OPEN' : `${gatesPassing}/${gatesTotal} GATES PASSING`}
                 </span>
                 {lockPolicy === 'STRIKE_SIDE_RULE' && (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold border bg-cyan-500/10 border-cyan-400/40 text-cyan-200" title="The server's lock policy: the calibrated strike-side rule decides the side and the timing; the engine score is observation only">
@@ -1510,6 +1513,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               )}
             </div>
 
+            {!readinessOpen && (
+              <p className="pt-3 text-[11px] text-cyan-200 font-sans">{lockStatusSentence(readinessLock)} The rows below are how the gates read at this tick.</p>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 pt-3">
               {/* Gate rows — full labels, current vs required */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">

@@ -12,6 +12,7 @@
  */
 import {
   evidenceState, confidenceLabel, lockQualityLabel, alignmentLabel, headline, pWinLabel,
+  lockStatusOf, lockStatusWord, lockStatusSentence,
 } from "../src/lib/engineSemantics.ts";
 import { readRepoFile, createHarness } from "./_engineSource.mjs";
 
@@ -80,5 +81,27 @@ t.check("P(win) side is only UP/DOWN", headline({ calibrated: { pWin: 0.5, n: 40
 t.check("pWinLabel tiers: 95 AT LAYER-5 BAR / 85 STRONG / 70 CLEAR / 58 MODEST / 42 COIN FLIP / below AGAINST",
   pWinLabel(96) === "AT LAYER-5 BAR" && pWinLabel(85) === "STRONG EDGE" && pWinLabel(70) === "CLEAR EDGE" && pWinLabel(58) === "MODEST EDGE" && pWinLabel(50) === "COIN FLIP" && pWinLabel(30) === "AGAINST CURRENT SIDE");
 t.check("pWinLabel(null) says there is no matching history", pWinLabel(null) === "NO MATCHING HISTORY");
+
+t.section("lockStatusOf(): gate checks are not blockers after a lock");
+// Captured from production 2026-09-11 01:36:28 local: the engine locked UP and,
+// at the same tick, 8 gating checks read as failing, including NOT_LOCKED.
+const lockedPayload = {
+  currentState: "LOCKED_UP", direction: "UP", lockedAt: 1789104984817,
+  lockGate: { eligible: false, checks: [
+    { id: "LOCK_QUALITY", current: "75", pass: false },
+    { id: "NOT_LOCKED", current: "locked", pass: false },
+  ] },
+};
+t.eq("LOCKED_UP is LOCKED UP", lockStatusWord(lockStatusOf(lockedPayload)), "LOCKED UP");
+t.eq("LOCKED_DOWN is LOCKED DOWN", lockStatusWord(lockStatusOf({ currentState: "LOCKED_DOWN" })), "LOCKED DOWN");
+t.eq("PROTECTED is still a lock, side from direction", lockStatusWord(lockStatusOf({ currentState: "PROTECTED", direction: "DOWN" })), "LOCKED DOWN");
+t.eq("SKIP is SKIPPED", lockStatusOf({ currentState: "SKIP", direction: "UP" }).kind, "SKIPPED");
+t.eq("SETTLED is SETTLED", lockStatusOf({ currentState: "SETTLED" }).kind, "SETTLED");
+t.eq("WATCH with an open NOT_LOCKED check is OPEN", lockStatusOf({ currentState: "WATCH", lockedAt: null, lockGate: { checks: [{ id: "NOT_LOCKED", current: "open" }] } }).kind, "OPEN");
+t.eq("a lockedAt stamp alone means LOCKED", lockStatusOf({ currentState: "WATCH", direction: "UP", lockedAt: 1789104984817 }).kind, "LOCKED");
+t.eq("the server's NOT_LOCKED=locked check alone means LOCKED", lockStatusOf({ currentState: "CONFIRMING", lockGate: { checks: [{ id: "NOT_LOCKED", current: "locked" }] } }).kind, "LOCKED");
+t.eq("no decision is OPEN, never a guessed lock", lockStatusOf(undefined).kind, "OPEN");
+t.check("an open cycle has no lock sentence", lockStatusSentence(lockStatusOf({ currentState: "WATCH" })) === "");
+t.check("a locked cycle says nothing is blocking", lockStatusSentence(lockStatusOf(lockedPayload)).includes("nothing is blocking now"));
 
 t.done();

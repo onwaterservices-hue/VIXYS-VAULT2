@@ -15,7 +15,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
-import { headline } from '../lib/engineSemantics';
+import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 
 /**
  * Scalping desk chart.
@@ -235,6 +235,8 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
       : [];
   const gatesPassing = gateChecks.filter((c) => c.pass).length;
   const lockEligible = Boolean(engineDecision?.lockEligibility?.eligible ?? engineDecision?.lockGate?.eligible ?? false);
+  const lock = lockStatusOf(engineLive ? engineDecision : null);
+  const cycleOpen = lock.kind === 'OPEN';
 
   // Audio trigger
   const handleActionSound = (direction: 'UP' | 'DOWN') => {
@@ -972,7 +974,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               <div className="px-3 py-1 rounded-xl bg-[#0a0518] border border-cyan-500/40 text-[10px]">
                 <span className="text-gray-400">GATES: </span>
                 <span className="text-cyan-300 font-black">
-                  {gateChecks.length ? `${gatesPassing}/${gateChecks.length} PASSING` : 'NO GATE DATA'}
+                  {!cycleOpen ? lockStatusWord(lock) : gateChecks.length ? `${gatesPassing}/${gateChecks.length} PASSING` : 'NO GATE DATA'}
                 </span>
               </div>
             </div>
@@ -1032,7 +1034,9 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
 
               <div className="pt-2 border-t border-purple-900/30 space-y-1.5">
                 <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider block">LOCK GATE CHECKS</span>
-                {gateChecks.length === 0 ? (
+                {!cycleOpen ? (
+                  <span className="text-[10px] text-cyan-200/80 font-sans">{lockStatusSentence(lock)}</span>
+                ) : gateChecks.length === 0 ? (
                   <span className="text-[10px] text-purple-300/50 font-sans">The engine has not reported its gate checks this tick.</span>
                 ) : (
                   <div className="flex flex-wrap gap-1.5">
@@ -1072,7 +1076,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
                   ['Time left in window', timeLeft !== null ? fmtCycleSec(timeLeft) : '—'],
                   ['Calibration sample', typeof calibrated?.n === 'number' && calibrated.n > 0 ? `n=${calibrated.n}` : '—'],
                   ['Kalshi read age', market && typeof market.ageMs === 'number' ? `${Math.round(market.ageMs / 1000)}s` : 'no fresh read'],
-                  ['Lock eligible', lockEligible ? 'YES' : 'NOT YET'],
+                  ['Lock', !cycleOpen ? lockStatusWord(lock) : lockEligible ? 'ELIGIBLE' : 'NOT YET ELIGIBLE'],
                 ].map(([k, v]) => (
                   <div key={k} className="p-2 rounded-xl bg-[#0c0620] border border-purple-900/30 flex items-center justify-between">
                     <span className="text-gray-400">{k}</span>

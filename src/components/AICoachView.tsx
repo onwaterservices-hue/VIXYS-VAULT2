@@ -1,7 +1,7 @@
 import React from 'react';
 import { Compass, Brain, CheckCircle2, XCircle, Info } from 'lucide-react';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
-import { headline } from '../lib/engineSemantics';
+import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 
 /**
  * VIXY VAULT - COACH
@@ -37,6 +37,8 @@ export const AICoachView: React.FC = () => {
   const failing = gating.filter((c) => !c.pass);
   const passing = gating.filter((c) => c.pass);
   const eligible = Boolean(decision?.lockEligibility?.eligible ?? decision?.lockGate?.eligible ?? false);
+  const lock = lockStatusOf(decision);
+  const cycleOpen = lock.kind === 'OPEN';
 
   const calibrated = decision?.calibrated ?? null;
   const pWinPct = typeof calibrated?.pWin === 'number' ? Math.round(calibrated.pWin * 100) : null;
@@ -100,17 +102,19 @@ export const AICoachView: React.FC = () => {
           {/* What is holding the lock back */}
           <div className="bg-[#0a0518] rounded-2xl border border-slate-800 p-6 space-y-4 font-mono">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">What is holding the lock back</h3>
+              <h3 className="text-sm font-extrabold text-white uppercase tracking-wider">{cycleOpen ? 'What is holding the lock back' : 'Lock status'}</h3>
               <span
                 className={`px-2.5 py-1 rounded text-[10px] font-bold border ${
-                  eligible ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                  eligible || !cycleOpen ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
                 }`}
               >
-                {gating.length ? `${passing.length}/${gating.length} GATES` : 'NO GATE DATA'}
+                {!cycleOpen ? lockStatusWord(lock) : gating.length ? `${passing.length}/${gating.length} GATES` : 'NO GATE DATA'}
               </span>
             </div>
 
-            {gating.length === 0 ? (
+            {!cycleOpen ? (
+              <p className="text-xs text-cyan-200 font-sans leading-relaxed">{lockStatusSentence(lock)}</p>
+            ) : gating.length === 0 ? (
               <p className="text-xs text-slate-400 font-sans">The server did not send its gate checklist this tick.</p>
             ) : failing.length === 0 ? (
               <p className="text-xs text-emerald-300 font-sans flex items-center gap-1.5">
@@ -132,7 +136,7 @@ export const AICoachView: React.FC = () => {
               </div>
             )}
 
-            {passing.length > 0 && (
+            {cycleOpen && passing.length > 0 && (
               <details className="text-xs">
                 <summary className="cursor-pointer text-slate-400 hover:text-white">Passing ({passing.length})</summary>
                 <div className="mt-2 space-y-1.5">

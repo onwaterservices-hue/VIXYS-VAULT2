@@ -222,3 +222,65 @@ export type EngineDecisionLike =
     }
   | null
   | undefined;
+
+/**
+ * Where the current cycle stands relative to a lock.
+ *
+ * Gate checks only decide whether the engine may lock. The server keeps
+ * re-evaluating them every tick after a lock, so a checklist read after the
+ * lock shows "failing" gates (including "No lock yet this cycle: locked") for
+ * a lock that already happened. Surfaces must call this first and present the
+ * checklist as "what is blocking a lock" only while the cycle is OPEN.
+ */
+export type LockStatusKind = 'OPEN' | 'LOCKED' | 'SKIPPED' | 'SETTLED';
+
+export interface LockStatus {
+  kind: LockStatusKind;
+  direction: 'UP' | 'DOWN' | null;
+  lockedAt: number | null;
+}
+
+export function lockStatusOf(
+  decision:
+    | {
+        currentState?: string | null;
+        direction?: string | null;
+        lockedAt?: number | null;
+        lockGate?: { checks?: Array<{ id?: string; current?: unknown } | null> | null } | null;
+      }
+    | null
+    | undefined,
+): LockStatus {
+  const st = decision?.currentState ?? null;
+  const dir: 'UP' | 'DOWN' | null = decision?.direction === 'UP' || decision?.direction === 'DOWN' ? decision.direction : null;
+  const lockedAt = typeof decision?.lockedAt === 'number' && decision.lockedAt > 0 ? decision.lockedAt : null;
+  if (st === 'SETTLED') return { kind: 'SETTLED', direction: dir, lockedAt };
+  if (st === 'SKIP') return { kind: 'SKIPPED', direction: null, lockedAt: null };
+  if (st === 'LOCKED_UP') return { kind: 'LOCKED', direction: 'UP', lockedAt };
+  if (st === 'LOCKED_DOWN') return { kind: 'LOCKED', direction: 'DOWN', lockedAt };
+  if (st === 'PROTECTED') return { kind: 'LOCKED', direction: dir, lockedAt };
+  const checks = Array.isArray(decision?.lockGate?.checks) ? decision!.lockGate!.checks! : [];
+  const notLocked = checks.find((c) => c && c.id === 'NOT_LOCKED');
+  if (lockedAt !== null || notLocked?.current === 'locked') return { kind: 'LOCKED', direction: dir, lockedAt };
+  return { kind: 'OPEN', direction: null, lockedAt: null };
+}
+
+export function lockStatusWord(status: LockStatus): string {
+  if (status.kind === 'LOCKED') return status.direction ? `LOCKED ${status.direction}` : 'LOCKED';
+  if (status.kind === 'SKIPPED') return 'SKIPPED';
+  if (status.kind === 'SETTLED') return 'SETTLED';
+  return 'OPEN';
+}
+
+export function lockStatusSentence(status: LockStatus): string {
+  if (status.kind === 'LOCKED') {
+    const side = status.direction ? ` ${status.direction}` : '';
+    const at = status.lockedAt
+      ? ` at ${new Date(status.lockedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`
+      : '';
+    return `The engine already locked${side}${at} this cycle. Gate checks only decide whether to lock, so nothing is blocking now.`;
+  }
+  if (status.kind === 'SKIPPED') return 'The engine skipped this cycle. Gate checks for the next cycle appear when it opens.';
+  if (status.kind === 'SETTLED') return 'This cycle has settled. Gate checks for the next cycle appear when it opens.';
+  return '';
+}
