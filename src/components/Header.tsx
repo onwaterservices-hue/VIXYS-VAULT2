@@ -85,7 +85,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [utcTime, setUtcTime] = useState<string>('');
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState<boolean>(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState<boolean>(false);
-  const [selectedCategory, setSelectedCategory] = useState<'ALL' | '15M' | 'WHALE' | 'PROTECTION'>('ALL');
+  const [selectedCategory, setSelectedCategory] = useState<'ALL' | '15M' | 'SKIPS'>('ALL');
 
   // Authoritative live canonical decision hook
   const { decision: canonicalDecision, dataHealthStatus } = useCanonical15mDecision();
@@ -162,11 +162,10 @@ export const Header: React.FC<HeaderProps> = ({
     if (selectedCategory === '15M') {
       return notifications.filter((n) => n.type === '15M_LOCK' || n.type === '15M_SETTLED');
     }
-    if (selectedCategory === 'WHALE') {
-      return notifications.filter((n) => n.type === 'WHALE' || n.type === 'ORDERFLOW');
-    }
-    if (selectedCategory === 'PROTECTION') {
-      return notifications.filter((n) => n.type === 'PROTECTION' || n.type === 'REGIME');
+    // REGIME is the "15M Cycle Skipped" notification. It was filed under a "SHIELD" tab, and a
+    // WHALES tab listed alert types nothing creates any more.
+    if (selectedCategory === 'SKIPS') {
+      return notifications.filter((n) => n.type === 'REGIME');
     }
     return notifications;
   }, [notifications, selectedCategory]);
@@ -374,7 +373,7 @@ export const Header: React.FC<HeaderProps> = ({
 
                 {/* Category Filtering Tabs */}
                 <div className="flex items-center gap-1 p-2 bg-[#080415] border-b border-purple-900/30 text-[10px] font-bold overflow-x-auto">
-                  {(['ALL', '15M', 'WHALE', 'PROTECTION'] as const).map((cat) => (
+                  {(['ALL', '15M', 'SKIPS'] as const).map((cat) => (
                     <button
                       key={cat}
                       onClick={() => setSelectedCategory(cat)}
@@ -384,7 +383,7 @@ export const Header: React.FC<HeaderProps> = ({
                           : 'text-purple-300/70 hover:text-white hover:bg-purple-950/60'
                       }`}
                     >
-                      {cat === 'ALL' ? `ALL (${notifications.length})` : cat === '15M' ? '15M LOCKS' : cat === 'WHALE' ? 'WHALES' : 'SHIELD'}
+                      {cat === 'ALL' ? `ALL (${notifications.length})` : cat === '15M' ? '15M LOCKS' : 'SKIPS'}
                     </button>
                   ))}
                 </div>

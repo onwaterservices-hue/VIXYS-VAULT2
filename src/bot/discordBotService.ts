@@ -109,69 +109,9 @@ export async function initializeDiscordBot(): Promise<boolean> {
   return await initClientBot();
 }
 
-// Broadcast high-confidence signal to Discord via Bot or Webhook
-export async function broadcastSignalToDiscord(signalData: {
-  symbol: string;
-  direction: 'YES' | 'NO';
-  confidence: number;
-  edgePct: number | null;
-  currentPrice: number;
-  targetPrice: number;
-  reasoning: string;
-  webhookUrl?: string;
-}): Promise<{ success: boolean; method: string; message: string }> {
-  const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
-  const isBullish = signalData.direction === 'YES';
-
-  const embedPayload = {
-    username: 'VIXY Terminal Intelligence',
-    avatar_url: 'https://images.unsplash.com/photo-1621416894569-0f39ed31d247?w=100',
-    embeds: [
-      {
-        title: `⚡ VIXY Signal Alert: ${signalData.symbol} -> ${signalData.direction} (${signalData.confidence}% Conf)`,
-        color: isBullish ? 65280 : 16711680,
-        fields: [
-          { name: 'Spot Price', value: `$${signalData.currentPrice.toLocaleString()}`, inline: true },
-          { name: 'Target Price', value: `$${signalData.targetPrice.toLocaleString()}`, inline: true },
-          { name: 'Edge vs Odds', value: typeof signalData.edgePct === 'number' ? `${signalData.edgePct >= 0 ? '+' : ''}${signalData.edgePct}%` : 'No live Kalshi price', inline: true },
-          { name: 'AI Reasoning', value: signalData.reasoning, inline: false },
-        ],
-        footer: { text: 'VIXY AI • Brier Calibrated • Decision Intelligence' },
-        timestamp: new Date().toISOString(),
-      },
-    ],
-  };
-
-  // Try Webhook first if provided or active
-  if (webhookUrl) {
-    try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(embedPayload),
-      });
-
-      if (res.ok) {
-        botState.lastBroadcastAt = new Date().toISOString();
-        botState.totalAlertsDispatched += 1;
-        return { success: true, method: 'WEBHOOK', message: 'Signal successfully posted to Discord Webhook!' };
-      } else {
-        const errorText = await res.text().catch(() => 'unknown');
-        console.error(`[DiscordBot] Webhook dispatch returned HTTP ${res.status}: ${errorText}`);
-        return { success: false, method: 'WEBHOOK', message: `Webhook failed with status ${res.status}` };
-      }
-    } catch (err) {
-      console.error('[DiscordBot] Webhook dispatch failed:', err);
-      return { success: false, method: 'WEBHOOK', message: 'Webhook dispatch exception' };
-    }
-  }
-
-  return {
-    success: false,
-    method: 'NONE',
-    message: 'No active Discord Webhook URL configured.',
-  };
-}
+// The lock broadcaster is broadcastSignalToDiscord in ./index.ts (imported by server.ts via
+// ./src/bot). An unused copy here posted "(N% Conf)", "AI Reasoning" and a "Brier
+// Calibrated" footer, and was removed so it cannot be wired back in.
 
 // Synchronize Discord Guild Member Roles (ELITE / AI / VERIFIED / PRO)
 interface CachedSyncResult {
