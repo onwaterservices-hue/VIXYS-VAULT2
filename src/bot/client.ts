@@ -189,7 +189,8 @@ export class DiscordBotManager {
       console.log(`[DiscordBotManager] ✅ Connected successfully as ${c.user.tag}! Active across ${c.guilds.cache.size} guilds.`);
 
       c.user.setPresence({
-        activities: [{ name: 'VIXY AI Signals | /dashboard | /predict', type: 3 }],
+        // Only /ping is registered (src/bot/index.ts); /dashboard and /predict do not exist.
+        activities: [{ name: 'VIXY 15M BTC locks | /ping', type: 3 }],
         status: 'online',
       });
     });

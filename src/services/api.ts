@@ -845,8 +845,8 @@ export interface ApiSignalResponse {
   signalState?: SignalStateType;
   signalConfirmed?: boolean;
   modelProbability: number | null;
-  upProbability?: number;
-  downProbability?: number;
+  upProbability?: number | null;
+  downProbability?: number | null;
   pUp?: number;
   pDown?: number;
   uncertaintyPct?: number;
@@ -858,11 +858,11 @@ export interface ApiSignalResponse {
     edgeDownPct: number;
     directionalBias: 'UP' | 'DOWN' | 'NEUTRAL';
   };
-  evidenceQuality?: number;
+  evidenceQuality?: number | null;
   vixyLockState?: string;
   decision?: string;
-  correlationPenalty?: string;
-  evidenceMatrix?: Array<{ name: string; strength: string; bias: string }>;
+  correlationPenalty?: string | null;
+  evidenceMatrix?: Array<{ name: string; strength: string; bias: string }> | null;
   confidence?: number | null;
   confidenceLabel?: string;
   kalshiImpliedProbability: number | null;
