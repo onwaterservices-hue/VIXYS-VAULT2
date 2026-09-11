@@ -17,7 +17,6 @@ import {
 } from './types';
 import { fetchCryptoTicker, fetchCryptoKlines, connectLiveCryptoStream, fetchAllCryptoTickers, getDiscordUserProfileApi, getAccountMeApi, syncAuthUserApi, safeFetchJson, getEntitlementsApi, EntitlementsResponse } from './services/api';
 import { INITIAL_HISTORICAL_PREDICTIONS, INITIAL_SUPPORT_TICKETS, INITIAL_ADMIN_STATS } from './data/mockData';
-import { ASSET_DATABASE } from './data/assetData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { TopNavControls } from './components/TopNavControls';
@@ -718,14 +717,15 @@ export default function App() {
   };
 
   // Live Ticker State initialized from active Asset
-  const activeAssetConfig = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;
+  // No price until a venue answers. Consumers render a dash for 0 or non-finite
+  // values; seeding from the static asset table showed months-old prices as live.
   const [ticker, setTicker] = useState<BTCTicker>({
-    price: activeAssetConfig.price,
-    change24h: activeAssetConfig.change24h,
-    high24h: activeAssetConfig.high24h,
-    low24h: activeAssetConfig.low24h,
-    volume24h: 28410.5,
-    timestamp: Date.now(),
+    price: 0,
+    change24h: Number.NaN,
+    high24h: Number.NaN,
+    low24h: Number.NaN,
+    volume24h: Number.NaN,
+    timestamp: 0,
   });
 
   // Spot prices map across assets
@@ -771,16 +771,15 @@ export default function App() {
   // When selectedAsset changes, sync Ticker from live feed or cached spot price
   useEffect(() => {
     let isMounted = true;
-    const config = ASSET_DATABASE[selectedAsset] || ASSET_DATABASE.BTC;
     const cachedSpot = spotPrices[selectedAsset];
-    
+    // Last observed price for this asset, or nothing. Never the static table.
     setTicker({
-      price: cachedSpot?.price || config.price,
-      change24h: cachedSpot?.change24h ?? config.change24h,
-      high24h: config.high24h,
-      low24h: config.low24h,
-      volume24h: 28410.5,
-      timestamp: Date.now(),
+      price: cachedSpot?.price ?? 0,
+      change24h: cachedSpot?.change24h ?? Number.NaN,
+      high24h: Number.NaN,
+      low24h: Number.NaN,
+      volume24h: Number.NaN,
+      timestamp: cachedSpot ? Date.now() : 0,
     });
 
     fetchCryptoTicker(selectedAsset).then((data) => {
