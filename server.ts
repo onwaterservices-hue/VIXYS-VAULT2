@@ -17671,13 +17671,15 @@ app.get("/api/venues/polymarket", async (req, res) => {
       });
     }
   } catch (err) {}
+  // The fetch failed. This used to answer status "ACTIVE" with invented prices
+  // (impliedYesPct 52 / impliedNoPct 48, $0.52 / $0.48 shares). Say it failed,
+  // as /api/venues/kalshi does.
   res.json({
     venue: "Polymarket",
-    status: "ACTIVE",
-    impliedYesPct: 52,
-    impliedNoPct: 48,
-    yesSharePriceUSD: 0.52,
-    noSharePriceUSD: 0.48,
+    status: "DATA UNAVAILABLE",
+    isLive: false,
+    markets: [],
+    message: "DATA UNAVAILABLE: Unable to retrieve live Polymarket markets",
     timestamp: Date.now(),
   });
 });
