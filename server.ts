@@ -6323,6 +6323,47 @@ async function clearLoginFailures(cleanEmail, req) {
 }
 __name(clearLoginFailures, "clearLoginFailures");
 
+// ---- Per-address budget for unauthenticated auth actions ----
+// Account creation (Firestore writes) and password-reset emails (Resend quota
+// and sender reputation) cost something to serve. Registration had no limit, and
+// the reset limiter only counted per target email, so one client could create
+// unlimited accounts or mail reset links to unlimited addresses. Counted in
+// Firestore within a 1-hour window so the cap holds across serverless
+// instances; fails OPEN like the other auth limiters.
+function requestClientAddress(req) {
+  const forwarded = String((req.headers && req.headers["x-forwarded-for"]) || "").split(",")[0].trim();
+  return forwarded || String((req.socket && req.socket.remoteAddress) || "");
+}
+__name(requestClientAddress, "requestClientAddress");
+
+async function consumeAuthAddressBudget(req, action, max) {
+  if (!db && !_adminActive) return true;
+  const address = requestClientAddress(req);
+  if (!address) return true;
+  const windowMs = 60 * 60 * 1000;
+  const id = action + "_" + crypto.createHash("sha256").update(address).digest("hex");
+  try {
+    const allowed = await runTransaction(db, async (tx) => {
+      const ref = doc(db, "auth_address_limits", id);
+      const snap = await tx.get(ref);
+      const now = Date.now();
+      const data = snap.exists() ? snap.data() || {} : {};
+      if (snap.exists() && now - (data.windowStart || 0) < windowMs) {
+        if ((data.count || 0) >= max) return false;
+        tx.set(ref, { windowStart: data.windowStart, count: (data.count || 0) + 1, updatedAt: new Date(now).toISOString() });
+        return true;
+      }
+      tx.set(ref, { windowStart: now, count: 1, updatedAt: new Date(now).toISOString() });
+      return true;
+    });
+    return allowed !== false;
+  } catch (err) {
+    console.warn(`[AUTH] ${action} address budget check failed, allowing:`, err?.message || err);
+    return true;
+  }
+}
+__name(consumeAuthAddressBudget, "consumeAuthAddressBudget");
+
 app.post("/api/auth/login", async (req, res) => {
   const reqId = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   console.log(
@@ -7445,6 +7486,13 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   }
   const cleanEmail = email.trim().toLowerCase();
 
+  // Per-address cap first: the per-email limit below cannot stop one client
+  // mailing reset links to many different addresses.
+  if (!(await consumeAuthAddressBudget(req, "password_reset", 10))) {
+    console.log("[PasswordReset] Address budget exhausted; no email sent.");
+    return res.json(genericResponse); // same response: never reveal limit state
+  }
+
   const allowed = await checkPasswordResetRateLimit(cleanEmail);
   if (!allowed) {
     console.log(`[PasswordReset] Rate limit exceeded for ${cleanEmail}`);
@@ -8069,6 +8117,13 @@ app.post("/api/auth/register", async (req, res) => {
   try {
     await ensureFirebaseReady();
   } catch (initErr) {}
+  if (!(await consumeAuthAddressBudget(req, "register", 10))) {
+    return res.status(429).json({
+      success: false,
+      error: "TOO_MANY_SIGNUPS",
+      message: "Too many sign-up attempts from this network. Please try again in an hour.",
+    });
+  }
   const resolution = await resolveCanonicalUserByEmail(cleanEmail).catch(
     () => ({ user: null, allDocs: [] }),
   );
