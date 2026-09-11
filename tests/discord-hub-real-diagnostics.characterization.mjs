@@ -11,7 +11,7 @@
 // /leaderboard: a confidence from the 24h change, a fixed 8.4% edge and 54/46
 // Kalshi odds, "Brier 0.168 n=1,842", a v4.3-INCREMENTAL model at 71.8% over
 // 18,427 cycles, and invented traders. Only /ping remains. The Sidebar showed a
-// fixed "3" on Alerts.
+// fixed "3" on Alerts. With no real tag the bot was shown as "VIXY AI#0000".
 import { readRepoFile, serverSrc, createHarness } from './_engineSource.mjs';
 
 const t = createHarness('discord-hub-real-diagnostics.characterization');
@@ -55,6 +55,9 @@ t.section('bot service slash commands');
   t.check('no invented analysis or record', !/Whale_Hunter|v4\.3-INCREMENTAL|0\.168|71\.8|18,427|n=1,842|\|\| 12\}|fetchCurrentPrice/.test(svc));
   t.check('role assignment and diagnostics remain', svc.includes('export async function assignDiscordRoleToUser(') && svc.includes('export async function runDiscordDiagnostics('));
 }
+
+t.section('bot tag');
+t.check('no placeholder bot tag anywhere', ![readRepoFile('src/components/DiscordBotHubView.tsx'), readRepoFile('src/bot/index.ts'), readRepoFile('src/bot/discordBotService.ts'), serverSrc].some((s) => s.includes('VIXY AI#0000')));
 
 t.section('sidebar');
 t.check('Alerts has no invented count', !/id: "alerts"[^}]*badge:/.test(readRepoFile('src/components/Sidebar.tsx')));
