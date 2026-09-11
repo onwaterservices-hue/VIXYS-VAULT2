@@ -1582,6 +1582,8 @@ export default function App() {
                       onSelectAsset={(sym) => setSelectedAsset(sym)}
                       alertSettings={alertSettings}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
+                      engineDecision={canonical15m.decision}
+                      engineFeedHealth={canonical15m.dataHealthStatus}
                     />
                   )}
 
