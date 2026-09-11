@@ -90,7 +90,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     ? 'Server memory only, not persisted'
     : 'From your server journal';
 
-  // Community Verified Logged Trades (Derived strictly from verified user trade hashes)
+  // Community logged trades: entries traders record in their own journals.
+  // Nothing checks them against a venue, so nothing here is "verified".
   // Which leaderboard row belongs to the viewer. The same rule drives the YOU
   // badge and the My Logged Trades / Community Leaders tabs, so they agree.
   const isYouRow = (trd: any): boolean => {
@@ -164,14 +165,17 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         </div>
 
         <div className="bg-[#0b0518] border border-purple-900/40 p-4 rounded-2xl space-y-1">
-          <span className="text-slate-400 text-[10px] uppercase font-bold block">Verification Status</span>
+          {/* Was "Verification Status: SHA-256 HASHED / Tamper-evident logs". The
+              only hash is of a trader's anonymous ID; entries are self-reported
+              journal logs and are not checked against any venue. */}
+          <span className="text-slate-400 text-[10px] uppercase font-bold block">Data Source</span>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-black text-emerald-400 flex items-center gap-1.5 mt-1">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              SHA-256 HASHED
+            <span className="text-sm font-black text-amber-300 flex items-center gap-1.5 mt-1">
+              <ShieldCheck className="w-4 h-4 text-amber-300" />
+              SELF-REPORTED
             </span>
           </div>
-          <span className="text-[11px] text-slate-400 font-sans block">Tamper-evident logs</span>
+          <span className="text-[11px] text-slate-400 font-sans block">Journal entries, not venue-verified</span>
         </div>
       </div>
 
