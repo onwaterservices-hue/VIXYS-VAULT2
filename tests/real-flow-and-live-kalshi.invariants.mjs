@@ -166,6 +166,10 @@ t.check('served edge shares the Kalshi price freshness (no edge beside an aged-o
   !/edgePct: currentEdgePct,\n\s*edge:/.test(code));
 t.check('all three state routes tick first when the instance has been idle',
   (code.match(/if \(!engineHydrated \|\| currentBtcPrice === 64161\.4 \|\| Date\.now\(\) - _engineTickLastRunMs > 15e3\) \{/g) || []).length === 3);
+t.check('Kalshi is read on every tick until a real Kalshi strike is held (no evaluation against strike 0)',
+  code.includes('if (currentEngineCycleId % 2 === 0 || current15mStrikePrice <= 0 || current15mStrikeSource !== "KALSHI") {'));
+t.check('the Coinbase Exchange ticker fallback is not labelled Binance',
+  code.includes('marketFeedHealth.priceSource = "COINBASE_EXCHANGE";') && !code.includes('marketFeedHealth.priceSource = "BINANCE";'));
 t.check('served edge never divides a missing edge into 0', !code.includes('edge: currentEdgePct / 100') && !code.includes('edge: isLive ? currentEdgePct / 100'));
 
 t.done();
