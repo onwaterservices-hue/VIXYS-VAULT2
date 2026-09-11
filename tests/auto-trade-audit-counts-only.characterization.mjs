@@ -18,5 +18,6 @@ for (const leak of ['userEmail', 'keyIdEncrypted', 'privateKeyEncrypted', 'decry
 }
 t.check('reports whether live orders are allowed by code', handler.includes('liveOrdersAllowedByCode: AUTO_TRADING_LIVE_ENABLED'));
 t.check('errors carry a code or name only', !/err\?\.message/.test(handler));
+t.check('registered after requireRole is defined (module-load order)', serverSrc.indexOf('const requireRole =') > 0 && serverSrc.indexOf('const requireRole =') < start);
 
 t.done();
