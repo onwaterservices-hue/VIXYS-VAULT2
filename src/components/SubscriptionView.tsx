@@ -21,6 +21,7 @@ import {
 import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
 import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi, extendMembershipApi } from '../services/api';
+import { describeMembershipWindow } from '../lib/membershipDates';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -35,6 +36,8 @@ interface SubscriptionViewProps {
   authState?: AuthState;
   onOpenAuth?: (mode: 'login' | 'register', prefillEmail?: string) => void;
   onOpenTerminal?: () => void;
+  /** The viewer's live day pass record, so the page never sells a pass to someone already holding one. */
+  dayPassInfo?: { active: boolean; startedAt?: string | null; expiresAt?: string | null; secondsRemaining: number };
 }
 
 export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
@@ -47,7 +50,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   authState,
   onOpenAuth,
   onOpenTerminal,
+  dayPassInfo,
 }) => {
+  // Visitors arrive here from "See monthly plans" while their pass is still
+  // running. Leading with another pass purchase works directly against that.
+  const passExpiryMs = dayPassInfo?.active && dayPassInfo.expiresAt ? new Date(dayPassInfo.expiresAt).getTime() : NaN;
+  const holdsActivePass = Number.isFinite(passExpiryMs) && passExpiryMs > Date.now();
+  const passEndsLabel = holdsActivePass
+    ? new Date(passExpiryMs).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
+    : '';
+  const scrollToPlans = () => {
+    document.getElementById('vixy-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
   const [isExtendingMonth, setIsExtendingMonth] = useState<boolean>(false);
   const [extendMonthSuccess, setExtendMonthSuccess] = useState<string>('');
   const [billingInterval, setBillingInterval] = useState<'monthly' | 'annual'>('monthly');
@@ -273,7 +287,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             setSubscription({
               plan: planKey,
               status: 'active',
-              renewalDate: ent.dayPass?.active ? '24 Hours Pass' : (ent.billing === 'YEARLY' ? '1 year from today' : '30 days from today'),
+              renewalDate: describeMembershipWindow(ent),
               paymentMethod: 'Stripe Credit Card',
               billingInterval: ent.billing === 'YEARLY' ? 'annual' : 'monthly',
             });
@@ -562,6 +576,29 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
 
           {/* VIXY 24-Hour Day Pass CTA Box */}
           <div className="pt-2 max-w-xl mx-auto">
+            {holdsActivePass ? (
+              <div className="bg-[#0c0620]/90 border-2 border-purple-500/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-purple-500/10 text-left">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-purple-500 text-white">
+                      YOUR PASS
+                    </span>
+                    <span className="text-xs font-mono font-bold text-purple-200">Ends {passEndsLabel}</span>
+                  </div>
+                  <div className="text-[12px] text-slate-200 font-sans leading-relaxed">
+                    Three day passes cost <strong className="text-white font-mono">$29.97</strong>. Starter is <strong className="text-white font-mono">$29</strong> and runs all 30 days.
+                  </div>
+                </div>
+                <button
+                  onClick={scrollToPlans}
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-xs shadow-lg shadow-purple-500/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Compare monthly plans</span>
+                </button>
+              </div>
+            ) : (
+              <>
             <div className="bg-[#0c0620]/90 border-2 border-amber-500/50 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl shadow-amber-500/10">
               <div className="text-left space-y-0.5">
                 <div className="flex items-center gap-2">
@@ -582,6 +619,11 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 <span>Get Day Pass ($9.99)</span>
               </button>
             </div>
+                <p className="mt-2.5 text-[11px] text-slate-400 font-sans text-center">
+                  Three day passes cost <strong className="text-slate-200 font-mono">$29.97</strong>. Starter is <strong className="text-slate-200 font-mono">$29</strong> and runs all 30 days.
+                </p>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -694,7 +736,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               <span className="hidden sm:inline opacity-30">•</span>
               <span className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 opacity-70" />
-                Membership Window: <span className="text-white font-mono font-bold tracking-tight">{subscription.renewalDate || 'Active'}</span>
+                Membership Window: <span className="text-white font-mono font-bold tracking-tight">{subscription.renewalDate || (subscription.status === 'active' ? 'Active' : '—')}</span>
               </span>
             </div>
           </div>
@@ -736,7 +778,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
       </div>
 
       {/* 3 Pricing Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-mono">
+      <div id="vixy-plans" className="scroll-mt-24 grid grid-cols-1 md:grid-cols-3 gap-6 font-mono">
         {/* STARTER */}
         <div className="vixy-card p-6 sm:p-8 flex flex-col justify-between space-y-6">
           <div className="space-y-4">

@@ -28,8 +28,11 @@ const PROMPT_WINDOW_SEC = 4 * 60 * 60; // last 4 hours of a 24-hour pass
 const PASS_TOTAL_SEC = 24 * 60 * 60;
 const DISMISS_KEY = 'vixy_daypass_upsell_dismissed_v1';
 
-// Roles that already hold a recurring plan; they must never see an upsell.
-const SUBSCRIBER_ROLES = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER'];
+// Staff never see a commercial prompt. Paying subscribers are excluded through
+// hasRecurringPlan, NOT through role labels: the client assigns the PRO role to
+// anyone holding an active day pass, so a label check hides this prompt from
+// every real pass holder.
+const STAFF_ROLES = ['ADMIN', 'OWNER'];
 
 interface DayPassUpgradePromptProps {
   dayPassInfo?: {
@@ -39,6 +42,8 @@ interface DayPassUpgradePromptProps {
     secondsRemaining: number;
   };
   userRole: string;
+  /** Server classification: the account holds a recurring plan, not just a pass. */
+  hasRecurringPlan?: boolean;
   /** Hide on surfaces where the plans are already the subject. */
   activeTab: string;
   onViewPricing: () => void;
@@ -55,6 +60,7 @@ function formatRemaining(totalSec: number): string {
 export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
   dayPassInfo,
   userRole,
+  hasRecurringPlan = false,
   activeTab,
   onViewPricing,
 }) => {
@@ -81,7 +87,8 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
   // No sourced expiry means no countdown. We would rather show nothing than
   // invent a deadline.
   if (!dayPassInfo?.active || expiryMs === null) return null;
-  if (SUBSCRIBER_ROLES.includes(String(userRole || '').toUpperCase())) return null;
+  if (hasRecurringPlan) return null;
+  if (STAFF_ROLES.includes(String(userRole || '').toUpperCase())) return null;
   if (activeTab === 'pricing' || activeTab === 'landing' || activeTab === 'auth') return null;
 
   const secondsLeft = Math.floor((expiryMs - now) / 1000);
