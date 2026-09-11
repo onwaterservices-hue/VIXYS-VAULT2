@@ -9880,8 +9880,12 @@ async function executePlanAcceptanceTest(planType, planName) {
   };
 }
 __name(executePlanAcceptanceTest, "executePlanAcceptanceTest");
+// Staff-only: every run creates test users (persisted) and day-pass records.
+// It had no guard at all and answered any method, so any visitor or crawler
+// could trigger those writes.
 app.all(
   ["/api/admin/acceptance-matrix", "/api/admin/run-acceptance-matrix"],
+  requireRole(["OWNER", "ADMIN"]),
   async (req, res) => {
     const plansToTest = [
       { type: "DAY_PASS", name: "24-Hour Day Pass ($9.99 One-Time)" },
@@ -9907,10 +9911,11 @@ app.all(
     res.json({ success: true, ...latestAcceptanceMatrixResults });
   },
 );
-app.get("/api/admin/events", (req, res) => {
+// Admin events carry customer emails (payments, webhooks, grants).
+app.get("/api/admin/events", requireRole(["OWNER", "ADMIN", "SUPPORT"]), (req, res) => {
   res.json(adminEventsStore);
 });
-app.get("/api/admin/events/stream", (req, res) => {
+app.get("/api/admin/events/stream", requireRole(["OWNER", "ADMIN", "SUPPORT"]), (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
   res.setHeader("Connection", "keep-alive");
@@ -12592,7 +12597,9 @@ app.get("/api/auth/diagnostic", async (req, res) => {
   };
   res.json(diagnosticReport);
 });
-app.get("/api/admin/entitlement-diagnostics", (req, res) => {
+// Returns full day-pass and subscription records (emails, Stripe and Discord
+// ids). Verified open to signed-out callers in production on 2026-09-11.
+app.get("/api/admin/entitlement-diagnostics", requireRole(["OWNER", "ADMIN", "SUPPORT"]), (req, res) => {
   const activeDayPasses = [];
   const expiredDayPasses = [];
   const seenIds = new Set();
@@ -12636,7 +12643,8 @@ app.get("/api/admin/entitlement-diagnostics", (req, res) => {
     recentSubscriptions: activeSubs.slice(0, 10),
   });
 });
-app.get("/api/admin/test-entitlement-suite", async (req, res) => {
+// Staff-only: the suite creates users and day-pass records while it runs.
+app.get("/api/admin/test-entitlement-suite", requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   const tests = [];
   let passedCount = 0;
   try {
@@ -17826,11 +17834,20 @@ app.get("/api/performance-stats", (req, res) => {
   res.json({ winRate, brierScore: 0.185, sampleSize, verified: true });
 });
 
+// A journal belongs to the signed-in account. Entries used to be keyed by a
+// client-supplied userId (every client sent the owner's), so anyone could read,
+// add to or delete any journal -- and the public leaderboard is built from it.
+function journalOwnerId(req) {
+  const auth = authenticateSession(req);
+  return auth ? String(auth.uid || auth.email || "") : "";
+}
+__name(journalOwnerId, "journalOwnerId");
 app.get("/api/journal", (req, res) => {
-  const userId = req.query.userId || "usr_owner_01";
-  const userEntries = serverJournalEntries.filter(
-    (e) => !userId || e.userId === userId,
-  );
+  const userId = journalOwnerId(req);
+  // Signed out: an empty journal (200), not every stored entry.
+  const userEntries = userId
+    ? serverJournalEntries.filter((e) => e.userId === userId)
+    : [];
   const totalEntries = userEntries.length;
   const cumulativeNetPnl = userEntries.reduce(
     (acc, curr) => acc + (curr.pnlUSD || 0),
@@ -17856,12 +17873,16 @@ app.get("/api/journal", (req, res) => {
     journaledWinRate,
     modelEdgeCapture: avgEdge,
     totalEntries,
-    storageType: "Server-Side Database",
+    // Entries live in this server instance's memory and are not persisted.
+    storageType: "IN_MEMORY_NOT_PERSISTED",
   });
 });
 app.post("/api/journal", (req, res) => {
+  const userId = journalOwnerId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, error: "AUTHENTICATION_REQUIRED" });
+  }
   const {
-    userId = "usr_owner_01",
     ticker = "BTC/USDT 15M",
     direction = "YES",
     entryPrice = 64e3,
@@ -17901,11 +17922,17 @@ app.post("/api/journal", (req, res) => {
   res.json({ success: true, entry: newEntry });
 });
 app.delete("/api/journal/:id", (req, res) => {
-  const { id } = req.params;
-  const idx = serverJournalEntries.findIndex((e) => e.id === id);
-  if (idx !== -1) {
-    serverJournalEntries.splice(idx, 1);
+  const userId = journalOwnerId(req);
+  if (!userId) {
+    return res.status(401).json({ success: false, error: "AUTHENTICATION_REQUIRED" });
   }
+  const { id } = req.params;
+  // Only the owner's own entry can be removed.
+  const idx = serverJournalEntries.findIndex((e) => e.id === id && e.userId === userId);
+  if (idx === -1) {
+    return res.status(404).json({ success: false, error: "ENTRY_NOT_FOUND" });
+  }
+  serverJournalEntries.splice(idx, 1);
   res.json({ success: true });
 });
 app.get("/api/leaderboard", (req, res) => {
