@@ -50,9 +50,18 @@ export const DesignSystemShowcase: React.FC = () => {
             <V2Badge variant="pro" size="xs">
               FOUNDATION V2
             </V2Badge>
+            <V2Badge variant="neutral" size="xs">
+              SAMPLE DATA
+            </V2Badge>
           </div>
           <p className="text-xs text-slate-400 font-sans">
             Institutional, restrained, quantitative trading component library & visual language.
+          </p>
+          {/* This page is publicly reachable at /design-system and its metric cards
+              ("BTC SPOT PRICE $64,591.20", "BAYESIAN CONVICTION 78.4%", "15M LOCK
+              QUALITY 88/100 LOCKED") read like live data. They are component samples. */}
+          <p className="text-xs text-amber-300/90 font-sans">
+            Every number on this page is a sample used to show the components. None of it is live market data or engine output.
           </p>
         </div>
 
