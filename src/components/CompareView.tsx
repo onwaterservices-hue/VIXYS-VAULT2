@@ -62,7 +62,7 @@ export const CompareView: React.FC<CompareViewProps> = ({
               Asset Compare Mode
             </h1>
             <p className="text-xs sm:text-sm text-purple-200/70 mt-1 max-w-2xl">
-              Two assets side by side: live Coinbase spot, resting book depth and large prints. VIXY's measured model covers BTC 15-minute only, so other assets show market data without a prediction.
+              Two assets side by side: live spot, resting book depth and large prints. VIXY's measured model covers BTC 15-minute only, so other assets show market data without a prediction.
             </p>
 
             {/* Quick Preset Buttons */}
@@ -225,7 +225,7 @@ const AssetComparisonCard: React.FC<{
           ) : (
             <div className="text-lg font-black text-purple-300/40">—</div>
           )}
-          <span className="vixy-section-title">24H · Coinbase</span>
+          <span className="vixy-section-title">24H CHANGE</span>
         </div>
       </div>
 

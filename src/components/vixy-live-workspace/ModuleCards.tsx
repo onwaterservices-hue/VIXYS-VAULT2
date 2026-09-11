@@ -481,27 +481,27 @@ export const VixyProtectionModule: React.FC<ModuleRenderProps> = ({ canonical15m
   const status: string | null =
     typeof p?.protectionStatus === 'string' ? p.protectionStatus : typeof c?.protectionStatus === 'string' ? c.protectionStatus : null;
   const preservation = finNum(p?.capitalPreservationScore ?? c?.capitalPreservationScore);
-  const late = p?.lateCycleProtectionActive === true;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
       <CardHeader
         icon={<ShieldCheck className="w-4 h-4 text-emerald-400" />}
-        title="VIXY PROTECTION"
+        title="REVERSAL VETO"
         right={<span className="text-purple-300 font-mono text-[10px] font-bold">{status ?? '—'}</span>}
       />
 
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <div className={`w-3 h-3 rounded-full ${status ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+          <div className={`w-3 h-3 rounded-full ${status === 'VETOED' ? 'bg-rose-400' : status ? 'bg-emerald-400' : 'bg-slate-600'}`} />
           <span className="text-lg font-bold text-white font-mono">{status ? status.replace(/_/g, ' ') : 'NO DATA'}</span>
         </div>
         <p className="text-[11px] text-slate-300 font-sans">
-          {late ? 'Late-cycle protection is active.' : 'Guardian status as reported by the engine this tick.'}
+          {/* protectionStatus is the reversal veto (SAFE / VETOED); lateCycleProtectionActive is always null. */}
+          Reversal veto as the engine reported it this tick. VETOED blocks a new lock; nothing exits a lock early.
         </p>
       </div>
 
-      <Footer label="CAPITAL PRESERVATION SCORE" value={preservation !== null ? `${preservation}/100` : '—'} />
+      <Footer label="100 − GUARDIAN SURVIVAL SCORE" value={preservation !== null ? `${preservation}/100` : '—'} />
     </div>
   );
 };

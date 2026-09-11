@@ -158,7 +158,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
       items: [
         { id: "markets", label: "Markets", icon: TrendingUp, desc: "Broad market internals & cross-venue delta", isPro: false },
         { id: "patterns", label: "Pattern Engine", icon: Sparkles, desc: "Algorithmic cluster analysis & regime detection", isPro: true, badge: "PRO" },
-        { id: "whales", label: "Whale Tracker", icon: Layers, desc: "Institutional order flow & whale sweeps", isPro: true, badge: "PRO" },
+        { id: "whales", label: "Whale Tracker", icon: Layers, desc: "Large Coinbase prints & resting book depth", isPro: true, badge: "PRO" },
         { id: "scanner", label: "Edge Scanner", icon: Target, desc: "Liquidity imbalance & statistical edge radar", isPro: true, badge: "+EV" },
         { id: "explainability", label: "News & Sentiment", icon: BrainCircuit, desc: "Macro sentiment, narrative feeds & neural weights", isPro: false },
         { id: "history", label: "VIXY Locks", icon: BarChart2, desc: "Immutable historical cycle ledger & verification", isPro: false, badge: "LEDGER" },

@@ -287,18 +287,15 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">VIXY RESULTS TERMINAL</h1>
               </div>
               <div className="flex flex-wrap items-center gap-2.5 text-xs text-zinc-400 mt-1 font-mono">
-                <span className="flex items-center gap-1.5 text-emerald-400 font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> ENGINE LIVE
+                {/* Whether this page loaded the engine state (was a literal pulsing "ENGINE LIVE"). */}
+                <span className={`flex items-center gap-1.5 font-semibold ${liveState ? 'text-emerald-400' : 'text-zinc-500'}`}>
+                  <span className={`w-2 h-2 rounded-full ${liveState ? 'bg-emerald-400' : 'bg-zinc-600'}`}></span> {liveState ? 'ENGINE STATE LOADED' : 'ENGINE STATE UNAVAILABLE'}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-3 self-end md:self-auto">
-            <div className="px-3 py-1.5 bg-black/80 border border-rose-500/40 rounded-xl flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"></span>
-              <span className="text-xs font-mono font-bold text-rose-300 uppercase tracking-wider">● LIVE RECORDING</span>
-            </div>
             <div className="px-3.5 py-1.5 bg-black/80 border border-zinc-800 rounded-xl text-right font-mono">
               <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider">SYNC TIME</div>
               <div className="text-xs text-cyan-300 font-bold">{lastUpdate.toLocaleTimeString()}</div>
@@ -452,7 +449,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
 
               let stageName = 'BUILDING LOCK';
               if (isSkip) {
-                stageName = 'CALIBRATING';
+                stageName = 'NO CALL';
               } else if (isLocked) {
                 stageName = 'LOCKED';
               } else if (liveState?.stage || liveState?.status) {
@@ -557,10 +554,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       isLocked ? (isUpDir ? 'bg-emerald-950/90 border-emerald-400 text-emerald-200' : 'bg-rose-950/90 border-rose-400 text-rose-200') :
                       'bg-cyan-950/90 border-cyan-400 text-cyan-200'
                     }`}>
-                      <span className={`w-2 h-2 rounded-full animate-ping ${
+                      <span className={`w-2 h-2 rounded-full ${
                         isSkip ? 'bg-purple-400' : isLocked ? (isUpDir ? 'bg-emerald-400' : 'bg-rose-400') : 'bg-cyan-400'
                       }`} />
-                      <span>● {isLocked ? 'IMMUTABLE LOCK' : isSkip ? 'CAPITAL PROTECTED' : stageName}</span>
+                      <span>{isLocked ? 'LOCKED' : isSkip ? 'NO CALL' : stageName}</span>
                     </div>
                   </div>
 
@@ -573,7 +570,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
                         {isSkip ? (
                           <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_15px_rgba(168,85,247,0.8)]">
-                            <Shield className="w-7 h-7 text-purple-300 animate-pulse" /> CALIBRATING
+                            <Shield className="w-7 h-7 text-purple-300" /> NO CALL
                           </span>
                         ) : isLocked ? (
                           isUpDir ? (
@@ -601,7 +598,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     <div className="flex flex-col sm:items-end">
                       <div className="text-[10px] font-black text-zinc-400 uppercase tracking-widest mb-1">LIVE SPOT PRICE</div>
                       <div className="text-xl sm:text-2xl font-mono text-white font-black flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+                        {spot != null && <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />}
                         ${spot != null ? spot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Unavailable'}
                       </div>
                       {isLocked && priceDiff !== null && priceDiff !== 0 && (
@@ -754,7 +751,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     <div className="font-black text-2xl tracking-tight">
                       {isNoTrade ? (
                         <span className="text-purple-300 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(168,85,247,0.8)]">
-                          <Shield className="w-6 h-6 text-purple-300" /> CALIBRATING
+                          <Shield className="w-6 h-6 text-purple-300" /> NO CALL
                         </span>
                       ) : isUpDir ? (
                         <span className="text-emerald-400 flex items-center gap-2 drop-shadow-[0_0_10px_rgba(52,211,153,0.8)]">
@@ -827,7 +824,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                         </div>
                       )}
                       {isNoTrade && (
-                        <div className="text-[9.5px] text-purple-300 font-bold tracking-wider">CAPITAL PRESERVED</div>
+                        <div className="text-[9.5px] text-purple-300 font-bold tracking-wider">NO CALL THIS CYCLE</div>
                       )}
                     </div>
                   </div>
@@ -983,7 +980,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 <div className="text-[10px] font-black uppercase tracking-widest text-zinc-400 mb-0.5">RECORDED DECISION</div>
                 <div className="text-2xl font-black flex items-center gap-2 font-mono">
                   {activeProvenance.status === 'SKIPPED' || activeProvenance.status === 'NO_TRADE' || activeProvenance.status === 'CRITICALLY_INVALIDATED' ? (
-                    <><Shield className="w-6 h-6 text-purple-400"/> CALIBRATING</>
+                    <><Shield className="w-6 h-6 text-purple-400"/> {activeProvenance.status === 'CRITICALLY_INVALIDATED' ? 'INVALIDATED' : 'NO CALL'}</>
                   ) : activeProvenance.direction === 'UP' ? (
                     <><ArrowUpRight className="w-7 h-7 text-emerald-400"/> BUY UP</>
                   ) : (
@@ -1044,7 +1041,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                   <FileText className="w-3.5 h-3.5 text-purple-400" /> ENGINE REASONING & CONDITIONS
                 </div>
                 <p className="text-zinc-300 text-xs leading-relaxed">
-                  {activeProvenance.reasons?.[0] || activeProvenance.lockEligibility?.reason || 'Multi-model ensemble consensus met minimum confidence & risk thresholds prior to candle close.'}
+                  {activeProvenance.reasons?.[0] || activeProvenance.lockEligibility?.reason || 'No reason was recorded for this lock.'}
                 </p>
               </div>
 
