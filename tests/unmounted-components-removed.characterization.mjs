@@ -27,9 +27,25 @@ for (const p of [
   'src/services/streamManager.ts',
   'src/utils/visualState.ts',
   'src/utils/cryptoUniverseRegression.ts',
+  // Also unreachable from src/main.tsx, server.ts, api/ and scripts/ (esbuild
+  // metafiles + a type-aware import graph), removed 2026-09-11:
+  'src/components/DiscordStatusWidget.tsx',
+  'src/bot/embeds/dashboard.ts',
+  'src/bot/embeds/prediction.ts',
+  'src/bot/services/aiEventRouter.ts',
+  'src/config/discordConfig.ts',
+  'src/config/env.config.ts',
+  'src/services/webhookManager.ts',
+  'src/services/engine/geminiExplainer.ts',
+  'src/services/market/assetIntelligence.ts',
+  'src/services/market/macroMarketIntelligence.ts',
+  'src/services/market/venueAdapters.ts',
+  'src/utils/metrics.ts',
+  'src/utils/numeric.ts',
 ]) {
   t.check(`${p} stays removed`, !existsSync(join(root, p)));
 }
+t.check('the live Discord embeds remain', existsSync(join(root, 'src/bot/embeds/signalEmbed.ts')) && existsSync(join(root, 'src/bot/embeds/dashboardEmbed.ts')));
 t.check('the mounted VIXY Live cards remain', existsSync(join(root, 'src/components/vixy-live-workspace/ModuleCards.tsx')));
 
 t.done();
