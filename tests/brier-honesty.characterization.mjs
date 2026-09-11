@@ -29,7 +29,7 @@ t.check('averaging sites call meanBrier', (code.match(/meanBrier\(/g) || []).len
 
 t.section('nothing invents a Brier or a win rate');
 t.check('no literal 0.185 Brier', !/brierScore:\s*0\.185/.test(code));
-t.check('performance-stats returns a null Brier', /res\.json\(\{ winRate, brierScore: null, sampleSize, verified: true \}\);/.test(serverSrc));
+t.check('performance-stats returns a null Brier (and does not call journal stats verified)', /res\.json\(\{ winRate, brierScore: null, sampleSize, verified: false, source: "SELF_REPORTED_JOURNAL" \}\);/.test(serverSrc));
 t.check('resolved-log win rate is null with nothing settled', /totalCount > 0 \? Math\.round\(\(winCount \/ totalCount\) \* 1e3\) \/ 10 : null;/.test(serverSrc));
 t.check('resolved-log exposes how many rows the Brier covers', /brierScoredCount,/.test(serverSrc));
 

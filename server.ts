@@ -18045,9 +18045,10 @@ app.get("/api/performance-stats", (req, res) => {
   const wins = settled.filter((e) => e.outcome === "WIN").length;
   const winRate = Math.round((wins / sampleSize) * 1e3) / 10;
   // Journal entries carry an outcome but no forecast probability, so no Brier
-  // score can be computed here. This returned a literal 0.185 beside
-  // verified: true.
-  res.json({ winRate, brierScore: null, sampleSize, verified: true });
+  // score can be computed here (this returned a literal 0.185). Nor is this win
+  // rate verified: journal outcomes are what traders typed in, so it was wrong
+  // to serve verified: true once 30 entries existed.
+  res.json({ winRate, brierScore: null, sampleSize, verified: false, source: "SELF_REPORTED_JOURNAL" });
 });
 
 // A journal belongs to the signed-in account. Entries used to be keyed by a
