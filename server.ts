@@ -4956,8 +4956,8 @@ async function checkAndSettle15mCycle(livePrice) {
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
           direction: "NEUTRAL",
-          probability: active15mCycle.livePrediction?.probability ?? null,
-          confidence: active15mCycle.livePrediction?.confidence ?? null,
+          probability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
+          confidence: active15mCycle.livePrediction?.confidence || 0,
           // The cycle's strike is kept current by canLockCurrentCycle while
           // the entry window is open; it was 0 on 78 of the last 112 SKIP rows
           // (cold instances create the cycle before the strike resolves),
@@ -4993,8 +4993,8 @@ async function checkAndSettle15mCycle(livePrice) {
           decision: "SKIP",
           entryPrice: active15mCycle.livePrediction?.spot || livePrice,
           strike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
-          confidencePct: active15mCycle.livePrediction?.confidence ?? null,
-          lockedProbability: active15mCycle.livePrediction?.probability ?? null,
+          confidencePct: active15mCycle.livePrediction?.confidence || 0,
+          lockedProbability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
@@ -5529,7 +5529,7 @@ async function checkAndSettle15mCycle(livePrice) {
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
           direction: "NEUTRAL",
-          probability: active15mCycle.livePrediction?.probability ?? null,
+          probability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           confidence:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
@@ -5565,7 +5565,7 @@ async function checkAndSettle15mCycle(livePrice) {
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
             null,
-          lockedProbability: active15mCycle.livePrediction?.probability ?? null,
+          lockedProbability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
@@ -19707,12 +19707,18 @@ function loadPersistentStore() {
         active15mCycle.stage = "LOCKED";
         active15mCycle.lockedDirection = mostRecentLog.direction || "NEUTRAL";
         active15mCycle.lockedDecision = mostRecentLog.decision || (mostRecentLog.direction === "UP" ? "BUY UP" : "BUY DOWN");
-        // Recorded values or nothing (confidence used to fall back to 75, p to 0.5).
-        active15mCycle.lockedConfidence = mostRecentLog.confidence ?? null;
-        active15mCycle.lockedProbability = mostRecentLog.probability ?? null;
+        // A field the persisted lock row does not carry stays null. These were
+        // filled with 75, 0.5 and the current time, so a cold instance could
+        // serve a lock confidence, probability and lock time nothing recorded.
+        // This path does not set lockedSnapshot, so the mutation check that
+        // compares locked probabilities does not run on a hydrated cycle.
+        active15mCycle.lockedConfidence =
+          typeof mostRecentLog.confidence === "number" && Number.isFinite(mostRecentLog.confidence) ? mostRecentLog.confidence : null;
+        active15mCycle.lockedProbability =
+          typeof mostRecentLog.probability === "number" && mostRecentLog.probability > 0 && mostRecentLog.probability <= 1 ? mostRecentLog.probability : null;
         active15mCycle.lockedStrike = mostRecentLog.targetStrike || 0;
         active15mCycle.lockedSpot = mostRecentLog.spotAtLock || 0;
-        active15mCycle.lockedAt = mostRecentLog.lockedAt || new Date().toISOString();
+        active15mCycle.lockedAt = mostRecentLog.lockedAt || null;
         active15mCycle.lockedReason = "HYDRATED_FROM_PERSISTENT_STORE";
         active15mCycle.intervalStart = new Date(mostRecentLog.intervalStart).getTime();
         active15mCycle.intervalEnd = new Date(mostRecentLog.intervalEnd).getTime();

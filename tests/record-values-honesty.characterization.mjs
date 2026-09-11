@@ -3,9 +3,8 @@
 // - LOCKED ledger rows were stamped dataSource "COINBASE_KRAKEN_CASCADE" and
 //   latencyMs 12 whatever fed the price (SKIP rows were fixed earlier; the
 //   lock row kept both literals).
-// - SKIP / NO_TRADE rows fell back to probability 50 and lockedProbability 50
-//   (the field is 0-1, so also the wrong scale) and confidence 0.
-// - Restoring a lock from the store fell back to confidence 75 and p 0.5.
+// - SKIP / NO_TRADE rows and lock hydration were fixed in parallel by #138 and
+//   are pinned by its tests; only their removed literals are re-checked here.
 // - User records were given a random "hw_xxxxxx" / "hw_sub_" / "hw_auto_"
 //   device fingerprint and an invented IP ("172.x.x.10", "172.56.22.10",
 //   "127.0.0.1"); AdminPanel lists fingerprints as device data. A random
@@ -21,12 +20,7 @@ t.check('no constant lock latency', !/latencyMs:\s*12\b/.test(code));
 t.check('no literal cascade data source', !code.includes('COINBASE_KRAKEN_CASCADE'));
 t.check('lock row names the feed that priced it', code.includes('dataSource: marketFeedHealth.priceSource || null,\n      latencyMs: null,\n      cycleId,'));
 t.check('no probability 50 fallback on skip rows', !/robability \|\| 50\b/.test(code));
-t.eq('skip rows keep p null when unknown', (code.match(/probability: active15mCycle\.livePrediction\?\.probability \?\? null,/g) || []).length, 2);
-t.check('no confidence 0 fallback on skip rows', !/confidence(Pct)?: active15mCycle\.livePrediction\?\.confidence \|\| 0,/.test(code));
-
-t.section('lock hydration');
-t.check('no confidence 75 / p 0.5 fallback', !/mostRecentLog\.confidence \|\| 75|mostRecentLog\.probability \|\| 0\.5/.test(code));
-t.check('recorded values or null', code.includes('active15mCycle.lockedConfidence = mostRecentLog.confidence ?? null;') && code.includes('active15mCycle.lockedProbability = mostRecentLog.probability ?? null;'));
+t.check('no confidence 75 / p 0.5 hydration fallback', !/mostRecentLog\.confidence \|\| 75|mostRecentLog\.probability \|\| 0\.5/.test(code));
 
 t.section('user records');
 t.check('no invented fingerprints', !/`hw_\$\{|hw_sub_|hw_auto_|"hw_anon"/.test(code));
