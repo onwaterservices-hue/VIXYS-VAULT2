@@ -1,23 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Sparkles,
-  ShieldCheck,
-  TrendingUp,
-  TrendingDown,
-  Zap,
   Activity,
-  Layers,
-  BrainCircuit,
-  RefreshCw,
-  Radar,
-  X,
-  CheckCircle2,
   AlertTriangle,
   Info,
-  ArrowUpRight,
+  Layers,
+  Radar,
+  RefreshCw,
+  TrendingDown,
+  TrendingUp,
+  X,
 } from 'lucide-react';
 import { BTCTicker, AlertSettings } from '../types';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
+import { fetchVixyStateApi } from '../services/api';
+
+// Pattern Detector -- the structure the BTC 15-minute engine actually detects.
+//
+// This page used to be a static catalog of ten "detected" patterns (Spoofing
+// Detection, Whale Accumulation $1.2M+, Hidden Iceberg Limit, Short Squeeze
+// Trap ...) each with an invented confidence, "HIST WIN RATE", "SEEN 480x",
+// "detected 12m ago" and ACTIVE/CONFIRMED status, under a "LIVE L2 SCANNER"
+// header claiming "30+ institutional patterns" and a "microsecond L2 order book
+// detection engine". A scan counter started at 1420 and added 8 per click after
+// a 600ms fake "SCANNING L2...". None of it was read from anything.
+//
+// Every detection below is one of the engine's deterministic structure rules,
+// evaluated on observed BTC prices and served by /api/vixy/state as
+// btc15mPipeline. No per-pattern win rate is recorded, so none is shown. Order
+// flow fields are derived from spot vs strike and short-term momentum, not from
+// an order book or trade tape, and are labelled that way.
 
 interface AIPatternEngineProps {
   ticker?: BTCTicker;
@@ -28,223 +39,214 @@ interface AIPatternEngineProps {
   onOpenDiscordModal?: () => void;
 }
 
-interface PatternItem {
+// ---- detection rules ----
+type DetectionCategory = 'Bullish' | 'Bearish' | 'Structure' | 'Risk';
+
+interface Detection {
   id: string;
   name: string;
-  simpleName?: string;
-  category: 'Bullish' | 'Bearish' | 'Microstructure' | 'Experimental';
-  type: string;
-  confidence: number;
-  historicalAccuracy: number;
-  seenCount: number;
-  expectedFollowThrough: string;
-  detectedAge: string;
-  isExperimental?: boolean;
-  status: 'ACTIVE' | 'FORMING' | 'CONFIRMED';
-  description: string;
-  simpleDescription?: string;
-  detailBreakdown?: string;
+  category: DetectionCategory;
+  source: string;
+  reading: string;
+  explanation: string;
+  derived?: boolean;
 }
 
+interface EnginePipeline {
+  priceStructure?: {
+    highLowStructure?: string;
+    vwap?: number;
+    vwapRelationship?: string;
+    breakoutState?: string;
+    localSupport?: number;
+    localResistance?: number;
+  };
+  orderFlowAnalytics?: { absorptionState?: string; netDeltaBTC?: number };
+  chopAnalytics?: { chopScore?: number; isChopFiltered?: boolean; directionFlips?: number; reason?: string | null };
+  reversalAssessment?: { threatScore?: number; threatLevel?: string; vetoActive?: boolean; primaryTriggers?: string[] };
+  multiTimeframeAlignment?: {
+    tf15s?: string;
+    tf30s?: string;
+    tf1m?: string;
+    tf5m?: string;
+    tf15m?: string;
+    alignedCount?: number;
+    totalCount?: number;
+    state?: string;
+    momentumClassification?: string;
+  };
+  volatilityExpectedMove?: { realizedVol15mPct?: number; volatilityRegime?: string };
+  evidenceAgreementCount?: number;
+  totalEvidenceFamilies?: number;
+  lockQuality?: number;
+  lockQualityTier?: string;
+}
+
+function humanLabel(v?: string | null): string {
+  return v ? v.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : '—';
+}
+
+function usdLabel(v?: number): string {
+  return typeof v === 'number' && Number.isFinite(v) ? `$${v.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—';
+}
+
+export function detectionsFromPipeline(p: EnginePipeline | null | undefined): Detection[] {
+  if (!p) return [];
+  const out: Detection[] = [];
+  const ps = p.priceStructure || {};
+  const flowNote = 'Derived from spot vs strike and short-term momentum, not from an order book or trade tape.';
+
+  if (ps.highLowStructure === 'HIGHER_HIGHS') {
+    out.push({ id: 'higher-highs', name: 'Higher highs and higher lows', category: 'Bullish', source: 'Price structure • last 20 observed prices',
+      reading: `support ${usdLabel(ps.localSupport)} • resistance ${usdLabel(ps.localResistance)}`,
+      explanation: 'The newer half of the last 20 observed prices made both a higher high and a higher low than the older half, each by more than $3.' });
+  } else if (ps.highLowStructure === 'LOWER_LOWS') {
+    out.push({ id: 'lower-lows', name: 'Lower highs and lower lows', category: 'Bearish', source: 'Price structure • last 20 observed prices',
+      reading: `support ${usdLabel(ps.localSupport)} • resistance ${usdLabel(ps.localResistance)}`,
+      explanation: 'The newer half of the last 20 observed prices made both a lower high and a lower low than the older half, each by more than $3.' });
+  } else if (ps.highLowStructure === 'COMPRESSED') {
+    out.push({ id: 'compressed', name: 'Range compression', category: 'Structure', source: 'Price structure • last 20 observed prices',
+      reading: `range ${usdLabel(ps.localSupport)} – ${usdLabel(ps.localResistance)}`,
+      explanation: 'The last 20 observed prices sit inside a band narrower than $15.' });
+  }
+
+  if (ps.breakoutState === 'BREAKOUT_BULL') {
+    out.push({ id: 'breakout-bull', name: 'Breakout at local resistance', category: 'Bullish', source: 'Price structure',
+      reading: `spot within $2 of ${usdLabel(ps.localResistance)}`,
+      explanation: 'While making higher highs, spot is within $2 of the highest of the last 20 observed prices.' });
+  } else if (ps.breakoutState === 'BREAKOUT_BEAR') {
+    out.push({ id: 'breakout-bear', name: 'Breakdown at local support', category: 'Bearish', source: 'Price structure',
+      reading: `spot within $2 of ${usdLabel(ps.localSupport)}`,
+      explanation: 'While making lower lows, spot is within $2 of the lowest of the last 20 observed prices.' });
+  }
+
+  if (ps.vwapRelationship === 'ABOVE_VWAP' || ps.vwapRelationship === 'BELOW_VWAP') {
+    const above = ps.vwapRelationship === 'ABOVE_VWAP';
+    out.push({ id: 'twap-side', name: above ? 'Above the cycle average' : 'Below the cycle average', category: above ? 'Bullish' : 'Bearish',
+      source: 'Cycle TWAP (no volume feed)', reading: `average ${usdLabel(ps.vwap)}`,
+      explanation: "Spot is more than $4 from the equal-weight average of this cycle's observed prices. There is no volume feed, so this is a time-weighted average, not a VWAP." });
+  }
+
+  const mtf = p.multiTimeframeAlignment || {};
+  const votes = [mtf.tf15s, mtf.tf30s, mtf.tf1m, mtf.tf5m, mtf.tf15m];
+  const bull = votes.filter((v) => v === 'BULLISH').length;
+  const bear = votes.filter((v) => v === 'BEARISH').length;
+  const voteLine = `15s ${humanLabel(mtf.tf15s)} • 30s ${humanLabel(mtf.tf30s)} • 1m ${humanLabel(mtf.tf1m)} • 5m ${humanLabel(mtf.tf5m)} • 15m ${humanLabel(mtf.tf15m)}`;
+  if (bull >= 4) {
+    out.push({ id: 'mtf-bull', name: 'Timeframes aligned up', category: 'Bullish', source: 'Momentum votes (15s–15m)', reading: `${bull}/5 bullish • ${voteLine}`,
+      explanation: 'At least four of the five lookback windows show price above its level at the start of that window by more than the window threshold.' });
+  } else if (bear >= 4) {
+    out.push({ id: 'mtf-bear', name: 'Timeframes aligned down', category: 'Bearish', source: 'Momentum votes (15s–15m)', reading: `${bear}/5 bearish • ${voteLine}`,
+      explanation: 'At least four of the five lookback windows show price below its level at the start of that window by more than the window threshold.' });
+  } else if (mtf.state === 'CONFLICT') {
+    out.push({ id: 'mtf-conflict', name: 'Timeframe conflict', category: 'Risk', source: 'Momentum votes (15s–15m)',
+      reading: `${mtf.alignedCount ?? '—'}/${mtf.totalCount ?? 5} aligned • ${voteLine}`,
+      explanation: 'Fewer than three lookback windows agree on a direction.' });
+  }
+
+  if (mtf.momentumClassification === 'ACCELERATING') {
+    out.push({ id: 'mom-accel', name: 'Momentum accelerating', category: 'Structure', source: 'Momentum (15s vs 1m)', reading: 'short-term move outpacing the 1-minute move',
+      explanation: 'The 15-second move is larger than the 1-minute move in the direction the engine is evaluating.' });
+  } else if (mtf.momentumClassification === 'REVERSING') {
+    out.push({ id: 'mom-reversing', name: 'Short-term momentum reversing', category: 'Risk', source: 'Momentum (15s vs 1m)', reading: '15-second move against the 1-minute move',
+      explanation: 'The 15-second move points against the 1-minute move in the direction the engine is evaluating.' });
+  } else if (mtf.momentumClassification === 'DECELERATING') {
+    out.push({ id: 'mom-decel', name: 'Momentum decelerating', category: 'Structure', source: 'Momentum (15s vs 1m)', reading: '15-second move near zero',
+      explanation: 'The 15-second move has flattened while a direction is still being evaluated.' });
+  }
+
+  const of = p.orderFlowAnalytics || {};
+  if (of.absorptionState === 'ABSORBED') {
+    out.push({ id: 'flow-absorbed', name: 'Absorption', category: 'Risk', source: 'Order-flow proxy', derived: true, reading: 'flow proxy against price move', explanation: flowNote });
+  } else if (of.absorptionState === 'CONTINUING') {
+    out.push({ id: 'flow-continuing', name: 'Flow continuation', category: 'Structure', source: 'Order-flow proxy', derived: true, reading: 'flow proxy with price move', explanation: flowNote });
+  } else if (of.absorptionState === 'EXHAUSTING') {
+    out.push({ id: 'flow-exhausting', name: 'Flow exhaustion', category: 'Risk', source: 'Order-flow proxy', derived: true, reading: 'flow proxy fading', explanation: flowNote });
+  }
+
+  const chop = p.chopAnalytics || {};
+  if (chop.isChopFiltered) {
+    out.push({ id: 'chop-filter', name: 'Chop filter active', category: 'Risk', source: 'Chop analytics',
+      reading: `${humanLabel(chop.reason)} • score ${chop.chopScore ?? '—'}/100`,
+      explanation: 'Chop score reached 50, or the regime read is CHOP. The engine will not lock while this is active.' });
+  } else if (typeof chop.chopScore === 'number' && chop.chopScore >= 30) {
+    out.push({ id: 'chop-elevated', name: 'Choppy conditions', category: 'Risk', source: 'Chop analytics',
+      reading: `score ${chop.chopScore}/100 • ${chop.directionFlips ?? 0} direction flip(s)`,
+      explanation: 'Direction flips, a price pinned near the strike, timeframe conflict or flat momentum have pushed the chop score to 30 or more.' });
+  }
+
+  const rev = p.reversalAssessment || {};
+  if (rev.vetoActive || (typeof rev.threatScore === 'number' && rev.threatScore >= 30)) {
+    out.push({ id: 'reversal', name: 'Reversal threat', category: 'Risk', source: 'Reversal assessment',
+      reading: `${rev.threatScore ?? '—'}% (${humanLabel(rev.threatLevel)})${rev.primaryTriggers && rev.primaryTriggers.length ? ` • ${rev.primaryTriggers.map(humanLabel).join(', ')}` : ''}`,
+      explanation: 'Threat combines timeframe disagreement, flow exhaustion, chop and cross-asset penalty. At 30% or more, or on a momentum reversal, the engine vetoes a lock.' });
+  }
+
+  const vol = p.volatilityExpectedMove || {};
+  if (vol.volatilityRegime === 'EXTREME' || vol.volatilityRegime === 'EXPANDING') {
+    out.push({ id: 'vol-high', name: vol.volatilityRegime === 'EXTREME' ? 'Extreme volatility' : 'Volatility expanding', category: 'Risk', source: 'Realized volatility',
+      reading: `${typeof vol.realizedVol15mPct === 'number' ? vol.realizedVol15mPct.toFixed(2) : '—'}% realized`,
+      explanation: 'Realized volatility of observed ticks is above the normal band.' });
+  } else if (vol.volatilityRegime === 'COMPRESSED') {
+    out.push({ id: 'vol-compressed', name: 'Volatility compressed', category: 'Structure', source: 'Realized volatility',
+      reading: `${typeof vol.realizedVol15mPct === 'number' ? vol.realizedVol15mPct.toFixed(2) : '—'}% realized`,
+      explanation: 'Realized volatility of observed ticks is below 0.6%.' });
+  }
+
+  return out;
+}
+// ---- end detection rules ----
+
+type Filter = 'ALL' | DetectionCategory;
+
+const CATEGORY_STYLE: Record<DetectionCategory, string> = {
+  Bullish: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  Bearish: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+  Structure: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30',
+  Risk: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+};
+
 export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
-  ticker = { price: 64108, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5 },
-  timeframe = '15M',
-  appMode = 'SIMPLE',
   userRole = 'UNPAID',
   alertSettings,
   onOpenDiscordModal,
 }) => {
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'BULLISH' | 'BEARISH' | 'MICRO' | 'EXPERIMENTAL'>('ALL');
-  const [selectedPattern, setSelectedPattern] = useState<PatternItem | null>(null);
-  const [isScanning, setIsScanning] = useState<boolean>(false);
-  const [lastScanTime, setLastScanTime] = useState<string>('Just now');
-  const [scanCount, setScanCount] = useState<number>(1420);
+  const [pipeline, setPipeline] = useState<EnginePipeline | null>(null);
+  const [marketTs, setMarketTs] = useState<number | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [loaded, setLoaded] = useState<boolean>(false);
+  const [activeFilter, setActiveFilter] = useState<Filter>('ALL');
+  const [selected, setSelected] = useState<Detection | null>(null);
 
   const isUnlocked = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase()) || Boolean(alertSettings?.discordLinked) || Boolean(alertSettings?.guildMember);
 
+  const load = useCallback(async () => {
+    setLoading(true);
+    const data = await fetchVixyStateApi();
+    setPipeline((data && data.btc15mPipeline) || null);
+    setMarketTs(typeof data?.lastMarketUpdateTs === 'number' ? data.lastMarketUpdateTs : null);
+    setLoaded(true);
+    setLoading(false);
+  }, []);
 
-  const handleManualScan = () => {
-    setIsScanning(true);
-    setTimeout(() => {
-      setIsScanning(false);
-      setScanCount((prev) => prev + 8);
-      setLastScanTime('Just now');
-    }, 600);
-  };
+  useEffect(() => {
+    if (!isUnlocked) return;
+    load();
+    const timer = setInterval(load, 15000);
+    return () => clearInterval(timer);
+  }, [isUnlocked, load]);
 
-  // Comprehensive Catalog of Detected Patterns
-  const patterns: PatternItem[] = [
-    {
-      id: 'pat_1',
-      name: 'Spoofing Detection',
-      simpleName: 'Fake Sell Wall Pulled (Bullish)',
-      category: 'Experimental',
-      type: 'Order Book AI',
-      confidence: 78,
-      historicalAccuracy: 75,
-      seenCount: 194,
-      expectedFollowThrough: 'False Resistance Removal',
-      detectedAge: '5m ago',
-      isExperimental: true,
-      status: 'ACTIVE',
-      description: 'Large 45 BTC ask wall repeatedly pulled 2 ticks before price interaction.',
-      simpleDescription: 'A seller put up a fake order to trick people into selling, then quickly cancelled it as price got close. Path upwards is clear!',
-      detailBreakdown: 'Artificial sell pressure created by algorithmic spoof orders designed to induce retail panics. As price approaches, the ask wall is instantly pulled, opening up rapid upside space.',
-    },
-    {
-      id: 'pat_2',
-      name: 'Bullish Absorption',
-      simpleName: 'Heavy Buying Support (Bullish)',
-      category: 'Bullish',
-      type: 'Order Flow',
-      confidence: 94,
-      historicalAccuracy: 88,
-      seenCount: 432,
-      expectedFollowThrough: 'Immediate Upside Impulse',
-      detectedAge: '14s ago',
-      status: 'CONFIRMED',
-      description: 'Heavy limit bid wall absorbed aggressive market sell orders near Strike VWAP support.',
-      simpleDescription: 'Big buyers stepped in and bought up every incoming sell order. Price refused to go down.',
-      detailBreakdown: 'Taker market sell orders totaling over 120 BTC were completely absorbed by institutional limit bids without breaking price level, signaling immense underlying buyer demand.',
-    },
-    {
-      id: 'pat_3',
-      name: 'Whale Accumulation',
-      simpleName: 'Big Whale Buying $1.2M+',
-      category: 'Bullish',
-      type: 'On-Chain / L2',
-      confidence: 92,
-      historicalAccuracy: 86,
-      seenCount: 318,
-      expectedFollowThrough: 'Sustained Strike Breakout',
-      detectedAge: '42s ago',
-      status: 'CONFIRMED',
-      description: 'Multiple block trades >$1.2M executed on taker buys with zero slippage impact.',
-      simpleDescription: 'A major institution or whale just bought millions in Bitcoin directly off the market.',
-      detailBreakdown: 'Institutional sweep orders executed across top tier exchanges in synced time intervals. Indicates stealth positioning before scheduled volatility window.',
-    },
-    {
-      id: 'pat_4',
-      name: 'Hidden Iceberg Limit',
-      simpleName: 'Automatic Buy Cushion',
-      category: 'Microstructure',
-      type: 'L2 Microstructure',
-      confidence: 89,
-      historicalAccuracy: 82,
-      seenCount: 265,
-      expectedFollowThrough: 'Strike Price Cushion Support',
-      detectedAge: '2m ago',
-      status: 'ACTIVE',
-      description: '12.8 BTC hidden limit buy order reloading continuously at $63,950 Strike Level.',
-      simpleDescription: 'An automated computer program is continuously refilling buy orders right below current price.',
-      detailBreakdown: 'Automated iceberg order continuously refilling display size of 0.5 BTC every time it is filled. Prevents downside breakdown below local strike boundary.',
-    },
-    {
-      id: 'pat_5',
-      name: 'Short Squeeze Trap',
-      simpleName: 'Short Sellers Trapped',
-      category: 'Bullish',
-      type: 'Derivatives / OI',
-      confidence: 91,
-      historicalAccuracy: 87,
-      seenCount: 189,
-      expectedFollowThrough: 'Cascading Liquidation Impulse',
-      detectedAge: '3m ago',
-      status: 'CONFIRMED',
-      description: 'Aggressive short sellers trapped as open interest expanded +$42M into bid cushion.',
-      simpleDescription: 'Traders betting price would fall got trapped as buyers stepped in. They will soon be forced to buy back.',
-      detailBreakdown: 'Net short positioning spiked sharply while spot price refused to drop. Late short sellers are now over-leveraged and vulnerable to buy stops cascading upwards.',
-    },
-    {
-      id: 'pat_6',
-      name: 'Liquidity Sweep & Reclaim',
-      simpleName: 'Quick Dip Snapped Back Up',
-      category: 'Microstructure',
-      type: 'Order Book AI',
-      confidence: 86,
-      historicalAccuracy: 83,
-      seenCount: 512,
-      expectedFollowThrough: 'Mean Reversion Drive',
-      detectedAge: '4m ago',
-      status: 'CONFIRMED',
-      description: 'Stop-loss cluster below local swing low swept and rapidly reclaimed within 2 ticks.',
-      simpleDescription: 'Price dropped for a brief second to flush out weak hands, then instantly bounced back up.',
-      detailBreakdown: 'Price dipped briefly into a high-density retail stop loss liquidity cluster before aggressive taker buyers snapped price back up above key session VWAP.',
-    },
-    {
-      id: 'pat_7',
-      name: 'Ask Wall Exhaustion',
-      simpleName: 'Sellers Out of Fuel',
-      category: 'Bullish',
-      type: 'Order Flow',
-      confidence: 85,
-      historicalAccuracy: 80,
-      seenCount: 210,
-      expectedFollowThrough: 'Clear Run to $64,500 Strike',
-      detectedAge: '6m ago',
-      status: 'ACTIVE',
-      description: 'Sell liquidity wall depleted by 72% via persistent TWAP taker buy sweeps.',
-      simpleDescription: 'Buyers have eaten through almost all sell orders above price, making it easy for price to rally.',
-      detailBreakdown: 'Persistent time-weighted average price (TWAP) buying has steadily eaten through resistance walls, leaving thin sell side depth above current price.',
-    },
-    {
-      id: 'pat_8',
-      name: 'Delta Divergence',
-      simpleName: 'Stealth Accumulation',
-      category: 'Microstructure',
-      type: 'Cumulative Delta',
-      confidence: 88,
-      historicalAccuracy: 84,
-      seenCount: 340,
-      expectedFollowThrough: 'Bullish Pivot Continuation',
-      detectedAge: '7m ago',
-      status: 'CONFIRMED',
-      description: 'Positive CVD expansion despite flat price consolidation indicating strong accumulation.',
-      simpleDescription: 'Buyers are quietly building huge positions while price stays flat before a bigger breakout.',
-      detailBreakdown: 'Cumulative Volume Delta is trending upwards steeply while price trades flat, demonstrating stealth market buying before price markup.',
-    },
-    {
-      id: 'pat_9',
-      name: 'Bearish Exhaustion',
-      simpleName: 'Selling Slowing Down',
-      category: 'Bearish',
-      type: 'Order Flow',
-      confidence: 42,
-      historicalAccuracy: 71,
-      seenCount: 115,
-      expectedFollowThrough: 'Weak Downside Momentum',
-      detectedAge: '11m ago',
-      status: 'FORMING',
-      description: 'Sell volume delta drying up rapidly near $63,800 Strike floor.',
-      simpleDescription: 'Sellers are losing power and running out of Bitcoin to dump near support.',
-      detailBreakdown: 'Seller aggressiveness has dropped significantly with falling volume on lower candle wicks, indicating downside pressure is running out of fuel.',
-    },
-    {
-      id: 'pat_10',
-      name: 'VWAP Drift Acceleration',
-      simpleName: 'Uptrend Riding Average Price',
-      category: 'Microstructure',
-      type: 'Market Structure',
-      confidence: 90,
-      historicalAccuracy: 85,
-      seenCount: 480,
-      expectedFollowThrough: 'Higher High Continuation',
-      detectedAge: '12m ago',
-      status: 'CONFIRMED',
-      description: 'Sustained price action holding strictly above 9/21 EMA and session VWAP.',
-      simpleDescription: 'Price is smoothly riding above average benchmark price with buyers stepping in on every tiny dip.',
-      detailBreakdown: 'Price is systematically riding the 9-period EMA upward with every pull-back finding immediate buying support at session VWAP.',
-    },
+  const detections = useMemo(() => detectionsFromPipeline(pipeline), [pipeline]);
+  const count = (c: DetectionCategory) => detections.filter((d) => d.category === c).length;
+  const visible = activeFilter === 'ALL' ? detections : detections.filter((d) => d.category === activeFilter);
+
+  const filters: Array<[Filter, string]> = [
+    ['ALL', `ALL (${detections.length})`],
+    ['Bullish', `BULLISH (${count('Bullish')})`],
+    ['Bearish', `BEARISH (${count('Bearish')})`],
+    ['Structure', `STRUCTURE (${count('Structure')})`],
+    ['Risk', `RISK (${count('Risk')})`],
   ];
-
-  // Filtered list based on active tab
-  const filteredPatterns = patterns.filter((p) => {
-    if (activeFilter === 'BULLISH') return p.category === 'Bullish';
-    if (activeFilter === 'BEARISH') return p.category === 'Bearish';
-    if (activeFilter === 'MICRO') return p.category === 'Microstructure';
-    if (activeFilter === 'EXPERIMENTAL') return p.category === 'Experimental' || p.isExperimental;
-    return true;
-  });
 
   return (
     <IntelligenceLockGate
@@ -252,247 +254,141 @@ export const AIPatternEngine: React.FC<AIPatternEngineProps> = ({
       isAdmin={userRole === 'ADMIN' || Boolean(alertSettings?.isAdmin)}
       userRole={userRole}
       onOpenDiscordModal={onOpenDiscordModal}
-      title="AI PATTERN RECOGNITION LOCKED"
-      subtitle="Verify your VIXY Vault Discord membership to unlock live AI microstructure patterns, liquidity sweeps, and L2 order book detection."
+      title="PATTERN DETECTOR LOCKED"
+      subtitle="Verify your VIXY Vault Discord membership to unlock the BTC 15-minute engine's live structure detections."
     >
-      <div className="bg-[#0a0518] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden transition-all duration-300">
-      {/* Background Soft Ambient Glow */}
-      <div className="absolute top-0 right-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-1/3 w-80 h-80 bg-cyan-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-[#0a0518] rounded-2xl border border-purple-900/50 p-5 sm:p-6 shadow-2xl space-y-5 text-slate-100 font-sans relative overflow-hidden">
+        <div className="absolute top-0 right-1/3 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* PATTERN DETECTOR HEADER BAR */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-purple-900/40 pb-4 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-300 shrink-0">
-            <Radar className="w-6 h-6 animate-spin text-purple-400" style={{ animationDuration: '8s' }} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-black tracking-tight text-white uppercase flex items-center gap-2">
-                <span>PATTERN DETECTOR</span>
-              </h2>
-              <span className="px-2 py-0.5 rounded-xl bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold border border-emerald-500/30">
-                LIVE L2 SCANNER
-              </span>
+        {/* HEADER */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-purple-900/40 pb-4 relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-purple-950/80 border border-purple-500/40 text-purple-300 shrink-0">
+              <Radar className="w-6 h-6 text-purple-400" />
             </div>
-            <p className="text-xs text-purple-300/70">
-              Real-time scanning for 30+ institutional patterns (Liquidity Sweeps, Traps, Whales, Absorptions & Spoofing).
-            </p>
-          </div>
-        </div>
-
-        {/* Scan Status & Filter Tabs Controls */}
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto justify-between md:justify-end">
-          <div className="text-[11px] font-mono text-purple-300/60 hidden lg:block">
-            Scanned: <strong className="text-purple-200">{scanCount} setups</strong> • Sync: {lastScanTime}
-          </div>
-
-          <button
-            onClick={handleManualScan}
-            disabled={isScanning}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-200 text-xs font-bold transition-all border border-purple-500/40 active:scale-95 disabled:opacity-50 cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${isScanning ? 'animate-spin' : ''}`} />
-            <span>{isScanning ? 'SCANNING L2...' : 'RE-SCAN L2'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* FILTER TABS BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/40 relative z-10">
-        <div className="flex flex-wrap items-center gap-1">
-          <button
-            onClick={() => setActiveFilter('ALL')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              activeFilter === 'ALL'
-                ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md font-black'
-                : 'text-purple-300/60 hover:text-white'
-            }`}
-          >
-            ALL ({patterns.length})
-          </button>
-
-          <button
-            onClick={() => setActiveFilter('BULLISH')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-              activeFilter === 'BULLISH'
-                ? 'bg-emerald-600 text-white shadow-md font-black'
-                : 'text-emerald-400/70 hover:text-emerald-300'
-            }`}
-          >
-            <span>BULLISH</span>
-            <span className="text-[10px] bg-emerald-950 px-1 rounded text-emerald-300">4</span>
-          </button>
-
-          <button
-            onClick={() => setActiveFilter('BEARISH')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-              activeFilter === 'BEARISH'
-                ? 'bg-rose-600 text-white shadow-md font-black'
-                : 'text-rose-400/70 hover:text-rose-300'
-            }`}
-          >
-            <span>BEARISH</span>
-            <span className="text-[10px] bg-rose-950 px-1 rounded text-rose-300">1</span>
-          </button>
-
-          <button
-            onClick={() => setActiveFilter('MICRO')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-              activeFilter === 'MICRO'
-                ? 'bg-cyan-600 text-white shadow-md font-black'
-                : 'text-cyan-400/70 hover:text-cyan-300'
-            }`}
-          >
-            <span>MICROSTRUCTURE</span>
-            <span className="text-[10px] bg-cyan-950 px-1 rounded text-cyan-300">4</span>
-          </button>
-
-          <button
-            onClick={() => setActiveFilter('EXPERIMENTAL')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1 ${
-              activeFilter === 'EXPERIMENTAL'
-                ? 'bg-amber-600 text-white shadow-md font-black'
-                : 'text-amber-400/70 hover:text-amber-300'
-            }`}
-          >
-            <span>EXPERIMENTAL (SPOOF)</span>
-            <span className="text-[10px] bg-amber-950 px-1 rounded text-amber-300">1</span>
-          </button>
-        </div>
-
-        <span className="text-[11px] font-mono text-purple-300/50 px-2 hidden sm:inline">
-          Click any pattern card to view deep L2 breakdown
-        </span>
-      </div>
-
-      {/* PATTERN CARDS GRID */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 relative z-10">
-        {filteredPatterns.map((pat) => (
-          <div
-            key={pat.id}
-            onClick={() => setSelectedPattern(pat)}
-            className={`bg-[#0c0620] p-4 rounded-xl border transition-all duration-200 cursor-pointer space-y-3 hover:border-purple-400/80 hover:shadow-lg hover:shadow-purple-900/20 group relative overflow-hidden ${
-              pat.isExperimental
-                ? 'border-amber-500/50 bg-amber-950/10'
-                : 'border-purple-900/40'
-            }`}
-          >
-            <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-sm text-white group-hover:text-purple-300 transition-colors">
-                    {appMode === 'SIMPLE' ? (pat.simpleName || pat.name) : pat.name}
-                  </span>
-                  {pat.isExperimental && (
-                    <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 text-[9px] font-black border border-amber-500/40 uppercase">
-                      EXPERIMENTAL
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-mono text-purple-300/60 block mt-0.5">{pat.type}</span>
-              </div>
-
-              <div className="text-right shrink-0">
-                <span className="text-xs font-black text-purple-300 bg-purple-950/80 px-2 py-0.5 rounded border border-purple-800/60 block">
-                  {pat.confidence}% Conf.
-                </span>
-                <span className="text-[10px] font-mono text-purple-300/50 block mt-1">{pat.detectedAge}</span>
-              </div>
-            </div>
-
-            <p className="text-xs text-purple-100/90 leading-relaxed font-sans">
-              {appMode === 'SIMPLE' ? (pat.simpleDescription || pat.description) : pat.description}
-            </p>
-
-            <div className="grid grid-cols-3 gap-2 pt-2 border-t border-purple-900/40 text-[10px] font-mono">
-              <div>
-                <span className="block text-purple-300/50 text-[9px]">HIST WIN RATE</span>
-                <span className="font-extrabold text-emerald-400">{pat.historicalAccuracy}%</span>
-              </div>
-              <div>
-                <span className="block text-purple-300/50 text-[9px]">SEEN</span>
-                <span className="font-bold text-slate-200">{pat.seenCount}x</span>
-              </div>
-              <div className="text-right">
-                <span className="block text-purple-300/50 text-[9px]">STATUS</span>
-                <span className={`font-black ${pat.status === 'CONFIRMED' ? 'text-emerald-400' : 'text-cyan-300'}`}>
-                  {pat.status}
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-base sm:text-lg font-black tracking-tight text-white uppercase">PATTERN DETECTOR</h2>
+                <span className="px-2 py-0.5 rounded-xl bg-purple-500/20 text-purple-200 text-[10px] font-extrabold border border-purple-500/30">
+                  BTC 15-MINUTE ENGINE
                 </span>
               </div>
-            </div>
-
-            <div className="text-[11px] text-cyan-300 font-sans bg-[#0a0518] px-2.5 py-1.5 rounded-xl border border-purple-900/40 flex items-center justify-between">
-              <span className="text-purple-300/60 text-[10px] font-bold">Follow Through:</span>
-              <span className="font-semibold text-cyan-200 text-[11px]">{pat.expectedFollowThrough}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* DEEP DETAIL MODAL DIALOG WHEN CARD IS CLICKED */}
-      {selectedPattern && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-[#0c0620] border border-purple-500/50 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4 text-purple-100 relative">
-            <button
-              onClick={() => setSelectedPattern(null)}
-              className="absolute top-4 right-4 p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-              <h3 className="text-base font-black text-white">{selectedPattern.name} Breakdown</h3>
-            </div>
-
-            <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/50 space-y-2 text-xs">
-              <div className="flex justify-between border-b border-purple-900/40 pb-2">
-                <span className="text-purple-300/60">Category:</span>
-                <span className="font-bold text-emerald-400">{selectedPattern.category}</span>
-              </div>
-              <div className="flex justify-between border-b border-purple-900/40 pb-2">
-                <span className="text-purple-300/60">Confidence Level:</span>
-                <span className="font-black text-purple-300">{selectedPattern.confidence}%</span>
-              </div>
-              <div className="flex justify-between border-b border-purple-900/40 pb-2">
-                <span className="text-purple-300/60">Historical Accuracy Rate:</span>
-                <span className="font-bold text-emerald-400">{selectedPattern.historicalAccuracy}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-purple-300/60">Expected Follow Through:</span>
-                <span className="font-bold text-cyan-300">{selectedPattern.expectedFollowThrough}</span>
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <span className="text-xs font-bold text-purple-200">Institutional L2 Explanation:</span>
-              <p className="text-xs text-purple-200/90 leading-relaxed font-sans bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">
-                {selectedPattern.detailBreakdown || selectedPattern.description}
+              <p className="text-xs text-purple-300/70">
+                Structure the engine detects right now from observed BTC prices. Rules are deterministic; no per-pattern win rate is recorded.
               </p>
             </div>
-
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-purple-300/60">
+              {marketTs ? `Market data ${new Date(marketTs).toISOString().slice(11, 19)}Z` : loaded ? 'No market timestamp' : 'Loading…'}
+            </span>
             <button
-              onClick={() => setSelectedPattern(null)}
-              className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs transition-all shadow-lg shadow-purple-600/30"
+              onClick={load}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-200 text-xs font-bold border border-purple-500/40 disabled:opacity-50 cursor-pointer"
             >
-              Close Pattern Analysis
+              <RefreshCw className={`w-3.5 h-3.5 text-cyan-400 ${loading ? 'animate-spin' : ''}`} />
+              <span>REFRESH</span>
             </button>
           </div>
         </div>
-      )}
 
-      {/* FOOTER NOTE */}
-      <div className="pt-2 border-t border-purple-900/40 flex items-center justify-between text-[11px] text-purple-300/60 font-sans">
-        <span className="flex items-center gap-1.5">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>Real-time microsecond L2 order book detection engine active.</span>
-        </span>
-        <span className="font-mono text-emerald-400/90 font-semibold">
-          30+ Patterns Active
-        </span>
+        {/* FILTERS */}
+        <div className="flex flex-wrap items-center gap-1 bg-[#0a0518] p-1.5 rounded-xl border border-purple-900/40 relative z-10">
+          {filters.map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setActiveFilter(key)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer ${
+                activeFilter === key ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white' : 'text-purple-300/60 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* DETECTIONS */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 relative z-10">
+          {visible.map((d) => (
+            <div
+              key={d.id}
+              onClick={() => setSelected(d)}
+              className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 cursor-pointer space-y-2.5 hover:border-purple-400/80"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <span className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                  {d.category === 'Bullish' ? <TrendingUp className="w-4 h-4 text-emerald-400" /> : d.category === 'Bearish' ? <TrendingDown className="w-4 h-4 text-rose-400" /> : d.category === 'Risk' ? <AlertTriangle className="w-4 h-4 text-amber-400" /> : <Activity className="w-4 h-4 text-cyan-400" />}
+                  {d.name}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-black border ${CATEGORY_STYLE[d.category]}`}>{d.category.toUpperCase()}</span>
+              </div>
+              <div className="text-[10px] font-mono text-purple-300/60 flex items-center gap-2">
+                <Layers className="w-3 h-3" />
+                {d.source}
+                {d.derived && <span className="px-1.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">DERIVED</span>}
+              </div>
+              <p className="text-xs text-purple-100/90 font-mono">{d.reading}</p>
+            </div>
+          ))}
+        </div>
+
+        {loaded && detections.length === 0 && (
+          <div className="bg-[#0c0620] p-4 rounded-xl border border-purple-900/40 text-xs font-mono text-purple-200 relative z-10">
+            {pipeline ? 'No structural pattern is active right now.' : 'The engine state could not be read.'}
+          </div>
+        )}
+        {loaded && pipeline && (
+          <div className="text-[11px] font-mono text-purple-300/70 relative z-10">
+            Evidence families agreeing: {pipeline.evidenceAgreementCount ?? '—'}/{pipeline.totalEvidenceFamilies ?? '—'} • lock quality {pipeline.lockQuality ?? '—'} ({humanLabel(pipeline.lockQualityTier)})
+          </div>
+        )}
+
+        {/* DETAIL MODAL */}
+        {selected && (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="bg-[#0c0620] border border-purple-500/50 max-w-lg w-full rounded-2xl p-6 shadow-2xl space-y-4 text-purple-100 relative">
+              <button
+                onClick={() => setSelected(null)}
+                className="absolute top-4 right-4 p-1 rounded-xl bg-purple-950 hover:bg-purple-900 text-purple-300"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h3 className="text-base font-black text-white">{selected.name}</h3>
+              <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/50 space-y-2 text-xs">
+                <div className="flex justify-between border-b border-purple-900/40 pb-2">
+                  <span className="text-purple-300/60">Category</span>
+                  <span className="font-bold">{selected.category}</span>
+                </div>
+                <div className="flex justify-between border-b border-purple-900/40 pb-2">
+                  <span className="text-purple-300/60">Source</span>
+                  <span className="font-bold">{selected.source}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-purple-300/60 shrink-0">Reading</span>
+                  <span className="font-bold text-right">{selected.reading}</span>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <span className="text-xs font-bold text-purple-200">How it is measured</span>
+                <p className="text-xs text-purple-200/90 leading-relaxed bg-[#0a0518] p-3 rounded-xl border border-purple-900/40">{selected.explanation}</p>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                className="w-full py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* FOOTER */}
+        <div className="pt-2 border-t border-purple-900/40 flex items-start gap-1.5 text-[11px] text-purple-300/60">
+          <Info className="w-4 h-4 text-purple-400 shrink-0" />
+          <span>Detections are the engine's deterministic structure rules on BTC 15-minute ticks. No order book or trade tape is read on this page.</span>
+        </div>
       </div>
-    </div>
     </IntelligenceLockGate>
   );
 };
