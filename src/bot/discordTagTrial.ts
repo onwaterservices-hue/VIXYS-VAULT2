@@ -12,7 +12,7 @@
  *
  * RULES (owner decisions, 2026-09-10)
  *   - Same access as the 24H day pass: 72 hours for claims made before the
- *     launch promo ends (2026-09-11, 11:59 PM Pacific), 24 hours after.
+ *     launch promo ends (midnight Eastern ending 2026-09-11), 24 hours after.
  *   - Once per Discord account AND once per VIXY account, ever.
  *   - Discord account must be at least 30 days old (derived from the snowflake).
  *   - Only for accounts with no paid access right now.
@@ -37,9 +37,9 @@
 export const TAG_TRIAL_ENTITLEMENT_TYPE = "TAG_TRIAL";
 // LAUNCH PROMO (owner decision 2026-09-11): a claim made before the promo ends
 // grants 72 hours; a claim made after it grants 24 hours. The deadline is one
-// fixed instant -- 11:59 PM Pacific on 2026-09-11 -- decided here, on the
+// fixed instant -- midnight Eastern ending 2026-09-11 -- decided here, on the
 // server, at claim time. Nothing the browser sends can extend it.
-export const TAG_TRIAL_PROMO_ENDS_AT = "2026-09-12T07:00:00.000Z";
+export const TAG_TRIAL_PROMO_ENDS_AT = "2026-09-12T04:00:00.000Z";
 export const TAG_TRIAL_PROMO_DURATION_HOURS = 72;
 export const TAG_TRIAL_STANDARD_DURATION_HOURS = 24;
 export const TAG_TRIAL_MIN_DISCORD_ACCOUNT_AGE_DAYS = 30;

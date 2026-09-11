@@ -610,6 +610,38 @@ export async function getTagTrialOfferApi(): Promise<TagTrialOffer | null> {
   }
 }
 
+// Public Invite to Earn terms, computed on the server from referralPolicy.ts.
+export interface ReferralProgram {
+  policyVersion: string;
+  discountPercent: number;
+  tiers: {
+    plan: string;
+    label: string;
+    monthlyPriceCents: number;
+    rewardCredits: number;
+    rewardUsd: string;
+    shareOfMonthlyPricePercent: number;
+  }[];
+  sameRewardOnAnnualPlans: boolean;
+  rewardCappedAtAmountPaid: boolean;
+  dayPassEarnsCredit: boolean;
+  creditsPerUsd: number;
+  creditsPerFreeDay: number;
+  payoutThresholdCredits: number;
+  clawbackHoldDays: number;
+  creditExpiryDays: number;
+}
+
+export async function getReferralProgramApi(): Promise<ReferralProgram | null> {
+  try {
+    const res = await fetch('/api/referral/program', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as ReferralProgram;
+  } catch {
+    return null;
+  }
+}
+
 export interface TagTrialStatus {
   available: boolean;
   offer: TagTrialOffer;

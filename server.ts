@@ -202,6 +202,8 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
+import { referralProgramSummary } from "./src/services/referral/referralPolicy";
+import { REFERRAL_DISCOUNT_PERCENT as REFERRAL_PROGRAM_DISCOUNT_PERCENT } from "./src/services/referral/referralService";
 import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview, useReferralRewardsDatapath } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
@@ -6807,6 +6809,14 @@ const referralHandlers = createReferralHandlers({
   },
 });
 
+// GET /api/referral/program -- the public Invite to Earn terms: credit per paid
+// friend by plan, what share of that plan's monthly price it is, the friend's
+// discount, hold/expiry/payout rules. Computed from referralPolicy.ts (the only
+// source of referral economics); no identity, no account data.
+app.get("/api/referral/program", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(referralProgramSummary(REFERRAL_PROGRAM_DISCOUNT_PERCENT));
+});
 app.get("/api/referral/me", (req, res) => referralHandlers.me(req, res));
 app.get("/api/referral/my-discount", (req, res) => referralHandlers.myDiscount(req, res));
 app.post("/api/referral/claim-code", (req, res) =>
@@ -10296,7 +10306,7 @@ const AUTHORITATIVE_STRIPE_LINKS = {
     annual: "https://buy.stripe.com/5kQdR8cKLgQibh2ffP1oI04",
   },
   ELITE: {
-    monthly: "https://buy.stripe.com/cNifZg267gQibh2gjT1oI0",
+    monthly: "https://buy.stripe.com/cNifZg267gQibh2gjT1oI00",
     annual: "https://buy.stripe.com/eVqdR8bGH9nQ70M3x71oI01",
   },
 };
