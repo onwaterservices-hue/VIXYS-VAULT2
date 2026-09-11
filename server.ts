@@ -15506,11 +15506,15 @@ app.get("/api/vixy/state", async (req, res) => {
     features: {
       asset: "BTC",
       desk: "15m",
-      orderFlow: Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
-      orderBookImbalance:
-        Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
+      // orderFlow and orderBookImbalance were both (bullVolPct - 50) * 0.02, a
+      // number computed from spot vs strike: no order book or trade tape is read.
+      // momentum5m was the interval momentum, not a 5-minute measure. The labelled
+      // proxy is btc15mPipeline.orderFlowAnalytics; per-timeframe votes are in
+      // btc15mPipeline.multiTimeframeAlignment.
+      orderFlow: null,
+      orderBookImbalance: null,
       momentum: currentMomentum,
-      momentum5m: currentMomentum,
+      momentum5m: null,
       momentumPct: currentMomentum,
       volatility: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
       volatility15m: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
@@ -16711,12 +16715,12 @@ app.get(
         ? {
             asset,
             desk,
-            orderFlow:
-              Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
-            orderBookImbalance:
-              Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3,
+            // Same as /api/vixy/state: no order book or tape behind these, and
+            // momentum5m was the interval momentum.
+            orderFlow: null,
+            orderBookImbalance: null,
             momentum: currentMomentum,
-            momentum5m: currentMomentum,
+            momentum5m: null,
             momentumPct: currentMomentum,
             volatility: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
             volatility15m: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
