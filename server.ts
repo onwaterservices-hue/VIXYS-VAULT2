@@ -14809,108 +14809,12 @@ app.get("/api/btc/klines", async (req, res) => {
   } catch (err) {}
   res.status(503).json({ error: "BTC klines feed temporarily unavailable" });
 });
-app.post("/api/predict", async (req, res) => {
-  const { currentPrice, bullVolumePct, netDelta, takerBuyRatio } =
-    req.body || {};
-  const btcPrice = currentPrice || 64108;
-  const bullPct = bullVolumePct || 68;
-  const delta = netDelta || 1420;
-  const takerRatio = takerBuyRatio || 1.42;
-  if (!ai) {
-    const direction = bullPct >= 50 ? "YES" : "NO";
-    const target = direction === "YES" ? btcPrice + 120 : btcPrice - 120;
-    return res.json({
-      direction,
-      probability: 91,
-      confidence: 91,
-      expectedValue: "+10.2%",
-      edgePct: 7.4,
-      targetPrice: Math.round(target),
-      marketRegime: "BULL BREAKOUT",
-      riskLevel: "Low",
-      crossMarketConfirmation:
-        "High Alignment (ETH + SOL + ES Futures confirming)",
-      historicalMatch: {
-        similarityScore: "94%",
-        date: "2026-03-14",
-        outcome: "UP +1.8%",
-        examplesCount: 18,
-      },
-      modelConsensus:
-        "6/7 Models Agree (Order Flow, Volume, Momentum, Structure, Volatility, Cross-Asset)",
-      reasoning: `15m candle opened with elevated taker buy volume (${takerRatio} ratio) and net delta (+${delta} BTC). Order book depth shows clear bid side absorption at $${Math.round(btcPrice - 80)}, creating a high probability for close above $${Math.round(target)}.`,
-      keyFactors: [
-        "Net Taker Delta +1,420 BTC in last 10m",
-        "VWAP support holding with high volume confluence",
-        "Kalshi / Polymarket odds underpricing continuation",
-        "Order book bid depth imbalance +18.4%",
-      ],
-      primaryDrivers: [
-        "Net Taker Delta +1,420 BTC in last 10m",
-        "VWAP support holding with high volume confluence",
-        "Order book bid depth imbalance +18.4%",
-      ],
-      primaryRisks: [
-        `Resistance Overhead at $${Math.round(btcPrice + 40)}`,
-        "Elevated liquidation cluster nearby",
-      ],
-      invalidationPoint: `Break and 1m close below VWAP support at $${Math.round(btcPrice - 85)}`,
-    });
-  }
-  try {
-    const prompt = `System Instruction: You are the quantitative intelligence layer powering VIXY AI - REAL-TIME MULTI-MARKET DECISION ENGINE.
-
-Your purpose is NOT to guess. You continuously evaluate live market conditions, calculate probabilities from observable evidence, explain uncertainty, and update conclusions as new data arrives.
-
-DATA PRIORITY TIERS EVALUATED:
-- Tier 1 (Highest Weight): Orderbook imbalance (${bullPct}% buy side), Net taker delta (+${delta} BTC), Taker buy/sell ratio (${takerRatio}), Bid/Ask pressure, Market depth, Liquidity walls, Market absorption, VWAP interaction, Volume profile.
-- Tier 2: Bitcoin price ($${btcPrice}), micro trend, momentum acceleration, EMA relationships, VWAP distance, RSI, MACD, ATR, Volatility expansion.
-- Tier 3: Open Interest, Funding Rates, Liquidation clusters, Long/Short ratios, ETF flows.
-- Tier 4: Cross-market correlations (BTC, ETH, SOL, XRP, DOGE, NASDAQ Futures, S&P Futures, DXY, Gold, US10Y).
-
-Generate an objective, evidence-grounded 15-minute binary prediction in JSON format matching this exact schema:
-{
-  "direction": "YES" or "NO",
-  "probability": 88,
-  "confidence": 91,
-  "expectedValue": "+10.2%",
-  "edgePct": 7.4,
-  "targetPrice": 64400,
-  "marketRegime": "BULL BREAKOUT",
-  "riskLevel": "Low",
-  "crossMarketConfirmation": "High Alignment (ETH + SOL + ES Futures confirming)",
-  "historicalMatch": {
-    "similarityScore": "94%",
-    "date": "2026-03-14",
-    "outcome": "UP +1.8%",
-    "examplesCount": 18
-  },
-  "modelConsensus": "6/7 Models Agree",
-  "reasoning": "Detailed 2-3 sentence institutional quant explanation detailing what changed, orderbook absorption, taker flow delta, and current VWAP floor.",
-  "keyFactors": ["string point 1", "string point 2", "string point 3"],
-  "primaryDrivers": ["string point 1", "string point 2", "string point 3"],
-  "primaryRisks": ["string risk 1", "string risk 2"],
-  "invalidationPoint": "string describing exact price/condition invalidating current signal"
-}`;
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash",
-      contents: prompt,
-      config: { responseMimeType: "application/json" },
-    });
-    const text = response.text || "";
-    const parsed = JSON.parse(text);
-    res.json(parsed);
-  } catch (error) {
-    console.error("Gemini prediction error:", error);
-    res
-      .status(500)
-      .json({
-        error:
-          "Oops, our prediction engine is cloudy right now. Please try again!",
-        message: error.message,
-      });
-  }
-});
+// POST /api/predict was removed (2026-09-11). It was a public, unauthenticated
+// second 15-minute prediction engine: every anonymous call spent a paid Gemini
+// request, its prompt handed the model an example answer to copy (confidence 91,
+// "6/7 Models Agree", a 94% "historical match"), missing inputs were filled with
+// invented market data, and without Gemini it returned those numbers verbatim.
+// Nothing called it. The live 15M engine is the only decision engine.
 app.post("/api/position-size", (req, res) => {
   const {
     asset = "BTC",
@@ -15449,7 +15353,13 @@ app.get("/api/model-status", async (req, res) => {
   const desk = req.query.desk || "15m";
   let settledCount = serverLearningEngine.todaySettledCount;
   let lifetimeObservations = serverLearningEngine.lifetimeObservations;
-  let hasActiveModel = true;
+  // "Active model" means calibrated: enough settled locks to meet minRequired.
+  // This was the literal `true`, so with 148 of 500 settled rows the terminal
+  // showed BUY_YES / BUY_NO actions, model probabilities and a green "Live
+  // Model" badge where its own branches were written to say HOLD / UNCALIBRATED
+  // and "Collecting data (n/500)".
+  const MODEL_MIN_REQUIRED = 500;
+  let hasActiveModel = settledCount >= MODEL_MIN_REQUIRED;
   const historyLen = serverLearningEngine.settledHistory.length;
   const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
   let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
@@ -15458,7 +15368,7 @@ app.get("/api/model-status", async (req, res) => {
   ).toISOString();
   res.json({
     settledCount,
-    minRequired: 500,
+    minRequired: MODEL_MIN_REQUIRED,
     lifetimeObservations,
     hasActiveModel,
     activeModelBrier,
@@ -15469,9 +15379,11 @@ app.get("/api/model-status", async (req, res) => {
     lastWeightUpdateSecAgo: Math.round(
       (Date.now() - serverLearningEngine.lastWeightUpdateTs) / 1e3,
     ),
-    memoryPersistence: "ACTIVE",
-    incrementalTraining: "ON",
-    featureContributions: serverLearningEngine.featureContributions,
+    // Not measured, so not claimed: these were the literals "ACTIVE" and "ON",
+    // and featureContributions is a hardcoded list of weights nothing trains.
+    memoryPersistence: null,
+    incrementalTraining: null,
+    featureContributions: null,
     recentSettlements: serverLearningEngine.settledHistory.slice(0, 10),
   });
 });
@@ -16391,7 +16303,8 @@ app.get(
       dataAgeMs <= 15e3;
     let settledCount = serverLearningEngine.todaySettledCount;
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
-    let hasActiveModel = true;
+    // Calibrated only once minSamplesNeeded settled locks exist (was literal true).
+    let hasActiveModel = settledCount >= 500;
     const historyLen = serverLearningEngine.settledHistory.length;
     const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
     let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
@@ -16771,58 +16684,10 @@ app.get(
       feedStatus: computedFeedStatus,
       lastMarketUpdateTs,
       lockEvaluation: isLive ? latestLockEvaluation : null,
-      algorithmVotes: isLive
-        ? [
-            {
-              algo: "Order Flow Delta",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.18" : "-0.18",
-              status: "PASS",
-            },
-            {
-              algo: "Whale Liquidity Sweeps",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.12" : "-0.12",
-              status: "PASS",
-            },
-            {
-              algo: "VWAP Floor",
-              vote: "Bullish",
-              weight: "+0.05",
-              status: "PASS",
-            },
-            {
-              algo: "Momentum Vector",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.09" : "-0.09",
-              status: "PASS",
-            },
-            {
-              algo: "Volatility Profile",
-              vote: "Neutral",
-              weight: "-0.01",
-              status: "WARNING",
-            },
-            {
-              algo: "Orderbook Imbalance",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.13" : "-0.13",
-              status: "PASS",
-            },
-            {
-              algo: "Institutional Flow",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.15" : "-0.15",
-              status: "PASS",
-            },
-            {
-              algo: "Neural Similarity Engine",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.21" : "-0.21",
-              status: "PASS",
-            },
-          ]
-        : [],
+      // Eight invented "algorithms" with fixed weights and status PASS ("VWAP
+      // Floor" voted Bullish unconditionally). No engine computes per-algorithm
+      // votes; the real per-family evidence is btc15mPipeline.evidenceFamilies.
+      algorithmVotes: null,
       modelValidation: {
         trainedAt: activeModelTrainedAt,
         brierScore: activeModelBrier,

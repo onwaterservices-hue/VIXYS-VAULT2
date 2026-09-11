@@ -1,4 +1,4 @@
-import { BTCTicker, Candle, PredictionSignal, SignalStateType, AccessStateType, UserAccessObject, SignalPredictionState } from '../types';
+import { BTCTicker, Candle, SignalStateType, AccessStateType, UserAccessObject, SignalPredictionState } from '../types';
 import { resolveCanonicalAsset } from './market/cryptoUniverseRegistry';
 
 const inFlightRequests = new Map<string, Promise<any>>();
@@ -445,48 +445,6 @@ export function connectLiveCryptoStream(
     if (reconnectTimer) clearTimeout(reconnectTimer);
     cleanupSocket();
     if (onStatusChange) onStatusChange('OFFLINE');
-  };
-}
-
-export async function fetchPrediction(
-  currentPrice: number,
-  bullVolumePct: number = 68,
-  netDelta: number = 1420,
-  takerBuyRatio: number = 1.42
-): Promise<Partial<PredictionSignal>> {
-  try {
-    const res = await fetch('/api/predict', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        currentPrice,
-        bullVolumePct,
-        netDelta,
-        takerBuyRatio,
-      }),
-    });
-    if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
-      return await res.json();
-    }
-  } catch (err) {
-    // Fallback
-  }
-  const direction = bullVolumePct >= 50 ? 'YES' : 'NO';
-  const target = direction === 'YES' ? currentPrice + 120 : currentPrice - 120;
-  return {
-    direction,
-    targetPrice: Math.round(target),
-    confidence: 91,
-    edgePct: 7.4,
-    reasoning: `15m candle opened with elevated taker buy volume (${takerBuyRatio} ratio) and net delta (+${netDelta} BTC). Order book depth shows clear bid side absorption at $${Math.round(
-      currentPrice - 80
-    )}, creating a high probability for close above $${Math.round(target)}.`,
-    keyFactors: [
-      'Net Taker Delta +1,420 BTC in last 10m',
-      'VWAP support holding with high volume confluence',
-      'Kalshi / Polymarket odds underpricing continuation',
-      'Order book bid depth imbalance +18.4%',
-    ],
   };
 }
 
