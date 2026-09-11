@@ -70,6 +70,7 @@ import { VixyLiveView } from './components/VixyLiveView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
 import ReferralCongratsToast from './components/ReferralCongratsToast';
 import { DayPassUpgradePrompt } from './components/DayPassUpgradePrompt';
+import { TagTrialPromoBanner } from './components/TagTrialPromoBanner';
 import { describeMembershipWindow, hasRecurringPlanFrom } from './lib/membershipDates';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
@@ -1237,6 +1238,14 @@ export default function App() {
       )}
   
       <div className="min-h-screen bg-[#05030a] text-purple-50 selection:bg-purple-600 selection:text-white flex flex-col font-sans">
+        {/* Discord server-tag launch offer. Renders only while the server's promo
+            window is open and disappears at its deadline. */}
+        <TagTrialPromoBanner
+          isAuthenticated={authState.isAuthenticated}
+          onOpenAuth={() => handleOpenAuth('register')}
+          onViewPricing={() => setActiveTab('pricing')}
+          onAccessGranted={() => window.location.assign('/vixy-live')}
+        />
       {isLoading && <LoadingOverlay onComplete={() => setIsLoading(false)} />}
 
       {/* Professional Maintenance Banner */}

@@ -415,7 +415,7 @@ import {
   createDiscordLinkStatusHandler,
   createDiscordUnlinkHandler,
 } from "./src/bot/discordOAuth";
-import { createTagTrialService } from "./src/bot/discordTagTrial";
+import { createTagTrialService, tagTrialOfferAt } from "./src/bot/discordTagTrial";
 // Statically imported so esbuild embeds this config directly into the
 // bundled dist/server.cjs -- a runtime fs.readFileSync(process.cwd() + ...)
 // depends on this exact file being present at that path in the deployed
@@ -7088,6 +7088,14 @@ function refreshTagTrialRecordFromStore(record) {
     .catch(() => {});
 }
 __name(refreshTagTrialRecordFromStore, "refreshTagTrialRecordFromStore");
+
+// GET /api/discord/tag-trial-offer -- the public offer (durations, the launch
+// promo deadline, the account-age rule) for the site-wide announcement. Rules
+// only: no identity is read and no account data is returned.
+app.get("/api/discord/tag-trial-offer", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(tagTrialOfferAt(Date.now()));
+});
 
 // GET /api/discord/tag-trial-status -- the signed-in account's offer, claim and
 // last attempt. Identity comes from the session cookie only.
