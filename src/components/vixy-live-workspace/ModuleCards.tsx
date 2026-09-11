@@ -553,7 +553,8 @@ export const TrendModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">TREND & REGIME</span>
         </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">SUPERTREND</span>
+        {/* Was "SUPERTREND"; no Supertrend indicator is computed. */}
+        <span className="text-purple-300 font-mono text-[10px] font-bold">ENGINE</span>
       </div>
 
       <div className="space-y-1">
@@ -757,12 +758,18 @@ export const VixyReadModule: React.FC<ModuleRenderProps> = ({ canonical15m, loca
           </div>
           <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">VIXY REASONING SYNTHESIS</span>
         </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">NEURAL EVIDENCE MATRIX</span>
+        <span className="text-purple-300 font-mono text-[10px] font-bold">ENGINE SUMMARY</span>
       </div>
 
+      {/* The fallback here was a fixed sentence ("Order book imbalance exhibits
+          heavy ask depletion across Binance and Coinbase...") shown whenever the
+          hypothesis was empty, which the server sends on every tick. No order
+          book or venue depth is read. Show the engine's own summary, or say
+          there is none. */}
       <p className="text-xs sm:text-sm text-slate-300 font-sans leading-relaxed">
         {canonical15m.gemini?.primaryHypothesis ||
-          "Multi-venue taker flow alignment synchronized with 15M cycle policy. Order book imbalance exhibits heavy ask depletion across Binance and Coinbase, confirming directional persistence above current strike."}
+          canonical15m.gemini?.reasoning ||
+          "No engine summary for this tick."}
       </p>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex flex-wrap justify-between gap-2">
