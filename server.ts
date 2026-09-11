@@ -4842,7 +4842,8 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       dataAgeMs: active15mCycle.calibrationDataAgeMs ?? null,
       choppyReason: active15mCycle.choppyReason ?? null,
       snapshotVersion: "v1",
-      engineVersion: "VIXY-VAULT-v5",
+      // The version that actually decided this lock (was a literal "VIXY-VAULT-v5").
+      engineVersion: lockModelVersion,
     };
   }
 
@@ -15831,6 +15832,7 @@ app.get("/api/vixy/state", async (req, res) => {
           direction: active15mCycle.lockedDirection,
           probability: active15mCycle.lockedProbability,
           confidence: active15mCycle.lockedConfidence,
+          lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
           lockedAt: active15mCycle.lockedAt,
           spotAtLock: active15mCycle.lockedSpot,
           strike: active15mCycle.lockedStrike,
@@ -15971,6 +15973,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         direction: active15mCycle.lockedDirection || "NEUTRAL",
         probability: active15mCycle.lockedProbability ?? 0.5,
         confidence: active15mCycle.lockedConfidence ?? 0,
+        lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
         lockedAt: active15mCycle.lockedAt || now,
         spotAtLock: active15mCycle.lockedSpot || spot,
         strike: active15mCycle.lockedStrike || strike,
@@ -16842,6 +16845,7 @@ app.get(
             direction: active15mCycle.lockedDirection,
             probability: active15mCycle.lockedProbability,
             confidence: active15mCycle.lockedConfidence,
+            lockPolicy: active15mCycle.lockPolicy ?? null, // rule P(win) x 100 under STRIKE_SIDE_RULE; engine score otherwise
             lockedAt: active15mCycle.lockedAt,
             spotAtLock: active15mCycle.lockedSpot,
             strike: active15mCycle.lockedStrike,
