@@ -10,9 +10,12 @@
 // This pins actualOutcome, wasCorrect and the Brier computation exactly as
 // they ship today, INCLUDING two behaviours that are almost certainly wrong
 // and are marked PINNED-AS-IS rather than fixed.
-import { serverSrc, sliceBetween, createHarness } from './_engineSource.mjs';
+import { serverSrc, sliceBetween, extractFn, createHarness } from './_engineSource.mjs';
 
 const t = createHarness('settlement-grader.characterization');
+
+// The grader calls brierOfRow; run the real one beside the slice.
+const brierOfRow = new Function(`${extractFn('brierOfRow', 'function brierOfRow(')}; return brierOfRow;`)();
 
 const graderSrc = sliceBetween(
   serverSrc,
@@ -28,10 +31,10 @@ for (const frag of ['prevLog.actualOutcome', 'prevLog.wasCorrect', 'prevLog.brie
 }
 
 // Run the real statements against a controlled prevLog.
-function grade({ direction, confidence, targetStrike, settlementPrice }) {
-  const prevLog = { direction, confidence, targetStrike, resolvedAt: '2026-09-09T00:00:00.000Z' };
-  const fn = new Function('prevLog', 'livePrice', 'Math', `${graderSrc}; return prevLog;`);
-  return fn(prevLog, settlementPrice, Math);
+function grade({ direction, confidence, probability, targetStrike, settlementPrice }) {
+  const prevLog = { direction, confidence, probability, targetStrike, resolvedAt: '2026-09-09T00:00:00.000Z' };
+  const fn = new Function('prevLog', 'livePrice', 'Math', 'brierOfRow', `${graderSrc}; return prevLog;`);
+  return fn(prevLog, settlementPrice, Math, brierOfRow);
 }
 
 t.section('actualOutcome is decided purely by settlementPrice vs targetStrike');
@@ -61,30 +64,34 @@ t.eq('incorrect -> LOSS', grade({ direction: 'UP', confidence: 80, targetStrike:
 t.eq('actualDirection mirrors actualOutcome',
   grade({ direction: 'UP', confidence: 80, targetStrike: 64000, settlementPrice: 63900 }).actualDirection, 'DOWN');
 
-t.section('Brier score = round((confidence/100 - wasCorrect)^2 * 1000) / 1000');
-// PINNED-AS-IS: this is Brier against the BINARY CORRECTNESS of the call, not
-// against the probability assigned to the UP outcome. A 90%-confidence call
-// that wins scores 0.01 whether it was an UP or a DOWN call. That is a
-// self-consistent definition but it is NOT the Brier score of a directional
-// probability forecast, and it is the number published as `avgBrierScore`.
+t.section('Brier score = round((recorded P(win) - wasCorrect)^2 * 1000) / 1000');
+// This was round((confidence/100 - wasCorrect)^2) and was pinned here as
+// "NOT the Brier score of a directional probability forecast": confidence is
+// the engine score, not a probability. The grader now scores the recorded
+// P(win) of the called side (prevLog.probability); confidence is ignored, and a
+// row with no recorded probability gets no Brier score.
 const cases = [
-  // confidence, settlementPrice, expected Brier
-  [90, 64100, 0.01],   // won at 90% -> (0.9-1)^2
-  [90, 63900, 0.81],   // lost at 90% -> (0.9-0)^2
-  [50, 64100, 0.25],   // won at 50%
-  [50, 63900, 0.25],   // lost at 50% -- symmetric at the coin flip
-  [100, 64100, 0],     // won at 100%
-  [100, 63900, 1],     // lost at 100%
-  [75, 64100, 0.063],  // (0.75-1)^2 = 0.0625 -> rounds to 0.063
-  [66, 63900, 0.436],  // 0.66^2 = 0.4356 -> rounds to 0.436
+  // recorded P(win), settlementPrice, expected Brier
+  [0.9, 64100, 0.01],   // won at 0.90 -> (0.9-1)^2
+  [0.9, 63900, 0.81],   // lost at 0.90 -> (0.9-0)^2
+  [0.5, 64100, 0.25],   // won at 0.50
+  [0.5, 63900, 0.25],   // lost at 0.50 -- symmetric at the coin flip
+  [1, 64100, 0],        // won at 1.0
+  [1, 63900, 1],        // lost at 1.0
+  [0.75, 64100, 0.063], // (0.75-1)^2 = 0.0625 -> rounds to 0.063
+  [0.66, 63900, 0.436], // 0.66^2 = 0.4356 -> rounds to 0.436
 ];
-for (const [confidence, settlementPrice, expected] of cases) {
-  const r = grade({ direction: 'UP', confidence, targetStrike: 64000, settlementPrice });
-  t.eq(`conf=${confidence} ${r.outcome} -> brier ${expected}`, r.brierScore, expected);
+for (const [probability, settlementPrice, expected] of cases) {
+  const r = grade({ direction: 'UP', confidence: 93, probability, targetStrike: 64000, settlementPrice });
+  t.eq(`p=${probability} ${r.outcome} -> brier ${expected}`, r.brierScore, expected);
 }
+t.eq('engine score is not used: confidence 93 with p 0.9 scores 0.01, not 0.005',
+  grade({ direction: 'UP', confidence: 93, probability: 0.9, targetStrike: 64000, settlementPrice: 64100 }).brierScore, 0.01);
+t.eq('no recorded probability -> no Brier score',
+  grade({ direction: 'UP', confidence: 93, targetStrike: 64000, settlementPrice: 64100 }).brierScore, null);
 // Brier is rounded to 3dp, so it is quantised and cannot express finer error.
 t.check('brierScore is rounded to 3 decimal places',
-  String(grade({ direction: 'UP', confidence: 77, targetStrike: 64000, settlementPrice: 64100 }).brierScore).split('.')[1]?.length <= 3);
+  String(grade({ direction: 'UP', confidence: 77, probability: 0.77, targetStrike: 64000, settlementPrice: 64100 }).brierScore).split('.')[1]?.length <= 3);
 
 t.section('status transition');
 t.check('grader sets settlementAt from resolvedAt',
