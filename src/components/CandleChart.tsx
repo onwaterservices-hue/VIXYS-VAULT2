@@ -589,7 +589,10 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     return `${upperStr} ${lowerStr} Z`;
   };
 
-  const latestClose = closes[closes.length - 1] || refSpot;
+  // The last real close, else the live price, else 0 (no data). It used to fall
+  // back to refSpot, whose last resort is 100, so a chart with no candles and no
+  // price labelled itself "$100.0". refSpot stays as axis scaling only.
+  const latestClose = closes[closes.length - 1] || (currentPrice > 0 ? currentPrice : 0);
   const previousClose = closes[closes.length - 2] || latestClose;
   const lastPriceChange = latestClose - previousClose;
   const lastPriceChangePct = (lastPriceChange / previousClose) * 100;
@@ -1208,8 +1211,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         );
       })}
 
-      {/* Live Price Tag Line */}
-      <g>
+      {/* Live Price Tag Line (only with a real price) */}
+      {latestClose > 0 && (<g>
         <line
           x1={marginLeft}
           y1={y(latestClose)}
@@ -1244,9 +1247,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           fontWeight="bold"
           fontFamily="Inter, system-ui, sans-serif"
         >
-          ${latestClose > 0 ? latestClose.toFixed(1) : 'WAITING'}
+          ${latestClose.toFixed(1)}
         </text>
-      </g>
+      </g>)}
 
       {/* Bottom-Right HUD Price Box: Always Real Spot Price */}
       <g transform={`translate(${marginLeft + plotWidth - 124}, ${marginTop + chartHeight - 26})`}>
@@ -1342,10 +1345,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
           {/* RSI Curve */}
           <path
-            d={linePath(
-              rsiLine.map((r) => r ?? 50),
-              yRsi
-            )}
+            // RSI is null until 14 closes exist; linePath skips nulls. It used to
+            // draw a flat RSI 50 line over that warm-up as if it were measured.
+            d={linePath(rsiLine, yRsi)}
             fill="none"
             stroke={THEME.purpleBright}
             strokeWidth="1.2"
@@ -1401,8 +1403,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             ${crosshairPos.price.toFixed(1)}
           </text>
 
-          {/* Floating AI Delta Tooltip near Cursor */}
-          {(() => {
+          {/* Floating AI Delta Tooltip near Cursor (needs a real last price) */}
+          {latestClose > 0 && (() => {
             const priceDelta = crosshairPos.price - latestClose;
             const pctDelta = (priceDelta / latestClose) * 100;
             const isPos = priceDelta >= 0;
@@ -1565,7 +1567,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="bg-[#0e0622] px-3 py-1 rounded-xl border border-purple-800/50 flex items-center gap-2">
           <span className="text-[#8b84a8] text-[10px]">SPOT:</span>
-          <span className="font-extrabold text-white text-xs">${latestClose.toFixed(1)}</span>
+          <span className="font-extrabold text-white text-xs">{latestClose > 0 ? `$${latestClose.toFixed(1)}` : '—'}</span>
           <span
             className={`text-[10px] font-bold ${
               lastPriceChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
