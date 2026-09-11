@@ -87,4 +87,14 @@ const app = readRepoFile('src/App.tsx');
 t.check('mounted in App', app.includes('<DayPassUpgradePrompt'));
 t.check('receives the live day pass record', app.includes('dayPassInfo={dayPassInfo}'));
 
+// --- Positioning regression guard ----------------------------------------
+// .hud-corners declares position: relative. On the same element as .fixed it
+// wins the cascade and drops the card into normal flow at the top of the page
+// instead of pinning it bottom-right. Caught by a local visual harness before
+// merge on 2026-09-10.
+const shell = raw.match(/className="(fixed [^"]*)"/);
+t.check('the fixed shell exists', !!shell);
+t.check('the fixed shell does not carry hud-corners', !!shell && !shell[1].includes('hud-corners'));
+t.check('hud-corners still decorates an inner wrapper', raw.includes('className="hud-corners amber'));
+
 t.done();

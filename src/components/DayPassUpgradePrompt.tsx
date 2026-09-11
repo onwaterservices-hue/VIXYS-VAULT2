@@ -106,8 +106,12 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
     <div
       role="complementary"
       aria-label="Day pass ending soon"
-      className="fixed bottom-5 right-5 z-[60] w-[330px] max-w-[calc(100vw-2.5rem)] hud-corners amber rounded-2xl border border-amber-500/40 bg-[#0c0718]/97 backdrop-blur-xl shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] p-4 space-y-3 font-sans vx-page-enter"
+      className="fixed bottom-5 right-5 z-[60] w-[330px] max-w-[calc(100vw-2.5rem)] vx-page-enter"
     >
+      {/* .hud-corners declares position: relative, which beats .fixed when both
+          sit on one element and drops the card into normal page flow. The
+          corners live on this inner full-size wrapper, never on the fixed shell. */}
+      <div className="hud-corners amber rounded-2xl border border-amber-500/40 bg-[#0c0718]/97 backdrop-blur-xl shadow-[0_18px_50px_-12px_rgba(0,0,0,0.85)] p-4 space-y-3 font-sans">
       <button
         onClick={handleDismiss}
         aria-label="Dismiss"
@@ -152,6 +156,7 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
         <span>See monthly plans</span>
         <ArrowRight className="w-3.5 h-3.5" />
       </button>
+      </div>
     </div>
   );
 };
