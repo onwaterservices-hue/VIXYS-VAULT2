@@ -372,9 +372,9 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
               </button>
             </div>
 
-            <div className="flex items-center gap-3 text-[11px] sm:text-xs text-slate-400 font-mono">
-              <span className="truncate">CONTRACT: <strong className="text-slate-200 font-mono">{canonical15m.contractId || canonical15m.decisionId || 'BTC-15M-CANONICAL'}</strong></span>
-              <span className="text-purple-900">•</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 max-w-full text-[11px] sm:text-xs text-slate-400 font-mono">
+              <span className="truncate max-w-full">CONTRACT: <strong className="text-slate-200 font-mono">{canonical15m.contractId || canonical15m.decisionId || 'BTC-15M-CANONICAL'}</strong></span>
+              <span className="hidden sm:inline text-purple-900">•</span>
               <span className="whitespace-nowrap">STRIKE: <strong className="text-slate-200 font-mono">{typeof canonical15m.openStrike === 'number' && canonical15m.openStrike > 0 ? `$${canonical15m.openStrike.toFixed(2)}` : '—'}</strong></span>
             </div>
           </div>

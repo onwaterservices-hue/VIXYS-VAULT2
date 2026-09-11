@@ -528,7 +528,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
             {/* Add Box Button */}
             <button
               onClick={handleAddEmptyBox}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs tracking-wider transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)] hover:shadow-[0_0_20px_rgba(147,51,234,0.5)] active:scale-95"
+              className="flex items-center gap-1.5 px-3.5 py-2.5 sm:py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs tracking-wider transition-all shadow-[0_0_15px_rgba(147,51,234,0.3)] hover:shadow-[0_0_20px_rgba(147,51,234,0.5)] active:scale-95"
             >
               <Plus className="w-4 h-4" />
               <span>+ ADD BOX</span>
@@ -539,7 +539,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
               onClick={() => {
                 handleProGate(() => setIsCustomizeMode(!isCustomizeMode));
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold border transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2.5 sm:py-1.5 rounded-xl font-mono text-xs font-bold border transition-all ${
                 isCustomizeMode
                   ? 'bg-purple-950/90 border-purple-500 text-purple-200 shadow-inner'
                   : 'bg-[#120c2b] border-purple-900/40 text-slate-300 hover:border-purple-700/60'
@@ -612,7 +612,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                       <button
                         onClick={() => setExpandedIntelligenceId(box.intelligenceId)}
                         title="Expand intelligence focus"
-                        className="p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
+                        className="p-2.5 sm:p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
                       >
                         <Maximize2 className="w-3.5 h-3.5" />
                       </button>
@@ -621,7 +621,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                       <button
                         onClick={() => handleToggleMinimize(box.id)}
                         title={box.collapsed ? 'Restore' : 'Minimize'}
-                        className="p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
+                        className="p-2.5 sm:p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
                       >
                         {box.collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
                       </button>
@@ -631,14 +631,14 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                         <button
                           onClick={() => setOpenDropdownBoxId(openDropdownBoxId === box.id ? null : box.id)}
                           title="Box actions"
-                          className="p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
+                          className="p-2.5 sm:p-1.5 rounded-lg bg-[#191333]/90 hover:bg-purple-800/80 border border-purple-700/50 text-slate-300 hover:text-white transition-all shadow-sm"
                         >
                           <MoreVertical className="w-3.5 h-3.5" />
                         </button>
 
                         {/* Dropdown Menu */}
                         {openDropdownBoxId === box.id && (
-                          <div className="absolute right-0 top-8 w-48 rounded-xl bg-[#140e2d] border border-purple-700/60 shadow-2xl p-1.5 z-40 text-xs font-mono">
+                          <div className="absolute right-0 top-11 sm:top-8 w-48 rounded-xl bg-[#140e2d] border border-purple-700/60 shadow-2xl p-1.5 z-40 text-xs font-mono">
                             <button
                               onClick={() => {
                                 setOpenDropdownBoxId(null);

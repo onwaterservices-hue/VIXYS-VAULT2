@@ -197,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
           {onOpenMobileMenu && (
             <button
               onClick={onOpenMobileMenu}
-              className="lg:hidden p-2 rounded-xl bg-[#0a0618] border border-purple-900/40 text-purple-300 hover:text-white"
+              className="lg:hidden p-2.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-purple-300 hover:text-white"
               title="Open Mobile Navigation"
             >
               <Menu className="w-5 h-5" />
@@ -296,7 +296,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative" ref={popoverRef}>
             <button
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              className={`p-2 rounded-xl border transition-all relative flex items-center justify-center cursor-pointer ${
+              className={`p-2.5 min-w-[40px] min-h-[40px] rounded-xl border transition-all relative flex items-center justify-center cursor-pointer ${
                 isNotificationsOpen
                   ? 'bg-purple-900/40 border-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]'
                   : 'bg-[#0e121a] border-slate-800 text-slate-300 hover:text-white hover:border-purple-800/60'
@@ -501,7 +501,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="relative">
               <button
                 onClick={() => setIsAccountMenuOpen(!isAccountMenuOpen)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-[#0d0722] border border-purple-700/50 text-xs font-bold text-white hover:border-purple-400 transition-all shadow-md cursor-pointer"
+                className="flex items-center gap-2.5 px-3 py-1.5 min-h-[40px] rounded-xl bg-[#0d0722] border border-purple-700/50 text-xs font-bold text-white hover:border-purple-400 transition-all shadow-md cursor-pointer"
               >
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white font-black text-xs border border-purple-400/40">
                   <User className="w-4 h-4" />

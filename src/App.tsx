@@ -1820,17 +1820,17 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-purple-300/70 text-xs">
-            <button onClick={() => setActiveTab('about')} className="hover:text-white transition-colors">About Us</button>
+            <button onClick={() => setActiveTab('about')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">About Us</button>
             <span>•</span>
-            <button onClick={() => setActiveTab('terms')} className="hover:text-white transition-colors">Terms of Service</button>
+            <button onClick={() => setActiveTab('terms')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Terms of Service</button>
             <span>•</span>
-            <button onClick={() => setActiveTab('privacy')} className="hover:text-white transition-colors">Privacy Policy</button>
+            <button onClick={() => setActiveTab('privacy')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Privacy Policy</button>
             <span>•</span>
             <button onClick={() => setActiveTab('risk')} className="hover:text-rose-300 text-rose-400/90 font-bold transition-colors">Risk Disclosure</button>
             <span>•</span>
-            <button onClick={() => setActiveTab('refunds')} className="hover:text-white transition-colors">Refund Policy</button>
+            <button onClick={() => setActiveTab('refunds')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Refund Policy</button>
             <span>•</span>
-            <button onClick={() => setActiveTab('contact')} className="hover:text-white transition-colors">Contact & Support</button>
+            <button onClick={() => setActiveTab('contact')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Contact & Support</button>
           </div>
         </div>
 
