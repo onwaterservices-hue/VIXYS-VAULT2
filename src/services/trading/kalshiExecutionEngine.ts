@@ -784,15 +784,21 @@ export async function executeAutoTradesForSignal(
   return summary;
 }
 
-export async function reconcilePendingExecutions(firestoreDb: any) {
+// `fs` lets the server pass its Admin-SDK-aware Firestore functions. The client
+// SDK imported above runs unauthenticated on Vercel, so this read was refused with
+// permission-denied on every cold boot (807 errors across 195 users in 7 days).
+export async function reconcilePendingExecutions(
+  firestoreDb: any,
+  fs: { collection: any; query: any; where: any; getDocs: any } = { collection, query, where, getDocs },
+) {
   if (!firestoreDb) return;
   console.log('[Kalshi] Starting execution reconciliation loop...');
   try {
-    const q = query(
-      collection(firestoreDb, "auto_trade_executions"),
-      where("executionStatus", "in", ["PENDING", "SUBMITTED", "PARTIALLY_FILLED", "RECONCILIATION_REQUIRED"])
+    const q = fs.query(
+      fs.collection(firestoreDb, "auto_trade_executions"),
+      fs.where("executionStatus", "in", ["PENDING", "SUBMITTED", "PARTIALLY_FILLED", "RECONCILIATION_REQUIRED"])
     );
-    const qSnap = await getDocs(q);
+    const qSnap = await fs.getDocs(q);
     
     qSnap.forEach((docSnap) => {
       console.log(`[Kalshi] Found unresolved execution ${docSnap.id}. Requires API reconciliation.`);
