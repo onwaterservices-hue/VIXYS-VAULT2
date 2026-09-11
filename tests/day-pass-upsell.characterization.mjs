@@ -59,8 +59,19 @@ t.check(
 
 // --- Targeting ------------------------------------------------------------
 t.check(
-  'existing subscribers are excluded',
-  code.includes('SUBSCRIBER_ROLES') && code.includes("'PRO'") && code.includes("'ELITE'") && code.includes("'STARTER'")
+  'paying subscribers are excluded by the server plan classification',
+  code.includes('if (hasRecurringPlan) return null;')
+);
+t.check(
+  'staff are excluded',
+  code.includes("STAFF_ROLES = ['ADMIN', 'OWNER']")
+);
+// The client maps an active day pass to the PRO role. Excluding on PRO, ELITE
+// or STARTER labels silently hid the prompt from every real pass holder. That
+// shipped once, in PR #65, before being caught by reading the role mapping.
+t.check(
+  'does not exclude on the PRO / ELITE / STARTER role labels',
+  !/'PRO'|'ELITE'|'STARTER'/.test(code)
 );
 t.check(
   'suppressed on pricing, landing and auth surfaces',
@@ -86,6 +97,13 @@ t.check(
 const app = readRepoFile('src/App.tsx');
 t.check('mounted in App', app.includes('<DayPassUpgradePrompt'));
 t.check('receives the live day pass record', app.includes('dayPassInfo={dayPassInfo}'));
+t.check('receives the server recurring-plan classification', app.includes('hasRecurringPlan={hasRecurringPlan}'));
+const libDates = readRepoFile('src/lib/membershipDates.ts');
+t.check(
+  'recurring plan means a real plan, not NONE or DAY_PASS',
+  libDates.includes("p !== 'NONE'") && libDates.includes("p !== 'DAY_PASS'")
+);
+t.check('payment verification never invents a 24-hour pass', !app.includes('secondsRemaining: 86400'));
 
 // --- Positioning regression guard ----------------------------------------
 // .hud-corners declares position: relative. On the same element as .fixed it
