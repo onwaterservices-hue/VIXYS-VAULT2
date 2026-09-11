@@ -989,23 +989,27 @@ export default function App() {
 
   // Direct Exchange API Credentials State (Elite Pass feature for Kalshi, Polymarket, DraftKings)
   const [exchangeKeys, setExchangeKeys] = useState<ExchangeApiKeys>({
+    // Nothing is connected until a real integration says so. These seeded
+    // "CONNECTED" venues with invented keys (kalshi_sec_9810239102,
+    // poly_l2_0x892a71f02931) and latencies (12ms / 18ms) were shown on the
+    // Settings page as the user's live connections.
     kalshi: {
-      connected: true,
-      apiKey: 'kalshi_sec_9810239102',
-      apiSecret: '••••••••••••••••••••••••',
+      connected: false,
+      apiKey: '',
+      apiSecret: '',
       environment: 'live',
-      status: 'CONNECTED',
-      latencyMs: 12,
-      lastPing: '2s ago',
+      status: 'DISCONNECTED',
+      latencyMs: 0,
+      lastPing: 'Never',
     },
     polymarket: {
-      connected: true,
-      apiKey: 'poly_l2_0x892a71f02931',
-      passphraseOrWallet: '0x7129...8a19',
+      connected: false,
+      apiKey: '',
+      passphraseOrWallet: '',
       environment: 'live',
-      status: 'CONNECTED',
-      latencyMs: 18,
-      lastPing: '1s ago',
+      status: 'DISCONNECTED',
+      latencyMs: 0,
+      lastPing: 'Never',
     },
     draftkings: {
       connected: false,
