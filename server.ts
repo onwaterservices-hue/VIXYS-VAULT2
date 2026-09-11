@@ -3175,7 +3175,9 @@ async function runMarketEngineTick() {
             livePrice = p;
             currentBtcPrice = livePrice;
             fetchSuccess = true;
-            marketFeedHealth.priceSource = "BINANCE";
+            // This fallback is Coinbase Exchange's ticker, not Binance; ledger rows
+            // record this label as the venue that priced them.
+            marketFeedHealth.priceSource = "COINBASE_EXCHANGE";
             marketFeedHealth.lastRealPrice = livePrice;
             marketFeedHealth.lastRealPriceTs = Date.now();
           }
@@ -3197,7 +3199,12 @@ async function runMarketEngineTick() {
       kalshiImpliedAtMs = 0;
       currentKalshiImpliedProb = null;
     }
-    if (currentEngineCycleId % 2 === 0) {
+    // Every 2nd tick, and on every tick until this instance holds a real Kalshi
+    // strike. A cold instance's first tick is odd, and one that boots inside a
+    // hydrated lock keeps the persisted interval, so the settle path never sets
+    // even the placeholder: the pipeline evaluated against strike 0 (served as
+    // kalshiStrike 0 on /api/vixy/state, 2026-09-11 17:39-17:40Z).
+    if (currentEngineCycleId % 2 === 0 || current15mStrikePrice <= 0 || current15mStrikeSource !== "KALSHI") {
       try {
         const baseUrl =
           process.env.KALSHI_BASE_URL ||
