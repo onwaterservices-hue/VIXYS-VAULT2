@@ -1154,6 +1154,48 @@ export function authenticateSession(req) {
 }
 __name(authenticateSession, "authenticateSession");
 
+// authenticateSession() only finds users already in this instance's memory, so
+// on a cold serverless instance a valid session reads as "signed out". This
+// verifies the same signed cookie, hydrates that one user from Firestore and
+// retries. Identity still comes only from the cookie's signed uid/email.
+async function authenticateSessionAsync(req) {
+  const auth = authenticateSession(req);
+  if (auth) return auth;
+  const payload = verifySession(parseCookieHeader(req)[SESSION_COOKIE_NAME]);
+  if (!payload) return null;
+  try {
+    const hydrated = await hydrateUserFromFirestore(payload.email, payload.uid);
+    const hydratedEmail = String((hydrated && hydrated.email) || "").toLowerCase();
+    if (
+      hydrated &&
+      !hydrated._degraded &&
+      hydratedEmail &&
+      !serverUsers.some((u) => (u.email || "").toLowerCase() === hydratedEmail)
+    ) {
+      serverUsers.push(hydrated);
+    }
+  } catch {
+    /* fall through: an unresolvable session is treated as signed out */
+  }
+  return authenticateSession(req);
+}
+__name(authenticateSessionAsync, "authenticateSessionAsync");
+
+// A user record as it may leave the server: credentials, reset/OTP material and
+// device fingerprints are removed at every depth. /api/auth/me used to return
+// the raw record, password hash included.
+function toPublicUserDTO(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 4) return value;
+  if (Array.isArray(value)) return value.map((v) => toPublicUserDTO(v, depth + 1));
+  const out = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (/password|reset|token|secret|otp|ipHash|hardwareFingerprint/i.test(key)) continue;
+    out[key] = toPublicUserDTO(v, depth + 1);
+  }
+  return out;
+}
+__name(toPublicUserDTO, "toPublicUserDTO");
+
 const requireRole = __name((allowedRoles) => {
   return (req, res, next) => {
     const auth = authenticateSession(req);
@@ -1190,9 +1232,12 @@ function toAdminUserDTO(u) {
   };
 }
 __name(toAdminUserDTO, "toAdminUserDTO");
+// The owner accounts keep their role here, but never a password: a default
+// password used to be assigned whenever a record had none (e.g. on a cold
+// instance before Firestore hydration), and this repository is public. A
+// missing password now means login fails and the reset flow sets one.
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === "undefined") return;
-  const defaultPasswordHash = hashPassword("Seattle007");
 
   let masterAdmin = serverUsers.find(
     (u) => (u.email || "").trim().toLowerCase() === "vixyvault0@gmail.com",
@@ -1212,19 +1257,12 @@ function sanitizeAndNormalizeServerUsers() {
       discordId: "123456789012345678",
       discordLinked: true,
       guildVerified: true,
-      passwordHash: defaultPasswordHash,
     };
     serverUsers.unshift(masterAdmin);
   } else {
     masterAdmin.role = "OWNER";
     masterAdmin.subscription = "ELITE_PASS";
     masterAdmin.status = "ACTIVE";
-    if (
-      !masterAdmin.passwordHash ||
-      !masterAdmin.passwordHash.startsWith("vixy$")
-    ) {
-      masterAdmin.passwordHash = defaultPasswordHash;
-    }
   }
 
   let onwaterUser = serverUsers.find(
@@ -1241,19 +1279,12 @@ function sanitizeAndNormalizeServerUsers() {
       status: "ACTIVE",
       joined: "2026-01-15",
       verificationStatus: "VERIFIED",
-      passwordHash: defaultPasswordHash,
     };
     serverUsers.unshift(onwaterUser);
   } else {
     onwaterUser.role = "OWNER";
     onwaterUser.subscription = "ELITE_PASS";
     onwaterUser.status = "ACTIVE";
-    if (
-      !onwaterUser.passwordHash ||
-      !onwaterUser.passwordHash.startsWith("vixy$")
-    ) {
-      onwaterUser.passwordHash = defaultPasswordHash;
-    }
   }
 
   serverUsers.forEach((u) => {
@@ -3492,14 +3523,12 @@ app.all("/api/cron/engine-tick", async (req, res) => {
 runMarketEngineTickTracked().catch(() => {});
 const serverUsers = [];
 app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
-  const email = String(
-    req.body?.email || req.headers["x-user-email"] || "",
-  ).toLowerCase();
-  const uid = String(req.body?.uid || "").trim();
-  if (email || uid) {
-    const user = ensureUserExists({ uid, email });
-    user.lastSeenAt = Date.now();
-    user.status = "ACTIVE";
+  // Presence for the signed-in account only. A posted email used to create or
+  // touch that user record -- including an owner record -- for any caller.
+  const auth = authenticateSession(req);
+  if (auth && auth.user) {
+    auth.user.lastSeenAt = Date.now();
+    auth.user.status = "ACTIVE";
   }
   res.json({ success: true, timestamp: Date.now() });
 });
@@ -6055,29 +6084,39 @@ async function getUserAccessState(email, uid) {
 }
 __name(getUserAccessState, "getUserAccessState");
 app.get(["/api/v1/auth/access", "/api/auth/access"], async (req, res) => {
-  const email = req.headers["x-user-email"] || req.query.email || "";
-  const uid = req.headers["x-user-id"] || req.query.uid || "";
-  const access = await getUserAccessState(email, uid);
-  res.json(access);
-});
-app.post("/api/auth/sync", (req, res) => {
-  const uid = String(req.body?.uid || req.body?.userId || "").trim();
-  const email = String(req.body?.email || req.headers["x-user-email"] || "")
-    .trim()
-    .toLowerCase();
-  const name = req.body?.name || req.body?.displayName;
-  const role = req.body?.role;
-  const subscription = req.body?.subscription;
-  if (!email && !uid) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "User email or uid is required for auth sync.",
-      });
+  // Session identity only; staff may inspect another account with ?email=.
+  // Any caller used to read any account's role and paid/admin state.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.json({
+      role: "UNPAID",
+      isAdmin: false,
+      accessState: "LOCKED",
+      discordVerified: false,
+      subscriptionStatus: "inactive",
+      entitlements: [],
+      locked: true,
+    });
   }
-  const user = ensureUserExists({ uid, email, name, role, subscription });
-  res.json({ success: true, user, reconciledAt: new Date().toISOString() });
+  const inspectOther = ["OWNER", "ADMIN", "SUPPORT"].includes(auth.role) && !!req.query.email;
+  const email = inspectOther ? String(req.query.email) : auth.email;
+  const uid = inspectOther ? String(req.query.uid || "") : String(auth.uid || "");
+  res.json(await getUserAccessState(email, uid));
+});
+app.post("/api/auth/sync", async (req, res) => {
+  // Only the signed-in account can sync itself, and never its role or plan.
+  // This used to create a user for any posted email with a caller-chosen role.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.status(401).json({
+      success: false,
+      error: "AUTHENTICATION_REQUIRED",
+      message: "Sign in to sync your account.",
+    });
+  }
+  const name = req.body?.name || req.body?.displayName;
+  const user = ensureUserExists({ uid: auth.uid, email: auth.email, name });
+  res.json({ success: true, user: toPublicUserDTO(user), reconciledAt: new Date().toISOString() });
 });
 let productionMaintenanceState = {
   enabled: process.env.MAINTENANCE_MODE === "true",
@@ -7777,7 +7816,9 @@ app.post("/api/discord/verify-membership", async (req, res) => {
 });
 
 // ================= EXTEND MEMBERSHIP ROUTE =================
-app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
+// Staff-only comp tool. It grants a paid plan to the posted email, and it used
+// to do that for any caller, unauthenticated.
+app.post(["/api/subscription/extend", "/api/user/extend-membership"], requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   try {
     const { email, uid, months = 1, plan = "PRO_PASS" } = req.body || {};
     const targetEmail = String(email || req.headers["x-user-email"] || "").trim().toLowerCase();
@@ -8002,23 +8043,19 @@ app.post("/api/auth/register", async (req, res) => {
   return res.json({ success: true, user: serverSession, entitlement });
 });
 app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
-  const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-    .toLowerCase()
-    .trim();
-  const reqUserId = (
-    req.headers["x-user-id"] ||
-    req.headers["x-user-uid"] ||
-    req.query.userId ||
-    req.query.uid ||
-    ""
-  ).trim();
-  if (!reqEmail && !reqUserId) {
+  // Identity comes only from the signed session cookie. This route used to take
+  // ?email= / x-user-email from the caller and return that account's full
+  // record -- password hash included -- to anyone who asked.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
     return res.json({
       authenticated: false,
       user: null,
       message: "No active session",
     });
   }
+  const reqEmail = auth.email;
+  const reqUserId = String(auth.uid || "");
   let user = serverUsers.find(
     (u) =>
       (reqEmail && u.email?.toLowerCase() === reqEmail) ||
@@ -8157,7 +8194,7 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
   };
   res.json({
     authenticated: true,
-    user: resolvedUser,
+    user: toPublicUserDTO(resolvedUser),
     discord: discordProfile || null,
   });
 });
@@ -10639,15 +10676,14 @@ app.post("/api/stripe/create-portal-session", async (req, res) => {
           "Stripe is not configured. Customer portal requires process.env.STRIPE_SECRET_KEY.",
       });
   }
-  const rawEmail = (
-    req.body.userEmail ||
-    req.body.email ||
-    req.headers["x-user-email"] ||
-    ""
-  ).trim();
+  // The portal can cancel a subscription and shows invoices and payment
+  // methods, so it opens only for the signed-in account -- never for an email
+  // posted by the caller, which is what this route used to trust.
+  const portalAuth = await authenticateSessionAsync(req);
+  const rawEmail = portalAuth ? portalAuth.email : "";
   if (!rawEmail) {
     console.warn(
-      "[BILLING_PORTAL] Request rejected: missing user email / unauthenticated.",
+      "[BILLING_PORTAL] Request rejected: no signed-in session.",
     );
     return res
       .status(401)
@@ -12370,36 +12406,28 @@ app.post(
     "/api/user/restore-access",
   ],
   async (req, res) => {
-    const cleanEmail = (
-      req.body.email ||
-      req.headers["x-user-email"] ||
-      req.query.email ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    const cleanUid = (
-      req.body.uid ||
-      req.body.userId ||
-      req.headers["x-user-uid"] ||
-      req.headers["x-user-id"] ||
-      ""
+    // Identity is the signed-in account, or -- when signed out -- only an
+    // unguessable Stripe checkout session id (the return from checkout). A
+    // posted email used to return that account's full entitlement, Stripe
+    // customer and subscription ids included, to any caller.
+    const restoreAuth = await authenticateSessionAsync(req);
+    const cleanEmail = restoreAuth ? restoreAuth.email : "";
+    const cleanUid = restoreAuth ? String(restoreAuth.uid || "") : "";
+    const sessionId = String(
+      (req.body && (req.body.stripeSessionId || req.body.sessionId)) || "",
     ).trim();
-    const sessionId = (
-      req.body.stripeSessionId ||
-      req.body.sessionId ||
-      ""
-    ).trim();
-    const discordUserId = (req.body.discordUserId || "").trim();
-    if (!cleanEmail && !cleanUid && !sessionId && !discordUserId) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          restored: false,
-          message:
-            "Please provide an account email or Stripe checkout session ID to restore access.",
-        });
+    const discordUserId = restoreAuth
+      ? String((req.body && req.body.discordUserId) || "").trim()
+      : "";
+    if (!cleanEmail && !cleanUid && !sessionId) {
+      // 200, not 401: the caller is simply signed out, and the client session
+      // guard reloads the page on a 401.
+      return res.json({
+        success: false,
+        restored: false,
+        requiresSignIn: true,
+        message: "Sign in to restore access to your account.",
+      });
     }
     let hydrationRes = null;
     if (cleanEmail || cleanUid) {
@@ -12459,14 +12487,20 @@ app.post(
   },
 );
 app.get("/api/auth/diagnostic", async (req, res) => {
-  const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
+  // A signed-in account may diagnose itself; staff may pass ?email= / ?uid=.
+  // Any caller used to get any account's Stripe customer id and entitlement.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  const inspectOther =
+    ["OWNER", "ADMIN", "SUPPORT"].includes(auth.role) &&
+    !!(req.query.email || req.query.uid || req.query.userId);
+  const reqEmail = String(inspectOther ? req.query.email || "" : auth.email)
     .toLowerCase()
     .trim();
-  const reqUserId = (
-    req.headers["x-user-id"] ||
-    req.query.uid ||
-    req.query.userId ||
-    ""
+  const reqUserId = String(
+    inspectOther ? req.query.uid || req.query.userId || "" : auth.uid || "",
   ).trim();
   if (!reqEmail && !reqUserId) {
     return res
@@ -19421,9 +19455,8 @@ function ensureUserExists(input, options) {
       status: defaultSub === "NONE" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
       stripeCustomerId: sub?.stripeCustomerId,
-      passwordHash: isMasterAdminEmail(cleanEmail)
-        ? hashPassword("Seattle007")
-        : void 0,
+      // Never a default password (see sanitizeAndNormalizeServerUsers).
+      passwordHash: void 0,
     };
     serverUsers.unshift(user);
     if (cleanEmail && !userSubscriptions.has(cleanEmail)) {
