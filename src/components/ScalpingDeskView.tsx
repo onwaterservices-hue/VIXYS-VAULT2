@@ -4,6 +4,7 @@ import { ScalpDecisionChart } from './ScalpDecisionChart';
 import { AIBrainMemoryVault } from './AIBrainMemoryVault';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
 import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
+import { useAssetMarketTape, formatUsdCompact } from '../hooks/useAssetMarketTape';
 import {
   Zap,
   Activity,
@@ -52,6 +53,21 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   const [apiSignal, setApiSignal] = useState<ApiSignalResponse | null>(null);
   const [modelStatus, setModelStatus] = useState<ModelStatusResponse | null>(null);
 
+  // Live Coinbase book and tape for the selected asset. Every tile on the
+  // order-flow panel reads from this; none of them is a fixed number.
+  const { book, prints } = useAssetMarketTape(selectedAsset);
+  const noLargePrints =
+    prints.status === 'LIVE' && (prints.takerBuyUSD ?? 0) === 0 && (prints.takerSellUSD ?? 0) === 0;
+  const netTakerUSD =
+    prints.status === 'LIVE' && !noLargePrints && prints.takerBuyUSD !== null && prints.takerSellUSD !== null
+      ? prints.takerBuyUSD - prints.takerSellUSD
+      : null;
+  const depthRatio = book.status === 'LIVE' && book.bidUSD && book.askUSD ? book.bidUSD / book.askUSD : null;
+  const spreadBps =
+    book.status === 'LIVE' && book.spreadUSD !== null && book.topBid !== null && book.topAsk !== null
+      ? (book.spreadUSD / ((book.topBid + book.topAsk) / 2)) * 10000
+      : null;
+
   const isUserAdmin = userRole === 'ADMIN' || userRole === 'OWNER' || Boolean(alertSettings?.isAdmin);
   const isPaidUser = ['PRO', 'ELITE', 'ADMIN', 'OWNER', 'STARTER', 'DAY_PASS'].includes(String(userRole).toUpperCase());
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
@@ -81,11 +97,9 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
     };
   }, [selectedAsset]);
 
-  const spotPrice = ticker.price || 64160.5;
-  const confidence = apiSignal?.confidence ?? 91.6;
-  const edgePct = apiSignal?.edge ? (apiSignal.edge * 100).toFixed(1) : '14.2';
-  const action = apiSignal?.action || 'BUY_YES';
-  const isBuyUp = action.includes('YES') || action.includes('BUY');
+  // Observed spot or nothing. The previous fallbacks invented a price, a
+  // confidence, an edge and a BUY direction whenever the feed had not answered.
+  const spotPrice: number | null = Number.isFinite(ticker?.price) && ticker.price > 0 ? ticker.price : null;
 
   return (
     <div className="space-y-4 font-mono text-purple-100 w-full max-w-7xl mx-auto min-w-0 relative">
@@ -162,7 +176,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                       : 'text-purple-300/50 hover:text-white'
                   }`}
                 >
-                  Order Flow & Taker Delta
+                  Order Flow & Book
                 </button>
                 <button
                   onClick={() => setDeskTab('L2_SCANNER')}
@@ -197,110 +211,143 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 </button>
 
                 <span className="text-[10px] text-purple-300/70 font-mono hidden md:inline shrink-0">
-                  Spot: <strong className="text-white">${spotPrice.toFixed(2)}</strong>
+                  Spot: <strong className="text-white">{spotPrice !== null ? `$${spotPrice.toFixed(2)}` : '—'}</strong>
                 </span>
               </div>
             </div>
 
-            {/* TAB 1: ORDER FLOW & MICRO IMBALANCE (COMPACT 3-COLUMN INSTITUTIONAL TILES) */}
+            {/* TAB 1: ORDER FLOW & BOOK. Live Coinbase data only. */}
             {deskTab === 'SIGNAL' && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
-                
-                {/* 1. Net Taker Delta */}
+                {/* 1. Large-print taker flow (aggressor side is known for these prints) */}
                 <div className="bg-[#0d0722]/80 p-3 rounded-xl border border-purple-800/30 font-mono">
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[10px] font-bold text-purple-300/80 uppercase tracking-wider">
-                      Net Taker Delta (15s)
+                      Large-print taker flow
                     </span>
-                    <span className="px-1.5 py-0.5 text-[9px] rounded font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                      INFLOW
-                    </span>
+                    {netTakerUSD !== null && (
+                      <span
+                        className={`px-1.5 py-0.5 text-[9px] rounded font-bold border ${
+                          netTakerUSD > 0
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                            : netTakerUSD < 0
+                            ? 'bg-rose-500/20 text-rose-400 border-rose-500/30'
+                            : 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                        }`}
+                      >
+                        {netTakerUSD > 0 ? 'NET BUY' : netTakerUSD < 0 ? 'NET SELL' : 'BALANCED'}
+                      </span>
+                    )}
                   </div>
-                  <div className="text-lg font-black text-emerald-400">+1,420 BTC</div>
+                  <div
+                    className={`text-lg font-black tabular-nums ${
+                      netTakerUSD === null ? 'text-purple-300/50' : netTakerUSD > 0 ? 'text-emerald-400' : netTakerUSD < 0 ? 'text-rose-400' : 'text-purple-200'
+                    }`}
+                  >
+                    {noLargePrints
+                      ? 'none'
+                      : netTakerUSD === null
+                      ? '—'
+                      : `${netTakerUSD >= 0 ? '+' : '−'}${formatUsdCompact(Math.abs(netTakerUSD))}`}
+                  </div>
                   <p className="text-[10px] text-purple-300/60 font-sans mt-1 leading-tight">
-                    Market buyers absorbing ask liquidity walls rapidly with high velocity.
+                    {prints.status === 'LIVE'
+                      ? `Buy ${formatUsdCompact(prints.takerBuyUSD)} vs sell ${formatUsdCompact(prints.takerSellUSD)} across prints of ${formatUsdCompact(prints.thresholdUSD)}+ in the last ${prints.tradesScanned ?? '—'} Coinbase trades. Not total market flow.`
+                      : prints.status === 'LOADING'
+                      ? 'Reading the Coinbase tape…'
+                      : `Coinbase tape unavailable for ${selectedAsset}.`}
                   </p>
                 </div>
 
-                {/* 2. Orderbook Depth Ratio */}
+                {/* 2. Resting depth ratio */}
                 <div className="bg-[#0d0722]/80 p-3 rounded-xl border border-purple-800/30 font-mono">
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[10px] font-bold text-purple-300/80 uppercase tracking-wider">
-                      Orderbook Depth Ratio
+                      Resting depth ratio
+                    </span>
+                    {depthRatio !== null && (
+                      <span className="px-1.5 py-0.5 text-[9px] rounded font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        {depthRatio >= 1 ? 'BIDS HEAVIER' : 'ASKS HEAVIER'}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-lg font-black text-purple-200 tabular-nums">
+                    {depthRatio !== null ? `${depthRatio.toFixed(2)} Bids / Asks` : '—'}
+                  </div>
+                  <p className="text-[10px] text-purple-300/60 font-sans mt-1 leading-tight">
+                    {book.status === 'LIVE'
+                      ? `Bids ${formatUsdCompact(book.bidUSD)} vs asks ${formatUsdCompact(book.askUSD)}, Coinbase top 30 levels. Resting orders can be pulled; this is not taker flow.`
+                      : book.status === 'LOADING'
+                      ? 'Reading the book…'
+                      : `Book unavailable for ${selectedAsset}.`}
+                  </p>
+                </div>
+
+                {/* 3. Coinbase spread */}
+                <div className="bg-[#0d0722]/80 p-3 rounded-xl border border-purple-800/30 font-mono">
+                  <div className="flex justify-between items-center mb-1.5">
+                    <span className="text-[10px] font-bold text-purple-300/80 uppercase tracking-wider">
+                      Coinbase spread
                     </span>
                     <span className="px-1.5 py-0.5 text-[9px] rounded font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      BIDS STACKED
+                      SINGLE VENUE
                     </span>
                   </div>
-                  <div className="text-lg font-black text-purple-200">2.41 Bids / Asks</div>
-                  <p className="text-[10px] text-purple-300/60 font-sans mt-1 leading-tight">
-                    Bid support strongly clustered $12.50 below spot price floor.
-                  </p>
-                </div>
-
-                {/* 3. Cross-Venue Spread */}
-                <div className="bg-[#0d0722]/80 p-3 rounded-xl border border-purple-800/30 font-mono">
-                  <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-[10px] font-bold text-purple-300/80 uppercase tracking-wider">
-                      Cross-Venue Spread
-                    </span>
-                    <span className="px-1.5 py-0.5 text-[9px] rounded font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      SYNCHRONIZED
-                    </span>
+                  <div className="text-lg font-black text-purple-200 tabular-nums">
+                    {spreadBps !== null && book.spreadUSD !== null
+                      ? `$${book.spreadUSD.toFixed(2)} · ${spreadBps < 0.1 ? spreadBps.toFixed(3) : spreadBps.toFixed(2)} bps`
+                      : '—'}
                   </div>
-                  <div className="text-lg font-black text-purple-200">0.02% Spread</div>
                   <p className="text-[10px] text-purple-300/60 font-sans mt-1 leading-tight">
-                    Kalshi and Polymarket micro-implied probabilities tightly matched.
+                    {book.status === 'LIVE' && book.topBid !== null && book.topAsk !== null
+                      ? `Best bid $${book.topBid.toFixed(2)} · best ask $${book.topAsk.toFixed(2)}. There is no cross-venue spread feed on this desk.`
+                      : book.status === 'LOADING'
+                      ? 'Reading the book…'
+                      : `Top of book unavailable for ${selectedAsset}.`}
                   </p>
                 </div>
-
               </div>
             )}
 
-            {/* TAB 2: L2 ORDERBOOK DEPTH FEED */}
+            {/* TAB 2: TOP OF BOOK. Live Coinbase data; the level-by-level ladder is on the Prediction Center radar. */}
             {deskTab === 'L2_SCANNER' && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                {/* Bids */}
                 <div className="p-3 rounded-xl bg-[#08120d] border border-emerald-500/30 space-y-1.5">
                   <span className="text-[10px] font-black text-emerald-400 uppercase tracking-wider block">
-                    Top 5 Bids (Buyers)
+                    Bids · Coinbase top 30 levels
                   </span>
                   <div className="space-y-1 text-xs font-mono">
                     <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice - 1.5).toFixed(2)}</span>
-                      <span className="text-emerald-400 font-bold">42.8 BTC</span>
+                      <span>Best bid</span>
+                      <span className="text-emerald-400 font-bold tabular-nums">{book.topBid !== null ? `$${book.topBid.toFixed(2)}` : '—'}</span>
                     </div>
                     <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice - 3.0).toFixed(2)}</span>
-                      <span className="text-emerald-400 font-bold">88.4 BTC</span>
-                    </div>
-                    <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice - 5.5).toFixed(2)}</span>
-                      <span className="text-emerald-400 font-bold">120.1 BTC</span>
+                      <span>Resting total</span>
+                      <span className="text-emerald-400 font-bold tabular-nums">{formatUsdCompact(book.bidUSD)}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Asks */}
                 <div className="p-3 rounded-xl bg-[#14080e] border border-rose-500/30 space-y-1.5">
                   <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider block">
-                    Top 5 Asks (Sellers)
+                    Asks · Coinbase top 30 levels
                   </span>
                   <div className="space-y-1 text-xs font-mono">
                     <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice + 1.5).toFixed(2)}</span>
-                      <span className="text-rose-400 font-bold">14.2 BTC</span>
+                      <span>Best ask</span>
+                      <span className="text-rose-400 font-bold tabular-nums">{book.topAsk !== null ? `$${book.topAsk.toFixed(2)}` : '—'}</span>
                     </div>
                     <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice + 3.0).toFixed(2)}</span>
-                      <span className="text-rose-400 font-bold">22.5 BTC</span>
-                    </div>
-                    <div className="flex justify-between text-purple-200/80">
-                      <span>${(spotPrice + 5.5).toFixed(2)}</span>
-                      <span className="text-rose-400 font-bold">39.1 BTC</span>
+                      <span>Resting total</span>
+                      <span className="text-rose-400 font-bold tabular-nums">{formatUsdCompact(book.askUSD)}</span>
                     </div>
                   </div>
                 </div>
+
+                <p className="md:col-span-2 text-[10px] text-purple-300/60 font-sans">
+                  {book.status === 'UNAVAILABLE' ? `Book unavailable for ${selectedAsset}. ` : ''}
+                  Level-by-level depth is on the Prediction Center orderbook radar.
+                </p>
               </div>
             )}
 

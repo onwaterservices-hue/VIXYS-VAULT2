@@ -20,6 +20,9 @@ export interface BookDepth {
   bidUSD: number | null;
   askUSD: number | null;
   bidSharePct: number | null;
+  spreadUSD: number | null;
+  topBid: number | null;
+  topAsk: number | null;
 }
 
 export interface LargePrint {
@@ -33,13 +36,26 @@ export interface LargePrints {
   status: TapeStatus;
   thresholdUSD: number | null;
   tradesScanned: number | null;
+  /** Aggressor USD totals over the large prints only, not over all trades. */
+  takerBuyUSD: number | null;
+  takerSellUSD: number | null;
   prints: LargePrint[];
 }
 
 const POLL_MS = 15000;
 
-const EMPTY_BOOK = (status: TapeStatus): BookDepth => ({ status, bidUSD: null, askUSD: null, bidSharePct: null });
-const EMPTY_PRINTS = (status: TapeStatus): LargePrints => ({ status, thresholdUSD: null, tradesScanned: null, prints: [] });
+const EMPTY_BOOK = (status: TapeStatus): BookDepth => ({ status, bidUSD: null, askUSD: null, bidSharePct: null, spreadUSD: null, topBid: null, topAsk: null });
+const EMPTY_PRINTS = (status: TapeStatus): LargePrints => ({ status, thresholdUSD: null, tradesScanned: null, takerBuyUSD: null, takerSellUSD: null, prints: [] });
+
+const positiveOrNull = (v: unknown): number | null => {
+  const x = Number(v);
+  return Number.isFinite(x) && x > 0 ? x : null;
+};
+
+const finiteOrNull = (v: unknown): number | null => {
+  const x = Number(v);
+  return v !== null && v !== undefined && Number.isFinite(x) ? x : null;
+};
 
 export function useAssetMarketTape(symbol: string): { book: BookDepth; prints: LargePrints } {
   const [book, setBook] = useState<BookDepth>(EMPTY_BOOK('LOADING'));
@@ -61,7 +77,15 @@ export function useAssetMarketTape(symbol: string): { book: BookDepth; prints: L
       const bid = Number(bookRes?.bidVolumeUSD);
       const ask = Number(bookRes?.askVolumeUSD);
       if (Number.isFinite(bid) && Number.isFinite(ask) && bid + ask > 0) {
-        setBook({ status: 'LIVE', bidUSD: bid, askUSD: ask, bidSharePct: Math.round((bid / (bid + ask)) * 100) });
+        setBook({
+          status: 'LIVE',
+          bidUSD: bid,
+          askUSD: ask,
+          bidSharePct: Math.round((bid / (bid + ask)) * 100),
+          spreadUSD: positiveOrNull(bookRes?.spreadUSD),
+          topBid: positiveOrNull(bookRes?.topBidPrice),
+          topAsk: positiveOrNull(bookRes?.topAskPrice),
+        });
       } else {
         setBook(EMPTY_BOOK('UNAVAILABLE'));
       }
@@ -73,6 +97,8 @@ export function useAssetMarketTape(symbol: string): { book: BookDepth; prints: L
           status: 'LIVE',
           thresholdUSD: Number.isFinite(threshold) ? threshold : null,
           tradesScanned: Number.isFinite(scanned) ? scanned : null,
+          takerBuyUSD: finiteOrNull(whaleRes.takerBuyUSD),
+          takerSellUSD: finiteOrNull(whaleRes.takerSellUSD),
           prints: whaleRes.orders
             // A print without a known aggressor is dropped, never guessed.
             .filter((o: any) => o && (o.takerSide === 'BUY' || o.takerSide === 'SELL') && Number(o.sizeUSD) > 0)
