@@ -33,8 +33,11 @@ const {
   evaluateTagTrialEligibility,
   buildTagTrialDayPassRecord,
   createTagTrialService,
+  tagTrialDurationHoursAt,
+  tagTrialOfferAt,
+  TAG_TRIAL_PROMO_ENDS_AT,
   TAG_TRIAL_COLLECTIONS: C,
-} = new Function(`${moduleSrc}; return { discordAccountCreatedAtMs, readServerTagState, evaluateTagTrialEligibility, buildTagTrialDayPassRecord, createTagTrialService, TAG_TRIAL_COLLECTIONS };`)();
+} = new Function(`${moduleSrc}; return { discordAccountCreatedAtMs, readServerTagState, evaluateTagTrialEligibility, buildTagTrialDayPassRecord, createTagTrialService, tagTrialDurationHoursAt, tagTrialOfferAt, TAG_TRIAL_PROMO_ENDS_AT, TAG_TRIAL_COLLECTIONS };`)();
 
 const GUILD = '1451337712937336985';
 const NOW = Date.parse('2026-09-10T12:00:00.000Z');
@@ -124,6 +127,49 @@ console.log('\n[3] The grant is honest');
 const rec = buildTagTrialDayPassRecord({ email: 'a@x.com', userId: 'uid_1', discordUserId: OLD_DISCORD_ID, guildId: GUILD, nowMs: NOW, discordRoleId: 'R' });
 check('typed TAG_TRIAL, not DAY_PASS', rec.entitlementType === 'TAG_TRIAL');
 check('lasts exactly 72 hours', Date.parse(rec.expiresAt) - NOW === 72 * HOUR);
+
+// ---------------------------------------------------------------------------
+console.log('\n[3b] Launch promo: 72h before the deadline, 24h at and after it');
+const PROMO_END = Date.parse(TAG_TRIAL_PROMO_ENDS_AT);
+check('the promo deadline is 11:59 PM Pacific on 2026-09-11', TAG_TRIAL_PROMO_ENDS_AT === '2026-09-12T07:00:00.000Z');
+check('a claim 1ms before the deadline is worth 72 hours', tagTrialDurationHoursAt(PROMO_END - 1) === 72);
+check('a claim at the deadline is worth 24 hours', tagTrialDurationHoursAt(PROMO_END) === 24);
+check('a claim a week later is worth 24 hours', tagTrialDurationHoursAt(PROMO_END + 7 * DAY) === 24);
+{
+  const late = buildTagTrialDayPassRecord({ email: 'a@x.com', userId: 'uid_1', discordUserId: OLD_DISCORD_ID, guildId: GUILD, nowMs: PROMO_END + HOUR, discordRoleId: 'R' });
+  check('a record granted after the deadline expires after exactly 24 hours', Date.parse(late.expiresAt) - (PROMO_END + HOUR) === 24 * HOUR);
+  check('its duration label says 24 hours', late.duration === '24 hours');
+  const early = buildTagTrialDayPassRecord({ email: 'a@x.com', userId: 'uid_1', discordUserId: OLD_DISCORD_ID, guildId: GUILD, nowMs: PROMO_END - HOUR, discordRoleId: 'R' });
+  check('a record granted before the deadline expires after exactly 72 hours', Date.parse(early.expiresAt) - (PROMO_END - HOUR) === 72 * HOUR);
+}
+{
+  const before = tagTrialOfferAt(PROMO_END - HOUR);
+  const after = tagTrialOfferAt(PROMO_END + HOUR);
+  check('offer before the deadline: promo active, 72h', before.promo.active === true && before.durationHours === 72 && before.promo.endsAt === TAG_TRIAL_PROMO_ENDS_AT);
+  check('offer after the deadline: promo inactive, 24h', after.promo.active === false && after.durationHours === 24 && after.standardDurationHours === 24);
+  check('the public offer carries no account data', Object.keys(before).sort().join(',') === 'durationHours,minDiscordAccountAgeDays,promo,standardDurationHours');
+}
+{
+  const { svc, setNow } = makeService();
+  setNow(PROMO_END + 2 * HOUR);
+  const late = await svc.claim({ vixyEmail: 'late@x.com', discordUserId: OLD_DISCORD_ID, discordUser: tagged() });
+  check('the service grants 24 hours to a claim made after the deadline', late.granted === true && Date.parse(late.expiresAt) - (PROMO_END + 2 * HOUR) === 24 * HOUR);
+}
+
+console.log('\n[3c] Site-wide announcement is driven by the server offer');
+{
+  const serverSrc = R('server.ts');
+  const bannerSrc = R('src/components/TagTrialPromoBanner.tsx');
+  const cardSrc = R('src/components/DiscordTagTrialOffer.tsx');
+  const appSrc = R('src/App.tsx');
+  check('a public offer route serves the server-computed offer', /app\.get\("\/api\/discord\/tag-trial-offer"[\s\S]{0,200}tagTrialOfferAt\(Date\.now\(\)\)/.test(serverSrc));
+  check('the offer route reads no identity', !/authenticateSession|req\.(query|body|headers)/.test(serverSrc.slice(serverSrc.indexOf('app.get("/api/discord/tag-trial-offer"'), serverSrc.indexOf('app.get("/api/discord/tag-trial-status"'))));
+  check('the banner renders nothing unless the server says the promo is active', /if \(!offer \|\| !offer\.promo\.active\) return null;/.test(bannerSrc));
+  check('the banner hides itself at the server deadline', /if \(!Number\.isFinite\(endsMs\) \|\| left <= 0\) return null;/.test(bannerSrc));
+  check('the banner shows no hardcoded duration', !/\b3 days\b|\b72\b|\b1 day\b|\b24 hours\b/.test(bannerSrc));
+  check('the banner is mounted site-wide in App', /<TagTrialPromoBanner/.test(appSrc));
+  check('the offer card no longer defaults to 72 hours', !/durationHours \?\? 72/.test(cardSrc));
+}
 check('every Stripe/payment field is null', ['stripePaymentStatus', 'stripePaymentLink', 'stripePaymentId', 'stripeCheckoutSessionId', 'stripeEventId', 'stripePriceId'].every((k) => k in rec && rec[k] === null));
 check('carries no grace/compensation flag', !('troubleshootingGraceApplied' in rec) && !('compensationApplied' in rec));
 check('no undefined values (Admin SDK rejects them)', Object.values(rec).every((v) => v !== undefined));

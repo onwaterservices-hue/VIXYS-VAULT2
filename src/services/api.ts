@@ -589,9 +589,30 @@ export async function getDiscordAuthUrlSecure(purpose?: 'tag_trial'): Promise<{ 
 // Discord server-tag trial state for the signed-in account (session cookie
 // identity). Fetched directly, not through safeFetchJson, because the offer card
 // polls it while a claim popup is open and must never see a cached answer.
+// The public server-tag offer: how long a claim made now is worth, and the
+// launch promo deadline the server enforces. Contains no account data.
+export interface TagTrialOffer {
+  durationHours: number;
+  minDiscordAccountAgeDays: number;
+  standardDurationHours: number;
+  promo: { active: boolean; endsAt: string; durationHours: number };
+}
+
+// Null when the request failed -- the banner then shows nothing rather than
+// guessing at an offer.
+export async function getTagTrialOfferApi(): Promise<TagTrialOffer | null> {
+  try {
+    const res = await fetch('/api/discord/tag-trial-offer', { cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as TagTrialOffer;
+  } catch {
+    return null;
+  }
+}
+
 export interface TagTrialStatus {
   available: boolean;
-  offer: { durationHours: number; minDiscordAccountAgeDays: number };
+  offer: TagTrialOffer;
   claimed: boolean;
   trial: {
     status: string;

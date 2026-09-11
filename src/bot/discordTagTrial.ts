@@ -11,7 +11,8 @@
  * browser sends can assert a tag.
  *
  * RULES (owner decisions, 2026-09-10)
- *   - Same access as the 24H day pass, for 72 hours.
+ *   - Same access as the 24H day pass: 72 hours for claims made before the
+ *     launch promo ends (2026-09-11, 11:59 PM Pacific), 24 hours after.
  *   - Once per Discord account AND once per VIXY account, ever.
  *   - Discord account must be at least 30 days old (derived from the snowflake).
  *   - Only for accounts with no paid access right now.
@@ -34,9 +35,15 @@
  */
 
 export const TAG_TRIAL_ENTITLEMENT_TYPE = "TAG_TRIAL";
-export const TAG_TRIAL_DURATION_HOURS = 72;
+// LAUNCH PROMO (owner decision 2026-09-11): a claim made before the promo ends
+// grants 72 hours; a claim made after it grants 24 hours. The deadline is one
+// fixed instant -- 11:59 PM Pacific on 2026-09-11 -- decided here, on the
+// server, at claim time. Nothing the browser sends can extend it.
+export const TAG_TRIAL_PROMO_ENDS_AT = "2026-09-12T07:00:00.000Z";
+export const TAG_TRIAL_PROMO_DURATION_HOURS = 72;
+export const TAG_TRIAL_STANDARD_DURATION_HOURS = 24;
 export const TAG_TRIAL_MIN_DISCORD_ACCOUNT_AGE_DAYS = 30;
-const TAG_TRIAL_DURATION_MS = TAG_TRIAL_DURATION_HOURS * 60 * 60 * 1000;
+const PROMO_ENDS_AT_MS = Date.parse(TAG_TRIAL_PROMO_ENDS_AT);
 const MIN_ACCOUNT_AGE_MS = TAG_TRIAL_MIN_DISCORD_ACCOUNT_AGE_DAYS * 24 * 60 * 60 * 1000;
 const DISCORD_EPOCH_MS = 1420070400000;
 const RECHECK_BATCH_LIMIT = 200;
@@ -46,6 +53,25 @@ export const TAG_TRIAL_COLLECTIONS = {
   byEmail: "discord_tag_trials_by_email",
   attempts: "discord_tag_trial_attempts",
 };
+
+/** Hours of access a claim made at `nowMs` is worth. */
+export function tagTrialDurationHoursAt(nowMs) {
+  return nowMs < PROMO_ENDS_AT_MS ? TAG_TRIAL_PROMO_DURATION_HOURS : TAG_TRIAL_STANDARD_DURATION_HOURS;
+}
+
+/** The public offer at `nowMs`: rules and the promo deadline, no account data. */
+export function tagTrialOfferAt(nowMs) {
+  return {
+    durationHours: tagTrialDurationHoursAt(nowMs),
+    minDiscordAccountAgeDays: TAG_TRIAL_MIN_DISCORD_ACCOUNT_AGE_DAYS,
+    standardDurationHours: TAG_TRIAL_STANDARD_DURATION_HOURS,
+    promo: {
+      active: nowMs < PROMO_ENDS_AT_MS,
+      endsAt: TAG_TRIAL_PROMO_ENDS_AT,
+      durationHours: TAG_TRIAL_PROMO_DURATION_HOURS,
+    },
+  };
+}
 
 /** Account creation time encoded in a Discord snowflake, or null if invalid. */
 export function discordAccountCreatedAtMs(discordUserId) {
@@ -101,6 +127,7 @@ function isLiveDayPass(record, nowMs) {
 export function buildTagTrialDayPassRecord(input) {
   const { email, userId, discordUserId, guildId, nowMs, discordRoleId } = input;
   const startedAt = new Date(nowMs).toISOString();
+  const hours = tagTrialDurationHoursAt(nowMs);
   return {
     entitlementId: "tag_trial_" + discordUserId,
     userId: userId || "usr_" + email.replace(/[^a-zA-Z0-9_]/g, "_"),
@@ -110,10 +137,10 @@ export function buildTagTrialDayPassRecord(input) {
     entitlementType: TAG_TRIAL_ENTITLEMENT_TYPE,
     accessTier: "ELITE",
     status: "ACTIVE",
-    duration: TAG_TRIAL_DURATION_HOURS + " hours",
+    duration: hours + " hours",
     activatedAt: startedAt,
     startedAt,
-    expiresAt: new Date(nowMs + TAG_TRIAL_DURATION_MS).toISOString(),
+    expiresAt: new Date(nowMs + hours * 60 * 60 * 1000).toISOString(),
     stripePaymentStatus: null,
     stripePaymentLink: null,
     stripePaymentId: null,
@@ -259,10 +286,7 @@ export function createTagTrialService(deps) {
   async function status(vixyEmail) {
     const email = String(vixyEmail || "").toLowerCase().trim();
     const db = deps.getDb();
-    const offer = {
-      durationHours: TAG_TRIAL_DURATION_HOURS,
-      minDiscordAccountAgeDays: TAG_TRIAL_MIN_DISCORD_ACCOUNT_AGE_DAYS,
-    };
+    const offer = tagTrialOfferAt(now());
     if (!email || !fx.ready(db)) return { available: false, offer, claimed: false, trial: null, lastAttempt: null };
 
     const byEmailSnap = await fx.getDoc(fx.doc(db, C.byEmail, email));
