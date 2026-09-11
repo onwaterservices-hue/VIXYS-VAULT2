@@ -117,8 +117,6 @@ export async function fetchCryptoTicker(queryOrSymbol: string = 'BTC'): Promise<
         low24h: data.low24h,
         volume24h: data.volume24h,
         timestamp: data.timestamp || Date.now(),
-        marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + data.change24h * 2))),
-        marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - data.change24h * 2))),
       };
     }
   } catch {
@@ -143,39 +141,15 @@ export async function fetchCryptoTicker(queryOrSymbol: string = 'BTC'): Promise<
         low24h: parseFloat(stats.low),
         volume24h: parseFloat(stats.volume),
         timestamp: Date.now(),
-        marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
-        marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
       };
     }
   } catch (e) {
     // Fallthrough
   }
 
-  // Safe, graceful fallback so application never crashes or spams console errors
-  const defaultPrices: Record<string, number> = {
-    BTC: 64591.20,
-    ETH: 3482.50,
-    SOL: 184.20,
-    XRP: 0.62,
-    DOGE: 0.14,
-    ADA: 0.42,
-    SUI: 1.85,
-    AVAX: 28.60,
-    LINK: 15.20,
-    NEAR: 5.42,
-    BNB: 588.40,
-  };
-  const baseP = defaultPrices[cleanSymbol] || 100;
-  return {
-    price: baseP,
-    change24h: 1.85,
-    high24h: baseP * 1.02,
-    low24h: baseP * 0.98,
-    volume24h: 120500,
-    timestamp: Date.now(),
-    marketImpliedYes: 54,
-    marketImpliedNo: 46,
-  };
+  // No venue answered. Fail rather than return a price nobody quoted; every
+  // caller catches this and keeps its last real value or shows a dash.
+  throw new Error(`No live ticker for ${cleanSymbol}`);
 }
 
 export async function fetchCryptoUniverse(): Promise<{ status: string; count: number; assets: any[] }> {
@@ -247,19 +221,8 @@ export async function fetchAllCryptoTickers(): Promise<CryptoTickerData[]> {
     // Fallback
   }
 
-  return [
-    { symbol: 'BTC', price: 64161.4, change24h: 3.42, high24h: 64850, low24h: 63210, volume24h: 28410.5, timestamp: Date.now() },
-    { symbol: 'ETH', price: 3482.5, change24h: 4.85, high24h: 3520, low24h: 3310, volume24h: 184200, timestamp: Date.now() },
-    { symbol: 'SOL', price: 184.2, change24h: 8.12, high24h: 188.5, low24h: 168.0, volume24h: 1420000, timestamp: Date.now() },
-    { symbol: 'XRP', price: 0.624, change24h: 1.85, high24h: 0.641, low24h: 0.608, volume24h: 410000000, timestamp: Date.now() },
-    { symbol: 'DOGE', price: 0.142, change24h: 6.4, high24h: 0.148, low24h: 0.131, volume24h: 980000000, timestamp: Date.now() },
-    { symbol: 'ADA', price: 0.418, change24h: 2.1, high24h: 0.428, low24h: 0.405, volume24h: 120000000, timestamp: Date.now() },
-    { symbol: 'SUI', price: 1.845, change24h: 7.2, high24h: 1.92, low24h: 1.71, volume24h: 48000000, timestamp: Date.now() },
-    { symbol: 'AVAX', price: 28.60, change24h: 3.8, high24h: 29.4, low24h: 27.2, volume24h: 4200000, timestamp: Date.now() },
-    { symbol: 'LINK', price: 15.20, change24h: 4.1, high24h: 15.8, low24h: 14.5, volume24h: 8900000, timestamp: Date.now() },
-    { symbol: 'NEAR', price: 5.42, change24h: 5.9, high24h: 5.65, low24h: 5.05, volume24h: 22000000, timestamp: Date.now() },
-    { symbol: 'BNB', price: 588.4, change24h: 2.3, high24h: 595.0, low24h: 574.0, volume24h: 520000, timestamp: Date.now() },
-  ];
+  // No venue answered: an empty list, never a static price table.
+  return [];
 }
 
 export async function fetchBTCKlines(interval: '15m' | '1h' | '15s' = '15m'): Promise<Candle[]> {
@@ -395,8 +358,6 @@ export function connectLiveCryptoStream(
               low24h,
               volume24h,
               timestamp: Date.now(),
-              marketImpliedYes: Math.min(85, Math.max(25, Math.round(50 + change24h * 2))),
-              marketImpliedNo: Math.max(15, Math.min(75, Math.round(50 - change24h * 2))),
             });
           }
         } catch (_) {}
