@@ -3581,7 +3581,7 @@ let active15mCycle = {
   hasConflict: false,
   signalUnstable: false,
   provisionalBias: "NEUTRAL_BIAS",
-  historicalSimilarityPct: 85,
+  historicalSimilarityPct: null,
   recentObservations: [],
   cycleHigh: 0,
   cycleLow: 0,
@@ -5050,7 +5050,7 @@ async function checkAndSettle15mCycle(livePrice) {
       hasConflict: false,
       signalUnstable: false,
       provisionalBias: "NEUTRAL_BIAS",
-      historicalSimilarityPct: 85,
+      historicalSimilarityPct: null,
       recentObservations: [],
       convictionTrail: [],
       cycleHigh: 0,
@@ -5257,40 +5257,18 @@ async function checkAndSettle15mCycle(livePrice) {
     }
   }
   active15mCycle.signalUnstable = signalUnstable;
-  const resolvedLogs = persistentSignalLogs.filter(
-    (s) => (s.status === "RESOLVED" || s.status === "LOCKED") && s.direction,
-  );
-  let historicalSimilarityPct = 84;
-  if (resolvedLogs.length > 0) {
-    const recentResolved = resolvedLogs.slice(0, 10);
-    const matchingDirCount = recentResolved.filter(
-      (s) => s.direction === candidateDir,
-    ).length;
-    historicalSimilarityPct = Math.round(
-      75 + (matchingDirCount / recentResolved.length) * 20,
-    );
-    // A `historicalConflict` vote used to be raised here whenever 2 or fewer of
-    // the last 10 ledger rows carried the side now being considered. That made
-    // the engine's direction a function of its own recent output, and it is a
-    // one-way ratchet: once the ledger leans one way, the OTHER side
-    // permanently carries an extra conflict vote, which suppresses it, which
-    // keeps the ledger leaning. Nothing about the market is measured by it.
-    //
-    // Measured in production 2026-09-10: the last 200 ledger rows contained 97
-    // locks, ALL of them UP and none DOWN, over ~42 hours; the settled rows
-    // show 23 of those 97 settled DOWN, so the missing side was reachable and
-    // simply could not be expressed. The Layer-5 shadow, which records which
-    // side of the strike the spot actually sat on, was near even over the same
-    // window (31 UP / 34 DOWN) -- so the imbalance was the engine's, not the
-    // market's. In the 34 cycles where price sat BELOW the strike the engine
-    // returned 24 SKIP and 10 BUY_UP, and zero BUY_DOWN.
-    //
-    // The same class of defect (direction derived from the engine's own
-    // scoreboard) was removed from the probability blend above; this was the
-    // remaining path. `historicalSimilarityPct` is unchanged and stays
-    // observation-only -- it is displayed, it no longer gates.
-  }
-  active15mCycle.historicalSimilarityPct = historicalSimilarityPct;
+  // historicalSimilarityPct is null: there is no similarity model. It was
+  // 75 + 20 x (share of the last 10 ledger rows on the candidate side), a
+  // 75-95 number served as "historical similarity" on /api/vixy/state and
+  // /api/signal (83-85 in 40 of 40 responses, 2026-09-11 05:58Z), with an 84
+  // fallback and 85 seeds.
+  //
+  // A `historicalConflict` vote used to be raised from that same ledger share
+  // whenever 2 or fewer of the last 10 rows carried the side now being
+  // considered: a one-way ratchet that kept the ledger leaning one way
+  // (97 of 97 locks UP over ~42h, 2026-09-10). Direction must never depend
+  // on the engine's own scoreboard.
+  active15mCycle.historicalSimilarityPct = null;
   const currentOrderFlow =
     Math.round((currentBullVolumePct - 50) * 0.02 * 1e3) / 1e3;
   const orderFlowConflict =
@@ -15487,7 +15465,7 @@ app.get("/api/vixy/state", async (req, res) => {
     hasConflict: active15mCycle.hasConflict || false,
     signalUnstable: active15mCycle.signalUnstable || false,
     provisionalBias: active15mCycle.provisionalBias || "NEUTRAL_BIAS",
-    historicalSimilarityPct: active15mCycle.historicalSimilarityPct || 84,
+    historicalSimilarityPct: active15mCycle.historicalSimilarityPct ?? null,
     protectionStatus: active15mCycle.protectionStatus,
     qualificationStatus: active15mCycle.qualificationStatus,
     cycleObservationCount: active15mCycle.cycleObservationCount,
@@ -16536,7 +16514,7 @@ app.get(
       hasConflict: active15mCycle.hasConflict || false,
       signalUnstable: active15mCycle.signalUnstable || false,
       provisionalBias: active15mCycle.provisionalBias || "NEUTRAL_BIAS",
-      historicalSimilarityPct: active15mCycle.historicalSimilarityPct || 84,
+      historicalSimilarityPct: active15mCycle.historicalSimilarityPct ?? null,
       crossAssetContext: latestCrossAssetContext,
       probability: isLive
         ? isLocked
