@@ -2040,11 +2040,13 @@ let latestBtc15mPipeline = {
   },
 };
 // Real BTC-USD closes from Coinbase 1-minute candles covering the last ~20
-// minutes, oldest first, each stamped at its bar's CLOSE time. Read ONLY by the
-// timeframe lookbacks in getPriceAtAgo, and only when this instance's own ticks
-// do not reach back far enough. Realized volatility, price structure, VWAP and
-// order-flow deltas keep reading rollingBtcTicks, so minute bars never mix into
-// estimates built from ~3s ticks. Empty until the first fetch lands.
+// minutes, oldest first, each stamped at its bar's CLOSE time. Read by the
+// timeframe lookbacks in getPriceAtAgo when this instance's own ticks do not
+// reach back far enough, and by the realized-volatility estimator when the
+// instance's ticks span under 10 minutes (time-aware, so bar spacing does not
+// bias it). Price structure, VWAP and order-flow deltas read only
+// rollingBtcTicks. Empty until the first fetch lands; a cold instance waits for
+// that fetch before its first evaluation.
 let hydratedBtcCloses = [];
 let _historyHydrateInFlight = false;
 let _historyHydrateLastAttemptMs = 0;
@@ -3073,6 +3075,13 @@ async function runMarketEngineTick() {
         }
       } catch (kErr) {}
     }
+    // A cold instance has no minute history, so its first evaluation read the
+    // 5m/15m lookbacks off its own first tick and left realized volatility
+    // unmeasured (14 of 24 production responses, 2026-09-11 06:02Z). Wait for
+    // the first candle fetch before evaluating: single-flight, 4s fetch timeout,
+    // ~0.1-0.2s typical, and only while no history is held. Warm ticks keep the
+    // non-blocking refresh below.
+    if (hydratedBtcCloses.length === 0) await hydratePriceHistoryFromCandles(Date.now());
     const spotStrikeDist = livePrice - current15mStrikePrice;
     const moneynessPct = (spotStrikeDist / current15mStrikePrice) * 100;
     const intervalMomentum =
