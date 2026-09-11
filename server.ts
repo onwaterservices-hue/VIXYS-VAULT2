@@ -1983,6 +1983,8 @@ let latestBtc15mPipeline = {
     expectedMoveUSD: null,
     requiredMoveUSD: null,
     coverageRatio: null,
+    isInTheMoney: false,
+    cushionRatio: null,
     isStrikeFeasible: false,
   },
   priceStructure: {
@@ -2325,11 +2327,22 @@ function evaluateBtc15mHighConvictionPipeline(
     (candidateDir === "DOWN" && spot <= strike - 10);
   // Unmeasured volatility cannot show a strike is reachable: coverage is null
   // and only an in-the-money side counts as feasible (fails closed).
+  //
+  // Coverage (expected move / distance still to travel) only means something
+  // for a side that has NOT reached the strike. An in-the-money side used to be
+  // given the constant 3.5, which /api/vixy/15m/current served as "Expected move
+  // coverage 3.50x" in 20 of 20 samples (2026-09-11 06:11Z) while the measured
+  // cushion was 1.09-1.19 expected moves. In the money, coverage is null and the
+  // cushion (distance already held / expected move) is reported instead.
   const coverageRatio = isITM
-    ? 3.5
+    ? null
     : expectedMoveUSD === null
       ? null
       : Math.round((expectedMoveUSD / Math.max(5, requiredMoveUSD)) * 100) / 100;
+  const cushionRatio =
+    isITM && expectedMoveUSD !== null && expectedMoveUSD > 0
+      ? Math.round((distFromStrikeAbs / expectedMoveUSD) * 100) / 100
+      : null;
   const isStrikeFeasible =
     isITM ||
     (coverageRatio !== null &&
@@ -2751,7 +2764,7 @@ function evaluateBtc15mHighConvictionPipeline(
   let rawLockQuality = Math.round(
     (agreementCount / 11) * 40 +
       (alignedCount / 5) * 20 +
-      Math.min(20, (coverageRatio / 2) * 20) +
+      (isITM ? 20 : coverageRatio === null ? 0 : Math.min(20, (coverageRatio / 2) * 20)) + // ITM kept its full 20 (was min(20, 3.5/2*20))
       (regimeAgrees ? 10 : 0) +
       (flowAgrees ? 10 : 0) -
       chopScore * 0.25 -
@@ -2837,6 +2850,8 @@ function evaluateBtc15mHighConvictionPipeline(
       expectedMoveUSD,
       requiredMoveUSD,
       coverageRatio,
+      isInTheMoney: isITM,
+      cushionRatio,
       isStrikeFeasible,
     },
     priceStructure: {
@@ -16062,6 +16077,16 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           name: "Volume",
           ...(() => {
             const vm = latestBtc15mPipeline?.volatilityExpectedMove;
+            if (vm && vm.isInTheMoney === true) {
+              // In the money there is no distance left to cover; report how many
+              // expected moves of cushion the side holds (null if vol unmeasured).
+              if (typeof vm.cushionRatio !== "number") return { score: null, aligned: false, detail: "In the money; volatility not measured" };
+              return {
+                score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, vm.cushionRatio * 2.5)) * 10) / 10)),
+                aligned: vm.isStrikeFeasible === true,
+                detail: "In the money: cushion " + vm.cushionRatio.toFixed(2) + "x expected move",
+              };
+            }
             if (!vm || typeof vm.coverageRatio !== "number") {
               return { score: null, aligned: false, detail: "No engine reading" };
             }
