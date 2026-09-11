@@ -160,6 +160,12 @@ t.check('Coinbase maker side is mapped to the taker side', code.includes('takerS
 t.check('canonical payload serves the real flow', code.includes('realFlow: latestBtc15mPipeline?.realFlow ?? null,'));
 t.check('served Order Flow sub-score reads real flow', code.includes('const f = latestBtc15mPipeline?.realFlow?.w60;'));
 t.check('no proxy presented as order flow', !code.includes('Spot-vs-strike flow proxy') && !code.includes('ORDER_BOOK_ABSORPTION'));
+t.check('served edge shares the Kalshi price freshness (no edge beside an aged-out price)',
+  code.includes('edgePct: kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentEdgePct : null,') &&
+  code.includes('edgePct: isLive && kalshiImpliedAtMs > 0 && Date.now() - kalshiImpliedAtMs < 120e3 ? currentEdgePct : null,') &&
+  !/edgePct: currentEdgePct,\n\s*edge:/.test(code));
+t.check('all three state routes tick first when the instance has been idle',
+  (code.match(/if \(!engineHydrated \|\| currentBtcPrice === 64161\.4 \|\| Date\.now\(\) - _engineTickLastRunMs > 15e3\) \{/g) || []).length === 3);
 t.check('served edge never divides a missing edge into 0', !code.includes('edge: currentEdgePct / 100') && !code.includes('edge: isLive ? currentEdgePct / 100'));
 
 t.done();
