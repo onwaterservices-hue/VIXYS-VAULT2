@@ -11,21 +11,20 @@ export const ContactView: React.FC<ContactViewProps> = ({ onReturnToTerminal }) 
   const [category, setCategory] = useState<'GENERAL' | 'BILLING' | 'API' | 'QUANT'>('GENERAL');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submittedTicket, setSubmittedTicket] = useState<{ id: string; time: string } | null>(null);
+  // This form used to wait 1.2s and show "Ticket Created Successfully" with a
+  // random TICKET-NNNNNN reference. Nothing was sent: there is no support-ticket
+  // endpoint, so every request was silently lost. It now opens the visitor's
+  // email app with the message addressed to the support inbox shown on this page.
+  const SUPPORT_EMAIL = 'vixyvault0@gmail.com';
+  const [submittedTicket, setSubmittedTicket] = useState<{ time: string } | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !message) return;
-
-    setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setSubmittedTicket({
-        id: `TICKET-${Math.floor(100000 + Math.random() * 900000)}`,
-        time: new Date().toLocaleTimeString(),
-      });
-      setMessage('');
-    }, 1200);
+    const mailSubject = `[${category}] ${subject}`;
+    const mailBody = `${message}\n\nReply to: ${email}`;
+    window.location.href = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(mailSubject)}&body=${encodeURIComponent(mailBody)}`;
+    setSubmittedTicket({ time: new Date().toLocaleTimeString() });
   };
 
   return (
@@ -71,7 +70,6 @@ export const ContactView: React.FC<ContactViewProps> = ({ onReturnToTerminal }) 
               <p>For instant assistance or enterprise API requests:</p>
               <div className="p-3 rounded-xl bg-purple-950/60 border border-purple-800/40 font-mono text-white font-bold flex items-center justify-between">
                 <span>vixyvault0@gmail.com</span>
-                <span className="text-[10px] text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30">ONLINE</span>
               </div>
             </div>
           </div>
@@ -103,29 +101,29 @@ export const ContactView: React.FC<ContactViewProps> = ({ onReturnToTerminal }) 
               <span>Security & Bug Bounty</span>
             </div>
             <p className="leading-relaxed">
-              If you discover a potential security vulnerability, please submit report to <span className="text-white font-mono font-bold">security@vixysvault.com</span>.
+              If you discover a potential security vulnerability, please submit report to <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span>.
             </p>
           </div>
         </div>
 
         {/* Support Ticket Submission Form */}
         <div className="lg:col-span-2 bg-[#0a0518]/90 border border-purple-900/40 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl relative">
-          <h2 className="text-2xl font-mono font-black text-white">Submit Support Ticket</h2>
+          <h2 className="text-2xl font-mono font-black text-white">Email Support</h2>
 
           {submittedTicket ? (
             <div className="p-8 rounded-2xl bg-emerald-950/40 border border-emerald-500/40 text-center space-y-4 animate-fadeIn">
               <div className="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 mx-auto">
                 <CheckCircle2 className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-mono font-black text-white">Ticket Created Successfully</h3>
+              <h3 className="text-xl font-mono font-black text-white">Email Draft Opened</h3>
               <p className="text-xs text-emerald-200/90 font-mono max-w-md mx-auto">
-                Ticket Reference <strong className="text-white">{submittedTicket.id}</strong> logged at {submittedTicket.time}. Our quant desk has received your request and will reply via email shortly.
+                Your email app should have opened at {submittedTicket.time} with this message addressed to <strong className="text-white">vixyvault0@gmail.com</strong>. Send it from there — nothing is sent from this page, and no ticket is created.
               </p>
               <button
                 onClick={() => setSubmittedTicket(null)}
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-mono text-xs font-black transition-all shadow-lg"
               >
-                Submit Another Inquiry
+                Write Another Message
               </button>
             </div>
           ) : (
