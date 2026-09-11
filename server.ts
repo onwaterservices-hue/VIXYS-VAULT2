@@ -16276,8 +16276,10 @@ app.get("/api/vixy/15m/current", async (req, res) => {
             const toward = evidenceDir === "UP" ? f.buyShare : 1 - f.buyShare;
             return {
               score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + (toward - 0.5) * 9) * 10) / 10)),
-              aligned: toward > 0.5,
-              detail,
+              // Aggression with the side that price is not following (ABSORBED)
+              // is not support; the ORDER_FLOW family withholds its vote too.
+              aligned: toward > 0.5 && latestBtc15mPipeline?.realFlow?.absorptionState !== "ABSORBED",
+              detail: latestBtc15mPipeline?.realFlow?.absorptionState === "ABSORBED" ? `${detail} | absorbed` : detail,
             };
           })(),
         },

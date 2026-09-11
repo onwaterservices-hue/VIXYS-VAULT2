@@ -56,6 +56,8 @@ t.eq('neutral taker flow scores 5.0 (was 7.0)', L['Order Flow'].score, 5);
 t.eq('...and is not counted as support (was aligned)', L['Order Flow'].aligned, false);
 t.check('flow detail names measured Coinbase taker flow, not a proxy ratio',
   /Coinbase taker flow 60s/.test(L['Order Flow'].detail) && !/proxy/.test(L['Order Flow'].detail) && !/Taker buy ratio/.test(L['Order Flow'].detail));
+t.check('absorbed flow (with-side aggression, price not following) is not support',
+  (() => { const a = by(run({ ...live, realFlow: { w60: { measured: true, buyShare: 0.77, buyBTC: 7.7, sellBTC: 2.3 }, absorptionState: 'ABSORBED' } }, 'UP'))['Order Flow']; return a.aligned === false && /absorbed/.test(a.detail); })());
 t.check('unmeasured flow is unscored and not support',
   (() => { const u = by(run({ ...live, realFlow: { w60: { measured: false, buyShare: 0.9, buyBTC: 9, sellBTC: 1 } } }, 'UP'))['Order Flow']; return u.score === null && u.aligned === false && /unmeasured/.test(u.detail); })());
 t.eq('zero displacement scores 5.0 (was 6.5)', L.Trend.score, 5);
