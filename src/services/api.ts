@@ -1589,19 +1589,6 @@ export async function resyncEntitlementApi(identifier: string) {
   }
 }
 
-export async function unfreezeUserBotsApi() {
-  try {
-    const res = await fetch('/api/admin/unfreeze-bots', {
-      method: 'POST',
-      headers: getAdminHeaders(),
-    });
-    return await safeParseJson(res);
-  } catch (err) {
-    console.warn('Failed to dispatch unfreeze bots request to server', err);
-  }
-  return { success: true, message: 'All local and remote user bots successfully unfrozen and active!' };
-}
-
 export async function createCheckoutSessionApi(payload: {
   plan: string;
   interval?: 'monthly' | 'annual';
