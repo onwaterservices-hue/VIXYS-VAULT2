@@ -10,6 +10,7 @@ import {
   userKalshiStateMap,
   autoTradeAuditLogHistory,
   createDefaultAutoTradeConfig,
+  AUTO_TRADING_LIVE_ENABLED,
 } from "./src/services/trading/kalshiExecutionEngine";
 var __defProp = Object.defineProperty;
 var __name = (target, value) =>
@@ -6422,6 +6423,73 @@ app.post(
     });
   },
 );
+// Registered here, after `requireRole` is defined: route registration runs
+// requireRole([...]) at module load, and #178 placed this route above that const,
+// which crashed every function instance (FUNCTION_INVOCATION_FAILED, 2026-09-11).
+// GET /api/admin/auto-trade/audit -- owner-only, read-only COUNTS, for deciding
+// whether Kalshi auto-trade execution should be routed through the Admin SDK.
+// No email, user id, key id, key material or per-user config leaves the server:
+// each document is reduced to counters inside this handler and never serialised.
+app.get("/api/admin/auto-trade/audit", requireRole(["OWNER"]), async (req, res) => {
+  const out: any = {
+    generatedAt: new Date().toISOString(),
+    // The order path refuses environment "live" while this code constant is false.
+    liveOrdersAllowedByCode: AUTO_TRADING_LIVE_ENABLED,
+    globalAutoTradingSwitchOn: productionMaintenanceState.autoTradingEnabled !== false,
+    firestoreReadPath: _adminActive ? "ADMIN_SDK" : "CLIENT_SDK",
+    credentials: null,
+    executions: null,
+    errors: [],
+  };
+  if (!db && !_adminActive) {
+    out.errors.push("NO_FIRESTORE");
+    return res.json(out);
+  }
+  try {
+    const credSnap = await getDocs(collection(db, "kalshi_credentials"));
+    const c: any = {
+      records: 0,
+      credentialsConfigured: 0,
+      credentialsByEnvironment: { paper: 0, live: 0, unset: 0 },
+      autoTradeEnabled: 0,
+      enabledByEnvironment: { paper: 0, live: 0, unset: 0 },
+      enabledWithConfiguredCredentials: 0,
+      autoDisabled: 0,
+      withConsecutiveFailures: 0,
+    };
+    credSnap.forEach((d: any) => {
+      const v = d.data() || {};
+      const cred = v.credentials || {};
+      const cfg = v.autoTradeConfig || {};
+      c.records += 1;
+      if (cred.configured === true) c.credentialsConfigured += 1;
+      c.credentialsByEnvironment[cred.environment === "live" || cred.environment === "paper" ? cred.environment : "unset"] += 1;
+      if (cfg.enabled === true) {
+        c.autoTradeEnabled += 1;
+        c.enabledByEnvironment[cfg.environment === "live" || cfg.environment === "paper" ? cfg.environment : "unset"] += 1;
+        if (cred.configured === true) c.enabledWithConfiguredCredentials += 1;
+      }
+      if (cfg.autoDisabledReason) c.autoDisabled += 1;
+      if ((Number(cfg.consecutiveFailures) || 0) > 0) c.withConsecutiveFailures += 1;
+    });
+    out.credentials = c;
+  } catch (err: any) {
+    out.errors.push(`CREDENTIALS_READ_FAILED:${err?.code || err?.name || "Error"}`);
+  }
+  try {
+    const execSnap = await getDocs(collection(db, "auto_trade_executions"));
+    const byStatus: Record<string, number> = {};
+    execSnap.forEach((d: any) => {
+      const s = String((d.data() || {}).executionStatus || "UNSET");
+      byStatus[s] = (byStatus[s] || 0) + 1;
+    });
+    out.executions = { total: execSnap.size, byStatus };
+  } catch (err: any) {
+    out.errors.push(`EXECUTIONS_READ_FAILED:${err?.code || err?.name || "Error"}`);
+  }
+  res.json(out);
+});
+
 app.get("/api/admin/dump-users", requireRole(["OWNER", "ADMIN"]), (req, res) => {
   res.json({
     users: serverUsers.map(toAdminUserDTO),
