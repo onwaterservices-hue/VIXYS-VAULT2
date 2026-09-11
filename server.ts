@@ -7303,6 +7303,7 @@ app.get("/api/discord/diagnostics", async (req, res) => {
     guildAccessible: live ? live.guildAccessible : null,
     hierarchySufficient: live ? live.hierarchySufficient : null,
     botHasManageRoles: live ? live.botHasManageRoles : null,
+    rolesFound: live ? live.rolesFound : null,
     liveProbeRan: !!live,
     diagnostics: report.diagnostics,
     diagnosticText: report.text,

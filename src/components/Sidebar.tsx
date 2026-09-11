@@ -151,7 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     {
       title: "ACCOUNT",
       items: [
-        { id: "alerts", label: "Alerts", icon: Bell, badge: "3", badgeType: "alert" },
+        { id: "alerts", label: "Alerts", icon: Bell }, // no alert count exists; this was a fixed "3"
         { id: "pricing", label: "Membership", icon: CreditCard, badge: hasActiveAccess ? "ACTIVE" : "PRO" },
         { id: "refer", label: "Refer to Earn", icon: Gift, badge: "EARN" },
           { id: "settings", label: "Settings", icon: Settings },

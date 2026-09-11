@@ -142,6 +142,26 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
     setTimeout(() => setCopied(false), 2000);
   };
 
+
+  // Real fields from /api/discord/diagnostics. The cards used to read
+  // BOT_CONNECTED, GUILD_FOUND, ROLE_FOUND, ROLE_MANAGEABLE, PENDING_COUNT,
+  // SUCCESS_COUNT, FAILED_COUNT, LAST_SYNC and LAST_ERROR, none of which the
+  // route sends, so the bot always read OFFLINE, the guild NOT_FOUND and every
+  // count 0. A value the route did not provide (probe not run, route failed) is
+  // UNKNOWN.
+  const tri = (v: unknown): 'yes' | 'no' | 'unknown' => (v === true ? 'yes' : v === false ? 'no' : 'unknown');
+  const dotClass = (st: string) => (st === 'yes' ? 'bg-emerald-400' : st === 'no' ? 'bg-rose-500 animate-pulse' : 'bg-slate-500');
+  const textClass = (st: string) => (st === 'yes' ? 'text-emerald-400' : st === 'no' ? 'text-rose-400' : 'text-slate-400');
+  const botReady = tri(diagnostics?.botState?.isReady);
+  const guildOk = tri(diagnostics?.guildAccessible);
+  const eliteRoleOk = tri(diagnostics?.rolesFound?.eliteRoleFound);
+  const hierarchyOk =
+    diagnostics?.hierarchySufficient === true && diagnostics?.botHasManageRoles === true
+      ? 'yes'
+      : diagnostics?.hierarchySufficient === false || diagnostics?.botHasManageRoles === false
+        ? 'no'
+        : 'unknown';
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto p-4 md:p-6 text-slate-100">
       {/* Header Banner */}
@@ -247,9 +267,9 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               <Activity className="w-3.5 h-3.5 text-purple-400" />
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.BOT_CONNECTED ? 'bg-emerald-400 animate-ping' : 'bg-rose-500 animate-pulse'}`} />
-              <span className={`text-base font-black tracking-tight ${diagnostics?.BOT_CONNECTED ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {diagnostics?.BOT_CONNECTED ? 'ONLINE' : 'OFFLINE'}
+              <span className={`w-2.5 h-2.5 rounded-full ${dotClass(botReady)}`} />
+              <span className={`text-base font-black tracking-tight ${textClass(botReady)}`}>
+                {botReady === 'yes' ? 'ONLINE' : botReady === 'no' ? 'OFFLINE' : 'UNKNOWN'}
               </span>
             </div>
             <p className="text-[10px] text-purple-400/60 font-mono">
@@ -264,9 +284,9 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               <Users className="w-3.5 h-3.5 text-indigo-400" />
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.GUILD_FOUND ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
-              <span className={`text-base font-black tracking-tight ${diagnostics?.GUILD_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {diagnostics?.GUILD_FOUND ? 'ACCESSIBLE' : 'NOT_FOUND'}
+              <span className={`w-2.5 h-2.5 rounded-full ${dotClass(guildOk)}`} />
+              <span className={`text-base font-black tracking-tight ${textClass(guildOk)}`}>
+                {guildOk === 'yes' ? 'ACCESSIBLE' : guildOk === 'no' ? 'NOT_FOUND' : 'UNKNOWN'}
               </span>
             </div>
             <p className="text-[10px] text-purple-400/60 font-mono truncate">
@@ -281,9 +301,9 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.ROLE_FOUND ? 'bg-emerald-400' : 'bg-rose-500 animate-pulse'}`} />
-              <span className={`text-base font-black tracking-tight ${diagnostics?.ROLE_FOUND ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {diagnostics?.ROLE_FOUND ? 'VERIFIED' : 'MISSING_ROLE'}
+              <span className={`w-2.5 h-2.5 rounded-full ${dotClass(eliteRoleOk)}`} />
+              <span className={`text-base font-black tracking-tight ${textClass(eliteRoleOk)}`}>
+                {eliteRoleOk === 'yes' ? 'FOUND' : eliteRoleOk === 'no' ? 'MISSING_ROLE' : 'UNKNOWN'}
               </span>
             </div>
             <p className="text-[10px] text-purple-400/60 font-mono truncate">
@@ -298,9 +318,9 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               <Lock className="w-3.5 h-3.5 text-amber-400" />
             </div>
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${diagnostics?.ROLE_MANAGEABLE ? 'bg-emerald-400' : 'bg-amber-500 animate-pulse'}`} />
-              <span className={`text-base font-black tracking-tight ${diagnostics?.ROLE_MANAGEABLE ? 'text-emerald-400' : 'text-amber-400'}`}>
-                {diagnostics?.ROLE_MANAGEABLE ? 'VALID_HIERARCHY' : 'INSUFFICIENT'}
+              <span className={`w-2.5 h-2.5 rounded-full ${dotClass(hierarchyOk)}`} />
+              <span className={`text-base font-black tracking-tight ${textClass(hierarchyOk)}`}>
+                {hierarchyOk === 'yes' ? 'VALID_HIERARCHY' : hierarchyOk === 'no' ? 'INSUFFICIENT' : 'UNKNOWN'}
               </span>
             </div>
             <p className="text-[10px] text-purple-400/60 font-mono">
@@ -311,24 +331,26 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
 
         {/* Telemetry Queue Statistics Panel */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-2">
-          {/* Left Column (Stats counts) */}
+          {/* Left Column (Stats counts). No role-sync counters are recorded
+              server-side (discordSyncMetrics is never written), so none are
+              shown as 0. */}
           <div className="md:col-span-5 grid grid-cols-3 gap-3">
             <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Pending Jobs</span>
-              <span className={`text-2xl font-black block ${diagnostics?.PENDING_COUNT > 0 ? 'text-amber-400' : 'text-white/60'}`}>
-                {diagnostics?.PENDING_COUNT ?? 0}
+              <span className="text-2xl font-black block text-white/60">
+                —
               </span>
             </div>
             <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Synced Success</span>
-              <span className="text-2xl font-black text-emerald-400 block">
-                {diagnostics?.SUCCESS_COUNT ?? 0}
+              <span className="text-2xl font-black text-white/60 block">
+                —
               </span>
             </div>
             <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30 text-center space-y-1">
               <span className="text-[10px] text-purple-400/60 font-mono block uppercase">Failed Jobs</span>
-              <span className={`text-2xl font-black block ${diagnostics?.FAILED_COUNT > 0 ? 'text-rose-400 animate-pulse' : 'text-white/60'}`}>
-                {diagnostics?.FAILED_COUNT ?? 0}
+              <span className="text-2xl font-black block text-white/60">
+                —
               </span>
             </div>
           </div>
@@ -341,16 +363,16 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 Last Checked Timestamp (LAST_SYNC):
               </span>
               <span className="text-white font-bold">
-                {diagnostics?.LAST_SYNC ? new Date(diagnostics.LAST_SYNC).toLocaleTimeString() : 'N/A'}
+                {diagnostics?.timestamp ? new Date(diagnostics.timestamp).toLocaleTimeString() : '—'}
               </span>
             </div>
 
-            {diagnostics?.LAST_ERROR ? (
+            {diagnostics?.botState?.lastError ? (
               <div className="p-2.5 rounded-xl bg-rose-950/40 border border-rose-800/40 text-[11px] font-mono text-rose-300 flex items-start gap-2">
                 <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                 <div className="truncate">
                   <span className="font-bold block uppercase text-[9px] text-rose-400">Last Encountered Sync Error:</span>
-                  <span className="font-bold">{diagnostics.LAST_ERROR}</span>
+                  <span className="font-bold">{diagnostics.botState.lastError}</span>
                 </div>
               </div>
             ) : (
