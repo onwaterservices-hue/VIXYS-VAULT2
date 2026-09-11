@@ -1,15 +1,15 @@
 /**
- * Real Computed Evidence Vectors Engine
- * 
- * Computes 6 authentic evidence vectors (0-10 scale) from live market data:
- * 1. Momentum: Real price velocity, RSI, and rate-of-change
- * 2. Trend: Real EMA stack, supertrend state, and VWAP structure
- * 3. Order Flow: Real CVD and taker buy/sell delta
- * 4. Volume: Real volume vs recent average and liquidity depth
- * 5. Sentiment: Real cross-venue odds (Kalshi/Polymarket) or null if unavailable
- * 6. Volatility: Real ATR and realized volatility envelope
- * 
- * If any input is genuinely missing or stale, displays "—" or "STALE" without fabrication.
+ * Evidence vectors (0-10 scale) for the 15M terminal, read from the engine's
+ * evidence.subScores on /api/vixy/15m/current (engine factors as a fallback):
+ * 1. Momentum: timeframes agreeing with the side being called
+ * 2. Trend: spot vs the cycle TWAP (no volume feed)
+ * 3. Order Flow: a spot-vs-strike flow proxy -- there is no trade tape behind it
+ * 4. Volume: expected-move coverage of the strike distance (not traded volume)
+ * 5. Sentiment: Kalshi implied odds, or null if unavailable
+ * 6. Volatility: realized-volatility regime
+ *
+ * A vector the engine did not score is shown as "—". Nothing here derives a
+ * vector from confidence, lock score or regime labels.
  */
 
 import { Canonical15mDecision, ConfluenceFactorItem } from '../types/canonicalDecision';
@@ -48,7 +48,7 @@ export function computeEvidenceVectors(
   feedStatus?: string
 ): ComputedEvidenceSummary {
   const isFeedStale = feedStatus === 'STALE' || feedStatus === 'DISCONNECTED' || feedStatus === 'MISSING_DATA';
-  const dir = decision?.direction || 'UP';
+  const dir = decision?.direction || 'NEUTRAL';
   const isUp = dir === 'UP';
 
   // Check if decision has precomputed subScores from engine or gemini evidence factors
@@ -63,6 +63,19 @@ export function computeEvidenceVectors(
   const findSubScore = (name: string) => {
     return evidenceSubScores.find(s => s.name?.toLowerCase() === name.toLowerCase());
   };
+
+  // The engine sent this vector without a reading. Show that; do not fall
+  // through to a vector derived from something else.
+  const unscored = (name: EvidenceVectorItem['name'], detail?: string): EvidenceVectorItem => ({
+    name,
+    score: null,
+    displayScore: '—',
+    percent: 0,
+    status: 'UNAVAILABLE',
+    aligned: false,
+    detail: detail || 'No engine reading',
+    isStaleOrMissing: true,
+  });
 
   // 1. MOMENTUM (Price velocity / RSI / Rate of change)
   let momentumVector: EvidenceVectorItem;
@@ -92,10 +105,12 @@ export function computeEvidenceVectors(
       detail: momSub.detail || `${s >= 7 ? 'Strong' : 'Moderate'} price velocity & RSI trajectory in cycle`,
       isStaleOrMissing: false,
     };
-  } else if (momFactor) {
-    const rawScore = momFactor.score ?? 75;
+  } else if (momSub) {
+    momentumVector = unscored('Momentum', momSub.detail);
+  } else if (momFactor && typeof momFactor.score === 'number') {
+    const rawScore = momFactor.score;
     const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-    const aligned = momFactor.aligned ?? (isUp ? rawScore >= 50 : rawScore < 50);
+    const aligned = momFactor.aligned ?? false;
     momentumVector = {
       name: 'Momentum',
       score,
@@ -104,21 +119,6 @@ export function computeEvidenceVectors(
       status: aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned,
       detail: momFactor.detail || `RSI & multi-TF velocity aligned with ${dir} bias`,
-      isStaleOrMissing: false,
-    };
-  } else if (decision) {
-    // Derive from live decision properties
-    const conf = decision.confidence || 75;
-    const score = Math.max(1, Math.min(9.8, Math.round((conf / 10) * 10) / 10));
-    const aligned = dir !== 'SKIP' && dir !== 'NEUTRAL';
-    momentumVector = {
-      name: 'Momentum',
-      score,
-      displayScore: score.toFixed(1),
-      percent: Math.min(100, Math.max(0, score * 10)),
-      status: aligned ? 'ALIGNED' : 'NEUTRAL',
-      aligned,
-      detail: `Velocity vector aligned with ${dir} bias (${conf}% confidence)`,
       isStaleOrMissing: false,
     };
   } else {
@@ -162,10 +162,12 @@ export function computeEvidenceVectors(
       detail: trendSub.detail || `Structural trend & EMA positioning support ${dir}`,
       isStaleOrMissing: false,
     };
-  } else if (trendFactor) {
-    const rawScore = trendFactor.score ?? 80;
+  } else if (trendSub) {
+    trendVector = unscored('Trend', trendSub.detail);
+  } else if (trendFactor && typeof trendFactor.score === 'number') {
+    const rawScore = trendFactor.score;
     const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-    const aligned = trendFactor.aligned ?? true;
+    const aligned = trendFactor.aligned ?? false;
     trendVector = {
       name: 'Trend',
       score,
@@ -176,8 +178,16 @@ export function computeEvidenceVectors(
       detail: trendFactor.detail || `Supertrend & VWAP structure aligned with ${dir}`,
       isStaleOrMissing: false,
     };
-  } else if (decision) {
-    const isSpotAboveStrike = (decision.currentSpot || 0) >= (decision.openStrike || 0);
+  } else if (
+    decision &&
+    (dir === 'UP' || dir === 'DOWN') &&
+    typeof decision.currentSpot === 'number' &&
+    typeof decision.openStrike === 'number' &&
+    decision.openStrike > 0
+  ) {
+    // Spot vs strike is measured; a missing strike used to read as 0 and
+    // put every spot "above strike".
+    const isSpotAboveStrike = decision.currentSpot >= decision.openStrike;
     const score = isUp === isSpotAboveStrike ? 8.4 : 4.2;
     const aligned = isUp === isSpotAboveStrike;
     trendVector = {
@@ -231,10 +241,12 @@ export function computeEvidenceVectors(
       detail: flowSub.detail || `Taker flow imbalance confirmed in ${dir} direction`,
       isStaleOrMissing: false,
     };
-  } else if (flowFactor) {
-    const rawScore = flowFactor.score ?? 78;
+  } else if (flowSub) {
+    orderFlowVector = unscored('Order Flow', flowSub.detail);
+  } else if (flowFactor && typeof flowFactor.score === 'number') {
+    const rawScore = flowFactor.score;
     const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-    const aligned = flowFactor.aligned ?? true;
+    const aligned = flowFactor.aligned ?? false;
     orderFlowVector = {
       name: 'Order Flow',
       score,
@@ -243,18 +255,6 @@ export function computeEvidenceVectors(
       status: aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned,
       detail: flowFactor.detail || `Aggressor taker flow delta positive for ${dir}`,
-      isStaleOrMissing: false,
-    };
-  } else if (decision) {
-    const score = (decision.lockScore || 70) > 60 ? 8.0 : 5.5;
-    orderFlowVector = {
-      name: 'Order Flow',
-      score,
-      displayScore: score.toFixed(1),
-      percent: score * 10,
-      status: score >= 6.5 ? 'ALIGNED' : 'NEUTRAL',
-      aligned: score >= 6.5,
-      detail: `Cumulative volume delta (CVD) aligned with active bias`,
       isStaleOrMissing: false,
     };
   } else {
@@ -298,10 +298,12 @@ export function computeEvidenceVectors(
       detail: volSub.detail || `Volume expansion above 20-period moving average`,
       isStaleOrMissing: false,
     };
-  } else if (volFactor) {
-    const rawScore = volFactor.score ?? 76;
+  } else if (volSub) {
+    volumeVector = unscored('Volume', volSub.detail);
+  } else if (volFactor && typeof volFactor.score === 'number') {
+    const rawScore = volFactor.score;
     const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-    const aligned = volFactor.aligned ?? true;
+    const aligned = volFactor.aligned ?? false;
     volumeVector = {
       name: 'Volume',
       score,
@@ -310,18 +312,6 @@ export function computeEvidenceVectors(
       status: aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned,
       detail: volFactor.detail || `Orderbook depth and liquidity expansion verified`,
-      isStaleOrMissing: false,
-    };
-  } else if (decision) {
-    const score = 7.6;
-    volumeVector = {
-      name: 'Volume',
-      score,
-      displayScore: score.toFixed(1),
-      percent: score * 10,
-      status: 'ALIGNED',
-      aligned: true,
-      detail: 'Volume expansion 1.25x above recent cycle baseline',
       isStaleOrMissing: false,
     };
   } else {
@@ -366,12 +356,14 @@ export function computeEvidenceVectors(
       detail: sentSub.detail || `Cross-venue market pricing consensus agrees with ${dir}`,
       isStaleOrMissing: false,
     };
+  } else if (sentSub) {
+    sentimentVector = unscored('Sentiment', sentSub.detail);
   } else if (crossVenueFactor) {
     // Cross-venue agreement factor from engine
     const rawScore = crossVenueFactor.score;
     if (typeof rawScore === 'number' && rawScore > 0) {
       const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-      const aligned = crossVenueFactor.aligned ?? true;
+      const aligned = crossVenueFactor.aligned ?? false;
       sentimentVector = {
         name: 'Sentiment',
         score,
@@ -436,10 +428,12 @@ export function computeEvidenceVectors(
       detail: volRegimeSub.detail || `ATR & realized vol within normal 15M expectation band`,
       isStaleOrMissing: false,
     };
-  } else if (volRegimeFactor) {
-    const rawScore = volRegimeFactor.score ?? 72;
+  } else if (volRegimeSub) {
+    volatilityVector = unscored('Volatility', volRegimeSub.detail);
+  } else if (volRegimeFactor && typeof volRegimeFactor.score === 'number') {
+    const rawScore = volRegimeFactor.score;
     const score = Math.max(0, Math.min(10, Math.round((rawScore / 10) * 10) / 10));
-    const aligned = volRegimeFactor.aligned ?? true;
+    const aligned = volRegimeFactor.aligned ?? false;
     volatilityVector = {
       name: 'Volatility',
       score,
@@ -448,19 +442,6 @@ export function computeEvidenceVectors(
       status: aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned,
       detail: volRegimeFactor.detail || `Realized volatility in controlled range for 15M cycle`,
-      isStaleOrMissing: false,
-    };
-  } else if (decision) {
-    const score = decision.regime === 'CHOPPY' ? 4.5 : 7.4;
-    const aligned = decision.regime !== 'CHOPPY';
-    volatilityVector = {
-      name: 'Volatility',
-      score,
-      displayScore: score.toFixed(1),
-      percent: score * 10,
-      status: aligned ? 'ALIGNED' : 'DIVERGENT',
-      aligned,
-      detail: `Market regime ${decision.regime || 'NORMAL'} • Expected move coverage optimal`,
       isStaleOrMissing: false,
     };
   } else {
@@ -515,7 +496,7 @@ export function computeEvidenceVectors(
 
     let alignmentSentence = "";
     if (alignedCount === totalValidCount && totalValidCount > 0) {
-      alignmentSentence = " Full cross-venue alignment remains highly favorable.";
+      alignmentSentence = " Every scored vector agrees.";
     } else if (alignedCount >= Math.ceil(totalValidCount / 2)) {
       alignmentSentence = " Alignment remains favorable, though some factors remain divergent.";
     } else {

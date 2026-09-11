@@ -2521,7 +2521,10 @@ function evaluateBtc15mHighConvictionPipeline(
     score: flowAgrees ? 85 : 40,
     weight: 0.12,
     agreement: flowAgrees,
-    details: `Taker: ${bullVolPct}% Bull | Delta: ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC | Flow: ${flowClassification}`,
+    // Not measured order flow: no trade tape or order book is read here.
+    // bullVolPct is computed from (spot - strike) / strike, and netDeltaBTC sums
+    // (bullVolPct - 50) * 1.8 over the last 15 ticks, so the label names a proxy.
+    details: `Spot-vs-strike flow proxy (no trade tape): ${bullVolPct}% bull | est. delta ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC | ${flowClassification}`,
   });
   const momAgrees =
     alignedCount >= 3 &&
@@ -2783,7 +2786,7 @@ function evaluateBtc15mHighConvictionPipeline(
     );
   if (flowAgrees)
     keyTailwinds.push(
-      `Aggressive taker flow (${bullVolPct}% bull volume, ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC delta)`,
+      `Spot-vs-strike flow proxy leans ${candidateDir} (${bullVolPct}% bull, est. ${netDeltaBTC > 0 ? "+" : ""}${netDeltaBTC} BTC; derived from price, not trade tape)`,
     );
   if (momAgrees)
     keyTailwinds.push(
@@ -15779,22 +15782,25 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // PR #58 deploy: openStrike 77,118.93 = spot, strikeSource PLACEHOLDER).
   // null here makes the terminal fall back to REFERENCE (CYCLE OPEN).
   const strike = market15mState.strikePrice > 0 ? market15mState.strikePrice : null;
+  // No side, probability or confidence is invented below. These fell back to
+  // "UP" / 0.6 / 75 on any falsy value, so a cold instance (currentConfidence 0
+  // until its first tick) served a 75% confidence nothing had computed.
   const lockedPred = isLocked
     ? {
-        direction: active15mCycle.lockedDirection || "UP",
-        probability: active15mCycle.lockedProbability || 0.6,
-        confidence: active15mCycle.lockedConfidence || 75,
+        direction: active15mCycle.lockedDirection || "NEUTRAL",
+        probability: active15mCycle.lockedProbability ?? 0.5,
+        confidence: active15mCycle.lockedConfidence ?? 0,
         lockedAt: active15mCycle.lockedAt || now,
         spotAtLock: active15mCycle.lockedSpot || spot,
         strike: active15mCycle.lockedStrike || strike,
         reason: active15mCycle.lockedReason || "Locked by VIXY engine",
-        decision: active15mCycle.lockedDecision || "BUY UP",
+        decision: active15mCycle.lockedDecision || (active15mCycle.lockedDirection ? `BUY ${active15mCycle.lockedDirection}` : "NO DECISION"),
       }
     : null;
   const livePred = {
-    direction: currentDirection || "UP",
-    probability: currentModelProbability || 0.6,
-    confidence: currentConfidence || 75,
+    direction: currentDirection || "NEUTRAL",
+    probability: currentModelProbability ?? 0.5,
+    confidence: currentConfidence ?? 0,
   };
   const pUp =
     latestBtc15mPipeline?.edgeVsConfidence?.pUp ??
@@ -15805,8 +15811,10 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     1 - (currentModelProbability ?? 0.5);
   const noTradeProbability = Math.max(0, 1 - pUp - pDown);
   const confidenceVal = isLocked
-    ? lockedPred?.confidence || 75
-    : livePred.confidence || 75;
+    ? lockedPred?.confidence ?? 0
+    : livePred.confidence ?? 0;
+  // The side the evidence sub-scores are scored against.
+  const evidenceDir = isLocked ? lockedPred?.direction : livePred.direction;
   const regimeVal = active15mCycle.isChoppy ? "CHOPPY" : "RANGE_BOUND";
   // No invented 6: if the pipeline has not run, the count is unknown.
   const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;
@@ -16095,51 +16103,83 @@ app.get("/api/vixy/15m/current", async (req, res) => {
     stateVersion: globalSequenceNumber,
     updatedAt: now,
     evidence: {
+      // Each sub-score is computed from the live pipeline, scored against the
+      // side being called (evidenceDir), or it is null with aligned false.
+      // These used to fall back to fixed readings whenever the pipeline was
+      // absent -- Momentum 8.0 "4/5", Trend 8.2 "+$18", Order Flow 7.9 "1.24x",
+      // Volume 7.6 "1.40x", Volatility 7.2 "NORMAL (1.20%)", nearly all marked
+      // aligned -- and Momentum, Trend and Order Flow ignored the side: a
+      // bull-leaning reading counted as support for DOWN, and a neutral reading
+      // scored 6.5-7.0. Production served "Order Flow 7.0 aligned, Taker buy
+      // ratio 1.00x" on 2026-09-11. For directional scores 5.0 = no support.
       subScores: [
         {
           name: "Momentum",
-          score: (() => {
+          ...(() => {
             const mtf = latestBtc15mPipeline?.multiTimeframeAlignment;
-            if (!mtf) return 8.0;
-            const alignedTf = mtf.alignedCount ?? 4;
+            if (!mtf || (evidenceDir !== "UP" && evidenceDir !== "DOWN")) {
+              return { score: null, aligned: false, detail: mtf ? "No side to score against" : "No engine reading" };
+            }
+            const want = evidenceDir === "UP" ? "BULLISH" : "BEARISH";
+            const agree = [mtf.tf15s, mtf.tf30s, mtf.tf1m, mtf.tf5m, mtf.tf15m].filter((v) => v === want).length;
             const boost = mtf.momentumClassification === "ACCELERATING" ? 1.5 : mtf.momentumClassification === "STABLE" ? 0.5 : -1.0;
-            return Math.max(1.0, Math.min(9.8, Math.round(((alignedTf / 5) * 8 + boost) * 10) / 10));
+            return {
+              score: Math.max(1.0, Math.min(9.8, Math.round(((agree / 5) * 8 + boost) * 10) / 10)),
+              aligned: agree >= 3,
+              detail: `Multi-TF ${agree}/5 ${want.toLowerCase()} (scored for ${evidenceDir})`,
+            };
           })(),
-          aligned: (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) >= 3,
-          detail: "Multi-TF " + (latestBtc15mPipeline?.multiTimeframeAlignment?.alignedCount ?? 4) + "/5 momentum alignment",
         },
         {
           name: "Trend",
-          score: (() => {
+          ...(() => {
             const ps = latestBtc15mPipeline?.priceStructure;
-            if (!ps) return 8.2;
-            const disp = Math.abs(ps.displacementUSD ?? 0);
-            return Math.max(1.0, Math.min(9.8, Math.round((6.5 + Math.min(3.0, disp / 20)) * 10) / 10));
+            if (!ps || typeof ps.displacementUSD !== "number") {
+              return { score: null, aligned: false, detail: "No engine reading" };
+            }
+            const d = ps.displacementUSD;
+            const detail = `Spot vs cycle TWAP ${d >= 0 ? "+" : "-"}$${Math.abs(d)}`;
+            if (evidenceDir !== "UP" && evidenceDir !== "DOWN") return { score: null, aligned: false, detail };
+            const toward = evidenceDir === "UP" ? d : -d;
+            return {
+              score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.max(-4.0, Math.min(4.5, toward / 20))) * 10) / 10)),
+              aligned: toward > 0 && ps.breakoutState !== "FAKEOUT",
+              detail,
+            };
           })(),
-          aligned: (latestBtc15mPipeline?.priceStructure?.breakoutState !== "FAKEOUT"),
-          detail: "VWAP displacement " + (latestBtc15mPipeline?.priceStructure?.displacementUSD?.toFixed(1) ?? "+$18"),
         },
         {
           name: "Order Flow",
-          score: (() => {
-            const of = latestBtc15mPipeline?.orderFlowAnalytics;
-            if (!of) return 7.9;
-            const taker = of.takerBuyRatio ?? 1.2;
-            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (taker - 0.5) * 4)) * 10) / 10));
+          ...(() => {
+            // takerBuyRatio is derived from spot vs strike (see the ORDER_FLOW
+            // family), not read from a trade tape.
+            const r = latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio;
+            if (typeof r !== "number" || !(r > 0)) {
+              return { score: null, aligned: false, detail: "No engine reading" };
+            }
+            const detail = `Spot-vs-strike flow proxy ${r.toFixed(2)}x (derived from price; no trade tape)`;
+            if (evidenceDir !== "UP" && evidenceDir !== "DOWN") return { score: null, aligned: false, detail };
+            const toward = evidenceDir === "UP" ? r : 1 / r;
+            return {
+              score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, (toward - 1) * 4)) * 10) / 10)),
+              aligned: toward > 1,
+              detail,
+            };
           })(),
-          aligned: (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio ?? 1.2) >= 1.0,
-          detail: "Taker buy ratio " + (latestBtc15mPipeline?.orderFlowAnalytics?.takerBuyRatio?.toFixed(2) ?? "1.24") + "x",
         },
         {
           name: "Volume",
-          score: (() => {
-            const expMove = latestBtc15mPipeline?.volatilityExpectedMove;
-            if (!expMove) return 7.6;
-            const cov = expMove.coverageRatio ?? 1.4;
-            return Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, cov * 2.5)) * 10) / 10));
+          ...(() => {
+            const vm = latestBtc15mPipeline?.volatilityExpectedMove;
+            if (!vm || typeof vm.coverageRatio !== "number") {
+              return { score: null, aligned: false, detail: "No engine reading" };
+            }
+            return {
+              score: Math.max(1.0, Math.min(9.8, Math.round((5.0 + Math.min(4.5, vm.coverageRatio * 2.5)) * 10) / 10)),
+              aligned: vm.isStrikeFeasible === true,
+              detail: "Expected move coverage " + vm.coverageRatio.toFixed(2) + "x",
+            };
           })(),
-          aligned: (latestBtc15mPipeline?.volatilityExpectedMove?.isStrikeFeasible ?? true),
-          detail: "Expected move coverage " + (latestBtc15mPipeline?.volatilityExpectedMove?.coverageRatio?.toFixed(2) ?? "1.40") + "x",
         },
         {
           name: "Sentiment",
@@ -16166,14 +16206,16 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         },
         {
           name: "Volatility",
-          score: (() => {
+          ...(() => {
             const vm = latestBtc15mPipeline?.volatilityExpectedMove;
-            if (!vm) return 7.2;
-            const score = vm.volatilityRegime === "EXTREME" ? 3.5 : vm.volatilityRegime === "COMPRESSED" ? 6.0 : 8.0;
-            return Math.max(1.0, Math.min(9.8, score));
+            if (!vm?.volatilityRegime) return { score: null, aligned: false, detail: "No engine reading" };
+            const regime = vm.volatilityRegime;
+            return {
+              score: regime === "EXTREME" ? 3.5 : regime === "COMPRESSED" ? 6.0 : 8.0,
+              aligned: regime !== "EXTREME",
+              detail: "Vol regime " + regime + (typeof vm.realizedVol15mPct === "number" ? " (" + vm.realizedVol15mPct.toFixed(2) + "%)" : ""),
+            };
           })(),
-          aligned: latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime !== "EXTREME",
-          detail: "Vol regime " + (latestBtc15mPipeline?.volatilityExpectedMove?.volatilityRegime ?? "NORMAL") + " (" + (latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? 1.2).toFixed(2) + "%)",
         }
       ]
     },
@@ -16737,11 +16779,11 @@ app.get(
       },
       status: computedFeedStatus,
       rawLean: isLive
-        ? `${action} (${currentConfidence}% Model Confidence Confluence across 8/8 Algorithms)`
+        ? `${action} (${currentConfidence}% model confidence)` // no per-algorithm votes exist
         : "DATA UNAVAILABLE",
       market15mState: isLive ? market15mState : null,
       modelVersion: serverLearningEngine.modelVersion,
-      calibrationVersion: `v${latestCalibrationState.calibrationSampleSize || 148}`,
+      calibrationVersion: `v${latestCalibrationState.calibrationSampleSize ?? 0}`,
       features: isLive
         ? {
             asset,
