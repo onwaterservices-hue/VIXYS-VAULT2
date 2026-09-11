@@ -142,7 +142,7 @@ export function buildEngineSandbox(repoRoot: string, opts: SandboxOptions = {}):
   const inputsSrc = sliceBetween(
     src,
     '    const spotStrikeDist = livePrice - current15mStrikePrice;',
-    '    const currentVol15m = Math.min(',
+    '    void hydratePriceHistoryFromCandles(now);', // the dead currentVol15m that used to end this slice is gone
     'pipeline input derivation',
   );
 

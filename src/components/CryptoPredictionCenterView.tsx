@@ -1889,7 +1889,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </div>
 
               <div className="flex items-center gap-2">
-                {/* View Mode Switcher (Candles vs Neural Ribbon) */}
+                {/* View Mode Switcher (Candles vs Trade Ribbon) */}
                 <div className="flex items-center p-1 rounded-xl bg-[#120930] border border-purple-800/40 text-xs">
                   <button
                     onClick={() => setChartMode('CANDLE')}
@@ -1909,7 +1909,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                         : 'text-purple-300 hover:text-white'
                     }`}
                   >
-                    Neural Ribbon
+                    Trade Ribbon
                   </button>
                 </div>
 

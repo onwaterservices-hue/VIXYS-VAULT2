@@ -168,9 +168,17 @@ console.log('== timeframe lookbacks use real candle history on young instances =
   t('a close more than 90s before the target is not used', lookback(young, stale, now, 77000, 300), 77010);
   t('an instance tick always beats a candle close', lookback([{ ts: now - 400e3, price: 76999 }, ...young], closes, now, 77000, 300), 76999);
 
-  // Hydrated closes must not leak into estimates built from ~3s ticks.
+  // Hydrated closes feed only the lookback above and, when the instance's own
+  // ticks span under 10 minutes, the time-aware realized-vol estimator (closed
+  // bars with ts <= now). Structure and deltas must never read them.
   const outside = fnSrc.slice(0, gStart) + fnSrc.slice(gEnd);
-  t('realized vol / structure / deltas never read hydratedBtcCloses', /hydratedBtcCloses/.test(outside), false);
+  const vStart = outside.indexOf('  const realizedVolFrom = (series) => {');
+  const vEnd = outside.indexOf('  const realizedVolSource =', vStart);
+  t('realized-vol block found', vStart >= 0 && vEnd > vStart, true);
+  const outsideVol = outside.slice(0, vStart) + outside.slice(vEnd);
+  t('structure / deltas never read hydratedBtcCloses', /hydratedBtcCloses/.test(outsideVol.replace(/\/\/[^\n]*/g, '')), false);
+  t('realized vol reads closes only as a fallback, never after now',
+    /const candleVol = tickVol === null \? realizedVolFrom\(hydratedBtcCloses\.filter\(\(c\) => c\.ts <= now\)\) : null;/.test(outside), true);
   // The in-progress candle is excluded and the hydrator is throttled.
   const hStart = src.indexOf('async function hydratePriceHistoryFromCandles(');
   const hSrc = src.slice(hStart, src.indexOf('__name(hydratePriceHistoryFromCandles', hStart));

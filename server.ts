@@ -1977,12 +1977,13 @@ let latestBtc15mPipeline = {
     momentumClassification: "NEUTRAL",
   },
   volatilityExpectedMove: {
-    realizedVol15mPct: 0.85,
-    volatilityRegime: "NORMAL",
-    expectedMoveUSD: 140,
-    requiredMoveUSD: 50,
-    coverageRatio: 2.8,
-    isStrikeFeasible: true,
+    realizedVol15mPct: null, // was 0.85 / NORMAL / 140 / 50 / 2.8 / feasible
+    realizedVolSource: null,
+    volatilityRegime: "UNKNOWN",
+    expectedMoveUSD: null,
+    requiredMoveUSD: null,
+    coverageRatio: null,
+    isStrikeFeasible: false,
   },
   priceStructure: {
     highLowStructure: "RANGE_BOUND",
@@ -2262,63 +2263,77 @@ function evaluateBtc15mHighConvictionPipeline(
       momentumClassification = "DECELERATING";
     else momentumClassification = "STABLE";
   }
-  let realizedVol15mPct = 0.85;
-  if (rollingBtcTicks.length >= 10) {
-    const returns = [];
-    for (let i = 1; i < rollingBtcTicks.length; i++) {
-      const prev = rollingBtcTicks[i - 1].price;
-      const curr = rollingBtcTicks[i].price;
-      if (prev > 0) returns.push(Math.log(curr / prev));
+  // Realized 15-minute volatility, MEASURED or null.
+  //
+  // This was `let realizedVol15mPct = 0.85` unless the instance held >= 10
+  // ticks, then sqrt(variance * 100) * 100 clamped to [0.4, 6.5] -- a scaling
+  // that assumes 100 ticks per 15 minutes whatever the real spacing. With 3s
+  // production ticks or 1m candles the result sits under the 0.4 floor, so
+  // production served either the 0.85 placeholder (14 of 20 samples,
+  // 2026-09-11 05:41Z) or the 0.40 floor, never a measurement. Coinbase 1m
+  // candles over 2026-08-12..09-11 put this measure at p50 0.146% per 15m;
+  // 0.85 exceeded it in 99.6% of cycles and 0.40 in 95.4%, inflating the
+  // expected move, strike coverage and the STRIKE_FEASIBLE lock gate 3-8x.
+  //
+  // Time-aware estimator: squared log returns summed over the time they span,
+  // scaled to 900s, so tick spacing does not matter. The instance's own ticks
+  // are used when they span >= 10 minutes, else real closed 1m candles
+  // (hydratedBtcCloses), else null.
+  const realizedVolFrom = (series) => {
+    let sumSq = 0;
+    let spanMs = 0;
+    for (let i = 1; i < series.length; i++) {
+      const a = series[i - 1];
+      const b = series[i];
+      const dt = b.ts - a.ts;
+      if (!(a.price > 0) || !(b.price > 0) || !(dt > 0) || dt > 180e3) continue;
+      sumSq += Math.log(b.price / a.price) ** 2;
+      spanMs += dt;
     }
-    const meanReturn = returns.reduce((acc, r) => acc + r, 0) / returns.length;
-    const variance =
-      returns.reduce((acc, r) => acc + Math.pow(r - meanReturn, 2), 0) /
-      Math.max(1, returns.length - 1);
-    realizedVol15mPct = Math.min(
-      6.5,
-      Math.max(0.4, Math.round(Math.sqrt(variance * 100) * 100 * 100) / 100),
-    );
-  }
-  if (!realizedVol15mPct || isNaN(realizedVol15mPct)) {
-    realizedVol15mPct = Math.min(
-      6.5,
-      Math.max(
-        0.4,
-        Math.round((Math.abs(rawMomentum) * 0.75 + 0.52) * 100) / 100,
-      ),
-    );
-  }
+    return spanMs >= 600e3 ? Math.sqrt((sumSq / spanMs) * 900e3) * 100 : null;
+  };
+  const tickVol = realizedVolFrom(rollingBtcTicks);
+  const candleVol = tickVol === null ? realizedVolFrom(hydratedBtcCloses.filter((c) => c.ts <= now)) : null;
+  const measuredVol = tickVol ?? candleVol;
+  const realizedVol15mPct = measuredVol === null ? null : Math.round(measuredVol * 1000) / 1000;
+  const realizedVolSource = tickVol !== null ? "TICKS" : candleVol !== null ? "CANDLES_1M" : null;
+  // Bands are this measure's own 30-day distribution (Coinbase 1m, trailing
+  // 20m, 2026-08-12..09-11): p25 0.095, p75 0.21, p95 0.39 (% per 15m). The old
+  // bands (0.6 / 1.8 / 3.2) were set against the placeholder scale.
   const volRegime =
-    realizedVol15mPct < 0.6
-      ? "COMPRESSED"
-      : realizedVol15mPct <= 1.8
-        ? "NORMAL"
-        : realizedVol15mPct <= 3.2
-          ? "EXPANDING"
-          : "EXTREME";
+    realizedVol15mPct === null
+      ? "UNKNOWN"
+      : realizedVol15mPct < 0.095
+        ? "COMPRESSED"
+        : realizedVol15mPct <= 0.21
+          ? "NORMAL"
+          : realizedVol15mPct <= 0.39
+            ? "EXPANDING"
+            : "EXTREME";
   const timeDecayFactor = Math.sqrt(Math.max(30, timeRemainingSec) / 900);
-  const expectedMoveUSD = Math.round(
-    spot *
-      (realizedVol15mPct / 100) *
-      timeDecayFactor *
-      (volRegime === "EXPANDING"
-        ? 1.25
-        : volRegime === "COMPRESSED"
-          ? 0.75
-          : 1),
-  );
+  // spot x measured 15m vol x sqrt(time left / 15m). The 0.75 / 1.25 regime
+  // multipliers are dropped: the vol they adjusted is now measured.
+  const expectedMoveUSD =
+    realizedVol15mPct === null
+      ? null
+      : Math.round(spot * (realizedVol15mPct / 100) * timeDecayFactor);
   const distFromStrike = spot - strike;
   const distFromStrikeAbs = Math.abs(distFromStrike);
   const requiredMoveUSD = Math.round(distFromStrikeAbs);
   const isITM =
     (candidateDir === "UP" && spot >= strike + 10) ||
     (candidateDir === "DOWN" && spot <= strike - 10);
+  // Unmeasured volatility cannot show a strike is reachable: coverage is null
+  // and only an in-the-money side counts as feasible (fails closed).
   const coverageRatio = isITM
     ? 3.5
-    : Math.round((expectedMoveUSD / Math.max(5, requiredMoveUSD)) * 100) / 100;
+    : expectedMoveUSD === null
+      ? null
+      : Math.round((expectedMoveUSD / Math.max(5, requiredMoveUSD)) * 100) / 100;
   const isStrikeFeasible =
     isITM ||
-    (coverageRatio >= 1.05 &&
+    (coverageRatio !== null &&
+      coverageRatio >= 1.05 &&
       timeRemainingSec >= 30);
   const pricesLast20 = rollingBtcTicks.slice(-20).map((t) => t.price);
   const localSupport =
@@ -2393,7 +2408,7 @@ function evaluateBtc15mHighConvictionPipeline(
     (mom5mPct < -0.04 || distFromStrike < -12)
   ) {
     dynamicRegime = "TRENDING_BEAR";
-  } else if (volRegime === "EXTREME" || realizedVol15mPct > 2.8) {
+  } else if (volRegime === "EXTREME") { // any vol > 0.39 is EXTREME; the old `> 2.8` was placeholder scale
     dynamicRegime = "HIGH_VOLATILITY";
   } else if (volRegime === "COMPRESSED" && distFromStrikeAbs < 10) {
     dynamicRegime = "CHOP";
@@ -2537,7 +2552,7 @@ function evaluateBtc15mHighConvictionPipeline(
     score: volAgrees ? 86 : 45,
     weight: 0.08,
     agreement: volAgrees,
-    details: `Vol: ${realizedVol15mPct}% (${volRegime}) | Exp: $${expectedMoveUSD} vs Req: $${requiredMoveUSD}`,
+    details: `Vol: ${realizedVol15mPct === null ? "unmeasured" : `${realizedVol15mPct}% (${realizedVolSource})`} (${volRegime}) | Exp: ${expectedMoveUSD === null ? "n/a" : `$${expectedMoveUSD}`} vs Req: $${requiredMoveUSD}`,
   });
   const liquidityAgrees = dataQualityStatus === "OPTIMAL";
   // Honest labelling: nothing here reads an order book. `liquidityAgrees` is
@@ -2572,7 +2587,7 @@ function evaluateBtc15mHighConvictionPipeline(
     details: `Regime: ${dynamicRegime} | Chop Score: ${chopScore}/100`,
   });
   const strikeAgrees =
-    isITM || (coverageRatio >= 1.2 && timeRemainingSec >= 120);
+    isITM || (coverageRatio !== null && coverageRatio >= 1.2 && timeRemainingSec >= 120);
   families.push({
     name: "STRIKE_EXPIRY",
     label: "Strike Moneyness",
@@ -2581,7 +2596,7 @@ function evaluateBtc15mHighConvictionPipeline(
     score: isITM ? 95 : strikeAgrees ? 82 : 40,
     weight: 0.1,
     agreement: strikeAgrees,
-    details: `Dist: ${distFromStrike > 0 ? "+" : ""}$${distFromStrike.toFixed(1)} | Coverage: ${coverageRatio}x`,
+    details: `Dist: ${distFromStrike > 0 ? "+" : ""}$${distFromStrike.toFixed(1)} | Coverage: ${coverageRatio === null ? "n/a" : `${coverageRatio}x`}`,
   });
   const timeAgrees = timeRemainingSec >= 180 && !isLateCycle;
   families.push({
@@ -2817,6 +2832,7 @@ function evaluateBtc15mHighConvictionPipeline(
     },
     volatilityExpectedMove: {
       realizedVol15mPct,
+      realizedVolSource,
       volatilityRegime: volRegime,
       expectedMoveUSD,
       requiredMoveUSD,
@@ -3071,13 +3087,6 @@ async function runMarketEngineTick() {
     currentBullVolumePct = Math.min(
       90,
       Math.max(10, Math.round(50 + moneynessPct * 25 + intervalMomentum * 15)),
-    );
-    const currentVol15m = Math.min(
-      6.5,
-      Math.max(
-        0.4,
-        Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-      ),
     );
     // Single-flight and self-throttled; the first ticks of a cold instance run
     // without it (as before) and later ticks read real minute history.
@@ -3883,7 +3892,7 @@ function canLockCurrentCycle(livePrice) {
     latestBtc15mPipeline.volatilityExpectedMove.isStrikeFeasible;
   if (!strikeFeasiblePass) {
     reasons.push(
-      `STRIKE_FEASIBILITY_FAILED (coverage=${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x)`,
+      `STRIKE_FEASIBILITY_FAILED (coverage=${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio ?? "unmeasured"}${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio == null ? "" : "x"})`,
     );
   }
   const reversalThreatPass =
@@ -4185,7 +4194,7 @@ function canLockCurrentCycle(livePrice) {
       { id: "LOCK_QUALITY", label: "Lock quality", pass: lockQualityPass, current: Math.round(latestBtc15mPipeline.lockQuality), required: `≥${minLockQuality} (${lockTier})`, gating: engineGating },
       { id: "AGREEMENT", label: "Evidence families agreeing", pass: evidenceAgreementPass, current: `${latestBtc15mPipeline.evidenceAgreementCount}/11`, required: `≥${minEvidenceAgreement}`, gating: engineGating },
       { id: "MTF", label: "Timeframes aligned", pass: mtfPass, current: `${latestBtc15mPipeline.multiTimeframeAlignment.alignedCount}/5`, required: `≥${minMtfAligned}`, gating: engineGating },
-      { id: "STRIKE_FEASIBLE", label: "Expected move covers strike", pass: strikeFeasiblePass, current: `${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x`, required: "feasible", gating: engineGating },
+      { id: "STRIKE_FEASIBLE", label: "Expected move covers strike", pass: strikeFeasiblePass, current: latestBtc15mPipeline.volatilityExpectedMove.coverageRatio == null ? "vol unmeasured" : `${latestBtc15mPipeline.volatilityExpectedMove.coverageRatio}x`, required: "feasible", gating: engineGating },
       { id: "REVERSAL", label: "Reversal threat", pass: reversalThreatPass, current: `${latestBtc15mPipeline.reversalAssessment.threatScore}%`, required: "<30% & no veto", gating: engineGating },
       { id: "EVIDENCE", label: "Engine score", pass: evidenceSufficient, current: Math.round(currentConfidence), required: "≥66", gating: engineGating },
       { id: "STABILITY", label: "Stable last 3 observations", pass: rollingStabilityPassed, current: `${last3Obs.filter((o) => o.candidateDir === dirTarget && o.conf >= 65.5).length}/3`, required: "3/3", gating: engineGating },
@@ -5394,13 +5403,7 @@ async function checkAndSettle15mCycle(livePrice) {
         active15mCycle.analyzedAt = new Date().toISOString();
         active15mCycle.analysisStatus = "COMPLETE";
       }
-      const vol15m = Math.min(
-        6.5,
-        Math.max(
-          0.4,
-          Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-        ),
-      );
+      const vol15m = latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? "unmeasured"; // the pipeline measurement, not a momentum formula
       console.log(
         `[VIXY_ANALYSIS] cycleId=${currentCycleId} regime=${serverLearningEngine.currentRegime} momentum=${currentMomentum}% volatility=${vol15m} persistence=${persistenceSeconds}s reversalRisk=${reversalThreat}% status=ANALYZING`,
       );
@@ -15505,27 +15508,9 @@ app.get("/api/vixy/state", async (req, res) => {
       momentum: currentMomentum,
       momentum5m: currentMomentum,
       momentumPct: currentMomentum,
-      volatility: Math.min(
-        6.5,
-        Math.max(
-          0.4,
-          Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-        ),
-      ),
-      volatility15m: Math.min(
-        6.5,
-        Math.max(
-          0.4,
-          Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-        ),
-      ),
-      volatility15mPct: Math.min(
-        6.5,
-        Math.max(
-          0.4,
-          Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
-        ),
-      ),
+      volatility: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
+      volatility15m: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
+      volatility15mPct: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
       distance: Math.round((spot - market15mState.strikePrice) * 100) / 100,
       distanceUSD: Math.round((spot - market15mState.strikePrice) * 100) / 100,
       regime: serverLearningEngine.currentRegime,
@@ -16114,7 +16099,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           name: "Volatility",
           ...(() => {
             const vm = latestBtc15mPipeline?.volatilityExpectedMove;
-            if (!vm?.volatilityRegime) return { score: null, aligned: false, detail: "No engine reading" };
+            if (!vm?.volatilityRegime || vm.volatilityRegime === "UNKNOWN") return { score: null, aligned: false, detail: "Volatility not measured" };
             const regime = vm.volatilityRegime;
             return {
               score: regime === "EXTREME" ? 3.5 : regime === "COMPRESSED" ? 6.0 : 8.0,
@@ -16701,30 +16686,9 @@ app.get(
             momentum: currentMomentum,
             momentum5m: currentMomentum,
             momentumPct: currentMomentum,
-            volatility: Math.min(
-              6.5,
-              Math.max(
-                0.4,
-                Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) /
-                  100,
-              ),
-            ),
-            volatility15m: Math.min(
-              6.5,
-              Math.max(
-                0.4,
-                Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) /
-                  100,
-              ),
-            ),
-            volatility15mPct: Math.min(
-              6.5,
-              Math.max(
-                0.4,
-                Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) /
-                  100,
-              ),
-            ),
+            volatility: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
+            volatility15m: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
+            volatility15mPct: latestBtc15mPipeline?.volatilityExpectedMove?.realizedVol15mPct ?? null,
             distance: Math.round((spot - kalshiStrike) * 100) / 100,
             distanceUSD: Math.round((spot - kalshiStrike) * 100) / 100,
             regime: serverLearningEngine.currentRegime,

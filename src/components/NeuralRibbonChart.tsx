@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Flame, Wifi, Zap, Volume2, VolumeX, ShieldCheck, Database, TrendingUp, TrendingDown, Sparkles, Maximize2, Minimize2, X } from 'lucide-react';
-import { fetchApiSignal, fetchModelStatus, fetchCryptoTicker, ApiSignalResponse, ModelStatusResponse } from '../services/api';
+import { fetchApiSignal, fetchModelStatus, ApiSignalResponse, ModelStatusResponse } from '../services/api';
 import { playBuyUpSound, playBuyDownSound } from '../utils/audio';
 import { ModelStatusBadge } from './ModelStatusBadge';
 
@@ -21,7 +21,7 @@ interface PricePoint {
 export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   asset = 'BTC',
   desk = '15s',
-  title = 'AI Neural Flow Ribbon & Order Flow Terminal',
+  title = 'Trade Flow Ribbon',
   spotPrice,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -29,7 +29,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   // States
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [connectionStatus, setConnectionStatus] = useState<string>('CONNECTING...');
-  const initialSpot = spotPrice || (asset === 'ETH' ? 3480.5 : 0);
+  const initialSpot = spotPrice && spotPrice > 0 ? spotPrice : 0;
   const [lastPrice, setLastPrice] = useState<number>(initialSpot);
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [audioEnabled, setAudioEnabled] = useState<boolean>(true);
@@ -68,9 +68,6 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   useEffect(() => {
     if (spotPrice && spotPrice > 0) {
       setLastPrice(spotPrice);
-      if (connectionStatus === 'CONNECTING...') {
-        setConnectionStatus('LIVE (FEED)');
-      }
     }
   }, [spotPrice]);
 
@@ -104,48 +101,31 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
   // Connect to Binance WS for real ticks & initial points
   useEffect(() => {
     let isCancelled = false;
-
-    // Timeout fallback to ensure UI doesn't freeze on CONNECTING...
-    const connTimeout = setTimeout(() => {
-      if (!isCancelled && !wsConnected) {
-        setConnectionStatus('LIVE (FEED)');
-      }
-    }, 2500);
-
-    // Generate initial price history baseline
-    fetchCryptoTicker(asset)
-      .then((data) => {
-        if (isCancelled || !data) return;
-        const currentP = data.price || 64591.20;
-        setLastPrice(currentP);
-        setConnectionStatus('LIVE (REST)');
-
-        setPriceHistory([{ time: Date.now(), price: currentP, buyVolume: 0, sellVolume: 0 }]);
-      })
-      .catch(() => {
-        if (!isCancelled) setConnectionStatus('LIVE (SIM)');
-      });
+    // The ribbon draws real Binance futures trades only. Until the first trade
+    // arrives it says it is connecting; it never seeds a price or claims LIVE.
+    setPriceHistory([]);
+    setConnectionStatus('CONNECTING...');
 
     const ws = new WebSocket(`wss://fstream.binance.com/ws/${binanceSymbol.toLowerCase()}@trade`);
 
     ws.onopen = () => {
       if (!isCancelled) {
         setWsConnected(true);
-        setConnectionStatus('LIVE WS FLOW');
+        setConnectionStatus('CONNECTED · WAITING FOR TRADES');
       }
     };
 
     ws.onclose = () => {
       if (!isCancelled) {
         setWsConnected(false);
-        setConnectionStatus('LIVE (FEED)');
+        setConnectionStatus('TRADE FEED OFFLINE');
       }
     };
 
     ws.onerror = () => {
       if (!isCancelled) {
         setWsConnected(false);
-        setConnectionStatus('LIVE (FEED)');
+        setConnectionStatus('TRADE FEED OFFLINE');
       }
     };
 
@@ -159,6 +139,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           const isSell = msg.m;
 
           setLastPrice(price);
+          setConnectionStatus('LIVE · BINANCE TRADES');
 
           setPriceHistory((prev) => {
             const newPt: PricePoint = {
@@ -254,12 +235,12 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           }
 
           // AI Confidence determines ribbon thickness (12px to 32px)
-          const conf = apiSignal?.modelProbability ?? 0.82;
-          const ribbonHalfWidth = 8 + conf * 12;
+          // Fixed width: no calibrated model sets the ribbon's thickness.
+          const ribbonHalfWidth = 14;
 
           // Draw Neural Flow Ribbon Upper and Lower Curves
-          const isBull = (apiSignal?.action === 'BUY_YES' || lastPrice > priceHistory[0]?.price);
-          const isBear = (apiSignal?.action === 'BUY_NO' || lastPrice < priceHistory[0]?.price);
+          const isBull = lastPrice > priceHistory[0]?.price;
+          const isBear = lastPrice < priceHistory[0]?.price;
 
           const mainColor = isBull ? '#10b981' : isBear ? '#f43f5e' : '#a855f7';
 
@@ -376,7 +357,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-slate-400 font-mono">
-              AI Dynamic Ribbon Thickness = Model Confidence Confluence
+              Binance futures trades · colour follows the move since the first trade on screen
             </p>
           </div>
         </div>
@@ -409,7 +390,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       {/* Floating Signal Tags & Price Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl bg-[#100727]/90 border border-purple-500/30">
         <div className="flex items-center gap-3">
-          <span className="text-xs font-mono text-slate-400 uppercase">Current AI Signal:</span>
+          <span className="text-xs font-mono text-slate-400 uppercase">Engine signal:</span>
           {hasActiveModel ? (
             apiSignal?.action === 'BUY_YES' ? (
               <button
@@ -419,7 +400,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
                 <TrendingUp className="w-4 h-4 text-emerald-400" />
                 BUY UP ▲ (CLICK TO CHIME)
               </button>
-            ) : (
+            ) : apiSignal?.action === 'BUY_NO' ? (
               <button
                 onClick={() => audioEnabled && playBuyDownSound()}
                 className="px-3 py-1 rounded-full bg-rose-950 border border-rose-400 text-rose-300 font-mono font-black text-xs shadow-[0_0_15px_rgba(244,63,94,0.5)] flex items-center gap-1.5 animate-pulse cursor-pointer"
@@ -427,6 +408,10 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
                 <TrendingDown className="w-4 h-4 text-rose-400" />
                 BUY DOWN ▼ (CLICK TO CHIME)
               </button>
+            ) : (
+              <span className="px-3 py-1 rounded-full bg-purple-950/60 border border-purple-500/40 text-purple-200 font-mono font-bold text-xs">
+                NO SIGNAL · HOLD
+              </span>
             )
           ) : (
             <span className="px-3 py-1 rounded-full bg-amber-950/60 border border-amber-500/40 text-amber-300 font-mono font-bold text-xs flex items-center gap-1">
@@ -438,7 +423,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
 
         <div className="flex items-center gap-4 text-xs font-mono font-bold">
           <div>
-            <span className="text-slate-400 block text-[10px] font-normal">AI CONFLUENCE</span>
+            <span className="text-slate-400 block text-[10px] font-normal">MODEL PROBABILITY</span>
             <span className="text-cyan-300">
               {hasActiveModel && apiSignal?.modelProbability ? `${Math.round(apiSignal.modelProbability * 100)}%` : 'UNCALIBRATED'}
             </span>
@@ -446,7 +431,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
           <div>
             <span className="text-slate-400 block text-[10px] font-normal">SPOT PRICE</span>
             <span className="text-emerald-400 text-sm font-black">
-              ${lastPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}
+              {lastPrice > 0 ? `$${lastPrice.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 })}` : '—'}
             </span>
           </div>
         </div>
@@ -464,7 +449,7 @@ export const NeuralRibbonChart: React.FC<NeuralRibbonChartProps> = ({
       <div className="fixed inset-0 z-50 bg-[#0a0518]/95 backdrop-blur-md p-6 overflow-y-auto flex flex-col justify-center items-center">
         <div className="w-full max-w-6xl relative space-y-4">
           <div className="flex justify-between items-center bg-[#130b28] p-3 rounded-xl border border-purple-500/40">
-            <span className="text-xs font-mono font-bold text-purple-200">EXPANDED NEURAL RIBBON MATRIX (Press ESC to exit)</span>
+            <span className="text-xs font-mono font-bold text-purple-200">TRADE FLOW RIBBON (Press ESC to exit)</span>
             <button
               onClick={() => setIsFullscreen(false)}
               className="px-3 py-1 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono font-bold text-xs flex items-center gap-1.5 transition"
