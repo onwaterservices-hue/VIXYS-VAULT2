@@ -15691,6 +15691,9 @@ app.get("/api/vixy/state", async (req, res) => {
         );
       } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
+        // The locking instance wrote lockPolicy into this document; copy it even when
+        // the other lock fields already match, so served locks say what confidence is.
+        if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
         const adoptedProb = lockData.probability;
@@ -15886,6 +15889,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         );
       } else if (lockDocSnap.exists()) {
         const lockData = lockDocSnap.data();
+        // The locking instance wrote lockPolicy into this document; copy it even when
+        // the other lock fields already match, so served locks say what confidence is.
+        if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
         const adoptedDir = lockData.direction;
         const adoptedConf = lockData.confidence;
         const adoptedProb = lockData.probability;
@@ -16532,6 +16538,9 @@ app.get(
           );
         } else if (lockDocSnap.exists()) {
           const lockData = lockDocSnap.data();
+          // The locking instance wrote lockPolicy into this document; copy it even when
+          // the other lock fields already match, so served locks say what confidence is.
+          if (typeof lockData.lockPolicy === "string") active15mCycle.lockPolicy = lockData.lockPolicy;
           const adoptedDir = lockData.direction;
           const adoptedConf = lockData.confidence;
           const adoptedProb = lockData.probability;
