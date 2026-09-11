@@ -15395,7 +15395,13 @@ app.get("/api/model-status", async (req, res) => {
   const desk = req.query.desk || "15m";
   let settledCount = serverLearningEngine.todaySettledCount;
   let lifetimeObservations = serverLearningEngine.lifetimeObservations;
-  let hasActiveModel = true;
+  // "Active model" means calibrated: enough settled locks to meet minRequired.
+  // This was the literal `true`, so with 148 of 500 settled rows the terminal
+  // showed BUY_YES / BUY_NO actions, model probabilities and a green "Live
+  // Model" badge where its own branches were written to say HOLD / UNCALIBRATED
+  // and "Collecting data (n/500)".
+  const MODEL_MIN_REQUIRED = 500;
+  let hasActiveModel = settledCount >= MODEL_MIN_REQUIRED;
   const historyLen = serverLearningEngine.settledHistory.length;
   const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
   let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
@@ -15404,7 +15410,7 @@ app.get("/api/model-status", async (req, res) => {
   ).toISOString();
   res.json({
     settledCount,
-    minRequired: 500,
+    minRequired: MODEL_MIN_REQUIRED,
     lifetimeObservations,
     hasActiveModel,
     activeModelBrier,
@@ -15415,9 +15421,11 @@ app.get("/api/model-status", async (req, res) => {
     lastWeightUpdateSecAgo: Math.round(
       (Date.now() - serverLearningEngine.lastWeightUpdateTs) / 1e3,
     ),
-    memoryPersistence: "ACTIVE",
-    incrementalTraining: "ON",
-    featureContributions: serverLearningEngine.featureContributions,
+    // Not measured, so not claimed: these were the literals "ACTIVE" and "ON",
+    // and featureContributions is a hardcoded list of weights nothing trains.
+    memoryPersistence: null,
+    incrementalTraining: null,
+    featureContributions: null,
     recentSettlements: serverLearningEngine.settledHistory.slice(0, 10),
   });
 });
@@ -16337,7 +16345,8 @@ app.get(
       dataAgeMs <= 15e3;
     let settledCount = serverLearningEngine.todaySettledCount;
     let lifetimeObservations = serverLearningEngine.lifetimeObservations;
-    let hasActiveModel = true;
+    // Calibrated only once minSamplesNeeded settled locks exist (was literal true).
+    let hasActiveModel = settledCount >= 500;
     const historyLen = serverLearningEngine.settledHistory.length;
     const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
     let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
@@ -16717,58 +16726,10 @@ app.get(
       feedStatus: computedFeedStatus,
       lastMarketUpdateTs,
       lockEvaluation: isLive ? latestLockEvaluation : null,
-      algorithmVotes: isLive
-        ? [
-            {
-              algo: "Order Flow Delta",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.18" : "-0.18",
-              status: "PASS",
-            },
-            {
-              algo: "Whale Liquidity Sweeps",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.12" : "-0.12",
-              status: "PASS",
-            },
-            {
-              algo: "VWAP Floor",
-              vote: "Bullish",
-              weight: "+0.05",
-              status: "PASS",
-            },
-            {
-              algo: "Momentum Vector",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.09" : "-0.09",
-              status: "PASS",
-            },
-            {
-              algo: "Volatility Profile",
-              vote: "Neutral",
-              weight: "-0.01",
-              status: "WARNING",
-            },
-            {
-              algo: "Orderbook Imbalance",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.13" : "-0.13",
-              status: "PASS",
-            },
-            {
-              algo: "Institutional Flow",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.15" : "-0.15",
-              status: "PASS",
-            },
-            {
-              algo: "Neural Similarity Engine",
-              vote: currentDirection === "UP" ? "Bullish" : "Bearish",
-              weight: currentDirection === "UP" ? "+0.21" : "-0.21",
-              status: "PASS",
-            },
-          ]
-        : [],
+      // Eight invented "algorithms" with fixed weights and status PASS ("VWAP
+      // Floor" voted Bullish unconditionally). No engine computes per-algorithm
+      // votes; the real per-family evidence is btc15mPipeline.evidenceFamilies.
+      algorithmVotes: null,
       modelValidation: {
         trainedAt: activeModelTrainedAt,
         brierScore: activeModelBrier,
