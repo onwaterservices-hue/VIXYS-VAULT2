@@ -8783,23 +8783,12 @@ app.delete(
       });
   },
 );
-const adminEventsStore = [
-  {
-    id: "evt_init_1",
-    timestamp: new Date(Date.now() - 3e5).toISOString(),
-    eventType: "SYSTEM_BOOT",
-    userEmail: "vixyvault0@gmail.com",
-    status: "SUCCESS",
-    message: "VIXY Vault Engine & Discord Entitlement Service Initialized",
-  },
-  {
-    id: "evt_init_2",
-    timestamp: new Date(Date.now() - 12e4).toISOString(),
-    eventType: "STRIPE_WEBHOOK_HEALTH",
-    status: "INFO",
-    message: "Stripe webhook signature listener active on /api/stripe/webhook",
-  },
-];
+// Admin event stream starts empty and holds only events passed to
+// broadcastAdminEvent. It used to boot with two invented entries backdated 2-5
+// minutes -- SYSTEM_BOOT "VIXY Vault Engine & Discord Entitlement Service
+// Initialized" under the owner's email and "Stripe webhook signature listener
+// active on /api/stripe/webhook" -- that no code had observed.
+const adminEventsStore = [];
 const adminSseClients = new Set();
 function broadcastAdminEvent(eventData) {
   const event = {

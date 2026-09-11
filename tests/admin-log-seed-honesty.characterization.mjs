@@ -6,6 +6,7 @@
 //                               promotion of trader.alex@gmail.com, a Stripe renewal
 //                               for quant.sarah@optionstrade.io, a bot health check
 //   /api/admin/support-tickets  three staged tickets dated 2026-08-05..11
+//   /api/admin/events (+ SSE)   a SYSTEM_BOOT and a Stripe listener event
 //   /api/admin/diagnostics      recentLogs "Engine Cycle #287 executed successfully",
 //                               "L2 Order Flow Delta spike (+1,420 BTC)", and a
 //                               calibration seed of 0.685 / 0.685 / 88.9% accuracy
@@ -22,11 +23,13 @@ t.section('boot seeds are empty');
 t.check('engineLogs boots empty', /^const engineLogs = \[\];$/m.test(serverSrc));
 t.check('serverAuditLogs boots empty', /^const serverAuditLogs = \[\];$/m.test(serverSrc));
 t.check('serverSupportTickets boots empty', /^const serverSupportTickets = \[\];$/m.test(serverSrc));
+t.check('adminEventsStore boots empty', /^const adminEventsStore = \[\];$/m.test(serverSrc));
 for (const staged of [
   'Engine Cycle #287', 'L2 Order Flow Delta spike', 'Level 0 Clearance', 'Promoted trader.alex@gmail.com to ELITE_PASS',
   'Pro Pass renewed for quant.sarah@optionstrade.io', 'Discord signal broadcaster synced successfully',
   'Kalshi API Latency Spike during 15M Candle Lock', 'Stripe Webhook Event Entitlement Resync Request',
   'Pro Pass Annual Billing Inquiry',
+  'VIXY Vault Engine & Discord Entitlement Service Initialized', 'Stripe webhook signature listener active',
 ]) t.check(`no staged entry in code: ${staged}`, !code.includes(staged));
 
 t.section('calibration seed (real code)');
