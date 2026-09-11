@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  ShieldCheck, 
-  Activity, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Activity,
   Sparkles, 
   ArrowRight, 
   Clock, 
@@ -25,6 +24,7 @@ import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils
 import { computeEvidenceVectors } from '../../utils/evidenceVectors';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
 import { fetchResolvedLogApi } from '../../services/api';
+import { ledgerRowStatus } from '../../utils/ledgerRowStatus';
 
 interface ContextualRightRailProps {
   decision?: Canonical15mDecision;
@@ -75,6 +75,14 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
   // panel says so instead of grading a number nobody computed.
   const reversalRiskRaw: number | null =
     typeof decision?.reversalRisk === 'number' && Number.isFinite(decision.reversalRisk) ? decision.reversalRisk : null;
+  // When the server built the decision this rail is showing. The rail polls its
+  // own copy of the decision, so a value from an older payload must look older.
+  const decisionServedAtMs: number | null =
+    typeof decision?.serverTimeMs === 'number' && Number.isFinite(decision.serverTimeMs)
+      ? decision.serverTimeMs
+      : decision?.updatedAt && Number.isFinite(Date.parse(decision.updatedAt))
+        ? Date.parse(decision.updatedAt)
+        : null;
   const reversalAssessment = useMemo(() => {
     return getReversalRiskAssessment(reversalRiskRaw ?? 0);
   }, [reversalRiskRaw]);
@@ -90,7 +98,7 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
         const j: any = await fetchResolvedLogApi();
         if (cancelled || !j) return;
         const rows = Array.isArray(j.recentResolved)
-          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 4)
+          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 6)
           : [];
         setLedgerRows(rows);
       } catch {
@@ -115,12 +123,16 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
     for (const r of ledgerRows) {
       const t = r.intervalEnd ? Date.parse(r.intervalEnd) : r.resolvedAt ? Date.parse(r.resolvedAt) : NaN;
       if (!Number.isFinite(t)) continue;
-      if (r.decision === 'SKIP') {
+      const st = ledgerRowStatus(r);
+      if (st === 'SKIP') {
         items.push({ key: `s-${t}`, text: 'Cycle skipped — lock gate not met', tMs: t, tone: 'skip' });
-      } else {
+      } else if (st === 'WIN' || st === 'LOSS') {
         const px = typeof r.settlementPrice === 'number' && r.settlementPrice > 0 ? ` @ $${Math.round(r.settlementPrice).toLocaleString()}` : '';
-        items.push({ key: `r-${t}`, text: `${r.direction} lock settled ${r.wasCorrect ? 'WIN' : 'LOSS'}${px}`, tMs: t, tone: r.wasCorrect ? 'up' : 'down' });
+        items.push({ key: `r-${t}`, text: `${r.direction} lock settled ${st}${px}`, tMs: t, tone: st === 'WIN' ? 'up' : 'down' });
       }
+      // OPEN / VOID / UNKNOWN rows are not settlements and get no item: an open
+      // lock has no outcome yet (it read "settled LOSS just now" while winning),
+      // and this cycle's lock is already the "Locked X this cycle" item above.
     }
     return items.sort((a, b) => b.tMs - a.tMs).slice(0, 4);
   }, [decision, ledgerRows, confidence]);
@@ -276,34 +288,43 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
         </div>
       </V2Panel>
 
-      {/* 4. VIXY PROTECTION™ */}
-      <V2Panel title="VIXY PROTECTION™" icon={ShieldCheck} padding="sm">
+      {/* 4. REVERSAL THREAT SCORE. This was "VIXY PROTECTION™" with a literal
+          ACTIVE badge and "SHIELD STATUS: STABLE (0 DIVERGENCE)". Nothing protects
+          a lock: server.ts has no early-exit path and every lock exits at cycle
+          expiry. What the panel shows is the engine's reversal threat score
+          (0-100, not a probability), its tier, and when this decision was served.
+          The rail's decision comes from App's own useCanonical15mDecision poll,
+          separate from the Prediction Center's, so the two can hold payloads from
+          different moments or server instances; the read time makes that visible. */}
+      <V2Panel title="REVERSAL THREAT SCORE" icon={AlertTriangle} padding="sm">
         <div className="space-y-2">
           <div className="flex items-center justify-between bg-[#080512] p-2.5 rounded-xl border border-purple-900/40">
             <div className="flex items-center gap-2 min-w-0">
-              <div className={`p-1.5 rounded-lg border shrink-0 ${reversalAssessment.cardClass}`}>
-                <ShieldCheck className="w-4 h-4" />
+              <div className={`p-1.5 rounded-lg border shrink-0 ${reversalRiskRaw === null ? 'bg-slate-900/60 border-slate-700/50 text-slate-500' : reversalAssessment.cardClass}`}>
+                <AlertTriangle className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className={`text-[11px] font-bold uppercase leading-none ${reversalAssessment.colorClass}`}>
-                  {reversalAssessment.tier === 'HIGH' ? 'HAZARD ELEVATED' : 'ACTIVE'}
+                <div className={`text-[11px] font-bold uppercase leading-none ${reversalRiskRaw === null ? 'text-slate-500' : reversalAssessment.colorClass}`}>
+                  {reversalRiskRaw === null ? 'NO DATA' : `${reversalAssessment.shortLabel} TIER`}
                 </div>
-                <div className="text-[9.5px] text-slate-400 mt-0.5">Reversal Risk</div>
+                <div className="text-[9.5px] text-slate-400 mt-0.5">Engine reversal threat score</div>
               </div>
             </div>
 
             <div className="text-right shrink-0">
-              <div className="text-sm font-black text-slate-100 font-mono">{reversalRiskRaw === null ? '—' : `${reversalAssessment.score}%`}</div>
-              <div className={`text-[8.5px] font-bold uppercase ${reversalRiskRaw === null ? 'text-slate-500' : reversalAssessment.colorClass}`}>
-                {reversalRiskRaw === null ? 'NO DATA' : reversalAssessment.label}
+              <div className="text-sm font-black text-slate-100 font-mono">{reversalRiskRaw === null ? '—' : `${reversalAssessment.score} / 100`}</div>
+              <div className="text-[8.5px] font-bold uppercase text-slate-500">
+                NOT A PROBABILITY
               </div>
             </div>
           </div>
 
           <div className="p-2 rounded-lg bg-[#080512] border border-purple-900/30 flex items-center justify-between text-[10px] font-mono">
-            <span className="text-slate-400">SHIELD STATUS:</span>
-            <span className={`font-bold ${reversalRiskRaw === null ? 'text-slate-500' : reversalAssessment.tier === 'LOW' ? 'text-emerald-400' : reversalAssessment.tier === 'MODERATE' ? 'text-amber-400' : 'text-rose-400'}`}>
-              {reversalRiskRaw === null ? 'NO DATA' : reversalAssessment.tier === 'LOW' ? 'STABLE (0 DIVERGENCE)' : reversalAssessment.tier === 'MODERATE' ? 'WATCH (MODERATE EXPOSURE)' : 'VETO ACTIVE (HIGH VOLATILITY)'}
+            <span className="text-slate-400">READ AT:</span>
+            <span className={`font-bold ${decisionServedAtMs === null ? 'text-slate-500' : 'text-slate-300'}`}>
+              {decisionServedAtMs === null
+                ? '—'
+                : `${new Date(decisionServedAtMs).toISOString().slice(11, 19)}Z · ${Math.max(0, Math.round((nowMs - decisionServedAtMs) / 1000))}s ago`}
             </span>
           </div>
         </div>

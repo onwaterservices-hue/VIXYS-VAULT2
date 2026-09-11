@@ -1539,7 +1539,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       <div className="flex items-center gap-2.5 flex-wrap">
         <span className="text-white font-extrabold uppercase text-xs tracking-wider flex items-center gap-1.5 bg-[#12072a] px-3 py-1 rounded-xl border border-purple-700/60">
           <Activity className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-          BTC {timeframe} • VIXY NEURAL RIBBON
+          BTC {timeframe} • VIXY ENGINE RIBBON
         </span>
 
         {/* Live Status Chip */}
