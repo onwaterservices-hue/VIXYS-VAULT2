@@ -10778,12 +10778,13 @@ const createCheckoutSessionHandler = __name(async (req, res) => {
     email: cleanUserEmail,
     name: userName,
   });
-  let stripeCustomerId = user.stripeCustomerId;
+  // A stored placeholder is treated as missing, so lookup-or-create by email runs.
+  let stripeCustomerId = realStripeCustomerId(user.stripeCustomerId);
   const subRec = cleanUserEmail
     ? userSubscriptions.get(cleanUserEmail)
     : void 0;
-  if (!stripeCustomerId && subRec?.stripeCustomerId) {
-    stripeCustomerId = subRec.stripeCustomerId;
+  if (!stripeCustomerId && realStripeCustomerId(subRec?.stripeCustomerId)) {
+    stripeCustomerId = realStripeCustomerId(subRec.stripeCustomerId);
     user.stripeCustomerId = stripeCustomerId;
   }
   if (!stripeCustomerId && cleanUserEmail) {
@@ -10985,7 +10986,8 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
       simulated: true,
     });
   }
-  let stripeCustomerId = user.stripeCustomerId;
+  // A stored placeholder is treated as missing, so lookup-or-create by email runs.
+  let stripeCustomerId = realStripeCustomerId(user.stripeCustomerId);
   if (!stripeCustomerId && cleanUserEmail) {
     try {
       const existingCustomers = await stripe.customers.list({
@@ -11126,6 +11128,16 @@ const createDayPassCheckoutHandler = __name(async (req, res) => {
 }, "createDayPassCheckoutHandler");
 app.post("/api/stripe/create-day-pass-checkout", createDayPassCheckoutHandler);
 app.post("/create-day-pass-checkout", createDayPassCheckoutHandler);
+// Real Stripe customer ids are "cus_" followed by letters and digits. Values stored
+// on accounts by hand ("N/A" typed into the admin user editor, placeholders such as
+// "cus_vixy_owner") are not, and Stripe rejects them with "No such customer" --
+// seen 8 times on Day Pass checkout (Vercel, 2026-08-30..09-06). Returns the id or null.
+function realStripeCustomerId(id: unknown): string | null {
+  const s = typeof id === "string" ? id.trim() : "";
+  return /^cus_[A-Za-z0-9]{8,}$/.test(s) ? s : null;
+}
+__name(realStripeCustomerId, "realStripeCustomerId");
+
 app.post("/api/stripe/create-portal-session", async (req, res) => {
   const stripe = getStripe();
   if (!stripe) {
@@ -11162,7 +11174,7 @@ app.post("/api/stripe/create-portal-session", async (req, res) => {
     let serverUser = serverUsers.find(
       (u) => u.email?.toLowerCase() === cleanEmail,
     );
-    let customerId = userSub?.stripeCustomerId || serverUser?.stripeCustomerId;
+    let customerId = realStripeCustomerId(userSub?.stripeCustomerId) || realStripeCustomerId(serverUser?.stripeCustomerId);
     if (!customerId && db) {
       try {
         const docId =
