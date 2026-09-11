@@ -13368,7 +13368,17 @@ app.get("/api/user/subscription", (req, res) => {
     entitlements: entitlement.entitlements,
   });
 });
-app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
+// Staff-only diagnostics. /api/stripe/health is answered by the earlier
+// registration, so in practice this serves /api/stripe/diagnostics -- which,
+// signed out, did not answer within 150 seconds in production: both live calls
+// below were awaited with no deadline, letting any anonymous request hold a
+// serverless function for minutes. No frontend calls this route.
+app.get(["/api/stripe/health", "/api/stripe/diagnostics"], requireRole(["OWNER", "ADMIN", "SUPPORT"]), async (req, res) => {
+  const withDeadline = (promise, ms, label) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)),
+    ]);
   const stripe = getStripe();
   const stripeKeyPresent = Boolean(process.env.STRIPE_SECRET_KEY);
   const webhookSecretPresent = Boolean(process.env.STRIPE_WEBHOOK_SECRET);
@@ -13376,7 +13386,11 @@ app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
   let liveApiError = null;
   if (stripe && stripeKeyPresent) {
     try {
-      await stripe.customers.list({ limit: 1 });
+      await withDeadline(
+        stripe.customers.list({ limit: 1 }),
+        8000,
+        "Stripe API probe",
+      );
       liveApiWorking = true;
     } catch (e) {
       liveApiError = e?.message || "Stripe API connection check failed";
@@ -13412,7 +13426,11 @@ app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
     }),
   );
   const botStatus = getDiscordBotStatus();
-  const discordDiag = await runDiscordDiagnostics().catch(() => null);
+  const discordDiag = await withDeadline(
+    runDiscordDiagnostics(),
+    8000,
+    "Discord diagnostics",
+  ).catch(() => null);
   const subscriberCounts = {
     starter: Array.from(userSubscriptions.values()).filter(
       (s) =>
