@@ -463,7 +463,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // shows the value as unavailable instead of a fabricated healthy number.
   const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? null;
   const lockQualityScore: number | null =
-    rawLockScore === null ? null : rawLockScore <= 10 ? Math.round(rawLockScore * 10) : Math.round(rawLockScore);
+    // The server's lock score is 0-100. Values of 10 or less used to be multiplied
+    // by 10 (a leftover 0-10 scale), so a weak score of 8 read as 80 / 100 and
+    // could show the gate as met; 2.8% of replayed ticks score <= 10.
+    typeof rawLockScore === 'number' && Number.isFinite(rawLockScore) ? Math.max(0, Math.min(100, Math.round(rawLockScore))) : null;
   // Headline number for the ring, from the one semantics helper every surface
   // (V2 rail, hub hero, Command Center ring) reads: calibrated P(win) when a
   // cell matches, else the engine score, else nothing.

@@ -15739,6 +15739,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
   // report a trend or high volatility: production served RANGE_BOUND here while
   // /api/vixy/state served TRENDING_BEAR for the same tick (10 of 10 samples,
   // 2026-09-11). The header, hub, workspace and scalp chart render this value.
+  // lockScore / lockProgressPct / reversalRisk / capitalPreservationScore are null
+  // when the pipeline or Guardian has no reading (were 50 / 50 / 20 / 0).
   const regimeVal = serverLearningEngine.currentRegime ?? null;
   // No invented 6: if the pipeline has not run, the count is unknown.
   const evidenceAlign = latestBtc15mPipeline?.evidenceAgreementCount ?? null;
@@ -15877,12 +15879,9 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           : "WATCH",
     direction: isLocked ? lockedPred?.direction : livePred.direction,
     confidence: confidenceVal,
-    lockScore: latestBtc15mPipeline?.lockQuality ?? 50,
-    reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? 20,
-    capitalPreservationScore: Math.max(
-      0,
-      Math.min(100, 100 - (latestGuardianDecision?.survivalScore ?? 100)),
-    ),
+    lockScore: latestBtc15mPipeline?.lockQuality ?? null,
+    reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? null,
+    capitalPreservationScore: (typeof latestGuardianDecision?.survivalScore === "number" ? Math.max(0, Math.min(100, 100 - latestGuardianDecision.survivalScore)) : null),
     capitalPreserved: latestGuardianDecision?.action === "PROTECT",
     regime: regimeVal,
     evidenceAlignment: evidenceAlign,
@@ -15960,7 +15959,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         }),
       ),
       contradictionScore: chopScore,
-      reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? 20,
+      reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? null,
       signalDirection: isLocked ? lockedPred?.direction : livePred.direction,
       // signalMomentum was the literal "STABLE"; it is the pipeline's own
       // momentum classification. reasoning no longer falls back to "Stable live
@@ -15973,14 +15972,11 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       latencyMs: null,
     },
     protection: {
-      lockScore: latestBtc15mPipeline?.lockQuality ?? 50,
-      lockProgressPct: latestBtc15mPipeline?.lockQuality ?? 50,
+      lockScore: latestBtc15mPipeline?.lockQuality ?? null,
+      lockProgressPct: latestBtc15mPipeline?.lockQuality ?? null,
       temporalStability: temporalStabilityVal,
-      reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? 20,
-      capitalPreservationScore: Math.max(
-        0,
-        Math.min(100, 100 - (latestGuardianDecision?.survivalScore ?? 100)),
-      ),
+      reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? null,
+      capitalPreservationScore: (typeof latestGuardianDecision?.survivalScore === "number" ? Math.max(0, Math.min(100, 100 - latestGuardianDecision.survivalScore)) : null),
       capitalPreserved: latestGuardianDecision?.action === "PROTECT",
       lateCycleProtectionActive: null, // not evaluated here; was a literal false
       protectionStatus: protectionStat,

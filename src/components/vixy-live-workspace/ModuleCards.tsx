@@ -360,7 +360,8 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
   const c: any = canonical15m as any;
   const raw = c?.lockScore ?? c?.lockEvaluation?.lockScore ?? null;
   const lockQuality: number | null =
-    typeof raw === 'number' && Number.isFinite(raw) ? (raw <= 10 ? Math.round(raw * 10) : Math.round(raw)) : null;
+    // 0-100 as served; no x10 rescale of scores <= 10.
+    typeof raw === 'number' && Number.isFinite(raw) ? Math.max(0, Math.min(100, Math.round(raw))) : null;
   const gateMin: number | null = typeof c?.lockGate?.minLockQuality === 'number' ? c.lockGate.minLockQuality : null;
   const stability: number | null = typeof c?.temporalStability === 'number' ? c.temporalStability : null;
 

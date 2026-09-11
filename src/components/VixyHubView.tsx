@@ -84,7 +84,8 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
     : typeof canonical15m.lockEvaluation?.lockScore === 'number' ? canonical15m.lockEvaluation.lockScore
     : null;
   const lockQuality: number | null =
-    lockScoreRaw === null ? null : lockScoreRaw <= 10 ? Math.round(lockScoreRaw * 10) : Math.round(lockScoreRaw);
+    // 0-100 as served; no x10 rescale of scores <= 10.
+    lockScoreRaw === null ? null : Math.max(0, Math.min(100, Math.round(lockScoreRaw)));
   const reversalRisk: number | null = typeof canonical15m.reversalRisk === 'number' ? canonical15m.reversalRisk : null;
   const regime: string | null = canonical15m.regime || null;
   const lifecycle = getNormalizedLifecycleState(canonical15m);
