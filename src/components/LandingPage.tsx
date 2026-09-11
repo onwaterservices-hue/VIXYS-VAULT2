@@ -164,7 +164,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   const faqs = [
     {
       q: 'How does the VIXY 24-Hour Day Pass work?',
-      a: 'The 24-Hour Day Pass gives you exactly 24 hours of full, unrestricted VIXY Elite access for a $9.99 one-time payment. You get 96 complete 15-minute prediction cycles, real-time orderbook depth, decision locks, and Discord signals. It does not auto-renew, so when the 24 hours are up the terminal locks again. If you want the engine running every day, three day passes cost $29.97 and the Starter plan is $29 for the full month.',
+      a: 'The 24-Hour Day Pass gives you exactly 24 hours of full, unrestricted VIXY Elite access for a $9.99 one-time payment. You get 96 complete 15-minute prediction cycles, real-time orderbook depth, decision locks, and Discord signals. It does not auto-renew, so when the 24 hours are up the terminal locks again. If you want the engine running every day, three day passes cost $29.97 and the Starter plan is $24 for the full month.',
     },
     {
       q: 'Is VIXY’s Vault a gambling platform or signal group?',
@@ -547,7 +547,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </button>
 
               {/* Cost anchor. Pure arithmetic from the two prices already on this
-                  page -- 3 x $9.99 = $29.97 against Starter at $29/month. Nothing
+                  page -- 3 x $9.99 = $29.97 against Starter at $24/month. Nothing
                   here is a projection, a discount or a scarcity claim. */}
               <div className="rounded-xl border border-purple-800/50 bg-[#0d0722]/80 px-3.5 py-3 text-left">
                 <div className="text-[9.5px] font-mono font-black uppercase tracking-[0.14em] text-purple-400/80 mb-1">
@@ -555,7 +555,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 </div>
                 <p className="text-[11px] text-purple-100/90 font-sans leading-relaxed">
                   Three day passes cost <strong className="text-white font-mono">$29.97</strong>.
-                  Starter is <strong className="text-white font-mono">$29</strong> and runs for all 30 days.
+                  Starter is <strong className="text-white font-mono">$24</strong> and runs for all 30 days.
                 </p>
                 <button
                   onClick={openPlans}
@@ -845,11 +845,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <h3 className="font-bold text-white text-sm uppercase tracking-wider">STARTER</h3>
               <div className="space-y-0.5">
                 <span className="text-4xl font-black text-purple-300">
-                  ${billingInterval === 'annual' ? 24 : 29}
+                  ${billingInterval === 'annual' ? 19 : 24}
                 </span>
                 <span className="text-xs text-purple-300/60 ml-1">/month</span>
                 <p className="text-[10px] text-purple-300/50 block font-sans">
-                  {billingInterval === 'annual' ? 'Billed annually ($288/yr)' : 'Billed monthly'}
+                  {billingInterval === 'annual' ? 'Billed annually ($228/yr)' : 'Billed monthly'}
                 </p>
               </div>
 
