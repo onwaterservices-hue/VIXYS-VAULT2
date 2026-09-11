@@ -23,7 +23,7 @@ const route = (path) => {
 
 t.section('backtest-replay (real handler)');
 {
-  const a = serverSrc.indexOf('app.get("/api/signal/backtest-replay", (req, res) => {');
+  const a = serverSrc.indexOf('app.get("/api/signal/backtest-replay", async (req, res) => {');
   const b = serverSrc.indexOf('\n});\n', a) + '\n});'.length;
   t.check('handler found', a > 0 && b > a);
   const handlerSrc = serverSrc.slice(a, b).replace('app.get("/api/signal/backtest-replay", ', 'module.exports = (').replace(/\}\);$/, '});').replace(/\n\}\);$/, '\n}');
@@ -34,7 +34,7 @@ t.section('backtest-replay (real handler)');
     return serverSrc.slice(i, j + 1);
   }).join('\n');
   const body = serverSrc.slice(a, b).replace(/^app\.get\("\/api\/signal\/backtest-replay",\s*/, '').replace(/\);\s*$/, '');
-  const js = transformSync(`${helpers}\nmodule.exports = (persistentSignalLogs) => { let out; const res = { json: (x) => { out = x; } }; (${body})({}, res); return out; };`, { loader: 'ts', format: 'cjs' }).code;
+  const js = transformSync(`${helpers}\nmodule.exports = async (persistentSignalLogs, ensureLedgerFresh) => { let out; const res = { json: (x) => { out = x; } }; await (${body})({}, res); return out; };`, { loader: 'ts', format: 'cjs' }).code;
   const m = { exports: {} };
   new Function('module', 'exports', js)(m, m.exports);
   const rows = [
@@ -43,7 +43,9 @@ t.section('backtest-replay (real handler)');
     { status: 'RESOLVED', cycleId: 'c3', targetStrike: 77000, settlementPrice: 77010, direction: 'UP', wasCorrect: true },
     { status: 'LOCKED', cycleId: 'c4', direction: 'DOWN' },
   ];
-  const out = m.exports(rows);
+  let hydrated = 0;
+  const out = await m.exports(rows, async () => { hydrated += 1; });
+  t.eq('the route hydrates the ledger before reading it', hydrated, 1);
   t.eq('no comparison is claimed', out.comparison, null);
   t.check('says why', typeof out.comparisonReason === 'string' && out.comparisonReason.includes('No second engine'));
   t.eq('graded rows only', out.ledger.graded, 3);
