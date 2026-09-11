@@ -14845,31 +14845,15 @@ app.post("/api/position-size", (req, res) => {
 const serverLearningEngine = {
   lifetimeObservations: 0,
   todaySettledCount: 0,
-  lastWeightUpdateTs: Date.now() - 4e3,
+  // No weights are trained. This is set when a settlement is recorded; it is not
+  // served as a training time. It booted 4s in the past, as if weights had just
+  // been updated.
+  lastWeightUpdateTs: null,
   modelVersion: "v4.3-INCREMENTAL",
   historicalAccuracy: null,
   currentRegime: null,
-  incrementalTrainingActive: true,
-  featureWeights: {
-    orderFlow: 0.18,
-    whales: 0.12,
-    vwap: 0.05,
-    momentum: 0.09,
-    volatility: -0.01,
-    liquidity: 0.13,
-    institutionalActivity: 0.15,
-    neuralSimilarity: 0.21,
-  },
-  featureContributions: [
-    { name: "Order Flow Delta", bias: "Bullish", weight: 0.18 },
-    { name: "Whale Liquidity Sweeps", bias: "Bullish", weight: 0.12 },
-    { name: "VWAP Price Anchoring", bias: "Bullish", weight: 0.05 },
-    { name: "Momentum Acceleration", bias: "Bullish", weight: 0.09 },
-    { name: "Volatility Expansion", bias: "Neutral", weight: -0.01 },
-    { name: "Orderbook Depth Imbalance", bias: "Bullish", weight: 0.13 },
-    { name: "Institutional Order Flow", bias: "Bullish", weight: 0.15 },
-    { name: "Neural Pattern Similarity", bias: "Bullish", weight: 0.21 },
-  ],
+  // featureWeights / featureContributions / incrementalTrainingActive were
+  // literals nothing trained or read ("Whale Liquidity Sweeps", all Bullish).
   settledHistory: [],
 };
 const base15mMs = Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3);
@@ -15337,9 +15321,7 @@ app.get("/api/model-status", async (req, res) => {
   const historyLen = serverLearningEngine.settledHistory.length;
   const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
   let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
-  let activeModelTrainedAt = new Date(
-    serverLearningEngine.lastWeightUpdateTs,
-  ).toISOString();
+  let activeModelTrainedAt = null; // no model is trained; this was the last settlement time
   res.json({
     settledCount,
     minRequired: MODEL_MIN_REQUIRED,
@@ -15350,9 +15332,7 @@ app.get("/api/model-status", async (req, res) => {
     modelVersion: serverLearningEngine.modelVersion,
     historicalAccuracy: serverLearningEngine.historicalAccuracy,
     currentRegime: serverLearningEngine.currentRegime,
-    lastWeightUpdateSecAgo: Math.round(
-      (Date.now() - serverLearningEngine.lastWeightUpdateTs) / 1e3,
-    ),
+    lastWeightUpdateSecAgo: null, // no weights are updated
     // Not measured, so not claimed: these were the literals "ACTIVE" and "ON",
     // and featureContributions is a hardcoded list of weights nothing trains.
     memoryPersistence: null,
@@ -16303,9 +16283,7 @@ app.get(
     const historyLen = serverLearningEngine.settledHistory.length;
     const avgBrier = meanBrier(serverLearningEngine.settledHistory).mean; // finite scores only; null when none
     let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
-    let activeModelTrainedAt = new Date(
-      serverLearningEngine.lastWeightUpdateTs,
-    ).toISOString();
+    let activeModelTrainedAt = null; // no model is trained; this was the last settlement time
     const minSamplesNeeded = 500;
     // The 15M cycle this endpoint reports on is BTC-only: the cycle id, strike,
     // lock state and Kalshi market state below all describe BTC. `spot` is
@@ -16688,7 +16666,7 @@ app.get(
         brierScore: activeModelBrier,
         validationSampleSize: settledCount,
         lifetimeMemoryCount: lifetimeObservations,
-        lastWeightUpdate: `${Math.round((Date.now() - serverLearningEngine.lastWeightUpdateTs) / 1e3)}s ago`,
+        lastWeightUpdate: null, // no weights are updated
       },
       status: computedFeedStatus,
       rawLean: isLive
