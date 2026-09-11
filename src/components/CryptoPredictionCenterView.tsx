@@ -47,7 +47,7 @@ import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cy
 import { getReversalRiskAssessment } from '../utils/reversalRisk';
 import { CandleChart } from './CandleChart';
 import { NeuralRibbonChart } from './NeuralRibbonChart';
-import { calculateMarketRegime, MarketRegimeAssessment } from '../utils/marketRegime';
+import { ledgerRowStatus } from '../utils/ledgerRowStatus';
 import { OrderbookHeatmapRadar } from './prediction-center/OrderbookHeatmapRadar';
 import { NeuralDecompositionMatrix } from './prediction-center/NeuralDecompositionMatrix';
 import { ScenarioSimulatorMatrix } from './prediction-center/ScenarioSimulatorMatrix';
@@ -557,19 +557,19 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const dynamicContextExplanation = useMemo(() => {
     switch (computedCycleState) {
       case 'ANALYZING':
-        return 'VIXY is evaluating momentum, trend continuity, and cross-venue order flow before forming a hypothesis.';
+        return 'VIXY is scoring momentum, trend, order flow and the other evidence families before any direction forms.';
       case 'BUILDING':
         return 'VIXY is seeing increasing agreement across live market evidence and directional order flow.';
       case 'CONFIRMING':
-        return 'VIXY has a directional hypothesis and is completing its final multi-venue stability checks.';
+        return 'VIXY has a direction and is waiting for the lock gate: stable observations, agreement and the entry window.';
       case 'LOCKED':
-        return `VIXY has committed to 15M ${isUp ? 'UP' : 'DOWN'}. Autonomous protection is actively monitoring for reversal risk.`;
+        return `VIXY locked 15M ${isUp ? 'UP' : 'DOWN'}. The lock stands until the cycle settles; there is no early exit.`;
       case 'PROTECTED':
-        return 'Autonomous capital preservation shield engaged. Volatility defense active.';
+        return 'The lock stands until the cycle settles; there is no early exit.';
       case 'SETTLED':
-        return '15-Minute cycle finalized and verified against benchmark settlement index.';
+        return 'Cycle settled: the price at cycle end was compared with the strike.';
       case 'SKIP':
-        return 'Evidence did not reach the required confidence threshold. VIXY is protecting capital.';
+        return 'The lock gate was not met, so no call was made this cycle.';
       default:
         return 'VIXY quantitative intelligence engine is monitoring 15-minute cycle structures in real time.';
     }
@@ -588,16 +588,15 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   };
 
   // Dynamic Real-Time Market Regime Assessment
-  const marketRegimeAssessment: MarketRegimeAssessment = useMemo(() => {
-    return calculateMarketRegime(
-      chartCandles,
-      spotPrice,
-      spotChange,
-      displayReversalRisk ?? 0,
-      displayConfidence ?? 0,
-      canonicalDecision?.direction || (isUp ? 'UP' : isDown ? 'DOWN' : 'SKIP')
-    );
-  }, [chartCandles, spotPrice, spotChange, displayReversalRisk, displayConfidence, canonicalDecision?.direction, isUp, isDown]);
+  // The one regime the engine serves: what its REGIME evidence family votes with.
+  // This was calculateMarketRegime(), a second, client-side classifier with an
+  // invented confidence (max(70, engine score), or 82 / 65), a "CVD delta" of
+  // 24h change x 14.5 shown in millions and a literal "88% BUY" flow agreement.
+  const serverRegime: string | null =
+    typeof (canonicalDecision as any)?.regime === 'string' && (canonicalDecision as any).regime
+      ? (canonicalDecision as any).regime
+      : null;
+  const serverRegimeLabel = serverRegime ? serverRegime.replace(/_/g, ' ') : '—';
 
   // Recent 15M settlements — REAL rows from the shared ledger, or an honest
   // empty state. This strip used to be five hardcoded rows ($64k-era prices,
@@ -641,7 +640,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         const j: any = await fetchResolvedLogApi();
         if (cancelled || !j) return;
         const rows = Array.isArray(j.recentResolved)
-          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 4)
+          ? j.recentResolved.filter((r: any) => r && (r.decision === 'BUY_UP' || r.decision === 'BUY_DOWN' || r.decision === 'SKIP')).slice(0, 5)
           : [];
         setRecentSettled({
           rows,
@@ -685,8 +684,13 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       status: 'ACTIVE',
       outcome: 'LIVE',
     };
-    const settled = (recentSettled?.rows || []).map((r: any) => {
-      const isSkipRow = r.decision === 'SKIP';
+    const settled = (recentSettled?.rows || [])
+      // The live card already stands for this cycle; its ledger row is still open.
+      .filter((r: any) => !canonicalDecision?.cycleId || r.cycleId !== canonicalDecision.cycleId)
+      .slice(0, 4)
+      .map((r: any) => {
+      const st = ledgerRowStatus(r);
+      const isSkipRow = st === 'SKIP';
       const strike = Number(r.strike ?? r.targetStrike ?? 0);
       const settle = Number(r.settlementPrice ?? 0);
       return {
@@ -696,8 +700,10 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
         price: isSkipRow
           ? 'no lock'
           : `${strike > 0 ? `$${strike.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'} → ${settle > 0 ? `$${settle.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '—'}`,
-        status: isSkipRow ? 'SKIP' : r.wasCorrect ? 'WIN' : 'LOSS',
-        outcome: isSkipRow ? 'SKIPPED' : r.wasCorrect ? 'WIN' : 'LOSS',
+        // WIN / LOSS only for a settled row with a boolean wasCorrect. An open lock
+        // rendered LOSS (14:30Z DOWN read LOSS while winning; it settled WIN).
+        status: st === 'UNKNOWN' ? '—' : st,
+        outcome: st === 'SKIP' ? 'SKIPPED' : st === 'OPEN' ? 'PENDING' : st === 'UNKNOWN' ? '—' : st,
       };
     });
     return [live, ...settled];
@@ -727,7 +733,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               </span>
             </div>
             <p className="text-xs text-purple-300/70 font-sans">
-              AI Quantitative Intelligence • Real-Time Order Flow • Cross-Venue Execution
+              15-minute engine • Live order flow • Kalshi strike
             </p>
           </div>
         </div>
@@ -738,18 +744,15 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Market State Indicator (Requirement 13) */}
           <button
             onClick={() => setShowMarketRegimeModal(true)}
-            className={`flex items-center gap-2 px-3 py-2.5 sm:py-1.5 rounded-xl border text-[11px] font-bold font-sans cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${marketRegimeAssessment.badgeClass}`}
-            title="Click to inspect real-time Market Regime telemetry"
+            className={`flex items-center gap-2 px-3 py-2.5 sm:py-1.5 rounded-xl border text-[11px] font-bold font-sans cursor-pointer transition-all hover:scale-[1.02] active:scale-95 bg-purple-950/60 text-purple-200 border-purple-700/50`}
+            title="The regime the 15-minute engine served"
           >
             <Activity className="w-3.5 h-3.5" />
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] opacity-75 font-mono">REGIME:</span>
-              <span className="font-black tracking-wide">{marketRegimeAssessment.label}</span>
+              <span className="font-black tracking-wide">{serverRegimeLabel}</span>
             </div>
-            <span className="text-[9px] font-mono px-1 rounded bg-black/30 border border-white/10">
-              {marketRegimeAssessment.confidence}%
-            </span>
-          </button>
+                      </button>
 
           {/* Sound Toggle */}
           <button
@@ -798,17 +801,19 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       <div className="px-4 py-2.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 shadow-sm flex flex-wrap items-center justify-between gap-3 text-[10px] font-mono text-purple-300/80">
         <div className="flex flex-wrap items-center gap-4 sm:gap-6">
           <div className="flex items-center gap-1.5">
-            <span className="text-purple-400/60 font-sans font-bold">SYSTEM</span>
-            <span className="flex items-center gap-1 text-emerald-400 font-bold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> ONLINE
-            </span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
             <span className="text-purple-400/60 font-sans font-bold">MARKET FEED</span>
-            <span className={`flex items-center gap-1 font-bold ${dataHealthStatus === 'LIVE' ? 'text-emerald-400' : 'text-amber-400'}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${dataHealthStatus === 'LIVE' ? 'bg-emerald-400 shadow-[0_0_6px_#10b981]' : 'bg-amber-400'}`} /> {dataHealthStatus === 'LIVE' ? 'LIVE' : dataHealthStatus}
-            </span>
+            {(() => {
+              // Fresh by the server's own FEED gate standard (<10s). This read the
+              // hook's polling status and showed LIVE beside a 24.8s feed age while
+              // the "Feed connected & fresh" gate row was failing.
+              const age = typeof feedHealth?.dataAgeMs === 'number' ? feedHealth.dataAgeMs : null;
+              const feedState = age === null ? '—' : age < 10000 ? 'FRESH' : 'STALE';
+              return (
+                <span className={`flex items-center gap-1 font-bold ${feedState === 'FRESH' ? 'text-emerald-400' : feedState === 'STALE' ? 'text-amber-400' : 'text-slate-500'}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${feedState === 'FRESH' ? 'bg-emerald-400' : feedState === 'STALE' ? 'bg-amber-400' : 'bg-slate-500'}`} /> {feedState}
+                </span>
+              );
+            })()}
           </div>
 
           <div className="flex items-center gap-1.5">
@@ -824,15 +829,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           <div className="flex items-center gap-1.5">
             <span className="text-purple-400/60 font-sans font-bold">VIXY ENGINE</span>
-            <span className="text-purple-200 font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" /> ACTIVE
+            {/* The engine stage the server served (was a literal pulsing ACTIVE). */}
+            <span className="text-purple-200 font-bold">
+              {canonicalDecision?.cycleId ? String((canonicalDecision as any).engineStage || canonicalDecision.currentState || '—').replace(/_/g, ' ') : '—'}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 hidden md:flex">
-            <span className="text-purple-400/60 font-sans font-bold">TELEMETRY</span>
-            <span className="text-emerald-400 font-bold">RECORDING</span>
-          </div>
         </div>
 
         <div className="flex items-center gap-3 ml-auto text-[10px]">
@@ -1754,7 +1756,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     ) : null}
                   </div>
                   <div className="text-xs font-black text-white font-sans">ANALYZING</div>
-                  <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">Order flow delta & whale sweeps</div>
+                  <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">Evidence families & order flow</div>
                   <div className="vx-rail mt-2"><div className={`vx-rail-fill ${isPhase2Done && !isPhase2Active ? 'done' : ''}`} style={{ width: `${phasePct(120, 360)}%` }} /></div>
                   {isPhase2Active && <span className="vx-beam-wrap"><span className="vx-scan-beam" /></span>}
                 </div>
@@ -1805,7 +1807,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                     {isLockedEarly ? 'EARLY LOCK' : 'LOCKED'}
                   </div>
                   <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">
-                    {isActuallyLocked ? 'Autonomous defense engaged' : 'Decision committed & guarded'}
+                    {isActuallyLocked ? 'Fixed until settlement' : 'Lock gate decides'}
                   </div>
                   <div className="vx-rail mt-2"><div className="vx-rail-fill" style={{ width: `${phasePct(720, 900)}%` }} /></div>
                 </div>
@@ -1857,7 +1859,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
                 <div className="p-3 rounded-xl bg-[#150a36] border border-purple-800/30">
                   <div className="font-bold text-white mb-0.5">3. Immutable Lock & Capital Protection</div>
-                  <p>Once Locked, VIXY cannot change its prediction. If an adverse strike breach occurs, autonomous VIXY Protection alerts you to preserve capital.</p>
+                  <p>Once Locked, VIXY cannot change its prediction. The lock stands until the cycle settles; nothing exits it early.</p>
                 </div>
               </div>
 
@@ -2260,7 +2262,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white font-sans">MARKET REGIME TELEMETRY</h3>
-                    <p className="text-xs text-purple-300/70 font-sans">Real-time dynamic regime classification</p>
+                    <p className="text-xs text-purple-300/70 font-sans">Served by the 15-minute engine</p>
                   </div>
                 </div>
                 <button
@@ -2271,48 +2273,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </button>
               </div>
 
-              <div className={`p-4 rounded-2xl border ${marketRegimeAssessment.badgeClass} flex items-center justify-between`}>
-                <div>
-                  <div className="text-[10px] uppercase font-bold opacity-75">CURRENT REGIME</div>
-                  <div className="text-xl font-black font-sans">{marketRegimeAssessment.label}</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-[10px] uppercase font-bold opacity-75">CONFIDENCE</div>
-                  <div className="text-xl font-black font-mono">{marketRegimeAssessment.confidence}%</div>
-                </div>
+              <div className="p-4 rounded-2xl border bg-purple-950/40 text-purple-100 border-purple-700/50">
+                <div className="text-[10px] uppercase font-bold opacity-75">CURRENT REGIME (ENGINE)</div>
+                <div className="text-xl font-black font-sans">{serverRegimeLabel}</div>
               </div>
 
               <p className="text-xs text-purple-200/90 font-sans leading-relaxed">
-                {marketRegimeAssessment.description}
+                The regime the 15-minute engine served for this tick: the classification its REGIME evidence family votes with (price structure, VWAP and momentum), shown as CHOP while the chop filter holds that vote neutral. No confidence is attached to it.
               </p>
-
-              <div className="grid grid-cols-2 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <div className="text-[10px] text-purple-400 font-bold">VOLATILITY RATIO</div>
-                  <div className="text-sm font-black text-white font-mono mt-0.5">
-                    {marketRegimeAssessment.metrics.volatilityRatio.toFixed(2)}x
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <div className="text-[10px] text-purple-400 font-bold">MOMENTUM SCORE</div>
-                  <div className="text-sm font-black text-emerald-400 font-mono mt-0.5">
-                    {marketRegimeAssessment.metrics.momentumScore > 0 ? '+' : ''}
-                    {marketRegimeAssessment.metrics.momentumScore.toFixed(1)}
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <div className="text-[10px] text-purple-400 font-bold">CVD DELTA</div>
-                  <div className="text-sm font-black text-white font-mono mt-0.5">
-                    {marketRegimeAssessment.metrics.cvdDelta}
-                  </div>
-                </div>
-                <div className="p-3 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <div className="text-[10px] text-purple-400 font-bold">FLOW AGREEMENT</div>
-                  <div className="text-sm font-black text-emerald-400 font-mono mt-0.5">
-                    {marketRegimeAssessment.metrics.flowAgreement}
-                  </div>
-                </div>
-              </div>
 
               <button
                 onClick={() => setShowMarketRegimeModal(false)}
