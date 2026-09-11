@@ -3418,6 +3418,18 @@ async function runMarketEngineTick() {
     lastModelRunTs = now;
     lastSignalUpdateTs = now;
     lastPredictionUpdateTs = now;
+    // Refresh the served lock checklist from THIS tick's pipeline, score and
+    // guardian. The gate already ran earlier in the tick (inside
+    // checkAndSettle15mCycle), before latestBtc15mPipeline was re-evaluated, so
+    // the checklist always described the previous tick -- and on a cold
+    // instance's first tick, the zero seed. Production served "0/11 evidence
+    // families agreeing" and "0/5 timeframes aligned" beside 9/11 and 5/5 in the
+    // same payload, including on locked cycles. Observation only: the lock
+    // decision taken earlier this tick is not re-run, and the Layer 5 shadow and
+    // conviction trail are not advanced a second time.
+    try {
+      canLockCurrentCycle(livePrice, { observeOnly: true });
+    } catch {}
     if (currentEngineCycleId % 20 === 0) {
       pushEngineLog(
         "INFO",
@@ -3766,6 +3778,11 @@ async function hydrateCycleRangeFromCandles(cycleId, intervalStartMs) {
 }
 __name(hydrateCycleRangeFromCandles, "hydrateCycleRangeFromCandles");
 function canLockCurrentCycle(livePrice) {
+  // Optional second argument { observeOnly: true }: rebuild the served lock
+  // checklist (active15mCycle.lockEligibility) without advancing per-cycle
+  // research state -- the Layer 5 shadow record and the conviction trail. The
+  // signature text stays `(livePrice)` because tests extract this function by it.
+  const observeOnly = arguments.length > 1 && arguments[1] != null && arguments[1].observeOnly === true;
   const now = Date.now();
   const reasons = [];
   const cycleId = active15mCycle.cycleId;
@@ -4048,7 +4065,7 @@ function canLockCurrentCycle(livePrice) {
   // (360–780s, the same bounds the gate enforces) where p >= bar on a definite
   // side. Attached to the ledger row at settlement for old-vs-new comparison.
   // Per-instance memory: `ticks` says how much of the cycle this instance saw.
-  try {
+  if (!observeOnly) try {
     let sh = shadowL5ByCycle.get(cycleId);
     if (!sh) {
       sh = { cycleId, bar: VIXY_LOCK_RULE_BAR, tableVersion: strikeSide.tableVersion ?? null, wouldLock: null, lastEval: null, ticks: 0, firstSec: effElapsed, lastSec: effElapsed, evals: [] };
@@ -4108,7 +4125,7 @@ function canLockCurrentCycle(livePrice) {
   // distance to the strike, so the terminal can show conviction BUILDING (or
   // not) across the cycle instead of one memoryless snapshot. Per-instance
   // memory; capped at 320 points (16 minutes at the 3s tick).
-  try {
+  if (!observeOnly) try {
     if (!Array.isArray(active15mCycle.convictionTrail)) active15mCycle.convictionTrail = [];
     const trail = active15mCycle.convictionTrail;
     const last = trail[trail.length - 1];
