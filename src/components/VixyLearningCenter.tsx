@@ -338,19 +338,22 @@ export const VixyLearningCenter = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CONFIDENCE CALIBRATION */}
+        {/* ENGINE SCORE BANDS (was labelled confidence calibration) */}
         <div className="bg-[#0c0620] rounded-xl border border-white/10 p-5 shadow-2xl">
           <h3 className="text-sm font-black text-slate-400 mb-4 uppercase tracking-wider flex items-center gap-2 border-b border-white/5 pb-2">
-            <BarChart3 className="w-4 h-4 text-amber-400" /> CONFIDENCE
-            CALIBRATION
+            <BarChart3 className="w-4 h-4 text-amber-400" /> ENGINE SCORE
+            BANDS
           </h3>
+          {/* Buckets are keyed by engine score, which is not a probability, so the
+              difference to the win rate is a gap, not a calibration error. */}
+          <p className="text-[10px] text-slate-500 font-mono -mt-2 mb-3">Avg engine score vs realized win rate. The score is not a probability.</p>
           <div className="space-y-2">
             <div className="grid grid-cols-5 gap-2 text-[10px] text-slate-500 font-mono font-bold mb-2 uppercase px-2">
               <div>Bucket</div>
-              <div>Pred</div>
+              <div>Avg score</div>
               <div>Actual</div>
               <div>N</div>
-              <div>Error</div>
+              <div>Gap</div>
             </div>
             {!calibration ? (
               <div className="bg-[#0a0518] p-3 rounded border border-white/5 text-xs text-slate-500 font-mono">
@@ -358,7 +361,7 @@ export const VixyLearningCenter = () => {
               </div>
             ) : bucketRows.length === 0 ? (
               <div className="bg-[#0a0518] p-3 rounded border border-white/5 text-xs text-slate-500 font-mono">
-                No settled locks in any confidence bucket yet.
+                No settled locks in any engine score band yet.
               </div>
             ) : (
               bucketRows.map((b: any, i: number) => {

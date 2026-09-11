@@ -27,7 +27,7 @@ t.section('backtest-replay (real handler)');
   const b = serverSrc.indexOf('\n});\n', a) + '\n});'.length;
   t.check('handler found', a > 0 && b > a);
   const handlerSrc = serverSrc.slice(a, b).replace('app.get("/api/signal/backtest-replay", ', 'module.exports = (').replace(/\}\);$/, '});').replace(/\n\}\);$/, '\n}');
-  const helpers = ['function meanBrier(', 'function calibrationConfidenceOf('].map((anchor) => {
+  const helpers = ['function brierOfRow(', 'function meanBrier(', 'function calibrationConfidenceOf('].map((anchor) => {
     const i = serverSrc.indexOf(anchor);
     let depth = 0, j = serverSrc.indexOf('{', i);
     for (; j < serverSrc.length; j++) { if (serverSrc[j] === '{') depth++; else if (serverSrc[j] === '}' && --depth === 0) break; }
@@ -38,8 +38,8 @@ t.section('backtest-replay (real handler)');
   const m = { exports: {} };
   new Function('module', 'exports', js)(m, m.exports);
   const rows = [
-    { status: 'RESOLVED', cycleId: 'c1', targetStrike: 77000, spotAtLock: 77050, settlementPrice: 77100, direction: 'UP', wasCorrect: true, confidence: 91, brierScore: 0.1 },
-    { status: 'RESOLVED', cycleId: 'c2', targetStrike: 77000, spotAtLock: 77004, settlementPrice: 76990, direction: 'UP', wasCorrect: false, confidence: 88, brierScore: 0.4 },
+    { status: 'RESOLVED', cycleId: 'c1', targetStrike: 77000, spotAtLock: 77050, settlementPrice: 77100, direction: 'UP', wasCorrect: true, confidence: 91, probability: 0.7, brierScore: 0.1 },
+    { status: 'RESOLVED', cycleId: 'c2', targetStrike: 77000, spotAtLock: 77004, settlementPrice: 76990, direction: 'UP', wasCorrect: false, confidence: 88, probability: 0.6, brierScore: 0.4 },
     { status: 'RESOLVED', cycleId: 'c3', targetStrike: 77000, settlementPrice: 77010, direction: 'UP', wasCorrect: true },
     { status: 'LOCKED', cycleId: 'c4', direction: 'DOWN' },
   ];
@@ -51,8 +51,10 @@ t.section('backtest-replay (real handler)');
   t.eq('graded rows only', out.ledger.graded, 3);
   t.eq('real wins', out.ledger.wins, 2);
   t.eq('real win rate', out.ledger.winRatePct, 66.7);
-  t.eq('Brier is the mean of recorded scores', out.ledger.avgBrierScore, 0.25);
-  t.eq('...over the rows that have one', out.ledger.brierScoredCount, 2);
+  // Scored from each row's recorded P(win): (0.7-1)^2 = 0.09 and 0.6^2 = 0.36.
+  // The stored brierScore values (0.1, 0.4 -> 0.25) are not averaged.
+  t.eq('Brier is scored from the recorded P(win), not stored scores', out.ledger.avgBrierScore, 0.225);
+  t.eq('...over the rows that record a P(win)', out.ledger.brierScoredCount, 2);
   const c3 = out.sampleCycles.find((r) => r.cycleId === 'c3');
   t.eq('missing spot is null, not 64100', c3.spot, null);
   t.eq('missing confidence is null, not 75', c3.confidence, null);
