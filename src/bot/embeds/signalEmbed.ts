@@ -31,17 +31,18 @@ export function createFreeSignalEmbed(data: MarketOverview) {
       {
         name: '🔒 Full trade released to VIXY ELITE',
         value:
-          '• **Entry Price**: Locked\n' +
-          '• **Stop Loss**: Locked\n' +
-          '• **Take Profit**: Locked\n' +
-          '• **Risk Rating**: Locked\n' +
-          '• **Live Position Updates**: Locked',
+          // Exactly the fields createVipSignalEmbed renders. This listed a "Risk
+          // Rating" and "Live Position Updates" that the ELITE embed never had.
+          '• **Entry** (spot ±0.05%): Locked\n' +
+          '• **Stop loss** (house rule ±0.35%): Locked\n' +
+          '• **Target** (house rule ±0.65%): Locked\n' +
+          '• **Lock rule**: Locked',
         inline: false,
       },
       {
         name: ' ',
         value:
-          `🚀 Unlock live entries, exits, VIXY Protection™, and institutional intelligence inside VIXY ELITE.\n\n` +
+          `🚀 See the entry, stop-loss and target levels on every lock inside VIXY ELITE.\n\n` +
           `👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/vixy-live)**`,
         inline: false,
       }
@@ -57,7 +58,7 @@ function scoreWinRateField(data: MarketOverview) {
   const n = typeof p.scoreWinRateSampleSize === 'number' ? p.scoreWinRateSampleSize : null;
   const value =
     typeof p.scoreWinRatePct === 'number'
-      ? `\`${p.scoreWinRatePct}%\` of ${n} settled locks${p.scoreBucket ? ` (score ${p.scoreBucket})` : ''}`
+      ? `\`${p.scoreWinRatePct}%\` of ${n} settled locks${p.scoreBucket ? ` (score ${String(p.scoreBucket).replace(/%/g, '')})` : ''}`
       : n !== null
         ? `Not enough settled locks at this score yet (${n})`
         : 'Not measured';
