@@ -1092,11 +1092,13 @@ export async function fetchPerformanceStats(asset?: string, desk?: string, confi
   };
 }
 
-export async function fetchJournal(userId: string = 'usr_owner_01') {
-  const data = await safeFetchJson<any>(`/api/journal?userId=${encodeURIComponent(userId)}`);
+// The server identifies the journal owner from the signed session; no user id
+// is sent. A failed read returns an empty journal with no summary numbers.
+export async function fetchJournal() {
+  const data = await safeFetchJson<any>('/api/journal');
   if (data) return data;
 
-  return { entries: [], cumulativeNetPnl: 0, journaledWinRate: null, modelEdgeCapture: null, totalEntries: 0 };
+  return { entries: [], cumulativeNetPnl: null, journaledWinRate: null, modelEdgeCapture: null, totalEntries: 0, storageType: null };
 }
 
 export async function createJournalEntry(entry: any) {
@@ -1107,11 +1109,11 @@ export async function createJournalEntry(entry: any) {
       body: JSON.stringify(entry),
     });
     if (res.headers.get('content-type')?.includes('application/json')) {
-      return await res.json();
+      return { status: res.status, ...(await res.json()) };
     }
-    return { ok: false, error: 'Non-JSON response received' };
+    return { success: false, status: res.status, error: 'Non-JSON response received' };
   } catch (err) {
-    return { ok: false, error: String(err) };
+    return { success: false, error: String(err) };
   }
 }
 
