@@ -53,7 +53,7 @@ for (const [name, make] of [['FREE', createFreeSignalEmbed], ['ELITE', createVip
   const f = fields(make(base({ scoreWinRatePct: 61.5, scoreWinRateSampleSize: 52, scoreBucket: '85-90%' })));
   t.check(`${name}: no "AI Confidence" percentage`, !Object.keys(f).some((k) => /AI Confidence/.test(k)));
   t.eq(`${name}: engine score shown as a score`, f['Engine score'], '`88 / 100`');
-  t.eq(`${name}: measured win rate of the bucket`, f['Win rate at this score'], '`61.5%` of 52 settled locks (score 85-90%)');
+  t.eq(`${name}: measured win rate of the bucket`, f['Win rate at this score'], '`61.5%` of 52 settled locks (score 85-90)');
   t.eq(`${name}: model probability marked uncalibrated`, f['Model P(win), uncalibrated'], '`72%`');
   t.check(`${name}: no bare "Locked P(win)"`, !('Locked P(win)' in f));
 }
@@ -76,4 +76,21 @@ t.section('server passes the measured rate');
 }
 
 rmSync(dir, { recursive: true, force: true });
+
+t.section('free upsell names only what ELITE receives');
+{
+  const probe = { scoreWinRatePct: 61.5, scoreWinRateSampleSize: 52, scoreBucket: '85-90%' };
+  const free = fields(createFreeSignalEmbed(base(probe)));
+  const vipNames = Object.keys(fields(createVipSignalEmbed(base(probe)))).join(' | ');
+  const locked = free['🔒 Full trade released to VIXY ELITE'] || '';
+  t.check('no Risk Rating or Live Position Updates promised', !/Risk Rating|Live Position Updates/.test(locked));
+  t.check('locked entry exists in the ELITE embed', /Entry/.test(locked) && /ENTRY/.test(vipNames));
+  t.check('locked stop loss exists in the ELITE embed', /Stop loss/.test(locked) && /STOP LOSS/.test(vipNames));
+  t.check('locked target exists in the ELITE embed', /Target/.test(locked) && /TARGET/.test(vipNames));
+  t.check('locked lock rule exists in the ELITE embed', /Lock rule/.test(locked) && /Lock rule/.test(vipNames));
+  const pitch = Object.values(free).join('\n');
+  t.check('no exits, VIXY Protection or institutional-intelligence promise', !/\bexits\b|VIXY Protection|institutional intelligence/i.test(pitch));
+  t.check('score band is not printed as a percent', !/\(score \d+-\d+%\)/.test(pitch));
+}
+
 t.done();
