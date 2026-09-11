@@ -170,6 +170,17 @@ t.check('Kalshi is read on every tick until a real Kalshi strike is held (no eva
   code.includes('if (currentEngineCycleId % 2 === 0 || current15mStrikePrice <= 0 || current15mStrikeSource !== "KALSHI") {'));
 t.check('the Coinbase Exchange ticker fallback is not labelled Binance',
   code.includes('marketFeedHealth.priceSource = "COINBASE_EXCHANGE";') && !code.includes('marketFeedHealth.priceSource = "BINANCE";'));
+t.check('every Kalshi fetch outcome is recorded (HTTP error, no current-window market, exception)',
+  code.includes('outcome: "HTTP_ERROR", httpStatus: kRes.status') &&
+  code.includes('outcome: m ? "OK_MARKET" : "NO_CURRENT_WINDOW_MARKET"') &&
+  code.includes('outcome: "EXCEPTION", httpStatus: null, marketsOpen: null, error: String(kErr?.name || "Error")') &&
+  !code.includes('} catch (kErr) {}'));
+t.check('feed health serves the Kalshi fetch outcome', code.includes('kalshiFetch: marketFeedHealth.kalshiFetch ?? null,'));
+t.check('no strike is served as kalshiStrike 0 or a 0 distance',
+  code.includes('kalshiStrike: market15mState.strikePrice > 0 ? market15mState.strikePrice : null,') &&
+  code.includes('kalshiStrike: current15mStrikePrice > 0 ? current15mStrikePrice : null,') &&
+  code.includes('distancePct: market15mState.strikePrice > 0 ? market15mState.distancePct : null,') &&
+  !code.includes('kalshiStrike: market15mState.strikePrice,') && !code.includes('kalshiStrike: current15mStrikePrice,'));
 t.check('served edge never divides a missing edge into 0', !code.includes('edge: currentEdgePct / 100') && !code.includes('edge: isLive ? currentEdgePct / 100'));
 
 t.done();
