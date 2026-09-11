@@ -1030,7 +1030,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           <Logo size="sm" showSubtitle={false} onClick={onLaunchTerminal} />
 
           <div className="flex flex-wrap items-center gap-6">
-            <button onClick={() => setShowTermsModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50 cursor-pointer">
+            <button onClick={() => setShowTermsModal(true)} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors underline decoration-purple-500/50 cursor-pointer">
               Terms of Service
             </button>
             <button onClick={() => setShowPrivacyModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50 cursor-pointer">

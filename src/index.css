@@ -716,3 +716,13 @@ a[role="button"]:active {
   .vx-live-edge::before { animation: none !important; opacity: 0.9 !important; }
   .vx-rail-fill { transition: none !important; }
 }
+
+/* ==== Mobile readability (2026-09-11) ====
+   Owner report: the site is hard to use on a phone. A 390px audit of the live
+   site measured 20-63 text elements per page rendered at 8-11px. Below 640px the
+   tiny arbitrary sizes are raised to legible minimums; desktop density is
+   untouched. */
+@media (max-width: 639px) {
+  .text-\[8px\], .text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\] { font-size: 11px !important; }
+  .text-\[11px\], .text-\[11\.5px\] { font-size: 12px !important; }
+}
