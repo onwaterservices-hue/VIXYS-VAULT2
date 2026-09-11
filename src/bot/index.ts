@@ -153,7 +153,7 @@ export async function broadcastSignalToDiscord(signalData: {
   symbol: string;
   direction: 'YES' | 'NO';
   confidence: number;
-  edgePct: number;
+  edgePct: number | null;
   currentPrice: number;
   targetPrice: number;
   reasoning: string;

@@ -424,11 +424,11 @@ export interface Btc15mEnginePipelineData {
     breakoutState: 'BREAKOUT_BULL' | 'BREAKOUT_BEAR' | 'FAILED_BREAKOUT' | 'RANGE_BOUND';
   };
   orderFlowAnalytics: {
-    takerBuyRatio: number;
-    netDeltaBTC: number;
+    takerBuyShare60: number | null;
+    netDeltaBTC: number | null;
     bidAskImbalancePct: number;
-    absorptionState: 'CONTINUING' | 'ABSORBED' | 'EXHAUSTING' | 'REVERSING' | 'NEUTRAL';
-    flowClassification: 'CONTINUATION' | 'ABSORPTION' | 'EXHAUSTING' | 'REVERSAL' | 'NEUTRAL';
+    absorptionState: 'CONTINUING' | 'ABSORBED' | 'EXHAUSTING' | 'REVERSING' | 'NEUTRAL' | 'UNMEASURED';
+    flowClassification: 'CONTINUATION' | 'ABSORPTION' | 'EXHAUSTING' | 'REVERSAL' | 'NEUTRAL' | 'UNMEASURED';
   };
   chopAnalytics: {
     chopScore: number;
@@ -446,8 +446,8 @@ export interface Btc15mEnginePipelineData {
   dataQuality: Btc15mDataQualityState;
   edgeVsConfidence: {
     modelProbability: number;
-    kalshiImpliedProbability: number;
-    realEdgePct: number;
+    kalshiImpliedProbability: number | null;
+    realEdgePct: number | null;
     calibratedConfidencePct: number;
     pUp: number;
     pDown: number;

@@ -68,10 +68,12 @@ t.section('"taker bull volume" is computed from price, not volume');
 // with both terms functions of (spot - strike) / strike, and the pipeline
 // derives a bidAskImbalancePct from it. FIXED (was PINNED-AS-IS): it was
 // rendered as `Taker: ${bullVolPct}% Bull | Delta: N BTC`; it is now labelled
-// a spot-vs-strike proxy. It still feeds the ORDER_FLOW family vote.
-t.check('server labels bullVolPct as a price-derived proxy, not taker flow',
+// a spot-vs-strike proxy, and it no longer feeds the ORDER_FLOW family: that
+// vote and the reversal watch read real Coinbase aggressor flow.
+t.check('ORDER_FLOW reads real taker flow, not the price-derived proxy',
   !serverSrc.includes('`Taker: ${bullVolPct}% Bull') &&
-  serverSrc.includes('Spot-vs-strike flow proxy (no trade tape): ${bullVolPct}% bull'));
+  !serverSrc.includes('Spot-vs-strike flow proxy (no trade tape)') &&
+  serverSrc.includes('Coinbase taker flow 60s: buy '));
 t.check('bidAskImbalancePct is derived from bullVolPct',
   /const bidAskImbalancePct = Math\.round\(\(bullVolPct - 50\)/.test(serverSrc));
 

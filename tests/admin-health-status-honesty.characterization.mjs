@@ -199,7 +199,7 @@ t.section('the server fields each status reads');
   t.check('cycle id boots at 0 and each tick increments it first',
     /^let currentEngineCycleId = 0;$/m.test(serverSrc)
     && /async function runMarketEngineTick\(\) \{\s*try \{\s*currentEngineCycleId \+= 1;/.test(serverSrc));
-  t.check('realEdgePct is already in percentage points', /const realEdgePct =\s*Math\.round\([\s\S]{0,200}?\*\s*1e3,\s*\)\s*\/\s*10;/.test(serverSrc));
+  t.check('realEdgePct is already in percentage points (null with no live Kalshi price)', /const realEdgePct =\s*kalshiImpliedProb === null\s*\?\s*null\s*:\s*Math\.round\([\s\S]{0,200}?\*\s*1e3,\s*\)\s*\/\s*10;/.test(serverSrc));
 
   const persist = new Set();
   for (const m of serverSrc.matchAll(/persistenceState = ([^;\n]+);/g)) for (const v of m[1].matchAll(/"([A-Z_]+)"/g)) persist.add(v[1]);
