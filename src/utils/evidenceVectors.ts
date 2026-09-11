@@ -283,7 +283,7 @@ export function computeEvidenceVectors(
       percent: 0,
       status: 'STALE',
       aligned: false,
-      detail: 'Liquidity depth and volume feed stale',
+      detail: 'Market feed stale',
       isStaleOrMissing: true,
     };
   } else if (volSub && typeof volSub.score === 'number') {
@@ -295,7 +295,7 @@ export function computeEvidenceVectors(
       percent: Math.min(100, Math.max(0, s * 10)),
       status: volSub.aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned: !!volSub.aligned,
-      detail: volSub.detail || `Volume expansion above 20-period moving average`,
+      detail: volSub.detail || 'No detail recorded',
       isStaleOrMissing: false,
     };
   } else if (volSub) {
@@ -311,7 +311,7 @@ export function computeEvidenceVectors(
       percent: Math.min(100, Math.max(0, score * 10)),
       status: aligned ? 'ALIGNED' : 'DIVERGENT',
       aligned,
-      detail: volFactor.detail || `Orderbook depth and liquidity expansion verified`,
+      detail: volFactor.detail || 'No detail recorded',
       isStaleOrMissing: false,
     };
   } else {
@@ -322,7 +322,7 @@ export function computeEvidenceVectors(
       percent: 0,
       status: 'UNAVAILABLE',
       aligned: false,
-      detail: 'Awaiting volume aggregation',
+      detail: 'No engine reading',
       isStaleOrMissing: true,
     };
   }
@@ -515,8 +515,9 @@ export function computeEvidenceVectors(
     compositeDisplay,
     convictionPct,
     signalsAlignedHeader: `${alignedCount} / ${totalCount} SIGNALS ALIGNED`,
-    convictionHeaderText: `CONVICTION ${compositeDisplay}/10`,
-    convictionPercentText: `${convictionPct}% SIGNAL CONVICTION`,
+    convictionHeaderText: `AVG SCORE ${compositeDisplay}/10`,
+    // The share of scored signals that agree with the direction, not a conviction or a probability.
+    convictionPercentText: `${convictionPct}% OF SCORED SIGNALS ALIGNED`,
     compositeFooterText: `${compositeDisplay} / 10 COMPOSITE`,
     dynamicExplanation,
   };

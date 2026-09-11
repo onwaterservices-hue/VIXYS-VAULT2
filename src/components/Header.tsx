@@ -395,7 +395,7 @@ export const Header: React.FC<HeaderProps> = ({
                     <div className="py-8 text-center space-y-2">
                       <ShieldCheck className="w-8 h-8 text-purple-400/40 mx-auto" />
                       <div className="text-xs text-purple-300/80 font-bold">All caught up</div>
-                      <div className="text-[10px] text-slate-500">Live surveillance active &amp; monitoring 24/7</div>
+                      <div className="text-[10px] text-slate-500">Locks, settlements and skips from the engine appear here</div>
                     </div>
                   ) : (
                     filteredNotifications.map((item) => {
@@ -483,8 +483,8 @@ export const Header: React.FC<HeaderProps> = ({
                 {/* Popover Footer */}
                 <div className="p-2.5 bg-[#080415] border-t border-purple-900/40 flex items-center justify-between text-[10px]">
                   <span className="text-purple-300/60 flex items-center gap-1 font-mono">
-                    <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
-                    <span>Real-Time Event Stream</span>
+                    <Radio className="w-3 h-3 text-cyan-400" />
+                    <span>Engine events</span>
                   </span>
                   <button
                     onClick={() => {
