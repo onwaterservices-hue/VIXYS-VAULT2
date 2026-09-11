@@ -15941,33 +15941,47 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         score: null,
         reason: null,
       },
-      checklist: {
-        cycleActive: true,
-        timeWindowPassed: true,
-        regimePassed: true,
-        directionalScorePassed: true,
-        confidencePassed: true,
-        temporalStabilityPassed: true,
-        crossVenuePassed: true,
-        reversalRiskPassed: true,
-        evidenceConfluencePassed: true,
-        noContradictionPassed: true,
-        protectionEnginePassed: true,
-        dataFreshnessPassed: true,
-        allPassed: true,
-      },
+      // Every flag here was the literal `true`, so this public payload reported
+      // allPassed on every cycle while lockGate (same payload) showed failing
+      // checks. Each flag is now read from the gate's own check list; a flag with
+      // no matching gate check (there is no cross-venue check) is null.
+      checklist: (() => {
+        const gate = active15mCycle.lockEligibility;
+        const pass = (id) => {
+          const c = Array.isArray(gate?.checks) ? gate.checks.find((x) => x.id === id) : null;
+          return c ? Boolean(c.pass) : null;
+        };
+        return {
+          cycleActive: active15mCycle.cycleId ? true : null,
+          timeWindowPassed: pass("WINDOW"),
+          regimePassed: pass("NOT_CHOPPY"),
+          directionalScorePassed: pass("LOCK_QUALITY"),
+          confidencePassed: pass("EVIDENCE"),
+          temporalStabilityPassed: pass("STABILITY"),
+          crossVenuePassed: null,
+          reversalRiskPassed: pass("REVERSAL"),
+          evidenceConfluencePassed: pass("AGREEMENT"),
+          noContradictionPassed: pass("NO_CONFLICT"),
+          protectionEnginePassed: pass("PROTECTION"),
+          dataFreshnessPassed: pass("FEED"),
+          allPassed: typeof gate?.eligible === "boolean" ? gate.eligible : null,
+        };
+      })(),
       skipReasonCode: latestLockEvaluation?.reason ?? null,
       skipReasonTitle: latestLockEvaluation?.reason ?? null,
       skipReasonDescription: latestLockEvaluation?.reason ?? null,
+      // No per-component lock score is computed. Seven of these were the same
+      // number (lockQuality, or 50) under seven different names; the real lock
+      // quality is protection.lockScore and its inputs are in lockGate.checks.
       scoreComponents: {
-        directionalEdge: latestBtc15mPipeline?.lockQuality ?? 50,
-        evidenceConfluence: latestBtc15mPipeline?.lockQuality ?? 50,
+        directionalEdge: null,
+        evidenceConfluence: null,
         temporalStability: temporalStabilityVal,
-        marketRegimeQuality: latestBtc15mPipeline?.lockQuality ?? 50,
-        crossVenueAgreement: latestBtc15mPipeline?.lockQuality ?? 50,
-        reversalProtection: latestBtc15mPipeline?.lockQuality ?? 50,
-        dataFreshness: latestBtc15mPipeline?.lockQuality ?? 50,
-        modelConsensus: latestBtc15mPipeline?.lockQuality ?? 50,
+        marketRegimeQuality: null,
+        crossVenueAgreement: null,
+        reversalProtection: null,
+        dataFreshness: null,
+        modelConsensus: null,
       },
       activeWeightingProfile: {},
     },
