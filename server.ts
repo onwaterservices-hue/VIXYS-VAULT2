@@ -18357,15 +18357,18 @@ app.delete("/api/journal/:id", (req, res) => {
   res.json({ success: true });
 });
 app.get("/api/leaderboard", (req, res) => {
+  const viewerId = journalOwnerId(req);
   const userMap = {};
   serverJournalEntries.forEach((e) => {
     if (!userMap[e.userId]) {
       userMap[e.userId] = {
         userId: e.userId,
+        // Built from a hash, not the id's last four characters: journal ids can
+        // fall back to an email, whose tail would print part of the domain.
         name:
           e.userId === "usr_owner_01"
             ? "Vixy Master Admin"
-            : `Quant_${e.userId.slice(-4)}`,
+            : "Quant_" + crypto.createHash("sha256").update(e.userId + "-leaderboard").digest("hex").slice(0, 4),
         totalPnl: 0,
         totalTrades: 0,
         wins: 0,
@@ -18379,9 +18382,13 @@ app.get("/api/leaderboard", (req, res) => {
     .sort((a, b) => b.totalPnl - a.totalPnl)
     .map((u, idx) => ({
       rank: idx + 1,
-      userId: u.userId,
+      // No raw userId on this public route: it can be an email (journalOwnerId
+      // falls back to auth.email). lastHash identifies the row.
       traderName: u.name || "Anonymous Trader",
-      badge: u.userId === "usr_owner_01" ? "MASTER ADMIN" : "QUANT TRADER",
+      // Journal rows carry no subscription tier; only the owner's role is known.
+      badge: u.userId === "usr_owner_01" ? "MASTER ADMIN" : null,
+      // From the signed session cookie, never a client-supplied id.
+      isViewer: viewerId !== "" && u.userId === viewerId,
       realizedPnl: u.totalPnl || 0,
       winRate:
         u.totalTrades > 0 ? Math.round((u.wins / u.totalTrades) * 1e3) / 10 : 0,

@@ -33,7 +33,9 @@ export const userKalshiStateMap = new Map<string, StoredUserKalshiState>();
 export const autoTradeAuditLogHistory: AutoTradeAuditLog[] = [];
 export const executedSignalIdSet = new Set<string>();
 
-export const AUTO_TRADING_LIVE_ENABLED = false;
+// Defined once in kalshiLiveTradingFlag so the UI can show the same state.
+import { AUTO_TRADING_LIVE_ENABLED } from './kalshiLiveTradingFlag';
+export { AUTO_TRADING_LIVE_ENABLED };
 
 
 /**
