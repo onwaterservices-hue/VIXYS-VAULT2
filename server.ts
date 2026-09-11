@@ -9174,14 +9174,16 @@ app.post(
         activatedAt: startedAt,
         expiresAt,
         startedAt,
-        stripePaymentStatus: "PAID",
-        stripePaymentLink: "https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09",
-        stripePaymentId: `manual_grant_${nowMs}`,
-        stripeCheckoutSessionId: `sess_manual_${nowMs}`,
-        stripeEventId: `evt_manual_${nowMs}`,
-        stripePriceId:
-          process.env.STRIPE_DAY_PASS_PRICE_ID ||
-          "price_1U4cKTCYsvFDvgUJZHASVwRG",
+        // An admin comp is not a purchase. No Stripe payment exists, so no
+        // Stripe identifiers are recorded; this used to write "PAID" with
+        // invented manual_grant_ / sess_manual_ / evt_manual_ ids, which then
+        // surfaced as a subscription id in the entitlement payload.
+        stripePaymentStatus: "MANUAL_GRANT",
+        stripePaymentLink: null,
+        stripePaymentId: null,
+        stripeCheckoutSessionId: null,
+        stripeEventId: null,
+        stripePriceId: null,
         discordRoleId:
           process.env.DISCORD_24H_ROLE_ID ||
           process.env.DISCORD_ROLE_DAY_PASS ||
@@ -11439,9 +11441,24 @@ function getUserEntitlement(emailOrUid) {
     (discordId ? userDayPasses.get(discordId) : void 0) ||
     user?.dayPass;
   refreshTagTrialRecordFromStore(dayPassRecord);
-  // The one-time +3 day troubleshooting grace is for purchased passes. A free
-  // server-tag trial is exactly 72 hours; extending it would double it.
-  if (dayPassRecord && !dayPassRecord.troubleshootingGraceApplied && dayPassRecord.entitlementType !== "TAG_TRIAL") {
+  // The one-time +3 day troubleshooting grace compensated passes hit by the
+  // 2026-08-15 incident (see AUGUST_15_COMPENSATED_USERS). It used to apply to
+  // any unflagged pass on first read, so the same $9.99 pass ran ~96h when a
+  // reconcile/restore or admin path recorded it and 24h when the webhook did.
+  // It now applies only to passes that started before that window closed. A
+  // free server-tag trial is exactly 72 hours and is never extended.
+  const GRACE_ELIGIBLE_BEFORE_MS = Date.parse("2026-08-16T00:00:00.000Z");
+  const graceStartMs = dayPassRecord
+    ? new Date(dayPassRecord.startedAt || dayPassRecord.activatedAt || dayPassRecord.createdAt || 0).getTime()
+    : NaN;
+  if (
+    dayPassRecord &&
+    !dayPassRecord.troubleshootingGraceApplied &&
+    dayPassRecord.entitlementType !== "TAG_TRIAL" &&
+    Number.isFinite(graceStartMs) &&
+    graceStartMs > 0 &&
+    graceStartMs < GRACE_ELIGIBLE_BEFORE_MS
+  ) {
     try {
       const expMs = new Date(dayPassRecord.expiresAt).getTime();
       const threeDaysMs = 3 * 24 * 60 * 60 * 1e3;
