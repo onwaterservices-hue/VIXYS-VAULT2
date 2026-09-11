@@ -125,16 +125,13 @@ export const SmartSearchModal: React.FC<SmartSearchModalProps> = ({
                           </span>
                         </div>
                         <div className="text-xs font-mono text-purple-200/90">
-                          ${asset.price.toLocaleString()}
+                          {asset.symbol}-USD
                         </div>
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-xs font-mono font-bold text-emerald-400">
-                        {asset.prediction.confidence}% AI
-                      </div>
-                      <span className="text-[10px] text-purple-300/60 font-mono">
-                        +{asset.prediction.edgePct}% Edge
+                      <span className="text-[10px] text-purple-300/70 font-mono font-bold uppercase tracking-wider group-hover:text-white transition-colors">
+                        Open desk →
                       </span>
                     </div>
                   </button>

@@ -209,3 +209,16 @@ export function auraClassFor(
     default:            return '';
   }
 }
+
+/**
+ * Minimal structural view of a canonical 15-minute decision, for display
+ * surfaces that only need the side and the headline number.
+ */
+export type EngineDecisionLike =
+  | {
+      direction?: string | null;
+      confidence?: number | null;
+      calibrated?: { pWin?: number | null; n?: number | null; currentSide?: string | null } | null;
+    }
+  | null
+  | undefined;
