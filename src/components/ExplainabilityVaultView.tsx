@@ -16,7 +16,7 @@ import {
 
 import { AlertSettings } from '../types';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
-import { headline } from '../lib/engineSemantics';
+import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 
 /**
  * Explainability Vault.
@@ -193,6 +193,8 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
   const failing = gateChecks.filter((c) => !c.pass);
   const passing = gateChecks.filter((c) => c.pass);
   const lockEligible = Boolean(engineDecision?.lockEligibility?.eligible ?? engineDecision?.lockGate?.eligible ?? false);
+  const lock = lockStatusOf(engineLive ? engineDecision : null);
+  const cycleOpen = lock.kind === 'OPEN';
 
   const trail: Array<{ t: number; p: number | null; s: number | null; d: number | null; side: string | null }> =
     engineLive && Array.isArray(engineDecision?.convictionTrail)
@@ -314,10 +316,12 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                 <span>LOCK GATES</span>
                 <Lock className="w-3.5 h-3.5 text-amber-400" />
               </div>
-              <div className="text-3xl font-black font-mono text-purple-200">{engineLive && gateChecks.length ? `${passing.length}/${gateChecks.length}` : '—'}</div>
+              <div className="text-3xl font-black font-mono text-purple-200">{!engineLive ? '—' : !cycleOpen ? lockStatusWord(lock) : gateChecks.length ? `${passing.length}/${gateChecks.length}` : '—'}</div>
               <p className="text-[11px] text-purple-300/60">
                 {!engineLive
                   ? 'Shown while the BTC engine is live.'
+                  : !cycleOpen
+                  ? lockStatusSentence(lock)
                   : gateChecks.length === 0
                   ? 'Not reported this tick.'
                   : lockEligible
@@ -415,11 +419,16 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
               <div className="space-y-6">
                 <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-3">
                   <div className="flex items-center justify-between border-b border-purple-900/40 pb-3">
-                    <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">What still blocks a lock</h3>
-                    {engineLive && gateChecks.length > 0 && <span className="text-[10px] font-mono text-amber-300">{failing.length} failing</span>}
+                    <h3 className="text-sm font-black text-white font-mono uppercase tracking-wider">{cycleOpen ? 'What still blocks a lock' : 'Lock status'}</h3>
+                    {engineLive && cycleOpen && gateChecks.length > 0 && <span className="text-[10px] font-mono text-amber-300">{failing.length} failing</span>}
                   </div>
                   {!engineLive ? (
                     <p className="text-xs text-purple-200/80">{notLiveText}</p>
+                  ) : !cycleOpen ? (
+                    <p className="text-xs text-cyan-200 flex items-start gap-1.5 leading-relaxed">
+                      <Lock className="w-4 h-4 shrink-0 text-cyan-300" />
+                      {lockStatusSentence(lock)}
+                    </p>
                   ) : gateChecks.length === 0 ? (
                     <p className="text-xs text-purple-200/80">The engine has not reported its gate checks this tick.</p>
                   ) : failing.length === 0 ? (
@@ -444,7 +453,7 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
                   )}
                 </div>
 
-                {engineLive && passing.length > 0 && (
+                {engineLive && cycleOpen && passing.length > 0 && (
                   <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2">
                     <h3 className="text-xs font-black text-white font-mono uppercase tracking-wider">Passing checks · {passing.length}</h3>
                     <div className="flex flex-wrap gap-1.5">

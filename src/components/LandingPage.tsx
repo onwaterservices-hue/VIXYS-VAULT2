@@ -37,7 +37,7 @@ import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
-import { headline } from '../lib/engineSemantics';
+import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 
 interface LandingPageProps {
   ticker: BTCTicker;
@@ -154,6 +154,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   }>;
   const heroGateRows = heroGateChecks.filter((c) => c && c.gating !== false && c.id !== 'CALIBRATED_P');
   const heroGatesPassing = heroGateRows.filter((c) => c.pass).length;
+  // After a lock the server keeps re-evaluating gates; they are not blockers then.
+  const heroLock = lockStatusOf(canonical15m as any);
+  const heroCycleOpen = heroLock.kind === 'OPEN';
   const heroTrail = (((canonical15m as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null }>).filter(
     (pt) => pt && typeof pt.p === 'number',
   );
@@ -454,9 +457,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <span className="flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-purple-400" />
                 <span>
-                  Lock gates:{' '}
-                  <strong className={heroGateRows.length && heroGatesPassing === heroGateRows.length ? 'text-emerald-400' : 'text-amber-300'}>
-                    {heroGateRows.length ? `${heroGatesPassing}/${heroGateRows.length} passing` : 'waiting for engine'}
+                  {heroCycleOpen ? 'Lock gates:' : 'Lock:'}{' '}
+                  <strong className={!heroCycleOpen || (heroGateRows.length && heroGatesPassing === heroGateRows.length) ? 'text-emerald-400' : 'text-amber-300'}>
+                    {!heroCycleOpen ? lockStatusWord(heroLock) : heroGateRows.length ? `${heroGatesPassing}/${heroGateRows.length} passing` : 'waiting for engine'}
                   </strong>
                 </span>
               </span>
@@ -1077,6 +1080,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <p className="text-slate-300 font-sans leading-relaxed">
                 These are the checks the 15-minute engine evaluates every tick before it is allowed to lock. They update live; nothing here is a fixed grade.
               </p>
+              {!heroCycleOpen && (
+                <p className="text-cyan-200 font-sans leading-relaxed">
+                  {lockStatusSentence(heroLock)} The rows below are how the gates read at this tick.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
@@ -1098,7 +1106,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                         }`}
                       >
-                        {c.gating === false ? 'OBSERVED' : c.pass ? 'PASS' : 'NOT YET'}
+                        {c.gating === false ? 'OBSERVED' : c.pass ? 'PASS' : heroCycleOpen ? 'NOT YET' : 'NOT MET'}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-300 font-sans">
