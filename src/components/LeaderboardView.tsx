@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { JournalEntry } from '../types';
 import {
   Trophy,
   Award,
@@ -17,15 +16,21 @@ import {
   ArrowUpRight,
   UserCheck,
 } from 'lucide-react';
-import { fetchLeaderboard, LeaderboardUser } from '../services/api';
+import { fetchLeaderboard, fetchJournal, LeaderboardUser } from '../services/api';
 
 interface LeaderboardViewProps {
-  entries?: JournalEntry[];
   onOpenJournal?: () => void;
 }
 
+// The signed-in viewer's own journal summary, as /api/journal returns it.
+interface MyJournalSummary {
+  entries: any[];
+  cumulativeNetPnl: number | null;
+  journaledWinRate: number | null;
+  storageType: string | null;
+}
+
 export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
-  entries = [],
   onOpenJournal,
 }) => {
   const [filterTab, setFilterTab] = useState<'ALL' | 'MY_LOGS' | 'COMMUNITY'>('ALL');
@@ -33,6 +38,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
   const [leaderboardData, setLeaderboardData] = useState<LeaderboardUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [myJournal, setMyJournal] = useState<MyJournalSummary | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -45,6 +51,20 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       } finally {
         if (active) setLoading(false);
       }
+      // Loaded separately so a journal failure never blanks the table.
+      try {
+        const j = await fetchJournal();
+        if (active && j && typeof j === 'object') {
+          setMyJournal({
+            entries: Array.isArray(j.entries) ? j.entries : [],
+            cumulativeNetPnl: j.cumulativeNetPnl != null && Number.isFinite(Number(j.cumulativeNetPnl)) ? Number(j.cumulativeNetPnl) : null,
+            journaledWinRate: j.journaledWinRate != null && Number.isFinite(Number(j.journaledWinRate)) ? Number(j.journaledWinRate) : null,
+            storageType: typeof j.storageType === 'string' ? j.storageType : null,
+          });
+        }
+      } catch (e) {
+        console.warn('Failed to load your journal', e);
+      }
     };
     loadBoard();
     const timer = setInterval(loadBoard, 15000);
@@ -54,11 +74,21 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
     };
   }, []);
 
-  // Calculate local user stats from real journal entries
-  const userTotalTrades = entries.length;
-  const userWinningTrades = entries.filter((e) => e.outcome === 'WIN').length;
-  const userWinRate = userTotalTrades > 0 ? ((userWinningTrades / userTotalTrades) * 100).toFixed(1) : '0.0';
-  const userTotalPnl = entries.reduce((acc, curr) => acc + (curr.pnl || 0), 0);
+  // Your own figures come from your server journal, the same record the Trade
+  // Journal page lists. They used to read an App-level array that nothing ever
+  // filled apart from an invented seed trade, summed a field the server never
+  // writes, and counted pending entries as losses. Unknown until it loads: a dash.
+  const myEntries = myJournal ? myJournal.entries : [];
+  const userTotalTrades: number | null = myJournal ? myEntries.length : null;
+  const userWinningTrades = myEntries.filter((e) => e?.outcome === 'WIN').length;
+  const userLosingTrades = myEntries.filter((e) => e?.outcome === 'LOSS').length;
+  const userWinRate: number | null = myJournal ? myJournal.journaledWinRate : null;
+  const userTotalPnl: number | null = myJournal ? myJournal.cumulativeNetPnl : null;
+  const myJournalStorageLabel = !myJournal
+    ? '—'
+    : myJournal.storageType === 'IN_MEMORY_NOT_PERSISTED'
+    ? 'Server memory only, not persisted'
+    : 'From your server journal';
 
   // Community Verified Logged Trades (Derived strictly from verified user trade hashes)
   // Which leaderboard row belongs to the viewer. The same rule drives the YOU
@@ -107,26 +137,26 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
         <div className="bg-[#0b0518] border border-purple-900/40 p-4 rounded-2xl space-y-1">
           <span className="text-slate-400 text-[10px] uppercase font-bold block">Your Logged Trades</span>
           <div className="flex items-center justify-between">
-            <span className="text-2xl font-black text-white">{userTotalTrades}</span>
+            <span className="text-2xl font-black text-white">{userTotalTrades !== null ? userTotalTrades : '—'}</span>
             <BookOpen className="w-5 h-5 text-purple-400" />
           </div>
-          <span className="text-[11px] text-purple-300/70 font-sans block">Stored on your device</span>
+          <span className="text-[11px] text-purple-300/70 font-sans block">{myJournalStorageLabel}</span>
         </div>
 
         <div className="bg-[#0b0518] border border-purple-900/40 p-4 rounded-2xl space-y-1">
           <span className="text-slate-400 text-[10px] uppercase font-bold block">Your Win Rate</span>
           <div className="flex items-center justify-between">
-            <span className="text-2xl font-black text-emerald-400">{userWinRate}%</span>
+            <span className="text-2xl font-black text-emerald-400">{userWinRate !== null ? `${userWinRate}%` : '—'}</span>
             <Percent className="w-5 h-5 text-emerald-400" />
           </div>
-          <span className="text-[11px] text-slate-400 font-sans block">{userWinningTrades} W / {userTotalTrades - userWinningTrades} L</span>
+          <span className="text-[11px] text-slate-400 font-sans block">{userWinningTrades} W / {userLosingTrades} L</span>
         </div>
 
         <div className="bg-[#0b0518] border border-purple-900/40 p-4 rounded-2xl space-y-1">
           <span className="text-slate-400 text-[10px] uppercase font-bold block">Your Journal Net PnL</span>
           <div className="flex items-center justify-between">
-            <span className={`text-2xl font-black ${userTotalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-              ${userTotalPnl >= 0 ? '+' : ''}{userTotalPnl.toFixed(2)}
+            <span className={`text-2xl font-black ${(userTotalPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {userTotalPnl !== null ? `$${userTotalPnl >= 0 ? '+' : ''}${userTotalPnl.toFixed(2)}` : '—'}
             </span>
             <TrendingUp className="w-5 h-5 text-purple-400" />
           </div>
