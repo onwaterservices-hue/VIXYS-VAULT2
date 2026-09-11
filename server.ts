@@ -19972,8 +19972,10 @@ function loadPersistentStore() {
     productionMaintenanceState = result.productionMaintenanceState;
   }
   
-  if (db) {
-    reconcilePendingExecutions(db).catch(err => console.error("Reconciliation error:", err));
+  // Reads auto_trade_executions through this file's Admin-aware Firestore functions,
+  // and only when a service account is active: the client path is refused on Vercel.
+  if (db && _adminActive) {
+    reconcilePendingExecutions(db, { collection, query, where, getDocs }).catch(err => console.error("Reconciliation error:", err));
   }
 
   // --- VIXY LOCK STATE HYDRATION ---
