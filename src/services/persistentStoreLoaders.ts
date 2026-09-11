@@ -85,44 +85,9 @@ export function loadPersistentStore({
       if (Array.isArray(data.signalLogs) && data.signalLogs.length > 0) {
         data.signalLogs.forEach((savedLog) => {
           if (!savedLog || !savedLog.id) return;
-          if (savedLog.status === "RESOLVED") {
-            const start = savedLog.intervalStart
-              ? new Date(savedLog.intervalStart).getTime()
-              : 0;
-            const lock = savedLog.lockedAt
-              ? new Date(savedLog.lockedAt).getTime()
-              : 0;
-            const elapsed =
-              start && lock ? Math.floor((lock - start) / 1e3) : 400;
-            const spot = savedLog.spotAtLock || savedLog.entryPrice || 0;
-            const strike = savedLog.targetStrike || savedLog.strike || 0;
-            const dist = spot && strike ? Math.abs(spot - strike) : 100;
-            const isGoodTiming = elapsed >= 360 && elapsed <= 720;
-            const isGoodDistance = dist >= 15;
-            const prob =
-              savedLog.lockedProbability || savedLog.probability || 0.68;
-            const probDelta = Math.abs(prob - 0.5);
-            let calibratedConf = 50;
-            if (isGoodTiming || isGoodDistance) {
-              const confVal =
-                68.5 +
-                probDelta * 8 -
-                (savedLog.reversalRisk ? savedLog.reversalRisk * 0.05 : 0);
-              calibratedConf = Math.min(73, Math.max(66, Math.round(confVal)));
-            } else {
-              const confVal = 41.8 + probDelta * 5;
-              calibratedConf = Math.min(45, Math.max(40, Math.round(confVal)));
-            }
-            savedLog.confidence = calibratedConf;
-            savedLog.confidencePct = calibratedConf;
-            const wasCorrect =
-              savedLog.wasCorrect === true ||
-              String(savedLog.wasCorrect) === "true";
-            savedLog.brierScore =
-              Math.round(
-                Math.pow(calibratedConf / 100 - (wasCorrect ? 1 : 0), 2) * 1e3,
-              ) / 1e3;
-          }
+          // A settled row is loaded as recorded. This used to overwrite confidence,
+          // confidencePct and brierScore with a hand formula (66-73 or 40-45, p
+          // defaulting to 0.68), which the next persist wrote back.
           const existingIdx = persistentSignalLogs.findIndex(
             (s) => s.id === savedLog.id,
           );
