@@ -1856,28 +1856,13 @@ async function updateCrossAssetFeeds() {
 }
 __name(updateCrossAssetFeeds, "updateCrossAssetFeeds");
 setInterval(updateCrossAssetFeeds, 4e3);
-const engineLogs = [
-  {
-    id: "log_101",
-    timestamp: new Date(Date.now() - 1e3).toISOString(),
-    level: "INFO",
-    message:
-      "Engine Cycle #287 executed successfully across Coinbase & Binance Orderbook",
-  },
-  {
-    id: "log_100",
-    timestamp: new Date(Date.now() - 3e3).toISOString(),
-    level: "INFO",
-    message:
-      "Kalshi KXBTC15M venue orderbook refreshed: Yes 54\xA2 / No 46\xA2",
-  },
-  {
-    id: "log_099",
-    timestamp: new Date(Date.now() - 5e3).toISOString(),
-    level: "INFO",
-    message: "L2 Order Flow Delta spike (+1,420 BTC). Bull volume 68%",
-  },
-];
+// Engine log starts empty: entries are pushed by pushEngineLog (every 20th
+// cycle and on warnings). It used to boot with three invented entries --
+// "Engine Cycle #287 executed successfully across Coinbase & Binance
+// Orderbook", "Yes 54c / No 46c" and "L2 Order Flow Delta spike (+1,420 BTC).
+// Bull volume 68%" -- timestamped 1-5 seconds before boot, which
+// /api/admin/diagnostics served as recentLogs.
+const engineLogs = [];
 function pushEngineLog(level, message) {
   engineLogs.unshift({
     id: `log_${Date.now()}_${Math.floor(Math.random() * 1e3)}`,
@@ -1888,14 +1873,17 @@ function pushEngineLog(level, message) {
   if (engineLogs.length > 50) engineLogs.pop();
 }
 __name(pushEngineLog, "pushEngineLog");
+// No probability or accuracy until the engine or the ledger supplies one
+// (runMarketEngineTick and ledger hydration overwrite these). The seed was
+// 0.685 / 0.685 / 88.9, served by /api/admin/diagnostics on a cold instance.
 let latestCalibrationState = {
-  rawModelProbability: 0.685,
-  calibratedModelProbability: 0.685,
+  rawModelProbability: null,
+  calibratedModelProbability: null,
   calibrationStatus: "WARMING_UP",
   calibrationSampleSize: 0,
   calibrationMinimumSamples: 50,
   brierScore: null, // no settled history at boot; was an invented 0.168
-  historicalAccuracy: 88.9,
+  historicalAccuracy: null,
 };
 // Boot state for the Guardian and the lock evaluation carries NO reading.
 //
@@ -8795,23 +8783,12 @@ app.delete(
       });
   },
 );
-const adminEventsStore = [
-  {
-    id: "evt_init_1",
-    timestamp: new Date(Date.now() - 3e5).toISOString(),
-    eventType: "SYSTEM_BOOT",
-    userEmail: "vixyvault0@gmail.com",
-    status: "SUCCESS",
-    message: "VIXY Vault Engine & Discord Entitlement Service Initialized",
-  },
-  {
-    id: "evt_init_2",
-    timestamp: new Date(Date.now() - 12e4).toISOString(),
-    eventType: "STRIPE_WEBHOOK_HEALTH",
-    status: "INFO",
-    message: "Stripe webhook signature listener active on /api/stripe/webhook",
-  },
-];
+// Admin event stream starts empty and holds only events passed to
+// broadcastAdminEvent. It used to boot with two invented entries backdated 2-5
+// minutes -- SYSTEM_BOOT "VIXY Vault Engine & Discord Entitlement Service
+// Initialized" under the owner's email and "Stripe webhook signature listener
+// active on /api/stripe/webhook" -- that no code had observed.
+const adminEventsStore = [];
 const adminSseClients = new Set();
 function broadcastAdminEvent(eventData) {
   const event = {
@@ -8844,69 +8821,18 @@ function broadcastAdminEvent(eventData) {
   return event;
 }
 __name(broadcastAdminEvent, "broadcastAdminEvent");
-const serverAuditLogs = [
-  {
-    id: "log_101",
-    timestamp: new Date(Date.now() - 6e4).toISOString(),
-    actor: "vixyvault0@gmail.com",
-    action: "ADMIN_LOGIN",
-    details: "Master Admin authenticated with Level 0 Clearance",
-    level: "INFO",
-  },
-  {
-    id: "log_102",
-    timestamp: new Date(Date.now() - 3e5).toISOString(),
-    actor: "vixyvault0@gmail.com",
-    action: "UPDATED_ROLE",
-    details: "Promoted trader.alex@gmail.com to ELITE_PASS",
-    level: "INFO",
-  },
-  {
-    id: "log_103",
-    timestamp: new Date(Date.now() - 18e5).toISOString(),
-    actor: "SYSTEM_STRIPE_WEBHOOK",
-    action: "SUBSCRIPTION_RENEWED",
-    details: "Pro Pass renewed for quant.sarah@optionstrade.io",
-    level: "INFO",
-  },
-  {
-    id: "log_104",
-    timestamp: new Date(Date.now() - 36e5).toISOString(),
-    actor: "SYSTEM_BOT_SCHEDULER",
-    action: "BOT_HEALTH_CHECK",
-    details: "Discord signal broadcaster synced successfully",
-    level: "INFO",
-  },
-];
-const serverSupportTickets = [
-  {
-    id: "TCK-8821",
-    userEmail: "trader.alex@gmail.com",
-    subject: "Kalshi API Latency Spike during 15M Candle Lock",
-    category: "API Feed",
-    status: "IN_PROGRESS",
-    date: "2026-08-11 14:22",
-    priority: "HIGH",
-  },
-  {
-    id: "TCK-8819",
-    userEmail: "quant.sarah@optionstrade.io",
-    subject: "Stripe Webhook Event Entitlement Resync Request",
-    category: "Billing",
-    status: "OPEN",
-    date: "2026-08-10 09:15",
-    priority: "MEDIUM",
-  },
-  {
-    id: "TCK-8810",
-    userEmail: "sam.predict@crypto.org",
-    subject: "Pro Pass Annual Billing Inquiry & Invoice Request",
-    category: "Billing",
-    status: "RESOLVED",
-    date: "2026-08-05 18:40",
-    priority: "LOW",
-  },
-];
+// The audit log holds only events recorded by addServerAuditLog on this
+// instance. It used to boot with four invented events -- an ADMIN_LOGIN
+// "Master Admin authenticated with Level 0 Clearance" under the owner's email,
+// "Promoted trader.alex@gmail.com to ELITE_PASS", "Pro Pass renewed for
+// quant.sarah@optionstrade.io" and a "Discord signal broadcaster synced
+// successfully" health check -- none of which happened.
+const serverAuditLogs = [];
+// No invented tickets. This list used to boot with three staged tickets
+// ("Kalshi API Latency Spike during 15M Candle Lock", "Stripe Webhook Event
+// Entitlement Resync Request", "Pro Pass Annual Billing Inquiry & Invoice
+// Request") dated 2026-08-05..11, served by /api/admin/support-tickets.
+const serverSupportTickets = [];
 function addServerAuditLog(actor, action, details, level = "INFO") {
   const log = {
     id: `log_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -9052,9 +8978,11 @@ app.get(
       stripeRevenueStatus: process.env.STRIPE_SECRET_KEY
         ? "CONFIRMED"
         : "DATA_UNAVAILABLE",
-      predictionsGeneratedToday: engineLogs.length,
+      // Not counted. engineLogs.length is the size of a 50-entry in-memory log
+      // (every 20th cycle plus warnings), not predictions or AI requests today.
+      predictionsGeneratedToday: null,
       avgPredictionLatencyMs: null, // not measured (was a literal 14)
-      aiRequestsToday: engineLogs.length,
+      aiRequestsToday: null,
       apiRequestsToday: null, // not counted (was engineLogs.length * 3)
       databaseSizeMb: null, // not measured (was a literal 12.4)
       serverLoadPct: null, // not measured (was a literal 18)

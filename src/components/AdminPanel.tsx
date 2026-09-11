@@ -1590,6 +1590,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               <div className="space-y-1.5 font-mono text-xs">
+                {auditLogs.length === 0 && (
+                  <div className="p-2.5 text-[11px] text-slate-500">
+                    No audit events recorded by this server instance yet.
+                  </div>
+                )}
                 {auditLogs.slice(0, 5).map((log, idx) => (
                   <div
                     key={log.id || idx}
@@ -2507,6 +2512,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="vixy-card hud-corners overflow-hidden">
               <div className="divide-y divide-slate-800/60 font-mono text-xs">
+                {auditLogs.length === 0 && (
+                  <div className="p-3 text-slate-500">
+                    No audit events recorded by this server instance yet.
+                    Events are written by admin actions and Stripe webhooks and
+                    are held in memory per server instance, so this list is not
+                    a complete history.
+                  </div>
+                )}
                 {auditLogs
                   .filter(
                     (log) =>
@@ -2733,6 +2746,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="vixy-card hud-corners overflow-hidden divide-y divide-slate-800">
+                {tickets.length === 0 && (
+                  <div className="p-3 text-xs text-slate-500">
+                    No support tickets recorded.
+                  </div>
+                )}
                 {tickets.map((t) => (
                   <div
                     key={t.id}
