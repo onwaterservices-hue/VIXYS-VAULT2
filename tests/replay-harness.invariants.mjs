@@ -78,4 +78,26 @@ t.check('walk seeks a cursor at the newest missing hour instead of paging from n
 t.section('DETERMINISM PLUMBING');
 t.check('Math.random in the pipeline is replaced by a seeded PRNG', readRepoFile('scripts/replay15m/engineSandbox.ts').includes("return prop === 'random' ? __rand : target[prop];"));
 t.check('offline mode is a hard error on a cache miss (never a silent fetch)', cache.includes('--offline requested but') && readRepoFile('scripts/replay15m/candleCache.ts').includes('--offline was requested but chunk'));
+t.section('SANDBOX DECLARES EVERY MODULE-LEVEL VARIABLE THE PIPELINE READS');
+// PR #70 added a module-level buffer read by the pipeline; the sandbox did not
+// declare it, so every replay threw ReferenceError and nothing noticed. This
+// derives the required set from server.ts itself, so a new engine variable
+// cannot break the harness silently again.
+{
+  const server = readRepoFile('server.ts');
+  const sandboxSrc = readRepoFile('scripts/replay15m/engineSandbox.ts');
+  const lines = server.split('\n');
+  const fS = lines.findIndex((l) => l.startsWith('function evaluateBtc15mHighConvictionPipeline('));
+  const fE = lines.findIndex((l, i) => i > fS && l === '}');
+  const body = lines.slice(fS, fE + 1).join('\n').split('\n').map((l) => l.split('//')[0]).join('\n');
+  const topLevel = new Set([...server.matchAll(/^(?:let|const|var) ([A-Za-z_$][\w$]*)\s*=/gm)].map((m) => m[1]));
+  const localDecl = new Set([...body.matchAll(/\b(?:let|const|var) ([A-Za-z_$][\w$]*)/g)].map((m) => m[1]));
+  const params = (lines[fS] + lines.slice(fS + 1, fS + 9).join(' ')).match(/\(([^)]*)\)/)[1].split(',').map((x) => x.trim().split('=')[0].trim());
+  const used = [...new Set([...body.matchAll(/\b([A-Za-z_$][\w$]*)\b/g)].map((m) => m[1]))]
+    .filter((id) => topLevel.has(id) && !localDecl.has(id) && !params.includes(id));
+  t.check('pipeline reads at least the known module-level state', used.includes('rollingBtcTicks') && used.includes('hydratedBtcCloses'), `used=${used.join(',')}`);
+  const missing = used.filter((id) => !new RegExp(`\\b(?:let|const|var) ${id}\\b`).test(sandboxSrc));
+  t.check('sandbox declares all of them', missing.length === 0, `missing: ${missing.join(', ')}`);
+}
+
 t.done();

@@ -2103,17 +2103,26 @@ function evaluateBtc15mHighConvictionPipeline(
     status: dataQualityStatus,
     score: dataQualityScore,
   };
+  // Cycle average of observed prices, equal weight per engine tick.
+  //
+  // Each tick used to add `3.5 + Math.random() * 2` as its "volume" (25 for the
+  // first tick of a cycle), so the average was built from invented volume and
+  // two identical price paths produced different values. It feeds
+  // vwapRelationship (+/- $4), which drives the PRICE_STRUCTURE evidence family
+  // and the regime, so evidence and lock decisions depended on Math.random().
+  // No volume feed reaches this function; without one the honest estimator is
+  // the time-weighted mean of the ticks this instance observed. Field names keep
+  // "vwap" for payload compatibility; human-readable text says TWAP.
   if (cycleVwapAccumulator.cycleStart !== currentIntervalStart) {
     cycleVwapAccumulator = {
       cycleStart: currentIntervalStart,
-      cumulativePv: spot * 25,
-      cumulativeVol: 25,
+      cumulativePv: spot,
+      cumulativeVol: 1,
       vwap: spot,
     };
   } else {
-    const estVol = 3.5 + Math.random() * 2;
-    cycleVwapAccumulator.cumulativePv += spot * estVol;
-    cycleVwapAccumulator.cumulativeVol += estVol;
+    cycleVwapAccumulator.cumulativePv += spot;
+    cycleVwapAccumulator.cumulativeVol += 1;
     cycleVwapAccumulator.vwap =
       Math.round(
         (cycleVwapAccumulator.cumulativePv /
@@ -2451,7 +2460,7 @@ function evaluateBtc15mHighConvictionPipeline(
     score: structureAgrees ? 88 : 42,
     weight: 0.12,
     agreement: structureAgrees,
-    details: `VWAP: ${vwap.toLocaleString()} (${vwapRelationship}) | Struct: ${highLowStructure} | Breakout: ${breakoutState}`,
+    details: `Cycle TWAP (no volume feed): ${vwap.toLocaleString()} (${vwapRelationship}) | Struct: ${highLowStructure} | Breakout: ${breakoutState}`,
   });
   const flowAgrees =
     (candidateDir === "UP" &&
