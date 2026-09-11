@@ -28,7 +28,7 @@ function run(acc, spot, strike, T) {
   const ticks = [];
   for (let s = 180; s >= 0; s -= 3) ticks.push({ ts: T - s * 1000, price: spot - 40 + (180 - s) * (40 / 180), takerBuyRatio: 1, delta: 0 });
   const ctx = { lastMarketUpdateTs: T, engineFeedStatus: 'CONNECTED', cycleVwapAccumulator: acc, rollingBtcTicks: ticks, hydratedBtcCloses: [],
-    __name: (f) => f, active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5,
+    __name: (f) => f, active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5, kalshiImpliedAtMs: 0,
     persistenceSeconds: 60, Math: trap };
   const k = Object.keys(ctx);
   return new Function(...k, `${fnSrc}\nreturn evaluateBtc15mHighConvictionPipeline;`)(...k.map((x) => ctx[x]))(spot, strike, T, 55, 0.05, 0);

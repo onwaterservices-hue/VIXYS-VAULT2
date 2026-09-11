@@ -119,7 +119,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
     // recorded edge is excluded from the average rather than counted as a
     // synthesized 5.5, which previously let a thin or empty ledger report a
     // confident-looking figure that no real cycle ever produced.
-    const edgeSamples = settled.filter(s => Number.isFinite(Number(s.edge)));
+    const edgeSamples = settled.filter(s => s.edge != null && Number.isFinite(Number(s.edge)));
     const avgEdge = edgeSamples.length > 0
       ? edgeSamples.reduce((acc, s) => acc + Number(s.edge), 0) / edgeSamples.length
       : null;
@@ -189,8 +189,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
       const wins = settled.filter(s => s.wasCorrect).length;
       const losses = settled.length - wins;
       
-      const edgeSum = settled.reduce((acc, s) => acc + (Number.isFinite(Number(s.edge)) ? Number(s.edge) : 0), 0);
-      const avgEdge = settled.length > 0 ? edgeSum / settled.length : 0;
+      // Rows without a measured edge (no live Kalshi price) are left out rather than averaged in as 0.
+      const edgeRows = settled.filter(s => s.edge != null && Number.isFinite(Number(s.edge)));
+      const edgeSum = edgeRows.reduce((acc, s) => acc + Number(s.edge), 0);
+      const avgEdge = edgeRows.length > 0 ? edgeSum / edgeRows.length : 0;
       const confSum = settled.reduce((acc, s) => acc + (Number.isFinite(Number(s.confidence)) ? Number(s.confidence) : 0), 0);
       const avgConf = settled.length > 0 ? confSum / settled.length : 0;
 
@@ -780,7 +782,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                       <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">{isNoTrade ? 'Reversal Risk' : 'Edge'}</div>
                       <div className="text-purple-300 font-bold">{isNoTrade
                         ? (Number.isFinite(Number(log.reversalRisk)) ? `${log.reversalRisk}%` : '--')
-                        : (Number.isFinite(Number(log.edge)) ? `+${log.edge}%` : '--')}</div>
+                        : (log.edge != null && Number.isFinite(Number(log.edge)) ? `${Number(log.edge) >= 0 ? '+' : ''}${log.edge}%` : '--')}</div>
                     </div>
                   </div>
 

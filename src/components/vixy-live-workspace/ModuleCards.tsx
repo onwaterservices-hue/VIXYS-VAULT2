@@ -426,6 +426,16 @@ export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }
         <span className="text-xs font-bold text-slate-300 font-mono">{lock.kind === 'OPEN' ? 'PRE-LOCK' : lockStatusWord(lock)}</span>
       </div>
 
+      {/* Real aggressor flow the reversal watch reads: Coinbase taker buys vs sells, last 60s. */}
+      <div className="flex items-center justify-between text-[10px] font-mono">
+        <span className="text-slate-500 uppercase tracking-wider">Taker flow 60s</span>
+        <span className="text-slate-200 font-bold">
+          {c?.realFlow?.w60?.measured === true && typeof c.realFlow.w60.buyShare === 'number'
+            ? `${Math.round(c.realFlow.w60.buyShare * 100)}% buy · ${Math.round((1 - c.realFlow.w60.buyShare) * 100)}% sell · ${String(c.realFlow.absorptionState ?? '—')}`
+            : 'unmeasured'}
+        </span>
+      </div>
+
       <Footer label="LOCK GATE LIMIT" value={gate ? String(gate.required) : '—'} />
     </div>
   );
