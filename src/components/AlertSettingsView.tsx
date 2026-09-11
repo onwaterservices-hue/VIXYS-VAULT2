@@ -43,17 +43,24 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
     }
 
     try {
-      const res = await sendTestAlert('discord', settings.discordWebhook, '', '', {
+      // Success is whatever the server says. This used to report "dispatched
+      // successfully" for any response -- including the 404 from
+      // /api/alerts/send, which has no server route -- and the payload was a
+      // staged signal ($64,108 spot, "+1,420 BTC" taker delta).
+      const res: any = await sendTestAlert('discord', settings.discordWebhook, '', '', {
         direction: 'YES',
-        confidence: 91,
-        edgePct: 7.4,
-        targetPrice: 64228,
-        currentPrice: 64108,
-        reasoning: 'Taker buy delta spike +1,420 BTC on 15m candle close',
+        confidence: null,
+        edgePct: null,
+        targetPrice: null,
+        currentPrice: null,
+        reasoning: 'TEST ALERT - not a signal',
       });
       setTestResult({
-        success: true,
-        message: res.message || 'Discord test alert & audio ping dispatched successfully!',
+        success: res?.success === true,
+        message:
+          res?.success === true
+            ? res.message || 'Discord test alert sent.'
+            : res?.message || 'Test alert was not sent: the alert delivery endpoint is unavailable.',
       });
     } catch (err: any) {
       setTestResult({
@@ -100,16 +107,20 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
     setIsSendingTest(true);
     setTestResult(null);
     try {
-      const res = await sendTestAlert('telegram', '', settings.telegramBotToken, settings.telegramChatId, {
+      const res: any = await sendTestAlert('telegram', '', settings.telegramBotToken, settings.telegramChatId, {
         direction: 'YES',
-        confidence: 91,
-        edgePct: 7.4,
-        targetPrice: 64228,
-        currentPrice: 64108,
+        confidence: null,
+        edgePct: null,
+        targetPrice: null,
+        currentPrice: null,
+        reasoning: 'TEST ALERT - not a signal',
       });
       setTestResult({
-        success: true,
-        message: res.message || 'Telegram test alert dispatched successfully!',
+        success: res?.success === true,
+        message:
+          res?.success === true
+            ? res.message || 'Telegram test alert sent.'
+            : res?.message || 'Test alert was not sent: the alert delivery endpoint is unavailable.',
       });
     } catch (err: any) {
       setTestResult({
