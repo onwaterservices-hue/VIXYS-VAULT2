@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
@@ -188,6 +188,11 @@ export default function App() {
     return false;
   });
   const [isEntitlementLoading, setIsEntitlementLoading] = useState<boolean>(true);
+  // Access is re-read while the app is open, not only at sign-in. A pass or a
+  // server-tag trial can end mid-session (the hourly check ends a trial when the
+  // VIXY tag is removed), and an open tab must not keep the terminal unlocked.
+  const [entitlementRefreshTick, setEntitlementRefreshTick] = useState(0);
+  const entitlementIdentityRef = useRef<string | null>(null);
   const [isVerifyingPayment, setIsVerifyingPayment] = useState<boolean>(false);
   const [paymentVerificationText, setPaymentVerificationText] = useState<string>('VERIFYING PAYMENT...');
 
@@ -354,6 +359,7 @@ export default function App() {
     const userId = authState.user?.id || undefined;
 
     if (!userEmail && !userId) {
+      entitlementIdentityRef.current = null;
       setUserRole('UNPAID');
       setHasRecurringPlan(false);
       setTerminalAccessGranted(false);
@@ -361,7 +367,13 @@ export default function App() {
       return;
     }
 
-    setIsEntitlementLoading(true);
+    // A re-check for the same account runs silently: no loading state, and a
+    // failed request leaves current access alone instead of locking a paying
+    // user over a network blip.
+    const identityKey = `${userEmail}|${userId || ''}`;
+    const isBackgroundRecheck = entitlementIdentityRef.current === identityKey;
+    entitlementIdentityRef.current = identityKey;
+    if (!isBackgroundRecheck) setIsEntitlementLoading(true);
 
     // Concurrently execute user session restoration (/api/auth/me) and entitlement resolution (/api/entitlements)
     const sessionRestorePromise = (authState.isAuthenticated && userEmail)
@@ -387,6 +399,8 @@ export default function App() {
           setActiveTab('landing');
           return;
         }
+
+        if (isBackgroundRecheck && !entData) return;
 
         // Merge entitlement payload from concurrent endpoints for immediate authoritative resolution
         const mergedEnt = entData || sessionData?.entitlement || null;
@@ -434,9 +448,14 @@ export default function App() {
         const rawRole = String(canonicalRole || sessionData?.user?.role || authState.user?.role || '').toUpperCase();
         const rawPlan = String(canonicalAccess?.product || canonicalAccess?.plan || mergedEnt?.plan || sessionData?.user?.subscription || '').toUpperCase();
 
+        // A server-tag trial the server ended early (the VIXY tag was removed)
+        // keeps its original expiresAt. The server's `active: false` is the
+        // answer; the clock alone must not re-open the terminal for it.
+        const tagTrialEndedByServer =
+          mergedEnt?.dayPass?.active === false && mergedEnt?.dayPass?.entitlementType === 'TAG_TRIAL';
         const isDayPassActive = Boolean(
           mergedEnt?.dayPass?.active ||
-          (mergedEnt?.dayPass?.expiresAt && new Date(mergedEnt.dayPass.expiresAt).getTime() > Date.now()) ||
+          (!tagTrialEndedByServer && mergedEnt?.dayPass?.expiresAt && new Date(mergedEnt.dayPass.expiresAt).getTime() > Date.now()) ||
           canonicalAccess?.product === 'DAY_PASS' ||
           canonicalAccess?.plan === 'DAY_PASS'
         );
@@ -515,7 +534,22 @@ export default function App() {
       .finally(() => {
         setIsEntitlementLoading(false);
       });
-  }, [authState.isAuthenticated, authState.user?.email, authState.user?.id]);
+  }, [authState.isAuthenticated, authState.user?.email, authState.user?.id, entitlementRefreshTick]);
+
+  // Re-check access every 5 minutes and whenever the tab becomes visible again.
+  useEffect(() => {
+    if (!authState.isAuthenticated) return;
+    const bump = () => setEntitlementRefreshTick((t) => t + 1);
+    const interval = setInterval(bump, 5 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') bump();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [authState.isAuthenticated]);
 
 
   const VALID_ROUTES = [

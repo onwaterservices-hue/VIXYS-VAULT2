@@ -315,6 +315,16 @@ check('on-demand pass expiry re-syncs Discord through the entitlement-aware path
   /DAY PASS ON-DEMAND EXPIRED[\s\S]{0,600}syncUserEntitlementToDiscord\(dayPassRecord\.email\)/.test(server));
 check('the entitlement payload tells the UI which kind of pass this is',
   /stripeSessionId: dayPassRecord\?\.stripeCheckoutSessionId,\s*entitlementType: dayPassRecord\?\.entitlementType \|\| null/.test(server));
+check('a LIVE pass payload also carries entitlementType (a live trial is labelled a free trial, not a Stripe card)',
+  /dayPass: \{\s*active: true,[\s\S]{0,400}entitlementType: dayPassRecord\.entitlementType \|\| null/.test(server));
+const app = R('src/App.tsx');
+check('a tag trial the server ended early is not re-opened by its original expiresAt',
+  /tagTrialEndedByServer =\s*mergedEnt\?\.dayPass\?\.active === false && mergedEnt\?\.dayPass\?\.entitlementType === 'TAG_TRIAL'/.test(app) &&
+  /!tagTrialEndedByServer && mergedEnt\?\.dayPass\?\.expiresAt/.test(app));
+check('an open tab re-checks access (5-minute timer + tab focus), so removing the tag locks the terminal',
+  /entitlementRefreshTick\]\);/.test(app) && /setInterval\(bump, 5 \* 60 \* 1000\)/.test(app) && /visibilitychange/.test(app));
+check('a failed background re-check never locks a user',
+  /if \(isBackgroundRecheck && !entData\) return;/.test(app));
 check('the frontend starts the claim through the session-bound OAuth starter',
   /getDiscordAuthUrlSecure\(purpose\?:\s*'tag_trial'\)/.test(api) && /getDiscordAuthUrlSecure\('tag_trial'\)/.test(R('src/components/DiscordTagTrialOffer.tsx')));
 
