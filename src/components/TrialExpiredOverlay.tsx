@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { createDayPassCheckoutApi, restoreAccessApi, getEntitlementsApi } from '../services/api';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
+import { DiscordTagTrialOffer } from './DiscordTagTrialOffer';
 
 interface TrialExpiredOverlayProps {
   onUpgradeToPro?: () => void;
@@ -278,6 +279,14 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             <CreditCard className="w-3.5 h-3.5 text-purple-400" />
             <span>View All Subscription Plans & Billing (Starter / Pro / Elite)</span>
           </button>
+
+          {/* Free access for displaying the VIXY Vault server tag in Discord. */}
+          <DiscordTagTrialOffer
+            isAuthenticated={isAuthenticated}
+            onOpenAuth={() => handleCreateAccount()}
+            onViewPricing={onViewPricing}
+            onAccessGranted={onAccessGranted}
+          />
 
           {/* Standard Normal Sign-In / Account Flow */}
           <div className="pt-2 border-t border-purple-900/40 space-y-2.5">

@@ -415,6 +415,7 @@ import {
   createDiscordLinkStatusHandler,
   createDiscordUnlinkHandler,
 } from "./src/bot/discordOAuth";
+import { createTagTrialService } from "./src/bot/discordTagTrial";
 // Statically imported so esbuild embeds this config directly into the
 // bundled dist/server.cjs -- a runtime fs.readFileSync(process.cwd() + ...)
 // depends on this exact file being present at that path in the deployed
@@ -6458,6 +6459,12 @@ const discordFirestore = {
   getDoc,
   setDoc,
   runTransaction,
+  // Query helpers for the tag-trial hourly re-check (same Admin-aware shim).
+  collection,
+  query,
+  where,
+  limit,
+  getDocs,
   // The Admin datapath ignores the `db` handle entirely, so a null client handle
   // must not be read as "Firestore unavailable" when Admin is live.
   ready: (clientDb) => _adminActive || !!clientDb,
@@ -6671,6 +6678,140 @@ app.get(
 
 
 
+// ---- Discord server-tag trial: 3 free days for wearing the VIXY tag ----
+// Rules and the reasoning behind each live in src/bot/discordTagTrial.ts.
+// Claims arrive through the Discord OAuth callback (purpose "tag_trial"), so
+// the tag is checked against Discord's own answer at claim time.
+async function fetchDiscordUserAsBot(discordUserId) {
+  const token = process.env.DISCORD_BOT_TOKEN;
+  if (!token || !discordUserId) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(
+      "https://discord.com/api/v10/users/" + encodeURIComponent(discordUserId),
+      { headers: { Authorization: "Bot " + token }, signal: controller.signal },
+    );
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+__name(fetchDiscordUserAsBot, "fetchDiscordUserAsBot");
+
+const tagTrialService = createTagTrialService({
+  getDb: () => db,
+  fx: discordFirestore,
+  getGuildId: () => process.env.DISCORD_GUILD_ID || null,
+  // Refuse unless the account demonstrably has nothing live. A day-pass-typed
+  // grant on a subscriber would swap their Discord role, so "cannot tell" is a
+  // refusal, never a grant.
+  resolveAccess: async (email, discordUserId) => {
+    const resolved = await resolveDiscordEntitlementTierAuthoritative(email, discordUserId);
+    if (resolved.tier !== "NONE") return "HAS_ACCESS";
+    if (!resolved.authoritative) return "UNRESOLVED";
+    const access = await getUserAccessState(email, "");
+    return access && access.locked === false ? "HAS_ACCESS" : "NO_ACCESS";
+  },
+  resolveUserId: async (email) => {
+    const u = serverUsers.find((x) => (x.email || "").toLowerCase() === email);
+    return (u && (u.id || u.uid)) || null;
+  },
+  applyDayPassRecord: (record) => {
+    userDayPasses.set(record.email, record);
+    if (record.userId) userDayPasses.set(record.userId, record);
+    if (record.discordUserId) userDayPasses.set(record.discordUserId, record);
+  },
+  markDayPassEnded: (email, userId, discordUserId) => {
+    const nowIso = new Date().toISOString();
+    for (const key of [email, userId, discordUserId].filter(Boolean)) {
+      const rec = userDayPasses.get(key);
+      if (rec && rec.entitlementType === "TAG_TRIAL" && rec.status === "ACTIVE") {
+        rec.status = "EXPIRED";
+        rec.updatedAt = nowIso;
+      }
+    }
+  },
+  syncDiscordRole: (email) => syncUserEntitlementToDiscord(email),
+  fetchDiscordUserAsBot,
+  dayPassRoleId:
+    process.env.DISCORD_24H_ROLE_ID ||
+    process.env.DISCORD_ROLE_DAY_PASS ||
+    process.env.DISCORD_DAY_PASS_ROLE_ID ||
+    null,
+  log: console,
+});
+
+// A trial ended by the re-check on one serverless instance must not stay live
+// in another warm instance's cache until it would have expired anyway. Re-read
+// the stored pass at most every 5 minutes; the next access check sees it.
+// (State lives on the hoisted function, not in a module const, because
+// getUserEntitlement may run before this point in the file is evaluated.)
+function refreshTagTrialRecordFromStore(record) {
+  if (!record || record.entitlementType !== "TAG_TRIAL" || record.status !== "ACTIVE" || !record.email) return;
+  const fn = refreshTagTrialRecordFromStore as any;
+  const seen: WeakMap<object, number> = fn.seen || (fn.seen = new WeakMap());
+  const last = seen.get(record) || 0;
+  if (Date.now() - last < 5 * 60 * 1000) return;
+  seen.set(record, Date.now());
+  getDoc(doc(db, "day_passes", String(record.email).toLowerCase()))
+    .then((snap) => {
+      const stored = snap.exists() ? snap.data() : null;
+      if (stored && (stored.entitlementType !== "TAG_TRIAL" || stored.status !== "ACTIVE")) {
+        Object.assign(record, stored);
+      }
+    })
+    .catch(() => {});
+}
+__name(refreshTagTrialRecordFromStore, "refreshTagTrialRecordFromStore");
+
+// GET /api/discord/tag-trial-status -- the signed-in account's offer, claim and
+// last attempt. Identity comes from the session cookie only.
+app.get("/api/discord/tag-trial-status", async (req, res) => {
+  const auth = authenticateSession(req);
+  if (!auth || !auth.email) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  res.set("Cache-Control", "no-store");
+  try {
+    return res.json(await tagTrialService.status(auth.email));
+  } catch (err) {
+    console.error("[TagTrial] status failed:", err && err.message);
+    return res.status(503).json({ error: "STATUS_UNAVAILABLE" });
+  }
+});
+
+// Hourly (vercel.json). Ends trials whose holder removed the VIXY tag and
+// expires finished ones. Claimed once per UTC hour in Firestore, so repeated or
+// external calls cannot spend the bot's Discord rate limit; a repeat returns the
+// hour's recorded counts. Counts only -- no identities in the response.
+app.all("/api/cron/tag-trial-check", async (req, res) => {
+  const job = "TAG_TRIAL_CHECK";
+  const hour = new Date().toISOString().slice(0, 13);
+  const runRef = doc(db, "tag_trial_recheck_runs", hour);
+  try {
+    const claim = await runTransaction(db, async (tx) => {
+      const snap = await tx.get(runRef);
+      if (snap.exists()) return { claimed: false, prior: snap.data() };
+      tx.set(runRef, { status: "RUNNING", startedAt: new Date().toISOString() });
+      return { claimed: true };
+    });
+    if (!claim) return res.status(503).json({ job, error: "RUN_CLAIM_UNAVAILABLE" });
+    if (!claim.claimed) {
+      return res.json({ job, skipped: true, reason: "ALREADY_RAN_THIS_HOUR", hour, lastRun: claim.prior });
+    }
+    const result = await tagTrialService.recheckActiveTrials();
+    await setDoc(runRef, { status: "DONE", finishedAt: new Date().toISOString(), result }, { merge: true });
+    return res.json({ job, skipped: false, hour, ...result, timestamp: new Date().toISOString() });
+  } catch (err) {
+    console.error("[TagTrial] recheck failed:", err && err.message);
+    return res.status(500).json({ job, error: String((err && err.message) || err) });
+  }
+});
+
 app.get(
   "/api/auth/discord/callback",
   createDiscordCallbackHandler(
@@ -6682,6 +6823,7 @@ app.get(
     assignDiscordRoleToUser,
     syncLegacyUserRecord,
     discordFirestore,
+    tagTrialService,
   ),
 );
 app.get(
@@ -11159,7 +11301,10 @@ function getUserEntitlement(emailOrUid) {
     (user?.id ? userDayPasses.get(user.id) : void 0) ||
     (discordId ? userDayPasses.get(discordId) : void 0) ||
     user?.dayPass;
-  if (dayPassRecord && !dayPassRecord.troubleshootingGraceApplied) {
+  refreshTagTrialRecordFromStore(dayPassRecord);
+  // The one-time +3 day troubleshooting grace is for purchased passes. A free
+  // server-tag trial is exactly 72 hours; extending it would double it.
+  if (dayPassRecord && !dayPassRecord.troubleshootingGraceApplied && dayPassRecord.entitlementType !== "TAG_TRIAL") {
     try {
       const expMs = new Date(dayPassRecord.expiresAt).getTime();
       const threeDaysMs = 3 * 24 * 60 * 60 * 1e3;
@@ -11220,7 +11365,13 @@ function getUserEntitlement(emailOrUid) {
         );
         const targetDiscordUser = dayPassRecord.discordUserId || discordId;
         if (targetDiscordUser) {
-          assignDiscordRoleToUser(targetDiscordUser, "NONE").catch((err) => {
+          // Re-sync, don't strip: someone who subscribed while the pass was
+          // live keeps the subscription's role.
+          Promise.resolve(
+            dayPassRecord.email
+              ? syncUserEntitlementToDiscord(dayPassRecord.email)
+              : assignDiscordRoleToUser(targetDiscordUser, "NONE"),
+          ).catch((err) => {
             console.warn(
               `[DAY PASS ON-DEMAND DISCORD DEMOTION WARN] User ${targetDiscordUser}:`,
               err,
@@ -11330,7 +11481,7 @@ function getUserEntitlement(emailOrUid) {
         startedAt: dayPassRecord?.startedAt || null,
         expiresAt: dayPassRecord?.expiresAt || null,
         secondsRemaining: dayPassSecondsRemaining,
-        stripeSessionId: dayPassRecord?.stripeCheckoutSessionId,
+        stripeSessionId: dayPassRecord?.stripeCheckoutSessionId, entitlementType: dayPassRecord?.entitlementType || null,
       },
       updatedAt: sub?.updatedAt || new Date().toISOString(),
     };
@@ -11456,7 +11607,7 @@ function getUserEntitlement(emailOrUid) {
       startedAt: dayPassRecord?.startedAt || null,
       expiresAt: dayPassRecord?.expiresAt || null,
       secondsRemaining: 0,
-      stripeSessionId: dayPassRecord?.stripeCheckoutSessionId,
+      stripeSessionId: dayPassRecord?.stripeCheckoutSessionId, entitlementType: dayPassRecord?.entitlementType || null,
     },
     updatedAt: sub?.updatedAt || new Date().toISOString(),
   };

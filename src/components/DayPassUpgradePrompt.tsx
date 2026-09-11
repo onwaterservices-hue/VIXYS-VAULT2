@@ -40,6 +40,8 @@ interface DayPassUpgradePromptProps {
     startedAt?: string | null;
     expiresAt?: string | null;
     secondsRemaining: number;
+    /** "TAG_TRIAL" for the free Discord server-tag trial, which is not 24 hours. */
+    entitlementType?: string | null;
   };
   userRole: string;
   /** Server classification: the account holds a recurring plan, not just a pass. */
@@ -97,8 +99,15 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
   // Dismissal is scoped to this specific pass, so buying a new pass re-arms it.
   if (dismissedFor === dayPassInfo.expiresAt) return null;
 
-  const usedPct = Math.min(100, Math.max(0, ((PASS_TOTAL_SEC - secondsLeft) / PASS_TOTAL_SEC) * 100));
-  const hoursUsed = Math.floor((PASS_TOTAL_SEC - secondsLeft) / 3600);
+  // A server-tag trial is a free grant of a different length. Its total comes
+  // from its own record so the readout never describes it as a 24-hour pass.
+  const isTagTrial = dayPassInfo.entitlementType === 'TAG_TRIAL';
+  const trialStartMs = isTagTrial && dayPassInfo.startedAt ? new Date(dayPassInfo.startedAt).getTime() : NaN;
+  const totalSec = Number.isFinite(trialStartMs) && expiryMs > trialStartMs
+    ? Math.round((expiryMs - trialStartMs) / 1000)
+    : PASS_TOTAL_SEC;
+  const usedPct = Math.min(100, Math.max(0, ((totalSec - secondsLeft) / totalSec) * 100));
+  const hoursUsed = Math.floor((totalSec - secondsLeft) / 3600);
 
   const handleDismiss = () => {
     try {
@@ -130,7 +139,7 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
       <div className="flex items-center gap-2">
         <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
         <span className="text-[10px] font-mono font-black uppercase tracking-[0.14em] text-amber-300">
-          Pass ends in {formatRemaining(secondsLeft)}
+          {isTagTrial ? 'Free trial ends in' : 'Pass ends in'} {formatRemaining(secondsLeft)}
         </span>
       </div>
 
@@ -140,7 +149,7 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
           <div className="vx-rail-fill" style={{ width: `${usedPct}%` }} />
         </div>
         <div className="mt-1.5 text-[10px] font-mono text-purple-400/80">
-          {hoursUsed} of 24 hours used
+          {hoursUsed} of {Math.round(totalSec / 3600)} hours used
         </div>
       </div>
 
