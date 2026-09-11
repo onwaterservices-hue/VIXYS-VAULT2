@@ -653,13 +653,6 @@ app.delete("/api/kalshi/keys", async (req, res) => {
   });
 });
 
-app.get("/api/internal/dump-creds", async (req, res) => {
-  try {
-    const docs = await getDocs(collection(db, "kalshi_credentials"));
-    res.json({ size: docs.size, data: docs.docs.map(d => ({id: d.id, data: d.data()})) });
-  } catch(e) { res.status(500).json({e: e.message}); }
-});
-
 app.post("/api/kalshi/test-handshake", async (req, res) => {
   const user = resolveRequestUser(req);
   if (!user || !isEliteOrAdmin(user)) {
