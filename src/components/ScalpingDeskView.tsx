@@ -106,6 +106,17 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   // confidence, an edge and a BUY direction whenever the feed had not answered.
   const spotPrice: number | null = Number.isFinite(ticker?.price) && ticker.price > 0 ? ticker.price : null;
 
+  // The header badge reports the book and tape this view actually reads. The
+  // candle chart shows its own status.
+  const marketDataBadge =
+    book.status === 'LIVE' && prints.status === 'LIVE'
+      ? { text: '● LIVE BOOK & TAPE', cls: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' }
+      : book.status === 'LOADING' || prints.status === 'LOADING'
+      ? { text: '○ LOADING BOOK & TAPE', cls: 'bg-slate-800/60 text-slate-300 border-slate-600/40' }
+      : book.status === 'LIVE' || prints.status === 'LIVE'
+      ? { text: `◐ PARTIAL · ${book.status === 'LIVE' ? 'TAPE' : 'BOOK'} UNAVAILABLE`, cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' }
+      : { text: '○ BOOK & TAPE UNAVAILABLE', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/30' };
+
   return (
     <div className="space-y-4 font-mono text-purple-100 w-full max-w-7xl mx-auto min-w-0 relative">
       {/* 1. TOP IDENTITY STRIP */}
@@ -119,8 +130,8 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
               <h1 className="text-sm sm:text-base font-black font-mono tracking-tight text-white truncate">
                 15S SCALPING DESK
               </h1>
-              <span className="px-2 py-0.5 text-[10px] rounded-lg font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                ● LIVE MARKET DATA
+              <span className={`px-2 py-0.5 text-[10px] rounded-lg font-bold border ${marketDataBadge.cls}`}>
+                {marketDataBadge.text}
               </span>
             </div>
             <p className="text-[10px] text-purple-300/70 font-sans mt-0.5 truncate">
@@ -202,7 +213,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                       : 'text-purple-300/50 hover:text-white'
                   }`}
                 >
-                  Paper Sandbox
+                  Paper Sandbox · Inactive
                 </button>
               </div>
 
@@ -364,17 +375,15 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                   <span className="text-xs font-bold text-purple-200 uppercase">
                     1-Click Paper Execution Sandbox
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Simulated Balance: $10,000.00</span>
+                  <span className="text-[10px] text-slate-400 font-mono">INACTIVE</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button className="py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer">
-                    BUY UP YES ($500)
-                  </button>
-                  <button className="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition-all cursor-pointer">
-                    BUY DOWN NO ($500)
-                  </button>
-                </div>
+                {/* This tab showed a fixed ten-thousand-dollar "simulated balance" and two $500
+                    buy buttons with no handlers: nothing was ever executed or
+                    recorded. There is no paper-trading engine behind this desk. */}
+                <p className="text-xs text-purple-300/70 font-sans leading-relaxed">
+                  Paper execution is not built yet. There is no simulated balance and no orders can be placed from this desk.
+                </p>
               </div>
             )}
 

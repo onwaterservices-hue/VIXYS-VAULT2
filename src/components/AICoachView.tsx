@@ -29,8 +29,10 @@ type GateCheck = {
 };
 
 export const AICoachView: React.FC = () => {
-  const { decision, dataHealthStatus } = useCanonical15mDecision() as any;
-  const live = dataHealthStatus === 'LIVE' && Boolean(decision);
+  const { decision, dataHealthStatus, hasServerDecision } = useCanonical15mDecision() as any;
+  // `decision` starts as a client placeholder, which is truthy, so require a
+  // decision that actually came from the server.
+  const live = dataHealthStatus === 'LIVE' && hasServerDecision === true;
 
   const checks: GateCheck[] = Array.isArray(decision?.lockGate?.checks) ? decision.lockGate.checks : [];
   const gating = checks.filter((c) => c && c.gating !== false && c.id !== 'CALIBRATED_P');

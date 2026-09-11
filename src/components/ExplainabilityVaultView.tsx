@@ -16,7 +16,7 @@ import {
 
 import { AlertSettings } from '../types';
 import { IntelligenceLockGate } from './IntelligenceLockGate';
-import { headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
+import { headline, headlineText, lockStatusOf, lockStatusWord, lockStatusSentence } from '../lib/engineSemantics';
 
 /**
  * Explainability Vault.
@@ -281,13 +281,20 @@ export const ExplainabilityVaultView: React.FC<ExplainabilityVaultViewProps> = (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="p-5 rounded-2xl bg-[#0a0518] border border-purple-900/50 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between text-xs font-mono text-purple-300/70">
-                <span>CALIBRATED P(WIN)</span>
-                <span title="How often past cycles in a similar state settled on the current side of the strike">
+                {/* The header names the number actually shown below it. */}
+                <span>{head?.kind === 'ENGINE_SCORE' ? 'ENGINE SCORE' : 'CALIBRATED P(WIN)'}</span>
+                <span
+                  title={
+                    head?.kind === 'ENGINE_SCORE'
+                      ? 'The engine score out of 100. It is not a probability; no calibrated cell matches this cycle yet.'
+                      : 'How often past cycles in a similar state settled on the current side of the strike'
+                  }
+                >
                   <HelpCircle className="w-3.5 h-3.5 text-purple-400" />
                 </span>
               </div>
               <div className="text-3xl font-black font-mono text-emerald-400">
-                {head && head.kind !== 'NONE' ? (head.kind === 'PWIN' ? `${head.value}%` : head.value) : '—'}
+                {headlineText(head)}
               </div>
               <p className="text-[11px] text-purple-300/60">
                 {!engineLive

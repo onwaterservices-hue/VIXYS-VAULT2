@@ -44,7 +44,6 @@ interface StrikeRow {
 }
 
 export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
-  ticker,
   spotPrices = {},
   selectedAsset = 'BTC',
   userRole,
@@ -73,9 +72,11 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
   const isDiscordVerified = Boolean(alertSettings?.discordLinked && alertSettings?.guildMember);
   const isIntelligenceUnlocked = isUserAdmin || isPaidUser || isDiscordVerified;
 
-  // Real: the live spot from the ticker feed. 0 when no feed — never a literal.
-  const spotPrice: number =
-    Number(spotPrices?.[selectedAsset]?.price) || Number(spotPrices?.['BTC']?.price) || Number(ticker?.price) || 0;
+  // Real: the selected asset's own live quote, or nothing. This used to fall
+  // back to BTC's price (and to an untagged ticker), so an ETH or SOL desk could
+  // show BTC's spot and build a strike ladder around it.
+  const selectedQuote = Number(spotPrices?.[selectedAsset]?.price);
+  const spotPrice: number | null = Number.isFinite(selectedQuote) && selectedQuote > 0 ? selectedQuote : null;
 
   const step = useMemo(() => {
     if (selectedAsset === 'ETH') return 10;
@@ -86,7 +87,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
 
   // Real arithmetic only: three round strikes around spot and their distance.
   const strikeRows: StrikeRow[] = useMemo(() => {
-    if (!(spotPrice > 0)) return [];
+    if (spotPrice === null) return [];
     const mk = (strike: number, label: string): StrikeRow => ({
       strike,
       label,
@@ -168,7 +169,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
           <div className="flex flex-wrap items-center gap-3 shrink-0">
             <div className="px-4 py-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-xs flex items-center space-x-2.5 shadow-md">
               <span className="text-purple-300 font-semibold">LIVE SPOT:</span>
-              <span className="font-black text-white font-mono text-sm sm:text-base">{spotPrice > 0 ? fmtUsd(spotPrice) : '—'}</span>
+              <span className="font-black text-white font-mono text-sm sm:text-base">{spotPrice !== null ? fmtUsd(spotPrice) : '—'}</span>
             </div>
             <div className="px-4 py-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-xs flex items-center space-x-2.5 shadow-md">
               <span className="text-purple-300 font-semibold">HOUR CLOSES IN:</span>

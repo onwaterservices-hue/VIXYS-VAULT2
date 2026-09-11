@@ -424,7 +424,8 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({ onOpenTerminal }) 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
           <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30">
             <span className="text-slate-400 block text-[10px] uppercase font-bold">Brier score (settled locks)</span>
-            <span className="text-white font-black text-sm">{model && model.brier !== null ? `${model.brier.toFixed(3)} (n=${model.settledCount})` : '—'}</span>
+            <span className="text-white font-black text-sm">{/* No n: /api/model-status does not report how many rows carry a Brier score, and settledCount is a different count. */}
+            {model && model.brier !== null ? model.brier.toFixed(3) : '—'}</span>
           </div>
           <div className="bg-[#0a0518] p-3 rounded-xl border border-purple-900/30">
             <span className="text-slate-400 block text-[10px] uppercase font-bold">Still needed</span>

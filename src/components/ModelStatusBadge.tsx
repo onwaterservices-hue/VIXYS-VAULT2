@@ -47,9 +47,19 @@ export const ModelStatusBadge: React.FC<ModelStatusBadgeProps> = ({
     );
   }
 
-  const settled = status?.settledCount ?? 0;
-  const minRequired = status?.minRequired ?? 500;
-  const hasModel = status?.hasActiveModel ?? false;
+  // A failed /api/model-status is not "0 settled". Say it is unavailable.
+  if (!status || status.unavailable || typeof status.settledCount !== 'number' || typeof status.minRequired !== 'number') {
+    return (
+      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900/60 border border-slate-600/40 text-slate-300 text-[11px] font-mono font-bold transition-all">
+        <Database className="w-3.5 h-3.5 text-slate-400" />
+        <span>Model status unavailable</span>
+      </div>
+    );
+  }
+
+  const settled = status.settledCount;
+  const minRequired = status.minRequired;
+  const hasModel = status.hasActiveModel ?? false;
   const brier = status?.activeModelBrier;
 
   if (hasModel) {

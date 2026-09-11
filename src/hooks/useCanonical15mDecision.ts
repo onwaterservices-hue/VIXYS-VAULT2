@@ -12,7 +12,7 @@ const ENGINE_STALE_MS = 30000;
 // individual requests are still nominally succeeding.
 const FEED_STALE_MS = 12000;
 
-export type FeedHealthStatus = 'LIVE' | 'STALE' | 'DISCONNECTED' | 'API_ERROR' | 'MISSING_DATA' | 'AUTH_ERROR';
+export type FeedHealthStatus = 'CONNECTING' | 'LIVE' | 'STALE' | 'DISCONNECTED' | 'API_ERROR' | 'MISSING_DATA' | 'AUTH_ERROR';
 
 export type NormalizedLifecycleState = 
   | 'CALIBRATING' 
@@ -75,6 +75,8 @@ export function useCanonical15mDecision(): {
   refreshDecision: () => Promise<void>;
   localUpdatedAt: number;
   dataHealthStatus: FeedHealthStatus;
+  /** true once a real server decision has replaced the placeholder */
+  hasServerDecision: boolean;
   feedError: string | null;
   normalizedLifecycle: NormalizedLifecycleState;
   isStale: boolean;
@@ -84,7 +86,11 @@ export function useCanonical15mDecision(): {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [localUpdatedAt, setLocalUpdatedAt] = useState<number>(Date.now());
 
-  const [dataHealthStatus, setDataHealthStatus] = useState<FeedHealthStatus>('LIVE');
+  // Nothing has been received yet, so the feed is not live. It becomes LIVE
+  // only inside applySafeUpdate, after a real server decision is applied.
+  const [dataHealthStatus, setDataHealthStatus] = useState<FeedHealthStatus>('CONNECTING');
+  // False while `decision` is still the client placeholder.
+  const [hasServerDecision, setHasServerDecision] = useState<boolean>(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const currentDecisionIdRef = useRef<string>('');
   // Server-stamped ordering. stateVersion cannot be used: it is
@@ -117,7 +123,7 @@ export function useCanonical15mDecision(): {
   useEffect(() => {
     const timer = setInterval(() => {
       if (Date.now() - localUpdatedAtRef.current > FEED_STALE_MS) {
-        setDataHealthStatus((prev) => (prev === 'DISCONNECTED' || prev === 'API_ERROR' ? prev : 'STALE'));
+        setDataHealthStatus((prev) => (prev === 'CONNECTING' || prev === 'DISCONNECTED' || prev === 'API_ERROR' ? prev : 'STALE'));
       }
     }, 2000);
     return () => clearInterval(timer);
@@ -140,6 +146,7 @@ export function useCanonical15mDecision(): {
       markFresh();
       setFeedError(null);
       setDataHealthStatus('LIVE');
+      setHasServerDecision(true);
       setDecision(incoming);
       return;
     }
@@ -155,6 +162,7 @@ export function useCanonical15mDecision(): {
     // The decision is always applied -- the backend is the source of truth and
     // this payload is at least as recent as what we hold.
     decisionIdPresentRef.current = true;
+    setHasServerDecision(true);
     setDecision(incoming);
     setFeedError(null);
 
@@ -282,6 +290,7 @@ export function useCanonical15mDecision(): {
     refreshDecision: fetchFromServer,
     localUpdatedAt,
     dataHealthStatus,
+    hasServerDecision,
     feedError,
     normalizedLifecycle,
     isStale: dataHealthStatus === 'STALE',

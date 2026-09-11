@@ -14,7 +14,9 @@ for (const comp of ['ScalpDecisionChart', 'NeuralRibbonChart', 'LiveScalpChart',
   t.check(`does not mount/consume ${comp} (no 1H data behind it)`, !desk.includes(comp));
 }
 t.check('states plainly that no 1H model exists', desk.includes('1H MODEL: NOT BUILT') && desk.includes('There is no 1-hour prediction model in VIXY today'));
-t.check('spot comes from the feed with no literal fallback', desk.includes("Number(ticker?.price) || 0") && !desk.includes('64174.83') && !desk.includes('64200'));
+// Was pinned to `... || Number(ticker?.price) || 0`, which also fell back to
+// BTC's quote for other assets. The selected asset's own quote, or nothing.
+t.check('spot comes from the feed with no literal fallback', desk.includes('const selectedQuote = Number(spotPrices?.[selectedAsset]?.price);') && !desk.includes("spotPrices?.['BTC']") && !desk.includes('64174.83') && !desk.includes('64200'));
 t.check('strike cards say P(win) is not measured and there is no 1H contract feed', desk.includes('not measured') && desk.includes('no 1H feed'));
 t.check('position sizer is driven by user-typed price and P(win), blank until both are entered', desk.includes('contractPriceCents') && desk.includes('userWinProbPct') && desk.includes('Enter a contract price between 1¢ and 99¢'));
 t.check('sizer is labelled as not a model output', desk.includes('NOT A MODEL OUTPUT'));
