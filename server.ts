@@ -17977,11 +17977,15 @@ app.get("/api/journal", (req, res) => {
   const wins = settled.filter((e) => e.outcome === "WIN").length;
   const journaledWinRate =
     settled.length > 0 ? Math.round((wins / settled.length) * 1e3) / 10 : null;
+  // Only entries that recorded an edge are averaged; a missing edge is not 0.
+  const edgeRows = userEntries.filter(
+    (e) => typeof e.edgeAtEntry === "number" && Number.isFinite(e.edgeAtEntry),
+  );
   const avgEdge =
-    userEntries.length > 0
+    edgeRows.length > 0
       ? Math.round(
-          (userEntries.reduce((acc, curr) => acc + curr.edgeAtEntry, 0) /
-            userEntries.length) *
+          (edgeRows.reduce((acc, curr) => acc + curr.edgeAtEntry, 0) /
+            edgeRows.length) *
             10,
         ) / 10
       : null;
@@ -18000,18 +18004,33 @@ app.post("/api/journal", (req, res) => {
   if (!userId) {
     return res.status(401).json({ success: false, error: "AUTHENTICATION_REQUIRED" });
   }
-  const {
-    ticker = "BTC/USDT 15M",
-    direction = "YES",
-    entryPrice = 64e3,
-    targetPrice = 64120,
-    stopLoss = 63900,
-    stake = 1e3,
-    edgeAtEntry = 7.4,
-    notes = "",
-    outcome = "PENDING",
-    pnlUSD = 0,
-  } = req.body || {};
+  // Every numeric field is what the trader entered or nothing. This route used
+  // to default a missing entry price to 64,000, target to 64,120, stop to
+  // 63,900, stake to 1,000 and edge to 7.4, so an incomplete request stored a
+  // plausible trade nobody made.
+  const body = req.body || {};
+  const numOrNull = (v) => {
+    if (v === null || v === undefined || v === "") return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  };
+  const ticker = typeof body.ticker === "string" ? body.ticker.trim().slice(0, 80) : "";
+  const direction = body.direction === "YES" || body.direction === "NO" ? body.direction : null;
+  const entryPrice = numOrNull(body.entryPrice);
+  const stake = numOrNull(body.stake);
+  if (!ticker || !direction || entryPrice === null || entryPrice <= 0 || entryPrice >= 100 || stake === null || stake <= 0) {
+    return res.status(400).json({
+      success: false,
+      error: "INVALID_ENTRY",
+      message: "ticker, direction (YES/NO), entryPrice (1-99 cents) and a positive stake are required.",
+    });
+  }
+  const targetPrice = numOrNull(body.targetPrice);
+  const stopLoss = numOrNull(body.stopLoss);
+  const edgeAtEntry = numOrNull(body.edgeAtEntry);
+  const outcome = ["WIN", "LOSS", "CLOSED", "PENDING"].includes(body.outcome) ? body.outcome : "PENDING";
+  const pnlUSD = numOrNull(body.pnlUSD);
+  const notes = typeof body.notes === "string" ? body.notes.slice(0, 1000) : "";
   const createdAt = new Date().toISOString();
   const entryHash =
     "0x" +
@@ -18021,18 +18040,18 @@ app.post("/api/journal", (req, res) => {
       .digest("hex")
       .slice(0, 16);
   const newEntry = {
-    id: `LOG-${Math.floor(1e3 + Math.random() * 9e3)}`,
+    id: `LOG-${crypto.randomBytes(6).toString("hex")}`,
     userId,
     ticker,
     direction,
-    entryPrice: Number(entryPrice),
-    targetPrice: Number(targetPrice),
-    stopLoss: Number(stopLoss),
-    stake: Number(stake),
-    edgeAtEntry: Number(edgeAtEntry),
+    entryPrice,
+    targetPrice,
+    stopLoss,
+    stake,
+    edgeAtEntry,
     notes,
     outcome,
-    pnlUSD: Number(pnlUSD),
+    pnlUSD,
     createdAt,
     entryHash,
   };
