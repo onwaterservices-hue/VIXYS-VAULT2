@@ -37,6 +37,7 @@ import { BTCTicker, AuthState } from '../types';
 import { Logo } from './Logo';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
 import { useCanonical15mDecision } from '../hooks/useCanonical15mDecision';
+import { headline } from '../lib/engineSemantics';
 
 interface LandingPageProps {
   ticker: BTCTicker;
@@ -91,13 +92,25 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
   const estimatedEdge = (calcModelProb - calcMarketProb).toFixed(1);
 
-  // Live Derived Values for Hero Terminal
-  const currentSpot = canonical15m.currentSpot || ticker?.price || 64250.00;
-  const spotFormatted = `$${currentSpot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const timeRemainingSec = canonical15m.timeRemainingSec ?? 524;
-  const mins = Math.floor(timeRemainingSec / 60);
-  const secs = timeRemainingSec % 60;
-  const timerFormatted = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  // Live derived values for the hero terminal. Every value is observed or shown
+  // as a dash. The previous fallbacks invented a price, a timer, a confidence
+  // and a lock score whenever the engine had not answered yet.
+  const isNum = (v: unknown): v is number => v !== null && v !== undefined && Number.isFinite(Number(v));
+  const heroSpot: number | null =
+    isNum(canonical15m.currentSpot) && Number(canonical15m.currentSpot) > 0
+      ? Number(canonical15m.currentSpot)
+      : isNum(ticker?.price) && Number(ticker?.price) > 0
+      ? Number(ticker?.price)
+      : null;
+  const spotFormatted =
+    heroSpot !== null ? `$${heroSpot.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+  const heroRemaining: number | null = isNum(canonical15m.timeRemainingSec)
+    ? Math.max(0, Math.floor(Number(canonical15m.timeRemainingSec)))
+    : null;
+  const timerFormatted =
+    heroRemaining !== null
+      ? `${String(Math.floor(heroRemaining / 60)).padStart(2, '0')}:${String(heroRemaining % 60).padStart(2, '0')}`
+      : '--:--';
 
   const stateDisplayName = canonical15m.currentState === 'LOCKED_UP'
     ? 'LOCKED — UP'
@@ -117,25 +130,33 @@ export const LandingPage: React.FC<LandingPageProps> = ({
     ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
     : 'text-purple-300 bg-purple-500/10 border-purple-500/30';
 
-  const confidenceScore = Math.round(canonical15m.confidence || 76);
-  const lockScore = Math.round(canonical15m.lockScore || 88);
-
-  const modelFactors = [
-    { id: 1, name: 'EMA9 Trend Alignment', detail: 'Spot price > EMA9 (9-period Exponential Moving Average)', status: 'PASS', type: 'Trend' },
-    { id: 2, name: 'EMA21 Slope Direction', detail: 'EMA21 slope gradient positive on 15M candle history', status: 'PASS', type: 'Trend' },
-    { id: 3, name: 'VWAP Support Floor', detail: 'Spot price maintaining above Volume-Weighted Average Price', status: 'PASS', type: 'Volume' },
-    { id: 4, name: 'RSI Momentum Balance', detail: 'RSI(14) between 48.0 and 68.0 (active momentum, non-overbought)', status: 'PASS', type: 'Momentum' },
-    { id: 5, name: 'Volume Delta Z-Score', detail: 'Taker buy volume delta exceeding +1.5 standard deviations', status: 'PASS', type: 'Volume' },
-    { id: 6, name: 'Net Taker Buy Aggression', detail: 'Net taker buy ratio > 58% on spot market depth', status: 'PASS', type: 'Orderbook' },
-    { id: 7, name: 'Orderbook Depth Imbalance', detail: 'Bid depth within 0.5% of mid price exceeds ask depth by >22%', status: 'PASS', type: 'Orderbook' },
-    { id: 8, name: 'Trailing 10-Bar High Breakout', detail: 'Candle close breaching trailing 10-bar resistance level', status: 'PASS', type: 'Price Action' },
-    { id: 9, name: 'Doji Reversal Support Hold', detail: 'Local doji indecision candle followed by bullish confirmation candle', status: 'PASS', type: 'Pattern' },
-    { id: 10, name: 'Microstructure Volatility Compression', detail: 'ATR(14) volatility compression signaling imminent directional expansion', status: 'PASS', type: 'Volatility' },
-    { id: 11, name: 'Options Implied Skew Neutrality', detail: 'Derivatives call/put implied volatility skew favoring upside', status: 'PASS', type: 'Derivatives' },
-    { id: 12, name: 'Funding Rate Shift Delta', detail: 'Perpetual swap funding rate holding near zero (no crowded long squeeze)', status: 'PASS', type: 'Derivatives' },
-    { id: 13, name: 'Model vs Market Odds Discrepancy', detail: 'Calculated expected value (+EV) discrepancy > +3.0% vs venue odds', status: 'PASS', type: 'Expected Value' },
-    { id: 14, name: 'Cross-Venue Liquidity Spread', detail: 'Bid/Ask spread stability across major spot exchanges', status: 'PASS', type: 'Microstructure' },
-  ];
+  // The same headline the Command Center uses: calibrated P(win) with its
+  // sample size when a historical cell matches, otherwise the engine score.
+  const heroHeadline = headline(canonical15m);
+  const heroLive = dataHealthStatus === 'LIVE' && heroHeadline.kind !== 'NONE';
+  const heroLockScore: number | null =
+    isNum(canonical15m.lockScore) && Number(canonical15m.lockScore) > 0 ? Math.round(Number(canonical15m.lockScore)) : null;
+  // Kalshi's price is shown only when the server marks the read as real.
+  const heroMarket = (() => {
+    const m = (canonical15m as any)?.marketRead;
+    return m && m.real === true && typeof m.kalshiImpliedYes === 'number' ? (m as { kalshiImpliedYes: number }) : null;
+  })();
+  const heroCalibrated = (canonical15m as any)?.calibrated ?? null;
+  const heroEdgeVsMarket: number | null =
+    typeof heroCalibrated?.edgeVsMarketPct === 'number' ? heroCalibrated.edgeVsMarketPct : null;
+  const heroGateChecks = ((canonical15m as any)?.lockGate?.checks ?? []) as Array<{
+    id: string;
+    label: string;
+    pass: boolean;
+    current: string | number;
+    required: string;
+    gating?: boolean;
+  }>;
+  const heroGateRows = heroGateChecks.filter((c) => c && c.gating !== false && c.id !== 'CALIBRATED_P');
+  const heroGatesPassing = heroGateRows.filter((c) => c.pass).length;
+  const heroTrail = (((canonical15m as any)?.convictionTrail ?? []) as Array<{ t: number; p: number | null }>).filter(
+    (pt) => pt && typeof pt.p === 'number',
+  );
 
   const faqs = [
     {
@@ -301,7 +322,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   </span>
                 </div>
                 <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-semibold">
-                  <TrendingUp className="w-3 h-3" /> Sub-Second Spot Feed
+                  <TrendingUp className="w-3 h-3" /> BTC spot
                 </span>
               </div>
 
@@ -323,19 +344,23 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="grid grid-cols-2 gap-4">
               {/* VIXY CONFIDENCE */}
               <div className="p-3.5 rounded-2xl bg-[#0c0620]/90 border border-purple-900/60 space-y-1">
-                <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">VIXY CONFIDENCE</span>
+                <span className="text-[10px] text-purple-300/70 uppercase tracking-widest block font-bold">
+                  {heroLive ? heroHeadline.label : 'VIXY ENGINE'}
+                </span>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-2xl font-black text-white">
-                    {confidenceScore}%
+                  <span className="text-2xl font-black text-white tabular-nums">
+                    {heroLive ? `${heroHeadline.value}%` : '—'}
                   </span>
-                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
-                    Lock Score {lockScore}
-                  </span>
+                  {heroLockScore !== null && (
+                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded">
+                      Lock Score {heroLockScore}
+                    </span>
+                  )}
                 </div>
                 <div className="w-full h-1.5 bg-purple-950 rounded-full overflow-hidden mt-1">
                   <div
                     className="h-full bg-gradient-to-r from-purple-500 via-violet-400 to-cyan-400 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, Math.max(10, confidenceScore))}%` }}
+                    style={{ width: `${heroLive && typeof heroHeadline.value === 'number' ? Math.min(100, Math.max(0, heroHeadline.value)) : 0}%` }}
                   />
                 </div>
               </div>
@@ -355,64 +380,87 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
             </div>
 
-            {/* Sparkline & Micro-Telemetry Ribbon */}
+            {/* Engine conviction trail and market read. Live engine data only. */}
             <div className="p-3.5 rounded-2xl bg-[#0a0518]/90 border border-purple-900/50 space-y-2">
               <div className="flex items-center justify-between text-[10px] text-purple-300/80">
                 <span className="flex items-center gap-1.5">
-                  <Radio className="w-3 h-3 text-cyan-400 animate-pulse" />
-                  CROSS-VENUE ORDER FLOW SYNTHESIS
+                  <Radio className={`w-3 h-3 text-cyan-400 ${heroLive ? 'animate-pulse' : ''}`} />
+                  ENGINE CONVICTION THIS CYCLE
                 </span>
-                <span className="text-cyan-300 font-bold">+EV DISCREPANCY IDENTIFIED</span>
+                <span
+                  className={`font-bold ${
+                    heroEdgeVsMarket === null ? 'text-purple-400/60' : heroEdgeVsMarket >= 0 ? 'text-emerald-300' : 'text-rose-300'
+                  }`}
+                >
+                  {heroEdgeVsMarket === null
+                    ? 'NO MARKET GAP YET'
+                    : `TABLE − MARKET ${heroEdgeVsMarket >= 0 ? '+' : ''}${heroEdgeVsMarket} PTS`}
+                </span>
               </div>
 
-              {/* Sparkline Visual */}
               <div className="h-12 w-full relative">
-                <svg viewBox="0 0 300 60" className="w-full h-full overflow-visible">
-                  <defs>
-                    <linearGradient id="heroLiveGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#A855F7" stopOpacity="0.4" />
-                      <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-                  <path
-                    d="M0,45 Q35,35 70,40 T140,25 T210,38 T260,18 T300,8"
-                    fill="none"
-                    stroke="#A855F7"
-                    strokeWidth="2.5"
-                  />
-                  <path
-                    d="M0,45 Q35,35 70,40 T140,25 T210,38 T260,18 T300,8 L300,60 L0,60 Z"
-                    fill="url(#heroLiveGrad)"
-                  />
-                </svg>
+                {heroTrail.length >= 2 ? (
+                  (() => {
+                    const vals = heroTrail.map((pt) => pt.p as number);
+                    const lo = Math.min(...vals);
+                    const hi = Math.max(...vals);
+                    const span = hi - lo || 1;
+                    const pts = vals.map((v, idx) => `${(idx / (vals.length - 1)) * 300},${55 - ((v - lo) / span) * 50}`).join(' ');
+                    return (
+                      <svg viewBox="0 0 300 60" className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                        <defs>
+                          <linearGradient id="heroLiveGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#A855F7" stopOpacity="0.4" />
+                            <stop offset="100%" stopColor="#A855F7" stopOpacity="0.0" />
+                          </linearGradient>
+                        </defs>
+                        <polygon points={`0,60 ${pts} 300,60`} fill="url(#heroLiveGrad)" />
+                        <polyline points={pts} fill="none" stroke="#A855F7" strokeWidth="2.5" />
+                      </svg>
+                    );
+                  })()
+                ) : (
+                  <div className="h-full flex items-center justify-center text-[10px] text-purple-300/50">
+                    The conviction trail draws as the cycle runs.
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2 pt-1 text-[10px] text-center border-t border-purple-900/30">
                 <div>
                   <span className="text-purple-400/70 block">KALSHI YES</span>
-                  <span className="text-white font-bold">54¢</span>
+                  <span className="text-white font-bold tabular-nums">
+                    {heroMarket ? `${Math.round(heroMarket.kalshiImpliedYes * 100)}¢` : '—'}
+                  </span>
                 </div>
                 <div>
                   <span className="text-purple-400/70 block">POLYMARKET</span>
-                  <span className="text-white font-bold">53%</span>
+                  <span className="text-purple-300/50 font-bold">no feed</span>
                 </div>
                 <div>
-                  <span className="text-purple-400/70 block">MODEL PROB</span>
-                  <span className="text-cyan-300 font-black">68.4%</span>
+                  <span className="text-purple-400/70 block">{heroLive && heroHeadline.kind === 'PWIN' ? 'P(WIN)' : 'MODEL'}</span>
+                  <span className="text-cyan-300 font-black tabular-nums">
+                    {heroLive && heroHeadline.kind === 'PWIN' ? `${heroHeadline.value}%` : '—'}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Interactive 14-Factor Grade Button */}
+            {/* Live lock gate checklist */}
             <button
               onClick={() => setShowFactorsModal(true)}
               className="w-full py-2.5 px-4 rounded-xl bg-purple-950/60 hover:bg-purple-900/60 border border-purple-500/40 hover:border-purple-400 text-purple-200 hover:text-white text-xs font-bold transition-all flex items-center justify-between cursor-pointer"
             >
               <span className="flex items-center gap-2">
                 <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>Multi-Factor Validation: <strong className="text-emerald-400">13/14 Passed (A+)</strong></span>
+                <span>
+                  Lock gates:{' '}
+                  <strong className={heroGateRows.length && heroGatesPassing === heroGateRows.length ? 'text-emerald-400' : 'text-amber-300'}>
+                    {heroGateRows.length ? `${heroGatesPassing}/${heroGateRows.length} passing` : 'waiting for engine'}
+                  </strong>
+                </span>
               </span>
-              <span className="text-[10px] text-cyan-300 underline decoration-cyan-400">View Factor Matrix →</span>
+              <span className="text-[10px] text-cyan-300 underline decoration-cyan-400">View gate checklist →</span>
             </button>
           </div>
         </div>
@@ -696,7 +744,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[#0a0518] p-5 rounded-2xl border border-purple-900/40 text-xs">
           <div className="space-y-2 text-left">
             <div className="flex justify-between font-bold">
-              <span className="text-purple-300/70">VIXY Model Estimated Prob:</span>
+              <span className="text-purple-300/70">Your probability estimate:</span>
               <span className="text-cyan-300 text-sm font-black">{calcModelProb}% YES</span>
             </div>
             <input
@@ -711,7 +759,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
           <div className="space-y-2 text-left">
             <div className="flex justify-between font-bold">
-              <span className="text-purple-300/70">Kalshi / Polymarket Odds:</span>
+              <span className="text-purple-300/70">Market price (YES):</span>
               <span className="text-violet-300 text-sm font-black">{calcMarketProb}% YES</span>
             </div>
             <input
@@ -989,7 +1037,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               Risk &amp; Jurisdiction Disclaimer
             </button>
             <button onClick={() => setShowFactorsModal(true)} className="hover:text-white transition-colors underline decoration-purple-500/50 cursor-pointer">
-              14-Factor Model Criteria
+              Lock gate checklist
             </button>
           </div>
 
@@ -1015,7 +1063,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="flex items-center justify-between border-b border-purple-900/50 pb-3">
               <div className="flex items-center gap-2">
                 <Layers className="w-5 h-5 text-purple-400" />
-                <h3 className="text-base font-black text-white uppercase">14-Factor Model Alignment Criteria</h3>
+                <h3 className="text-base font-black text-white uppercase">Live lock gate checklist</h3>
               </div>
               <button
                 onClick={() => setShowFactorsModal(false)}
@@ -1027,27 +1075,39 @@ export const LandingPage: React.FC<LandingPageProps> = ({
 
             <div className="space-y-1 text-xs">
               <p className="text-slate-300 font-sans leading-relaxed">
-                Setup Grade A+ requires multi-factor alignment across momentum, orderbook depth, and volatility compression.
+                These are the checks the 15-minute engine evaluates every tick before it is allowed to lock. They update live; nothing here is a fixed grade.
               </p>
             </div>
 
             <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-              {modelFactors.map((fac) => (
-                <div
-                  key={fac.id}
-                  className="p-3 rounded-xl border bg-[#0a0518] border-purple-900/40 space-y-1"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-white text-xs flex items-center gap-1.5">
-                      <span className="text-purple-400">#{fac.id}</span> {fac.name}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                      {fac.status}
-                    </span>
+              {heroGateChecks.length === 0 ? (
+                <p className="text-[11px] text-slate-400 font-sans">
+                  The engine has not sent its gate checklist yet. It appears here as soon as the live feed answers.
+                </p>
+              ) : (
+                heroGateChecks.map((c) => (
+                  <div key={c.id} className="p-3 rounded-xl border bg-[#0a0518] border-purple-900/40 space-y-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-bold text-white text-xs">{c.label}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                          c.gating === false
+                            ? 'bg-slate-500/15 text-slate-300 border-slate-500/30'
+                            : c.pass
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        }`}
+                      >
+                        {c.gating === false ? 'OBSERVED' : c.pass ? 'PASS' : 'NOT YET'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-sans">
+                      <strong className="text-white font-mono">{String(c.current)}</strong>{' '}
+                      <span className="text-slate-500">/ required {c.required}</span>
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-300 font-sans">{fac.detail}</p>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             <div className="pt-2 border-t border-purple-900/50 flex justify-end">
