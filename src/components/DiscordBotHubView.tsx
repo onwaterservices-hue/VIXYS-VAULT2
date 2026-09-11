@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Send, ShieldCheck, Zap, ExternalLink, RefreshCw, CheckCircle2, MessageSquare, Terminal, Users, Sparkles, Copy, AlertCircle, PlayCircle, Lock, Activity, ShieldAlert, Cpu } from 'lucide-react';
-import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, unfreezeUserBotsApi, fetchAdminEventsApi, fetchDiscordHealthApi, resyncEntitlementApi } from '../services/api';
+import { getDiscordBotStatusApi, sendDiscordTestBroadcastApi, syncDiscordVipRoleApi, fetchAdminEventsApi, fetchDiscordHealthApi, resyncEntitlementApi } from '../services/api';
 
 interface DiscordBotHubViewProps {
   onClose?: () => void;
@@ -24,27 +24,11 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
   const [syncingVip, setSyncingVip] = useState(false);
   const [vipResponse, setVipResponse] = useState<{ success?: boolean; message?: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [unfreezing, setUnfreezing] = useState(false);
-  const [unfreezeMessage, setUnfreezeMessage] = useState<string | null>(null);
 
   // Resync State
   const [resyncIdentifier, setResyncIdentifier] = useState('vixyvault0@gmail.com');
   const [isResyncing, setIsResyncing] = useState(false);
   const [resyncResult, setResyncResult] = useState<any | null>(null);
-
-  const handleUnfreezeBots = async () => {
-    setUnfreezing(true);
-    setUnfreezeMessage(null);
-    try {
-      const res = await unfreezeUserBotsApi();
-      setUnfreezeMessage(res.message || '⚡ All user bots successfully unfrozen and active!');
-      await loadStatus();
-    } catch (err: any) {
-      setUnfreezeMessage('Failed to trigger unfreeze: ' + (err.message || 'Error'));
-    } finally {
-      setUnfreezing(false);
-    }
-  };
 
   const loadStatus = async () => {
     setLoading(true);
@@ -181,7 +165,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                   </span>
                 </div>
                 <p className="text-xs text-purple-300/70 font-mono mt-0.5">
-                  Unified discord.js Bot Engine & Webhook Signal Dispatcher • Zero Latency
+                  discord.js bot client & webhook signal dispatcher
                 </p>
               </div>
             </div>
@@ -189,15 +173,6 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
 
           {/* Primary CTA button */}
           <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={handleUnfreezeBots}
-              disabled={unfreezing}
-              className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-600/30 border border-emerald-400/50 flex items-center gap-1.5 transition-all transform hover:-translate-y-0.5"
-            >
-              <PlayCircle className={`w-4 h-4 text-emerald-200 ${unfreezing ? 'animate-spin' : ''}`} />
-              <span>{unfreezing ? 'Unfreezing...' : '⚡ UNFREEZE ALL BOTS'}</span>
-            </button>
-
             <button
               onClick={loadStatus}
               disabled={loading}
@@ -222,21 +197,6 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
         </div>
       </div>
 
-      {unfreezeMessage && (
-        <div className="p-4 rounded-xl bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 text-xs font-mono flex items-center justify-between shadow-lg animate-pulse">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-            <span className="font-bold">{unfreezeMessage}</span>
-          </div>
-          <button
-            onClick={() => setUnfreezeMessage(null)}
-            className="text-xs text-emerald-400 hover:text-white px-2 py-1 rounded bg-emerald-900/40"
-          >
-            Dismiss
-          </button>
-        </div>
-      )}
-
       {/* INSTITUTIONAL COMMAND CENTER DIAGNOSTICS */}
       <div className="bg-[#0a0518] border border-purple-900/60 rounded-2xl p-6 shadow-2xl space-y-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-purple-900/40 pb-4">
@@ -248,12 +208,12 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               </h2>
             </div>
             <p className="text-[11px] text-purple-300/60 font-mono mt-1">
-              Active tracking of asynchronous, decoupled Stripe-to-Discord entitlement queue & bot hierarchy integrity.
+              Bot, guild, role and hierarchy state from a live Discord API probe on each refresh.
             </p>
           </div>
           <div className="text-right">
             <span className="text-[10px] font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
-              QUEUE WORKER ACTIVE • 15S INGEST
+              {diagnostics?.liveProbeRan ? 'LIVE PROBE RAN' : 'PROBE UNAVAILABLE'}
             </span>
           </div>
         </div>
@@ -378,7 +338,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
             ) : (
               <div className="p-2 px-3 rounded-xl bg-emerald-950/35 border border-emerald-900/30 text-[11px] font-mono text-emerald-300 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                <span>All asynchronous queue workers are running idle with zero active system exceptions.</span>
+                <span>No bot error reported.</span>
               </div>
             )}
           </div>
@@ -563,49 +523,19 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               <h3 className="font-black text-white text-sm">Discord Slash Commands Directory</h3>
             </div>
 
+            {/* /predict, /price, /status, /vip and /leaderboard were removed (#137, #144):
+                they answered with invented analysis. Only /ping is registered. */}
             <p className="text-xs text-purple-300/70 font-mono">
-              The embedded Discord bot listens for slash commands across all joined servers:
+              Registered slash commands. They answer only while the bot gateway client is connected (see Bot Connected).
             </p>
 
             <div className="space-y-2 text-xs font-mono">
               <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
                 <div className="font-bold text-emerald-400 flex items-center justify-between">
-                  <span>/predict [asset]</span>
-                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Live AI Signal</span>
+                  <span>/ping</span>
+                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Status</span>
                 </div>
-                <p className="text-[11px] text-purple-200/80">Fetches live prediction signal, confidence, and Kalshi implied odds.</p>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
-                <div className="font-bold text-purple-300 flex items-center justify-between">
-                  <span>/price [asset]</span>
-                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Spot Market</span>
-                </div>
-                <p className="text-[11px] text-purple-200/80">Real-time spot price & 24h change from Coinbase Pro / Binance.</p>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
-                <div className="font-bold text-indigo-300 flex items-center justify-between">
-                  <span>/status</span>
-                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Model Stats</span>
-                </div>
-                <p className="text-[11px] text-purple-200/80">Displays AI Brier score calibration, active market regime & accuracy.</p>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
-                <div className="font-bold text-amber-300 flex items-center justify-between">
-                  <span>/vip</span>
-                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Pro Access</span>
-                </div>
-                <p className="text-[11px] text-purple-200/80">Check or verify VIP Pro membership status and upgrade links.</p>
-              </div>
-
-              <div className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
-                <div className="font-bold text-cyan-300 flex items-center justify-between">
-                  <span>/leaderboard</span>
-                  <span className="text-[9px] bg-purple-950 px-1.5 py-0.2 rounded text-purple-300">Alpha Rankings</span>
-                </div>
-                <p className="text-[11px] text-purple-200/80">Top prediction market traders and verified win rates.</p>
+                <p className="text-[11px] text-purple-200/80">Replies with the measured gateway latency, or "not measured yet".</p>
               </div>
             </div>
           </div>
@@ -673,14 +603,13 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
                 <h3 className="font-black text-white text-sm">Live System Event Stream</h3>
               </div>
               <span className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                SSE ACTIVE
+                LOADED ON REFRESH
               </span>
             </div>
 
             <div className="space-y-2 max-h-64 overflow-y-auto pr-1 text-xs font-mono custom-scrollbar">
               {localEvents.length === 0 ? (
-                <div className="p-4 text-center text-purple-400/50 text-xs">Waiting for live Stripe or Discord events...</div>
+                <div className="p-4 text-center text-purple-400/50 text-xs">No Stripe or Discord events recorded yet.</div>
               ) : (
                 localEvents.slice(0, 15).map((evt) => (
                   <div key={evt.id} className="p-2.5 rounded-xl bg-[#0c0620] border border-purple-800/40 space-y-1">
