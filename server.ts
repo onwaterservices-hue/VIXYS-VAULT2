@@ -6236,6 +6236,84 @@ app.get("/api/health/auth", (req, res) => {
     timestamp: Date.now(),
   });
 });
+// ---- Login brute-force limit ----
+// Login had no attempt limit at all. Failed attempts are now counted in
+// Firestore (so the cap holds across serverless instances) per account and per
+// client address, inside a 15-minute window: 10 failures lock that account's
+// logins, 50 failures lock that address. The check runs before the password is
+// verified, so a locked account cannot be probed. A successful login clears the
+// account counter only; an address failing across many accounts stays capped.
+// Fails OPEN if Firestore is unreachable -- the same tradeoff as the password
+// reset limiter: locking every paying user out during a Firestore blip is worse
+// than a briefly unthrottled login.
+function loginLimitKeys(cleanEmail, req) {
+  const forwarded = String((req.headers && req.headers["x-forwarded-for"]) || "").split(",")[0].trim();
+  const ip = forwarded || String((req.socket && req.socket.remoteAddress) || "");
+  const hash = (v) => crypto.createHash("sha256").update(v).digest("hex");
+  const keys = [{ id: "email_" + hash(cleanEmail), max: 10 }];
+  if (ip) keys.push({ id: "ip_" + hash(ip), max: 50 });
+  return keys;
+}
+__name(loginLimitKeys, "loginLimitKeys");
+
+async function isLoginRateLimited(cleanEmail, req) {
+  if (!db && !_adminActive) return false;
+  const windowMs = 15 * 60 * 1000;
+  try {
+    for (const key of loginLimitKeys(cleanEmail, req)) {
+      const snap = await getDoc(doc(db, "login_attempt_limits", key.id));
+      if (!snap.exists()) continue;
+      const data = snap.data() || {};
+      if (Date.now() - (data.windowStart || 0) < windowMs && (data.failures || 0) >= key.max) {
+        return true;
+      }
+    }
+    return false;
+  } catch (err) {
+    console.warn("[AUTH] Login rate-limit check failed, allowing attempt:", err?.message || err);
+    return false;
+  }
+}
+__name(isLoginRateLimited, "isLoginRateLimited");
+
+async function recordLoginFailure(cleanEmail, req) {
+  if (!db && !_adminActive) return;
+  const windowMs = 15 * 60 * 1000;
+  for (const key of loginLimitKeys(cleanEmail, req)) {
+    try {
+      await runTransaction(db, async (tx) => {
+        const ref = doc(db, "login_attempt_limits", key.id);
+        const snap = await tx.get(ref);
+        const now = Date.now();
+        const data = snap.exists() ? snap.data() || {} : {};
+        if (snap.exists() && now - (data.windowStart || 0) < windowMs) {
+          tx.set(ref, { windowStart: data.windowStart, failures: (data.failures || 0) + 1, updatedAt: new Date(now).toISOString() });
+        } else {
+          tx.set(ref, { windowStart: now, failures: 1, updatedAt: new Date(now).toISOString() });
+        }
+      });
+    } catch (err) {
+      console.warn("[AUTH] Could not record login failure:", err?.message || err);
+    }
+  }
+}
+__name(recordLoginFailure, "recordLoginFailure");
+
+async function clearLoginFailures(cleanEmail, req) {
+  if (!db && !_adminActive) return;
+  const accountKey = loginLimitKeys(cleanEmail, req)[0];
+  try {
+    await setDoc(doc(db, "login_attempt_limits", accountKey.id), {
+      windowStart: 0,
+      failures: 0,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn("[AUTH] Could not clear login failures:", err?.message || err);
+  }
+}
+__name(clearLoginFailures, "clearLoginFailures");
+
 app.post("/api/auth/login", async (req, res) => {
   const reqId = `auth_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   console.log(
@@ -6263,6 +6341,14 @@ app.post("/api/auth/login", async (req, res) => {
       `[AUTH_DEBUG] FIREBASE_INIT_FAILED reqId=${reqId}:`,
       initErr?.message || initErr,
     );
+  }
+  if (await isLoginRateLimited(cleanEmail, req)) {
+    console.log(`[AUTH LOGIN THROTTLED] email=${cleanEmail} reqId=${reqId}`);
+    return res.status(429).json({
+      success: false,
+      error: "TOO_MANY_ATTEMPTS",
+      message: "Too many failed sign-in attempts. Wait 15 minutes or reset your password.",
+    });
   }
   let resolution;
   try {
@@ -6311,6 +6397,7 @@ app.post("/api/auth/login", async (req, res) => {
     console.log(
       `[AUTH LOGIN FAILURE] email=${cleanEmail} reason=USER_NOT_FOUND`,
     );
+    await recordLoginFailure(cleanEmail, req);
     return res
       .status(401)
       .json({
@@ -6332,6 +6419,7 @@ app.post("/api/auth/login", async (req, res) => {
     console.log(
       `[AUTH LOGIN REJECTED] email=${cleanEmail} reason=PASSWORD_NOT_SET reqId=${reqId}`,
     );
+    await recordLoginFailure(cleanEmail, req);
     return res
       .status(401)
       .json({
@@ -6354,6 +6442,7 @@ app.post("/api/auth/login", async (req, res) => {
   );
   if (!verificationSuccess) {
     console.log(`[AUTH LOGIN FAILURE] email=${cleanEmail} reason=BAD_PASSWORD`);
+    await recordLoginFailure(cleanEmail, req);
     return res
       .status(401)
       .json({
@@ -6388,6 +6477,7 @@ app.post("/api/auth/login", async (req, res) => {
   console.log(
     `[AUTH LOGIN SUCCESS] email=${cleanEmail} userId=${user.id || user.uid}`,
   );
+  await clearLoginFailures(cleanEmail, req);
   const sessionIssued = issueSessionCookie(res, user);
   if (!sessionIssued) {
     return res.status(500).json({
