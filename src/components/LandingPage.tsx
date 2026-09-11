@@ -776,7 +776,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               max="95"
               value={calcModelProb}
               onChange={(e) => setCalcModelProb(Number(e.target.value))}
-              className="w-full accent-cyan-400 cursor-pointer"
+              className="w-full h-9 sm:h-auto accent-cyan-400 cursor-pointer"
             />
           </div>
 
@@ -791,7 +791,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               max="80"
               value={calcMarketProb}
               onChange={(e) => setCalcMarketProb(Number(e.target.value))}
-              className="w-full accent-purple-500 cursor-pointer"
+              className="w-full h-9 sm:h-auto accent-purple-500 cursor-pointer"
             />
           </div>
         </div>

@@ -5,6 +5,8 @@ interface LogoProps {
   showText?: boolean;
   showSubtitle?: boolean;
   className?: string;
+  textClassName?: string;
+  subtitleClassName?: string;
   onClick?: () => void;
 }
 
@@ -13,6 +15,8 @@ export const Logo: React.FC<LogoProps> = ({
   showText = true,
   showSubtitle = true,
   className = '',
+  textClassName = '',
+  subtitleClassName = '',
   onClick,
 }) => {
   const iconSizes = {
@@ -101,7 +105,7 @@ export const Logo: React.FC<LogoProps> = ({
 
       {/* Brand Typography */}
       {showText && (
-        <div className="font-mono flex flex-col justify-center leading-tight whitespace-nowrap">
+        <div className={`font-mono flex flex-col justify-center leading-tight whitespace-nowrap ${textClassName}`}>
           <div className="flex items-center gap-1.5 font-black tracking-tight text-white">
             <span className={`${titleSizes[size]} text-white`}>VIXY'S</span>
             <span className={`${titleSizes[size]} text-transparent bg-clip-text bg-gradient-to-r from-purple-300 via-fuchsia-300 to-indigo-300`}>
@@ -113,7 +117,7 @@ export const Logo: React.FC<LogoProps> = ({
           </div>
 
           {showSubtitle && (
-            <p className="text-[9px] text-purple-300/70 font-sans tracking-wider uppercase font-bold mt-0.5 whitespace-nowrap">
+            <p className={`text-[9px] text-purple-300/70 font-sans tracking-wider uppercase font-bold mt-0.5 whitespace-nowrap ${subtitleClassName}`}>
               Decision Intelligence
             </p>
           )}

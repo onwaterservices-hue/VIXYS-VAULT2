@@ -101,5 +101,27 @@ check('phone buttons and selects are at least 36x36', /@media \(max-width: 639px
 check('toggle switches are excluded from the minimum', /button:not\(\[role="switch"\]\)/.test(touchBlock));
 check('the minimum is not applied above the phone breakpoint', !/^button[^{]*\{[^}]*min-height: 36px/m.test(css5.slice(0, css5.indexOf('Touch target minimum on phones'))));
 
+console.log('\n[10] Signed-out header fits a phone screen');
+const headerSrc = R('src/components/Header.tsx');
+const logoSrc = R('src/components/Logo.tsx');
+check('header row and both side groups use tighter gaps on phones', (headerSrc.match(/gap-2 sm:gap-3/g) || []).length >= 3);
+check('notification bell is hidden for signed-out visitors on phones', /\$\{isAuthenticated \? '' : 'hidden sm:block '\}relative/.test(headerSrc));
+check('day pass CTA uses a short label below lg and the full price label from lg', /<span className="lg:hidden">Day Pass<\/span>\s*<span className="hidden lg:inline">Get Day Pass \(\$9\.99\)<\/span>/.test(headerSrc));
+check('day pass CTA keeps the full price as its accessible name', /aria-label="Get Day Pass \(\$9\.99\)"/.test(headerSrc));
+const signedOutCluster = headerSrc.slice(headerSrc.indexOf("onOpenAuth('login')"), headerSrc.indexOf('Get Day Pass ($9.99)</span>'));
+check('signed-out header CTAs never wrap to multiple lines', (signedOutCluster.match(/whitespace-nowrap"/g) || []).length === 2);
+check('logo subtitle is hidden on phones in the header', /subtitleClassName="hidden sm:block"/.test(headerSrc) && /\$\{subtitleClassName\}/.test(logoSrc));
+check('logo wordmark yields to the CTAs on narrow phones', /textClassName=\{isAuthenticated \? 'max-\[375px\]:hidden' : 'max-\[420px\]:hidden'\}/.test(headerSrc) && /\$\{textClassName\}/.test(logoSrc));
+
+console.log('\n[11] Remaining small tap targets');
+check('tag-trial Discord invite link has a phone-sized hit area', /inline-block py-2\.5 -my-2\.5 sm:py-0 sm:my-0 underline text-indigo-300/.test(R('src/components/DiscordTagTrialOffer.tsx')));
+check('landing EV calculator sliders are taller on phones', (R('src/components/LandingPage.tsx').match(/w-full h-9 sm:h-auto accent-(cyan-400|purple-500) cursor-pointer/g) || []).length === 2);
+
+console.log('\n[12] Header fits tablets and laptops');
+check('UTC clock appears from md, not on small tablets', /<div className="hidden md:flex items-center gap-1\.5 text-xs text-slate-300 font-bold bg-\[#0e121a\]/.test(headerSrc));
+check('ticker strip appears from xl, not at 1024px', /\{\/\* Center Section: Top Ticker Market Pills[^\n]*\n\s*<div className="hidden xl:flex items-center gap-3">/.test(headerSrc));
+check('ETH pill appears from 2xl', /\{\/\* ETH Ticker Pill \*\/\}\s*<div className="hidden 2xl:flex /.test(headerSrc));
+check('SOL pill appears from 1680px', /\{\/\* SOL Ticker Pill \*\/\}\s*<div className="hidden min-\[1680px\]:flex /.test(headerSrc));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

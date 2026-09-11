@@ -239,7 +239,7 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
           <ol className="list-decimal pl-4 space-y-1 text-[11px] text-purple-200/90">
             <li>
               Join the{' '}
-              <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="underline text-indigo-300 hover:text-white">
+              <a href={DISCORD_INVITE_URL} target="_blank" rel="noopener noreferrer" className="inline-block py-2.5 -my-2.5 sm:py-0 sm:my-0 underline text-indigo-300 hover:text-white">
                 VIXY Vault Discord server
               </a>
               .
