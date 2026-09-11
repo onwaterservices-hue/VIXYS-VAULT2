@@ -1006,7 +1006,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-purple-950/90 border border-purple-600/60 text-xs font-black text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.25)] whitespace-nowrap"
                 >
                   <ShieldAlert className="w-3.5 h-3.5 text-purple-400" />
-                  <span>VIXY SKIP — CAPITAL PROTECTED</span>
+                  <span>VIXY SKIP — NO CALL THIS CYCLE</span>
                 </motion.div>
               )}
 
@@ -1622,7 +1622,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 {computedCycleState === 'CONFIRMING' && 'CONFIRMING BIAS'}
                 {computedCycleState === 'LOCKED' && `VIXY LOCKED — ${isUp ? 'UP' : 'DOWN'}`}
                 {computedCycleState === 'PROTECTED' && 'PROTECTION ACTIVE'}
-                {computedCycleState === 'SKIP' && 'VIXY SKIP — CAPITAL PROTECTED'}
+                {computedCycleState === 'SKIP' && 'VIXY SKIP — NO CALL THIS CYCLE'}
                 {computedCycleState === 'SETTLED' && '15M CYCLE SETTLED'}
               </span>
               <span className="text-purple-300/40 hidden sm:inline">•</span>
