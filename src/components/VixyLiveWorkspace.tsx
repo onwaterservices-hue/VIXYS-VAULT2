@@ -476,7 +476,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                           setIsRenamingWorkspace(true);
                         }}
                         title="Rename workspace"
-                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-purple-300 transition-opacity"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 p-2.5 sm:p-1 text-slate-400 hover:text-purple-300 transition-opacity"
                       >
                         <Edit2 className="w-3 h-3" />
                       </button>
@@ -563,7 +563,7 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
             <button
               onClick={handleResetToEmptyCanvas}
               title="Reset workspace to empty canvas"
-              className="p-1.5 rounded-xl bg-[#120c2b] hover:bg-purple-950/60 border border-purple-900/40 text-slate-400 hover:text-white transition-all"
+              className="p-2.5 sm:p-1.5 rounded-xl bg-[#120c2b] hover:bg-purple-950/60 border border-purple-900/40 text-slate-400 hover:text-white transition-all"
             >
               <RotateCcw className="w-4 h-4" />
             </button>
@@ -737,12 +737,12 @@ export const VixyLiveWorkspace: React.FC<VixyLiveWorkspaceProps> = ({
                     {/* Top right box controls for empty container */}
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      className="absolute top-3 right-3 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
                     >
                       <button
                         onClick={() => handleDeleteBox(box.id)}
                         title="Remove empty box"
-                        className="p-1 rounded-lg bg-[#191333]/90 hover:bg-rose-950/80 border border-purple-800/40 text-slate-400 hover:text-rose-300 transition-all"
+                        className="p-2.5 sm:p-1 rounded-lg bg-[#191333]/90 hover:bg-rose-950/80 border border-purple-800/40 text-slate-400 hover:text-rose-300 transition-all"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>

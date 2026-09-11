@@ -723,6 +723,7 @@ a[role="button"]:active {
    tiny arbitrary sizes are raised to legible minimums; desktop density is
    untouched. */
 @media (max-width: 639px) {
-  .text-\[8px\], .text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\] { font-size: 11px !important; }
+  .text-\[8px\], .text-\[8\.5px\], .text-\[9px\], .text-\[9\.5px\], .text-\[10px\], .text-\[10\.5px\] { font-size: 11px !important; }
+  .vx-label, .vx-state { font-size: 11px !important; }
   .text-\[11px\], .text-\[11\.5px\] { font-size: 12px !important; }
 }

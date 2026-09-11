@@ -291,7 +291,7 @@ export const OneHourDeskView: React.FC<OneHourDeskViewProps> = ({
                 </label>
                 <label className="flex items-center justify-between gap-2">
                   <span className="text-purple-300 font-bold">Kelly fraction</span>
-                  <select value={kellyFraction} onChange={(e) => setKellyFraction(Number(e.target.value))} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-1.5 text-white font-mono text-right font-bold cursor-pointer">
+                  <select value={kellyFraction} onChange={(e) => setKellyFraction(Number(e.target.value))} className="w-32 bg-[#0a0518] border border-purple-500/40 focus:border-purple-400 focus:outline-none rounded-xl px-3 py-2.5 sm:py-1.5 text-white font-mono text-right font-bold cursor-pointer">
                     <option value={0.125}>1/8 (0.125)</option>
                     <option value={0.25}>1/4 (0.25)</option>
                     <option value={0.5}>1/2 (0.50)</option>

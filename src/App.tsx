@@ -1804,7 +1804,7 @@ export default function App() {
             <span>•</span>
             <button onClick={() => setActiveTab('privacy')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Privacy Policy</button>
             <span>•</span>
-            <button onClick={() => setActiveTab('risk')} className="hover:text-rose-300 text-rose-400/90 font-bold transition-colors">Risk Disclosure</button>
+            <button onClick={() => setActiveTab('risk')} className="inline-flex items-center min-h-[40px] hover:text-rose-300 text-rose-400/90 font-bold transition-colors">Risk Disclosure</button>
             <span>•</span>
             <button onClick={() => setActiveTab('refunds')} className="inline-flex items-center min-h-[40px] hover:text-white transition-colors">Refund Policy</button>
             <span>•</span>

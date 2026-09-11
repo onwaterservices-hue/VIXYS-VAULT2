@@ -1564,7 +1564,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       </div>
 
       {/* Spot Price & Controls */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="bg-[#0e0622] px-3 py-1 rounded-xl border border-purple-800/50 flex items-center gap-2">
           <span className="text-[#8b84a8] text-[10px]">SPOT:</span>
           <span className="font-extrabold text-white text-xs">{latestClose > 0 ? `$${latestClose.toFixed(1)}` : '—'}</span>
