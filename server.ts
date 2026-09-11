@@ -17097,7 +17097,11 @@ app.get("/api/signal/calibration-report", async (req, res) => {
 // HIGH_CONVICTION, the two Brier scores were the literals 0.192 and 0.144, a
 // missing spot became 64100 and a missing confidence 75. It now reports the real
 // graded ledger and says there is nothing to compare against.
-app.get("/api/signal/backtest-replay", (req, res) => {
+app.get("/api/signal/backtest-replay", async (req, res) => {
+  // A cold instance holds no ledger until it hydrates; without this it served
+  // totalHistoricalCyclesEvaluated 0 and a null win rate (seen 2026-09-11 06:44Z)
+  // beside warm instances reporting 149 graded rows.
+  try { await ensureLedgerFresh(); } catch {}
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
   const graded = settled.filter((s) => typeof s.wasCorrect === "boolean");
   const wins = graded.filter((s) => s.wasCorrect).length;
