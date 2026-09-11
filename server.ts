@@ -16912,8 +16912,10 @@ function getCalibratedConfidence(rawConf: number): any {
   const lo = Math.min(95, Math.max(50, Math.floor(raw / 5) * 5));
   const hi = lo >= 95 ? 101 : lo + 5;
   const items = settled.filter((s: any) => {
-    const c = s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
-    return c >= lo && c < hi;
+    // No forecast -> not in any bucket. The `|| 75` default counted such rows as
+    // 75% calls, which could lift the 75-80% bucket past the 15-sample bar.
+    const c = calibrationConfidenceOf(s);
+    return c !== null && c >= lo && c < hi;
   });
   const n = items.length;
   const wins = items.filter((s: any) => s.wasCorrect).length;
@@ -16929,7 +16931,32 @@ app.get("/api/signal/calibrated-confidence", (req, res) => {
   res.json(getCalibratedConfidence(raw));
 });
 
-app.get("/api/signal/confidence-buckets", (req, res) => {
+// Calibration inputs are read from the row or not at all.
+//
+// The calibration endpoints used `s.confidence || (probability*100) || 75` and
+// `(s.probability || s.confidence || 75) / 100`. Two defects: a row with no
+// forecast was counted as a 75% call, and lock rows store probability as a
+// FRACTION (0.661-0.797) so dividing it by 100 gave p ~= 0.007 -- which made
+// /api/signal/calibration-report serve Brier 0.709 and log loss 3.315 for
+// ledger rows whose own stored Brier averages 0.223.
+function calibrationConfidenceOf(s) {
+  if (s && typeof s.confidence === "number" && s.confidence > 0 && s.confidence <= 100) return s.confidence;
+  if (s && typeof s.probability === "number" && s.probability > 0 && s.probability <= 1) return Math.round(s.probability * 100);
+  return null;
+}
+__name(calibrationConfidenceOf, "calibrationConfidenceOf");
+// Probability of the side the lock called, as a fraction in (0, 1].
+function calibrationProbabilityOf(s) {
+  if (s && typeof s.probability === "number" && s.probability > 0 && s.probability <= 1) return s.probability;
+  if (s && typeof s.confidence === "number" && s.confidence > 0 && s.confidence <= 100) return s.confidence / 100;
+  return null;
+}
+__name(calibrationProbabilityOf, "calibrationProbabilityOf");
+
+app.get("/api/signal/confidence-buckets", async (req, res) => {
+  // A cold instance answered with an empty ledger (totalSettledCycles 0 while
+  // another instance saw 146). Hydrate first, as /api/signal/resolved-log does.
+  try { await ensureLedgerFresh(); } catch {}
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
   const bucketRanges = [
     { name: "50-55%", min: 50, max: 55 },
@@ -16945,27 +16972,28 @@ app.get("/api/signal/confidence-buckets", (req, res) => {
   ];
   const buckets = bucketRanges.map((b) => {
     const items = settled.filter((s) => {
-      const conf =
-        s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
-      return conf >= b.min && conf < (b.max === 100 ? 101 : b.max);
+      const conf = calibrationConfidenceOf(s); // no forecast -> no bucket (was counted as 75)
+      return conf !== null && conf >= b.min && conf < (b.max === 100 ? 101 : b.max);
     });
     const predictions = items.length;
     const wins = items.filter((s) => s.wasCorrect).length;
     const losses = predictions - wins;
+    // Empty bucket -> null, so "no data" never renders as "lost every time" or
+    // as a midpoint that nothing predicted.
     const empiricalAccuracy =
-      predictions > 0 ? Math.round((wins / predictions) * 1e3) / 10 : 0;
+      predictions > 0 ? Math.round((wins / predictions) * 1e3) / 10 : null;
     const avgProb =
       predictions > 0
         ? Math.round(
-            (items.reduce((sum, item) => sum + (item.confidence || 75), 0) /
+            (items.reduce((sum, item) => sum + calibrationConfidenceOf(item), 0) /
               predictions) *
               10,
           ) / 10
-        : (b.min + b.max) / 2;
+        : null;
     const calibrationError =
       predictions > 0
         ? Math.round(Math.abs(avgProb - empiricalAccuracy) * 10) / 10
-        : 0;
+        : null;
     return {
       bucket: b.name,
       minConfidence: b.min,
@@ -16985,45 +17013,45 @@ app.get("/api/signal/confidence-buckets", (req, res) => {
   const overallWinRatePct =
     totalPredictions > 0
       ? Math.round((totalWins / totalPredictions) * 1e3) / 10
-      : 0;
+      : null;
   res.json({
     totalSettledCycles: totalPredictions,
     overallWinRatePct,
+    // Settled rows that carry no confidence or probability and so sit in no bucket.
+    unbucketedRows: settled.filter((s) => calibrationConfidenceOf(s) === null).length,
     buckets,
     timestamp: new Date().toISOString(),
   });
 });
-app.get("/api/signal/calibration-report", (req, res) => {
+app.get("/api/signal/calibration-report", async (req, res) => {
+  try { await ensureLedgerFresh(); } catch {}
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
   const totalSettled = settled.length;
   const wins = settled.filter((s) => s.wasCorrect).length;
   const overallWinRatePct =
     totalSettled > 0 ? Math.round((wins / totalSettled) * 1e3) / 10 : null; // was an invented 71.8
-  const brierScores = settled.map((s) => {
-    const p = (s.probability || s.confidence || 75) / 100;
-    const y = s.wasCorrect ? 1 : 0;
-    return Math.pow(p - y, 2);
-  });
+  // p is the probability of the side the lock called, as a fraction; rows with
+  // no forecast are left out rather than scored as a 75% call.
+  const scored = settled
+    .map((s) => ({ p: calibrationProbabilityOf(s), y: s.wasCorrect ? 1 : 0 }))
+    .filter((r) => r.p !== null);
+  const brierScores = scored.map((r) => Math.pow(r.p - r.y, 2));
   const avgBrier =
     brierScores.length > 0
       ? Math.round(
           (brierScores.reduce((a, b) => a + b, 0) / brierScores.length) * 1e3,
         ) / 1e3
       : null; // no settled rows -> no Brier (was an invented 0.168)
-  const logLosses = settled.map((s) => {
-    const p = Math.max(
-      0.01,
-      Math.min(0.99, (s.probability || s.confidence || 75) / 100),
-    );
-    const y = s.wasCorrect ? 1 : 0;
-    return -(y * Math.log(p) + (1 - y) * Math.log(1 - p));
+  const logLosses = scored.map((r) => {
+    const p = Math.max(0.01, Math.min(0.99, r.p));
+    return -(r.y * Math.log(p) + (1 - r.y) * Math.log(1 - p));
   });
   const avgLogLoss =
     logLosses.length > 0
       ? Math.round(
           (logLosses.reduce((a, b) => a + b, 0) / logLosses.length) * 1e3,
         ) / 1e3
-      : 0.512;
+      : null; // no scored rows -> no log loss (was an invented 0.512)
   const buckets = [
     { label: "60\u201365%", min: 60, max: 65 },
     { label: "65\u201370%", min: 65, max: 70 },
@@ -17033,25 +17061,26 @@ app.get("/api/signal/calibration-report", (req, res) => {
     { label: "85%+", min: 85, max: 100 },
   ].map((b) => {
     const subset = settled.filter((s) => {
-      const c =
-        s.confidence || (s.probability ? Math.round(s.probability * 100) : 75);
-      return c >= b.min && c < (b.max === 100 ? 101 : b.max);
+      const c = calibrationConfidenceOf(s);
+      return c !== null && c >= b.min && c < (b.max === 100 ? 101 : b.max);
     });
     const count = subset.length;
     const w = subset.filter((s) => s.wasCorrect).length;
-    const acc = count > 0 ? Math.round((w / count) * 1e3) / 10 : 0;
+    // Empty bucket -> nulls. This used to report the bucket midpoint as the
+    // calibration error (e.g. 62.5 with 0 samples).
+    const acc = count > 0 ? Math.round((w / count) * 1e3) / 10 : null;
     const avgPred =
       count > 0
         ? Math.round(
-            (subset.reduce((a, s) => a + (s.confidence || 75), 0) / count) * 10,
+            (subset.reduce((a, s) => a + calibrationConfidenceOf(s), 0) / count) * 10,
           ) / 10
-        : (b.min + b.max) / 2;
+        : null;
     return {
       bucket: b.label,
       predictedConfidence: avgPred,
       empiricalWinRate: acc,
       sampleCount: count,
-      calibrationDiff: Math.round(Math.abs(avgPred - acc) * 10) / 10,
+      calibrationDiff: count > 0 ? Math.round(Math.abs(avgPred - acc) * 10) / 10 : null,
     };
   });
   const regimes = [
@@ -17067,35 +17096,37 @@ app.get("/api/signal/calibration-report", (req, res) => {
     );
     const count = subset.length;
     const w = subset.filter((s) => s.wasCorrect).length;
+    const confs = subset.map(calibrationConfidenceOf).filter((c) => c !== null);
     return {
       regime: r,
       totalCycles: count,
-      winRatePct: count > 0 ? Math.round((w / count) * 1e3) / 10 : 70,
+      // No cycles -> no win rate or confidence (were an invented 70 and 75).
+      winRatePct: count > 0 ? Math.round((w / count) * 1e3) / 10 : null,
       avgConfidence:
-        count > 0
-          ? Math.round(
-              (subset.reduce((a, s) => a + (s.confidence || 75), 0) / count) *
-                10,
-            ) / 10
-          : 75,
+        confs.length > 0
+          ? Math.round((confs.reduce((a, c) => a + c, 0) / confs.length) * 10) / 10
+          : null,
     };
   });
+  // Lock rows do not store the engine's lock-quality tier, so these are
+  // CONFIDENCE bands and say so in `basis`. The former "SKIP" entry counted
+  // every settled lock (confidence >= 0) -- skipped cycles are not settled
+  // locks -- so it is gone.
   const lockTiers = [
-    { tier: "HIGH_CONVICTION", minQuality: 90 },
-    { tier: "QUALIFIED", minQuality: 80 },
-    { tier: "SKIP", minQuality: 0 },
+    { tier: "HIGH_CONVICTION", minConfidence: 88 },
+    { tier: "QUALIFIED", minConfidence: 76 },
   ].map((t) => {
-    const subset = settled.filter(
-      (s) =>
-        (s.confidence || 75) >=
-        (t.tier === "HIGH_CONVICTION" ? 88 : t.tier === "QUALIFIED" ? 76 : 0),
-    );
+    const subset = settled.filter((s) => {
+      const c = calibrationConfidenceOf(s);
+      return c !== null && c >= t.minConfidence;
+    });
     const count = subset.length;
     const w = subset.filter((s) => s.wasCorrect).length;
     return {
       tier: t.tier,
+      basis: `confidence >= ${t.minConfidence} (lock rows carry no lock-quality tier)`,
       cycles: count,
-      winRatePct: count > 0 ? Math.round((w / count) * 1e3) / 10 : 0,
+      winRatePct: count > 0 ? Math.round((w / count) * 1e3) / 10 : null,
     };
   });
   res.json({
@@ -17107,6 +17138,7 @@ app.get("/api/signal/calibration-report", (req, res) => {
     overallWinRatePct,
     avgBrierScore: avgBrier,
     avgLogLoss,
+    scoredRows: scored.length,
     confidenceBuckets: buckets,
     regimeBreakdown,
     lockQualityTiers: lockTiers,
