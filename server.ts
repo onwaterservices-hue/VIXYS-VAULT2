@@ -15904,9 +15904,11 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       upProbability: pUp,
       downProbability: pDown,
       noTradeProbability,
-      bullScore: 0,
-      bearScore: 0,
-      netDirectionalBias: 0,
+      // No bull/bear score or net bias is computed; these were literal 0s on every
+      // tick. The per-timeframe votes are in btc15mPipeline.multiTimeframeAlignment.
+      bullScore: null,
+      bearScore: null,
+      netDirectionalBias: null,
       confidence: confidenceVal,
       regime: regimeVal,
       alignedEvidenceCount: evidenceAlign,
@@ -15916,12 +15918,14 @@ app.get("/api/vixy/15m/current", async (req, res) => {
           name: fam.label || fam.name || "Factor",
           group: fam.name || "PRICE_STRUCTURE",
           direction: fam.bias || "NEUTRAL",
-          score: fam.score || 50,
-          confidence: fam.score || 50,
-          quality: fam.score || 50,
-          weight: fam.weight || 0.1,
-          aligned: fam.agreement ?? true,
-          freshnessSec: 0,
+          // A family's own score, or null -- not 50 for a missing/zero score, not
+          // aligned when agreement is unknown, and no claimed 0s freshness.
+          score: typeof fam.score === "number" ? fam.score : null,
+          confidence: typeof fam.score === "number" ? fam.score : null,
+          quality: typeof fam.score === "number" ? fam.score : null,
+          weight: typeof fam.weight === "number" ? fam.weight : null,
+          aligned: fam.agreement === true,
+          freshnessSec: null,
           timestamp: Date.now(),
           detail: fam.details || "",
         }),
@@ -15929,14 +15933,15 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       contradictionScore: chopScore,
       reversalRisk: latestBtc15mPipeline?.reversalAssessment?.threatScore ?? 20,
       signalDirection: isLocked ? lockedPred?.direction : livePred.direction,
-      signalMomentum: "STABLE",
-      reasoning:
-        latestBtc15mPipeline?.explainability?.summaryReason ||
-        "Stable live analysis",
-      primaryHypothesis: "",
-      counterHypothesis: "",
+      // signalMomentum was the literal "STABLE"; it is the pipeline's own
+      // momentum classification. reasoning no longer falls back to "Stable live
+      // analysis"; no hypotheses are generated and no latency is measured.
+      signalMomentum: latestBtc15mPipeline?.multiTimeframeAlignment?.momentumClassification ?? null,
+      reasoning: latestBtc15mPipeline?.explainability?.summaryReason || null,
+      primaryHypothesis: null,
+      counterHypothesis: null,
       recommendedState: isLocked ? "LOCKED" : "WATCH",
-      latencyMs: 0,
+      latencyMs: null,
     },
     protection: {
       lockScore: latestBtc15mPipeline?.lockQuality ?? 50,
@@ -15948,7 +15953,7 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         Math.min(100, 100 - (latestGuardianDecision?.survivalScore ?? 100)),
       ),
       capitalPreserved: latestGuardianDecision?.action === "PROTECT",
-      lateCycleProtectionActive: false,
+      lateCycleProtectionActive: null, // not evaluated here; was a literal false
       protectionStatus: protectionStat,
       lockTier: lockTierVal,
       lockEvaluation: latestLockEvaluation || {
