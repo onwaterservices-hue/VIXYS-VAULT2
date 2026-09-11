@@ -408,7 +408,7 @@ import {
   discordClient,
   loadProductionDiscordCredentials,
 } from "./src/bot";
-import { fetchLiveMarketOverview } from "./src/bot/services/marketData";
+import { fetchLiveMarketQuote } from "./src/bot/services/marketData";
 import {
   createDiscordConnectHandler,
   createDiscordCallbackHandler,
@@ -7722,10 +7722,10 @@ app.post("/api/auth/reset-password", async (req, res) => {
 });
 
 // ---- Hourly Market Intelligence digest (real data only) ----
-// Uses only genuinely live fields from fetchLiveMarketOverview (price,
-// 24h change, high/low, volume, market cap) -- deliberately excludes
-// that function's fabricated confidence/whale-pressure/reasoning fields,
-// which are hardcoded or simple formulas dressed up as analysis.
+// Reads venue tickers through fetchLiveMarketQuote, which throws when neither
+// Binance nor Coinbase returns a complete ticker: the hour is then marked FAILED
+// and nothing is posted. The previous market-data helper posted $64,821.50 /
+// +2.45% / 18,450 volume for BTC, ETH and SOL alike when both venues failed.
 async function sendHourlyMarketDigestOnce() {
   if (!db) {
     console.error("[HourlyMarket] Firestore unavailable, skipping this hour.");
@@ -7752,9 +7752,9 @@ async function sendHourlyMarketDigestOnce() {
 
   try {
     const [btc, eth, sol] = await Promise.all([
-      fetchLiveMarketOverview("BTC"),
-      fetchLiveMarketOverview("ETH"),
-      fetchLiveMarketOverview("SOL"),
+      fetchLiveMarketQuote("BTC"),
+      fetchLiveMarketQuote("ETH"),
+      fetchLiveMarketQuote("SOL"),
     ]);
 
     const fmtPrice = (p) => "$" + p.toLocaleString("en-US", { maximumFractionDigits: p < 10 ? 4 : 2 });
@@ -7779,7 +7779,7 @@ async function sendHourlyMarketDigestOnce() {
           inline: true,
         },
       ],
-      footer: { text: "VIXY Vault \u2022 Live Market Data (Binance/Coinbase)" },
+      footer: { text: `VIXY Vault \u2022 Live market data (${[...new Set([btc, eth, sol].map((m) => m.source === "BINANCE" ? "Binance" : "Coinbase"))].join(", ")})` },
       timestamp: new Date().toISOString(),
     };
 
