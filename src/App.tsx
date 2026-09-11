@@ -405,11 +405,14 @@ export default function App() {
             mergedEnt.status === 'active' || mergedEnt.status === 'trialing' ||
             mergedEnt.dayPass?.active;
 
+          // A free Discord server-tag trial rides on the day-pass record; it must
+          // not be labelled as a paid 24-hour pass or a card payment.
+          const isTagTrial = !!mergedEnt.dayPass?.active && mergedEnt.dayPass?.entitlementType === 'TAG_TRIAL';
           setSubscription({
             plan: resolvedPlan as any,
             status: isSubActive ? 'active' : (mergedEnt.status === 'past_due' ? 'past_due' : 'inactive'),
-            renewalDate: mergedEnt.dayPass?.active ? '24 Hours Pass' : '30 days from now',
-            paymentMethod: 'Stripe Credit Card',
+            renewalDate: isTagTrial ? '3-Day Server Tag Trial' : mergedEnt.dayPass?.active ? '24 Hours Pass' : '30 days from now',
+            paymentMethod: isTagTrial ? 'None (free trial)' : 'Stripe Credit Card',
             billingInterval: mergedEnt.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
         }

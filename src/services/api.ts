@@ -641,8 +641,8 @@ export async function getStripeHealthApi() {
 // Throws on any non-2xx so callers surface a real reason instead of a generic
 // "failed to load" -- 401 means "sign in first", 503 means the server has no
 // Discord OAuth credentials configured.
-export async function getDiscordAuthUrlSecure(): Promise<{ url: string }> {
-  const res = await fetch('/api/discord/connect', {
+export async function getDiscordAuthUrlSecure(purpose?: 'tag_trial'): Promise<{ url: string }> {
+  const res = await fetch(purpose ? `/api/discord/connect?purpose=${purpose}` : '/api/discord/connect', {
     credentials: 'include',
     cache: 'no-store',
   });
@@ -665,6 +665,34 @@ export async function getDiscordAuthUrlSecure(): Promise<{ url: string }> {
     throw new Error(`Could not start Discord connection (status ${res.status}${code ? `: ${code}` : ''}).`);
   }
   return res.json();
+}
+
+// Discord server-tag trial state for the signed-in account (session cookie
+// identity). Fetched directly, not through safeFetchJson, because the offer card
+// polls it while a claim popup is open and must never see a cached answer.
+export interface TagTrialStatus {
+  available: boolean;
+  offer: { durationHours: number; minDiscordAccountAgeDays: number };
+  claimed: boolean;
+  trial: {
+    status: string;
+    claimedAt: string | null;
+    expiresAt: string | null;
+    endedAt: string | null;
+    endedReason: string | null;
+  } | null;
+  lastAttempt: { at: string; outcome: 'GRANTED' | 'REFUSED' | 'FAILED'; reason: string | null } | null;
+}
+
+// Null when signed out or the request failed -- never a guessed state.
+export async function getTagTrialStatusApi(): Promise<TagTrialStatus | null> {
+  try {
+    const res = await fetch('/api/discord/tag-trial-status', { credentials: 'include', cache: 'no-store' });
+    if (!res.ok) return null;
+    return (await res.json()) as TagTrialStatus;
+  } catch {
+    return null;
+  }
 }
 
 // Canonical Discord link state for the signed-in account.
