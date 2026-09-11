@@ -924,7 +924,7 @@ export const ScalpDecisionChart: React.FC<ScalpDecisionChartProps> = ({
               />
             </div>
             <p className="text-[10px] text-purple-300/70 font-sans">
-              Spot is on the {side} side of the strike. {head.label} = {head.value}%: how often similar past cycles settled on that side
+              Spot is on the {side} side of the strike. Similar past cycles settled on that side {head.value}% of the time
               {head.n !== null ? `, across ${head.n} of them` : ''}. The other side is the complement.
             </p>
           </>
