@@ -19,6 +19,8 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
     journaledWinRate: null,
     modelEdgeCapture: null,
   });
+  // Where the server says entries are kept (the storageType on /api/journal).
+  const [storageType, setStorageType] = useState<string | null>(null);
 
   const loadJournal = async () => {
     setLoading(true);
@@ -32,6 +34,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
           journaledWinRate: data.journaledWinRate ?? null,
           modelEdgeCapture: data.modelEdgeCapture ?? null,
         });
+        setStorageType(typeof data.storageType === 'string' ? data.storageType : null);
       } else if (Array.isArray(data)) {
         setEntries(data);
       }
@@ -145,7 +148,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
         <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
           <span className="text-purple-300/60 text-xs block mb-1 uppercase font-bold">Journaled Win Rate</span>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black text-cyan-300">{winRate.toFixed(1)}%</span>
+            <span className="text-3xl font-black text-cyan-300">{totalTrades > 0 ? `${winRate.toFixed(1)}%` : '—'}</span>
             <span className="text-xs text-purple-300/50">({winCount}/{totalTrades} Settled)</span>
           </div>
         </div>
@@ -153,7 +156,10 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
         <div className="bg-[#0c0620] p-5 rounded-2xl border border-purple-500/30 shadow-lg">
           <span className="text-purple-300/60 text-xs block mb-1 uppercase font-bold">Average Implied Edge</span>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-black text-purple-200">+11.4%</span>
+            {/* Was a fixed percentage shown to every user. No entry records a
+                measured implied edge (the form never asks for one), so there is
+                nothing real to average yet. */}
+            <span className="text-3xl font-black text-purple-200">—</span>
             <span className="text-xs text-purple-300/50">vs Kalshi Odds</span>
           </div>
         </div>
@@ -166,7 +172,13 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
             <Shield className="w-4 h-4 text-cyan-400" />
             VERIFIED TRADE LOGS ({safeEntries.length})
           </span>
-          <span className="text-[11px] text-purple-300/50">Server Database Persistent</span>
+          <span className="text-[11px] text-purple-300/50">
+            {storageType === 'IN_MEMORY_NOT_PERSISTED'
+              ? 'Server memory only, not persisted'
+              : storageType
+              ? `Storage: ${storageType}`
+              : '—'}
+          </span>
         </div>
 
         {loading ? (
@@ -185,9 +197,14 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
             {safeEntries.map((entry, idx) => {
               const tickerName = entry.ticker || entry.market || 'BTC/USDT 15M';
               const pnl = Number(entry.pnlUSD) || 0;
-              const odds = Number(entry.entryOdds) || (Number(entry.entryPrice) ? Number(entry.entryPrice) / 100 : 0.5);
-              const stake = Number(entry.stake) || Number(entry.stakeUSD) || 100;
-              const hash = entry.entryHash || `0x${idx}84aef2918`;
+              // Missing fields render as a dash. These fell back to fixed odds, a
+              // fixed stake and a made-up hash string, all indistinguishable from
+              // values the server actually recorded.
+              const oddsRaw = Number(entry.entryOdds) || (Number(entry.entryPrice) ? Number(entry.entryPrice) / 100 : NaN);
+              const odds = Number.isFinite(oddsRaw) && oddsRaw > 0 ? oddsRaw : null;
+              const stakeRaw = Number(entry.stake) || Number(entry.stakeUSD);
+              const stake = Number.isFinite(stakeRaw) && stakeRaw > 0 ? stakeRaw : null;
+              const hash = typeof entry.entryHash === 'string' && entry.entryHash ? entry.entryHash : null;
 
               return (
                 <div key={entry.id || idx} className="p-5 hover:bg-purple-900/20 transition-colors flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -200,7 +217,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                       </span>
                       <span className="font-bold text-white text-sm">{tickerName}</span>
                       <span className="text-purple-300/50 text-xs">
-                        {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Live'}
+                        {entry.createdAt ? new Date(entry.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                       </span>
                     </div>
 
@@ -209,7 +226,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                     <div className="flex flex-wrap items-center gap-1.5 pt-1">
                       <span className="px-2 py-0.5 rounded-full bg-purple-950/60 text-purple-300 border border-purple-500/30 text-[10px] font-mono flex items-center gap-1">
                         <Key className="w-3 h-3 text-cyan-400" />
-                        SHA256: {hash.substring(0, 14)}...
+                        SHA256: {hash ? `${hash.substring(0, 14)}...` : '—'}
                       </span>
                     </div>
                   </div>
@@ -218,7 +235,7 @@ export const TradeJournalView: React.FC<TradeJournalViewProps> = () => {
                     <div className="text-right">
                       <span className="text-[10px] text-purple-300/50 block">Stake / Implied</span>
                       <span className="font-bold text-xs text-purple-200">
-                        ${stake} @ {Math.round(odds * 100)}¢
+                        {stake !== null ? `$${stake}` : '—'} @ {odds !== null ? `${Math.round(odds * 100)}¢` : '—'}
                       </span>
                     </div>
 
