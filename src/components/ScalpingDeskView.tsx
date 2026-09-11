@@ -135,7 +135,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
             <button
               key={symbol}
               onClick={() => onSelectAsset && onSelectAsset(symbol)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 selectedAsset === symbol
                   ? 'bg-purple-600/40 text-white border border-purple-500/50'
                   : 'text-purple-300/50 hover:text-white'
@@ -176,7 +176,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   onClick={() => setDeskTab('SIGNAL')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-2.5 py-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     deskTab === 'SIGNAL'
                       ? 'bg-purple-600/40 text-white border border-purple-500/50'
                       : 'text-purple-300/50 hover:text-white'
@@ -186,7 +186,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 </button>
                 <button
                   onClick={() => setDeskTab('L2_SCANNER')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-2.5 py-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     deskTab === 'L2_SCANNER'
                       ? 'bg-purple-600/40 text-white border border-purple-500/50'
                       : 'text-purple-300/50 hover:text-white'
@@ -196,7 +196,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                 </button>
                 <button
                   onClick={() => setDeskTab('PAPER_DESK')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                  className={`px-2.5 py-2.5 sm:py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     deskTab === 'PAPER_DESK'
                       ? 'bg-purple-600/40 text-white border border-purple-500/50'
                       : 'text-purple-300/50 hover:text-white'
