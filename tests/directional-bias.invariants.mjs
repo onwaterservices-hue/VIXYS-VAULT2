@@ -123,7 +123,7 @@ console.log('== cold-boot price history is real, not invented ==');
     const T = boot + secs * 1000, spot = rollingBtcTicks[rollingBtcTicks.length - 1].price;
     const m = Math.round(((spot - strike) / strike) * 1e4) / 100;
     const bv = Math.min(90, Math.max(10, Math.round(50 + ((spot - strike) / strike * 100) * 25 + m * 15)));
-    const ctx = { lastMarketUpdateTs: T, engineFeedStatus: 'CONNECTED', cycleVwapAccumulator, rollingBtcTicks, __name: (f) => f,
+    const ctx = { lastMarketUpdateTs: T, engineFeedStatus: 'CONNECTED', cycleVwapAccumulator, rollingBtcTicks, hydratedBtcCloses: [], __name: (f) => f,
       active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5, persistenceSeconds: 60 };
     const k = Object.keys(ctx);
     return new Function(...k, `${fnSrc}\nreturn evaluateBtc15mHighConvictionPipeline;`)(...k.map((x) => ctx[x]))(spot, strike, T, bv, m, 0);
@@ -135,6 +135,48 @@ console.log('== cold-boot price history is real, not invented ==');
   t('young instance: mirrored markets get equal alignment', down.multiTimeframeAlignment.alignedCount, up.multiTimeframeAlignment.alignedCount);
   t('young instance: mirrored markets get equal threat', down.reversalAssessment.threatScore, up.reversalAssessment.threatScore);
   t('young instance: mirrored markets get equal tier', down.lockQualityTier, up.lockQualityTier);
+}
+
+console.log('== timeframe lookbacks use real candle history on young instances ==');
+//
+// Guards fix/hydrate-price-history-from-candles. On an instance seconds old a 5m
+// or 15m lookback found no tick that old and fell back to the instance's first
+// tick, so the "5m"/"15m" vote measured seconds. Production 2026-09-11: tf5m
+// disagreed with real Coinbase 5-minute momentum in 13 of 14 samples.
+{
+  const lines = src.split('\n');
+  const fStart = lines.findIndex((l) => l.startsWith('function evaluateBtc15mHighConvictionPipeline('));
+  const fEnd = lines.findIndex((l, i) => i > fStart && l === '}');
+  const fnSrc = lines.slice(fStart, fEnd + 1).join('\n');
+  const gStart = fnSrc.indexOf('const getPriceAtAgo = __name(');
+  const gEnd = fnSrc.indexOf('}, "getPriceAtAgo");', gStart) + '}, "getPriceAtAgo");'.length;
+  const gSrc = fnSrc.slice(gStart, gEnd);
+  const lookback = (rollingBtcTicks, hydratedBtcCloses, now, spot, sec) =>
+    new Function('rollingBtcTicks', 'hydratedBtcCloses', 'now', 'spot', '__name', `${gSrc}\nreturn getPriceAtAgo(${sec});`)(rollingBtcTicks, hydratedBtcCloses, now, spot, (f) => f);
+
+  const now = 1789100000000;
+  const young = [{ ts: now - 20e3, price: 77010 }, { ts: now - 10e3, price: 77005 }, { ts: now, price: 77000 }];
+  const closes = [];
+  for (let m = 20; m >= 1; m--) closes.push({ ts: now - m * 60e3, price: 76500 + (20 - m) * 25 });
+
+  t('instance tick is used when it reaches the lookback', lookback(young, closes, now, 77000, 10), 77005);
+  t('5m lookback on a young instance reads the real 5m-old close', lookback(young, closes, now, 77000, 300), closes.find((c) => c.ts === now - 300e3).price);
+  t('15m lookback on a young instance reads the real 15m-old close', lookback(young, closes, now, 77000, 900), closes.find((c) => c.ts === now - 900e3).price);
+  t('no hydrated history -> previous fallback (first instance tick)', lookback(young, [], now, 77000, 300), 77010);
+  const stale = [{ ts: now - 30 * 60e3, price: 70000 }];
+  t('a close more than 90s before the target is not used', lookback(young, stale, now, 77000, 300), 77010);
+  t('an instance tick always beats a candle close', lookback([{ ts: now - 400e3, price: 76999 }, ...young], closes, now, 77000, 300), 76999);
+
+  // Hydrated closes must not leak into estimates built from ~3s ticks.
+  const outside = fnSrc.slice(0, gStart) + fnSrc.slice(gEnd);
+  t('realized vol / structure / deltas never read hydratedBtcCloses', /hydratedBtcCloses/.test(outside), false);
+  // The in-progress candle is excluded and the hydrator is throttled.
+  const hStart = src.indexOf('async function hydratePriceHistoryFromCandles(');
+  const hSrc = src.slice(hStart, src.indexOf('__name(hydratePriceHistoryFromCandles', hStart));
+  t('hydrator excludes the in-progress bar', /closeTs <= cutoff/.test(hSrc), true);
+  t('hydrator is single-flight', /_historyHydrateInFlight\) return;/.test(hSrc), true);
+  t('hydrator reads real Coinbase 1m candles', /api\.exchange\.coinbase\.com\/products\/BTC-USD\/candles\?granularity=60/.test(hSrc), true);
+  t('engine tick triggers hydration before the pipeline', /void hydratePriceHistoryFromCandles\(now\);\s*\n\s*latestBtc15mPipeline = evaluateBtc15mHighConvictionPipeline\(/.test(src), true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
