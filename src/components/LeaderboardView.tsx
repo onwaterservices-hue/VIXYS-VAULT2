@@ -92,12 +92,12 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
 
   // Community logged trades: entries traders record in their own journals.
   // Nothing checks them against a venue, so nothing here is "verified".
-  // Which leaderboard row belongs to the viewer. The same rule drives the YOU
-  // badge and the My Logged Trades / Community Leaders tabs, so they agree.
-  const isYouRow = (trd: any): boolean => {
-    const n = String(trd?.traderName || trd?.name || '');
-    return n.includes('You') || n.includes('Quantum') || n.includes('Master Admin');
-  };
+  // Which leaderboard row belongs to the viewer. The server decides it from the
+  // signed session cookie (isViewer), the same identity that keys journal
+  // entries. Matching on display names tagged the owner's row as every
+  // visitor's own. The same rule drives the YOU badge and the My Logged Trades /
+  // Community Leaders tabs, so they agree.
+  const isYouRow = (trd: LeaderboardUser): boolean => trd?.isViewer === true;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans animate-fadeIn">
@@ -228,7 +228,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 leaderboardData
                   .filter((trd) => {
                     const nameStr = (trd.traderName || (trd as any).name || '').toLowerCase();
-                    const idStr = (trd.userId || '').toLowerCase();
+                    const idStr = (trd.lastHash || '').toLowerCase();
                     const term = (searchTerm || '').toLowerCase();
                     if (filterTab === 'MY_LOGS' && !isYouRow(trd)) return false;
                     if (filterTab === 'COMMUNITY' && isYouRow(trd)) return false;
@@ -271,15 +271,19 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                         
                       </td>
                       <td className="py-3 px-3">
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                            trd.badge === 'MASTER ADMIN'
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                              : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
-                          }`}
-                        >
-                          {trd.badge}
-                        </span>
+                        {trd.badge ? (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
+                              trd.badge === 'MASTER ADMIN'
+                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                            }`}
+                          >
+                            {trd.badge}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-slate-300">{trd.totalTrades} Trades</td>
                       <td className="py-3 px-3 text-emerald-400 font-extrabold">{trd.winRate}%</td>
