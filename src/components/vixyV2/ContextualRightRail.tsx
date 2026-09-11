@@ -11,7 +11,7 @@ import {
   AlertTriangle,
   ChevronRight
 } from 'lucide-react';
-import { headline } from '../../lib/engineSemantics';
+import { headline, headlineText } from '../../lib/engineSemantics';
 import { 
   V2Panel, 
   V2Button, 
@@ -171,7 +171,7 @@ export const ContextualRightRail: React.FC<ContextualRightRailProps> = ({
                     variant={hl.value !== null && hl.value >= (hl.kind === 'PWIN' ? 58 : 75) ? 'emerald' : 'amber'}
                     size="xs"
                   >
-                    {hl.value !== null ? `${hl.value}%` : '—'}
+                    {headlineText(hl)}
                   </V2Badge>
                 </div>
                 <div

@@ -1401,7 +1401,7 @@ export const WatchlistModule: React.FC<ModuleRenderProps> = () => {
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <CardHeader icon={<Star className="w-4 h-4 text-amber-400" />} title="ASSET WATCHLIST" right={<span className="text-purple-300 font-mono text-[10px] font-bold">LIVE TICKERS</span>} />
+      <CardHeader icon={<Star className="w-4 h-4 text-amber-400" />} title="ASSET WATCHLIST" right={<span className="text-purple-300 font-mono text-[10px] font-bold">{status === 'LIVE' ? 'LIVE TICKERS' : status === 'LOADING' ? 'LOADING' : 'UNAVAILABLE'}</span>} />
 
       <div className="space-y-1.5">
         {picks.map(({ sym, t }) => {

@@ -33,7 +33,7 @@ import {
 import { TAB_TO_PATH } from '../utils/routePaths';
 import { BTCTicker } from '../types';
 import CycleObject from './CycleObject';
-import { headline } from '../lib/engineSemantics';
+import { headline, headlineText } from '../lib/engineSemantics';
 import { useCanonical15mDecision, getNormalizedLifecycleState } from '../hooks/useCanonical15mDecision';
 import { auraClassFor } from '../lib/engineSemantics';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../utils/cycleTime';
@@ -147,7 +147,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
       group: "TERMINALS",
       cardHeight: "h-auto sm:min-h-[140px]",
       items: [
-        { id: "scalping", label: "Scalping Desk", icon: Zap, desc: "15S ultra-fast taker execution terminal", isPro: true, badge: "15S" },
+        { id: "scalping", label: "Scalping Desk", icon: Zap, desc: "Short-horizon BTC chart beside the 15M engine's read", isPro: true, badge: "15S" },
         { id: "onehour", label: "1-Hour Desk", icon: Clock, desc: "1H positional swing tracking & structural bias", isPro: true, badge: "1H" },
         { id: "compare", label: "Asset Compare", icon: Sliders, desc: "Multi-asset BTC, ETH, SOL telemetry matrix", isPro: false, badge: "MULTI" },
       ]
@@ -160,8 +160,8 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
         { id: "patterns", label: "Pattern Engine", icon: Sparkles, desc: "Algorithmic cluster analysis & regime detection", isPro: true, badge: "PRO" },
         { id: "whales", label: "Whale Tracker", icon: Layers, desc: "Large Coinbase prints & resting book depth", isPro: true, badge: "PRO" },
         { id: "scanner", label: "Edge Scanner", icon: Target, desc: "Liquidity imbalance & statistical edge radar", isPro: true, badge: "+EV" },
-        { id: "explainability", label: "News & Sentiment", icon: BrainCircuit, desc: "Macro sentiment, narrative feeds & neural weights", isPro: false },
-        { id: "history", label: "VIXY Locks", icon: BarChart2, desc: "Immutable historical cycle ledger & verification", isPro: false, badge: "LEDGER" },
+        { id: "explainability", label: "News & Sentiment", icon: BrainCircuit, desc: "The evidence behind each engine call", isPro: false },
+        { id: "history", label: "VIXY Locks", icon: BarChart2, desc: "Every recorded 15M lock and how it settled", isPro: false, badge: "LEDGER" },
       ]
     },
     {
@@ -201,7 +201,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
               COMMAND CENTER
             </h1>
             <p className="text-slate-400 text-xs font-sans max-w-xl">
-              Live quantitative decision matrix and institutional macro intelligence.
+              The engine's current 15-minute BTC call, its number and the cycle strike.
             </p>
           </div>
           
@@ -209,7 +209,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
             {/* Live Spot Price Pill */}
             <div className="px-3 py-1.5 rounded-xl bg-[#090614] border border-purple-900/40 flex items-center gap-2.5 text-xs font-mono shadow-sm">
               <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className={`w-2 h-2 rounded-full ${spotPrice !== null ? 'bg-emerald-400' : 'bg-slate-600'}`} />
                 <span className="text-purple-200 font-bold">BTC/USD</span>
               </div>
               <div className="h-3.5 w-px bg-purple-900/50" />
@@ -299,7 +299,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
                       {rawDirection}
                     </span>
                     <span className="text-xl sm:text-2xl lg:text-3xl font-mono font-bold text-white">
-                      {hl.value !== null ? `${hl.value}%` : '—'}
+                      {headlineText(hl)}
                     </span>
                     <span
                       className="text-[11px] font-mono text-slate-400 uppercase tracking-wider whitespace-nowrap"
@@ -325,7 +325,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
               {/* Metric 1: the headline number (P(win) or engine score) */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">{hl.kind === 'PWIN' ? 'P(WIN)' : 'ENGINE SCORE'}</span>
-                <span className="text-lg sm:text-xl font-black text-white py-1">{hl.value !== null ? `${hl.value}%` : '—'}</span>
+                <span className="text-lg sm:text-xl font-black text-white py-1">{headlineText(hl)}</span>
                 <span className="text-[9.5px] text-slate-500 font-sans truncate">{hl.kind === 'PWIN' ? `n=${hl.n ?? 0} · ${hl.word}` : hl.word}</span>
               </div>
 
@@ -339,8 +339,8 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
               {/* Metric 3: Reversal Risk */}
               <div className="p-3 sm:p-3.5 rounded-2xl bg-[#090614]/90 border border-purple-900/40 flex flex-col justify-between min-w-[110px]">
                 <span className="text-[9.5px] text-purple-300/70 font-bold uppercase tracking-wider whitespace-nowrap">REVERSAL RISK</span>
-                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk === null ? 'text-slate-500' : reversalRisk < 30 ? 'text-emerald-400' : 'text-amber-400'}`}>{reversalRisk === null ? '—' : `${reversalRisk}%`}</span>
-                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk === null ? 'No data' : reversalRisk < 30 ? 'Low Hazard' : 'Moderate'}</span>
+                <span className={`text-lg sm:text-xl font-black py-1 ${reversalRisk === null ? 'text-slate-500' : reversalRisk < 30 ? 'text-emerald-400' : reversalRisk < 60 ? 'text-amber-400' : 'text-rose-400'}`}>{reversalRisk === null ? '—' : `${reversalRisk} / 100`}</span>
+                <span className="text-[9.5px] text-slate-500 font-sans truncate">{reversalRisk === null ? 'No data' : 'Threat score, not a probability'}</span>
               </div>
 
               {/* Metric 4: Cycle Expiry */}
@@ -373,7 +373,7 @@ export const VixyHubView: React.FC<VixyHubViewProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 min-w-0 max-w-full text-[11px] sm:text-xs text-slate-400 font-mono">
-              <span className="truncate max-w-full">CONTRACT: <strong className="text-slate-200 font-mono">{canonical15m.contractId || canonical15m.decisionId || 'BTC-15M-CANONICAL'}</strong></span>
+              <span className="truncate max-w-full">CONTRACT: <strong className="text-slate-200 font-mono">{canonical15m.contractId || canonical15m.decisionId || '—'}</strong></span>
               <span className="hidden sm:inline text-purple-900">•</span>
               <span className="whitespace-nowrap">STRIKE: <strong className="text-slate-200 font-mono">{typeof canonical15m.openStrike === 'number' && canonical15m.openStrike > 0 ? `$${canonical15m.openStrike.toFixed(2)}` : '—'}</strong></span>
             </div>
