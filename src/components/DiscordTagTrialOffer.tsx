@@ -12,7 +12,7 @@ const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 3 * 60 * 1000;
 
 const REASON_TEXT: Record<string, string> = {
-  TAG_NOT_EQUIPPED: "Discord reports the VIXY Vault server tag isn't showing on your profile. Equip it, then claim again.",
+  TAG_NOT_EQUIPPED: "Discord says the VIXY Vault tag isn't on your profile yet. In Discord, open User Settings → Profiles → Server Tag, choose VIXY Vault, then claim again.",
   TAG_STATE_UNKNOWN: "Discord didn't return your server tag this time. Please try again in a minute.",
   INVALID_DISCORD_ID: "Discord returned an account we couldn't read. Please try again.",
   ALREADY_CLAIMED: 'This Discord account or VIXY account has already used the free server-tag trial.',
@@ -42,6 +42,20 @@ export function formatFreeTime(hours: number): string {
     return `${d} day${d === 1 ? '' : 's'}`;
   }
   return `${hours} hours`;
+}
+
+// The last minute a claim still counts, in the viewer's time zone, e.g.
+// "Fri 11:59 PM EDT". A deadline at exactly midnight printed as "Sat 12:00 AM"
+// reads as Saturday night, a full day late.
+export function formatClaimDeadline(endsAt: string | number): string {
+  const ms = typeof endsAt === 'number' ? endsAt : Date.parse(endsAt);
+  if (!Number.isFinite(ms)) return '';
+  return new Date(ms - 60 * 1000).toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
 }
 
 interface DiscordTagTrialOfferProps {
@@ -181,9 +195,7 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
   const offer = status?.offer ?? publicOffer;
   const freeLabel = offer ? formatFreeTime(offer.durationHours) : null;
   const minAge = offer?.minDiscordAccountAgeDays ?? 30;
-  const promoEndsLabel = offer?.promo.active
-    ? new Date(offer.promo.endsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
-    : null;
+  const promoEndsLabel = offer?.promo.active ? formatClaimDeadline(offer.promo.endsAt) || null : null;
   const trial = status?.trial ?? null;
   const active = trial?.status === 'ACTIVE';
   const used = !!status?.claimed && !active;
@@ -203,8 +215,8 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
         <div className="flex items-start gap-2 text-emerald-300 text-xs">
           <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
           <span>
-            Server-tag trial active until <strong>{new Date(trial.expiresAt).toLocaleString()}</strong>. It ends
-            early if you remove the VIXY Vault tag from your Discord profile.
+            Your free trial is active until <strong>{new Date(trial.expiresAt).toLocaleString()}</strong>. Keep the
+            VIXY Vault tag on your Discord profile: removing it ends the trial.
           </span>
         </div>
       ) : used ? (
@@ -232,8 +244,8 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
         <>
           {offer?.promo.active && promoEndsLabel && (
             <p className="text-[11px] font-semibold text-amber-300 leading-relaxed">
-              Launch offer: claim before {promoEndsLabel} for {formatFreeTime(offer.promo.durationHours)}. Claims after
-              that unlock {formatFreeTime(offer.standardDurationHours)}.
+              Launch offer: claim by {promoEndsLabel} and get {formatFreeTime(offer.promo.durationHours)} free. After
+              that, claims get {formatFreeTime(offer.standardDurationHours)}.
             </p>
           )}
           <ol className="list-decimal pl-4 space-y-1 text-[11px] text-purple-200/90">
@@ -244,8 +256,8 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
               </a>
               .
             </li>
-            <li>In Discord, set the VIXY Vault server tag to show next to your username.</li>
-            <li>Claim below. We confirm the tag with Discord before unlocking.</li>
+            <li>In Discord, open User Settings → Profiles → Server Tag, press Select and choose VIXY Vault.</li>
+            <li>Claim below. We confirm your tag with Discord and unlock the terminal right away.</li>
           </ol>
           <button
             type="button"
@@ -273,7 +285,8 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
           </button>
           <p className="text-[10px] text-purple-300/60 leading-relaxed">
             One claim per Discord account and per VIXY account. Your Discord account must be at least {minAge} days
-            old. Not available while you have paid access. The trial ends early if the tag is removed.
+            old. Not available while you have paid access. Keep the tag on: we check it every hour, and removing it
+            ends the trial.
           </p>
         </>
       )}
