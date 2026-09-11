@@ -61,69 +61,12 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
   const userTotalPnl = entries.reduce((acc, curr) => acc + (curr.pnl || 0), 0);
 
   // Community Verified Logged Trades (Derived strictly from verified user trade hashes)
-  const communityTraders = [
-    {
-      id: 'usr_top_01',
-      traderName: 'QuantumSovereign',
-      emailMasked: 'vixy...0@gmail.com',
-      badge: 'MASTER ADMIN',
-      badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-      totalTrades: userTotalTrades > 0 ? userTotalTrades : 28,
-      winRate: userTotalTrades > 0 ? `${userWinRate}%` : '78.6%',
-      netPnl: userTotalTrades > 0 ? `$${userTotalPnl >= 0 ? '+' : ''}${userTotalPnl.toFixed(2)}` : '+$1,420.00',
-      lastHash: entries[0]?.hash || '0x8f3a912c4b7e5109d3a2',
-      isCurrentUser: true,
-    },
-    {
-      id: 'usr_top_02',
-      traderName: 'DeltaHedger99',
-      emailMasked: 'trader...9@proton.me',
-      badge: 'VERIFIED PRO',
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-      totalTrades: 42,
-      winRate: '73.8%',
-      netPnl: '+$2,890.50',
-      lastHash: '0x9a4b281f6c3d902e',
-      isCurrentUser: false,
-    },
-    {
-      id: 'usr_top_03',
-      traderName: 'KalshiScalper_X',
-      emailMasked: 'sam...a@crypto.com',
-      badge: 'VERIFIED PRO',
-      badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-      totalTrades: 19,
-      winRate: '68.4%',
-      netPnl: '+$840.00',
-      lastHash: '0x1c8d729a4e2f9104',
-      isCurrentUser: false,
-    },
-    {
-      id: 'usr_top_04',
-      traderName: 'AlphaSeeker_Sol',
-      emailMasked: 'quant...k@fund.io',
-      badge: 'ELITE PASS',
-      badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-      totalTrades: 34,
-      winRate: '64.7%',
-      netPnl: '+$1,150.25',
-      lastHash: '0x7e3f92104d5a8b1c',
-      isCurrentUser: false,
-    },
-  ];
-
-  const filteredTraders = communityTraders.filter((t) => {
-    if (filterTab === 'MY_LOGS' && !t.isCurrentUser) return false;
-    if (filterTab === 'COMMUNITY' && t.isCurrentUser) return false;
-    if (
-      searchTerm &&
-      !t.traderName.toLowerCase().includes(searchTerm.toLowerCase()) &&
-      !t.emailMasked.toLowerCase().includes(searchTerm.toLowerCase())
-    ) {
-      return false;
-    }
-    return true;
-  });
+  // Which leaderboard row belongs to the viewer. The same rule drives the YOU
+  // badge and the My Logged Trades / Community Leaders tabs, so they agree.
+  const isYouRow = (trd: any): boolean => {
+    const n = String(trd?.traderName || trd?.name || '');
+    return n.includes('You') || n.includes('Quantum') || n.includes('Master Admin');
+  };
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto font-sans animate-fadeIn">
@@ -133,7 +76,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
           <div className="space-y-3">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-bold">
               <Trophy className="w-4 h-4 text-amber-400" />
-              <span>VERIFIED JOURNAL LEADERBOARD</span>
+              <span>JOURNAL LEADERBOARD</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
@@ -141,7 +84,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             </h1>
 
             <p className="text-sm text-purple-200/80 max-w-2xl font-sans leading-relaxed">
-              Transparent rankings compiled exclusively from real user trade logs containing cryptographic client-side SHA-256 hashes. Zero fabricated stats or simulated traders.
+              Rankings compiled from real user trade journal entries. No seeded or simulated traders.
             </p>
           </div>
 
@@ -225,7 +168,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
               type="text"
-              placeholder="Search trader or hash..."
+              placeholder="Search trader..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-[#0c0620] border border-purple-900/40 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"
@@ -243,7 +186,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                 <th className="py-2.5 px-3">Logged Trades</th>
                 <th className="py-2.5 px-3">Win Rate</th>
                 <th className="py-2.5 px-3">Net Realized PnL</th>
-                <th className="py-2.5 px-3">Latest SHA-256 Hash</th>
+                <th className="py-2.5 px-3">Trader ID Hash</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-900/30">
@@ -253,6 +196,8 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                     const nameStr = (trd.traderName || (trd as any).name || '').toLowerCase();
                     const idStr = (trd.userId || '').toLowerCase();
                     const term = (searchTerm || '').toLowerCase();
+                    if (filterTab === 'MY_LOGS' && !isYouRow(trd)) return false;
+                    if (filterTab === 'COMMUNITY' && isYouRow(trd)) return false;
                     if (term && !nameStr.includes(term) && !idStr.includes(term)) {
                       return false;
                     }
@@ -260,7 +205,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                   })
                   .map((trd, index) => {
                     const nameStr = trd.traderName || (trd as any).name || 'Trader';
-                    const isUser = nameStr.includes('You') || nameStr.includes('Quantum') || nameStr.includes('Master Admin');
+                    const isUser = isYouRow(trd);
                     return (
                     <tr
                       key={trd.rank || index}
@@ -289,7 +234,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] text-slate-400 block">vixy...0@gmail.com</span>
+                        
                       </td>
                       <td className="py-3 px-3">
                         <span
@@ -304,17 +249,18 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
                       </td>
                       <td className="py-3 px-3 text-slate-300">{trd.totalTrades} Trades</td>
                       <td className="py-3 px-3 text-emerald-400 font-extrabold">{trd.winRate}%</td>
-                      <td className="py-3 px-3 font-extrabold text-emerald-400">
-                        ${(trd.realizedPnl || 0) >= 0 ? '+' : ''}
-                        {(trd.realizedPnl || 0).toFixed(2)}
+                      <td className={`py-3 px-3 font-extrabold ${(trd.realizedPnl || 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(trd.realizedPnl || 0) >= 0
+                          ? `+$${(trd.realizedPnl || 0).toFixed(2)}`
+                          : `−$${Math.abs(trd.realizedPnl || 0).toFixed(2)}`}
                       </td>
                       <td className="py-3 px-3">
                         <span
-                          title="Client-side SHA-256 hash"
+                          title="SHA-256 of the trader's anonymous ID"
                           className="px-2 py-0.5 rounded bg-[#0a0518] border border-purple-900/60 text-purple-300 font-mono text-[10px] flex items-center gap-1 w-fit"
                         >
                           <Hash className="w-3 h-3 text-purple-400" />
-                          {trd.lastHash ? `${trd.lastHash.substring(0, 10)}...` : '0x7e...'}
+                          {trd.lastHash ? `${trd.lastHash.substring(0, 10)}...` : '—'}
                         </span>
                       </td>
                     </tr>
@@ -336,7 +282,7 @@ export const LeaderboardView: React.FC<LeaderboardViewProps> = ({
       <div className="p-4 rounded-xl bg-[#0a0518] border border-purple-900/40 text-[11px] font-mono text-slate-400 flex items-start gap-3">
         <Info className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <p>
-          <strong className="text-purple-300">Leaderboard Integrity Standard:</strong> Leaderboard statistics are compiled exclusively from user-logged trade journal entries with verified client-side SHA-256 hashes. VIXY AI does not seed synthetic leaderboard entries or guarantee future trading performance.
+          <strong className="text-purple-300">Leaderboard Integrity Standard:</strong> Leaderboard statistics are compiled from user-logged trade journal entries. VIXY AI does not seed synthetic leaderboard entries or guarantee future trading performance.
         </p>
       </div>
     </div>
