@@ -1103,31 +1103,6 @@ export async function fetchPerformanceStats(asset?: string, desk?: string, confi
   };
 }
 
-export interface SystemStatusResponse {
-  binanceWs: { status: string; lastMessageTs: number; latencyMs: number };
-  kalshiPoller: { status: string; lastFetchTs: number; latencyMs: number };
-  polymarketPoller: { status: string; lastFetchTs: number; latencyMs: number };
-  settlementCron: { status: string; lastRunTs: number; checkedCount: number; settledCount: number };
-  sampleCollector: { collected: number; required: number; pctComplete: number };
-  changelog: Array<{ date: string; title: string; description: string }>;
-}
-
-export async function fetchSystemStatus(): Promise<SystemStatusResponse> {
-  const data = await safeFetchJson<SystemStatusResponse>('/api/system-status');
-  if (data) return data;
-
-  return {
-    binanceWs: { status: 'CONNECTED', lastMessageTs: Date.now(), latencyMs: 8 },
-    kalshiPoller: { status: 'ACTIVE', lastFetchTs: Date.now(), latencyMs: 12 },
-    polymarketPoller: { status: 'ACTIVE', lastFetchTs: Date.now(), latencyMs: 18 },
-    settlementCron: { status: 'RUNNING', lastRunTs: Date.now() - 300000, checkedCount: 18, settledCount: 4 },
-    sampleCollector: { collected: 340, required: 500, pctComplete: 68 },
-    changelog: [
-      { date: '2026-08-03', title: 'Real API Integration', description: 'All metrics dynamically fetched from live endpoints.' },
-    ],
-  };
-}
-
 export async function fetchJournal(userId: string = 'usr_owner_01') {
   const data = await safeFetchJson<any>(`/api/journal?userId=${encodeURIComponent(userId)}`);
   if (data) return data;
