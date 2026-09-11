@@ -1605,6 +1605,9 @@ export default function App() {
                       alertSettings={alertSettings}
                       userRole={userRole}
                       onOpenDiscordModal={() => setIsDiscordModalOpen(true)}
+                      asset={selectedAsset}
+                      engineDecision={canonical15m.decision}
+                      engineFeedHealth={canonical15m.dataHealthStatus}
                     />
                   )}
 

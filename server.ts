@@ -5753,15 +5753,19 @@ app.get(
   requireRole(["OWNER", "ADMIN", "SUPPORT"]),
   (req, res) => {
     const now = Date.now();
+    // Measured values only. This used to report a constant 12ms feed latency,
+    // an engine that was always "RUNNING", a database that was always
+    // "Connected", and deduplication counts invented as users + 2.
+    const lastModelRunSecAgo = Math.round((now - lastModelRunTs) / 100) / 10;
     res.json({
       marketFeed: {
         status: engineFeedStatus,
-        latencyMs: 12,
+        latencyMs: null, // not measured by this server
         lastUpdateSecAgo: Math.round((now - lastMarketUpdateTs) / 100) / 10,
       },
       predictionEngine: {
-        status: "RUNNING",
-        lastModelRunSecAgo: Math.round((now - lastModelRunTs) / 100) / 10,
+        status: lastModelRunTs > 0 && lastModelRunSecAgo < 120 ? "RUNNING" : "STALE",
+        lastModelRunSecAgo,
         state: engineState,
         cycleId: currentEngineCycleId,
         direction: currentDirection,
@@ -5780,13 +5784,11 @@ app.get(
         lifetimeObservations: serverLearningEngine.settledHistory.length,
       },
       deduplication: {
-        totalDocuments: serverUsers.length + 2,
         canonicalUsers: serverUsers.length,
-        duplicateRecords: 2,
         legacyAccounts: serverUsers.filter(
           (u) => u.email === "onwaterservices@gmail.com",
         ).length,
-        unresolvedRecords: 0,
+        duplicatesMeasured: false,
       },
       activeContract: activeContractSymbol,
       lockStatus: {
@@ -5804,7 +5806,7 @@ app.get(
         isEarlyLock: latestLockEvaluation.isEarlyLock,
         oddsWindow5050: latestLockEvaluation.oddsWindow5050,
       },
-      database: { status: "Connected" },
+      database: { status: persistenceState },
       discord: {
         status: getDiscordBotStatus().isReady ? "Connected" : "Disconnected",
       },
@@ -5814,16 +5816,14 @@ app.get(
   },
 );
 app.use((req, res, next) => {
-  const userEmail = (
-    req.headers["x-user-email"] ||
-    (req.body && req.body.userEmail) ||
-    (req.query && req.query.email) ||
-    ""
-  ).toLowerCase();
-  if (userEmail && userEmail !== "global_active_user") {
-    const user = serverUsers.find((u) => u.email?.toLowerCase() === userEmail);
-    if (user) {
-      user.lastActiveAt = Date.now();
+  // Presence comes from the signed session only. Any caller used to mark any
+  // user active in the admin panel by naming their email in a header, body or
+  // query. The cookie check keeps session verification off cookieless requests.
+  const cookieHeader = String(req.headers.cookie || "");
+  if (cookieHeader.includes(`${SESSION_COOKIE_NAME}=`)) {
+    const auth = authenticateSession(req);
+    if (auth && auth.user) {
+      auth.user.lastActiveAt = Date.now();
     }
   }
   next();
@@ -14608,10 +14608,18 @@ app.get("/api/btc/ticker", async (req, res) => {
   res.status(503).json({ error: "Data feed temporarily unavailable" });
 });
 app.get("/api/diagnostic", (req, res) => {
+  // Every line is a value this server measured, and anything it does not
+  // measure is named as such. This used to print PASS / HEALTHY / CONNECTED
+  // for checks that were never run (sequence integrity, state reconciliation,
+  // prediction immutability, settlement engine, websocket, account API, ...),
+  // a flat STATUS=PRODUCTION_READY, an invented $64,821.50 spot and $65,000
+  // strike when no market data existed, and a "latency" of data age - 500 ms.
   const now = Date.now();
-  const dataAgeMs = now - lastMarketUpdateTs;
-  const isBinanceConnected =
-    engineFeedStatus === "CONNECTED" && dataAgeMs < 15e3;
+  const dataAgeMs = lastMarketUpdateTs > 0 ? now - lastMarketUpdateTs : null;
+  const feedFresh =
+    engineFeedStatus === "CONNECTED" && dataAgeMs !== null && dataAgeMs < 15e3;
+  const firestoreHealthy = persistenceState === "HEALTHY_FIRESTORE";
+  const hasSpot = Number.isFinite(currentBtcPrice) && currentBtcPrice > 0;
   const isLocked = active15mCycle.isLocked;
   const botState = getDiscordBotStatus();
   const discordStatus =
@@ -14622,35 +14630,18 @@ app.get("/api/diagnostic", (req, res) => {
         : "DEGRADED";
   const lines = [
     `[VIXY_PRODUCTION_DIAGNOSTIC]`,
-    `frontend=READY`,
-    `backend=RUNNING`,
-    `binance=${isBinanceConnected ? "CONNECTED" : "DISCONNECTED"}`,
-    `cryptoTracking=ACTIVE`,
-    `marketData=${engineFeedStatus === "CONNECTED" ? (dataAgeMs < 5e3 ? "FRESH" : dataAgeMs < 15e3 ? "STALE" : "CRITICAL") : "CRITICAL"}`,
-    `algorithm=RUNNING`,
-    `firestore=${persistenceState === "HEALTHY_FIRESTORE" ? "HEALTHY" : persistenceState === "DEGRADED_CACHE_ACTIVE" ? "DEGRADED_CACHE_ACTIVE" : persistenceState}`,
-    `authoritativeState=AVAILABLE`,
-    `vixyWebSocket=CONNECTED`,
-    `frontendSnapshot=FRESH`,
-    `accountApi=HEALTHY`,
-    `btc15mCard=CONNECTED`,
-    `crossAssetContext=READY`,
-    `crossAssetCorrelation=READY`,
-    `crossAssetDivergence=READY`,
-    `signalLedger=HEALTHY`,
+    `marketFeed=${engineFeedStatus}`,
+    `marketData=${engineFeedStatus === "CONNECTED" && dataAgeMs !== null ? (dataAgeMs < 5e3 ? "FRESH" : dataAgeMs < 15e3 ? "STALE" : "CRITICAL") : "CRITICAL"}`,
+    `firestore=${persistenceState}`,
     `cycleSignalCount=${active15mCycle.isLocked ? 1 : 0}`,
-    `settlementEngine=HEALTHY`,
-    `sequenceIntegrity=PASS`,
-    `stateReconciliation=PASS`,
-    `frontendHydration=PASS`,
-    `predictionImmutability=PASS`,
     `discord=${discordStatus}`,
     `cycle=${active15mCycle.cycleId}`,
     `cycleStatus=${active15mCycle.status}`,
     `cycleStage=${active15mCycle.stage}`,
     `cycleExpiry=${new Date(active15mCycle.intervalEnd).toISOString()}`,
-    `strike=${active15mCycle.kalshiStrike || current15mStrikePrice || 65e3}`,
-    `spot=${currentBtcPrice || 64821.5}`,
+    `strike=${active15mCycle.kalshiStrike || current15mStrikePrice || "UNAVAILABLE"}`,
+    `strikeSource=${current15mStrikeSource}`,
+    `spot=${hasSpot ? currentBtcPrice : "UNAVAILABLE"}`,
     `liveDirection=${active15mCycle.status === "CALIBRATING" || active15mCycle.status === "BOOTSTRAPPING" || active15mCycle.status === "OBSERVING" ? "OBSERVING" : active15mCycle.lockedDirection || (currentDirection === "UP" ? "BUY UP" : currentDirection === "DOWN" ? "BUY DOWN" : "WAIT")}`,
     `liveProbability=${active15mCycle.lockedProbability || Math.round(currentModelProbability * 100)}`,
     `liveConfidence=${active15mCycle.lockedConfidence || Math.round(currentConfidence)}`,
@@ -14665,13 +14656,13 @@ app.get("/api/diagnostic", (req, res) => {
     `protectionStatus=${active15mCycle.protectionStatus}`,
     `reversalThreat=${active15mCycle.reversalThreat}`,
     `sequence=${globalSequenceNumber}`,
-    `dataAgeMs=${dataAgeMs}`,
-    `latencyMs=${Math.max(0, dataAgeMs - 500)}`,
+    `dataAgeMs=${dataAgeMs === null ? "UNAVAILABLE" : dataAgeMs}`,
     `calibrationStatus=${active15mCycle.calibrationStatus}`,
     `analysisStatus=${active15mCycle.analysisStatus}`,
     `qualificationStatus=${active15mCycle.qualificationStatus}`,
     `validationStatus=${active15mCycle.validationStatus}`,
-    `STATUS=PRODUCTION_READY`,
+    `notMeasuredHere=frontend,websocket,accountApi,signalLedger,settlementEngine,sequenceIntegrity,stateReconciliation,frontendHydration,predictionImmutability,crossAsset`,
+    `STATUS=${feedFresh && firestoreHealthy ? "OK" : "DEGRADED"}`,
   ];
   res.send(lines.join("\n"));
 });

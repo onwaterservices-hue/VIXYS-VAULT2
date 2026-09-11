@@ -74,8 +74,8 @@ t.check(
 
 // --- Wiring -----------------------------------------------------------------
 t.check(
-  'App passes the live engine decision to Compare, Markets, Scanner and the Scalping desk',
-  (app.match(/engineDecision=\{canonical15m\.decision\}/g) || []).length === 4
+  'App passes the live engine decision to Compare, Markets, Scanner, the Scalping desk and Patterns',
+  (app.match(/engineDecision=\{canonical15m\.decision\}/g) || []).length === 5
 );
 t.check('App passes live spot to Compare', app.includes('spotPrices={spotPrices}'));
 
