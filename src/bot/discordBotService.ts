@@ -114,7 +114,7 @@ export async function broadcastSignalToDiscord(signalData: {
   symbol: string;
   direction: 'YES' | 'NO';
   confidence: number;
-  edgePct: number;
+  edgePct: number | null;
   currentPrice: number;
   targetPrice: number;
   reasoning: string;
@@ -133,7 +133,7 @@ export async function broadcastSignalToDiscord(signalData: {
         fields: [
           { name: 'Spot Price', value: `$${signalData.currentPrice.toLocaleString()}`, inline: true },
           { name: 'Target Price', value: `$${signalData.targetPrice.toLocaleString()}`, inline: true },
-          { name: 'Edge vs Odds', value: `+${signalData.edgePct}%`, inline: true },
+          { name: 'Edge vs Odds', value: typeof signalData.edgePct === 'number' ? `${signalData.edgePct >= 0 ? '+' : ''}${signalData.edgePct}%` : 'No live Kalshi price', inline: true },
           { name: 'AI Reasoning', value: signalData.reasoning, inline: false },
         ],
         footer: { text: 'VIXY AI • Brier Calibrated • Decision Intelligence' },
