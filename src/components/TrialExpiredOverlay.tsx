@@ -218,25 +218,25 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             <span className="flex items-center gap-1.5">
               <Crown className="w-3.5 h-3.5 text-amber-400" /> UNRESTRICTED QUANT MEMBER ADVANTAGES
             </span>
-            <span className="text-emerald-400 font-mono text-[10px]">+EV ACCELERATOR</span>
+            <span className="text-emerald-400 font-mono text-[10px]">LIVE ENGINE</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-purple-100 text-[11px]">
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <span>Sub-Second L2 Net Taker Volume Delta Depth</span>
+              <span>Live Coinbase L2 Depth & Large Prints</span>
             </div>
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <span>Live 15-Minute Reversal & Pivot Score</span>
+              <span>Live 15-Minute Reversal Risk & Lock Gates</span>
             </div>
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <span>Kalshi & Polymarket Arbitrage Radar</span>
+              <span>Kalshi Price vs Calibrated P(win)</span>
             </div>
             <div className="flex items-start gap-2">
               <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
-              <span>Instant Discord & Telegram Webhook Signals</span>
+              <span>Discord Lock & Settlement Alerts</span>
             </div>
           </div>
         </div>
