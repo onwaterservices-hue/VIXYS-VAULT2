@@ -69,7 +69,6 @@ import {
   fetchAdminReferrals,
   saveAdminReferral,
   deleteAdminReferral,
-  unfreezeUserBotsApi,
   fetchAdminStats,
   fetchAdminTransactions,
   performUserAction,
