@@ -57,6 +57,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   dataSource = 'live',
   authState,
 }) => {
+  // Plan buttons on this page must keep signed-out visitors on the page. The
+  // /pricing view shows only an account-creation wall to a signed-out visitor,
+  // so routing them there dead-ends them while the full plan cards are already
+  // public further down this page.
+  const openPlans = () => {
+    if (authState?.isAuthenticated) {
+      onOpenPricing();
+      return;
+    }
+    document.getElementById('landing-plans')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   const { decision: canonical15m, dataHealthStatus } = useCanonical15mDecision();
   const [calcModelProb, setCalcModelProb] = useState(68);
   const [calcMarketProb, setCalcMarketProb] = useState(52);
@@ -210,7 +222,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </button>
 
             <button
-              onClick={onOpenPricing}
+              onClick={openPlans}
               className="px-6 py-4 rounded-xl bg-[#0a0518]/80 hover:bg-[#0c0620] border border-purple-900/60 text-purple-300/90 font-bold text-xs sm:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.98]"
             >
               <span>PLANS &amp; PRICING</span>
@@ -495,7 +507,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Starter is <strong className="text-white font-mono">$29</strong> and runs for all 30 days.
                 </p>
                 <button
-                  onClick={onOpenPricing}
+                  onClick={openPlans}
                   className="mt-2.5 w-full py-2 px-3 rounded-lg bg-purple-950/70 hover:bg-purple-900/80 border border-purple-600/50 hover:border-purple-400/70 text-purple-100 hover:text-white font-mono font-bold text-[11px] uppercase tracking-wider transition-all cursor-pointer active:scale-[0.98]"
                 >
                   Compare monthly plans →
@@ -733,7 +745,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
       {/* ========================================================================= */}
       {/* 6. PRICING SECTION */}
       {/* ========================================================================= */}
-      <section className="relative z-10 space-y-8 font-mono max-w-5xl mx-auto">
+      <section id="landing-plans" className="scroll-mt-24 relative z-10 space-y-8 font-mono max-w-5xl mx-auto">
         <div className="text-center space-y-2">
           <h2 className="text-3xl sm:text-4xl font-black text-white font-sans uppercase tracking-wider">
             SUBSCRIPTION PLANS
