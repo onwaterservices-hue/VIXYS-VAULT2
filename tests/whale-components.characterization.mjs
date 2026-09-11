@@ -1,12 +1,14 @@
-// The whale tracker page must draw only from the real
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+// The whale tracker page and the WhaleBrain card must draw only from the real
 // endpoints (/api/whales, /api/radar, /api/vixy/15m/current) and never invent
 // a print, an entity, a wall, a sentiment or a timestamp. These pins exist so
 // the fabrications removed on 2026-09-09 (fake "institutional block stream",
 // $64k-era strike walls, "BlackRock Custody Bridge", hardcoded +$42.1M volume,
 // static 89% sentiment, default "-$0.09M SOLD" sweep, "-1m" timestamps,
 // "DARK POOL RADAR") can never silently return.
-// (The WhaleBrain card these pins also covered was never mounted and was
-// deleted on 2026-09-11.)
 import { readRepoFile, createHarness } from './_engineSource.mjs';
 const t = createHarness('whale-components.characterization');
 
@@ -28,5 +30,8 @@ t.check('resting depth never labelled defense', !/defense wall|Defense Wall|DEFE
 t.check('renders explicit venue-unavailable and empty states', tracker.includes('UNAVAILABLE') && tracker.includes('No prints'));
 t.check('only assets with a real feed', !/'NVDA'|'SPY'|'TSLA'/.test(tracker));
 t.check('timestamps computed from the print, not written by hand', tracker.includes('relTime(order.timestamp)'));
+
+t.section('WhaleBrain was an unmounted card with an invented default print; it is removed');
+t.check('src/components/brains/WhaleBrain.tsx no longer exists', !existsSync(join(repoRoot, 'src/components/brains/WhaleBrain.tsx')));
 
 t.done();
