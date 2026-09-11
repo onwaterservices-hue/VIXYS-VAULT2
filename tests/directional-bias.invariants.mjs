@@ -92,5 +92,50 @@ t('conflictCount has no self-referential vote', /if \(historicalConflict\) confl
 // historicalSimilarityPct stays: it is displayed, it must not gate.
 t('historicalSimilarityPct still computed for display', /active15mCycle\.historicalSimilarityPct = historicalSimilarityPct;/.test(src), true);
 
+console.log('== cold-boot price history is real, not invented ==');
+//
+// Guards the defect fixed in fix/cold-boot-fake-tick-history. rollingBtcTicks was
+// pre-filled at boot with 61 invented ticks at $64,185 (~$12.7k below market) and
+// the VWAP accumulator anchored at the same price. Every timeframe vote on a young
+// instance then read ~+20% momentum, so UP candidates qualified at 86-91% while
+// DOWN candidates were vetoed and capped near 57. Production: 112 locks, all UP.
+{
+  const bootStart = src.indexOf('const rollingBtcTicks = [];');
+  const bootEnd = src.indexOf('let latestBtc15mPipeline = {', bootStart);
+  const bootSrc = src.slice(bootStart, bootEnd).replace(/\/\/[^\n]*/g, '');
+  t('rollingBtcTicks declared once', src.split('const rollingBtcTicks = [];').length - 1, 1);
+  t('no ticks pushed at boot', /rollingBtcTicks\.push/.test(bootSrc), false);
+  t('no hardcoded 64185 price anywhere', /64185/.test(src), false);
+  const vwap = new Function(`${bootSrc}; return cycleVwapAccumulator;`)();
+  t('VWAP accumulator not anchored to a price', vwap.vwap, 0);
+  t('VWAP accumulator resets on first real tick', vwap.cycleStart, 0);
+
+  // Behavioural: run the REAL pipeline on a young instance using the REAL boot
+  // state, then mirror the market. The side must not change what is reachable.
+  const lines = src.split('\n');
+  const fStart = lines.findIndex((l) => l.startsWith('function evaluateBtc15mHighConvictionPipeline('));
+  const fEnd = lines.findIndex((l, i) => i > fStart && l === '}');
+  const fnSrc = lines.slice(fStart, fEnd + 1).join('\n');
+  const youngInstance = (sign) => {
+    const { rollingBtcTicks, cycleVwapAccumulator } = new Function(`${bootSrc}; return { rollingBtcTicks, cycleVwapAccumulator };`)();
+    const boot = 1789000000000, secs = 60, strike = 77000;
+    for (let s = 1; s <= secs; s += 3) rollingBtcTicks.push({ price: strike + sign * 60 * (s / secs), ts: boot + s * 1000, takerBuyRatio: 1, delta: 0 });
+    const T = boot + secs * 1000, spot = rollingBtcTicks[rollingBtcTicks.length - 1].price;
+    const m = Math.round(((spot - strike) / strike) * 1e4) / 100;
+    const bv = Math.min(90, Math.max(10, Math.round(50 + ((spot - strike) / strike * 100) * 25 + m * 15)));
+    const ctx = { lastMarketUpdateTs: T, engineFeedStatus: 'CONNECTED', cycleVwapAccumulator, rollingBtcTicks, __name: (f) => f,
+      active15mCycle: { directionChanges: 0 }, latestCrossAssetContext: { riskPenalty: 0 }, currentKalshiImpliedProb: 0.5, persistenceSeconds: 60 };
+    const k = Object.keys(ctx);
+    return new Function(...k, `${fnSrc}\nreturn evaluateBtc15mHighConvictionPipeline;`)(...k.map((x) => ctx[x]))(spot, strike, T, bv, m, 0);
+  };
+  const up = youngInstance(+1), down = youngInstance(-1);
+  const votes = (p) => ['tf15s', 'tf30s', 'tf1m', 'tf5m', 'tf15m'].map((f) => p.multiTimeframeAlignment[f]);
+  t('young instance: no BULLISH vote on a falling market', votes(down).includes('BULLISH'), false);
+  t('young instance: mirrored markets get equal confidence', down.edgeVsConfidence.calibratedConfidencePct, up.edgeVsConfidence.calibratedConfidencePct);
+  t('young instance: mirrored markets get equal alignment', down.multiTimeframeAlignment.alignedCount, up.multiTimeframeAlignment.alignedCount);
+  t('young instance: mirrored markets get equal threat', down.reversalAssessment.threatScore, up.reversalAssessment.threatScore);
+  t('young instance: mirrored markets get equal tier', down.lockQualityTier, up.lockQualityTier);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

@@ -1896,22 +1896,38 @@ let latestLockEvaluation = {
   isEarlyLock: true,
   oddsWindow5050: true,
 };
+// Price history starts EMPTY and is filled only by real ticks.
+//
+// This array used to be pre-filled at boot with 61 invented ticks spanning the
+// previous 15 minutes at a hardcoded $64,185 -- about $12,700 below where BTC
+// actually trades. Every timeframe vote reads getPriceAtAgo(15s..900s), so on a
+// fresh instance each lookback landed on an invented $64k price and measured
+// roughly +20% momentum: all five timeframes voted BULLISH on every cold boot,
+// whatever the market was doing. The VWAP accumulator was anchored at the same
+// $64,185, so spot also read far ABOVE_VWAP, and the single $64k -> $77k step
+// pinned realized volatility at its 6.5% cap. The 300-tick buffer only evicts
+// the seed after 300 real ticks, and production runs ~100 instances per
+// 15-minute cycle, so most engine ticks ran on poisoned history.
+//
+// The effect was one-sided. An UP candidate on a young instance got 5/5
+// alignment, threat 15 and 86-91% confidence; a DOWN candidate on the same
+// instance got MTF 2/5, a reversal veto and confidence capped at ~57. Measured
+// in production 2026-09-10/11: 112 consecutive locks, all UP, none DOWN; in the
+// runtime logs 272 DOWN-candidate observations, none reaching the 66% gate
+// (max 57), against 110 of 284 UP observations reaching it.
+//
+// With no seed, a lookback older than the instance's real history falls back
+// to the earliest REAL tick (getPriceAtAgo), so a young instance measures the
+// move it has actually observed -- small, and symmetric -- and the length
+// guards on realized volatility and structure leave their defaults in place.
 const rollingBtcTicks = [];
-(() => {
-  const bootNow = Date.now();
-  const baseSpot = 64185;
-  for (let i = 60; i >= 0; i--) {
-    const ts = bootNow - i * 15 * 1e3;
-    const wave = Math.sin(i * 0.25) * 14 + (60 - i) * 0.2;
-    const p = Math.round((baseSpot - wave) * 100) / 100;
-    rollingBtcTicks.push({ price: p, ts, takerBuyRatio: 1.08, delta: 12.5 });
-  }
-})();
+// cycleStart 0 never matches a live interval, so the first real tick resets the
+// accumulator to its own spot instead of blending with an invented anchor.
 let cycleVwapAccumulator = {
-  cycleStart: Math.floor(Date.now() / (15 * 60 * 1e3)) * (15 * 60 * 1e3),
-  cumulativePv: 64185 * 25,
-  cumulativeVol: 25,
-  vwap: 64185,
+  cycleStart: 0,
+  cumulativePv: 0,
+  cumulativeVol: 0,
+  vwap: 0,
 };
 let latestBtc15mPipeline = {
   lockQuality: 0,

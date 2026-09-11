@@ -70,6 +70,8 @@ import { VixyLockView } from './components/VixyLockView';
 import { VixyLiveView } from './components/VixyLiveView';
 import { AuthToast, AuthToastData } from './components/AuthToast';
 import ReferralCongratsToast from './components/ReferralCongratsToast';
+import { DayPassUpgradePrompt } from './components/DayPassUpgradePrompt';
+import { describeMembershipWindow, hasRecurringPlanFrom } from './lib/membershipDates';
 import { useAuthSubscription } from './hooks/useAuthSubscription';
 
 // Human titles for each internal tab key (mirrors the sidebar + hub labels).
@@ -172,6 +174,12 @@ export default function App() {
     secondsRemaining: number;
   }>({ active: false, secondsRemaining: 0 });
 
+  // True only when the server classifies this account as holding a recurring
+  // Stripe plan. Role labels cannot answer this: the client maps an active day
+  // pass to the PRO role, so a label check hides the in-pass upgrade prompt
+  // from exactly the people it exists for.
+  const [hasRecurringPlan, setHasRecurringPlan] = useState<boolean>(false);
+
   const [terminalAccessGranted, setTerminalAccessGranted] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('vixy_auth');
@@ -199,7 +207,7 @@ export default function App() {
           return {
             plan: 'VIXY VAULT ELITE QUANT' as any,
             status: 'active',
-            renewalDate: '30 days from now',
+            renewalDate: '',
             paymentMethod: 'Stripe Credit Card',
             billingInterval: 'monthly',
           };
@@ -207,7 +215,7 @@ export default function App() {
           return {
             plan: (sub.includes('STARTER') ? 'STARTER' : 'PRO') as any,
             status: 'active',
-            renewalDate: '30 days from now',
+            renewalDate: '',
             paymentMethod: 'Stripe Credit Card',
             billingInterval: 'monthly',
           };
@@ -217,8 +225,8 @@ export default function App() {
     return {
       plan: 'ELITE',
       status: 'inactive',
-      renewalDate: 'August 27, 2026',
-      paymentMethod: 'Corporate Visa ending in 4242',
+      renewalDate: '',
+      paymentMethod: '',
       billingInterval: 'annual',
     };
   });
@@ -307,7 +315,11 @@ export default function App() {
               setPaymentVerificationText('PAYMENT VERIFIED');
               
               // Also eagerly update the UI state
-              setDayPassInfo(ent.dayPass || { active: true, secondsRemaining: 86400 });
+              // Only record a pass the server actually described. Access on this
+              // path is granted below through the resolved role, so nothing here
+              // needs an assumed duration.
+              if (ent.dayPass) setDayPassInfo(ent.dayPass);
+              setHasRecurringPlan(hasRecurringPlanFrom(ent));
               const resolvedRole = ent.entitlements?.canAccessAdminPanel ? 'ADMIN' : (ent.plan === 'ELITE_QUANT' || ent.plan === 'ELITE' || ent.entitlements?.eliteQuant ? 'ELITE' : 'PRO');
               setUserRole(resolvedRole);
               setTerminalAccessGranted(true);
@@ -347,6 +359,7 @@ export default function App() {
 
     if (!userEmail && !userId) {
       setUserRole('UNPAID');
+      setHasRecurringPlan(false);
       setTerminalAccessGranted(false);
       setIsEntitlementLoading(false);
       return;
@@ -372,6 +385,7 @@ export default function App() {
         if (sessionData && sessionData.authenticated === false) {
           setAuthState({ isAuthenticated: false, user: null });
           setUserRole('UNPAID');
+      setHasRecurringPlan(false);
           setTerminalAccessGranted(false);
           localStorage.removeItem('vixy_auth');
           setActiveTab('landing');
@@ -405,13 +419,15 @@ export default function App() {
             mergedEnt.status === 'active' || mergedEnt.status === 'trialing' ||
             mergedEnt.dayPass?.active;
 
+          setHasRecurringPlan(hasRecurringPlanFrom(mergedEnt));
           // A free Discord server-tag trial rides on the day-pass record; it must
-          // not be labelled as a paid 24-hour pass or a card payment.
+          // not be labelled as a paid pass or a card payment.
           const isTagTrial = !!mergedEnt.dayPass?.active && mergedEnt.dayPass?.entitlementType === 'TAG_TRIAL';
+          const membershipWindow = describeMembershipWindow(mergedEnt);
           setSubscription({
             plan: resolvedPlan as any,
             status: isSubActive ? 'active' : (mergedEnt.status === 'past_due' ? 'past_due' : 'inactive'),
-            renewalDate: isTagTrial ? '3-Day Server Tag Trial' : mergedEnt.dayPass?.active ? '24 Hours Pass' : '30 days from now',
+            renewalDate: isTagTrial ? membershipWindow.replace(/^Pass ends/, 'Server tag trial ends') : membershipWindow,
             paymentMethod: isTagTrial ? 'None (free trial)' : 'Stripe Credit Card',
             billingInterval: mergedEnt.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
@@ -1111,6 +1127,7 @@ export default function App() {
       user: null,
     });
     setUserRole('UNPAID');
+      setHasRecurringPlan(false);
     setActiveTab('landing');
   };
 
@@ -1198,6 +1215,16 @@ export default function App() {
     <>
       <AuthToast toast={authToast} onClose={() => setAuthToast(null)} />
       <ReferralCongratsToast />
+
+      {/* Asks a day-pass holder to subscribe while their pass is still running
+          and still delivering value, rather than only after it has expired. */}
+      <DayPassUpgradePrompt
+        dayPassInfo={dayPassInfo}
+        userRole={userRole}
+        hasRecurringPlan={hasRecurringPlan}
+        activeTab={activeTab}
+        onViewPricing={() => setActiveTab('pricing')}
+      />
       {isVerifyingPayment && (
         <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center p-4 bg-[#05020F]/95 backdrop-blur-md animate-fadeIn font-mono text-center">
           <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-400 rounded-full animate-spin mb-6 shadow-[0_0_15px_rgba(34,211,238,0.4)]" />
@@ -1347,6 +1374,7 @@ export default function App() {
           {activeTab === 'pricing' && (
             <SubscriptionView
               subscription={subscription}
+              dayPassInfo={dayPassInfo}
               setSubscription={setSubscription}
               userRole={userRole}
               setUserRole={setUserRole}
