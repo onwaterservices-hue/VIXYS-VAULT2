@@ -4586,8 +4586,10 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       lockRuleN: ruleDecides ? gate.lockRuleN : null,
       lockRuleCell: ruleDecides ? gate.lockRuleCell : null,
       lockedReason: finalReason,
-      dataSource: "COINBASE_KRAKEN_CASCADE",
-      latencyMs: 12,
+      // Source of the feed that priced this lock; no latency is measured here
+      // (these were the literals "COINBASE_KRAKEN_CASCADE" and 12).
+      dataSource: marketFeedHealth.priceSource || null,
+      latencyMs: null,
       cycleId,
       timeframe: "15M",
       decision: finalDir === "UP" ? "BUY_UP" : "BUY_DOWN",
@@ -8457,12 +8459,12 @@ app.post(
           message: `User account with email ${cleanEmail} already exists!`,
         });
     }
-    const genHwFingerprint =
-      hardwareFingerprint || `hw_${Math.random().toString(36).slice(2, 8)}`;
-    const genIpHash =
-      ipAddress ||
-      `172.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.10`;
-    const isDupFingerprint = serverUsers.some(
+    // Only what the client sent. A random "hw_xxxxxx" fingerprint and a random
+    // 172.x.x.10 address used to be stored as device data, and a random
+    // fingerprint can never match, so the duplicate check was a no-op.
+    const genHwFingerprint = hardwareFingerprint || null;
+    const genIpHash = ipAddress || null;
+    const isDupFingerprint = !!genHwFingerprint && serverUsers.some(
       (u) =>
         u.hardwareFingerprint === genHwFingerprint && u.email !== cleanEmail,
     );
@@ -11997,9 +11999,8 @@ async function reconcileUserEntitlement(identity) {
                       ? userData.passwordHash
                       : void 0,
                   verificationStatus: userData.verificationStatus || "VERIFIED",
-                  hardwareFingerprint:
-                    userData.hardwareFingerprint || `hw_${k}`,
-                  ipHash: userData.ipHash || "127.0.0.1",
+                  hardwareFingerprint: userData.hardwareFingerprint || null,
+                  ipHash: userData.ipHash || null,
                   joined:
                     userData.joined || new Date().toISOString().split("T")[0],
                   status: userData.status || "ACTIVE",
@@ -13635,8 +13636,8 @@ async function updateSubscriptionInFirestore(email, updateData) {
       subscription: passName,
       passwordHash: void 0,
       verificationStatus: "VERIFIED",
-      hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
-      ipHash: "172.56.22.10",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status:
         updateData.status === "ACTIVE" || updateData.status === "TRIALING"
@@ -19571,8 +19572,8 @@ function ensureUserExists(input, options) {
       role: "USER",
       subscription: "NONE",
       verificationStatus: "UNVERIFIED",
-      hardwareFingerprint: "hw_anon",
-      ipHash: "127.0.0.1",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status: "INACTIVE",
       volumeTrades: 0,
@@ -19606,8 +19607,8 @@ function ensureUserExists(input, options) {
       role: defaultRole,
       subscription: defaultSub,
       verificationStatus: "VERIFIED",
-      hardwareFingerprint: `hw_auto_${Math.random().toString(36).slice(2, 8)}`,
-      ipHash: "127.0.0.1",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status: defaultSub === "NONE" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
