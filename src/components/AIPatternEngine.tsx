@@ -152,7 +152,12 @@ function evaluateRules(candles: Candle[], candleStatus: FeedStatus, book: BookDe
   const buyShare = total > 0 ? (buy / total) * 100 : null;
   const printsNote = prints.status === 'LOADING' ? 'Reading the tape…' : 'Tape unavailable.';
   const noPrintsNote = `No large prints in the last ${prints.tradesScanned ?? '—'} trades.`;
-  const printSize = prints.thresholdUSD !== null ? `${formatUsdCompact(prints.thresholdUSD)}+` : 'large';
+  const printSize =
+    prints.thresholdUSD !== null
+      ? prints.thresholdUSD >= 1000 && prints.thresholdUSD % 1000 === 0
+        ? `$${prints.thresholdUSD / 1000}k+`
+        : `${formatUsdCompact(prints.thresholdUSD)}+`
+      : 'large';
 
   const candleSource = '1-minute candles';
   const bookSource = 'Coinbase book · top 30 levels';
