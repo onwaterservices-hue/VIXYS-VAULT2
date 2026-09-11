@@ -190,10 +190,10 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-[#05040a]/95 backdrop-blur-xl border-b border-purple-900/30 text-slate-200 select-none">
-      <div className="w-full max-w-[1700px] mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-3 font-mono">
+      <div className="w-full max-w-[1700px] mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 sm:gap-3 font-mono">
         
         {/* Left Section: Mobile Menu Trigger + Brand Logo */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {onOpenMobileMenu && (
             <button
               onClick={onOpenMobileMenu}
@@ -208,12 +208,17 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-3 cursor-pointer group"
             onClick={() => setActiveTab(hasActiveAccess ? 'hub' : 'landing')}
           >
-            <Logo size="md" showSubtitle={true} />
+            <Logo
+              size="md"
+              showSubtitle={true}
+              subtitleClassName="hidden sm:block"
+              textClassName={isAuthenticated ? 'max-[375px]:hidden' : 'max-[420px]:hidden'}
+            />
           </div>
         </div>
 
         {/* Center Section: Top Ticker Market Pills (BTC, ETH, SOL) + Market Status */}
-        <div className="hidden lg:flex items-center gap-3">
+        <div className="hidden xl:flex items-center gap-3">
           {/* BTC Ticker Pill */}
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-xs font-bold shadow-sm">
             <div className="w-4 h-4 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-black text-[9px] border border-amber-500/30">
@@ -229,7 +234,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* ETH Ticker Pill */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-xs font-bold shadow-sm">
+          <div className="hidden 2xl:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-xs font-bold shadow-sm">
             <div className="w-4 h-4 rounded-full bg-purple-500/20 text-purple-300 flex items-center justify-center font-black text-[9px] border border-purple-500/30">
               Ξ
             </div>
@@ -243,7 +248,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* SOL Ticker Pill */}
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-xs font-bold shadow-sm">
+          <div className="hidden min-[1680px]:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#0a0618] border border-purple-900/40 text-xs font-bold shadow-sm">
             <div className="w-4 h-4 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-black text-[9px] border border-cyan-500/30">
               S
             </div>
@@ -284,16 +289,16 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Right Section: UTC Clock + Live System Notifications + Account Area */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* UTC Clock */}
-          <div className="hidden sm:flex items-center gap-1.5 text-xs text-slate-300 font-bold bg-[#0e121a] px-3 py-1.5 rounded-lg border border-slate-800/80">
+          <div className="hidden md:flex items-center gap-1.5 text-xs text-slate-300 font-bold bg-[#0e121a] px-3 py-1.5 rounded-lg border border-slate-800/80">
             <Clock className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-white font-mono">{utcTime || '15:26:43'}</span>
             <span className="text-[10px] text-slate-500">UTC</span>
           </div>
 
           {/* Live Notification Bell & Flyout System */}
-          <div className="relative" ref={popoverRef}>
+          <div className={`${isAuthenticated ? '' : 'hidden sm:block '}relative`} ref={popoverRef}>
             <button
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               className={`p-2.5 min-w-[40px] min-h-[40px] rounded-xl border transition-all relative flex items-center justify-center cursor-pointer ${
@@ -590,19 +595,21 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2">
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-3.5 py-1.5 rounded-xl bg-[#0d0722] border border-purple-800/40 text-xs font-bold text-purple-200 hover:text-white transition-all cursor-pointer"
+                className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-[#0d0722] border border-purple-800/40 text-xs font-bold text-purple-200 hover:text-white transition-all cursor-pointer whitespace-nowrap"
               >
                 Log In
               </button>
               <button
                 onClick={() => onOpenAuth('register')}
-                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5"
+                aria-label="Get Day Pass ($9.99)"
+                className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
               >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Get Day Pass ($9.99)</span>
+                <Sparkles className="w-3.5 h-3.5 hidden sm:block" />
+                <span className="lg:hidden">Day Pass</span>
+                <span className="hidden lg:inline">Get Day Pass ($9.99)</span>
               </button>
             </div>
           )}
