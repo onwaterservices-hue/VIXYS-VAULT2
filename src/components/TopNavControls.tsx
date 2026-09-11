@@ -75,22 +75,26 @@ export const TopNavControls: React.FC<TopNavControlsProps> = ({
 
                 {/* Name & Price */}
                 {(() => {
+                  // Only a live quote is shown. This fell back to ASSET_DATABASE's static
+                  // price and 24h change (BTC $64,161.40, +3.42%) whenever the live feed
+                  // had not answered, presenting a months-old number as the market.
                   const liveData = spotPrices?.[asset.symbol];
-                  const displayPrice = liveData?.price ?? asset.price;
-                  const displayChange = liveData?.change24h ?? asset.change24h;
+                  const displayPrice = typeof liveData?.price === 'number' && liveData.price > 0 ? liveData.price : null;
+                  const displayChange = typeof liveData?.change24h === 'number' && Number.isFinite(liveData.change24h) ? liveData.change24h : null;
                   return (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-white">{asset.symbol}</span>
                       <span className="text-xs font-mono font-bold text-slate-200">
-                        ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        {displayPrice === null
+                          ? '—'
+                          : `$${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
                       </span>
                       <span
                         className={`text-[10px] font-mono font-bold ${
-                          displayChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          displayChange === null ? 'text-slate-500' : displayChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
                         }`}
                       >
-                        {displayChange >= 0 ? '+' : ''}
-                        {displayChange.toFixed(2)}%
+                        {displayChange === null ? '—' : `${displayChange >= 0 ? '+' : ''}${displayChange.toFixed(2)}%`}
                       </span>
                     </div>
                   );
