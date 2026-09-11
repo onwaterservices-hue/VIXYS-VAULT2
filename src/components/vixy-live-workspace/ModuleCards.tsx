@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Compass,
   Sparkles,
@@ -36,132 +36,319 @@ import {
 import { ModuleRenderProps } from '../../config/vixyLiveModules';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 import { getReversalRiskAssessment } from '../../utils/reversalRisk';
-import { lockQualityLabel } from '../../lib/engineSemantics';
+import { lockQualityLabel, headline, lockStatusOf, lockStatusWord, lockStatusSentence } from '../../lib/engineSemantics';
+import { useAssetMarketTape, formatUsdCompact } from '../../hooks/useAssetMarketTape';
+import { fetchAllCryptoTickers, CryptoTickerData } from '../../services/api';
+
+// ================= SHARED OBSERVED DATA =================
+// Every card below reads the engine payload, the live Coinbase tape, real
+// 1-minute candles, the lock ledger or live tickers. A missing value is a dash.
+
+const posNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null);
+const finNum = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const fmtUsd = (v: number | null): string =>
+  v === null ? '—' : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const ageText = (ms: number): string => (ms < 1000 ? `${Math.round(ms)}ms` : ms < 120000 ? `${Math.round(ms / 1000)}s` : `${Math.round(ms / 60000)}m`);
+const clockText = (iso: string): string => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+/** Engine spot first, then the live ticker. */
+const spotOf = (canonical15m: any, ticker: any): number | null => posNum(canonical15m?.currentSpot) ?? posNum(ticker?.price);
+/** The Kalshi open strike, or null. Never derived from spot. */
+const strikeOf = (canonical15m: any): number | null => posNum(canonical15m?.openStrike);
+const gateCheck = (canonical15m: any, id: string): any =>
+  (Array.isArray(canonical15m?.lockGate?.checks) ? canonical15m.lockGate.checks : []).find((c: any) => c && c.id === id) ?? null;
+const familiesOf = (canonical15m: any): Array<{ name: string; direction: string; detail: string }> =>
+  (Array.isArray(canonical15m?.gemini?.evidenceFactors) ? canonical15m.gemini.evidenceFactors : [])
+    .filter((f: any) => f && typeof f.name === 'string')
+    .map((f: any) => ({ name: f.name, direction: String(f.direction ?? 'NEUTRAL'), detail: String(f.detail ?? '') }));
+
+function calcEma(values: number[], period: number): number[] {
+  const k = 2 / (period + 1);
+  const out: number[] = [];
+  let prev = values[0] || 0;
+  values.forEach((v, i) => {
+    prev = i === 0 ? v : v * k + prev * (1 - k);
+    out.push(prev);
+  });
+  return out;
+}
+
+type FeedState = 'LOADING' | 'LIVE' | 'UNAVAILABLE';
+
+interface MiniCandle {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
+function useMinuteCandles(symbol = 'BTC'): { candles: MiniCandle[]; status: FeedState } {
+  const [candles, setCandles] = useState<MiniCandle[]>([]);
+  const [status, setStatus] = useState<FeedState>('LOADING');
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch(`/api/crypto/klines?symbol=${encodeURIComponent(symbol)}&interval=1m&_t=${Date.now()}`, { cache: 'no-store' });
+        const data = res.ok ? await res.json() : null;
+        if (!alive) return;
+        const rows: MiniCandle[] = Array.isArray(data)
+          ? data
+              .map((d: any) => ({ time: Number(d?.time), open: Number(d?.open), high: Number(d?.high), low: Number(d?.low), close: Number(d?.close) }))
+              .filter((c: MiniCandle) => [c.time, c.open, c.high, c.low, c.close].every((v) => Number.isFinite(v)) && c.low > 0 && c.high >= c.low)
+              .sort((a: MiniCandle, b: MiniCandle) => a.time - b.time)
+          : [];
+        if (rows.length >= 2) {
+          setCandles(rows);
+          setStatus('LIVE');
+        } else {
+          setStatus('UNAVAILABLE');
+        }
+      } catch {
+        if (alive) setStatus('UNAVAILABLE');
+      }
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, [symbol]);
+  return { candles, status };
+}
+
+interface LedgerRow {
+  id: string;
+  intervalStart: string;
+  direction: string;
+  targetStrike: number | null;
+  status: string;
+  wasCorrect: boolean | null;
+}
+
+interface LedgerStats {
+  wins: number;
+  losses: number;
+  total: number;
+  winRatePct: number;
+  avgBrier: number | null;
+}
+
+function useLockLedger(): { rows: LedgerRow[]; stats: LedgerStats | null; status: FeedState } {
+  const [rows, setRows] = useState<LedgerRow[]>([]);
+  const [stats, setStats] = useState<LedgerStats | null>(null);
+  const [status, setStatus] = useState<FeedState>('LOADING');
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/signal/resolved-log?limit=8', { cache: 'no-store' });
+        const body = res.ok ? await res.json() : null;
+        if (!alive) return;
+        if (!body) {
+          setStatus('UNAVAILABLE');
+          return;
+        }
+        setRows(
+          (Array.isArray(body.recentResolved) ? body.recentResolved : [])
+            .filter((r: any) => r && typeof r.id === 'string')
+            .map((r: any) => ({
+              id: r.id,
+              intervalStart: String(r.intervalStart ?? ''),
+              direction: String(r.direction ?? '—'),
+              targetStrike: posNum(r.targetStrike),
+              status: String(r.status ?? ''),
+              wasCorrect: typeof r.wasCorrect === 'boolean' ? r.wasCorrect : null,
+            })),
+        );
+        const btc = body?.stats?.perAsset?.BTC;
+        setStats(
+          btc && [btc.wins, btc.losses, btc.total, btc.winRatePct].every((v: unknown) => typeof v === 'number') && btc.total > 0
+            ? { wins: btc.wins, losses: btc.losses, total: btc.total, winRatePct: btc.winRatePct, avgBrier: finNum(body?.stats?.avgBrierScore) }
+            : null,
+        );
+        setStatus('LIVE');
+      } catch {
+        if (alive) setStatus('UNAVAILABLE');
+      }
+    };
+    load();
+    const timer = setInterval(load, 60000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+  return { rows, stats, status };
+}
+
+const outcomeOf = (r: LedgerRow): 'WIN' | 'LOSS' | 'NO TRADE' | 'PENDING' => {
+  if (r.status === 'NO_TRADE') return 'NO TRADE';
+  if (r.status === 'RESOLVED' && typeof r.wasCorrect === 'boolean') return r.wasCorrect ? 'WIN' : 'LOSS';
+  return 'PENDING';
+};
+
+function useAllTickers(): { rows: CryptoTickerData[]; status: FeedState } {
+  const [rows, setRows] = useState<CryptoTickerData[]>([]);
+  const [status, setStatus] = useState<FeedState>('LOADING');
+  useEffect(() => {
+    let alive = true;
+    const load = async () => {
+      try {
+        const data = await fetchAllCryptoTickers();
+        if (!alive) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setRows(data);
+          setStatus('LIVE');
+        } else {
+          setStatus('UNAVAILABLE');
+        }
+      } catch {
+        if (alive) setStatus('UNAVAILABLE');
+      }
+    };
+    load();
+    const timer = setInterval(load, 15000);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+    };
+  }, []);
+  return { rows, status };
+}
+
+const Footer: React.FC<{ label: string; value: React.ReactNode; tone?: string }> = ({ label, value, tone = 'text-slate-300' }) => (
+  <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between gap-2">
+    <span>{label}</span>
+    <span className={`${tone} font-bold text-right`}>{value}</span>
+  </div>
+);
+
+const CardHeader: React.FC<{ icon: React.ReactNode; title: string; right?: React.ReactNode }> = ({ icon, title, right }) => (
+  <div className="flex items-center justify-between gap-2">
+    <div className="flex items-center gap-2 min-w-0">
+      <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300 shrink-0">{icon}</div>
+      <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider truncate">{title}</span>
+    </div>
+    {right}
+  </div>
+);
 
 // ================= CORE MODULES =================
 
-export const Decision15mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker, onExpandModule }) => {
-  const rawDirection = canonical15m.direction || 'UP';
-  const isUp = rawDirection === 'UP' || (rawDirection as any) === 'YES';
-  const isDown = rawDirection === 'DOWN' || (rawDirection as any) === 'NO';
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const targetStrike = canonical15m.openStrike || (spotPrice - 38.50);
-  const strikeDelta = spotPrice - targetStrike;
+export const Decision15mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
+  const c: any = canonical15m as any;
+  const direction: string | null = c?.direction === 'UP' || c?.direction === 'DOWN' || c?.direction === 'NEUTRAL' ? c.direction : null;
+  const isUp = direction === 'UP';
+  const isDown = direction === 'DOWN';
+  const spotPrice = spotOf(c, ticker);
+  const targetStrike = strikeOf(c);
+  const strikeDelta = spotPrice !== null && targetStrike !== null ? spotPrice - targetStrike : null;
+  const lock = lockStatusOf(c);
+  const stateWord = lock.kind !== 'OPEN' ? lockStatusWord(lock) : String(c?.engineStage ?? c?.currentState ?? '—').replace(/_/g, ' ');
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Compass className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">15M DECISION</span>
-        </div>
-        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-          isUp ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-          isDown ? 'bg-rose-950 text-rose-400 border border-rose-800' :
-          'bg-purple-950 text-purple-300 border border-purple-800'
-        }`}>
-          {canonical15m.currentState?.replace('_', ' ') || 'BUILDING'}
-        </span>
-      </div>
+      <CardHeader
+        icon={<Compass className="w-4 h-4" />}
+        title="15M DECISION"
+        right={
+          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+            isUp ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : isDown ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-purple-950 text-purple-300 border border-purple-800'
+          }`}>
+            {stateWord}
+          </span>
+        }
+      />
 
       <div className="flex items-center gap-3.5">
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shadow-inner ${
-          isUp ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' :
-          isDown ? 'bg-rose-950/80 border-rose-500/50 text-rose-400 shadow-[0_0_15px_rgba(239,68,68,0.2)]' :
-          'bg-purple-950/80 border-purple-500/50 text-purple-300'
+          isUp ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-400' : isDown ? 'bg-rose-950/80 border-rose-500/50 text-rose-400' : 'bg-purple-950/80 border-purple-500/50 text-purple-300'
         }`}>
           {isUp ? <ArrowUpRight className="w-7 h-7" /> : isDown ? <ArrowDownRight className="w-7 h-7" /> : <Minus className="w-7 h-7" />}
         </div>
         <div>
           <div className={`text-2xl font-black font-sans tracking-tight ${isUp ? 'text-emerald-400' : isDown ? 'text-rose-400' : 'text-purple-300'}`}>
-            {rawDirection}
+            {direction ?? '—'}
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
-            STRIKE: <strong className="text-white">${targetStrike.toFixed(2)}</strong>
+            STRIKE: <strong className="text-white">{targetStrike !== null ? fmtUsd(targetStrike) : 'pending'}</strong>
           </div>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>DELTA TO STRIKE</span>
-        <span className={`font-bold ${strikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {strikeDelta >= 0 ? '+' : ''}${strikeDelta.toFixed(2)}
-        </span>
-      </div>
+      <Footer
+        label="SPOT VS STRIKE"
+        tone={strikeDelta === null ? 'text-slate-400' : strikeDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        value={strikeDelta === null ? '—' : `${strikeDelta >= 0 ? '+' : '−'}${fmtUsd(Math.abs(strikeDelta))}`}
+      />
     </div>
   );
 };
 
-export const Decision1mModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const isUp = (canonical15m.confidence ?? 78) >= 50;
+export const Decision1mModule: React.FC<ModuleRenderProps> = () => {
+  const { candles, status } = useMinuteCandles('BTC');
+  const last = candles.length >= 2 ? candles[candles.length - 1] : null;
+  const prev = candles.length >= 2 ? candles[candles.length - 2] : null;
+  const moveBps = last && prev ? ((last.close - prev.close) / prev.close) * 10000 : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-amber-950/70 border border-amber-800/40 text-amber-300">
-            <Zap className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">1M SCALP FLOW</span>
-        </div>
-        <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-amber-950 text-amber-400 border border-amber-800">
-          MICRO-FLOW
-        </span>
-      </div>
+      <CardHeader
+        icon={<Zap className="w-4 h-4 text-amber-300" />}
+        title="1M PRICE ACTION"
+        right={<span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase bg-slate-900 text-slate-400 border border-slate-700">NO 1M MODEL</span>}
+      />
 
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-amber-950/80 border border-amber-500/40 text-amber-400 flex items-center justify-center font-mono font-bold text-lg">
-          {isUp ? 'BUY' : 'SELL'}
+        <div className={`w-10 h-10 rounded-xl border flex items-center justify-center ${
+          moveBps === null ? 'bg-slate-900 border-slate-700 text-slate-500' : moveBps >= 0 ? 'bg-emerald-950/80 border-emerald-500/40 text-emerald-400' : 'bg-rose-950/80 border-rose-500/40 text-rose-400'
+        }`}>
+          {moveBps === null ? <Minus className="w-5 h-5" /> : moveBps >= 0 ? <ArrowUpRight className="w-5 h-5" /> : <ArrowDownRight className="w-5 h-5" />}
         </div>
         <div>
-          <div className="text-xl font-bold font-mono text-white">HIGH FREQ BIAS</div>
-          <div className="text-[11px] text-slate-400 font-mono">15s Velocity: <span className="text-emerald-400 font-bold">+4.2 pts</span></div>
+          <div className="text-xl font-bold font-mono text-white">{moveBps === null ? '—' : `${moveBps >= 0 ? '+' : '−'}${Math.abs(moveBps).toFixed(1)} bps`}</div>
+          <div className="text-[11px] text-slate-400 font-mono">Last 1m close: <span className="text-slate-200 font-bold">{fmtUsd(last?.close ?? null)}</span></div>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>MICRO VOLATILITY</span>
-        <span className="text-cyan-400 font-bold">EXPANDING</span>
-      </div>
+      <p className="text-[10px] text-slate-400 font-sans">VIXY has no 1-minute model. This is the raw candle move, not a signal.</p>
+
+      <Footer label="SOURCE" value={status === 'LIVE' ? '1-MINUTE CANDLES' : status === 'LOADING' ? 'LOADING' : 'UNAVAILABLE'} />
     </div>
   );
 };
 
 export const CalibrationConfidenceModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const confidence = canonical15m.confidence ?? 78;
+  const c: any = canonical15m as any;
+  const h = headline(c);
+  const pct = typeof h.value === 'number' ? Math.max(0, Math.min(100, h.value)) : null;
+  const agreement = gateCheck(c, 'AGREEMENT');
+  const lock = lockStatusOf(c);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Sparkles className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">CALIBRATION</span>
-        </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">MODEL CONVICTION</span>
-      </div>
+      <CardHeader icon={<Sparkles className="w-4 h-4" />} title="CALIBRATION" right={<span className="text-purple-300 font-mono text-[10px] font-bold">{h.label}</span>} />
 
       <div>
         <div className="flex items-baseline justify-between">
-          <span className="text-3xl font-black text-white font-mono">{confidence}%</span>
-          <span className="text-xs font-bold text-emerald-400 font-mono">HIGH TIER</span>
+          <span className="text-3xl font-black text-white font-mono">{h.kind === 'PWIN' ? `${h.value}%` : h.kind === 'ENGINE_SCORE' ? h.value : '—'}</span>
+          <span className="text-xs font-bold text-slate-300 font-mono">{h.kind === 'ENGINE_SCORE' ? 'NOT A PROBABILITY' : h.word}</span>
         </div>
         <div className="w-full h-2 rounded-full bg-purple-950 overflow-hidden border border-purple-900/50 mt-2">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400"
-            style={{ width: `${confidence}%` }}
-          />
+          <div className="h-full rounded-full bg-gradient-to-r from-purple-500 via-emerald-400 to-cyan-400" style={{ width: `${pct ?? 0}%` }} />
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>EVIDENCE CONFLUENCE</span>
-        <span className="text-slate-200 font-bold">{canonical15m.evidenceAlignment ?? 8}/10 GATES ALIGNED</span>
-      </div>
+      <Footer
+        label="EVIDENCE FAMILIES"
+        value={lock.kind !== 'OPEN' ? lockStatusWord(lock) : agreement ? `${String(agreement.current)} agree (need ${agreement.required})` : '—'}
+      />
     </div>
   );
 };
@@ -215,38 +402,30 @@ export const LockQualityModule: React.FC<ModuleRenderProps> = ({ canonical15m })
 };
 
 export const ReversalRiskModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const rawRisk = canonical15m.reversalRisk ?? 22;
-  const assessment = getReversalRiskAssessment(rawRisk);
-  const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
+  const c: any = canonical15m as any;
+  const raw = finNum(c?.reversalRisk);
+  const assessment = raw !== null ? getReversalRiskAssessment(raw) : null;
+  const gate = gateCheck(c, 'REVERSAL');
+  const lock = lockStatusOf(c);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <ShieldAlert className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">REVERSAL RISK</span>
-        </div>
-        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${assessment.badgeClass}`}>
-          {assessment.statusLabel}
-        </span>
-      </div>
+      <CardHeader
+        icon={<ShieldAlert className="w-4 h-4" />}
+        title="REVERSAL RISK"
+        right={
+          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${assessment ? assessment.badgeClass : 'bg-slate-900 text-slate-400 border border-slate-700'}`}>
+            {assessment ? assessment.statusLabel : 'NO DATA'}
+          </span>
+        }
+      />
 
       <div className="flex items-baseline justify-between">
-        <span className={`text-3xl font-black font-mono ${assessment.colorClass}`}>
-          {assessment.score}%
-        </span>
-        <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-300 font-mono">
-          <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          <span>{isProtected ? 'PROTECTED' : 'MONITORING'}</span>
-        </div>
+        <span className={`text-3xl font-black font-mono ${assessment ? assessment.colorClass : 'text-slate-500'}`}>{assessment ? `${assessment.score}%` : '—'}</span>
+        <span className="text-xs font-bold text-slate-300 font-mono">{lock.kind === 'OPEN' ? 'PRE-LOCK' : lockStatusWord(lock)}</span>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>DOWNSTREAM SAFETY</span>
-        <span className="text-slate-300 font-bold">HARD STOP AT 62%</span>
-      </div>
+      <Footer label="LOCK GATE LIMIT" value={gate ? String(gate.required) : '—'} />
     </div>
   );
 };
@@ -286,67 +465,63 @@ export const CycleStatusModule: React.FC<ModuleRenderProps> = ({ canonical15m, n
 };
 
 export const VixyProtectionModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const isProtected = canonical15m.currentState === 'LOCKED_UP' || canonical15m.currentState === 'LOCKED_DOWN' || canonical15m.currentState === 'PROTECTED';
+  const c: any = canonical15m as any;
+  const p: any = c?.protection ?? null;
+  const status: string | null =
+    typeof p?.protectionStatus === 'string' ? p.protectionStatus : typeof c?.protectionStatus === 'string' ? c.protectionStatus : null;
+  const preservation = finNum(p?.capitalPreservationScore ?? c?.capitalPreservationScore);
+  const late = p?.lateCycleProtectionActive === true;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">VIXY PROTECTION</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">ONLINE</span>
-      </div>
+      <CardHeader
+        icon={<ShieldCheck className="w-4 h-4 text-emerald-400" />}
+        title="VIXY PROTECTION"
+        right={<span className="text-purple-300 font-mono text-[10px] font-bold">{status ?? '—'}</span>}
+      />
 
       <div className="space-y-1">
         <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-lg font-bold text-white font-mono">
-            {isProtected ? 'SENTINEL ACTIVE' : 'MONITORING GATES'}
-          </span>
+          <div className={`w-3 h-3 rounded-full ${status ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+          <span className="text-lg font-bold text-white font-mono">{status ? status.replace(/_/g, ' ') : 'NO DATA'}</span>
         </div>
         <p className="text-[11px] text-slate-300 font-sans">
-          Downstream tail risk veto and drawdown protection enabled.
+          {late ? 'Late-cycle protection is active.' : 'Guardian status as reported by the engine this tick.'}
         </p>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>PROTECTION LEVEL</span>
-        <span className="text-emerald-400 font-bold">100% MAXIMUM</span>
-      </div>
+      <Footer label="CAPITAL PRESERVATION SCORE" value={preservation !== null ? `${preservation}/100` : '—'} />
     </div>
   );
 };
 
-export const VixySignalModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const targetStrike = canonical15m.openStrike || (spotPrice - 38.50);
+export const VixySignalModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  const c: any = canonical15m as any;
+  const lock = lockStatusOf(c);
+  const h = headline(c);
+  const strike = strikeOf(c);
+  const direction: 'UP' | 'DOWN' | null = c?.direction === 'UP' || c?.direction === 'DOWN' ? c.direction : null;
+  const shownSide = lock.kind === 'LOCKED' ? lock.direction ?? direction : direction;
+  const tone = shownSide === 'UP' ? 'text-emerald-400' : shownSide === 'DOWN' ? 'text-rose-400' : 'text-slate-400';
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Crosshair className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">VIXY SIGNAL</span>
-        </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">AUTHORITATIVE</span>
-      </div>
+      <CardHeader
+        icon={<Crosshair className="w-4 h-4 text-cyan-400" />}
+        title="VIXY SIGNAL"
+        right={<span className="text-cyan-400 font-mono text-[10px] font-bold">{lock.kind === 'OPEN' ? 'NOT LOCKED' : lockStatusWord(lock)}</span>}
+      />
 
       <div>
-        <div className="text-2xl font-black text-emerald-400 font-mono">{canonical15m.direction || 'UP'} TARGET</div>
+        <div className={`text-2xl font-black font-mono ${tone}`}>
+          {lock.kind === 'LOCKED' ? `${shownSide ?? ''} LOCK`.trim() : shownSide ? `${shownSide} BIAS` : 'NO BIAS'}
+        </div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          Settlement Strike: <strong className="text-white">${targetStrike.toFixed(2)}</strong>
+          Kalshi strike: <strong className="text-white">{strike !== null ? fmtUsd(strike) : 'pending'}</strong>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>EXECUTION CONFIDENCE</span>
-        <span className="text-emerald-400 font-bold">{canonical15m.confidence || 78}% CONVICTION</span>
-      </div>
+      <Footer label={h.label} value={h.kind === 'PWIN' ? `${h.value}%` : h.kind === 'ENGINE_SCORE' ? `${h.value} (not a probability)` : '—'} />
     </div>
   );
 };
@@ -354,156 +529,167 @@ export const VixySignalModule: React.FC<ModuleRenderProps> = ({ canonical15m, ti
 // ================= MARKET MODULES =================
 
 export const LivePriceModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const spotChange = ticker?.change24h || 1.85;
+  const tickerPrice = posNum(ticker?.price);
+  const spotPrice = tickerPrice ?? posNum((canonical15m as any)?.currentSpot);
+  const change = finNum(ticker?.change24h);
+  const high = posNum(ticker?.high24h);
+  const low = posNum(ticker?.low24h);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <DollarSign className="w-4 h-4" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">BTC / USD SPOT</span>
-        </div>
-        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-      </div>
+      <CardHeader
+        icon={<DollarSign className="w-4 h-4" />}
+        title="BTC / USD SPOT"
+        right={<span className={`w-2 h-2 rounded-full ${spotPrice !== null ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />}
+      />
 
       <div>
-        <div className="text-2xl sm:text-3xl font-black text-white font-mono">
-          ${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-        </div>
+        <div className="text-2xl sm:text-3xl font-black text-white font-mono">{fmtUsd(spotPrice)}</div>
         <div className="flex items-center gap-2 mt-1">
-          <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
-            spotChange >= 0 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950 text-rose-400 border border-rose-800/40'
-          }`}>
-            {spotChange >= 0 ? '+' : ''}{spotChange.toFixed(2)}% (24h)
-          </span>
-          <span className="text-[10.5px] text-slate-400 font-mono">BINANCE FEED</span>
+          {change !== null && (
+            <span className={`text-xs font-bold font-mono px-2 py-0.5 rounded ${
+              change >= 0 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' : 'bg-rose-950 text-rose-400 border border-rose-800/40'
+            }`}>
+              {change >= 0 ? '+' : ''}{change.toFixed(2)}% (24h)
+            </span>
+          )}
+          <span className="text-[10.5px] text-slate-400 font-mono">{tickerPrice !== null ? 'TICKER FEED' : spotPrice !== null ? 'ENGINE SPOT' : 'NO FEED'}</span>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>24H SPREAD</span>
-        <span className="text-slate-300 font-bold">$63,890 — $65,240</span>
-      </div>
+      <Footer label="24H RANGE" value={high !== null && low !== null ? `${fmtUsd(low)} — ${fmtUsd(high)}` : '—'} />
     </div>
   );
 };
 
 export const PriceChangeModule: React.FC<ModuleRenderProps> = ({ ticker }) => {
-  const spotChange = ticker?.change24h || 1.85;
-  const isUp = spotChange >= 0;
+  const change = finNum(ticker?.change24h);
+  const high = posNum(ticker?.high24h);
+  const low = posNum(ticker?.low24h);
+  const rangePct = high !== null && low !== null ? ((high - low) / low) * 100 : null;
+  const isUp = change !== null && change >= 0;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">PRICE CHANGE & RANGE</span>
-        </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">24H CYCLE</span>
-      </div>
+      <CardHeader icon={<TrendingUp className="w-4 h-4 text-emerald-400" />} title="PRICE CHANGE & RANGE" right={<span className="text-purple-300 font-mono text-[10px] font-bold">24H</span>} />
 
       <div>
-        <div className={`text-3xl font-black font-mono ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {isUp ? '+' : ''}{spotChange.toFixed(2)}%
+        <div className={`text-3xl font-black font-mono ${change === null ? 'text-slate-500' : isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {change === null ? '—' : `${isUp ? '+' : ''}${change.toFixed(2)}%`}
         </div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          24h High: <strong className="text-slate-200">$65,240</strong> • Low: <strong className="text-slate-200">$63,890</strong>
+          24h High: <strong className="text-slate-200">{fmtUsd(high)}</strong> • Low: <strong className="text-slate-200">{fmtUsd(low)}</strong>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>RANGE VOLATILITY</span>
-        <span className="text-cyan-400 font-bold">2.1% MEDIUM</span>
-      </div>
+      <Footer label="24H RANGE WIDTH" value={rangePct !== null ? `${rangePct.toFixed(2)}%` : '—'} />
     </div>
   );
 };
 
-export const CandlestickChartModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const targetStrike = canonical15m.openStrike || (spotPrice - 38.50);
+export const CandlestickChartModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  const { candles, status } = useMinuteCandles('BTC');
+  const strike = strikeOf(canonical15m as any);
+  const bars = candles.slice(-24);
+  let lo = bars.length ? Math.min(...bars.map((b) => b.low)) : 0;
+  let hi = bars.length ? Math.max(...bars.map((b) => b.high)) : 0;
+  const strikeInView = strike !== null && bars.length > 0 && Math.abs(strike - (lo + hi) / 2) < Math.max(hi - lo, lo * 0.0005) * 2;
+  if (strikeInView && strike !== null) {
+    lo = Math.min(lo, strike);
+    hi = Math.max(hi, strike);
+  }
+  const span = hi - lo || 1;
+  const pctOf = (v: number) => ((v - lo) / span) * 100;
+  const last = bars.length ? bars[bars.length - 1] : null;
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <LineChart className="w-4 h-4 text-purple-300" />
+      <CardHeader
+        icon={<LineChart className="w-4 h-4 text-purple-300" />}
+        title="CANDLESTICKS · 1M"
+        right={
+          <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">
+            {strike !== null ? `STRIKE ${fmtUsd(strike)}` : 'STRIKE PENDING'}
+          </span>
+        }
+      />
+
+      <div className="w-full h-24 sm:h-28 bg-[#090714] rounded-xl border border-purple-900/30 p-2 relative overflow-hidden">
+        {bars.length < 2 ? (
+          <div className="h-full flex items-center justify-center text-[11px] font-mono text-slate-400">
+            {status === 'LOADING' ? 'Loading 1-minute candles…' : 'Candle feed unavailable.'}
           </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">CANDLESTICK ACTION</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] font-mono font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/50">STRIKE: ${targetStrike.toFixed(2)}</span>
-          <span className="text-[10px] font-mono text-purple-300">15M TF</span>
-        </div>
+        ) : (
+          <div className="relative h-full flex items-stretch gap-[2px]">
+            {strikeInView && strike !== null && (
+              <div className="absolute left-0 right-0 border-b border-dashed border-cyan-400/60 z-10" style={{ bottom: `${pctOf(strike)}%` }} />
+            )}
+            {bars.map((b) => {
+              const up = b.close >= b.open;
+              const bodyLow = Math.min(b.open, b.close);
+              const bodyHeight = Math.max(1.5, pctOf(Math.max(b.open, b.close)) - pctOf(bodyLow));
+              return (
+                <div key={b.time} className="relative flex-1 h-full">
+                  <div className={`absolute left-1/2 -translate-x-1/2 w-px ${up ? 'bg-emerald-400/60' : 'bg-rose-400/60'}`} style={{ bottom: `${pctOf(b.low)}%`, height: `${Math.max(1, pctOf(b.high) - pctOf(b.low))}%` }} />
+                  <div className={`absolute left-0 right-0 rounded-sm ${up ? 'bg-emerald-400' : 'bg-rose-500'}`} style={{ bottom: `${pctOf(bodyLow)}%`, height: `${bodyHeight}%` }} />
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      <div className="w-full h-24 sm:h-28 bg-[#090714] rounded-xl border border-purple-900/30 p-2 relative flex items-end justify-between gap-1 overflow-hidden">
-        {/* Strike target line */}
-        <div className="absolute top-1/2 left-0 right-0 border-b border-dashed border-cyan-400/50 z-10">
-          <span className="absolute right-2 -top-3.5 text-[8.5px] font-mono font-bold text-cyan-300 bg-[#090714] px-1">STRIKE LINE</span>
-        </div>
-        {[42, 55, 48, 62, 58, 70, 65, 82, 75, 89, 84, 95].map((val, idx) => (
-          <div key={idx} className="flex-1 flex flex-col items-center gap-1 z-0 h-full justify-end">
-            <div className="w-0.5 bg-emerald-500/40" style={{ height: `${val + 10}%` }} />
-            <div
-              className={`w-full max-w-[14px] rounded-sm ${idx % 3 === 0 ? 'bg-rose-500' : 'bg-emerald-400'} shadow-sm`}
-              style={{ height: `${val * 0.7}%` }}
-            />
-          </div>
-        ))}
-      </div>
-
-      <div className="text-[10px] text-slate-500 font-mono pt-1 border-t border-purple-900/30 flex justify-between">
-        <span>VWAP POSITION</span>
-        <span className="text-emerald-400 font-bold">TRADING ABOVE VWAP ($64,480)</span>
-      </div>
+      <Footer label="LAST 1M CLOSE" value={fmtUsd(last?.close ?? null)} />
     </div>
   );
 };
 
 export const NeuralRibbonModule: React.FC<ModuleRenderProps> = () => {
+  const { candles, status } = useMinuteCandles('BTC');
+  const closes = candles.map((c) => c.close);
+  const ready = closes.length >= 21;
+  const fast = ready ? calcEma(closes, 9) : [];
+  const slow = ready ? calcEma(closes, 21) : [];
+  const gapBps = ready ? ((fast[fast.length - 1] - slow[slow.length - 1]) / slow[slow.length - 1]) * 10000 : null;
+  let widthNow: number | null = null;
+  let widthMedian: number | null = null;
+  if (closes.length >= 20) {
+    const widths: number[] = [];
+    for (let i = 13; i < closes.length; i++) {
+      const w = closes.slice(i - 13, i + 1);
+      const mean = w.reduce((a, b) => a + b, 0) / 14;
+      const sd = Math.sqrt(w.reduce((a, b) => a + (b - mean) ** 2, 0) / 14);
+      widths.push(((4 * sd) / mean) * 10000);
+    }
+    widthNow = widths[widths.length - 1];
+    widthMedian = [...widths].sort((a, b) => a - b)[Math.floor(widths.length / 2)];
+  }
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Activity className="w-4 h-4 text-emerald-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">NEURAL RIBBON & CONVERGENCE</span>
-        </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">BANDWIDTH 3.2% (EXPANDING)</span>
-      </div>
+      <CardHeader
+        icon={<Activity className="w-4 h-4 text-emerald-400" />}
+        title="EMA RIBBON · 1M"
+        right={<span className="text-cyan-400 font-mono text-[10px] font-bold">{widthNow !== null ? `BB WIDTH ${widthNow.toFixed(1)} BPS` : 'BB WIDTH —'}</span>}
+      />
 
       <div className="space-y-2 py-1">
         <div className="flex items-center justify-between text-xs font-mono">
-          <span className="text-slate-400">EMA CLUSTER SPREAD:</span>
-          <span className="text-emerald-400 font-bold">BULLISH DIVERGENCE</span>
+          <span className="text-slate-400">EMA(9) − EMA(21):</span>
+          <span className={`font-bold ${gapBps === null ? 'text-slate-500' : gapBps >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {gapBps === null ? (status === 'LOADING' ? 'loading…' : '—') : `${gapBps >= 0 ? '+' : '−'}${Math.abs(gapBps).toFixed(1)} bps`}
+          </span>
         </div>
-        <div className="w-full h-5 rounded-lg bg-[#070512] border border-purple-900/40 p-1 flex gap-1 items-center">
-          <div className="h-full flex-1 rounded bg-emerald-500/80 animate-pulse" />
-          <div className="h-full flex-1 rounded bg-emerald-400" />
-          <div className="h-full flex-1 rounded bg-cyan-400" />
-          <div className="h-full flex-1 rounded bg-purple-500" />
-          <div className="h-full flex-1 rounded bg-indigo-500" />
-        </div>
-        <div className="flex justify-between text-[9.5px] text-slate-500 font-mono">
-          <span>FAST EMA (9)</span>
-          <span>MEDIUM (21)</span>
-          <span>SLOW (50)</span>
-          <span>BASELINE (200)</span>
+        <div className="flex justify-between text-[10px] text-slate-500 font-mono">
+          <span>EMA(9) {ready ? fmtUsd(fast[fast.length - 1]) : '—'}</span>
+          <span>EMA(21) {ready ? fmtUsd(slow[slow.length - 1]) : '—'}</span>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>SQUEEZE STATE</span>
-        <span className="text-emerald-400 font-bold">EXPANSION PHASE ACTIVE</span>
-      </div>
+      <Footer
+        label="SQUEEZE (≤60% OF MEDIAN WIDTH)"
+        value={widthNow !== null && widthMedian !== null ? (widthNow <= 0.6 * widthMedian ? 'YES' : 'NO') : '—'}
+      />
     </div>
   );
 };
@@ -713,35 +899,30 @@ export const MarketRegimeModule: React.FC<ModuleRenderProps> = ({ canonical15m }
 };
 
 export const DistanceToStrikeModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const targetStrike = canonical15m.openStrike || (spotPrice - 38.50);
-  const delta = spotPrice - targetStrike;
+  const c: any = canonical15m as any;
+  const spotPrice = spotOf(c, ticker);
+  const targetStrike = strikeOf(c);
+  const delta = spotPrice !== null && targetStrike !== null ? spotPrice - targetStrike : null;
+  const distBps = delta !== null && targetStrike !== null ? (delta / targetStrike) * 10000 : null;
+  const side = delta === null ? null : delta > 0 ? 'UP' : delta < 0 ? 'DOWN' : 'AT';
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Crosshair className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">DISTANCE TO STRIKE</span>
-        </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">BUFFER</span>
-      </div>
+      <CardHeader icon={<Crosshair className="w-4 h-4 text-cyan-400" />} title="DISTANCE TO STRIKE" right={<span className="text-cyan-400 font-mono text-[10px] font-bold">KALSHI STRIKE</span>} />
 
       <div>
-        <div className={`text-3xl font-black font-mono ${delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-          {delta >= 0 ? '+' : ''}${delta.toFixed(2)}
+        <div className={`text-3xl font-black font-mono ${delta === null ? 'text-slate-500' : delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+          {delta === null ? '—' : `${delta >= 0 ? '+' : '−'}${fmtUsd(Math.abs(delta))}`}
         </div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          Strike: <strong className="text-white">${targetStrike.toFixed(2)}</strong> • Spot: <strong className="text-white">${spotPrice.toFixed(2)}</strong>
+          Strike: <strong className="text-white">{fmtUsd(targetStrike)}</strong> • Spot: <strong className="text-white">{fmtUsd(spotPrice)}</strong>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>IN-THE-MONEY STATUS</span>
-        <span className="text-emerald-400 font-bold">{delta >= 0 ? 'ITM (+0.84σ)' : 'OTM'}</span>
-      </div>
+      <Footer
+        label="SPOT IS"
+        value={side === null || distBps === null ? '—' : side === 'AT' ? 'AT THE STRIKE' : `${side} SIDE · ${Math.abs(distBps).toFixed(1)} bps`}
+      />
     </div>
   );
 };
@@ -780,108 +961,94 @@ export const VixyReadModule: React.FC<ModuleRenderProps> = ({ canonical15m, loca
   );
 };
 
-export const SignalMatrixModule: React.FC<ModuleRenderProps> = () => {
+export const SignalMatrixModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  const c: any = canonical15m as any;
+  const mtf = gateCheck(c, 'MTF');
+  const family = familiesOf(c).find((f) => /multi-tf/i.test(f.name)) ?? null;
+  const lock = lockStatusOf(c);
+  const backs = family && (family.direction === 'UP' || family.direction === 'DOWN') ? family.direction : null;
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Grid className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">SIGNAL MATRIX</span>
+      <CardHeader icon={<Grid className="w-4 h-4 text-cyan-400" />} title="SIGNAL MATRIX" right={<span className="text-cyan-400 font-mono text-[10px] font-bold">MULTI-TIMEFRAME</span>} />
+
+      <div className="space-y-1">
+        <div className="flex items-baseline justify-between">
+          <span className="text-2xl font-black text-white font-mono">{mtf ? String(mtf.current) : '—'}</span>
+          <span className="text-[10px] font-mono text-slate-400">{mtf ? `timeframes aligned · need ${mtf.required}` : 'no gate data'}</span>
         </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">MULTI-TIMEFRAME</span>
-      </div>
-
-      <div className="grid grid-cols-4 gap-1.5 py-1">
-        {[
-          { tf: '1M', dir: 'UP', conf: '82%' },
-          { tf: '5M', dir: 'UP', conf: '76%' },
-          { tf: '15M', dir: 'UP', conf: '78%' },
-          { tf: '1H', dir: 'UP', conf: '88%' },
-        ].map((item) => (
-          <div key={item.tf} className="p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30 text-center">
-            <div className="text-[10px] font-mono text-slate-400 font-bold">{item.tf}</div>
-            <div className="text-xs font-bold text-emerald-400 font-mono mt-0.5">{item.dir}</div>
-            <div className="text-[9px] font-mono text-slate-500">{item.conf}</div>
+        {family && (
+          <div className="flex items-center justify-between text-[11px] font-mono">
+            <span className="text-slate-400 truncate">{family.detail || family.name}</span>
+            <span className={`font-bold ${backs === 'UP' ? 'text-emerald-400' : backs === 'DOWN' ? 'text-rose-400' : 'text-slate-500'}`}>{backs ? `BACKS ${backs}` : 'NO VOTE'}</span>
           </div>
-        ))}
+        )}
+        <p className="text-[10px] text-slate-500 font-sans">The engine publishes its aligned count, not each timeframe's vote.</p>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>CONFLUENCE ALIGNMENT</span>
-        <span className="text-emerald-400 font-bold">100% BULLISH HARMONY</span>
-      </div>
+      <Footer label="GATE" value={lock.kind !== 'OPEN' ? lockStatusWord(lock) : mtf ? (mtf.pass ? 'PASS' : 'NOT MET') : '—'} />
     </div>
   );
 };
 
 export const EvidenceAlignmentModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
-  const aligned = canonical15m.evidenceAlignment ?? 8;
+  const c: any = canonical15m as any;
+  const families = familiesOf(c);
+  const backing = families.filter((f) => f.direction === 'UP' || f.direction === 'DOWN');
+  const agreement = gateCheck(c, 'AGREEMENT');
+  const lock = lockStatusOf(c);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Layers className="w-4 h-4 text-purple-300" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">EVIDENCE ALIGNMENT</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">{aligned}/10 GATES PASS</span>
-      </div>
+      <CardHeader
+        icon={<Layers className="w-4 h-4 text-purple-300" />}
+        title="EVIDENCE ALIGNMENT"
+        right={<span className="text-emerald-400 font-mono text-[10px] font-bold">{families.length ? `${backing.length}/${families.length} BACK A SIDE` : '—'}</span>}
+      />
 
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-xs font-mono">
-          <span className="text-slate-300">Order Flow Delta:</span>
-          <span className="text-emerald-400 font-bold">PASS (+$28M)</span>
-        </div>
-        <div className="flex items-center justify-between text-xs font-mono">
-          <span className="text-slate-300">Supertrend 15M:</span>
-          <span className="text-emerald-400 font-bold">PASS (BULL)</span>
-        </div>
-        <div className="flex items-center justify-between text-xs font-mono">
-          <span className="text-slate-300">Prediction Odds:</span>
-          <span className="text-emerald-400 font-bold">PASS (58¢)</span>
-        </div>
+        {families.length === 0 ? (
+          <p className="text-[11px] text-slate-400 font-sans">The engine has not reported evidence families this tick.</p>
+        ) : (
+          families.slice(0, 3).map((f) => {
+            const backs = f.direction === 'UP' || f.direction === 'DOWN';
+            return (
+              <div key={f.name} className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-300 truncate">{f.name}</span>
+                <span className={`font-bold ${f.direction === 'UP' ? 'text-emerald-400' : f.direction === 'DOWN' ? 'text-rose-400' : 'text-slate-500'}`}>
+                  {backs ? `BACKS ${f.direction}` : 'NO VOTE'}
+                </span>
+              </div>
+            );
+          })
+        )}
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>CONFIRMATION STATUS</span>
-        <span className="text-emerald-400 font-bold">STRONG VERIFICATION</span>
-      </div>
+      <Footer label="LOCK GATE" value={lock.kind !== 'OPEN' ? lockStatusWord(lock) : agreement ? `${String(agreement.current)} (need ${agreement.required})` : '—'} />
     </div>
   );
 };
 
-export const CrossVenueModule: React.FC<ModuleRenderProps> = () => {
+export const CrossVenueModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  const m: any = (canonical15m as any)?.marketRead;
+  const yes = m?.real === true && typeof m.kalshiImpliedYes === 'number' ? Math.round(m.kalshiImpliedYes * 100) : null;
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Sparkles className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">CROSS-VENUE ODDS</span>
-        </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">PREDICTION MARKETS</span>
-      </div>
+      <CardHeader icon={<Sparkles className="w-4 h-4 text-cyan-400" />} title="PREDICTION MARKETS" right={<span className="text-cyan-400 font-mono text-[10px] font-bold">KALSHI</span>} />
 
       <div className="space-y-2">
         <div className="flex items-center justify-between p-2 rounded-xl bg-[#0e0a22] border border-purple-900/30">
           <span className="text-xs font-bold text-slate-300 font-sans">KALSHI 15M</span>
-          <span className="text-xs font-bold font-mono text-emerald-400">YES 58¢ • NO 42¢</span>
+          <span className="text-xs font-bold font-mono text-emerald-400">{yes !== null ? `YES ${yes}¢ • NO ${100 - yes}¢` : 'no fresh read'}</span>
         </div>
         <div className="flex items-center justify-between p-2 rounded-xl bg-[#0e0a22] border border-purple-900/30">
           <span className="text-xs font-bold text-slate-300 font-sans">POLYMARKET</span>
-          <span className="text-xs font-bold font-mono text-emerald-400">UP 59% (+$420K)</span>
+          <span className="text-xs font-bold font-mono text-slate-500">no feed</span>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>VENUE ARBITRAGE</span>
-        <span className="text-emerald-400 font-bold">+1.2% BULLISH PREM</span>
-      </div>
+      <Footer label="KALSHI READ AGE" value={yes !== null && typeof m?.ageMs === 'number' ? ageText(m.ageMs) : '—'} />
     </div>
   );
 };
@@ -889,65 +1056,56 @@ export const CrossVenueModule: React.FC<ModuleRenderProps> = () => {
 export const SentimentModule: React.FC<ModuleRenderProps> = () => {
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Eye className="w-4 h-4 text-purple-300" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">MARKET SENTIMENT</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">GREED (74/100)</span>
-      </div>
+      <CardHeader icon={<Eye className="w-4 h-4 text-purple-300" />} title="MARKET SENTIMENT" right={<span className="text-slate-400 font-mono text-[10px] font-bold">NOT MEASURED</span>} />
 
       <div>
-        <div className="text-2xl font-black text-emerald-400 font-mono">BULLISH TILT</div>
-        <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-          Social sentiment + funding rates bias +0.012%
-        </div>
+        <div className="text-2xl font-black text-slate-500 font-mono">NO SENTIMENT FEED</div>
+        <p className="text-[11px] text-slate-300 font-sans mt-0.5">
+          VIXY does not read social sentiment or funding rates, so this card shows nothing rather than a guess.
+        </p>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>FUNDING RATE</span>
-        <span className="text-emerald-400 font-bold">+0.010% / 8h</span>
-      </div>
+      <Footer label="FUNDING RATE" value="NOT READ" tone="text-slate-400" />
     </div>
   );
 };
 
-export const WhaleActivityModule: React.FC<ModuleRenderProps> = ({ canonical15m, ticker }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
+export const WhaleActivityModule: React.FC<ModuleRenderProps> = () => {
+  const { prints } = useAssetMarketTape('BTC');
+  const live = prints.status === 'LIVE' && prints.takerBuyUSD !== null && prints.takerSellUSD !== null;
+  const buy = prints.takerBuyUSD ?? 0;
+  const sell = prints.takerSellUSD ?? 0;
+  const net = buy - sell;
+  const size = prints.thresholdUSD !== null && prints.thresholdUSD >= 1000 ? `$${Math.round(prints.thresholdUSD / 1000)}k+` : 'LARGE';
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Fish className="w-4 h-4 text-cyan-400" />
+      <CardHeader icon={<Fish className="w-4 h-4 text-cyan-400" />} title="WHALE ACTIVITY" right={<span className="text-cyan-400 font-mono text-[10px] font-bold">COINBASE · {size}</span>} />
+
+      {live ? (
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-slate-300">Taker buy:</span>
+            <span className="text-emerald-400 font-bold">{formatUsdCompact(buy)}</span>
           </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">WHALE ACTIVITY</span>
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-slate-300">Taker sell:</span>
+            <span className="text-rose-400 font-bold">{formatUsdCompact(sell)}</span>
+          </div>
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="text-slate-300">Trades scanned:</span>
+            <span className="text-white font-bold">{prints.tradesScanned ?? '—'}</span>
+          </div>
         </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">LARGE TAKERS</span>
-      </div>
+      ) : (
+        <p className="text-[11px] text-slate-400 font-sans">{prints.status === 'LOADING' ? 'Reading the Coinbase tape…' : 'Coinbase tape unavailable.'}</p>
+      )}
 
-      <div className="space-y-1.5">
-        <div className="flex justify-between items-center text-xs font-mono">
-          <span className="text-slate-300">Binance Spot:</span>
-          <span className="text-emerald-400 font-bold">+45.2 BTC ($2.9M)</span>
-        </div>
-        <div className="flex justify-between items-center text-xs font-mono">
-          <span className="text-slate-300">Coinbase Pro:</span>
-          <span className="text-emerald-400 font-bold">+28.0 BTC ($1.8M)</span>
-        </div>
-        <div className="flex justify-between items-center text-xs font-mono">
-          <span className="text-slate-300">Block Trades (15m):</span>
-          <span className="text-white font-bold">14 Prints</span>
-        </div>
-      </div>
-
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>ABSORPTION STATUS</span>
-        <span className="text-emerald-400 font-bold">BUY ABSORPTION ACTIVE</span>
-      </div>
+      <Footer
+        label="NET (LARGE PRINTS ONLY)"
+        tone={!live || buy + sell === 0 ? 'text-slate-400' : net >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+        value={!live ? '—' : buy + sell === 0 ? 'no large prints' : `${net >= 0 ? '+' : '−'}${formatUsdCompact(Math.abs(net))}`}
+      />
     </div>
   );
 };
@@ -987,300 +1145,277 @@ export const EdgeScannerModule: React.FC<ModuleRenderProps> = () => {
 };
 
 export const PatternEngineModule: React.FC<ModuleRenderProps> = () => {
+  const { candles, status } = useMinuteCandles('BTC');
+  const n = candles.length;
+  const closes = candles.map((c) => c.close);
+  let emaWord = '—';
+  if (n >= 21) {
+    const fast = calcEma(closes, 9);
+    const slow = calcEma(closes, 21);
+    emaWord = fast[n - 1] >= slow[n - 1] ? 'ABOVE' : 'BELOW';
+  }
+  let breakWord = '—';
+  if (n >= 8) {
+    const bar = candles[n - 2];
+    const prior = candles.slice(n - 8, n - 2);
+    const priorHigh = Math.max(...prior.map((c) => c.high));
+    const priorLow = Math.min(...prior.map((c) => c.low));
+    breakWord = bar.close > priorHigh ? 'ABOVE PRIOR HIGHS' : bar.close < priorLow ? 'BELOW PRIOR LOWS' : 'INSIDE RANGE';
+  }
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Activity className="w-4 h-4 text-purple-300" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">PATTERN ENGINE</span>
-        </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">AUTOSCAN</span>
-      </div>
+      <CardHeader icon={<Activity className="w-4 h-4 text-purple-300" />} title="PATTERN RULES · 1M" right={<span className="text-purple-300 font-mono text-[10px] font-bold">RULES, NOT PREDICTIONS</span>} />
 
-      <div>
-        <div className="text-xl font-bold text-white font-mono">BULL FLAG FORMATION</div>
-        <div className="text-[11px] text-slate-300 font-sans mt-0.5">
-          High volume breakout on 15M interval, target strike expansion confirmed.
+      <div className="space-y-1.5 text-xs font-mono">
+        <div className="flex justify-between">
+          <span className="text-slate-400">EMA(9) vs EMA(21):</span>
+          <span className="text-white font-bold">{status === 'LOADING' && n === 0 ? 'loading…' : emaWord}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Last close vs prior 6 bars:</span>
+          <span className="text-white font-bold">{breakWord}</span>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>PATTERN CONFIDENCE</span>
-        <span className="text-emerald-400 font-bold">84% VALIDITY</span>
-      </div>
+      <Footer label="WIN RATE" value="NOT MEASURED" tone="text-slate-400" />
     </div>
   );
 };
 
 // ================= SYSTEM MODULES =================
 
-export const DataHealthModule: React.FC<ModuleRenderProps> = ({ dataHealthStatus, localUpdatedAt, nowMs }) => {
-  return (
-    <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Database className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">DATA HEALTH & FEED</span>
-        </div>
-        <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
-          dataHealthStatus === 'LIVE' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
-          'bg-amber-950 text-amber-400 border border-amber-800'
-        }`}>
-          {dataHealthStatus === 'LIVE' ? 'ONLINE' : dataHealthStatus || 'CONNECTING'}
-        </span>
-      </div>
-
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-xs font-mono">
-          <span className="text-slate-400">WEBSOCKET LATENCY:</span>
-          <span className="text-emerald-400 font-bold">14ms</span>
-        </div>
-        <div className="flex justify-between text-xs font-mono">
-          <span className="text-slate-400">TICK DRIFT:</span>
-          <span className="text-cyan-400 font-bold">&lt; 150ms</span>
-        </div>
-        <div className="flex justify-between text-xs font-mono">
-          <span className="text-slate-400">STALE TICK DETECTOR:</span>
-          <span className="text-emerald-400 font-bold">CLEAR</span>
-        </div>
-      </div>
-
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>ENGINE CLOCK</span>
-        <span className="text-slate-300 font-bold">{new Date(localUpdatedAt || nowMs).toLocaleTimeString()}</span>
-      </div>
-    </div>
-  );
-};
-
-export const LiveFeedModule: React.FC<ModuleRenderProps> = ({ ticker, canonical15m }) => {
-  const spotPrice = ticker?.price || canonical15m.currentSpot || 64591.20;
-  const livePrints = [
-    { id: '1', venue: 'BINANCE', size: '12.45 BTC', price: spotPrice, side: 'BUY' },
-    { id: '2', venue: 'COINBASE', size: '8.20 BTC', price: spotPrice - 1.1, side: 'BUY' },
-    { id: '3', venue: 'BYBIT', size: '4.80 BTC', price: spotPrice + 0.9, side: 'SELL' },
-    { id: '4', venue: 'OKX', size: '15.10 BTC', price: spotPrice + 0.4, side: 'BUY' },
-    { id: '5', venue: 'KRAKEN', size: '3.60 BTC', price: spotPrice - 0.8, side: 'BUY' },
-  ];
+export const DataHealthModule: React.FC<ModuleRenderProps> = ({ canonical15m, dataHealthStatus, localUpdatedAt, nowMs }) => {
+  const c: any = canonical15m as any;
+  const fh: any = c?.feedHealth ?? null;
+  const now = nowMs || Date.now();
+  const tickAge = typeof c?.engineTickTs === 'number' && c.engineTickTs > 0 ? Math.max(0, now - c.engineTickTs) : null;
+  const dataAge = finNum(fh?.dataAgeMs);
+  const venuesLive = finNum(fh?.venuesLive);
+  const venuesTotal = finNum(fh?.venuesTotal);
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">LIVE FEED TAPE</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[9px] font-bold uppercase">STREAMING</span>
-      </div>
-
-      <div className="space-y-1.5">
-        {livePrints.map((p) => (
-          <div key={p.id} className="flex items-center justify-between text-[10.5px] font-mono p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30">
-            <span className="text-purple-300 font-bold">{p.venue}</span>
-            <span className="text-white">{p.size}</span>
-            <span className={`font-bold ${p.side === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>
-              ${p.price.toFixed(2)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>TAPE FLOW</span>
-        <span className="text-emerald-400 font-bold">+84% BUY DELTA</span>
-      </div>
-    </div>
-  );
-};
-
-export const TelemetryModule: React.FC<ModuleRenderProps> = ({ localUpdatedAt, nowMs }) => {
-  return (
-    <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Sliders className="w-4 h-4 text-cyan-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">ENGINE TELEMETRY</span>
-        </div>
-        <span className="text-cyan-400 font-mono text-[10px] font-bold">100 HZ LOOP</span>
-      </div>
+      <CardHeader
+        icon={<Database className="w-4 h-4 text-cyan-400" />}
+        title="DATA HEALTH & FEED"
+        right={
+          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase ${
+            dataHealthStatus === 'LIVE' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'
+          }`}>
+            {dataHealthStatus || 'CONNECTING'}
+          </span>
+        }
+      />
 
       <div className="space-y-1.5 text-xs font-mono">
         <div className="flex justify-between">
-          <span className="text-slate-400">Cycle Heartbeat:</span>
-          <span className="text-emerald-400 font-bold">ACTIVE (1000ms)</span>
+          <span className="text-slate-400">ENGINE TICK AGE:</span>
+          <span className="text-white font-bold">{tickAge !== null ? ageText(tickAge) : '—'}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Lock Stability Index:</span>
-          <span className="text-emerald-400 font-bold">99.8%</span>
+          <span className="text-slate-400">PRICE DATA AGE:</span>
+          <span className="text-white font-bold">{dataAge !== null ? ageText(dataAge) : '—'}</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-slate-400">Decision Engine Latency:</span>
-          <span className="text-cyan-400 font-bold">8.2ms</span>
+          <span className="text-slate-400">VENUES FRESH:</span>
+          <span className="text-white font-bold">{venuesLive !== null && venuesTotal !== null ? `${venuesLive}/${venuesTotal}` : '—'}</span>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>DAEMON STATUS</span>
-        <span className="text-emerald-400 font-bold">AUTONOMOUS SYNC</span>
+      <Footer label="LAST PAYLOAD" value={localUpdatedAt ? new Date(localUpdatedAt).toLocaleTimeString() : '—'} />
+    </div>
+  );
+};
+
+export const LiveFeedModule: React.FC<ModuleRenderProps> = () => {
+  const { prints } = useAssetMarketTape('BTC');
+  const live = prints.status === 'LIVE';
+  const size = prints.thresholdUSD !== null && prints.thresholdUSD >= 1000 ? `$${Math.round(prints.thresholdUSD / 1000)}k+` : 'large';
+
+  return (
+    <div className="flex flex-col justify-between h-full space-y-3">
+      <CardHeader
+        icon={<Radio className={`w-4 h-4 text-emerald-400 ${live ? 'animate-pulse' : ''}`} />}
+        title="LARGE PRINT TAPE"
+        right={<span className="text-emerald-400 font-mono text-[9px] font-bold uppercase">{live ? 'COINBASE' : prints.status}</span>}
+      />
+
+      <div className="space-y-1.5">
+        {!live ? (
+          <p className="text-[11px] text-slate-400 font-sans">{prints.status === 'LOADING' ? 'Reading the Coinbase tape…' : 'Coinbase tape unavailable.'}</p>
+        ) : prints.prints.length === 0 ? (
+          <p className="text-[11px] text-slate-400 font-sans">No {size} prints in the last {prints.tradesScanned ?? '—'} trades.</p>
+        ) : (
+          prints.prints.map((p) => (
+            <div key={p.id} className="flex items-center justify-between text-[10.5px] font-mono p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30">
+              <span className="text-slate-400">{p.time || '—'}</span>
+              <span className={`font-bold ${p.takerSide === 'BUY' ? 'text-emerald-400' : 'text-rose-400'}`}>TAKER {p.takerSide}</span>
+              <span className="text-white">{formatUsdCompact(p.sizeUSD)}</span>
+            </div>
+          ))
+        )}
       </div>
+
+      <Footer
+        label="BUY / SELL (LARGE PRINTS)"
+        value={live && prints.takerBuyUSD !== null && prints.takerSellUSD !== null ? `${formatUsdCompact(prints.takerBuyUSD)} / ${formatUsdCompact(prints.takerSellUSD)}` : '—'}
+      />
+    </div>
+  );
+};
+
+export const TelemetryModule: React.FC<ModuleRenderProps> = ({ canonical15m, localUpdatedAt, nowMs }) => {
+  const c: any = canonical15m as any;
+  const now = nowMs || Date.now();
+  const tickAge = typeof c?.engineTickTs === 'number' && c.engineTickTs > 0 ? Math.max(0, now - c.engineTickTs) : null;
+  const gap = typeof c?.serverTimeMs === 'number' && localUpdatedAt ? localUpdatedAt - c.serverTimeMs : null;
+  const stability = finNum(c?.temporalStability);
+
+  return (
+    <div className="flex flex-col justify-between h-full space-y-3">
+      <CardHeader
+        icon={<Sliders className="w-4 h-4 text-cyan-400" />}
+        title="ENGINE TELEMETRY"
+        right={<span className="text-cyan-400 font-mono text-[10px] font-bold">{String(c?.engineStage ?? '—').replace(/_/g, ' ')}</span>}
+      />
+
+      <div className="space-y-1.5 text-xs font-mono">
+        <div className="flex justify-between">
+          <span className="text-slate-400">Engine tick age:</span>
+          <span className="text-white font-bold">{tickAge !== null ? ageText(tickAge) : '—'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Server → browser gap:</span>
+          <span className="text-white font-bold">{gap !== null ? `${Math.round(gap)}ms` : '—'}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Temporal stability:</span>
+          <span className="text-white font-bold">{stability !== null ? `${stability}%` : '—'}</span>
+        </div>
+      </div>
+
+      <Footer label="ENGINE SOURCE" value={typeof c?.serverSource === 'string' ? c.serverSource : '—'} />
     </div>
   );
 };
 
 export const CycleHistoryModule: React.FC<ModuleRenderProps> = () => {
-  const history = [
-    { cycle: '08:45', dir: 'UP', strike: 64550, resolved: 'YES', pnl: '+$420' },
-    { cycle: '08:30', dir: 'UP', strike: 64510, resolved: 'YES', pnl: '+$390' },
-    { cycle: '08:15', dir: 'DOWN', strike: 64580, resolved: 'YES', pnl: '+$510' },
-    { cycle: '08:00', dir: 'UP', strike: 64490, resolved: 'YES', pnl: '+$380' },
-  ];
+  const { rows, stats, status } = useLockLedger();
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <History className="w-4 h-4 text-purple-300" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">CYCLE HISTORY</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">4/4 WIN STREAK</span>
-      </div>
+      <CardHeader
+        icon={<History className="w-4 h-4 text-purple-300" />}
+        title="CYCLE HISTORY"
+        right={<span className="text-emerald-400 font-mono text-[10px] font-bold">{stats ? `${stats.wins}–${stats.losses} BTC` : status}</span>}
+      />
 
       <div className="space-y-1.5">
-        {history.map((h, i) => (
-          <div key={i} className="flex items-center justify-between text-xs font-mono p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30">
-            <span className="text-slate-400">{h.cycle}</span>
-            <span className="text-purple-300 font-bold">{h.dir}</span>
-            <span className="text-white">${h.strike}</span>
-            <span className="text-emerald-400 font-bold">{h.resolved} ({h.pnl})</span>
-          </div>
-        ))}
+        {rows.length === 0 ? (
+          <p className="text-[11px] text-slate-400 font-sans">{status === 'LOADING' ? 'Loading the ledger…' : status === 'UNAVAILABLE' ? 'Ledger unavailable.' : 'No ledger entries yet.'}</p>
+        ) : (
+          rows.slice(0, 4).map((r) => {
+            const outcome = outcomeOf(r);
+            return (
+              <div key={r.id} className="flex items-center justify-between text-xs font-mono p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30">
+                <span className="text-slate-400">{clockText(r.intervalStart)}</span>
+                <span className="text-purple-300 font-bold">{r.direction}</span>
+                <span className="text-white">{fmtUsd(r.targetStrike)}</span>
+                <span className={`font-bold ${outcome === 'WIN' ? 'text-emerald-400' : outcome === 'LOSS' ? 'text-rose-400' : 'text-slate-400'}`}>{outcome}</span>
+              </div>
+            );
+          })
+        )}
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>SESSION WIN RATE</span>
-        <span className="text-emerald-400 font-bold">87.5% (21/24)</span>
-      </div>
+      <Footer label="GRADED BTC LOCKS" value={stats ? `${stats.winRatePct}% of ${stats.total}` : '—'} />
     </div>
   );
 };
 
 export const PerformanceModule: React.FC<ModuleRenderProps> = () => {
+  const { stats, status } = useLockLedger();
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Trophy className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">PERFORMANCE MATRIX</span>
-        </div>
-        <span className="text-amber-400 font-mono text-[10px] font-bold">STATISTICAL</span>
-      </div>
+      <CardHeader icon={<Trophy className="w-4 h-4 text-amber-400" />} title="PERFORMANCE" right={<span className="text-amber-400 font-mono text-[10px] font-bold">LEDGER</span>} />
 
       <div>
-        <div className="text-3xl font-black text-emerald-400 font-mono">84.2%</div>
+        <div className="text-3xl font-black text-emerald-400 font-mono">{stats ? `${stats.winRatePct}%` : '—'}</div>
         <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-          30-Day Directional Calibration Rate
+          {stats ? `${stats.wins}–${stats.losses} across ${stats.total} graded BTC locks` : status === 'LOADING' ? 'Loading the ledger…' : 'Ledger unavailable.'}
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>PROFIT FACTOR</span>
-        <span className="text-emerald-400 font-bold">2.48 PF</span>
-      </div>
+      <Footer label="AVG BRIER (GRADED LOCKS)" value={stats && stats.avgBrier !== null ? stats.avgBrier.toFixed(3) : '—'} />
     </div>
   );
 };
 
-export const AlertsModule: React.FC<ModuleRenderProps> = () => {
+export const AlertsModule: React.FC<ModuleRenderProps> = ({ canonical15m }) => {
+  const lock = lockStatusOf(canonical15m as any);
+  const { rows } = useLockLedger();
+  const lastSettled = rows.find((r) => r.status === 'RESOLVED' || r.status === 'NO_TRADE') ?? null;
+
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Bell className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">LIVE ALERTS</span>
-        </div>
-        <span className="text-emerald-400 font-mono text-[10px] font-bold">ARMED</span>
-      </div>
+      <CardHeader icon={<Bell className="w-4 h-4 text-amber-400" />} title="LATEST EVENTS" right={<span className="text-purple-300 font-mono text-[10px] font-bold">FROM THE ENGINE</span>} />
 
       <div className="space-y-1.5">
-        <div className="p-2 rounded-lg bg-[#0e0a22] border border-emerald-900/40 flex items-start gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-          <div className="text-[11px] text-slate-300 font-sans">
-            <strong className="text-emerald-400 font-mono">LOCK CONFIRMED:</strong> 15M cycle locked UP at $64,552.70
-          </div>
+        <div className="p-2 rounded-lg bg-[#0e0a22] border border-purple-900/30 flex items-start gap-2">
+          <Lock className="w-4 h-4 text-purple-300 shrink-0 mt-0.5" />
+          <div className="text-[11px] text-slate-300 font-sans">{lock.kind === 'OPEN' ? 'No lock yet this cycle.' : lockStatusSentence(lock)}</div>
         </div>
         <div className="p-2 rounded-lg bg-[#0e0a22] border border-purple-900/30 flex items-start gap-2">
-          <Sparkles className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
           <div className="text-[11px] text-slate-300 font-sans">
-            <strong className="text-purple-300 font-mono">FLOW:</strong> CVD surge +$14M in last 60 seconds
+            {lastSettled
+              ? `Last settled cycle (${clockText(lastSettled.intervalStart)}): ${outcomeOf(lastSettled)}${lastSettled.direction === 'UP' || lastSettled.direction === 'DOWN' ? `, called ${lastSettled.direction}` : ''}.`
+              : 'No settled cycle loaded yet.'}
           </div>
         </div>
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>ALERT SENSITIVITY</span>
-        <span className="text-purple-300 font-bold">NORMAL (HIGH CONVICTION ONLY)</span>
-      </div>
+      <Footer label="PUSH ALERTS" value="SENT IN DISCORD" />
     </div>
   );
 };
 
 // ================= PERSONAL MODULES =================
 
-export const WatchlistModule: React.FC<ModuleRenderProps> = ({ ticker }) => {
-  const btcPrice = ticker?.price || 64591.20;
-  const assets = [
-    { symbol: 'BTC', name: 'Bitcoin', price: btcPrice, change: '+1.85%' },
-    { symbol: 'ETH', name: 'Ethereum', price: 3482.10, change: '+2.40%' },
-    { symbol: 'SOL', name: 'Solana', price: 148.70, change: '+4.10%' },
-  ];
+export const WatchlistModule: React.FC<ModuleRenderProps> = () => {
+  const { rows, status } = useAllTickers();
+  const picks = ['BTC', 'ETH', 'SOL'].map((sym) => ({ sym, t: rows.find((r) => r.symbol === sym) ?? null }));
 
   return (
     <div className="flex flex-col justify-between h-full space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-1.5 rounded-lg bg-purple-950/70 border border-purple-800/40 text-purple-300">
-            <Star className="w-4 h-4 text-amber-400" />
-          </div>
-          <span className="text-xs font-mono font-bold text-slate-200 uppercase tracking-wider">ASSET WATCHLIST</span>
-        </div>
-        <span className="text-purple-300 font-mono text-[10px] font-bold">TRACKED</span>
-      </div>
+      <CardHeader icon={<Star className="w-4 h-4 text-amber-400" />} title="ASSET WATCHLIST" right={<span className="text-purple-300 font-mono text-[10px] font-bold">LIVE TICKERS</span>} />
 
       <div className="space-y-1.5">
-        {assets.map((a) => (
-          <div key={a.symbol} className="flex items-center justify-between p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30 text-xs font-mono">
-            <span className="font-bold text-white">{a.symbol}</span>
-            <span className="text-slate-300">${a.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-            <span className="text-emerald-400 font-bold">{a.change}</span>
-          </div>
-        ))}
+        {picks.map(({ sym, t }) => {
+          const price = posNum(t?.price);
+          const change = finNum(t?.change24h);
+          return (
+            <div key={sym} className="flex items-center justify-between p-1.5 rounded-lg bg-[#0e0a22] border border-purple-900/30 text-xs font-mono">
+              <span className="font-bold text-white">{sym}</span>
+              <span className="text-slate-300">{fmtUsd(price)}</span>
+              <span className={`font-bold ${change === null ? 'text-slate-500' : change >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                {change === null ? '—' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
-      <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>PRIMARY ASSET</span>
-        <span className="text-emerald-400 font-bold">BTC/USD (ACTIVE)</span>
-      </div>
+      <Footer label="SOURCE" value={status === 'LIVE' ? 'LIVE TICKERS' : status === 'LOADING' ? 'LOADING' : 'UNAVAILABLE'} />
     </div>
   );
 };
 
 export const NotesModule: React.FC<ModuleRenderProps> = () => {
   const [note, setNote] = useState<string>(() => {
-    return localStorage.getItem('vixy_live_desk_notes') || "Session focus: Looking for 15M cycle lock confluences above $64.5K. CVD holding steady.";
+    return localStorage.getItem('vixy_live_desk_notes') || '';
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1346,8 +1481,8 @@ export const QuickActionsModule: React.FC<ModuleRenderProps> = ({ onOpenTerminal
       </div>
 
       <div className="text-[10px] text-slate-500 font-mono pt-2 border-t border-purple-900/30 flex justify-between">
-        <span>EXECUTION ROUTING</span>
-        <span className="text-emerald-400 font-bold">KALSHI DIRECT</span>
+        <span>SHORTCUTS</span>
+        <span className="text-slate-300 font-bold">TERMINAL & REPLAY</span>
       </div>
     </div>
   );

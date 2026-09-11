@@ -88,7 +88,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Compass,
     defaultSize: 'small',
-    description: 'Current 15-minute VIXY authoritative directional bias & target strike delta'
+    description: 'The engine’s 15-minute direction, lock state and distance to the Kalshi strike'
   },
   {
     id: '1m_decision',
@@ -96,7 +96,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Zap,
     defaultSize: 'small',
-    description: 'Current 1-minute high-frequency micro flow & scalping direction'
+    description: 'The last 1-minute candle move (VIXY has no 1-minute model)'
   },
   {
     id: 'calibration',
@@ -104,7 +104,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Sparkles,
     defaultSize: 'small',
-    description: '0-100% model conviction gauge and gate alignment matrix'
+    description: 'Calibrated P(win) with its sample, or the engine score, plus family agreement'
   },
   {
     id: 'lock_quality',
@@ -112,7 +112,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Lock,
     defaultSize: 'small',
-    description: 'Current lock strength, score tier, and retention stability'
+    description: 'Engine lock score against the gate bar, with temporal stability'
   },
   {
     id: 'reversal_risk',
@@ -120,7 +120,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: ShieldAlert,
     defaultSize: 'small',
-    description: 'Real-time reversal threat meter and hard stop safety sentinel'
+    description: 'Engine reversal threat and the lock gate limit it must stay under'
   },
   {
     id: 'cycle_status',
@@ -128,7 +128,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Clock,
     defaultSize: 'small',
-    description: '15M / 1M authoritative countdown timer and state timeline'
+    description: '15-minute cycle countdown and current engine state'
   },
   {
     id: 'vixy_protection',
@@ -136,7 +136,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: ShieldCheck,
     defaultSize: 'small',
-    description: 'Authoritative capital safety guard and drawdown risk sentinel'
+    description: 'Guardian protection status and capital preservation score'
   },
   {
     id: 'vixy_signal',
@@ -144,7 +144,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'CORE',
     icon: Crosshair,
     defaultSize: 'small',
-    description: 'Authoritative execution bias, strike distance, and target matrix'
+    description: 'Lock state, engine bias and the Kalshi strike'
   },
 
   // ================= MARKET =================
@@ -154,7 +154,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: DollarSign,
     defaultSize: 'small',
-    description: 'BTC/USD real-time spot price, 24h delta, and bid/ask spread'
+    description: 'BTC/USD spot price, 24h change and 24h range'
   },
   {
     id: 'price_change',
@@ -162,7 +162,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: TrendingUp,
     defaultSize: 'small',
-    description: '24h High/Low range, percentage shift, and volatility channel'
+    description: '24h change, high, low and range width'
   },
   {
     id: 'candlestick_chart',
@@ -170,7 +170,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: LineChart,
     defaultSize: 'medium',
-    description: 'Interactive price action chart with strike band & VWAP overlay'
+    description: 'Real 1-minute BTC candles with the Kalshi strike line'
   },
   {
     id: 'neural_ribbon',
@@ -178,7 +178,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Activity,
     defaultSize: 'medium',
-    description: 'Multi-EMA ribbon convergence/divergence and squeeze expansion radar'
+    description: 'Fast and slow EMA gap and Bollinger squeeze on 1-minute candles'
   },
   {
     id: 'momentum',
@@ -186,7 +186,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Zap,
     defaultSize: 'small',
-    description: '15-second velocity, RSI momentum vector, and acceleration curve'
+    description: 'Short-window momentum (measured inside the engine, not on this card)'
   },
   {
     id: 'trend',
@@ -194,7 +194,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: TrendingUp,
     defaultSize: 'small',
-    description: 'Supertrend regime classification and multi-frame EMA stack'
+    description: 'Engine regime classification and temporal stability'
   },
   {
     id: 'volume',
@@ -202,7 +202,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Layers,
     defaultSize: 'small',
-    description: '24h spot turnover, market depth liquidity, and spread gauge'
+    description: 'Volume and depth (live depth is on the 15-second desk)'
   },
   {
     id: 'order_flow',
@@ -210,7 +210,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: BarChart2,
     defaultSize: 'small',
-    description: 'Cumulative volume delta (CVD) and net taker buy/sell imbalance'
+    description: 'Net taker flow (live large-print flow is on the Whale Activity card)'
   },
   {
     id: 'volatility',
@@ -218,7 +218,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Activity,
     defaultSize: 'small',
-    description: 'ATR index, implied volatility band, and standard deviation score'
+    description: 'Engine volatility regime and contradiction score'
   },
   {
     id: 'market_regime',
@@ -226,7 +226,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Grid,
     defaultSize: 'small',
-    description: 'Macro regime identification (Expansion, Trend, Mean-Reversion)'
+    description: 'Engine market regime and temporal stability'
   },
   {
     id: 'distance_to_strike',
@@ -234,7 +234,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'MARKET',
     icon: Crosshair,
     defaultSize: 'small',
-    description: 'Live delta distance and buffer to target settlement strike'
+    description: 'Spot distance to the Kalshi strike, in dollars and basis points'
   },
 
   // ================= INTELLIGENCE =================
@@ -244,7 +244,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Sparkles,
     defaultSize: 'large',
-    description: 'Neural evidence synthesis and primary hypothesis breakdown'
+    description: 'The engine’s own written reasoning this tick'
   },
   {
     id: 'signal_matrix',
@@ -252,7 +252,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Grid,
     defaultSize: 'small',
-    description: 'Multi-timeframe (1M, 5M, 15M, 1H) alignment confluence matrix'
+    description: 'Engine timeframe alignment count against the lock gate'
   },
   {
     id: 'evidence_alignment',
@@ -260,7 +260,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Layers,
     defaultSize: 'small',
-    description: '10-gate quantitative confluence scoring and verification breakdown'
+    description: 'Engine evidence families and which side each one backs'
   },
   {
     id: 'cross_venue',
@@ -268,7 +268,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Scale,
     defaultSize: 'small',
-    description: 'Kalshi KXBTC15M and Polymarket prediction market odds comparison'
+    description: 'Kalshi 15-minute YES and NO prices (no Polymarket feed)'
   },
   {
     id: 'sentiment',
@@ -276,7 +276,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Eye,
     defaultSize: 'small',
-    description: 'Cross-market fear/greed composite and institutional positioning'
+    description: 'Sentiment and funding rates (not measured by VIXY)'
   },
   {
     id: 'whale_activity',
@@ -284,7 +284,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Fish,
     defaultSize: 'small',
-    description: 'Block trade radar, large taker prints, and liquidity absorption'
+    description: 'Coinbase large prints: taker buy and sell totals'
   },
   {
     id: 'edge_scanner',
@@ -292,7 +292,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Sparkles,
     defaultSize: 'small',
-    description: 'Statistical edge calculation and favorable risk/reward setups'
+    description: 'Edge versus the market (not measured on this card)'
   },
   {
     id: 'pattern_engine',
@@ -300,7 +300,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'INTELLIGENCE',
     icon: Activity,
     defaultSize: 'small',
-    description: 'Algorithmic candle structure, head & shoulders, and breakout flags'
+    description: 'Fixed chart rules on 1-minute candles: EMA cross and breakout'
   },
 
   // ================= SYSTEM =================
@@ -310,7 +310,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: Database,
     defaultSize: 'small',
-    description: 'WebSocket stream latency, tick freshness, and engine status'
+    description: 'Engine tick age, price data age and fresh venues'
   },
   {
     id: 'live_feed',
@@ -318,7 +318,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: Radio,
     defaultSize: 'small',
-    description: 'Real-time trade tape with cross-exchange prints and volume'
+    description: 'Recent Coinbase large prints with aggressor side'
   },
   {
     id: 'telemetry',
@@ -326,7 +326,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: Sliders,
     defaultSize: 'small',
-    description: 'Continuous engine loop tick rate, memory, and sync latency'
+    description: 'Engine tick age, payload gap and temporal stability'
   },
   {
     id: 'cycle_history',
@@ -334,7 +334,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: History,
     defaultSize: 'medium',
-    description: 'Historical 15M cycle resolutions and target strike outcomes'
+    description: 'Recent ledger cycles and their graded outcomes'
   },
   {
     id: 'performance',
@@ -342,7 +342,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: Trophy,
     defaultSize: 'small',
-    description: 'VIXY directional accuracy rate, win streak, and expected value'
+    description: 'Graded BTC lock record and average Brier score'
   },
   {
     id: 'alerts',
@@ -350,7 +350,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'SYSTEM',
     icon: Bell,
     defaultSize: 'small',
-    description: 'Real-time volatility spikes, state changes, and lock warnings'
+    description: 'Current lock status and the last settled cycle'
   },
 
   // ================= PERSONAL =================
@@ -360,7 +360,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'PERSONAL',
     icon: Star,
     defaultSize: 'small',
-    description: 'Quick switcher for BTC, ETH, SOL, and top crypto assets'
+    description: 'Live BTC, ETH and SOL prices'
   },
   {
     id: 'notes',
@@ -376,7 +376,7 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
     category: 'PERSONAL',
     icon: MousePointer,
     defaultSize: 'small',
-    description: 'One-click shortcuts to Kalshi execution, Replay Center, and Terminal'
+    description: 'Shortcuts to the Terminal and Replay Center'
   }
 ];
 
