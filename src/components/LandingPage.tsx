@@ -214,7 +214,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {/* Institutional Status Badge */}
           <div className="inline-flex items-center gap-2.5 px-3.5 py-1.5 rounded-full bg-[#0c0620]/90 border border-purple-500/30 backdrop-blur-md text-[11px] font-mono font-semibold tracking-wider text-purple-200 shadow-lg shadow-purple-950/40">
             <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
             <span className="text-purple-300">VIXY VAULT</span>

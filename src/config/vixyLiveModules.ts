@@ -132,11 +132,11 @@ export const VIXY_LIVE_MODULES: VixyLiveModuleDefinition[] = [
   },
   {
     id: 'vixy_protection',
-    title: 'VIXY Protection',
+    title: 'Reversal Veto',
     category: 'CORE',
     icon: ShieldCheck,
     defaultSize: 'small',
-    description: 'Guardian protection status and capital preservation score'
+    description: 'Reversal veto (SAFE / VETOED) and 100 minus the guardian survival score, as the engine reported them'
   },
   {
     id: 'vixy_signal',

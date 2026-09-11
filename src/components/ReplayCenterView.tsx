@@ -130,7 +130,7 @@ function buildFrames(row: LedgerRow): Frame[] {
     const lockSec = Math.max(0, (Date.parse(row.lockedAt) - startMs) / 1000);
     const snap = row.lockSnapshot || null;
     frames.push({
-      kind: 'LOCK', minute: lockSec / 60, timeStr: mmss(lockSec), title: `ENGINE LOCK: ${row.direction} · ${typeof row.confidence === 'number' ? `${Math.round(row.confidence)}%` : '—'}`,
+      kind: 'LOCK', minute: lockSec / 60, timeStr: mmss(lockSec), title: `ENGINE LOCK: ${row.direction} · ${typeof row.confidence === 'number' ? (row.lockPolicy === 'STRIKE_SIDE_RULE' ? `rule P ${Math.round(row.confidence)}%` : `engine score ${Math.round(row.confidence)} / 100`) : '—'}`,
       price: row.spotAtLock ?? null, priceLabel: 'spot at lock',
       lines: [
         row.lockPolicy === 'STRIKE_SIDE_RULE'
@@ -356,7 +356,7 @@ export const ReplayCenterView: React.FC = () => {
             </div>
             <div className="p-4 rounded-2xl bg-[#12072e] border border-purple-800/40 space-y-2">
               <div className="flex items-center justify-between text-[10px] text-purple-400 font-bold uppercase tracking-wider"><span>ENGINE</span><Lock className="w-3.5 h-3.5 text-purple-400" /></div>
-              <div className="text-xl font-black text-white font-sans">{active.decision === 'BUY_UP' || active.decision === 'BUY_DOWN' ? `${active.direction} ${typeof active.confidence === 'number' ? Math.round(active.confidence) + '%' : ''}` : 'SKIP'}</div>
+              <div className="text-xl font-black text-white font-sans">{active.decision === 'BUY_UP' || active.decision === 'BUY_DOWN' ? `${active.direction} ${typeof active.confidence === 'number' ? (active.lockPolicy === 'STRIKE_SIDE_RULE' ? Math.round(active.confidence) + '%' : Math.round(active.confidence) + ' / 100') : ''}` : 'SKIP'}</div>
               <div className="text-[11px] text-purple-300/80 pt-1">{active.lockPolicy || (active.decision === 'SKIP' ? active.qualificationReason || 'no lock' : 'engine gate')}</div>
             </div>
             <div className="p-4 rounded-2xl bg-[#12072e] border border-purple-800/40 space-y-2">
