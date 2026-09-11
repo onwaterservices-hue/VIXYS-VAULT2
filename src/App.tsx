@@ -1778,6 +1778,7 @@ export default function App() {
           secondsRemaining={canonical15m.decision?.secondsRemaining}
           cycleEnd={canonical15m.decision?.cycleEnd}
           dataHealthStatus={canonical15m.dataHealthStatus}
+          dataAgeMs={typeof (canonical15m.decision as any)?.feedHealth?.dataAgeMs === 'number' ? (canonical15m.decision as any).feedHealth.dataAgeMs : null}
         />
       )}
 

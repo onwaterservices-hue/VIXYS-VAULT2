@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Activity, ShieldCheck, Database, Cpu, Zap, Wifi } from 'lucide-react';
 import { calculateCycleSecondsRemaining, formatCountdownMmSs } from '../../utils/cycleTime';
 
 interface SystemStatusBarProps {
   secondsRemaining?: number;
   cycleEnd?: number;
   dataHealthStatus?: string;
+  /** server-reported age of the last market tick; null when not reported */
+  dataAgeMs?: number | null;
 }
 
 export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
   secondsRemaining,
   cycleEnd,
-  dataHealthStatus = 'LIVE'
+  dataHealthStatus = 'CONNECTING',
+  dataAgeMs = null
 }) => {
   const [nowMs, setNowMs] = useState<number>(Date.now());
 
@@ -43,47 +45,22 @@ export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
         </div>
 
         <div className="hidden md:flex items-center gap-4 text-[10.5px]">
-          {/* Status Item 1: System */}
-          <div className="flex items-center gap-1.5 text-slate-300">
-            <span className={`w-2 h-2 rounded-full ${dataHealthStatus === "LIVE" ? "bg-emerald-400 animate-pulse shadow-sm shadow-emerald-400" : "bg-red-500"}`} />
-            <span className="text-slate-400">SYSTEM</span>
-            <span className={`${dataHealthStatus === "LIVE" ? "text-emerald-400" : "text-red-500"} font-bold`}>{dataHealthStatus === "LIVE" ? "ONLINE" : "DEGRADED"}</span>
-          </div>
-
-          <span className="text-purple-900">•</span>
-
-          {/* Status Item 2: Data Feed */}
+          {/* Only what this bar receives: the client feed state and the server's data age.
+              It showed a literal "LATENCY: 0.8s", and SYSTEM ONLINE / VIXY ENGINE ACTIVE /
+              FIRESTORE CONNECTED all repeated the feed flag; nothing here checks Firestore. */}
           <div className="flex items-center gap-1.5 text-slate-300">
             <span className={`w-2 h-2 rounded-full ${dataHealthStatus === "LIVE" ? "bg-emerald-400" : "bg-yellow-500"}`} />
             <span className="text-slate-400">DATA FEED:</span>
-            <span className={`${dataHealthStatus === "LIVE" ? "text-emerald-400" : "text-yellow-500"} font-bold`}>{dataHealthStatus}</span>
+            <span className={`${dataHealthStatus === "LIVE" ? "text-emerald-400" : "text-yellow-500"} font-bold`}>{dataHealthStatus.replace(/_/g, " ")}</span>
           </div>
 
           <span className="text-purple-900">•</span>
 
-          {/* Status Item 3: Latency */}
           <div className="flex items-center gap-1.5 text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <span className="text-slate-400">LATENCY:</span>
-            <span className="text-cyan-300 font-bold">0.8s</span>
-          </div>
-
-          <span className="text-purple-900">•</span>
-
-          {/* Status Item 4: Engine */}
-          <div className="flex items-center gap-1.5 text-slate-300">
-            <span className={`w-2 h-2 rounded-full ${dataHealthStatus === "LIVE" ? "bg-emerald-400" : "bg-red-500"}`} />
-            <span className="text-slate-400">VIXY ENGINE:</span>
-            <span className={`${dataHealthStatus === "LIVE" ? "text-emerald-400" : "text-red-500"} font-bold`}>{dataHealthStatus === "LIVE" ? "ACTIVE" : "STALE"}</span>
-          </div>
-
-          <span className="text-purple-900">•</span>
-
-          {/* Status Item 5: Firestore */}
-          <div className="flex items-center gap-1.5 text-slate-300">
-            <span className={`w-2 h-2 rounded-full ${dataHealthStatus === "LIVE" ? "bg-emerald-400" : "bg-red-500"}`} />
-            <span className="text-slate-400">FIRESTORE:</span>
-            <span className={`${dataHealthStatus === "LIVE" ? "text-emerald-400" : "text-red-500"} font-bold`}>{dataHealthStatus === "LIVE" ? "CONNECTED" : "UNKNOWN"}</span>
+            <span className="text-slate-400">DATA AGE:</span>
+            <span className={`font-bold ${dataAgeMs === null ? "text-slate-500" : dataAgeMs <= 3000 ? "text-emerald-400" : dataAgeMs <= 7000 ? "text-amber-400" : "text-rose-400"}`}>
+              {dataAgeMs === null ? "—" : `${(dataAgeMs / 1000).toFixed(1)}s`}
+            </span>
           </div>
         </div>
       </div>
