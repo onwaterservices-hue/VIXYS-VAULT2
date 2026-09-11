@@ -1863,38 +1863,49 @@ let latestCalibrationState = {
   calibrationStatus: "WARMING_UP",
   calibrationSampleSize: 0,
   calibrationMinimumSamples: 50,
-  brierScore: 0.168,
+  brierScore: null, // no settled history at boot; was an invented 0.168
   historicalAccuracy: 88.9,
 };
+// Boot state for the Guardian and the lock evaluation carries NO reading.
+//
+// Both objects are served to clients (/api/vixy/state returns them verbatim,
+// /api/vixy/15m/current passes latestLockEvaluation.reason into skipReason*) and
+// latestGuardianDecision.reversalThreat is read by the lock gate. They used to
+// boot as a finished, favourable decision: qualified: true, direction UP, every
+// check passing, 18s of persistence, Guardian confidence 72 / survival 72 /
+// reversal threat 28 -- and the reason string "EARLY LOCK ACTIVE: 50/50 Odds
+// Mispricing Window (+100% Profit Pull Target) -- Locked at 52c". None of that
+// was measured, and a threat of 28 cleared the gate's "< 30%" REVERSAL bar
+// before any tick. Until runMarketEngineTick writes real values these now read
+// as nothing: not qualified, no side, no checks passed, no threat, no reason.
 let latestGuardianDecision = {
   action: "WAIT",
-  reason: ["Awaiting entry permission clearance"],
-  confidence: 72,
+  reason: [],
+  confidence: 0,
   positionState: "NONE",
-  direction: "UP",
-  lockState: "AWAITING_LOCK",
-  reversalThreat: 28,
-  survivalScore: 72,
-  timestamp: new Date().toISOString(),
-  cycleId: 1,
+  direction: "NEUTRAL",
+  lockState: "MONITORING",
+  reversalThreat: null,
+  survivalScore: null,
+  timestamp: null,
+  cycleId: 0,
 };
 let latestLockEvaluation = {
-  qualified: true,
-  direction: "UP",
+  qualified: false,
+  direction: "NEUTRAL",
   checks: {
-    confidence: true,
-    freshness: true,
-    liquidity: true,
-    spread: true,
-    edge: true,
-    persistence: true,
+    confidence: false,
+    freshness: false,
+    liquidity: false,
+    spread: false,
+    edge: false,
+    persistence: false,
   },
-  reason:
-    "\u26A1 EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) \u2014 Locked at 52\xA2",
-  persistenceSeconds: 18,
-  requiredPersistenceSeconds: 3,
-  isEarlyLock: true,
-  oddsWindow5050: true,
+  reason: null,
+  persistenceSeconds: 0,
+  requiredPersistenceSeconds: null,
+  isEarlyLock: false,
+  oddsWindow5050: false,
 };
 // Price history starts EMPTY and is filled only by real ticks.
 //
@@ -3138,7 +3149,7 @@ async function runMarketEngineTick() {
             (sum, item) => sum + item.brierScore,
             0,
           ) / historyLen
-        : 0.168;
+        : null; // no settled history -> no Brier score (was an invented 0.168)
     latestCalibrationState = {
       rawModelProbability:
         latestBtc15mPipeline.edgeVsConfidence.modelProbability,
@@ -3147,7 +3158,7 @@ async function runMarketEngineTick() {
       calibrationStatus,
       calibrationSampleSize,
       calibrationMinimumSamples,
-      brierScore: Math.round(avgBrier * 1e3) / 1e3,
+      brierScore: avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3,
       historicalAccuracy: historicalAccuracyVal,
     };
     const is5050PullWindow =
@@ -3192,9 +3203,16 @@ async function runMarketEngineTick() {
     } else if (!isEdgePass) {
       reasonText = `Minimum edge requirement (+1.5%) not reached (current: ${currentEdgePct >= 0 ? "+" : ""}${currentEdgePct}%)`;
     } else if (!isPersistPass) {
-      reasonText = `Early Lock persistence timer in progress (${persistenceSeconds}s / ${effectiveRequiredPersistenceSeconds}s required)`;
+      // Names the bar actually in force: 3s only inside the early-entry window,
+      // otherwise the standard 12s. This used to say "Early Lock" for both.
+      reasonText = `${isEarlyLockOpportunity ? "Early-entry" : "Standard"} persistence timer in progress (${persistenceSeconds}s / ${effectiveRequiredPersistenceSeconds}s required)`;
     } else if (isQualified && isEarlyLockOpportunity) {
-      reasonText = `\u26A1 EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) \u2014 Locked at ~${Math.round(currentKalshiImpliedProb * 100)}\xA2`;
+      // The deterministic early-entry rule that fired, stated as the rule. The
+      // previous text ("EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100%
+      // Profit Pull Target) -- Locked at ~NNc") asserted a profit target nothing
+      // computes and said "Locked" while this object only reports qualification;
+      // the lock itself is committed separately by lock15mCycle.
+      reasonText = `Early-entry rule met: Kalshi YES ~${Math.round(currentKalshiImpliedProb * 100)}\xA2 (inside 38-62\xA2), HIGH_CONVICTION tier, |edge| ${Math.abs(currentEdgePct)}% >= 2.5%`;
     }
     latestLockEvaluation = {
       qualified: isQualified,
@@ -3202,8 +3220,11 @@ async function runMarketEngineTick() {
       checks: {
         confidence: isConfPass,
         freshness: isFresh,
-        liquidity: isLiquidityPass,
-        spread: isSpreadPass,
+        // Not measured: isLiquidityPass / isSpreadPass are the constant true
+        // above, so reporting them as passed checks claimed a book read that
+        // never happened. null = no measurement.
+        liquidity: null,
+        spread: null,
         edge: isEdgePass,
         persistence: isPersistPass,
       },
@@ -4755,7 +4776,7 @@ async function checkAndSettle15mCycle(livePrice) {
           // Calibration ONLY observes the settled outcome. It MUST NOT modify the live decision.
           try {
             const rawProb = prevLog.probability || (prevLog.confidence / 100);
-            const regime = serverLearningEngine.currentRegime || "TRENDING_BULL";
+            const regime = serverLearningEngine.currentRegime || "RANGING_NEUTRAL"; // was a bullish "TRENDING_BULL" default
             let regimeFactor = 1.0;
             if (regime === 'TRENDING_BEAR' && prevLog.direction === 'DOWN') regimeFactor = 1.04;
             else if (regime === 'TRENDING_BULL' && prevLog.direction === 'UP') regimeFactor = 1.04;
@@ -4796,7 +4817,7 @@ async function checkAndSettle15mCycle(livePrice) {
           const updatedAccuracy =
             totalHistory > 0
               ? Math.round((wins / totalHistory) * 1e3) / 10
-              : 71.8;
+              : null; // no settled history -> no accuracy (was an invented 71.8)
           const updatedAvgBrier =
             totalHistory > 0
               ? Math.round(
@@ -4807,7 +4828,7 @@ async function checkAndSettle15mCycle(livePrice) {
                     totalHistory) *
                     1e3,
                 ) / 1e3
-              : 0.168;
+              : null; // no settled history -> no Brier (was an invented 0.168)
           serverLearningEngine.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.brierScore = updatedAvgBrier;
@@ -8794,12 +8815,12 @@ app.get(
         ? "CONFIRMED"
         : "DATA_UNAVAILABLE",
       predictionsGeneratedToday: engineLogs.length,
-      avgPredictionLatencyMs: 14,
+      avgPredictionLatencyMs: null, // not measured (was a literal 14)
       aiRequestsToday: engineLogs.length,
-      apiRequestsToday: engineLogs.length * 3,
-      databaseSizeMb: 12.4,
-      serverLoadPct: 18,
-      winRate: 71.8,
+      apiRequestsToday: null, // not counted (was engineLogs.length * 3)
+      databaseSizeMb: null, // not measured (was a literal 12.4)
+      serverLoadPct: null, // not measured (was a literal 18)
+      winRate: null, // not computed here (was a literal 71.8)
       timestamp: Date.now(),
     });
   },
@@ -14705,13 +14726,20 @@ app.post("/api/position-size", (req, res) => {
     },
   });
 });
+// Boot counters are ZERO and unknowns are null. This object used to boot with
+// lifetimeObservations 18427, todaySettledCount 148, historicalAccuracy 71.8 and
+// regime TRENDING_BULL_VOLATILITY. /api/model-status served the counts as
+// settledCount / lifetimeObservations, and todaySettledCount doubles as the
+// calibration sample size, so 148 >= 50 reported calibration ACTIVE on a cold
+// instance with zero settled cycles. lifetimeObservations was never overwritten
+// by ledger hydration, so real settlements were added on top of 18427.
 const serverLearningEngine = {
-  lifetimeObservations: 18427,
-  todaySettledCount: 148,
+  lifetimeObservations: 0,
+  todaySettledCount: 0,
   lastWeightUpdateTs: Date.now() - 4e3,
   modelVersion: "v4.3-INCREMENTAL",
-  historicalAccuracy: 71.8,
-  currentRegime: "TRENDING_BULL_VOLATILITY",
+  historicalAccuracy: null,
+  currentRegime: null,
   incrementalTrainingActive: true,
   featureWeights: {
     orderFlow: 0.18,
@@ -14855,6 +14883,8 @@ function recomputeAccuracyFromSettledHistory() {
   const history = serverLearningEngine.settledHistory || [];
   const total = history.length;
   serverLearningEngine.todaySettledCount = total;
+  // Real settled rows restored from the ledger; replaces the old 18427 seed.
+  serverLearningEngine.lifetimeObservations = Math.max(serverLearningEngine.lifetimeObservations || 0, total);
   if (!total) {
     serverLearningEngine.historicalAccuracy = null;
     latestCalibrationState.historicalAccuracy = null;
@@ -15172,8 +15202,8 @@ app.get("/api/model-status", async (req, res) => {
           (sum, item) => sum + item.brierScore,
           0,
         ) / historyLen
-      : 0.168;
-  let activeModelBrier = Math.round(avgBrier * 1e3) / 1e3;
+      : null; // no settled history -> no Brier (was an invented 0.168)
+  let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
   let activeModelTrainedAt = new Date(
     serverLearningEngine.lastWeightUpdateTs,
   ).toISOString();
@@ -15762,8 +15792,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         }
       : null,
     lockEvaluation: latestLockEvaluation || {
-      qualified: true,
-      score: 50,
+      qualified: false,
+      score: null,
       reason: null,
     },
     gemini: {
@@ -15818,8 +15848,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       protectionStatus: protectionStat,
       lockTier: lockTierVal,
       lockEvaluation: latestLockEvaluation || {
-        qualified: true,
-        score: 50,
+        qualified: false,
+        score: null,
         reason: null,
       },
       checklist: {
@@ -16120,8 +16150,8 @@ app.get(
             (sum, item) => sum + item.brierScore,
             0,
           ) / historyLen
-        : 0.168;
-    let activeModelBrier = Math.round(avgBrier * 1e3) / 1e3;
+        : null; // no settled history -> no Brier (was an invented 0.168)
+    let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
     let activeModelTrainedAt = new Date(
       serverLearningEngine.lastWeightUpdateTs,
     ).toISOString();
@@ -16798,7 +16828,7 @@ app.get("/api/signal/calibration-report", (req, res) => {
   const totalSettled = settled.length;
   const wins = settled.filter((s) => s.wasCorrect).length;
   const overallWinRatePct =
-    totalSettled > 0 ? Math.round((wins / totalSettled) * 1e3) / 10 : 71.8;
+    totalSettled > 0 ? Math.round((wins / totalSettled) * 1e3) / 10 : null; // was an invented 71.8
   const brierScores = settled.map((s) => {
     const p = (s.probability || s.confidence || 75) / 100;
     const y = s.wasCorrect ? 1 : 0;
@@ -16809,7 +16839,7 @@ app.get("/api/signal/calibration-report", (req, res) => {
       ? Math.round(
           (brierScores.reduce((a, b) => a + b, 0) / brierScores.length) * 1e3,
         ) / 1e3
-      : 0.168;
+      : null; // no settled rows -> no Brier (was an invented 0.168)
   const logLosses = settled.map((s) => {
     const p = Math.max(
       0.01,
@@ -16967,17 +16997,17 @@ app.get("/api/signal/backtest-replay", (req, res) => {
       },
       newEngine: {
         result: newResult,
-        lockQuality: wouldSkip ? 68 : 91,
+        lockQuality: null, // not recomputed per historical row (was an invented 68 / 91)
         tier: wouldSkip ? "SKIP" : "HIGH_CONVICTION",
       },
     };
   });
   const oldTotal = oldEngineWins + oldEngineLosses;
   const oldWinRate =
-    oldTotal > 0 ? Math.round((oldEngineWins / oldTotal) * 1e3) / 10 : 71.8;
+    oldTotal > 0 ? Math.round((oldEngineWins / oldTotal) * 1e3) / 10 : null; // was an invented 71.8
   const newTrades = newEngineWins + newEngineLosses;
   const newWinRate =
-    newTrades > 0 ? Math.round((newEngineWins / newTrades) * 1e3) / 10 : 78.4;
+    newTrades > 0 ? Math.round((newEngineWins / newTrades) * 1e3) / 10 : null; // was an invented 78.4
   res.json({
     timestamp: new Date().toISOString(),
     totalHistoricalCyclesEvaluated: settled.length,
