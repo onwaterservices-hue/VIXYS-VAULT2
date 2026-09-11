@@ -1544,6 +1544,8 @@ export default function App() {
 
                   {activeTab === 'markets' && (
                     <MarketCardsView
+                      engineDecision={canonical15m.decision}
+                      engineFeedHealth={canonical15m.dataHealthStatus}
                       onSelectAssetAndNavigate={(sym) => {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');
@@ -1555,6 +1557,9 @@ export default function App() {
 
                   {activeTab === 'compare' && (
                     <CompareView
+                      spotPrices={spotPrices}
+                      engineDecision={canonical15m.decision}
+                      engineFeedHealth={canonical15m.dataHealthStatus}
                       onSelectAssetAndNavigate={(sym) => {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');
@@ -1627,6 +1632,8 @@ export default function App() {
 
                   {activeTab === 'scanner' && (
                     <OpportunityScannerView
+                      engineDecision={canonical15m.decision}
+                      engineFeedHealth={canonical15m.dataHealthStatus}
                       onSelectAssetAndNavigate={(sym) => {
                         setSelectedAsset(sym);
                         setActiveTab('terminal');

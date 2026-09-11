@@ -2,22 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { Sparkles, TrendingUp, ArrowRight, Star, ShieldCheck, Zap, RefreshCw } from 'lucide-react';
 import { ASSET_DATABASE, AssetConfig } from '../data/assetData';
 import { fetchAllCryptoTickers, CryptoTickerData } from '../services/api';
+import { headline, EngineDecisionLike } from '../lib/engineSemantics';
 
 interface MarketCardsViewProps {
   onSelectAssetAndNavigate: (symbol: string) => void;
   favorites: string[];
-  onToggleFavorite: (symbol: string) => void;
+    onToggleFavorite: (symbol: string) => void;
+  /** The canonical BTC 15-minute decision. VIXY has no model for other assets. */
+  engineDecision?: EngineDecisionLike;
+  engineFeedHealth?: string | null;
 }
 
 export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
   onSelectAssetAndNavigate,
   favorites,
-  onToggleFavorite,
+    onToggleFavorite,
+  engineDecision = null,
+  engineFeedHealth = null,
 }) => {
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; change24h: number }>>({});
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
-  const assets = Object.values(ASSET_DATABASE);
+    const assets = Object.values(ASSET_DATABASE);
+  const engineHeadline = headline(engineDecision);
+  const engineLive = engineFeedHealth === 'LIVE' && engineHeadline.kind !== 'NONE';
+  const engineDirection = String(engineDecision?.direction || '').toUpperCase();
 
   const loadLivePrices = async () => {
     setIsRefreshing(true);
@@ -52,11 +61,11 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
           <div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold text-purple-400 uppercase tracking-widest mb-1">
               <TrendingUp className="w-4 h-4 text-purple-400" />
-              <span>Prediction Markets Matrix • Scraped Live Exchange Feed</span>
+              <span>Live Spot Matrix • Coinbase</span>
             </div>
             <h1 className="text-2xl font-black text-white tracking-tight">Active Crypto Intelligence Matrix</h1>
             <p className="text-xs text-purple-200/70">
-              Scraped live market data across major exchanges with instant AI confidence, order book depth, and probability calculations.
+              Live Coinbase spot for each asset. VIXY's measured model covers BTC 15-minute only; other assets show price without a prediction.
             </p>
           </div>
 
@@ -76,8 +85,13 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
         {assets.map((asset) => {
           const isFav = favorites.includes(asset.symbol);
           const liveInfo = livePrices[asset.symbol];
-          const displayPrice = liveInfo ? liveInfo.price : asset.price;
-          const displayChange = liveInfo ? liveInfo.change24h : asset.change24h;
+                    // Live Coinbase values only. There is no fallback to the static
+          // asset table, which held months-old prices.
+          const displayPrice: number | null =
+            liveInfo && Number.isFinite(liveInfo.price) && liveInfo.price > 0 ? liveInfo.price : null;
+          const displayChange: number | null =
+            liveInfo && Number.isFinite(liveInfo.change24h) ? liveInfo.change24h : null;
+          const isBtc = asset.symbol === 'BTC';
 
           return (
             <div
@@ -98,7 +112,7 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                       <h3 className="text-xl font-black text-white group-hover:text-purple-200 transition-colors">
                         {asset.name}
                       </h3>
-                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}/USDT • Live Exchange</span>
+                      <span className="text-xs font-mono text-purple-300/70">{asset.symbol}-USD · Coinbase</span>
                     </div>
                   </div>
 
@@ -111,39 +125,59 @@ export const MarketCardsView: React.FC<MarketCardsViewProps> = ({
                   </button>
                 </div>
 
-                {/* Price & 24h Change */}
+                                {/* Price & 24h Change: live or a dash */}
                 <div className="flex items-baseline justify-between font-mono mb-6 pb-4 border-b border-purple-900/40">
-                  <div className="text-2xl font-black text-white">
-                    ${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  <div className="text-2xl font-black text-white tabular-nums">
+                    {displayPrice !== null
+                      ? `$${displayPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`
+                      : '—'}
                   </div>
-                  <div
-                    className={`text-xs font-bold px-2.5 py-1 rounded-xl border ${
-                      displayChange >= 0
-                        ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
-                        : 'text-rose-400 bg-rose-500/10 border-rose-500/30'
-                    }`}
-                  >
-                    {displayChange >= 0 ? '+' : ''}
-                    {displayChange.toFixed(2)}% 24H
-                  </div>
+                  {displayChange !== null ? (
+                    <div
+                      className={`text-xs font-bold px-2.5 py-1 rounded-xl border tabular-nums ${
+                        displayChange >= 0
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+                          : 'text-rose-400 bg-rose-500/10 border-rose-500/30'
+                      }`}
+                    >
+                      {displayChange >= 0 ? '+' : ''}
+                      {displayChange.toFixed(2)}% 24H
+                    </div>
+                  ) : (
+                    <div className="text-xs font-bold px-2.5 py-1 rounded-xl border border-purple-900/40 text-purple-300/50">no live spot</div>
+                  )}
                 </div>
 
-                {/* AI Stats Row */}
+                                {/* VIXY model row: real engine output for BTC, nothing invented elsewhere */}
                 <div className="grid grid-cols-2 gap-3 mb-6 font-mono">
                   <div className="p-3 rounded-2xl bg-white/[0.03] border border-purple-900/30">
                     <div className="text-[10px] text-purple-300/60 font-bold uppercase flex items-center gap-1 mb-1">
                       <Sparkles className="w-3 h-3 text-purple-400" />
-                      AI Confidence
+                      {isBtc && engineLive ? engineHeadline.label : 'VIXY model'}
                     </div>
-                    <div className="text-xl font-black text-white">{asset.prediction.confidence}%</div>
+                    {isBtc && engineLive ? (
+                      <div className="text-xl font-black text-white tabular-nums">{engineHeadline.value}%</div>
+                    ) : (
+                      <div className="text-sm font-bold text-purple-300/60">{isBtc ? 'engine not live' : 'no model'}</div>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-2xl bg-white/[0.03] border border-purple-900/30">
                     <div className="text-[10px] text-purple-300/60 font-bold uppercase flex items-center gap-1 mb-1">
                       <Zap className="w-3 h-3 text-emerald-400" />
-                      Edge vs Market
+                      {isBtc && engineLive ? 'Side · 15M' : 'Edge vs market'}
                     </div>
-                    <div className="text-xl font-black text-emerald-400">+{asset.prediction.edgePct}%</div>
+                    {isBtc && engineLive ? (
+                      <div
+                        className={`text-xl font-black ${
+                          engineDirection === 'UP' ? 'text-emerald-400' : engineDirection === 'DOWN' ? 'text-rose-400' : 'text-purple-200'
+                        }`}
+                      >
+                        {engineDirection || '—'}
+                      </div>
+                    ) : (
+                      <div className="text-sm font-bold text-purple-300/60">not measured</div>
+                    )}
                   </div>
                 </div>
               </div>
