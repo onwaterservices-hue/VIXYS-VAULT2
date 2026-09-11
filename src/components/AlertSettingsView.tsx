@@ -19,8 +19,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { AlertSettings } from '../types';
-import { sendTestAlert, getDiscordAuthUrlSecure } from '../services/api';
-import { playAlertSound } from '../utils/audio';
+import { getDiscordAuthUrlSecure } from '../services/api';
 import { CommunityAccessNode } from './CommunityAccessNode';
 
 interface AlertSettingsViewProps {
@@ -30,47 +29,7 @@ interface AlertSettingsViewProps {
 
 export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, setSettings }) => {
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const [isSendingTest, setIsSendingTest] = useState<boolean>(false);
   const [isLinkingDiscord, setIsLinkingDiscord] = useState<boolean>(false);
-
-  const handleTestDiscord = async () => {
-    setIsSendingTest(true);
-    setTestResult(null);
-
-    // Play Discord Ping sound chime if sound enabled
-    if (settings.discordSoundEnabled) {
-      playAlertSound(settings.discordNotificationSound || 'discord_ping');
-    }
-
-    try {
-      // Success is whatever the server says. This used to report "dispatched
-      // successfully" for any response -- including the 404 from
-      // /api/alerts/send, which has no server route -- and the payload was a
-      // staged signal ($64,108 spot, "+1,420 BTC" taker delta).
-      const res: any = await sendTestAlert('discord', settings.discordWebhook, '', '', {
-        direction: 'YES',
-        confidence: null,
-        edgePct: null,
-        targetPrice: null,
-        currentPrice: null,
-        reasoning: 'TEST ALERT - not a signal',
-      });
-      setTestResult({
-        success: res?.success === true,
-        message:
-          res?.success === true
-            ? res.message || 'Discord test alert sent.'
-            : res?.message || 'Test alert was not sent: the alert delivery endpoint is unavailable.',
-      });
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: 'Failed to send Discord test webhook. Verify URL.',
-      });
-    } finally {
-      setIsSendingTest(false);
-    }
-  };
 
   const handleLinkDiscordAccount = async () => {
     setIsLinkingDiscord(true);
@@ -100,35 +59,6 @@ export const AlertSettingsView: React.FC<AlertSettingsViewProps> = ({ settings, 
       });
     } finally {
       setIsLinkingDiscord(false);
-    }
-  };
-
-  const handleTestTelegram = async () => {
-    setIsSendingTest(true);
-    setTestResult(null);
-    try {
-      const res: any = await sendTestAlert('telegram', '', settings.telegramBotToken, settings.telegramChatId, {
-        direction: 'YES',
-        confidence: null,
-        edgePct: null,
-        targetPrice: null,
-        currentPrice: null,
-        reasoning: 'TEST ALERT - not a signal',
-      });
-      setTestResult({
-        success: res?.success === true,
-        message:
-          res?.success === true
-            ? res.message || 'Telegram test alert sent.'
-            : res?.message || 'Test alert was not sent: the alert delivery endpoint is unavailable.',
-      });
-    } catch (err: any) {
-      setTestResult({
-        success: false,
-        message: 'Failed to send Telegram alert.',
-      });
-    } finally {
-      setIsSendingTest(false);
     }
   };
 
