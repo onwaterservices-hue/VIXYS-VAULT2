@@ -234,7 +234,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // Dynamic Confidence & Reversal Risk from canonical engine. No seeded 78:
   // until the first payload lands the score is null and renders as a dash.
   const [displayConfidence, setDisplayConfidence] = useState<number | null>(null);
-  const [displayReversalRisk, setDisplayReversalRisk] = useState<number>(28);
+  const [displayReversalRisk, setDisplayReversalRisk] = useState<number | null>(null);
 
   // Synchronize state with real-time canonicalDecision from backend
   useEffect(() => {
@@ -242,9 +242,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       if (typeof canonicalDecision.confidence === 'number' && canonicalDecision.confidence > 0) {
         setDisplayConfidence(canonicalDecision.confidence);
       }
-      if (typeof canonicalDecision.reversalRisk === 'number') {
-        setDisplayReversalRisk(canonicalDecision.reversalRisk);
-      }
+      // The payload's threat score or null: no seeded 28, no stale carry-over.
+      setDisplayReversalRisk(typeof canonicalDecision.reversalRisk === 'number' ? canonicalDecision.reversalRisk : null);
     }
   }, [canonicalDecision]);
 
@@ -450,7 +449,8 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     };
   }, [chartCandles, spotPrice, targetPrice, spotChange]);
 
-  const rawDirection = (canonicalDecision as any)?.direction || 'UP';
+  // No UP default: a payload without a direction is unknown, not UP.
+  const rawDirection = (canonicalDecision as any)?.direction || null;
   const isUp = rawDirection === 'YES' || rawDirection === 'UP';
   const isDown = rawDirection === 'NO' || rawDirection === 'DOWN';
   const isSkip = rawDirection === 'SKIP' || rawDirection === 'NEUTRAL';
@@ -458,7 +458,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   // is the other side so the two numbers are never read as one claim.
   const sideMismatch = Boolean(priceSide && (isUp || isDown) && priceSide !== (isUp ? 'UP' : 'DOWN'));
 
-  const biasLabel = isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN';
+  const biasLabel = isSkip ? 'SKIP' : isUp ? 'UP' : isDown ? 'DOWN' : '—';
   // No invented 87: if the canonical payload carries no lock score, the card
   // shows the value as unavailable instead of a fabricated healthy number.
   const rawLockScore = (canonicalDecision as any)?.lockScore ?? (canonicalDecision as any)?.lockEvaluation?.lockScore ?? null;
@@ -482,14 +482,9 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
     return st === 'LOCKED_UP' || st === 'LOCKED_DOWN' || Boolean((canonicalDecision as any)?.isLocked);
   }, [canonicalDecision?.currentState, (canonicalDecision as any)?.isLocked]);
 
-  const isEarlyLockQualified = useMemo(() => {
-    return (
-      (displayConfidence ?? 0) >= 75 &&
-      lockQualityScore !== null &&
-      lockQualityScore >= 78 &&
-      displayReversalRisk <= 25
-    );
-  }, [displayConfidence, lockQualityScore, displayReversalRisk]);
+  // The server's own lock gate. This was confidence >= 75, lock quality >= 78 and
+  // reversal <= 25: thresholds the engine does not use.
+  const isEarlyLockQualified = gatesTotal > 0 && gatesPassing === gatesTotal;
 
   // Maps the engine's real lifecycle stage onto this card's existing display
   // vocabulary. Same progression the card always showed, now driven by the
@@ -598,7 +593,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
       chartCandles,
       spotPrice,
       spotChange,
-      displayReversalRisk,
+      displayReversalRisk ?? 0,
       displayConfidence ?? 0,
       canonicalDecision?.direction || (isUp ? 'UP' : isDown ? 'DOWN' : 'SKIP')
     );
@@ -684,7 +679,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
   const recentCycles = useMemo(() => {
     const live = {
       id: String(canonicalDecision?.cycleId || '').slice(15, 20) || 'LIVE',
-      dir: isSkip ? 'SKIP' : isUp ? 'UP' : 'DOWN',
+      dir: isSkip ? 'SKIP' : isUp ? 'UP' : isDown ? 'DOWN' : '—',
       conf: displayConfidence as number | null,
       price: `$${spotPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
       status: 'ACTIVE',
@@ -1404,10 +1399,14 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           {/* Card 4: Reversal Risk & Protection Status */}
           {(() => {
-            const riskAssessment = getReversalRiskAssessment(displayReversalRisk);
-            const riskGlow = riskAssessment.tier === 'LOW'
+            // No score yet: dashes, a neutral glow and no highlighted tier.
+            const riskKnown = displayReversalRisk !== null;
+            const riskAssessment = getReversalRiskAssessment(displayReversalRisk ?? 0);
+            const riskGlow = !riskKnown
+              ? 'rgba(148, 163, 184, 0.08)'
+              : riskKnown && riskAssessment.tier === 'LOW'
               ? 'rgba(16, 185, 129, 0.1)'
-              : riskAssessment.tier === 'MODERATE'
+              : riskKnown && riskAssessment.tier === 'MODERATE'
               ? 'rgba(245, 158, 11, 0.1)'
               : 'rgba(244, 63, 94, 0.12)';
             
@@ -1425,12 +1424,12 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                       <span>REVERSAL RISK</span>
                     </div>
                     <span className={`px-1.5 py-0.5 rounded font-extrabold text-[9px] tracking-wider uppercase whitespace-nowrap shrink-0 ${riskAssessment.badgeClass}`}>
-                      {riskAssessment.shortLabel}
+                      {riskKnown ? riskAssessment.shortLabel : '—'}
                     </span>
                   </div>
 
                   <div className={`text-xl sm:text-2xl font-black font-mono tracking-tight leading-none ${riskAssessment.colorClass}`}>
-                    {riskAssessment.score}%
+                    {riskKnown ? `${riskAssessment.score}%` : '—'}
                   </div>
 
                   <div className="text-[10px] font-bold flex items-center gap-1.5 whitespace-nowrap">
@@ -1452,20 +1451,20 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 <div className="mt-3 pt-2 border-t border-purple-900/30 space-y-1 relative z-10">
                   <div className="grid grid-cols-3 gap-1.5 h-1.5 rounded-full overflow-hidden bg-[#180d38] p-0.5 border border-purple-800/40">
                     <div className={`h-full rounded-full transition-all ${
-                      riskAssessment.tier === 'LOW' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-emerald-950/40'
+                      riskKnown && riskAssessment.tier === 'LOW' ? 'bg-emerald-400 shadow-[0_0_8px_#10b981]' : 'bg-emerald-950/40'
                     }`} />
                     <div className={`h-full rounded-full transition-all ${
-                      riskAssessment.tier === 'MODERATE' ? 'bg-amber-400 shadow-[0_0_8px_#f59e0b]' : 'bg-amber-950/40'
+                      riskKnown && riskAssessment.tier === 'MODERATE' ? 'bg-amber-400 shadow-[0_0_8px_#f59e0b]' : 'bg-amber-950/40'
                     }`} />
                     <div className={`h-full rounded-full transition-all ${
-                      riskAssessment.tier === 'HIGH' ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-rose-950/40'
+                      riskKnown && riskAssessment.tier === 'HIGH' ? 'bg-rose-500 shadow-[0_0_8px_#f43f5e]' : 'bg-rose-950/40'
                     }`} />
                   </div>
                   
                   <div className="flex items-center justify-between text-[8px] font-bold text-purple-400/80 font-mono uppercase px-0.5">
-                    <span className={riskAssessment.tier === 'LOW' ? 'text-emerald-400 font-black' : ''}>LOW</span>
-                    <span className={riskAssessment.tier === 'MODERATE' ? 'text-amber-400 font-black' : ''}>MODERATE</span>
-                    <span className={riskAssessment.tier === 'HIGH' ? 'text-rose-400 font-black' : ''}>HIGH</span>
+                    <span className={riskKnown && riskAssessment.tier === 'LOW' ? 'text-emerald-400 font-black' : ''}>LOW</span>
+                    <span className={riskKnown && riskAssessment.tier === 'MODERATE' ? 'text-amber-400 font-black' : ''}>MODERATE</span>
+                    <span className={riskKnown && riskAssessment.tier === 'HIGH' ? 'text-rose-400 font-black' : ''}>HIGH</span>
                   </div>
                 </div>
               </div>
@@ -1779,7 +1778,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   <div className="text-xs font-black text-white font-sans">CONVERGENCE</div>
                   <div className="text-[10px] text-purple-300/70 mt-0.5 leading-tight">
                     {isEarlyLockQualified && !isActuallyLocked ? (
-                      <span className="text-amber-300 font-bold">⚡ Early lock criteria met</span>
+                      <span className="text-amber-300 font-bold">⚡ All lock gates passing</span>
                     ) : (
                       'Multi-timeframe confluence'
                     )}
@@ -2157,26 +2156,24 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           engineScore={typeof displayConfidence === 'number' ? displayConfidence : null}
         />
 
-        {/* QUANTITATIVE SCENARIOS & AUTONOMOUS EXECUTION 2-COLUMN GRID */}
+        {/* WHAT-IF PRICE LEVELS & STRIKE CUSHION / REVERSAL GATE 2-COLUMN GRID.
+            Neither panel receives the engine score: it is not a probability. The
+            reversal risk is read straight off the payload (not displayReversalRisk,
+            which is seeded at 28 and keeps its last value when the field is null). */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <ScenarioSimulatorMatrix
             spotPrice={spotPrice}
             strikePrice={targetPrice}
+            strikeLabel={selectedAsset === 'BTC' && (canonicalDecision?.openStrike ?? 0) > 0 ? ((canonicalDecision as any)?.lockGate?.strikeSource === 'PLACEHOLDER' ? 'placeholder strike' : 'Kalshi strike') : 'reference price'}
             asset={selectedAsset}
-            baseConviction={displayConfidence ?? 0}
-            baseLockQuality={lockQualityScore ?? 0}
-            baseReversalRisk={displayReversalRisk}
-            isUp={isUp}
           />
 
           <AutonomousExecutionGuard
             spotPrice={spotPrice}
             strikePrice={targetPrice}
-            conviction={displayConfidence ?? 0}
-            reversalRisk={displayReversalRisk}
-            isActuallyLocked={isActuallyLocked}
-            asset={selectedAsset}
-            isUp={isUp}
+            strikeLabel={selectedAsset === 'BTC' && (canonicalDecision?.openStrike ?? 0) > 0 ? ((canonicalDecision as any)?.lockGate?.strikeSource === 'PLACEHOLDER' ? 'placeholder strike' : 'Kalshi strike') : 'reference price'}
+            reversalRisk={typeof canonicalDecision?.reversalRisk === 'number' && Number.isFinite(canonicalDecision.reversalRisk) ? canonicalDecision.reversalRisk : null}
+            reversalGateCheck={lockChecks.find((c) => c.id === 'REVERSAL') ?? null}
           />
         </div>
 
@@ -2345,7 +2342,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-white font-sans">WHY DID VIXY SKIP?</h3>
-                    <p className="text-xs text-purple-300/70 font-sans">Quantitative Capital Preservation Rationale</p>
+                    <p className="text-xs text-purple-300/70 font-sans">Lock gate results on the current tick</p>
                   </div>
                 </div>
                 <button
@@ -2356,40 +2353,55 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                 </button>
               </div>
 
-              <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 space-y-2">
-                <div className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">PRIMARY BLOCKER</div>
-                <div className="text-sm font-bold text-white">
-                  Cross-Venue Dispersion & Reversal Risk Threshold Exceeded
-                </div>
-                <p className="text-xs text-amber-200/80 leading-relaxed font-sans">
-                  The quantitative decision engine detected conflicting directional order flow between Binance spot taker volume and Kalshi 15M probability, pushing reversal risk to {displayReversalRisk}% (above the 25% safety ceiling).
-                </p>
-              </div>
+              {(() => {
+                // Real gate rows from the payload. This block named a fixed blocker,
+                // invented an order-flow explanation, capped reversal at 25% and showed
+                // a fixed factor count.
+                const failing = gateRows.filter((c) => !c.pass);
+                const reversalRow = lockChecks.find((c) => c.id === 'REVERSAL');
+                return (
+                  <>
+                    <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 space-y-2">
+                      <div className="text-[10px] text-amber-300 font-bold uppercase tracking-wider">{failing.length > 0 ? 'FAILING LOCK GATES' : 'LOCK GATES'}</div>
+                      {gatesTotal === 0 ? (
+                        <p className="text-xs text-amber-200/80 leading-relaxed font-sans">Gate results are not available for this tick.</p>
+                      ) : failing.length === 0 ? (
+                        <p className="text-xs text-amber-200/80 leading-relaxed font-sans">Every gating check passes on the current tick; the engine has not committed a lock for this cycle.</p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {failing.map((c) => (
+                            <li key={c.id} className="text-xs text-amber-100 font-sans flex justify-between gap-3">
+                              <span className="font-bold text-white">{c.label}</span>
+                              <span className="font-mono text-amber-300">{String(c.current)} (needs {c.required})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
 
-              <div className="space-y-2 text-xs">
-                <div className="text-[11px] font-bold text-purple-300 font-sans">SAFETY METRIC AUDIT</div>
-                
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                    <div className="space-y-2 text-xs">
+                      <div className="text-[11px] font-bold text-purple-300 font-sans">SAFETY METRIC AUDIT</div>
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
                   <span className="text-purple-300">Lock Quality Score</span>
                   <span className="font-bold text-amber-400 font-mono">{lockQualityScore === null ? '—' : lockQualityScore} / 100 (Threshold: {lockGateMin === null ? '--' : `${lockGateMin}${lockGateTier ? ` ${lockGateTier}` : ''}`})</span>
                 </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <span className="text-purple-300">Reversal Risk</span>
-                  <span className="font-bold text-rose-400 font-mono">{displayReversalRisk}% (Max allowed: 25%)</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
-                  <span className="text-purple-300">Signal Confluence</span>
-                  <span className="font-bold text-amber-400 font-mono">3 of 6 factors aligned</span>
-                </div>
-              </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                        <span className="text-purple-300">Reversal Risk</span>
+                        <span className="font-bold text-rose-400 font-mono">{displayReversalRisk === null ? '—' : `${displayReversalRisk}%`} (lock gate: {reversalRow?.required ?? '—'})</span>
+                      </div>
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-[#140a33] border border-purple-800/30">
+                        <span className="text-purple-300">Lock Gates Passing</span>
+                        <span className="font-bold text-amber-400 font-mono">{gatesTotal === 0 ? '—' : `${gatesPassing} of ${gatesTotal}`}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
 
               <div className="p-3 rounded-xl bg-[#12082b] border border-purple-800/40 text-[11px] text-purple-300/90 font-sans flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Capital Protection Guarantee:</strong> VIXY will never force a prediction in ambiguous or high-entropy regimes. Skipping preserves 100% of capital for high-conviction setups.
-                </span>
+                  <strong>Skipped cycle:</strong> no call is published for it, so there is no outcome to win or lose.</span>
               </div>
 
               <button
