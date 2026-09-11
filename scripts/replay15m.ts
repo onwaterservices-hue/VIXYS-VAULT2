@@ -40,8 +40,9 @@
  *      1-minute candles give 15. Sub-minute momentum (mom15sPct, mom30sPct) and
  *      persistenceSeconds, which the engine increments by a hardcoded 3 per
  *      tick, therefore behave differently.
- *   3. RANDOMNESS. The pipeline calls Math.random() once per tick for the VWAP
- *      volume estimate. The replay pins it to a seeded PRNG for reproducibility.
+ *   3. RANDOMNESS. The pipeline no longer calls Math.random(): the invented
+ *      per-tick VWAP "volume" was removed and the cycle average is equal-weight.
+ *      The sandbox still pins Math.random to a seeded PRNG, defensively.
  *   4. CROSS-ASSET. crossAssetPen is fed 0; the ETH/SOL feeds it derives from
  *      are not reconstructible from BTC candles.
  *   These make the replay a measurement of the ENGINE'S LOGIC over real price
@@ -664,7 +665,7 @@ function report(records: CycleRecord[], meta: { skippedNoCoverage: number; sourc
   console.log(SOURCE === 'trades'
     ? `  2. RESOLVED for this run: ${BUCKET_SECONDS}s buckets from real trade prints, matching production's ~3s cadence`
     : '  2. 15 ticks/cycle from 1m candles; production ticks ~every 3s  <-- USE --source trades');
-  console.log('  3. pipeline Math.random() pinned to a seeded PRNG');
+  console.log('  3. pipeline has no Math.random(); sandbox still pins it to a seeded PRNG (defensive)');
   console.log('  4. crossAssetPen fed 0; ETH/SOL feeds not reconstructible from BTC candles');
   console.log('  These are reasons the replay CANNOT reproduce the production ledger exactly.');
   console.log('');

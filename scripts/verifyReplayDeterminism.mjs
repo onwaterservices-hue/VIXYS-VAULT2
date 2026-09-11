@@ -2,8 +2,9 @@
 // Proves the 15M replay is deterministic and free of look-ahead.
 //
 //   1. same seed  -> byte-identical per-cycle records
-//   2. diff seed  -> different records (the seed genuinely reaches the pipeline,
-//                    so determinism is not just "nothing is random")
+//   2. diff seed  -> ALSO identical records: since the invented per-tick VWAP
+//                    volume was removed the pipeline has no randomness, so the
+//                    seed must not be able to change a decision
 //   3. zero look-ahead violations reported by the harness itself
 //
 // Runs fully offline against the cached candles.
@@ -81,8 +82,8 @@ try {
 
   check('same seed -> identical records', JSON.stringify(A.records) === JSON.stringify(B.records));
   check('same seed -> identical full payload', JSON.stringify(A) === JSON.stringify(B));
-  check('different seed -> different records (seed reaches the pipeline)',
-    JSON.stringify(A.records) !== JSON.stringify(C.records));
+  check('different seed -> identical records (pipeline has no randomness)',
+    JSON.stringify(A.records) === JSON.stringify(C.records));
   check('replay produced cycles', Array.isArray(A.records) && A.records.length > 0, `n=${A.records?.length}`);
 } finally {
   rmSync(tmp, { recursive: true, force: true });
