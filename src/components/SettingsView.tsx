@@ -26,7 +26,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenPricing,
 }) => {
   const [copiedKey, setCopiedKey] = useState(false);
-  const [apiKey, setApiKey] = useState(authState.user?.apiKey || 'vault_live_98a7b6c5d4e3f210');
+  const [apiKey, setApiKey] = useState(authState.user?.apiKey || '');
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Testing status for each exchange
@@ -49,53 +49,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setTimeout(() => setCopiedKey(false), 2000);
   };
 
-  const handleRegenerateKey = () => {
-    setIsGenerating(true);
-    setTimeout(() => {
-      const newKey = `vault_live_${Math.random().toString(36).substring(2, 12)}${Math.random().toString(36).substring(2, 8)}`;
-      setApiKey(newKey);
-      setIsGenerating(false);
-    }, 600);
-  };
-
-  const handleTestConnection = (venue: 'kalshi' | 'polymarket' | 'draftkings') => {
-    setTestingVenue(venue);
-    setTestSuccessMessage(null);
-    setTimeout(() => {
-      const simulatedLatency = 15;
-      setExchangeKeys((prev) => ({
-        ...prev,
-        [venue]: {
-          ...prev[venue],
-          connected: true,
-          status: 'CONNECTED',
-          latencyMs: simulatedLatency,
-          lastPing: 'Just now',
-        },
-      }));
-      setTestingVenue(null);
-      const nameMap = { kalshi: 'Kalshi DCM', polymarket: 'Polymarket L2', draftkings: 'DraftKings Micro' };
-      setTestSuccessMessage(`${nameMap[venue]} API Handshake Verified! Latency: ${simulatedLatency}ms`);
-      setTimeout(() => setTestSuccessMessage(null), 4000);
-    }, 900);
-  };
-
-  const handleToggleConnect = (venue: 'kalshi' | 'polymarket' | 'draftkings') => {
-    setExchangeKeys((prev) => {
-      const curr = prev[venue];
-      const nextConnected = !curr.connected;
-      return {
-        ...prev,
-        [venue]: {
-          ...curr,
-          connected: nextConnected,
-          status: nextConnected ? 'CONNECTED' : 'DISCONNECTED',
-          latencyMs: nextConnected ? 14 : 0,
-          lastPing: nextConnected ? 'Just now' : 'Never',
-        },
-      };
-    });
-  };
+  // No key is generated in the browser and no venue connection is simulated.
+  // "Regenerate" made a random vault_live_ key the server never issued, and
+  // "Test API Handshake" / "Enable" marked Polymarket and DraftKings CONNECTED
+  // at 14-15ms without contacting anything. Neither integration exists yet.
 
   return (
     <div className="max-w-4xl mx-auto space-y-8 py-4 font-mono text-purple-100">
@@ -132,11 +89,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
           <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
             <span className="hud-stat-label">Full Name</span>
-            <span className="hud-stat-value text-purple-100">{authState.user?.name || 'Quant User'}</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.name || '—'}</span>
           </div>
           <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
             <span className="hud-stat-label">Email Address</span>
-            <span className="hud-stat-value text-purple-100">{authState.user?.email || 'trader@vixysvault.com'}</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.email || '—'}</span>
           </div>
           <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
             <span className="hud-stat-label">Account Tier</span>
@@ -144,7 +101,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           <div className="hud-stat-card bg-[#0a0518] border-purple-900/40">
             <span className="hud-stat-label">Member Since</span>
-            <span className="hud-stat-value text-purple-100">{authState.user?.joinedDate || 'July 2026'}</span>
+            <span className="hud-stat-value text-purple-100">{authState.user?.joinedDate || '—'}</span>
           </div>
         </div>
       </div>
@@ -168,7 +125,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </h2>
             </div>
             <p className="text-xs text-purple-300/70 font-mono mt-1">
-              Connect external L2 orderbooks for multi-venue arbitrage monitoring and cross-platform spread analysis.
+              Polymarket and DraftKings are not integrated yet. Nothing entered here is used or tested.
             </p>
           </div>
         </div>
@@ -253,27 +210,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <div className="pt-2 border-t border-purple-900/40 flex items-center justify-between gap-2">
               <button
-                onClick={() => handleTestConnection('polymarket')}
-                disabled={testingVenue === 'polymarket'}
-                className="flex-1 py-1.5 rounded-xl bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                disabled
+                className="flex-1 py-1.5 rounded-xl bg-[#0c0620] text-purple-300/50 border border-purple-900/40 text-[10px] font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
+                title="No integration exists yet; nothing can be tested"
               >
-                {testingVenue === 'polymarket' ? (
-                  <RefreshCw className="w-3 h-3 animate-spin text-indigo-400" />
-                ) : (
-                  <Activity className="w-3 h-3" />
-                )}
-                <span>Test API Handshake</span>
+                <span>No integration yet</span>
               </button>
 
               <button
-                onClick={() => handleToggleConnect('polymarket')}
-                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
-                  exchangeKeys.polymarket.connected
-                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
-                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
-                }`}
+                disabled
+                className="px-2.5 py-1.5 rounded-xl text-[10px] font-bold border bg-[#0c0620] text-purple-300/50 border-purple-900/40 cursor-not-allowed"
               >
-                {exchangeKeys.polymarket.connected ? 'Disable' : 'Enable'}
+                Unavailable
               </button>
             </div>
           </div>
@@ -349,27 +297,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
             <div className="pt-2 border-t border-purple-900/40 flex items-center justify-between gap-2">
               <button
-                onClick={() => handleTestConnection('draftkings')}
-                disabled={testingVenue === 'draftkings'}
-                className="flex-1 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold transition-all flex items-center justify-center gap-1"
+                disabled
+                className="flex-1 py-1.5 rounded-xl bg-[#0c0620] text-purple-300/50 border border-purple-900/40 text-[10px] font-bold cursor-not-allowed flex items-center justify-center gap-1.5"
+                title="No integration exists yet; nothing can be tested"
               >
-                {testingVenue === 'draftkings' ? (
-                  <RefreshCw className="w-3 h-3 animate-spin text-emerald-400" />
-                ) : (
-                  <Activity className="w-3 h-3" />
-                )}
-                <span>Test API Handshake</span>
+                <span>No integration yet</span>
               </button>
 
               <button
-                onClick={() => handleToggleConnect('draftkings')}
-                className={`px-2.5 py-1.5 rounded-xl text-[10px] font-bold border transition-all ${
-                  exchangeKeys.draftkings.connected
-                    ? 'bg-rose-500/15 text-rose-300 border-rose-500/30 hover:bg-rose-500/25'
-                    : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/25'
-                }`}
+                disabled
+                className="px-2.5 py-1.5 rounded-xl text-[10px] font-bold border bg-[#0c0620] text-purple-300/50 border-purple-900/40 cursor-not-allowed"
               >
-                {exchangeKeys.draftkings.connected ? 'Disable' : 'Enable'}
+                Unavailable
               </button>
             </div>
           </div>
@@ -400,29 +339,23 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <label className="text-[11px] text-purple-300/60 block">Live Production API Secret Key</label>
+            <label className="text-[11px] text-purple-300/60 block">API Key</label>
             <div className="flex items-center gap-2">
               <input
                 type="text"
                 readOnly
-                value={apiKey}
+                value={apiKey || 'Not issued: there is no public VIXY API yet'}
                 className="flex-1 bg-[#0a0518] border border-purple-900/60 rounded-xl px-3 py-2 text-xs font-mono text-purple-300 select-all focus:outline-none"
               />
               <button
                 onClick={handleCopyKey}
+                disabled={!apiKey}
                 className="px-3 py-2 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] text-purple-200 border border-purple-900/40 text-xs font-bold transition-all flex items-center gap-1.5"
               >
                 {copiedKey ? <Check className="w-4 h-4 text-purple-400" /> : <Copy className="w-4 h-4" />}
                 <span>{copiedKey ? 'Copied' : 'Copy Key'}</span>
               </button>
-              <button
-                onClick={handleRegenerateKey}
-                disabled={isGenerating}
-                className="p-2 rounded-xl bg-[#0c0620] hover:bg-[#0c0620] text-purple-300/70 hover:text-white border border-purple-900/40 transition-all"
-                title="Regenerate API Key"
-              >
-                <RefreshCw className={`w-4 h-4 ${isGenerating ? 'animate-spin text-purple-400' : ''}`} />
-              </button>
+              
             </div>
           </div>
 
@@ -431,9 +364,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <Terminal className="w-4 h-4" />
               <span>API Endpoint Sample (Python / Node)</span>
             </div>
-            <pre className="text-[11px] text-purple-300/70 overflow-x-auto p-2 bg-[#0a0518] rounded border border-purple-900/40 font-mono">
-              curl -H "X-VAULT-KEY: {apiKey}" https://api.vixysvault.com/v1/predict/btc15m
-            </pre>
+            <p className="text-[11px] text-purple-300/70">
+              There is no public VIXY REST or WebSocket API yet, so no keys are issued and there is no endpoint to call.
+            </p>
           </div>
         </div>
       </div>
