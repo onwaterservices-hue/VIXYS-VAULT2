@@ -60,7 +60,11 @@ t.check('persistence reason no longer says "Early Lock" unconditionally',
 
 t.section('Unmeasured values are reported as unmeasured');
 t.check('lock checks report liquidity as null (not measured)', /liquidity: null,\s*\n\s*spread: null,\s*\n\s*edge: isEdgePass,/.test(serverSrc));
-t.check('no-history Brier fallback is null, not 0.168', /: null; \/\/ no settled history -> no Brier score/.test(serverSrc));
+// Pins behaviour, not a comment: the calibration Brier is the mean of real scores
+// (meanBrier returns null when none exist) and no invented 0.168 remains.
+t.check('no-history Brier is null, not an invented 0.168',
+  /const avgBrier = meanBrier\(serverLearningEngine\.settledHistory\)\.mean;/.test(serverSrc) &&
+  !/\b0\.168\b/.test(serverSrc.split('\n').map((l) => l.split('//')[0]).join('\n')));
 t.check('calibration brierScore tolerates null', /brierScore: avgBrier === null \? null : Math\.round\(avgBrier \* 1e3\) \/ 1e3,/.test(serverSrc));
 {
   const calSrc = sliceBetween(serverSrc, 'let latestCalibrationState = {', 'let latestGuardianDecision = {', 'calibration seed');
