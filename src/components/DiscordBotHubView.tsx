@@ -273,7 +273,7 @@ export const DiscordBotHubView: React.FC<DiscordBotHubViewProps> = ({ adminEvent
               </span>
             </div>
             <p className="text-[10px] text-purple-400/60 font-mono">
-              Tag: {statusData?.status?.botTag || 'VIXY AI#0000'}
+              Tag: {statusData?.status?.botTag || diagnostics?.botState?.botTag || '—'}
             </p>
           </div>
 

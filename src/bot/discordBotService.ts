@@ -36,7 +36,7 @@ export function getDiscordBotStatus(): DiscordBotState {
     botState.isReady = true;
     botState.pingMs = discordClient.ws.ping;
     botState.guildCount = discordClient.guilds.cache.size;
-    botState.botTag = discordClient.user?.tag || 'VIXY AI#0000';
+    botState.botTag = discordClient.user?.tag || null;
     botState.botId = discordClient.user?.id || null;
     botState.mode = 'ACTIVE_BOT';
   } else if (process.env.DISCORD_WEBHOOK_URL) {
