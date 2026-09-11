@@ -294,7 +294,9 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
                     </span>
                   </div>
                   <div className="text-lg font-black text-purple-200 tabular-nums">
-                    {spreadBps !== null ? `${spreadBps.toFixed(2)} bps` : '—'}
+                    {spreadBps !== null && book.spreadUSD !== null
+                      ? `$${book.spreadUSD.toFixed(2)} · ${spreadBps < 0.1 ? spreadBps.toFixed(3) : spreadBps.toFixed(2)} bps`
+                      : '—'}
                   </div>
                   <p className="text-[10px] text-purple-300/60 font-sans mt-1 leading-tight">
                     {book.status === 'LIVE' && book.topBid !== null && book.topAsk !== null
