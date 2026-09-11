@@ -7313,27 +7313,33 @@ app.post(
     // YES/NO union broadcastSignalToDiscord expects.
     const direction =
       rawDirection === "NO" || rawDirection === "DOWN" ? "NO" : "YES";
-    const currentPrice = Number(body.currentPrice);
-    const targetPrice = Number(body.targetPrice);
-    if (!Number.isFinite(currentPrice) || !Number.isFinite(targetPrice)) {
+    // A Bot Hub test must never read as a real lock in a subscriber channel.
+    // The Bot Hub sent an invented $64,821.50 spot, $65,120 target, confidence 89
+    // and "+1,420 BTC" rationale, and this route posted them through the real
+    // publisher (ELITE by default -> #premium-signals) as a lock embed. Tests
+    // now carry the live price when the engine has one and always render as a
+    // TEST embed with no score, probability, entry, stop or target.
+    const bodyPrice = Number(body.currentPrice);
+    const currentPrice = Number.isFinite(bodyPrice) && bodyPrice > 0 ? bodyPrice : currentBtcPrice > 0 ? currentBtcPrice : NaN;
+    if (!Number.isFinite(currentPrice)) {
       return res.status(400).json({
         success: false,
-        message: "currentPrice and targetPrice must be finite numbers.",
+        message: "No live price is available yet; try again once the engine has ticked.",
       });
     }
+    const targetPrice = current15mStrikePrice > 0 ? current15mStrikePrice : currentPrice;
     try {
       const result = await broadcastSignalToDiscord({
         symbol: String(body.symbol || "BTC"),
         direction,
-        confidence: Number.isFinite(Number(body.confidence))
-          ? Number(body.confidence)
-          : 0,
-        edgePct: Number.isFinite(Number(body.edgePct)) ? Number(body.edgePct) : 0,
+        confidence: 0,
+        edgePct: 0,
         currentPrice,
         targetPrice,
-        reasoning: String(body.reasoning || "Manual test broadcast from Bot Hub."),
+        reasoning: "TEST_BROADCAST",
         webhookUrl: body.webhookUrl || undefined,
         tier: body.tier === "FREE" ? "FREE" : "ELITE",
+        test: true,
       });
       return res.json({
         success: !!result.success,

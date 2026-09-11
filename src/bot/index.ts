@@ -2,7 +2,7 @@ import { discordClient, discordBotManager, generateInviteUrl, initializeDiscordB
 export { loadProductionDiscordCredentials };
 import { createDashboardEmbed } from './embeds/dashboardEmbed';
 import { createStructuredPredictionEmbed } from './embeds/predictionEmbed';
-import { createFreeSignalEmbed, createVipSignalEmbed } from './embeds/signalEmbed';
+import { createFreeSignalEmbed, createVipSignalEmbed, createTestSignalEmbed } from './embeds/signalEmbed';
 import { createMarketAnalysisEmbed } from './embeds/marketAnalysisEmbed';
 import {
   createWhaleTrackerEmbed,
@@ -294,6 +294,8 @@ export async function broadcastSignalToDiscord(signalData: {
   scoreWinRatePct?: number | null;
   scoreWinRateSampleSize?: number | null;
   scoreBucket?: string | null;
+  // Bot Hub delivery test: rendered as a TEST embed, never as a lock.
+  test?: boolean;
 }): Promise<{ success: boolean; method: string; message: string }> {
   const tier = signalData.tier === 'FREE' ? 'FREE' : 'ELITE';
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
@@ -331,9 +333,11 @@ export async function broadcastSignalToDiscord(signalData: {
     },
   };
 
-  const embed = tier === 'FREE'
-    ? createFreeSignalEmbed(marketData)
-    : createVipSignalEmbed(marketData);
+  const embed = signalData.test === true
+    ? createTestSignalEmbed(marketData, tier)
+    : tier === 'FREE'
+      ? createFreeSignalEmbed(marketData)
+      : createVipSignalEmbed(marketData);
 
   // Stamp the authoritative VIXY cycle ID so this message is traceable
   // back to the exact same decision shown on the website. Handles both a
