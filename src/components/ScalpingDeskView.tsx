@@ -37,6 +37,9 @@ interface ScalpingDeskViewProps {
   onSelectAsset?: (symbol: string) => void;
   alertSettings?: AlertSettings;
   onOpenDiscordModal?: () => void;
+  /** Live canonical 15M decision, passed to the chart. BTC-only model. */
+  engineDecision?: any;
+  engineFeedHealth?: string | null;
 }
 
 export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
@@ -46,6 +49,8 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
   onSelectAsset,
   alertSettings,
   onOpenDiscordModal,
+  engineDecision,
+  engineFeedHealth,
 }) => {
   const [deskTab, setDeskTab] = useState<'SIGNAL' | 'WHY' | 'L2_SCANNER' | 'PAPER_DESK'>('SIGNAL');
   const [showWhyDrawer, setShowWhyDrawer] = useState<boolean>(false);
@@ -112,14 +117,14 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
           <div className="min-w-0">
             <div className="flex items-center space-x-2 flex-wrap">
               <h1 className="text-sm sm:text-base font-black font-mono tracking-tight text-white truncate">
-                15S ALPHA INTELLIGENCE ENGINE
+                15S SCALPING DESK
               </h1>
               <span className="px-2 py-0.5 text-[10px] rounded-lg font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                ● ULTRA-FAST 15S
+                ● LIVE MARKET DATA
               </span>
             </div>
             <p className="text-[10px] text-purple-300/70 font-sans mt-0.5 truncate">
-              HIGH-FREQUENCY SHORT-HORIZON PROBABILISTIC DECISION INTELLIGENCE
+              Live candles, book depth and large prints, read beside the BTC 15-minute engine
             </p>
           </div>
         </div>
@@ -149,7 +154,7 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
         userRole={userRole}
         onOpenDiscordModal={onOpenDiscordModal}
         title="15S SCALPING INTELLIGENCE LOCKED"
-        subtitle="Verify your VIXY Vault Discord membership to unlock live 15s probability cones, micro-delta sweeps, and AI conviction signals."
+        subtitle="Verify your VIXY Vault Discord membership to unlock live 1-minute candles, the Coinbase book and tape, and the BTC 15-minute engine read."
       >
         <div className="space-y-4 w-full min-w-0">
           
@@ -158,7 +163,8 @@ export const ScalpingDeskView: React.FC<ScalpingDeskViewProps> = ({
             <ScalpDecisionChart
               asset={selectedAsset}
               desk="15s"
-              title={`${selectedAsset} 15S SCALPING MATRIX & PROBABILITY CONE`}
+              engineDecision={engineDecision}
+              engineFeedHealth={engineFeedHealth}
             />
           </div>
 
