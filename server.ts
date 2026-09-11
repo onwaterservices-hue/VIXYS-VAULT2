@@ -4282,6 +4282,13 @@ async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, r
     { tier: "FREE", label: "FREE" },
     { tier: "ELITE", label: "ELITE" },
   ];
+  // The raw engine score reads like a probability of being right, but it is not
+  // one: across 150 settled locks (2026-09-11) scores of 80-85 won 52.9%, 85-90
+  // won 61.5% and 90-95 won 82.1%. Both embeds show the score's measured win
+  // rate from the ledger (getCalibratedConfidence, n >= 15 per bucket) or say
+  // the bucket is too thin.
+  try { await ensureLedgerFresh(); } catch {}
+  const scoreCalibration = getCalibratedConfidence(conf);
 
   for (const { tier, label } of tiers) {
     const claimKey = `${cycleId}#${label}`;
@@ -4319,6 +4326,9 @@ async function attemptDiscordSignalBroadcast(cycleId, dir, conf, spot, strike, r
           tier,
           probability: Number.isFinite(probability) ? probability : undefined,
           lockedAt: lockedAt || undefined,
+          scoreWinRatePct: scoreCalibration.status === "CALIBRATED" ? scoreCalibration.calibrated : null,
+          scoreWinRateSampleSize: Number.isFinite(scoreCalibration.sampleSize) ? scoreCalibration.sampleSize : null,
+          scoreBucket: scoreCalibration.bucket || null,
         });
       } catch (err) {
         console.error(`[Discord] Automated broadcast failed (tier=${label}):`, err);

@@ -289,6 +289,11 @@ export async function broadcastSignalToDiscord(signalData: {
   // corresponding fields instead of deriving stand-ins.
   probability?: number;
   lockedAt?: string;
+  // Measured win rate of settled locks whose engine score fell in the same
+  // 5-point bucket (null when the bucket has fewer than 15 settled locks).
+  scoreWinRatePct?: number | null;
+  scoreWinRateSampleSize?: number | null;
+  scoreBucket?: string | null;
 }): Promise<{ success: boolean; method: string; message: string }> {
   const tier = signalData.tier === 'FREE' ? 'FREE' : 'ELITE';
   const webhookUrl = signalData.webhookUrl || process.env.DISCORD_WEBHOOK_URL;
@@ -317,6 +322,9 @@ export async function broadcastSignalToDiscord(signalData: {
       accuracy: 0,
       totalSettled: 0,
       lockedProbability: Number.isFinite(signalData.probability) ? signalData.probability : undefined,
+      scoreWinRatePct: typeof signalData.scoreWinRatePct === 'number' ? signalData.scoreWinRatePct : null,
+      scoreWinRateSampleSize: typeof signalData.scoreWinRateSampleSize === 'number' ? signalData.scoreWinRateSampleSize : null,
+      scoreBucket: signalData.scoreBucket ?? null,
       lockedAt: signalData.lockedAt || undefined,
       lockRule: signalData.reasoning,
       strike: Number.isFinite(signalData.targetPrice) && signalData.targetPrice > 0 ? signalData.targetPrice : undefined,

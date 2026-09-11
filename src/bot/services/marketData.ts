@@ -30,6 +30,10 @@ export interface MarketOverview {
     lockedAt?: string;
     lockRule?: string;
     strike?: number;
+    // Measured win rate of settled locks in this engine score's bucket.
+    scoreWinRatePct?: number | null;
+    scoreWinRateSampleSize?: number | null;
+    scoreBucket?: string | null;
   };
 }
 

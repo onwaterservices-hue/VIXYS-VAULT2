@@ -16,14 +16,17 @@ export function createFreeSignalEmbed(data: MarketOverview) {
     // regardless of what the engine measured.
     .setDescription(lock.description)
     .addFields(
-      { name: 'Current AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
+      // Was "Current AI Confidence" with a % sign: it is the engine's score, not a
+      // probability, and scores of 80-90 have won 53-62% of settled locks.
+      { name: 'Engine score', value: `\`${data.prediction.confidence} / 100\``, inline: true },
+      scoreWinRateField(data),
       { name: 'Market Bias', value: `\`${isBull ? 'Bullish' : 'Bearish'}\``, inline: true },
       // The engine's locked probability for the chosen side. Previously this
       // slot printed confidence * 0.96 under the name "Probability Score", a
       // number no model produced. When no locked probability exists the field
       // is omitted rather than filled with a derived stand-in.
       ...(lock.probabilityPct !== null
-        ? [{ name: 'Locked P(win)', value: `\`${lock.probabilityPct}%\``, inline: true }]
+        ? [{ name: 'Model P(win), uncalibrated', value: `\`${lock.probabilityPct}%\``, inline: true }]
         : []),
       {
         name: '🔒 Full trade released to VIXY ELITE',
@@ -45,6 +48,20 @@ export function createFreeSignalEmbed(data: MarketOverview) {
     )
     .setFooter({ text: 'VIXY AI Signal Scanner • Confidential Quantitative Intelligence' })
     .setTimestamp();
+}
+
+// The engine score is not a probability of being right. When enough settled
+// locks share its bucket, show what that bucket actually won; otherwise say so.
+function scoreWinRateField(data: MarketOverview) {
+  const p = data.prediction;
+  const n = typeof p.scoreWinRateSampleSize === 'number' ? p.scoreWinRateSampleSize : null;
+  const value =
+    typeof p.scoreWinRatePct === 'number'
+      ? `\`${p.scoreWinRatePct}%\` of ${n} settled locks${p.scoreBucket ? ` (score ${p.scoreBucket})` : ''}`
+      : n !== null
+        ? `Not enough settled locks at this score yet (${n})`
+        : 'Not measured';
+  return { name: 'Win rate at this score', value, inline: true };
 }
 
 // Facts about the lock that both embeds print. Everything here is read from
@@ -89,9 +106,10 @@ export function createVipSignalEmbed(data: MarketOverview) {
     .addFields(
       { name: 'Asset', value: `**${data.asset}**`, inline: true },
       { name: 'Direction', value: `**${isBull ? '🐂 BULLISH (YES)' : '🐻 BEARISH (NO)'}**`, inline: true },
-      { name: 'AI Confidence', value: `\`${data.prediction.confidence}%\``, inline: true },
+      { name: 'Engine score', value: `\`${data.prediction.confidence} / 100\``, inline: true },
+      scoreWinRateField(data),
       ...(lock.probabilityPct !== null
-        ? [{ name: 'Locked P(win)', value: `\`${lock.probabilityPct}%\``, inline: true }]
+        ? [{ name: 'Model P(win), uncalibrated', value: `\`${lock.probabilityPct}%\``, inline: true }]
         : []),
       // Entry / stop / target are fixed offsets from the spot at lock
       // (-0.05% / -0.35% / +0.65% for a bullish call, mirrored for bearish).
