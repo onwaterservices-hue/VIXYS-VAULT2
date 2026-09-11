@@ -419,10 +419,16 @@ export const HistoricalAccuracy: React.FC<any> = () => {
               const isLocked = liveState?.isLocked;
               const isSkip = liveState?.status === 'NO_TRADE' || liveState?.status === 'SKIPPED' || liveState?.stage === 'NO_TRADE' || liveState?.stage === 'SKIPPED' || liveState?.isChoppy || (liveState?.lockEligibility?.reason && String(liveState?.lockEligibility?.reason).toUpperCase().includes('CHOP'));
               
-              const elapsedSec = liveState?.lockEligibility?.elapsedSeconds || 193;
-              const remSec = liveState?.lockEligibility?.remainingSeconds || 707;
-              const totalSec = Math.max(1, elapsedSec + remSec);
-              const progressPct = Math.min(100, Math.max(0, (elapsedSec / totalSec) * 100));
+              // The cycle timer comes only from the engine's lockEligibility. The
+              // old fallbacks invented an elapsed/remaining pair whenever the field
+              // was absent, and also whenever a real value was 0 (cycle start/end).
+              const lockElig = liveState?.lockEligibility;
+              const timerKnown = lockElig?.elapsedSeconds != null && lockElig?.remainingSeconds != null
+                && Number.isFinite(Number(lockElig.elapsedSeconds)) && Number.isFinite(Number(lockElig.remainingSeconds));
+              const elapsedSec: number | null = timerKnown ? Number(lockElig.elapsedSeconds) : null;
+              const remSec: number | null = timerKnown ? Number(lockElig.remainingSeconds) : null;
+              const totalSec = elapsedSec !== null && remSec !== null ? Math.max(1, elapsedSec + remSec) : 1;
+              const progressPct = elapsedSec !== null ? Math.min(100, Math.max(0, (elapsedSec / totalSec) * 100)) : 0;
 
               let stageName = 'BUILDING LOCK';
               if (isSkip) {
@@ -431,6 +437,10 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                 stageName = 'LOCKED';
               } else if (liveState?.stage || liveState?.status) {
                 stageName = String(liveState.stage || liveState.status).replace(/_/g, ' ').toUpperCase();
+              } else if (remSec === null) {
+                // No published stage and no timer: keep the default label rather
+                // than deriving a stage from seconds nobody measured.
+                stageName = 'BUILDING LOCK';
               } else if (remSec > 675) {
                 stageName = 'BUILDING LOCK';
               } else if (remSec > 450) {
@@ -589,7 +599,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                         <Clock className="w-3.5 h-3.5 text-purple-400" /> 15M CYCLE PROGRESS
                       </span>
                       <span className="text-cyan-300">
-                        {elapsedSec}s elapsed <span className="text-zinc-600">/</span> {remSec}s remaining
+                        {elapsedSec !== null ? `${elapsedSec}s` : '—'} elapsed <span className="text-zinc-600">/</span> {remSec !== null ? `${remSec}s` : '—'} remaining
                       </span>
                     </div>
 
@@ -757,7 +767,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                     <div className="bg-black/50 p-2.5 rounded-xl border border-purple-900/40">
                       <div className="text-[9.5px] text-zinc-400 font-black uppercase tracking-wider mb-1">Entry Price</div>
                       <div className="text-white font-black">
-                        ${entryPrice ? Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2}) : '64,115'}
+                        {entryPrice ? `$${Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : '—'}
                       </div>
                     </div>
 
@@ -787,7 +797,7 @@ export const HistoricalAccuracy: React.FC<any> = () => {
                         {isResolved && settlementPrice 
                           ? `$${Number(settlementPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` 
                           : isNoTrade 
-                          ? `$${entryPrice ? Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2}) : '64,115'}`
+                          ? (entryPrice ? `$${Number(entryPrice).toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 2})}` : '—')
                           : 'In Progress...'}
                       </div>
                       {isResolved && priceDelta !== null && (

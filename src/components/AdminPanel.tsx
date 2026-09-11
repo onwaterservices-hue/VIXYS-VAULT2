@@ -78,7 +78,6 @@ import {
   fetchAdminAuditLogs,
   fetchSystemHealth,
   fetchAdminEventsApi,
-  fetchDiscordHealthApi,
   fetchStripeHealthApi,
   resyncEntitlementApi,
   wipeBetaUsersApi,
@@ -189,6 +188,129 @@ interface AdminPanelProps {
   stats?: any;
   tickets?: SupportTicket[];
   setTickets?: React.Dispatch<React.SetStateAction<SupportTicket[]>>;
+}
+
+// ---------------------------------------------------------------------------
+// Admin health states. Every status the panel shows is derived here from a
+// field a server route actually returns. Anything missing, unrecognised, or not
+// freshly answered within HEALTH_STALE_AFTER_MS is UNKNOWN; nothing falls back
+// to ONLINE.
+//   ONLINE      a runtime reading says the service is working
+//   CONFIGURED  only configuration was checked (keys present), not reachability
+//   DEGRADED    the server reported a failing or stale state
+//   UNKNOWN     no current reading
+// ---------------------------------------------------------------------------
+type HealthState = "ONLINE" | "CONFIGURED" | "DEGRADED" | "UNKNOWN";
+
+// safeFetchJson caches /health and /diagnostics answers for 15s and the panel
+// polls every 5s, so a working route answers at least every ~20s.
+const HEALTH_STALE_AFTER_MS = 60_000;
+
+const HEALTH_ROUTES = {
+  systemHealth: "/api/admin/system-health",
+  diagnostics: "/api/admin/diagnostics",
+  stripeHealth: "/api/stripe/health",
+  discordDiagnostics: "/api/discord/diagnostics",
+} as const;
+
+type RouteProbe = { answeredAt: number; rttMs: number };
+
+function isRecord(v: unknown): v is Record<string, any> {
+  return !!v && typeof v === "object";
+}
+
+// /api/admin/diagnostics reads module-level values seeded at boot:
+// engineFeedStatus = "CONNECTED" and lastModelRunTs = lastMarketUpdateTs =
+// Date.now(). currentEngineCycleId starts at 0 and is incremented first thing in
+// runMarketEngineTick, so cycleId 0 means the instance that answered has never
+// ticked and its feed/engine status is a seed, not a reading.
+function engineHasTicked(diag: unknown): boolean {
+  const id = isRecord(diag) && isRecord(diag.predictionEngine) ? diag.predictionEngine.cycleId : null;
+  return typeof id === "number" && id > 0;
+}
+
+/** marketFeed.status = engineFeedStatus: "CONNECTED" | "STALE". */
+function marketFeedState(diag: unknown): HealthState {
+  if (!isRecord(diag) || !engineHasTicked(diag)) return "UNKNOWN";
+  const s = isRecord(diag.marketFeed) ? diag.marketFeed.status : undefined;
+  if (s === "CONNECTED") return "ONLINE";
+  if (s === "STALE" || s === "DEGRADED" || s === "DISCONNECTED") return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** predictionEngine.status: "RUNNING" (model ran < 120s ago) | "STALE". */
+function predictionEngineState(diag: unknown): HealthState {
+  if (!isRecord(diag) || !engineHasTicked(diag)) return "UNKNOWN";
+  const s = diag.predictionEngine.status;
+  if (s === "RUNNING") return "ONLINE";
+  if (s === "STALE") return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** database.status = persistenceState. */
+function databaseState(diag: unknown): HealthState {
+  const s = isRecord(diag) && isRecord(diag.database) ? diag.database.status : undefined;
+  if (s === "HEALTHY_FIRESTORE") return "ONLINE";
+  if (s === "DEGRADED_LOCAL_FALLBACK" || s === "LOCAL_DISK_ONLY" || s === "RESOURCE_EXHAUSTED") return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** /api/stripe/health status: "HEALTHY" | "DEGRADED". Keys, webhook secret,
+ * price IDs and Firestore are checked; Stripe itself is never called. */
+function stripeConfigState(stripe: unknown): HealthState {
+  const s = isRecord(stripe) ? stripe.status : undefined;
+  if (s === "HEALTHY") return "CONFIGURED";
+  if (s === "DEGRADED") return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** Webhook secret presence only; webhook delivery is not observed. */
+function stripeWebhookState(stripe: unknown): HealthState {
+  const p = isRecord(stripe) ? stripe.stripe_webhook_secret_present : undefined;
+  if (p === true) return "CONFIGURED";
+  if (p === false) return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** /api/discord/diagnostics botState.isReady (discord.js gateway ready). */
+function discordBotState(diag: unknown): HealthState {
+  const ready = isRecord(diag) && isRecord(diag.botState) ? diag.botState.isReady : undefined;
+  if (ready === true) return "ONLINE";
+  if (ready === false) return "DEGRADED";
+  return "UNKNOWN";
+}
+
+/** A role-gated route returned a body without an error: the API answered and
+ * accepted the admin session. The body's own literal "HEALTHY" is not read. */
+function routeAnswered(body: unknown): HealthState {
+  return isRecord(body) && !("error" in body) ? "ONLINE" : "UNKNOWN";
+}
+
+function isProbeFresh(probe: RouteProbe | undefined, checkedAt: number): boolean {
+  return !!probe && checkedAt - probe.answeredAt <= HEALTH_STALE_AFTER_MS;
+}
+
+/** The body, or null when its route has not freshly answered recently. */
+function freshBody<T>(body: T | null, probe: RouteProbe | undefined, checkedAt: number): T | null {
+  return isProbeFresh(probe, checkedAt) ? body : null;
+}
+
+/** Browser round-trip of the route's last fresh answer, or a dash. */
+function probeLatency(probe: RouteProbe | undefined, checkedAt: number): string {
+  return probe && isProbeFresh(probe, checkedAt) ? `${probe.rttMs}ms` : "—";
+}
+
+function telemetryState(fresh: boolean[]): "LIVE" | "PARTIAL" | "NONE" {
+  const n = fresh.filter(Boolean).length;
+  return n === 0 ? "NONE" : n === fresh.length ? "LIVE" : "PARTIAL";
+}
+
+function yesNoUnknown(v: unknown): "YES" | "NO" | "—" {
+  return v === true ? "YES" : v === false ? "NO" : "—";
+}
+
+function yesNoClass(v: unknown): string {
+  return v === true ? "text-emerald-400" : v === false ? "text-rose-400" : "text-slate-400";
 }
 
 /**
@@ -328,8 +450,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [referrals, setReferrals] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLogItem[]>([]);
   const [systemHealth, setSystemHealth] = useState<any>(null);
-  const [discordHealth, setDiscordHealth] = useState<any>(null);
   const [stripeHealth, setStripeHealth] = useState<any>(null);
+  // Evidence behind the health statuses: when each health route last returned a
+  // FRESH answer and how long that browser round-trip took. healthCheckedAt is
+  // stamped on every refresh so staleness is re-evaluated even when nothing new
+  // arrives.
+  const [routeProbes, setRouteProbes] = useState<Record<string, RouteProbe>>({});
+  const [healthCheckedAt, setHealthCheckedAt] = useState(0);
+  const lastRouteBodiesRef = useRef<Record<string, unknown>>({});
   const [signalLogsState, setSignalLogsState] = useState<any[]>([]);
   const [discordDiag, setDiscordDiag] = useState<any>(null);
   const [dayPassRecords, setDayPassRecords] = useState<any[]>([]);
@@ -491,6 +619,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (isManualRefresh) setIsRefreshing(true);
     setGlobalError(null);
 
+    const freshProbes: Record<string, RouteProbe> = {};
+    // Times a health fetch. safeFetchJson hands back the SAME object when it
+    // serves its cache (TTL hit, 429 backoff, or a failed request), so only a new
+    // object counts as the route answering, and only then is the round-trip kept.
+    const timed = async (route: string, run: () => Promise<any>) => {
+      const t0 = performance.now();
+      const body = await run().catch(() => null);
+      const rttMs = Math.round(performance.now() - t0);
+      if (
+        isRecord(body) &&
+        !("error" in body) &&
+        body.success !== false &&
+        body !== lastRouteBodiesRef.current[route]
+      ) {
+        lastRouteBodiesRef.current[route] = body;
+        freshProbes[route] = { answeredAt: Date.now(), rttMs };
+      }
+      return body;
+    };
+
     try {
       const [
         fetchedUsers,
@@ -500,7 +648,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         fetchedLogs,
         fetchedHealth,
         fetchedDiag,
-        fetchedDiscHealth,
         fetchedStripeHealth,
         fetchedTickets,
         fetchedDayPasses,
@@ -510,10 +657,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         fetchAdminTransactions().catch(() => null),
         fetchAdminReferrals().catch(() => null),
         fetchAdminAuditLogs().catch(() => null),
-        fetchSystemHealth().catch(() => null),
-        fetchAdminDiagnostics().catch(() => null),
-        fetchDiscordHealthApi().catch(() => null),
-        fetchStripeHealthApi().catch(() => null),
+        timed(HEALTH_ROUTES.systemHealth, fetchSystemHealth),
+        timed(HEALTH_ROUTES.diagnostics, fetchAdminDiagnostics),
+        timed(HEALTH_ROUTES.stripeHealth, fetchStripeHealthApi),
         fetchAdminSupportTickets().catch(() => null),
         fetchAdminDayPassesApi().catch(() => null),
       ]);
@@ -546,7 +692,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       if (Array.isArray(fetchedLogs)) setAuditLogs(fetchedLogs);
       if (fetchedHealth) setSystemHealth(fetchedHealth);
       if (fetchedDiag) setDiagnosticsData(fetchedDiag);
-      if (fetchedDiscHealth) setDiscordHealth(fetchedDiscHealth);
       if (fetchedStripeHealth) setStripeHealth(fetchedStripeHealth);
       if (Array.isArray(fetchedTickets)) setTickets(fetchedTickets);
       if (fetchedDayPasses && Array.isArray(fetchedDayPasses.records))
@@ -562,9 +707,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         setSignalLogsState(sigLogRes.recentResolved);
       }
 
-      const fetchedDiscordDiag = await fetch("/api/discord/diagnostics")
-        .then((r) => r.json())
-        .catch(() => null);
+      const fetchedDiscordDiag = await timed(
+        HEALTH_ROUTES.discordDiagnostics,
+        () => fetch("/api/discord/diagnostics").then((r) => r.json()),
+      );
       if (fetchedDiscordDiag && fetchedDiscordDiag.success) {
         setDiscordDiag(fetchedDiscordDiag);
       }
@@ -574,6 +720,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         "Failed to synchronize backend admin telemetry. Some services may be unavailable.",
       );
     } finally {
+      setRouteProbes((prev) => ({ ...prev, ...freshProbes }));
+      setHealthCheckedAt(Date.now());
       isFetchingDataRef.current = false;
       if (isManualRefresh) setIsRefreshing(false);
     }
@@ -955,7 +1103,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }).length;
   }, [users]);
 
-  const currentlyConnectedSessions = systemHealth?.realtimeConnections || 0;
+  // /api/admin/system-health's realtimeConnections is synthesized server-side
+  // (serverUsers.length plus a clock-derived 0-4, or a literal 3). It counts no
+  // connections, so it is not displayed.
+  const currentlyConnectedSessions = "—";
+
+  // Health statuses read only bodies whose route freshly answered recently.
+  const freshSystemHealth = freshBody(systemHealth, routeProbes[HEALTH_ROUTES.systemHealth], healthCheckedAt);
+  const freshDiagnostics = freshBody(diagnosticsData, routeProbes[HEALTH_ROUTES.diagnostics], healthCheckedAt);
+  const freshStripeHealth = freshBody(stripeHealth, routeProbes[HEALTH_ROUTES.stripeHealth], healthCheckedAt);
+  const freshDiscordDiag = freshBody(discordDiag, routeProbes[HEALTH_ROUTES.discordDiagnostics], healthCheckedAt);
+  const telemetry = telemetryState(
+    [freshSystemHealth, freshDiagnostics, freshStripeHealth, freshDiscordDiag].map(Boolean),
+  );
+  const stripeGatewayState = stripeConfigState(freshStripeHealth);
+  const discordBotReady = isRecord(freshDiscordDiag?.botState)
+    ? freshDiscordDiag.botState.isReady
+    : undefined;
 
   if (isAccessDenied) {
     return (
@@ -999,8 +1163,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   | Master Control Panel
                 </span>
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-full">
-                Live Telemetry
+              <span
+                className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest rounded-full border ${
+                  telemetry === "LIVE"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : telemetry === "PARTIAL"
+                      ? "bg-amber-500/10 text-amber-400 border-amber-500/30"
+                      : "bg-slate-500/10 text-slate-400 border-slate-500/30"
+                }`}
+                title={`Live = every health route answered within the last ${HEALTH_STALE_AFTER_MS / 1000}s`}
+              >
+                {telemetry === "LIVE"
+                  ? "Live Telemetry"
+                  : telemetry === "PARTIAL"
+                    ? "Partial Telemetry"
+                    : "No Fresh Telemetry"}
               </span>
             </div>
             <p className="text-xs text-slate-400">
@@ -1188,7 +1365,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 },
                 {
                   title: "CONNECTED SESSIONS",
-                  value: currentlyConnectedSessions.toString(),
+                  value: currentlyConnectedSessions,
                   icon: Radio,
                   color: "text-cyan-400",
                   targetTab: "system_health",
@@ -1236,65 +1413,64 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       [01] SYSTEM CONNECTIVITY MATRIX
                     </h3>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-cyan-950/80 text-cyan-400 border border-cyan-800/40">
-                    LIVE FEED
+                  <span
+                    className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border ${
+                      telemetry === "LIVE"
+                        ? "bg-cyan-950/80 text-cyan-400 border-cyan-800/40"
+                        : telemetry === "PARTIAL"
+                          ? "bg-amber-950/80 text-amber-400 border-amber-800/40"
+                          : "bg-slate-900/80 text-slate-400 border-slate-700/40"
+                    }`}
+                  >
+                    {telemetry === "LIVE" ? "LIVE FEED" : telemetry === "PARTIAL" ? "PARTIAL FEED" : "NO FRESH FEED"}
                   </span>
                 </div>
 
                 <div className="space-y-2.5">
-                  {[
-                    {
-                      name: "API HEALTH",
-                      status:
-                        systemHealth?.status === "ok" ||
-                        systemHealth?.status === "ONLINE"
-                          ? "ONLINE"
-                          : "DEGRADED",
-                      desc: "Full-stack Express backend routes",
-                    },
-                    {
-                      name: "BINANCE DATA FEED",
-                      status: diagnosticsData?.marketFeed?.status || "ONLINE",
-                      desc: "Websocket & REST price feed",
-                    },
-                    {
-                      name: "KALSHI EXCHANGE",
-                      status: diagnosticsData?.activeContract
-                        ? "ONLINE"
-                        : "DEGRADED",
-                      desc: "Target Strike binary settlement",
-                    },
-                    {
-                      name: "FIRESTORE DB",
-                      status:
-                        diagnosticsData?.database?.status === "Connected" ||
-                        diagnosticsData?.database?.status === "ONLINE"
-                          ? "ONLINE"
-                          : "DEGRADED",
-                      desc: "Persistent Cloud state engine",
-                    },
-                    {
-                      name: "PREDICTION ENGINE",
-                      status:
-                        diagnosticsData?.predictionEngine?.status || "ONLINE",
-                      desc: "15M binary direction pipeline",
-                    },
-                    {
-                      name: "DISCORD BOT SERVICE",
-                      status: discordDiag?.BOT_CONNECTED
-                        ? "ONLINE"
-                        : "DEGRADED",
-                      desc: "discord.js active bot gateway",
-                    },
-                    {
-                      name: "STRIPE PAYMENTS",
-                      status:
-                        stripeHealth?.status === "OPERATIONAL"
-                          ? "ONLINE"
-                          : "DEGRADED",
-                      desc: "Billing & entitlement pass checks",
-                    },
-                  ].map((sys, idx) => (
+                  {(
+                    [
+                      {
+                        name: "API HEALTH",
+                        status: routeAnswered(freshSystemHealth),
+                        desc: "Full-stack Express backend routes",
+                      },
+                      {
+                        // The price comes from a Coinbase -> Kraken -> CoinGecko
+                        // -> Binance REST cascade; Binance is the last fallback.
+                        name: "BTC PRICE FEED",
+                        status: marketFeedState(freshDiagnostics),
+                        desc: "REST venue cascade, Coinbase first",
+                      },
+                      {
+                        // activeContractSymbol is a constant, so it proves
+                        // nothing, and no route this panel reads reports Kalshi
+                        // freshness.
+                        name: "KALSHI EXCHANGE",
+                        status: "UNKNOWN",
+                        desc: "Target Strike binary settlement",
+                      },
+                      {
+                        name: "FIRESTORE DB",
+                        status: databaseState(freshDiagnostics),
+                        desc: "Persistent Cloud state engine",
+                      },
+                      {
+                        name: "PREDICTION ENGINE",
+                        status: predictionEngineState(freshDiagnostics),
+                        desc: "15M binary direction pipeline",
+                      },
+                      {
+                        name: "DISCORD BOT SERVICE",
+                        status: discordBotState(freshDiscordDiag),
+                        desc: "discord.js active bot gateway",
+                      },
+                      {
+                        name: "STRIPE PAYMENTS",
+                        status: stripeGatewayState,
+                        desc: "Billing & entitlement pass checks",
+                      },
+                    ] as Array<{ name: string; status: HealthState; desc: string }>
+                  ).map((sys, idx) => (
                     <div
                       key={idx}
                       className="p-2.5 bg-[#06030e] border border-purple-950/40 rounded-xl flex items-center justify-between text-xs font-mono"
@@ -1309,9 +1485,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                       <span
                         className={`vixy-badge ${
-                          sys.status === "ONLINE"
+                          sys.status === "ONLINE" || sys.status === "CONFIGURED"
                             ? "bg-emerald-950/80 text-emerald-400 border-emerald-800/40"
-                            : "bg-rose-950/80 text-rose-400 border-rose-800/40"
+                            : sys.status === "DEGRADED"
+                              ? "bg-rose-950/80 text-rose-400 border-rose-800/40"
+                              : "bg-slate-900/80 text-slate-400 border-slate-700/40"
                         }`}
                       >
                         {sys.status}
@@ -1332,28 +1510,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </h3>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[9px] font-mono font-bold bg-purple-950/80 text-purple-400 border border-purple-800/40">
-                    AUTHORITATIVE
+                    {diagnosticsData?.calibration?.calibrationAuthority || "UNKNOWN"}
                   </span>
                 </div>
 
                 {(() => {
-                  const calibratedProb =
-                    diagnosticsData?.calibration?.calibratedModelProbability ??
-                    0.5;
+                  const rawProb =
+                    diagnosticsData?.calibration?.calibratedModelProbability;
                   const dir = diagnosticsData?.predictionEngine?.direction;
+                  // No probability without a directional call and a calibrated
+                  // value; a missing value is a dash, not 50%.
+                  const calibratedProb =
+                    typeof rawProb === "number" &&
+                    Number.isFinite(rawProb) &&
+                    (dir === "UP" || dir === "DOWN")
+                      ? rawProb
+                      : null;
                   const upProbability =
-                    dir === "UP"
-                      ? calibratedProb * 100
-                      : dir === "DOWN"
-                        ? (1 - calibratedProb) * 100
-                        : 50;
-                  const downProbability =
-                    dir === "DOWN"
-                      ? calibratedProb * 100
+                    calibratedProb === null
+                      ? null
                       : dir === "UP"
-                        ? (1 - calibratedProb) * 100
-                        : 50;
+                        ? calibratedProb * 100
+                        : (1 - calibratedProb) * 100;
+                  const downProbability =
+                    calibratedProb === null
+                      ? null
+                      : dir === "DOWN"
+                        ? calibratedProb * 100
+                        : (1 - calibratedProb) * 100;
                   const isLocked = diagnosticsData?.lockStatus?.qualified;
+                  const ticked = engineHasTicked(diagnosticsData);
+                  // realEdgePct is already in percentage points (server.ts
+                  // computes (prob - implied) * 1e3 / 10), so it is not * 100.
+                  const edgePct = diagnosticsData?.predictionEngine?.edgePct;
+                  const feedAgeSec =
+                    diagnosticsData?.marketFeed?.lastUpdateSecAgo;
 
                   return (
                     <div className="space-y-2 text-xs font-mono">
@@ -1363,7 +1554,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             UP PROBABILITY
                           </span>
                           <span className="text-base font-black text-emerald-400">
-                            {upProbability.toFixed(1)}%
+                            {upProbability === null
+                              ? "—"
+                              : `${upProbability.toFixed(1)}%`}
                           </span>
                         </div>
                         <div className="p-2.5 bg-[#06030e] border border-purple-950 rounded-xl text-center">
@@ -1371,7 +1564,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             DOWN PROBABILITY
                           </span>
                           <span className="text-base font-black text-rose-400">
-                            {downProbability.toFixed(1)}%
+                            {downProbability === null
+                              ? "—"
+                              : `${downProbability.toFixed(1)}%`}
                           </span>
                         </div>
                       </div>
@@ -1384,7 +1579,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <span
                             className={`font-black ${dir === "UP" ? "text-emerald-400" : dir === "DOWN" ? "text-rose-400" : "text-slate-400"}`}
                           >
-                            {dir || "NEUTRAL"}
+                            {dir || "—"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
@@ -1393,7 +1588,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </span>
                           <span className="text-white font-bold">
                             {diagnosticsData?.calibration?.calibrationStatus ||
-                              "ACTIVE"}
+                              "UNKNOWN"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
@@ -1402,7 +1597,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </span>
                           <span className="text-cyan-400 font-bold">
                             {diagnosticsData?.calibration
-                              ?.calibrationSampleSize || 0}{" "}
+                              ?.calibrationSampleSize ?? "—"}{" "}
                             /{" "}
                             {diagnosticsData?.calibration
                               ?.calibrationMinimumSamples || 50}
@@ -1436,8 +1631,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             CURRENT SIGNAL EDGE
                           </span>
                           <span className="text-emerald-400 font-bold">
-                            {diagnosticsData?.predictionEngine?.edgePct != null
-                              ? `+${(Number(diagnosticsData.predictionEngine.edgePct) * 100).toFixed(1)}%`
+                            {ticked &&
+                            typeof edgePct === "number" &&
+                            Number.isFinite(edgePct)
+                              ? `${edgePct >= 0 ? "+" : ""}${edgePct.toFixed(1)}%`
                               : "N/A"}
                           </span>
                         </div>
@@ -1446,9 +1643,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             QUALIFICATION STATE
                           </span>
                           <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${isLocked ? "bg-emerald-950 text-emerald-400" : "bg-amber-950 text-amber-400"}`}
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${isLocked === true ? "bg-emerald-950 text-emerald-400" : isLocked === false ? "bg-amber-950 text-amber-400" : "bg-slate-900 text-slate-400"}`}
                           >
-                            {isLocked ? "QUALIFIED" : "PASS"}
+                            {isLocked === true
+                              ? "QUALIFIED"
+                              : isLocked === false
+                                ? "PASS"
+                                : "—"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
@@ -1459,8 +1660,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             className="text-white font-bold truncate max-w-[55%]"
                             title={diagnosticsData?.lockStatus?.reason}
                           >
-                            {diagnosticsData?.lockStatus?.reason ||
-                              "AWAITING_EDGE"}
+                            {diagnosticsData?.lockStatus?.reason || "—"}
                           </span>
                         </div>
                         <div className="flex justify-between items-center p-2 rounded bg-[#06030e]/60 border border-purple-950/30">
@@ -1468,9 +1668,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             FEED FRESHNESS
                           </span>
                           <span className="text-emerald-400 font-bold">
-                            {typeof diagnosticsData?.marketFeed?.lastUpdateSecAgo === "number"
-                              ? `${diagnosticsData.marketFeed.lastUpdateSecAgo}s AGO`
-                              : "NO UPDATE YET"}
+                            {ticked &&
+                            typeof feedAgeSec === "number" &&
+                            Number.isFinite(feedAgeSec)
+                              ? `${feedAgeSec}s AGO`
+                              : "—"}
                           </span>
                         </div>
                       </div>
@@ -1498,44 +1700,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">CONNECTED:</span>
                       <span
-                        className={`font-black ${discordDiag?.BOT_CONNECTED ? "text-emerald-400" : "text-rose-400"}`}
+                        className={`font-black ${yesNoClass(discordBotReady)}`}
                       >
-                        {discordDiag?.BOT_CONNECTED ? "YES" : "NO"}
+                        {yesNoUnknown(discordBotReady)}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">GUILD FOUND:</span>
                       <span
-                        className={`font-black ${discordDiag?.GUILD_FOUND ? "text-emerald-400" : "text-rose-400"}`}
+                        className={`font-black ${yesNoClass(freshDiscordDiag?.guildAccessible)}`}
                       >
-                        {discordDiag?.GUILD_FOUND ? "YES" : "NO"}
+                        {yesNoUnknown(freshDiscordDiag?.guildAccessible)}
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">ROLE FOUND:</span>
                       <span
-                        className={`font-black ${discordDiag?.ROLE_FOUND ? "text-emerald-400" : "text-rose-400"}`}
+                        className="font-black text-slate-400"
+                        title="Role lookup results are not returned by /api/discord/diagnostics"
                       >
-                        {discordDiag?.ROLE_FOUND ? "YES" : "NO"}
+                        —
                       </span>
                     </div>
                     <div className="p-2 rounded bg-[#06030e] border border-purple-950/50 flex justify-between items-center">
                       <span className="text-purple-400/70">HIERARCHY:</span>
                       <span
-                        className={`font-black ${discordDiag?.ROLE_MANAGEABLE ? "text-emerald-400" : "text-rose-400"}`}
+                        className={`font-black ${yesNoClass(freshDiscordDiag?.hierarchySufficient)}`}
                       >
-                        {discordDiag?.ROLE_MANAGEABLE ? "YES" : "NO"}
+                        {yesNoUnknown(freshDiscordDiag?.hierarchySufficient)}
                       </span>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-1">
+                  <div
+                    className="grid grid-cols-3 gap-2 text-center text-xs font-mono pt-1"
+                    title="The server never writes discordSyncQueue or discordSyncMetrics, so these counters are not measured"
+                  >
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
                       <span className="text-[9px] text-purple-400/50 block uppercase">
                         QUEUE
                       </span>
                       <span className="text-base font-black text-cyan-300">
-                        {discordDiag?.PENDING_COUNT ?? 0}
+                        —
                       </span>
                     </div>
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
@@ -1543,7 +1749,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         SUCCESS
                       </span>
                       <span className="text-base font-black text-emerald-400">
-                        {discordDiag?.SUCCESS_COUNT ?? 0}
+                        —
                       </span>
                     </div>
                     <div className="p-2 bg-[#06030e] border border-purple-950 rounded-xl">
@@ -1551,23 +1757,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         FAILED
                       </span>
                       <span className="text-base font-black text-rose-400">
-                        {discordDiag?.FAILED_COUNT ?? 0}
+                        —
                       </span>
                     </div>
                   </div>
 
-                  {discordDiag?.LAST_ERROR ? (
+                  {freshDiscordDiag?.botState?.lastError ? (
                     <div className="p-2 rounded-lg bg-rose-950/40 border border-rose-800/40 text-[10px] font-mono text-rose-300">
                       <span className="font-black block uppercase text-[9px] text-rose-400">
-                        LAST SYNC ERROR:
+                        LAST BOT ERROR:
                       </span>
                       <span className="break-all text-xs font-bold">
-                        {discordDiag.LAST_ERROR}
+                        {String(freshDiscordDiag.botState.lastError)}
                       </span>
                     </div>
-                  ) : (
+                  ) : isRecord(freshDiscordDiag?.botState) ? (
                     <div className="p-2 rounded-lg bg-emerald-950/35 border border-emerald-900/30 text-[10px] font-mono text-emerald-300 text-center">
-                      ✓ Zero exceptions logged in gateway loop
+                      ✓ No bot error recorded by the answering instance
+                    </div>
+                  ) : (
+                    <div className="p-2 rounded-lg bg-slate-900/60 border border-slate-700/40 text-[10px] font-mono text-slate-400 text-center">
+                      Discord diagnostics unavailable
                     </div>
                   )}
                 </div>
@@ -1592,7 +1802,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span>Integrations Status</span>
                   </h3>
                   <span className="text-[10px] font-mono text-slate-400">
-                    Real-Time
+                    Auto-refreshing
                   </span>
                 </div>
 
@@ -1603,13 +1813,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </span>
                     <span
                       className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                        stripeHealth?.status === "OPERATIONAL"
+                        stripeGatewayState === "CONFIGURED"
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                          : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                          : stripeGatewayState === "DEGRADED"
+                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                            : "bg-slate-500/10 text-slate-400 border border-slate-500/30"
                       }`}
                     >
-                      {stripeHealth?.status || "CONFIGURED"} (
-                      {stripeHealth?.stripe_secret_key_mode || "LIVE"})
+                      {stripeGatewayState} (
+                      {stripeHealth?.stripe_secret_key_mode?.toUpperCase() ||
+                        "UNKNOWN"})
                     </span>
                   </div>
 
@@ -1619,12 +1832,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </span>
                     <span
                       className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded ${
-                        discordHealth?.botConnected
+                        discordBotReady === true
                           ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                          : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                          : discordBotReady === false
+                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                            : "bg-slate-500/10 text-slate-400 border border-slate-500/30"
                       }`}
                     >
-                      {discordHealth?.botConnected ? "CONNECTED" : "STANDBY"}
+                      {discordBotReady === true
+                        ? "CONNECTED"
+                        : discordBotReady === false
+                          ? typeof freshDiscordDiag?.botState?.mode === "string"
+                            ? freshDiscordDiag.botState.mode.replace(/_/g, " ")
+                            : "NOT CONNECTED"
+                          : "UNKNOWN"}
                     </span>
                   </div>
 
@@ -1632,8 +1853,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span className="text-slate-300 font-semibold">
                       Kalshi & Crypto Feed
                     </span>
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                      OPERATIONAL
+                    <span
+                      className="px-2 py-0.5 text-[10px] font-bold uppercase rounded bg-slate-500/10 text-slate-400 border border-slate-500/30"
+                      title="No route this panel reads reports Kalshi feed freshness"
+                    >
+                      UNKNOWN
                     </span>
                   </div>
                 </div>
@@ -1683,7 +1907,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <p className="text-[11px] text-slate-400">
                   Force-queries Stripe customer subscriptions and Discord guild
                   member roles, reconciles local user state, and re-assigns
-                  roles within &lt;200ms.
+                  roles.
                 </p>
               </div>
             </div>
@@ -2096,7 +2320,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-purple-500/20 text-purple-300 border border-purple-500/40">
                     Stripe Mode:{" "}
                     {stripeHealth?.stripe_secret_key_mode?.toUpperCase() ||
-                      "LIVE"}
+                      "UNKNOWN"}
                   </span>
                   <button
                     onClick={() => loadAdminData(true)}
@@ -2685,52 +2909,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div className="vixy-card hud-corners p-5 space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-purple-200 flex items-center space-x-2">
                 <Server className="w-5 h-5 text-cyan-400" />
-                <span>Real-Time Backend Service Matrix</span>
+                <span>Backend Service Matrix</span>
               </h2>
+              <p className="text-[10px] font-mono text-slate-500">
+                Polled every 5s. Status is read from the route shown on hover;
+                UNKNOWN means no current reading. Latency is this browser&apos;s
+                round-trip to that route on its last fresh answer, not the
+                provider&apos;s own latency.
+              </p>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {[
-                  { name: "AUTH", status: "ONLINE", latency: "4ms" },
-                  {
-                    name: "DATABASE / PERSISTENCE",
-                    status: "ONLINE",
-                    latency: "2ms",
-                  },
-                  {
-                    name: "STRIPE GATEWAY",
-                    status:
-                      stripeHealth?.status === "OPERATIONAL"
-                        ? "ONLINE"
-                        : "DEGRADED",
-                    latency: "24ms",
-                  },
-                  {
-                    name: "STRIPE WEBHOOKS",
-                    status: "ONLINE",
-                    latency: "12ms",
-                  },
-                  {
-                    name: "DISCORD INFRASTRUCTURE",
-                    status: discordHealth?.botConnected ? "ONLINE" : "DEGRADED",
-                    latency: "18ms",
-                  },
-                  {
-                    name: "MARKET DATA FEED",
-                    status: "ONLINE",
-                    latency: "14ms",
-                  },
-                  {
-                    name: "VIXY AI PREDICTION ENGINE",
-                    status: "ONLINE",
-                    latency: "16ms",
-                  },
-                  {
-                    name: "AUTOMATION SCHEDULER",
-                    status: "ONLINE",
-                    latency: "1ms",
-                  },
-                  { name: "BOT CLUSTER", status: "ONLINE", latency: "8ms" },
-                ].map((svc, i) => (
+                {(
+                  [
+                    {
+                      name: "AUTH",
+                      status: routeAnswered(freshSystemHealth),
+                      route: HEALTH_ROUTES.systemHealth,
+                    },
+                    {
+                      name: "DATABASE / PERSISTENCE",
+                      status: databaseState(freshDiagnostics),
+                      route: HEALTH_ROUTES.diagnostics,
+                    },
+                    {
+                      name: "STRIPE GATEWAY",
+                      status: stripeGatewayState,
+                      route: HEALTH_ROUTES.stripeHealth,
+                    },
+                    {
+                      name: "STRIPE WEBHOOKS",
+                      status: stripeWebhookState(freshStripeHealth),
+                      route: HEALTH_ROUTES.stripeHealth,
+                    },
+                    {
+                      name: "DISCORD INFRASTRUCTURE",
+                      status: discordBotState(freshDiscordDiag),
+                      route: HEALTH_ROUTES.discordDiagnostics,
+                    },
+                    {
+                      name: "MARKET DATA FEED",
+                      status: marketFeedState(freshDiagnostics),
+                      route: HEALTH_ROUTES.diagnostics,
+                    },
+                    {
+                      name: "VIXY AI PREDICTION ENGINE",
+                      status: predictionEngineState(freshDiagnostics),
+                      route: HEALTH_ROUTES.diagnostics,
+                    },
+                    // No route reports these: server.ts never starts the
+                    // AutomationScheduler and runs no bot cluster.
+                    { name: "AUTOMATION SCHEDULER", status: "UNKNOWN", route: null },
+                    { name: "BOT CLUSTER", status: "UNKNOWN", route: null },
+                  ] as Array<{ name: string; status: HealthState; route: string | null }>
+                ).map((svc, i) => (
                   <div
                     key={i}
                     className="p-3.5 bg-slate-950/60 border border-slate-800 rounded-xl space-y-1"
@@ -2741,15 +2972,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex items-center justify-between pt-1">
                       <span
                         className={`px-2 py-0.5 text-[10px] font-bold rounded ${
-                          svc.status === "ONLINE"
+                          svc.status === "ONLINE" || svc.status === "CONFIGURED"
                             ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
-                            : "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                            : svc.status === "DEGRADED"
+                              ? "bg-amber-500/10 text-amber-400 border border-amber-500/30"
+                              : "bg-slate-500/10 text-slate-400 border border-slate-500/30"
                         }`}
+                        title={svc.route ?? "No route reports this service"}
                       >
                         {svc.status}
                       </span>
-                      <span className="text-xs font-mono text-slate-400">
-                        {svc.latency}
+                      <span
+                        className="text-xs font-mono text-slate-400"
+                        title={svc.route ? `Browser round-trip to ${svc.route}` : undefined}
+                      >
+                        {svc.route
+                          ? probeLatency(routeProbes[svc.route], healthCheckedAt)
+                          : "—"}
                       </span>
                     </div>
                   </div>
@@ -3654,7 +3893,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       DAY_PASS ($9.99 - 24-Hour Access Pass)
                     </option>
                     <option value="STARTER">
-                      STARTER ($29/mo - Beginner Access)
+                      STARTER ($24/mo - Beginner Access)
                     </option>
                     <option value="NONE">
                       NONE (Unpaid / Beginner)

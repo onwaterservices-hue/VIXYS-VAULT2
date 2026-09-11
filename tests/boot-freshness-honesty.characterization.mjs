@@ -221,7 +221,7 @@ t.check('cycle calibrationDataAgeMs is null when never updated',
   /active15mCycle\.calibrationDataAgeMs =\s*lastMarketUpdateTs > 0 \? now - lastMarketUpdateTs : null;/.test(code));
 {
   const admin = readRepoFile('src/components/AdminPanel.tsx');
-  t.check('AdminPanel does not render a missing feed age as "0s AGO"', !admin.includes('lastUpdateSecAgo || 0') && admin.includes('"NO UPDATE YET"'));
+  t.check('AdminPanel does not render a missing feed age as "0s AGO"', !admin.includes('lastUpdateSecAgo || 0') && admin.includes('{ticked &&') && admin.includes('Number.isFinite(feedAgeSec)'));
 }
 
 t.section('no weight-update time is stamped or persisted');

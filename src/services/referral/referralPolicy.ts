@@ -31,6 +31,57 @@ export const TIER_REWARD_CREDITS: Record<string, number> = {
   ELITE_QUANT: 3980,
 };
 
+/**
+ * Monthly list price per tier, in cents, as charged by the live Stripe Payment
+ * Links (read on 2026-09-11: Starter $24.00, Pro $79.00, Elite $199.00 a month).
+ * Used only to DISPLAY what share of a friend's plan a referral credit is -- it
+ * never changes a reward. If a Stripe price changes, change it here; a test pins
+ * the prices shown in the UI to these values.
+ */
+export const PLAN_MONTHLY_PRICE_CENTS: Record<string, number> = {
+  STARTER: 2400,
+  PRO_QUANT: 7900,
+  ELITE_QUANT: 19900,
+};
+
+const PROGRAM_TIERS = [
+  { plan: "STARTER", label: "Starter", rewardKey: "STARTER_MONTHLY" },
+  { plan: "PRO_QUANT", label: "Pro", rewardKey: "PRO_QUANT_MONTHLY" },
+  { plan: "ELITE_QUANT", label: "Elite", rewardKey: "ELITE_QUANT_MONTHLY" },
+];
+
+/**
+ * The public Invite to Earn terms, derived only from the constants in this file.
+ * shareOfMonthlyPricePercent is the flat credit divided by the plan's monthly
+ * price, to one decimal.
+ */
+export function referralProgramSummary(discountPercent: number) {
+  return {
+    policyVersion: REFERRAL_POLICY_VERSION,
+    discountPercent,
+    tiers: PROGRAM_TIERS.map((t) => {
+      const rewardCredits = TIER_REWARD_CREDITS[t.rewardKey];
+      const monthlyPriceCents = PLAN_MONTHLY_PRICE_CENTS[t.plan];
+      return {
+        plan: t.plan,
+        label: t.label,
+        monthlyPriceCents,
+        rewardCredits,
+        rewardUsd: creditsToUsd(rewardCredits),
+        shareOfMonthlyPricePercent: Math.round((rewardCredits / monthlyPriceCents) * 1000) / 10,
+      };
+    }),
+    sameRewardOnAnnualPlans: TIER_REWARD_CREDITS.STARTER_YEARLY === TIER_REWARD_CREDITS.STARTER_MONTHLY,
+    rewardCappedAtAmountPaid: true,
+    dayPassEarnsCredit: false,
+    creditsPerUsd: CREDITS_PER_USD,
+    creditsPerFreeDay: CREDITS_PER_DAY,
+    payoutThresholdCredits: PAYOUT_THRESHOLD_CREDITS,
+    clawbackHoldDays: CLAWBACK_HOLD_DAYS,
+    creditExpiryDays: CREDIT_EXPIRY_DAYS,
+  };
+}
+
 /** Day Pass earns nothing: $9.99 in, 999 credits out would pay a day for a day. */
 export const NON_QUALIFYING_PLANS = new Set([
   "DAY_PASS", "DAY_PASS_ACTIVE", "DAY_PASS_PURCHASED",

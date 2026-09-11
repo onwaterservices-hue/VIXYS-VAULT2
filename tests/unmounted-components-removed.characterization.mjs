@@ -45,7 +45,7 @@ for (const p of [
 ]) {
   t.check(`${p} stays removed`, !existsSync(join(root, p)));
 }
-t.check('the live Discord embeds remain', existsSync(join(root, 'src/bot/embeds/signalEmbed.ts')) && existsSync(join(root, 'src/bot/embeds/dashboardEmbed.ts')));
+t.check('the live Discord signal embed remains', existsSync(join(root, 'src/bot/embeds/signalEmbed.ts')));
 t.check('the mounted VIXY Live cards remain', existsSync(join(root, 'src/components/vixy-live-workspace/ModuleCards.tsx')));
 
 t.done();

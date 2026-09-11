@@ -202,6 +202,8 @@ import {
 } from "firebase/firestore";
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
+import { referralProgramSummary } from "./src/services/referral/referralPolicy";
+import { REFERRAL_DISCOUNT_PERCENT as REFERRAL_PROGRAM_DISCOUNT_PERCENT } from "./src/services/referral/referralService";
 import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview, useReferralRewardsDatapath } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
 
@@ -408,7 +410,7 @@ import {
   discordClient,
   loadProductionDiscordCredentials,
 } from "./src/bot";
-import { fetchLiveMarketOverview } from "./src/bot/services/marketData";
+import { fetchLiveMarketQuote } from "./src/bot/services/marketData";
 import {
   createDiscordConnectHandler,
   createDiscordCallbackHandler,
@@ -4609,8 +4611,10 @@ async function lock15mCycle(cycleId, livePrice, forcedReason) {
       lockRuleN: ruleDecides ? gate.lockRuleN : null,
       lockRuleCell: ruleDecides ? gate.lockRuleCell : null,
       lockedReason: finalReason,
-      dataSource: "COINBASE_KRAKEN_CASCADE",
-      latencyMs: 12,
+      // Source of the feed that priced this lock; no latency is measured here
+      // (these were the literals "COINBASE_KRAKEN_CASCADE" and 12).
+      dataSource: marketFeedHealth.priceSource || null,
+      latencyMs: null,
       cycleId,
       timeframe: "15M",
       decision: finalDir === "UP" ? "BUY_UP" : "BUY_DOWN",
@@ -4983,7 +4987,7 @@ async function checkAndSettle15mCycle(livePrice) {
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
           direction: "NEUTRAL",
-          probability: active15mCycle.livePrediction?.probability || 50,
+          probability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           confidence: active15mCycle.livePrediction?.confidence || 0,
           // The cycle's strike is kept current by canLockCurrentCycle while
           // the entry window is open; it was 0 on 78 of the last 112 SKIP rows
@@ -5021,7 +5025,7 @@ async function checkAndSettle15mCycle(livePrice) {
           entryPrice: active15mCycle.livePrediction?.spot || livePrice,
           strike: active15mCycle.strikePrice > 0 ? active15mCycle.strikePrice : 0,
           confidencePct: active15mCycle.livePrediction?.confidence || 0,
-          lockedProbability: active15mCycle.livePrediction?.probability || 50,
+          lockedProbability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
@@ -5559,7 +5563,7 @@ async function checkAndSettle15mCycle(livePrice) {
           intervalStart: new Date(active15mCycle.intervalStart).toISOString(),
           intervalEnd: new Date(active15mCycle.intervalEnd).toISOString(),
           direction: "NEUTRAL",
-          probability: active15mCycle.livePrediction?.probability || 50,
+          probability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           confidence:
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
@@ -5595,7 +5599,7 @@ async function checkAndSettle15mCycle(livePrice) {
             active15mCycle.livePrediction?.confidence ||
             currentConfidence ||
             null,
-          lockedProbability: active15mCycle.livePrediction?.probability || 50,
+          lockedProbability: (typeof active15mCycle.livePrediction?.probability === "number" && active15mCycle.livePrediction.probability > 0 && active15mCycle.livePrediction.probability <= 1 ? active15mCycle.livePrediction.probability : null),
           settlementAt: new Date(active15mCycle.intervalEnd).toISOString(),
           actualDirection: "NEUTRAL",
           outcome: "SKIP",
@@ -6822,6 +6826,14 @@ const referralHandlers = createReferralHandlers({
   },
 });
 
+// GET /api/referral/program -- the public Invite to Earn terms: credit per paid
+// friend by plan, what share of that plan's monthly price it is, the friend's
+// discount, hold/expiry/payout rules. Computed from referralPolicy.ts (the only
+// source of referral economics); no identity, no account data.
+app.get("/api/referral/program", (req, res) => {
+  res.set("Cache-Control", "no-store");
+  return res.json(referralProgramSummary(REFERRAL_PROGRAM_DISCOUNT_PERCENT));
+});
 app.get("/api/referral/me", (req, res) => referralHandlers.me(req, res));
 app.get("/api/referral/my-discount", (req, res) => referralHandlers.myDiscount(req, res));
 app.post("/api/referral/claim-code", (req, res) =>
@@ -7328,6 +7340,7 @@ app.get("/api/discord/diagnostics", async (req, res) => {
     guildAccessible: live ? live.guildAccessible : null,
     hierarchySufficient: live ? live.hierarchySufficient : null,
     botHasManageRoles: live ? live.botHasManageRoles : null,
+    rolesFound: live ? live.rolesFound : null,
     liveProbeRan: !!live,
     diagnostics: report.diagnostics,
     diagnosticText: report.text,
@@ -7759,10 +7772,10 @@ app.post("/api/auth/reset-password", async (req, res) => {
 });
 
 // ---- Hourly Market Intelligence digest (real data only) ----
-// Uses only genuinely live fields from fetchLiveMarketOverview (price,
-// 24h change, high/low, volume, market cap) -- deliberately excludes
-// that function's fabricated confidence/whale-pressure/reasoning fields,
-// which are hardcoded or simple formulas dressed up as analysis.
+// Reads venue tickers through fetchLiveMarketQuote, which throws when neither
+// Binance nor Coinbase returns a complete ticker: the hour is then marked FAILED
+// and nothing is posted. The previous market-data helper posted $64,821.50 /
+// +2.45% / 18,450 volume for BTC, ETH and SOL alike when both venues failed.
 async function sendHourlyMarketDigestOnce() {
   if (!db) {
     console.error("[HourlyMarket] Firestore unavailable, skipping this hour.");
@@ -7789,9 +7802,9 @@ async function sendHourlyMarketDigestOnce() {
 
   try {
     const [btc, eth, sol] = await Promise.all([
-      fetchLiveMarketOverview("BTC"),
-      fetchLiveMarketOverview("ETH"),
-      fetchLiveMarketOverview("SOL"),
+      fetchLiveMarketQuote("BTC"),
+      fetchLiveMarketQuote("ETH"),
+      fetchLiveMarketQuote("SOL"),
     ]);
 
     const fmtPrice = (p) => "$" + p.toLocaleString("en-US", { maximumFractionDigits: p < 10 ? 4 : 2 });
@@ -7816,7 +7829,7 @@ async function sendHourlyMarketDigestOnce() {
           inline: true,
         },
       ],
-      footer: { text: "VIXY Vault \u2022 Live Market Data (Binance/Coinbase)" },
+      footer: { text: `VIXY Vault \u2022 Live market data (${[...new Set([btc, eth, sol].map((m) => m.source === "BINANCE" ? "Binance" : "Coinbase"))].join(", ")})` },
       timestamp: new Date().toISOString(),
     };
 
@@ -8484,12 +8497,12 @@ app.post(
           message: `User account with email ${cleanEmail} already exists!`,
         });
     }
-    const genHwFingerprint =
-      hardwareFingerprint || `hw_${Math.random().toString(36).slice(2, 8)}`;
-    const genIpHash =
-      ipAddress ||
-      `172.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250)}.10`;
-    const isDupFingerprint = serverUsers.some(
+    // Only what the client sent. A random "hw_xxxxxx" fingerprint and a random
+    // 172.x.x.10 address used to be stored as device data, and a random
+    // fingerprint can never match, so the duplicate check was a no-op.
+    const genHwFingerprint = hardwareFingerprint || null;
+    const genIpHash = ipAddress || null;
+    const isDupFingerprint = !!genHwFingerprint && serverUsers.some(
       (u) =>
         u.hardwareFingerprint === genHwFingerprint && u.email !== cleanEmail,
     );
@@ -10325,7 +10338,7 @@ const AUTHORITATIVE_STRIPE_LINKS = {
     annual: "https://buy.stripe.com/5kQdR8cKLgQibh2ffP1oI04",
   },
   ELITE: {
-    monthly: "https://buy.stripe.com/cNifZg267gQibh2gjT1oI0",
+    monthly: "https://buy.stripe.com/cNifZg267gQibh2gjT1oI00",
     annual: "https://buy.stripe.com/eVqdR8bGH9nQ70M3x71oI01",
   },
 };
@@ -12038,9 +12051,8 @@ async function reconcileUserEntitlement(identity) {
                       ? userData.passwordHash
                       : void 0,
                   verificationStatus: userData.verificationStatus || "VERIFIED",
-                  hardwareFingerprint:
-                    userData.hardwareFingerprint || `hw_${k}`,
-                  ipHash: userData.ipHash || "127.0.0.1",
+                  hardwareFingerprint: userData.hardwareFingerprint || null,
+                  ipHash: userData.ipHash || null,
                   joined:
                     userData.joined || new Date().toISOString().split("T")[0],
                   status: userData.status || "ACTIVE",
@@ -13676,8 +13688,8 @@ async function updateSubscriptionInFirestore(email, updateData) {
       subscription: passName,
       passwordHash: void 0,
       verificationStatus: "VERIFIED",
-      hardwareFingerprint: `hw_sub_${Math.random().toString(36).slice(2, 8)}`,
-      ipHash: "172.56.22.10",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status:
         updateData.status === "ACTIVE" || updateData.status === "TRIALING"
@@ -19650,8 +19662,8 @@ function ensureUserExists(input, options) {
       role: "USER",
       subscription: "NONE",
       verificationStatus: "UNVERIFIED",
-      hardwareFingerprint: "hw_anon",
-      ipHash: "127.0.0.1",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status: "INACTIVE",
       volumeTrades: 0,
@@ -19685,8 +19697,8 @@ function ensureUserExists(input, options) {
       role: defaultRole,
       subscription: defaultSub,
       verificationStatus: "VERIFIED",
-      hardwareFingerprint: `hw_auto_${Math.random().toString(36).slice(2, 8)}`,
-      ipHash: "127.0.0.1",
+      hardwareFingerprint: null,
+      ipHash: null,
       joined: new Date().toISOString().split("T")[0],
       status: defaultSub === "NONE" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
@@ -19795,11 +19807,18 @@ function loadPersistentStore() {
         active15mCycle.stage = "LOCKED";
         active15mCycle.lockedDirection = mostRecentLog.direction || "NEUTRAL";
         active15mCycle.lockedDecision = mostRecentLog.decision || (mostRecentLog.direction === "UP" ? "BUY UP" : "BUY DOWN");
-        active15mCycle.lockedConfidence = mostRecentLog.confidence || 75;
-        active15mCycle.lockedProbability = mostRecentLog.probability || 0.5;
+        // A field the persisted lock row does not carry stays null. These were
+        // filled with 75, 0.5 and the current time, so a cold instance could
+        // serve a lock confidence, probability and lock time nothing recorded.
+        // This path does not set lockedSnapshot, so the mutation check that
+        // compares locked probabilities does not run on a hydrated cycle.
+        active15mCycle.lockedConfidence =
+          typeof mostRecentLog.confidence === "number" && Number.isFinite(mostRecentLog.confidence) ? mostRecentLog.confidence : null;
+        active15mCycle.lockedProbability =
+          typeof mostRecentLog.probability === "number" && mostRecentLog.probability > 0 && mostRecentLog.probability <= 1 ? mostRecentLog.probability : null;
         active15mCycle.lockedStrike = mostRecentLog.targetStrike || 0;
         active15mCycle.lockedSpot = mostRecentLog.spotAtLock || 0;
-        active15mCycle.lockedAt = mostRecentLog.lockedAt || new Date().toISOString();
+        active15mCycle.lockedAt = mostRecentLog.lockedAt || null;
         active15mCycle.lockedReason = "HYDRATED_FROM_PERSISTENT_STORE";
         active15mCycle.intervalStart = new Date(mostRecentLog.intervalStart).getTime();
         active15mCycle.intervalEnd = new Date(mostRecentLog.intervalEnd).getTime();

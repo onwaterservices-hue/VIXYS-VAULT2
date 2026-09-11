@@ -589,7 +589,10 @@ export const CandleChart: React.FC<CandleChartProps> = ({
     return `${upperStr} ${lowerStr} Z`;
   };
 
-  const latestClose = closes[closes.length - 1] || refSpot;
+  // The last real close, else the live price, else 0 (no data). It used to fall
+  // back to refSpot, whose last resort is 100, so a chart with no candles and no
+  // price labelled itself "$100.0". refSpot stays as axis scaling only.
+  const latestClose = closes[closes.length - 1] || (currentPrice > 0 ? currentPrice : 0);
   const previousClose = closes[closes.length - 2] || latestClose;
   const lastPriceChange = latestClose - previousClose;
   const lastPriceChangePct = (lastPriceChange / previousClose) * 100;
@@ -597,15 +600,23 @@ export const CandleChart: React.FC<CandleChartProps> = ({
   // Active or hovered candle for Top HUD
   const displayCandleIdx = hoveredCandleIndex !== null ? hoveredCandleIndex : visibleCandles.length - 1;
   const displayCandle = visibleCandles[displayCandleIdx] || visibleCandles[visibleCandles.length - 1];
-  const displayOpen = displayCandle?.open || 0;
-  const displayHigh = displayCandle?.high || 0;
-  const displayLow = displayCandle?.low || 0;
-  const displayClose = displayCandle?.close || 0;
-  const displayVolume = displayCandle?.volume || 0;
-  const displayEma9 = ema9Val[displayCandleIdx] || 0;
-  const displayEma21 = ema21Val[displayCandleIdx] || 0;
-  const displayVwap = vwapLine[displayCandleIdx] || 0;
-  const displayRsi = rsiLine[displayCandleIdx] || 50;
+  // Readout values are null when the bar or indicator does not exist yet (RSI-14
+  // needs 15 closes). The old fallbacks printed a neutral RSI and $0 prices as if
+  // measured; the readout shows a dash instead. Real values, including a genuine
+  // zero volume, pass through unchanged.
+  const finiteOrNull = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const readoutUsd = (v: number | null) => (v === null ? '—' : `$${v.toFixed(1)}`);
+  const readoutNum = (v: number | null) => (v === null ? '—' : v.toFixed(1));
+  const displayOpen = finiteOrNull(displayCandle?.open);
+  const displayHigh = finiteOrNull(displayCandle?.high);
+  const displayLow = finiteOrNull(displayCandle?.low);
+  const displayClose = finiteOrNull(displayCandle?.close);
+  const displayVolume = finiteOrNull(displayCandle?.volume);
+  const displayEma9 = finiteOrNull(ema9Val[displayCandleIdx]);
+  const displayEma21 = finiteOrNull(ema21Val[displayCandleIdx]);
+  const displayVwap = finiteOrNull(vwapLine[displayCandleIdx]);
+  const displayRsi = finiteOrNull(rsiLine[displayCandleIdx]);
 
   // Handle SVG Mouse Navigation & Crosshair
   const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
@@ -1200,8 +1211,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         );
       })}
 
-      {/* Live Price Tag Line */}
-      <g>
+      {/* Live Price Tag Line (only with a real price) */}
+      {latestClose > 0 && (<g>
         <line
           x1={marginLeft}
           y1={y(latestClose)}
@@ -1236,9 +1247,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
           fontWeight="bold"
           fontFamily="Inter, system-ui, sans-serif"
         >
-          ${latestClose > 0 ? latestClose.toFixed(1) : 'WAITING'}
+          ${latestClose.toFixed(1)}
         </text>
-      </g>
+      </g>)}
 
       {/* Bottom-Right HUD Price Box: Always Real Spot Price */}
       <g transform={`translate(${marginLeft + plotWidth - 124}, ${marginTop + chartHeight - 26})`}>
@@ -1334,10 +1345,9 @@ export const CandleChart: React.FC<CandleChartProps> = ({
 
           {/* RSI Curve */}
           <path
-            d={linePath(
-              rsiLine.map((r) => r ?? 50),
-              yRsi
-            )}
+            // RSI is null until 14 closes exist; linePath skips nulls. It used to
+            // draw a flat RSI 50 line over that warm-up as if it were measured.
+            d={linePath(rsiLine, yRsi)}
             fill="none"
             stroke={THEME.purpleBright}
             strokeWidth="1.2"
@@ -1393,8 +1403,8 @@ export const CandleChart: React.FC<CandleChartProps> = ({
             ${crosshairPos.price.toFixed(1)}
           </text>
 
-          {/* Floating AI Delta Tooltip near Cursor */}
-          {(() => {
+          {/* Floating AI Delta Tooltip near Cursor (needs a real last price) */}
+          {latestClose > 0 && (() => {
             const priceDelta = crosshairPos.price - latestClose;
             const pctDelta = (priceDelta / latestClose) * 100;
             const isPos = priceDelta >= 0;
@@ -1557,7 +1567,7 @@ export const CandleChart: React.FC<CandleChartProps> = ({
       <div className="flex items-center gap-3">
         <div className="bg-[#0e0622] px-3 py-1 rounded-xl border border-purple-800/50 flex items-center gap-2">
           <span className="text-[#8b84a8] text-[10px]">SPOT:</span>
-          <span className="font-extrabold text-white text-xs">${latestClose.toFixed(1)}</span>
+          <span className="font-extrabold text-white text-xs">{latestClose > 0 ? `$${latestClose.toFixed(1)}` : '—'}</span>
           <span
             className={`text-[10px] font-bold ${
               lastPriceChange >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -1728,23 +1738,23 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         </span>
         <div>
           <span className="text-[#8b84a8]">O: </span>
-          <span className="font-bold text-white">${displayOpen.toFixed(1)}</span>
+          <span className="font-bold text-white">{readoutUsd(displayOpen)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">H: </span>
-          <span className="font-bold text-emerald-400">${displayHigh.toFixed(1)}</span>
+          <span className="font-bold text-emerald-400">{readoutUsd(displayHigh)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">L: </span>
-          <span className="font-bold text-rose-400">${displayLow.toFixed(1)}</span>
+          <span className="font-bold text-rose-400">{readoutUsd(displayLow)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">C: </span>
-          <span className="font-bold text-white">${displayClose.toFixed(1)}</span>
+          <span className="font-bold text-white">{readoutUsd(displayClose)}</span>
         </div>
         <div>
           <span className="text-[#8b84a8]">VOL: </span>
-          <span className="font-bold text-purple-300">{displayVolume.toFixed(1)}</span>
+          <span className="font-bold text-purple-300">{readoutNum(displayVolume)}</span>
         </div>
       </div>
 
@@ -1752,19 +1762,19 @@ export const CandleChart: React.FC<CandleChartProps> = ({
         {showEMA && (
           <div>
             <span className="text-purple-400">EMA9: </span>
-            <span className="font-bold text-white">${displayEma9.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutUsd(displayEma9)}</span>
           </div>
         )}
         {showVWAP && (
           <div>
             <span className="text-cyan-400">VWAP: </span>
-            <span className="font-bold text-white">${displayVwap.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutUsd(displayVwap)}</span>
           </div>
         )}
         {showRSI && (
           <div>
             <span className="text-amber-400">RSI: </span>
-            <span className="font-bold text-white">{displayRsi.toFixed(1)}</span>
+            <span className="font-bold text-white">{readoutNum(displayRsi)}</span>
           </div>
         )}
       </div>

@@ -50,55 +50,16 @@ export function getDiscordBotStatus(): DiscordBotState {
   return botState;
 }
 
-// Live price provider helper
-async function fetchCurrentPrice(asset: string = 'BTC'): Promise<{ price: number; change24h: number }> {
-  try {
-    const symbol = asset.toUpperCase().replace('USDT', '');
-    const cbRes = await fetch(`https://api.exchange.coinbase.com/products/${symbol}-USD/stats`);
-    if (cbRes.ok) {
-      const stats = await cbRes.json();
-      const price = parseFloat(stats.last);
-      const open = parseFloat(stats.open);
-      const change24h = open > 0 ? ((price - open) / open) * 100 : 0;
-      return { price, change24h: Math.round(change24h * 100) / 100 };
-    }
-  } catch (err) {
-    console.warn(`[DiscordBot] Price fetch failed for ${asset}:`, err);
-  }
-  return null;
-}
-
 // Register Slash Commands via Discord REST API
 async function registerSlashCommands(token: string, clientId: string, guildId?: string) {
+  // Only /ping. /price, /predict, /status, /vip and /leaderboard answered with
+  // invented analysis: a confidence from the 24h change, a fixed 8.4% edge and
+  // 54/46 Kalshi odds, "Brier 0.168 n=1,842", a v4.3-INCREMENTAL model at
+  // 71.8% over 18,427 cycles, and a leaderboard of traders who do not exist.
   const commands = [
     new SlashCommandBuilder()
       .setName('ping')
       .setDescription('Check VIXY AI Bot operational status and latency'),
-    new SlashCommandBuilder()
-      .setName('price')
-      .setDescription('Fetch live crypto prices across exchanges')
-      .addStringOption(opt =>
-        opt.setName('asset')
-           .setDescription('Crypto symbol (e.g. BTC, ETH, SOL)')
-           .setRequired(false)
-      ),
-    new SlashCommandBuilder()
-      .setName('predict')
-      .setDescription('Get live VIXY AI Prediction Signal & Kalshi/Polymarket Implied Odds')
-      .addStringOption(opt =>
-        opt.setName('asset')
-           .setDescription('Asset ticker (default: BTC)')
-           .setRequired(false)
-      ),
-    new SlashCommandBuilder()
-      .setName('status')
-      .setDescription('View VIXY AI Model Health, Brier Calibration & System Stats'),
-    new SlashCommandBuilder()
-      .setName('vip')
-      .setDescription('Verify or check VIXY AI VIP Pro Subscription Status'),
-    new SlashCommandBuilder()
-      .setName('leaderboard')
-      .setDescription('View Top Prediction Traders & Alpha Leaderboard'),
   ];
 
   const rest = new REST({ version: '10' }).setToken(token);
@@ -130,101 +91,13 @@ async function handleInteraction(interaction: Interaction) {
   const { commandName } = interaction;
 
   if (commandName === 'ping') {
+    const ping = discordClient?.ws.ping;
     await interaction.reply({
-      content: `🟢 **VIXY AI ONLINE** • Latency: \`${discordClient?.ws.ping || 12}ms\` • Model: \`v4.3-INCREMENTAL\``,
+      // Real gateway latency or nothing: it fell back to 12ms and named a
+      // "v4.3-INCREMENTAL" model that does not exist.
+      content: `🟢 **VIXY AI ONLINE** • Gateway latency: \`${typeof ping === 'number' && Number.isFinite(ping) && ping >= 0 ? `${ping}ms` : 'not measured yet'}\``,
       ephemeral: true,
     });
-  } else if (commandName === 'price') {
-    await interaction.deferReply();
-    const asset = interaction.options.getString('asset')?.toUpperCase() || 'BTC';
-    const priceData = await fetchCurrentPrice(asset);
-    
-    if (!priceData) {
-      await interaction.editReply({ content: `Market data feed for ${asset} is currently unavailable. Please try again later.` });
-      return;
-    }
-    const { price, change24h } = priceData;
-
-    const embed = new EmbedBuilder()
-      .setTitle(`📊 Live Market Price: ${asset}/USDT`)
-      .setColor(change24h >= 0 ? 0x10B981 : 0xF43F5E)
-      .addFields(
-        { name: 'Spot Price', value: `$${price.toLocaleString()}`, inline: true },
-        { name: '24h Change', value: `${change24h >= 0 ? '+' : ''}${change24h}%`, inline: true },
-        { name: 'Data Feed', value: 'Coinbase Pro / Binance Unified Feed', inline: true }
-      )
-      .setFooter({ text: 'VIXY AI Terminal • Real-Time Exchange Data' })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
-  } else if (commandName === 'predict') {
-    await interaction.deferReply();
-    const asset = interaction.options.getString('asset')?.toUpperCase() || 'BTC';
-    const priceData = await fetchCurrentPrice(asset);
-    
-    if (!priceData) {
-      await interaction.editReply({ content: `VIXY Engine requires live market data for ${asset} which is currently unavailable. Please try again later.` });
-      return;
-    }
-    const { price, change24h } = priceData;
-
-    const isBullish = change24h >= 0;
-    const direction = isBullish ? 'BUY UP (YES)' : 'BUY DOWN (NO)';
-    const confidence = Math.round(75 + Math.abs(change24h) * 2);
-    const edge = "8.4";
-
-    const embed = new EmbedBuilder()
-      .setTitle(`⚡ VIXY AI Prediction Signal: ${asset} 15M Contract`)
-      .setColor(isBullish ? 0x10B981 : 0xF43F5E)
-      .addFields(
-        { name: 'Asset', value: `${asset}/USDT`, inline: true },
-        { name: 'Spot Price', value: `$${price.toLocaleString()}`, inline: true },
-        { name: 'AI Signal', value: `**${direction}**`, inline: true },
-        { name: 'Model Confidence', value: `${confidence}%`, inline: true },
-        { name: 'Value Edge vs Odds', value: `+${edge}%`, inline: true },
-        { name: 'Kalshi Implied Odds', value: `${isBullish ? 54 : 46}% YES`, inline: true }
-      )
-      .setDescription(`*Orderbook Taker Delta & Institutional Flow indicate momentum continuation towards $${(price * (isBullish ? 1.002 : 0.998)).toFixed(2)}.*`)
-      .setFooter({ text: 'VIXY AI • Brier Score: 0.168 • n=1,842' })
-      .setTimestamp();
-
-    await interaction.editReply({ embeds: [embed] });
-  } else if (commandName === 'status') {
-    const embed = new EmbedBuilder()
-      .setTitle('🧠 VIXY AI Engine Status & Health')
-      .setColor(0x8B5CF6)
-      .addFields(
-        { name: 'Model Version', value: 'v4.3-INCREMENTAL', inline: true },
-        { name: 'Brier Score', value: '0.168 (Calibrated)', inline: true },
-        { name: 'Accuracy Rate', value: '71.8%', inline: true },
-        { name: 'Active Regime', value: 'TRENDING_BULL_VOLATILITY', inline: true },
-        { name: 'Observations', value: '18,427 Settled Cycles', inline: true },
-        { name: 'Status', value: '🟢 OPTIMAL LIVE LEARNING', inline: true }
-      )
-      .setFooter({ text: 'VIXY AI Platform • Decision Intelligence' })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-  } else if (commandName === 'vip') {
-    const baseUrl = (process.env.APP_URL || 'https://www.vixxyvault.com').replace(/\/$/, '');
-    await interaction.reply({
-      content: `💎 **VIXY AI VIP Pro Membership**\n- Real-time Sub-Second Alerts\n- Full Institutional Depth & Whale Tracking\n- Automated Discord Role & Private Channel Access\n👉 **[ Launch VIXY Vault AI Dashboard → ](${baseUrl}/#pricing)**`,
-      ephemeral: true,
-    });
-  } else if (commandName === 'leaderboard') {
-    const embed = new EmbedBuilder()
-      .setTitle('🏆 VIXY AI Alpha Traders Leaderboard')
-      .setColor(0xF59E0B)
-      .setDescription(
-        '1. 🥇 **Whale_Hunter_X** — +$42,850 PnL (84% Win Rate)\n' +
-        '2. 🥈 **QuantAlpha_99** — +$28,400 PnL (79% Win Rate)\n' +
-        '3. 🥉 **Satoshi_N** — +$19,200 PnL (76% Win Rate)\n' +
-        '4. 🏅 **DeltaRider** — +$14,100 PnL (72% Win Rate)\n' +
-        '5. 🏅 **VIXY_VIP_User** — +$11,800 PnL (71% Win Rate)'
-      )
-      .setFooter({ text: 'Rankings updated hourly based on verified trades' });
-
-    await interaction.reply({ embeds: [embed] });
   }
 }
 
