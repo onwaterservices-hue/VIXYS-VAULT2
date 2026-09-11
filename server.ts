@@ -15349,12 +15349,16 @@ app.get("/api/live-engine/health", (req, res) => {
   const kalshiFeedAge = now - lastKalshiUpdateTs;
   const predictionAge = now - lastPredictionUpdateTs;
   res.json({
-    engine: "CONNECTED",
+    // Was the literal "CONNECTED": now read from when the engine last ticked.
+    engine:
+      _engineTickLastRunMs > 0
+        ? now - _engineTickLastRunMs < 15e3 ? "CONNECTED" : "STALE"
+        : "NOT_STARTED",
     btcFeed:
       btcFeedAge < 15e3 ? "CONNECTED" : btcFeedAge < 6e4 ? "DEGRADED" : "STALE",
     kalshiFeed: kalshiFeedAge < 12e4 ? "CONNECTED" : "DEGRADED",
-    predictionEngine: predictionAge < 15e3 ? "ACTIVE" : "ACTIVE",
-    settlementEngine: "ACTIVE",
+    predictionEngine: predictionAge < 15e3 ? "ACTIVE" : "STALE", // both branches said ACTIVE
+    settlementEngine: null, // no in-process settlement heartbeat; settlement runs from the 15-minute cron
     database:
       db && persistenceState === "HEALTHY_FIRESTORE" ? "CONNECTED" : "DEGRADED",
     lastMarketUpdate: new Date(lastMarketUpdateTs).toISOString(),
@@ -16806,17 +16810,23 @@ app.get("/api/vixy/health", (req, res) => {
       lastUpdateAt: new Date(lastMarketUpdateTs).toISOString(),
     },
     signal: {
-      healthy: true,
+      // Was the literal true. Healthy means the signal updated recently.
+      healthy: now - lastSignalUpdateTs < 3e4,
       lastUpdateAt: new Date(lastSignalUpdateTs).toISOString(),
       currentDecision:
         active15mCycle.lockedDecision ||
         active15mCycle.provisionalBias ||
         "OBSERVING",
-      currentConfidence: active15mCycle.lockedConfidence || 75,
+      // The locked confidence while locked, else the live one; never a default 75.
+      currentConfidence: active15mCycle.isLocked
+        ? (active15mCycle.lockedConfidence ?? null)
+        : (currentConfidence ?? null),
     },
+    // Was `healthy: true` with lastSnapshotAt set to the request time. Healthy is
+    // the persistence layer's own state; no snapshot time is tracked here.
     authoritativeState: {
-      healthy: true,
-      lastSnapshotAt: new Date().toISOString(),
+      healthy: Boolean(db) && persistenceState === "HEALTHY_FIRESTORE",
+      lastSnapshotAt: null,
     },
     overall: marketConnected
       ? "LIVE"
@@ -17075,95 +17085,49 @@ app.get("/api/signal/calibration-report", async (req, res) => {
     lockQualityTiers: lockTiers,
   });
 });
+// There is one engine. This route used to present an "old engine vs new
+// 11-family engine" comparison over the settled ledger: the "new engine" re-used
+// the old direction and skipped rows by array position (`idx % 3 === 0` when the
+// spot sat within $8 of the strike), every non-skipped row was tagged
+// HIGH_CONVICTION, the two Brier scores were the literals 0.192 and 0.144, a
+// missing spot became 64100 and a missing confidence 75. It now reports the real
+// graded ledger and says there is nothing to compare against.
 app.get("/api/signal/backtest-replay", (req, res) => {
   const settled = persistentSignalLogs.filter((s) => s.status === "RESOLVED");
-  let oldEngineWins = 0;
-  let oldEngineLosses = 0;
-  let newEngineWins = 0;
-  let newEngineLosses = 0;
-  let newEngineSkips = 0;
-  let chopSavedCount = 0;
-  const cycleDetails = settled.map((s, idx) => {
-    const spot = s.spotAtLock || s.settlementPrice || 64100;
-    const strike = s.targetStrike || spot;
-    const actualOutcome =
-      s.actualOutcome ||
-      (s.settlementPrice && s.settlementPrice >= strike ? "UP" : "DOWN");
-    const oldDir =
-      s.direction === "UP" || s.direction === "DOWN"
-        ? s.direction
-        : s.probability >= 0.5
-          ? "UP"
-          : "DOWN";
-    const oldCorrect = oldDir === actualOutcome;
-    if (oldCorrect) oldEngineWins++;
-    else oldEngineLosses++;
-    const dist = Math.abs(spot - strike);
-    const isChopLikely = dist < 8 && idx % 3 === 0;
-    const wouldSkip = isChopLikely || (s.confidence && s.confidence < 68);
-    let newResult = "SKIPPED";
-    if (wouldSkip) {
-      newEngineSkips++;
-      if (!oldCorrect) chopSavedCount++;
-      newResult = "SKIPPED";
-    } else {
-      const newDir = oldDir;
-      const newCorrect = newDir === actualOutcome;
-      if (newCorrect) {
-        newEngineWins++;
-        newResult = "WIN";
-      } else {
-        newEngineLosses++;
-        newResult = "LOSS";
-      }
-    }
-    return {
-      cycleId: s.cycleId || `15M-${idx}`,
-      strike,
-      spot,
-      settlementPrice: s.settlementPrice || spot,
-      actualOutcome,
-      oldEngine: {
-        direction: oldDir,
-        result: oldCorrect ? "WIN" : "LOSS",
-        confidence: s.confidence || 75,
-      },
-      newEngine: {
-        result: newResult,
-        lockQuality: null, // not recomputed per historical row (was an invented 68 / 91)
-        tier: wouldSkip ? "SKIP" : "HIGH_CONVICTION",
-      },
-    };
-  });
-  const oldTotal = oldEngineWins + oldEngineLosses;
-  const oldWinRate =
-    oldTotal > 0 ? Math.round((oldEngineWins / oldTotal) * 1e3) / 10 : null; // was an invented 71.8
-  const newTrades = newEngineWins + newEngineLosses;
-  const newWinRate =
-    newTrades > 0 ? Math.round((newEngineWins / newTrades) * 1e3) / 10 : null; // was an invented 78.4
+  const graded = settled.filter((s) => typeof s.wasCorrect === "boolean");
+  const wins = graded.filter((s) => s.wasCorrect).length;
+  const losses = graded.length - wins;
+  const brier = meanBrier(settled);
   res.json({
     timestamp: new Date().toISOString(),
     totalHistoricalCyclesEvaluated: settled.length,
-    comparison: {
-      oldEngine: {
-        tradesTaken: oldTotal,
-        winRatePct: oldWinRate,
-        wins: oldEngineWins,
-        losses: oldEngineLosses,
-        avgBrierScore: 0.192,
-      },
-      newEngine11Family: {
-        tradesTaken: newTrades,
-        skips: newEngineSkips,
-        winRatePct: newWinRate,
-        wins: newEngineWins,
-        losses: newEngineLosses,
-        chopLossesAvoided: chopSavedCount,
-        avgBrierScore: 0.144,
-        winRateDeltaPct: Math.round((newWinRate - oldWinRate) * 10) / 10,
-      },
+    comparison: null,
+    comparisonReason:
+      "No second engine exists and no alternative decisions were recorded, so there is nothing to replay against. The offline replay harness is scripts/replay15m.ts.",
+    ledger: {
+      graded: graded.length,
+      wins,
+      losses,
+      winRatePct: graded.length > 0 ? Math.round((wins / graded.length) * 1e3) / 10 : null,
+      avgBrierScore: brier.mean === null ? null : Math.round(brier.mean * 1e3) / 1e3,
+      brierScoredCount: brier.n,
     },
-    sampleCycles: cycleDetails.slice(0, 15),
+    sampleCycles: settled.slice(0, 15).map((s) => {
+      const strike = typeof s.targetStrike === "number" && s.targetStrike > 0 ? s.targetStrike : null;
+      const settlementPrice = typeof s.settlementPrice === "number" && s.settlementPrice > 0 ? s.settlementPrice : null;
+      return {
+        cycleId: s.cycleId || null,
+        strike,
+        spot: typeof s.spotAtLock === "number" && s.spotAtLock > 0 ? s.spotAtLock : null,
+        settlementPrice,
+        actualOutcome:
+          s.actualOutcome ||
+          (strike !== null && settlementPrice !== null ? (settlementPrice >= strike ? "UP" : "DOWN") : null),
+        direction: s.direction === "UP" || s.direction === "DOWN" ? s.direction : null,
+        result: typeof s.wasCorrect === "boolean" ? (s.wasCorrect ? "WIN" : "LOSS") : null,
+        confidence: calibrationConfidenceOf(s),
+      };
+    }),
   });
 });
 // ----------------------------------------------------------------------------
