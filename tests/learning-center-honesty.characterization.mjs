@@ -50,7 +50,7 @@ t.check('a failed or non-OK fetch clears the source to null', /if \(!res\.ok\) r
 t.check('every source is replaced each poll (no stale numbers kept)', ['setModelStatus(model)', 'setCalibration(calib)', 'setEngineHealth(health)', 'setShadow(shadowReadout)'].every((s) => src.includes(s)));
 t.check('only buckets with settled locks render', /b\.sampleCount > 0/.test(src));
 t.check('only regimes with settled cycles render', /r\.totalCycles > 0/.test(src));
-t.check('calibration empty and failed states', src.includes('No settled locks in any confidence bucket yet.') && src.includes('Calibration report unavailable.'));
+t.check('calibration empty and failed states', src.includes('No settled locks in any engine score band yet.') && src.includes('Calibration report unavailable.'));
 t.check('regime empty and failed states', src.includes('No settled cycles carry a regime tag yet.') && src.includes('Regime breakdown unavailable.'));
 t.check('shadow failed state', src.includes('Shadow readout unavailable.'));
 t.check('unsourced uptime and feature reliability render as unavailable', /UPTIME<\/span>\s*<span[^>]*title="No engine route reports uptime\."\s*>\s*\{UNAVAILABLE\}/.test(src) && src.includes('No engine route measures feature reliability.'));

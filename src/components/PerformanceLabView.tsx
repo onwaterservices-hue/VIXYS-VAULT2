@@ -248,7 +248,7 @@ export const PerformanceLabView: React.FC = () => {
           <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Brier Score</span>
           <span className="text-2xl font-black text-purple-200">{fmt(stats?.avgBrierScore, 3)}</span>
           <span className="text-[10px] text-purple-400 block font-semibold">
-            coin-flip = {COIN_FLIP_BRIER.toFixed(3)} • n={stats?.brierScoredCount ?? dash} scored
+            of recorded P(win) • coin-flip = {COIN_FLIP_BRIER.toFixed(3)} • n={stats?.brierScoredCount ?? dash} scored
           </span>
         </div>
         <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
@@ -259,10 +259,10 @@ export const PerformanceLabView: React.FC = () => {
           </span>
         </div>
         <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
-          <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Calibration Error</span>
+          <span className="text-[10px] text-purple-300/70 uppercase font-bold block">Score–Win Gap</span>
           <span className="text-2xl font-black text-amber-300">{fmt(calibrationErrorPct, 1, '%')}</span>
           <span className="text-[10px] text-purple-400 block font-semibold">
-            weighted over {measuredBuckets.length} band(s) with n ≥ {MIN_BUCKET_N}
+            |engine score − win rate| over {measuredBuckets.length} band(s), n ≥ {MIN_BUCKET_N}; not a calibration error
           </span>
         </div>
         <div className="bg-[#0c0620] p-4 rounded-2xl border border-purple-500/30 space-y-1">
@@ -288,9 +288,9 @@ export const PerformanceLabView: React.FC = () => {
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
                 <Target className="w-4 h-4 text-purple-400" />
-                CONFIDENCE BAND OUTCOMES
+                ENGINE SCORE BAND OUTCOMES
               </h3>
-              <p className="text-xs text-purple-300/70 mt-0.5">Predicted confidence vs realized win rate, per band.</p>
+              <p className="text-xs text-purple-300/70 mt-0.5">Average engine score vs realized win rate, per band. The score is not a probability.</p>
             </div>
             <span className="px-2.5 py-1 rounded bg-purple-500/20 text-purple-300 font-mono text-[10px] font-bold border border-purple-500/30">
               N = {buckets ? buckets.totalSettledCycles : dash} SETTLED
@@ -302,7 +302,7 @@ export const PerformanceLabView: React.FC = () => {
               return (
                 <div key={b.bucket} className="bg-[#0a0518] p-3.5 rounded-xl border border-purple-900/40 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-black text-white">{b.bucket} Confidence</span>
+                    <span className="font-black text-white">Score {b.bucket.replace(/%/g, '')}</span>
                     <div className="flex items-center gap-2">
                       <span className="text-purple-300/70 text-[11px]">{b.predictions} settled</span>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -313,7 +313,7 @@ export const PerformanceLabView: React.FC = () => {
                     </div>
                   </div>
                   <div className="grid grid-cols-4 gap-2 text-[11px] pt-1 border-t border-purple-900/30">
-                    <div><span className="text-purple-400 text-[9px] block uppercase">Predicted</span><span className="text-purple-200 font-bold">{fmt(b.avgPredictedConfidencePct, 1, '%')}</span></div>
+                    <div><span className="text-purple-400 text-[9px] block uppercase">Avg score</span><span className="text-purple-200 font-bold">{fmt(b.avgPredictedConfidencePct, 1, '%')}</span></div>
                     <div><span className="text-purple-400 text-[9px] block uppercase">Realized</span><span className="text-emerald-400 font-bold">{fmt(b.empiricalAccuracyPct, 1, '%')}</span></div>
                     <div><span className="text-purple-400 text-[9px] block uppercase">Gap</span><span className="text-amber-300 font-bold">{fmt(b.calibrationErrorPct, 1, '%')}</span></div>
                     <div><span className="text-purple-400 text-[9px] block uppercase">W / L</span><span className="text-purple-300 font-bold">{b.wins} / {b.losses}</span></div>
@@ -335,9 +335,9 @@ export const PerformanceLabView: React.FC = () => {
             <div>
               <h3 className="text-sm font-extrabold text-white font-mono uppercase tracking-wider flex items-center gap-2">
                 <BarChart2 className="w-4 h-4 text-purple-400" />
-                RELIABILITY CURVE
+                SCORE VS WIN RATE
               </h3>
-              <p className="text-xs text-purple-300/70 mt-0.5">Dashed line = perfect calibration. Bands with n ≥ {MIN_BUCKET_N} only.</p>
+              <p className="text-xs text-purple-300/70 mt-0.5">Dashed line = score equals win rate, a reference only: the score is not a probability. Bands with n ≥ {MIN_BUCKET_N} only.</p>
             </div>
           </div>
           <div className="h-64 bg-[#0a0518] rounded-xl border border-purple-900/40 p-4 relative font-mono">
@@ -356,7 +356,7 @@ export const PerformanceLabView: React.FC = () => {
               </div>
             )}
             <div className="absolute top-2 left-3 text-[10px] text-purple-400">Realized win rate (%)</div>
-            <div className="absolute bottom-1 right-3 text-[10px] text-purple-400">Predicted confidence 50–100%</div>
+            <div className="absolute bottom-1 right-3 text-[10px] text-purple-400">Average engine score 50–100</div>
           </div>
         </div>
       </div>
@@ -458,7 +458,9 @@ export const PerformanceLabView: React.FC = () => {
                 <div className="text-purple-300/80 text-[11px] mt-0.5">
                   P(win) {typeof s.probability === 'number' ? `${(s.probability * 100).toFixed(1)}%` : dash}
                   {' • '}spot {usd(s.spotAtLock)} vs strike {usd(s.targetStrike)}
-                  {' • '}Brier {fmt(s.brierScore, 3)}
+                  {/* Scored from the recorded P(win), as the server now does; older rows
+                      stored a score computed from the engine score / 100. */}
+                  {' • '}Brier {fmt(typeof s.probability === 'number' && s.probability > 0 && s.probability <= 1 && typeof s.wasCorrect === 'boolean' ? Math.pow(s.probability - (s.wasCorrect ? 1 : 0), 2) : null, 3)}
                 </div>
               </div>
               <div className="text-right">

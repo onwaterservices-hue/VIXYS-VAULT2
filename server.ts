@@ -4839,13 +4839,7 @@ async function checkAndSettle15mCycle(livePrice) {
           prevLog.actualOutcome =
             livePrice >= prevLog.targetStrike ? "UP" : "DOWN";
           prevLog.wasCorrect = prevLog.actualOutcome === prevLog.direction;
-          prevLog.brierScore =
-            Math.round(
-              Math.pow(
-                prevLog.confidence / 100 - (prevLog.wasCorrect ? 1 : 0),
-                2,
-              ) * 1e3,
-            ) / 1e3;
+          prevLog.brierScore = brierOfRow(prevLog);
           prevLog.settlementAt = prevLog.resolvedAt;
           prevLog.actualDirection = prevLog.actualOutcome;
           // --- EXIT TELEMETRY (additive) ---
@@ -5014,7 +5008,7 @@ async function checkAndSettle15mCycle(livePrice) {
           // Layer-5 shadow's would-lock on this row. null when no strike.
           settledSide: active15mCycle.strikePrice > 0 && livePrice > 0 ? (livePrice >= active15mCycle.strikePrice ? "UP" : "DOWN") : null,
           wasCorrect: false,
-          brierScore: 0,
+          brierScore: null, // no call was made, so there is no forecast to score (was a perfect 0)
           qualificationReason:
             active15mCycle.qualificationReason ||
             active15mCycle.choppyReason ||
@@ -5585,7 +5579,7 @@ async function checkAndSettle15mCycle(livePrice) {
           settlementPrice: livePrice,
           actualOutcome: "NEUTRAL",
           wasCorrect: false,
-          brierScore: 0,
+          brierScore: null, // no call was made, so there is no forecast to score (was a perfect 0)
           qualificationReason:
             active15mCycle.qualificationReason ||
             active15mCycle.choppyReason ||
@@ -15044,7 +15038,9 @@ async function hydrateSignalHistoryFromFirestore() {
       prediction: item.direction,
       confidence: item.confidence,
       actualOutcome: item.actualOutcome,
-      brierScore: item.brierScore,
+      // Scored from the recorded P(win), so rows stored with the old
+      // confidence / 100 score are graded the same way as new ones.
+      brierScore: brierOfRow(item),
     }));
     recomputeAccuracyFromSettledHistory();
     _ledgerLastHydrateMs = Date.now();
@@ -15070,6 +15066,19 @@ __name(hydrateSignalHistoryFromFirestore, "hydrateSignalHistoryFromFirestore");
 // no Brier with 147 settled rows), and `acc + (x.brierScore || 0)` counted the
 // row as 0 -- a PERFECT forecast -- which flattered calibration. Both now use
 // this: finite scores only, with the count of rows that contributed.
+// Brier score of one settled lock: (recorded P(win) of the called side - outcome)^2.
+// It used confidence / 100, but confidence is the engine score, which is not a
+// probability (the product labels it "Engine score N / 100"). Scored that way
+// the ledger's Brier (0.204 on 126 locks, 2026-09-11) was worse than always
+// predicting the base rate (0.190); the recorded P(win) scores 0.184. A row with
+// no recorded probability or no graded outcome has no Brier score.
+function brierOfRow(row) {
+  const p = row && row.probability;
+  if (typeof p !== "number" || !(p > 0 && p <= 1)) return null;
+  if (typeof row.wasCorrect !== "boolean") return null;
+  return Math.round(Math.pow(p - (row.wasCorrect ? 1 : 0), 2) * 1e3) / 1e3;
+}
+__name(brierOfRow, "brierOfRow");
 function meanBrier(rows) {
   let sum = 0;
   let n = 0;
@@ -15212,7 +15221,7 @@ app.get("/api/signal/resolved-log", async (req, res) => {
   // record and a perfect forecast). Brier averages only rows that carry one.
   const winRatePct =
     totalCount > 0 ? Math.round((winCount / totalCount) * 1e3) / 10 : null;
-  const brierAgg = meanBrier(resolved);
+  const brierAgg = meanBrier(resolved.map((row) => ({ brierScore: brierOfRow(row) })));
   const avgBrierScore =
     brierAgg.mean === null ? null : Math.round(brierAgg.mean * 1e3) / 1e3;
   const brierScoredCount = brierAgg.n;
@@ -17223,7 +17232,7 @@ app.get("/api/signal/backtest-replay", async (req, res) => {
   const graded = settled.filter((s) => typeof s.wasCorrect === "boolean");
   const wins = graded.filter((s) => s.wasCorrect).length;
   const losses = graded.length - wins;
-  const brier = meanBrier(settled);
+  const brier = meanBrier(settled.map((row) => ({ brierScore: brierOfRow(row) })));
   res.json({
     timestamp: new Date().toISOString(),
     totalHistoricalCyclesEvaluated: settled.length,
@@ -18432,8 +18441,7 @@ app.all("/api/cron/settle", async (req, res) => {
     row.actualDirection = row.actualOutcome;
     row.wasCorrect = row.actualOutcome === dir;
     row.outcome = row.wasCorrect ? "WIN" : "LOSS";
-    row.brierScore =
-      Math.round(Math.pow((Number(row.confidence) || 0) / 100 - (row.wasCorrect ? 1 : 0), 2) * 1e3) / 1e3;
+    row.brierScore = brierOfRow(row);
     const lateEntry = Number(row.entryPrice ?? row.spotAtLock);
     if (Number.isFinite(lateEntry) && lateEntry > 1e3) {
       const signed = (lateClose - lateEntry) * (dir === "UP" ? 1 : -1);
