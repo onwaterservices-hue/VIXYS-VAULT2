@@ -18,6 +18,12 @@ VIXY AI operates a two-tier Discord community structure designed to generate max
 
 ## 2. Directory Structure & Key Modules
 
+> **Removed 2026-09-11:** `src/config/env.config.ts`, `src/config/discordConfig.ts` and
+> `src/services/webhookManager.ts` were never imported by the server or the client and
+> have been deleted. There is no Zod validation step; `server.ts` reads
+> `process.env` directly after `dotenv.config()`. The sections below that describe
+> those modules are historical.
+
 ```
 src/
 ├── config/

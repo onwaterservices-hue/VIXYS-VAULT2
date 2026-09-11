@@ -1,3 +1,7 @@
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 // The whale tracker page and the WhaleBrain card must draw only from the real
 // endpoints (/api/whales, /api/radar, /api/vixy/15m/current) and never invent
 // a print, an entity, a wall, a sentiment or a timestamp. These pins exist so
@@ -27,15 +31,7 @@ t.check('renders explicit venue-unavailable and empty states', tracker.includes(
 t.check('only assets with a real feed', !/'NVDA'|'SPY'|'TSLA'/.test(tracker));
 t.check('timestamps computed from the print, not written by hand', tracker.includes('relTime(order.timestamp)'));
 
-t.section('WhaleBrain has no invented default print');
-const brainSrc = readRepoFile('src/components/brains/WhaleBrain.tsx');
-const brain = brainSrc.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n');
-t.check('fetches /api/whales', brain.includes('fetch(`/api/whales?asset='));
-t.check('no default fabricated sweep', !brain.includes('sweep-default') && !brain.includes('-$0.09M'));
-t.check('null until a real print arrives', brain.includes('whaleEvents[0] || null'));
-t.check('no dark-pool or dark-scan claims', !/DARK POOL|DARK SCANS/i.test(brain));
-t.check('no impact-derived confidence', !brain.includes("o.impact === 'CRITICAL'") && !brain.includes('INSTITUTIONAL'));
-t.check('size tier passed through from the endpoint', brain.includes('o.sizeTier'));
-t.check('timestamp computed, not hardcoded', brain.includes('relTime(latest.timestamp)') && !brain.includes("'-1m'"));
-t.check('degraded venue renders as degraded', brain.includes('VENUE DEGRADED') || brain.includes('UNAVAILABLE'));
+t.section('WhaleBrain was an unmounted card with an invented default print; it is removed');
+t.check('src/components/brains/WhaleBrain.tsx no longer exists', !existsSync(join(repoRoot, 'src/components/brains/WhaleBrain.tsx')));
+
 t.done();

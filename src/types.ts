@@ -95,7 +95,7 @@ export interface HistoricalPrediction {
   result: 'WIN' | 'LOSS' | 'OPEN' | 'LOCKED' | 'CANCELLED' | 'INSUFFICIENT DATA';
   pnlPct: number;
   hash: string;
-  modelVersion?: string; // e.g. 'v4.3-INCREMENTAL'
+  modelVersion?: string; // e.g. 'VIXY_15M_ENGINE_GATE@abc1234' (rows before 2026-09-11: 'v4.3-INCREMENTAL')
   latencyMs?: number;
   dataFreshnessMs?: number;
   qualityScore?: 'A+' | 'A' | 'B' | 'C' | 'D';

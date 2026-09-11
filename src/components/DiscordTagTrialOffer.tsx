@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Tag, Loader2, CheckCircle2, AlertCircle, Clock } from 'lucide-react';
-import { getDiscordAuthUrlSecure, getTagTrialStatusApi, TagTrialStatus } from '../services/api';
+import { getDiscordAuthUrlSecure, getTagTrialOfferApi, getTagTrialStatusApi, TagTrialOffer, TagTrialStatus } from '../services/api';
 
 // Offer card for the Discord server-tag trial: display the VIXY Vault server tag
 // next to your Discord username and get free access. Every state rendered here
@@ -35,6 +35,15 @@ function reasonText(reason: string | null, minAgeDays: number): string {
   return (reason && REASON_TEXT[reason]) || `Discord verification did not complete (${reason || 'unknown'}). Please try again.`;
 }
 
+// "3 days", "1 day", or "36 hours" for a duration the server returned.
+export function formatFreeTime(hours: number): string {
+  if (hours % 24 === 0) {
+    const d = hours / 24;
+    return `${d} day${d === 1 ? '' : 's'}`;
+  }
+  return `${hours} hours`;
+}
+
 interface DiscordTagTrialOfferProps {
   isAuthenticated: boolean;
   onOpenAuth?: () => void;
@@ -51,6 +60,9 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
   className = '',
 }) => {
   const [status, setStatus] = useState<TagTrialStatus | null>(null);
+  // The public offer (durations + launch promo deadline) so signed-out visitors
+  // see the real terms instead of a hardcoded default.
+  const [publicOffer, setPublicOffer] = useState<TagTrialOffer | null>(null);
   const [waiting, setWaiting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const baselineAttemptAt = useRef<string | null>(null);
@@ -75,14 +87,29 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
     if (!attempt || (!settleAny && attempt.at === baselineAttemptAt.current)) return false;
     baselineAttemptAt.current = attempt.at;
     if (attempt.outcome === 'GRANTED') {
-      const days = Math.round(s.offer.durationHours / 24);
-      setResult({ type: 'success', text: `Verified with Discord. Your ${days} free days are active.` });
+      // The length actually granted, read from the trial record itself.
+      const t = s.trial;
+      const grantedHours =
+        t?.claimedAt && t?.expiresAt
+          ? Math.round((Date.parse(t.expiresAt) - Date.parse(t.claimedAt)) / 3600e3)
+          : s.offer.durationHours;
+      setResult({ type: 'success', text: `Verified with Discord. Your free access is active for ${formatFreeTime(grantedHours)}.` });
       const cb = onAccessGrantedRef.current;
       if (cb) setTimeout(cb, 1500);
     } else {
       setResult({ type: 'error', text: reasonText(attempt.reason, s.offer.minDiscordAccountAgeDays) });
     }
     return true;
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getTagTrialOfferApi().then((o) => {
+      if (!cancelled) setPublicOffer(o);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -151,8 +178,12 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
     }
   };
 
-  const days = Math.round((status?.offer.durationHours ?? 72) / 24);
-  const minAge = status?.offer.minDiscordAccountAgeDays ?? 30;
+  const offer = status?.offer ?? publicOffer;
+  const freeLabel = offer ? formatFreeTime(offer.durationHours) : null;
+  const minAge = offer?.minDiscordAccountAgeDays ?? 30;
+  const promoEndsLabel = offer?.promo.active
+    ? new Date(offer.promo.endsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+    : null;
   const trial = status?.trial ?? null;
   const active = trial?.status === 'ACTIVE';
   const used = !!status?.claimed && !active;
@@ -164,7 +195,7 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
           Discord
         </span>
         <span className="text-sm font-black text-white font-mono uppercase">
-          Wear the VIXY tag, get {days} days free
+          {freeLabel ? `Wear the VIXY tag, get ${freeLabel} free` : 'Wear the VIXY tag, get free access'}
         </span>
       </div>
 
@@ -199,6 +230,12 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
         </div>
       ) : (
         <>
+          {offer?.promo.active && promoEndsLabel && (
+            <p className="text-[11px] font-semibold text-amber-300 leading-relaxed">
+              Launch offer: claim before {promoEndsLabel} for {formatFreeTime(offer.promo.durationHours)}. Claims after
+              that unlock {formatFreeTime(offer.standardDurationHours)}.
+            </p>
+          )}
           <ol className="list-decimal pl-4 space-y-1 text-[11px] text-purple-200/90">
             <li>
               Join the{' '}
@@ -224,7 +261,13 @@ export const DiscordTagTrialOffer: React.FC<DiscordTagTrialOfferProps> = ({
             ) : (
               <>
                 <Tag className="w-4 h-4" />
-                <span>{isAuthenticated ? `Claim ${days} free days` : 'Create a free account to claim'}</span>
+                <span>
+                  {isAuthenticated
+                    ? freeLabel
+                      ? `Claim ${freeLabel} free`
+                      : 'Claim free access'
+                    : 'Create a free account to claim'}
+                </span>
               </>
             )}
           </button>
