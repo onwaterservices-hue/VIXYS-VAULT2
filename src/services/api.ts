@@ -765,31 +765,6 @@ export async function syncDiscordVipRoleApi(discordUserId: string, guildId?: str
   }
 }
 
-export async function sendTestAlert(
-  channel: 'discord' | 'telegram',
-  webhookUrl: string,
-  botToken: string,
-  chatId: string,
-  signalData: any
-) {
-  try {
-    const res = await fetch('/api/alerts/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        channel,
-        webhookUrl,
-        botToken,
-        chatId,
-        signalData,
-      }),
-    });
-    return await safeParseJson(res);
-  } catch {
-    return { success: false, message: 'Server connection error' };
-  }
-}
-
 export interface ApiSignalResponse {
   asset: string;
   desk: string;
