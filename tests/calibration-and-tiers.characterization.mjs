@@ -25,7 +25,7 @@
 // (SKIP -> NONE, else STANDARD); the real applied bar is exposed as `lockGate`.
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { serverSrc, readRepoFile, sliceBetween, createHarness, ROOT } from './_engineSource.mjs';
+import { serverSrc, readRepoFile, sliceBetween, extractFn, createHarness, ROOT } from './_engineSource.mjs';
 import { transformSync } from 'esbuild';
 // getCalibratedConfidence carries TS annotations; transpile types away only.
 const stripTypes = (src) => transformSync(src, { loader: 'ts', format: 'cjs' }).code;
@@ -42,9 +42,11 @@ const bucketSrc = sliceBetween(
   'confidence buckets',
 );
 
+// The bucket code reads confidence through the real top-level helper.
+const calibrationConfidenceOf = new Function(`${extractFn('calibrationConfidenceOf', 'function calibrationConfidenceOf(')}; return calibrationConfidenceOf;`)();
 function bucketize(settledLogs) {
-  const fn = new Function('settled', 'Math', `${bucketSrc}; return buckets;`);
-  return fn(settledLogs, Math);
+  const fn = new Function('settled', 'Math', 'calibrationConfidenceOf', `${bucketSrc}; return buckets;`);
+  return fn(settledLogs, Math, calibrationConfidenceOf);
 }
 const log = (confidence, wasCorrect, extra = {}) => ({ confidence, wasCorrect, status: 'RESOLVED', ...extra });
 const byName = (bs, name) => bs.find((b) => b.bucket === name);
@@ -68,18 +70,18 @@ t.eq('conf=100 lands in 95%+ (top bucket closes at 101)', byName(bucketize([log(
 t.eq('PINNED-AS-IS: conf=49 falls into NO bucket',
   bucketize([log(49, true)]).reduce((a, b) => a + b.predictions, 0), 0);
 
-t.section('PART A3: confidence resolution order (confidence -> probability -> 75)');
-// `s.confidence || (s.probability ? round(probability*100) : 75)`
+t.section('PART A3: confidence resolution order (confidence -> probability -> none)');
 t.eq('probability used when confidence absent',
   byName(bucketize([{ status: 'RESOLVED', probability: 0.82, wasCorrect: true }]), '80-85%').predictions, 1);
-// PINNED-AS-IS: `||` not `??`, so a genuine confidence of 0 falls through to
-// probability, and a log with NEITHER is silently assigned 75 -- a fabricated
-// value landing in the 75-80% bucket. This is the exact defect class CLAUDE.md
-// names: an unknown rendered as a plausible number.
-t.eq('PINNED-AS-IS: log with neither confidence nor probability is bucketed as 75',
-  byName(bucketize([{ status: 'RESOLVED', wasCorrect: true }]), '75-80%').predictions, 1);
-t.eq('PINNED-AS-IS: confidence=0 falls through to the 75 default',
-  byName(bucketize([{ status: 'RESOLVED', confidence: 0, wasCorrect: true }]), '75-80%').predictions, 1);
+// FIXED (was PINNED-AS-IS): a log with NEITHER confidence nor probability used to
+// be silently assigned 75 -- "an unknown rendered as a plausible number". It now
+// lands in no bucket.
+t.eq('log with neither confidence nor probability lands in NO bucket',
+  bucketize([{ status: 'RESOLVED', wasCorrect: true }]).reduce((a, b) => a + b.predictions, 0), 0);
+t.eq('confidence=0 with no probability lands in NO bucket (no 75 default)',
+  bucketize([{ status: 'RESOLVED', confidence: 0, wasCorrect: true }]).reduce((a, b) => a + b.predictions, 0), 0);
+t.eq('confidence=0 falls through to a real probability',
+  byName(bucketize([{ status: 'RESOLVED', confidence: 0, probability: 0.71, wasCorrect: true }]), '70-75%').predictions, 1);
 
 t.section('PART A4: per-bucket arithmetic');
 const mixed = bucketize([log(81, true), log(82, true), log(83, false), log(84, false), log(80, false)]);
@@ -101,13 +103,11 @@ for (const n of [5, 6, 15]) {
   const bs = bucketize(Array.from({ length: n }, () => log(82, true)));
   t.eq(`n=${n} -> insufficientEvidence false`, byName(bs, '80-85%').insufficientEvidence, false);
 }
-// PINNED-AS-IS: an empty bucket reports 0% accuracy rather than null, so "no
-// data" and "lost every time" render identically. insufficientEvidence is the
-// ONLY thing distinguishing them.
-t.eq('PINNED-AS-IS: empty bucket reports empiricalAccuracyPct 0, not null',
-  byName(empty, '80-85%').empiricalAccuracyPct, 0);
-t.eq('PINNED-AS-IS: empty bucket reports avgPredictedConfidence as the range midpoint',
-  byName(empty, '80-85%').avgPredictedConfidencePct, 82.5);
+// FIXED (was PINNED-AS-IS): an empty bucket reported 0% accuracy and the range
+// midpoint as "predicted", so "no data" rendered as "lost every time".
+t.eq('empty bucket reports empiricalAccuracyPct null', byName(empty, '80-85%').empiricalAccuracyPct, null);
+t.eq('empty bucket reports avgPredictedConfidencePct null', byName(empty, '80-85%').avgPredictedConfidencePct, null);
+t.eq('empty bucket reports calibrationErrorPct null', byName(empty, '80-85%').calibrationErrorPct, null);
 
 // ---------------------------------------------------------------------------
 // PART A6 -- getCalibratedConfidence (7eea881): INSUFFICIENT_SAMPLE at n < 15
@@ -116,7 +116,7 @@ t.section('PART A6: getCalibratedConfidence maps raw confidence onto its bucket 
 const calibSrc = sliceBetween(serverSrc, 'const CALIBRATION_MIN_BUCKET_SAMPLES = 15;', 'app.get("/api/signal/calibrated-confidence"', 'getCalibratedConfidence');
 function makeCalib(settledLogs) {
   const js = stripTypes(calibSrc);
-  return new Function('persistentSignalLogs', 'Math', 'Number', '__name', `${js}; return getCalibratedConfidence;`)(settledLogs, Math, Number, (f) => f);
+  return new Function('persistentSignalLogs', 'Math', 'Number', '__name', 'calibrationConfidenceOf', `${js}; return getCalibratedConfidence;`)(settledLogs, Math, Number, (f) => f, calibrationConfidenceOf);
 }
 const resolved = (n, wins, conf) => Array.from({ length: n }, (_, i) => ({ status: 'RESOLVED', confidence: conf, wasCorrect: i < wins }));
 t.eq('NaN input -> NO_INPUT', makeCalib([])(NaN).status, 'NO_INPUT');
@@ -133,10 +133,11 @@ t.eq('raw 97 -> top bucket 95-100%', makeCalib(resolved(20, 10, 97))(97).bucket,
 // PINNED-AS-IS: raw below 50 is clamped INTO the 50-55 bucket rather than
 // rejected, so a raw of 40 is answered with the 50-55% bucket's win rate.
 t.eq('PINNED-AS-IS: raw 40 is looked up in the 50-55% bucket', makeCalib(resolved(20, 10, 52))(40).bucket, '50-55%');
-// PINNED-AS-IS: same `|| 75` default as the bucket endpoints -- a resolved log
-// with neither confidence nor probability is counted in the 75-80% bucket.
-t.eq('PINNED-AS-IS: log with no confidence counted as 75',
-  makeCalib(Array.from({ length: 15 }, () => ({ status: 'RESOLVED', wasCorrect: true })))(77).status, 'CALIBRATED');
+// FIXED (was PINNED-AS-IS): the same `|| 75` default as the bucket endpoints
+// counted a resolved log with no forecast in the 75-80% bucket, so 15 such rows
+// produced a CALIBRATED answer from nothing.
+t.eq('log with no confidence is not counted', makeCalib(Array.from({ length: 15 }, () => ({ status: 'RESOLVED', wasCorrect: true })))(77).sampleSize, 0);
+t.eq('15 forecast-less rows do not calibrate a bucket', makeCalib(Array.from({ length: 15 }, () => ({ status: 'RESOLVED', wasCorrect: true })))(77).status, 'INSUFFICIENT_SAMPLE');
 // Only RESOLVED logs count.
 t.eq('LOCKED (unsettled) logs are excluded',
   makeCalib(Array.from({ length: 20 }, () => ({ status: 'LOCKED', confidence: 87, wasCorrect: true })))(87).sampleSize, 0);
