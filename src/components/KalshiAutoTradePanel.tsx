@@ -717,7 +717,7 @@ export const KalshiAutoTradePanel: React.FC<KalshiAutoTradePanelProps> = ({
                             {log.action} • {log.status}
                           </span>
                           <span className="font-bold text-white">
-                            {log.asset} {log.direction} ({log.confidence}%)
+                            {log.asset} {log.direction} (score {log.confidence} / 100)
                           </span>
                           {log.stakeUSD > 0 && <span className="text-cyan-300 font-bold">${log.stakeUSD} USD</span>}
                         </div>
