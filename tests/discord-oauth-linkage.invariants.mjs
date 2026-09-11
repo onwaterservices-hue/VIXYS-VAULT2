@@ -45,7 +45,6 @@ console.log('[1] OAuth start endpoint exists and is the one the frontend calls')
 const FRONTEND_FILES = [
   'src/services/api.ts',
   'src/components/DiscordOnboardingModal.tsx',
-  'src/components/DiscordStatusWidget.tsx',
   'src/components/AlertSettingsView.tsx',
   'src/components/CommunityAccessNode.tsx',
 ];
@@ -75,8 +74,8 @@ check('the secure starter does not pass an email/userId query',
   !/getDiscordAuthUrlSecure[\s\S]{0,400}(x-user-email|params\.append\('email')/.test(api));
 check('the connect handler authenticates the session',
   /authenticateSession\(req\)[\s\S]{0,220}AUTHENTICATION_REQUIRED/.test(oauth));
-// All four start callsites must use the secure function.
-for (const f of ['src/components/DiscordOnboardingModal.tsx','src/components/DiscordStatusWidget.tsx','src/components/AlertSettingsView.tsx','src/components/CommunityAccessNode.tsx']) {
+// All three start callsites (DiscordStatusWidget was unmounted and deleted) must use the secure function.
+for (const f of ['src/components/DiscordOnboardingModal.tsx','src/components/AlertSettingsView.tsx','src/components/CommunityAccessNode.tsx']) {
   check(`${f.split('/').pop()} starts OAuth via getDiscordAuthUrlSecure`,
     /getDiscordAuthUrlSecure\(\)/.test(R(f)));
 }
@@ -222,7 +221,7 @@ const KNOWN_UNIMPLEMENTED = new Set([
 ]);
 
 const calledPaths = new Set();
-for (const f of ['src/services/api.ts','src/App.tsx','src/components/CommunityAccessNode.tsx','src/components/DiscordOnboardingModal.tsx','src/components/DiscordStatusWidget.tsx','src/components/AlertSettingsView.tsx']) {
+for (const f of ['src/services/api.ts','src/App.tsx','src/components/CommunityAccessNode.tsx','src/components/DiscordOnboardingModal.tsx','src/components/AlertSettingsView.tsx']) {
   // Comment lines are stripped: this file's own explanatory comments name the
   // dead paths, and matching those would be a false positive.
   for (const m of strip(R(f)).matchAll(/['\`](\/api\/(?:auth\/)?discord\/[a-zA-Z0-9_-]+)/g)) {
