@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AuthState } from '../types';
 import { setPendingReferral } from '../hooks/useReferralCapture';
+import { LiveTrackRecord } from './LiveTrackRecord';
 
 interface AuthViewProps {
   authState: AuthState;
@@ -207,7 +208,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
               <span>WHAT'S INCLUDED</span>
             </h3>
             <p className="text-xs text-purple-300/70 font-sans">
-              Instant access to high-frequency decision intelligence tools built for prediction traders.
+              Live decision intelligence built for 15-minute prediction market traders.
             </p>
           </div>
 
@@ -215,9 +216,9 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white block font-bold">15S & 1H Pre-Spike Lead Signals</strong>
+                <strong className="text-white block font-bold">Live 15-Minute Decision Engine</strong>
                 <span className="text-purple-300/70 font-sans text-[11px]">
-                  Detect price spikes 5-10s before contracts hit 80¢+.
+                  Calibrated P(win) with its sample size, the live lock gates, and every settled outcome.
                 </span>
               </div>
             </div>
@@ -235,20 +236,16 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Globe className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white block font-bold">Discord & Telegram Bot Sync</strong>
+                <strong className="text-white block font-bold">Discord Lock Alerts</strong>
                 <span className="text-purple-300/70 font-sans text-[11px]">
-                  Connect your webhooks for automated instant signal execution.
+                  Every lock and settlement posted to the VIXY Discord as it happens.
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 border-t border-purple-900/40 text-[11px] text-purple-300/60 font-sans space-y-2">
-            <div className="flex items-center gap-2 text-amber-300 font-bold">
-              <Star className="w-3.5 h-3.5 fill-amber-300" />
-              <span>Trusted by 2,400+ Valhalla & Quant Traders</span>
-            </div>
-            <p>Verified 91.4% signal accuracy over 10,000+ Kalshi market settlement blocks.</p>
+          <div className="pt-4 border-t border-purple-900/40">
+            <LiveTrackRecord />
           </div>
         </div>
 

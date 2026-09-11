@@ -467,7 +467,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               </div>
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span>Sub-Second L2</span>
+                <span>Live L2 Depth</span>
               </div>
               <div className="flex items-center gap-1">
                 <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />

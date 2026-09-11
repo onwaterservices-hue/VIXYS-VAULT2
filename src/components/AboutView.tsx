@@ -22,7 +22,7 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
               About VIXY AI
             </h1>
             <p className="text-sm text-purple-300/80 font-sans max-w-2xl leading-relaxed">
-              Institutional-grade decision intelligence for sub-minute and 1-hour prediction market traders on Kalshi, Polymarket, and DraftKings.
+              Decision intelligence for BTC 15-minute prediction market traders on Kalshi.
             </p>
           </div>
 
@@ -58,10 +58,10 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
             <h2>Our Mission: Democratizing Quantitative Edge</h2>
           </div>
           <p className="text-purple-200/80">
-            Prediction markets are the fastest-growing financial innovation of the decade. Yet retail traders have historically lacked the sub-second microstructure analytics, orderbook delta processing, and neural pattern recognition available to high-frequency trading firms.
+            Prediction markets settle fast, and most retail traders enter them with a chart and a guess. VIXY exists to replace the guess with a measured number, and to show you how that number was measured.
           </p>
           <p className="text-purple-200/80">
-            <strong>VIXY AI</strong> bridges this gap by aggregating live L2 order flow from Binance, Coinbase, Kalshi, and Polymarket, feeding it through multi-algorithm ensemble models to output real-time probability estimates and Kelly Criterion position sizing.
+            <strong>VIXY AI</strong> reads live BTC spot, the Coinbase order book and large prints, and Kalshi's contract price, and runs a 15-minute decision engine. Its headline number is a calibrated probability: how often past cycles in a similar state settled on the current side of the strike, shown with its sample size.
           </p>
         </section>
 
@@ -77,9 +77,9 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
               <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-mono font-bold text-sm">
                 01
               </div>
-              <h3 className="text-white font-mono font-bold text-base">Sub-Second Microstructure</h3>
+              <h3 className="text-white font-mono font-bold text-base">Live Market Microstructure</h3>
               <p className="text-xs text-purple-300/70 leading-relaxed">
-                Direct WebSocket feeds processing taker volume delta, net order flow imbalance, and whale liquidity sweeps in under 15ms.
+                Coinbase L2 depth and $10k+ prints read every few seconds, labelled as resting depth or aggressor flow for what each one actually is.
               </p>
             </div>
 
@@ -87,9 +87,9 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
               <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-mono font-bold text-sm">
                 02
               </div>
-              <h3 className="text-white font-mono font-bold text-base">Neural Ribbon Matching</h3>
+              <h3 className="text-white font-mono font-bold text-base">Calibrated Probability</h3>
               <p className="text-xs text-purple-300/70 leading-relaxed">
-                Pattern matching engine scanning 18,000+ historical contract settlements to find high-confluence setup parallels.
+                Each tick is matched to historical cycles in a similar state. The number shown is how often they settled on the current side, with n.
               </p>
             </div>
 
@@ -97,9 +97,9 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
               <div className="w-10 h-10 rounded-xl bg-purple-600/20 border border-purple-500/30 flex items-center justify-center text-purple-300 font-mono font-bold text-sm">
                 03
               </div>
-              <h3 className="text-white font-mono font-bold text-base">SHA-256 Verifiable Logs</h3>
+              <h3 className="text-white font-mono font-bold text-base">Public Lock Ledger</h3>
               <p className="text-xs text-purple-300/70 leading-relaxed">
-                Every trade journal entry and signal snapshot generates a cryptographic SHA-256 hash ensuring zero retroactive editing.
+                Every lock, skip and settlement is recorded and graded against the settlement price, and the full record is published in VIXY Locks.
               </p>
             </div>
           </div>
@@ -117,10 +117,10 @@ export const AboutView: React.FC<AboutViewProps> = ({ onReturnToTerminal, onOpen
                 <span className="text-purple-400">Company Name:</span> VIXY AI Quant Research Lab
               </div>
               <div>
-                <span className="text-purple-400">Infrastructure:</span> Cloud Run Multi-Region Edge Containers
+                <span className="text-purple-400">Infrastructure:</span> Vercel
               </div>
               <div>
-                <span className="text-purple-400">Primary Venues:</span> Kalshi, Polymarket, DraftKings
+                <span className="text-purple-400">Primary Venue:</span> Kalshi (BTC 15-minute contracts)
               </div>
               <div>
                 <span className="text-purple-400">Payment Processor:</span> Stripe, Inc. (PCI-DSS Level 1)
