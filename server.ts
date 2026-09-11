@@ -1154,6 +1154,48 @@ export function authenticateSession(req) {
 }
 __name(authenticateSession, "authenticateSession");
 
+// authenticateSession() only finds users already in this instance's memory, so
+// on a cold serverless instance a valid session reads as "signed out". This
+// verifies the same signed cookie, hydrates that one user from Firestore and
+// retries. Identity still comes only from the cookie's signed uid/email.
+async function authenticateSessionAsync(req) {
+  const auth = authenticateSession(req);
+  if (auth) return auth;
+  const payload = verifySession(parseCookieHeader(req)[SESSION_COOKIE_NAME]);
+  if (!payload) return null;
+  try {
+    const hydrated = await hydrateUserFromFirestore(payload.email, payload.uid);
+    const hydratedEmail = String((hydrated && hydrated.email) || "").toLowerCase();
+    if (
+      hydrated &&
+      !hydrated._degraded &&
+      hydratedEmail &&
+      !serverUsers.some((u) => (u.email || "").toLowerCase() === hydratedEmail)
+    ) {
+      serverUsers.push(hydrated);
+    }
+  } catch {
+    /* fall through: an unresolvable session is treated as signed out */
+  }
+  return authenticateSession(req);
+}
+__name(authenticateSessionAsync, "authenticateSessionAsync");
+
+// A user record as it may leave the server: credentials, reset/OTP material and
+// device fingerprints are removed at every depth. /api/auth/me used to return
+// the raw record, password hash included.
+function toPublicUserDTO(value, depth = 0) {
+  if (!value || typeof value !== "object" || depth > 4) return value;
+  if (Array.isArray(value)) return value.map((v) => toPublicUserDTO(v, depth + 1));
+  const out = {};
+  for (const [key, v] of Object.entries(value)) {
+    if (/password|reset|token|secret|otp|ipHash|hardwareFingerprint/i.test(key)) continue;
+    out[key] = toPublicUserDTO(v, depth + 1);
+  }
+  return out;
+}
+__name(toPublicUserDTO, "toPublicUserDTO");
+
 const requireRole = __name((allowedRoles) => {
   return (req, res, next) => {
     const auth = authenticateSession(req);
@@ -1190,9 +1232,12 @@ function toAdminUserDTO(u) {
   };
 }
 __name(toAdminUserDTO, "toAdminUserDTO");
+// The owner accounts keep their role here, but never a password: a default
+// password used to be assigned whenever a record had none (e.g. on a cold
+// instance before Firestore hydration), and this repository is public. A
+// missing password now means login fails and the reset flow sets one.
 function sanitizeAndNormalizeServerUsers() {
   if (typeof serverUsers === "undefined") return;
-  const defaultPasswordHash = hashPassword("Seattle007");
 
   let masterAdmin = serverUsers.find(
     (u) => (u.email || "").trim().toLowerCase() === "vixyvault0@gmail.com",
@@ -1212,19 +1257,12 @@ function sanitizeAndNormalizeServerUsers() {
       discordId: "123456789012345678",
       discordLinked: true,
       guildVerified: true,
-      passwordHash: defaultPasswordHash,
     };
     serverUsers.unshift(masterAdmin);
   } else {
     masterAdmin.role = "OWNER";
     masterAdmin.subscription = "ELITE_PASS";
     masterAdmin.status = "ACTIVE";
-    if (
-      !masterAdmin.passwordHash ||
-      !masterAdmin.passwordHash.startsWith("vixy$")
-    ) {
-      masterAdmin.passwordHash = defaultPasswordHash;
-    }
   }
 
   let onwaterUser = serverUsers.find(
@@ -1241,19 +1279,12 @@ function sanitizeAndNormalizeServerUsers() {
       status: "ACTIVE",
       joined: "2026-01-15",
       verificationStatus: "VERIFIED",
-      passwordHash: defaultPasswordHash,
     };
     serverUsers.unshift(onwaterUser);
   } else {
     onwaterUser.role = "OWNER";
     onwaterUser.subscription = "ELITE_PASS";
     onwaterUser.status = "ACTIVE";
-    if (
-      !onwaterUser.passwordHash ||
-      !onwaterUser.passwordHash.startsWith("vixy$")
-    ) {
-      onwaterUser.passwordHash = defaultPasswordHash;
-    }
   }
 
   serverUsers.forEach((u) => {
@@ -1863,38 +1894,49 @@ let latestCalibrationState = {
   calibrationStatus: "WARMING_UP",
   calibrationSampleSize: 0,
   calibrationMinimumSamples: 50,
-  brierScore: 0.168,
+  brierScore: null, // no settled history at boot; was an invented 0.168
   historicalAccuracy: 88.9,
 };
+// Boot state for the Guardian and the lock evaluation carries NO reading.
+//
+// Both objects are served to clients (/api/vixy/state returns them verbatim,
+// /api/vixy/15m/current passes latestLockEvaluation.reason into skipReason*) and
+// latestGuardianDecision.reversalThreat is read by the lock gate. They used to
+// boot as a finished, favourable decision: qualified: true, direction UP, every
+// check passing, 18s of persistence, Guardian confidence 72 / survival 72 /
+// reversal threat 28 -- and the reason string "EARLY LOCK ACTIVE: 50/50 Odds
+// Mispricing Window (+100% Profit Pull Target) -- Locked at 52c". None of that
+// was measured, and a threat of 28 cleared the gate's "< 30%" REVERSAL bar
+// before any tick. Until runMarketEngineTick writes real values these now read
+// as nothing: not qualified, no side, no checks passed, no threat, no reason.
 let latestGuardianDecision = {
   action: "WAIT",
-  reason: ["Awaiting entry permission clearance"],
-  confidence: 72,
+  reason: [],
+  confidence: 0,
   positionState: "NONE",
-  direction: "UP",
-  lockState: "AWAITING_LOCK",
-  reversalThreat: 28,
-  survivalScore: 72,
-  timestamp: new Date().toISOString(),
-  cycleId: 1,
+  direction: "NEUTRAL",
+  lockState: "MONITORING",
+  reversalThreat: null,
+  survivalScore: null,
+  timestamp: null,
+  cycleId: 0,
 };
 let latestLockEvaluation = {
-  qualified: true,
-  direction: "UP",
+  qualified: false,
+  direction: "NEUTRAL",
   checks: {
-    confidence: true,
-    freshness: true,
-    liquidity: true,
-    spread: true,
-    edge: true,
-    persistence: true,
+    confidence: false,
+    freshness: false,
+    liquidity: false,
+    spread: false,
+    edge: false,
+    persistence: false,
   },
-  reason:
-    "\u26A1 EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) \u2014 Locked at 52\xA2",
-  persistenceSeconds: 18,
-  requiredPersistenceSeconds: 3,
-  isEarlyLock: true,
-  oddsWindow5050: true,
+  reason: null,
+  persistenceSeconds: 0,
+  requiredPersistenceSeconds: null,
+  isEarlyLock: false,
+  oddsWindow5050: false,
 };
 // Price history starts EMPTY and is filled only by real ticks.
 //
@@ -3147,7 +3189,7 @@ async function runMarketEngineTick() {
             (sum, item) => sum + item.brierScore,
             0,
           ) / historyLen
-        : 0.168;
+        : null; // no settled history -> no Brier score (was an invented 0.168)
     latestCalibrationState = {
       rawModelProbability:
         latestBtc15mPipeline.edgeVsConfidence.modelProbability,
@@ -3156,7 +3198,7 @@ async function runMarketEngineTick() {
       calibrationStatus,
       calibrationSampleSize,
       calibrationMinimumSamples,
-      brierScore: Math.round(avgBrier * 1e3) / 1e3,
+      brierScore: avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3,
       historicalAccuracy: historicalAccuracyVal,
     };
     const is5050PullWindow =
@@ -3201,9 +3243,16 @@ async function runMarketEngineTick() {
     } else if (!isEdgePass) {
       reasonText = `Minimum edge requirement (+1.5%) not reached (current: ${currentEdgePct >= 0 ? "+" : ""}${currentEdgePct}%)`;
     } else if (!isPersistPass) {
-      reasonText = `Early Lock persistence timer in progress (${persistenceSeconds}s / ${effectiveRequiredPersistenceSeconds}s required)`;
+      // Names the bar actually in force: 3s only inside the early-entry window,
+      // otherwise the standard 12s. This used to say "Early Lock" for both.
+      reasonText = `${isEarlyLockOpportunity ? "Early-entry" : "Standard"} persistence timer in progress (${persistenceSeconds}s / ${effectiveRequiredPersistenceSeconds}s required)`;
     } else if (isQualified && isEarlyLockOpportunity) {
-      reasonText = `\u26A1 EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100% Profit Pull Target) \u2014 Locked at ~${Math.round(currentKalshiImpliedProb * 100)}\xA2`;
+      // The deterministic early-entry rule that fired, stated as the rule. The
+      // previous text ("EARLY LOCK ACTIVE: 50/50 Odds Mispricing Window (+100%
+      // Profit Pull Target) -- Locked at ~NNc") asserted a profit target nothing
+      // computes and said "Locked" while this object only reports qualification;
+      // the lock itself is committed separately by lock15mCycle.
+      reasonText = `Early-entry rule met: Kalshi YES ~${Math.round(currentKalshiImpliedProb * 100)}\xA2 (inside 38-62\xA2), HIGH_CONVICTION tier, |edge| ${Math.abs(currentEdgePct)}% >= 2.5%`;
     }
     latestLockEvaluation = {
       qualified: isQualified,
@@ -3211,8 +3260,11 @@ async function runMarketEngineTick() {
       checks: {
         confidence: isConfPass,
         freshness: isFresh,
-        liquidity: isLiquidityPass,
-        spread: isSpreadPass,
+        // Not measured: isLiquidityPass / isSpreadPass are the constant true
+        // above, so reporting them as passed checks claimed a book read that
+        // never happened. null = no measurement.
+        liquidity: null,
+        spread: null,
         edge: isEdgePass,
         persistence: isPersistPass,
       },
@@ -3480,14 +3532,12 @@ app.all("/api/cron/engine-tick", async (req, res) => {
 runMarketEngineTickTracked().catch(() => {});
 const serverUsers = [];
 app.post(["/api/auth/heartbeat", "/api/heartbeat"], (req, res) => {
-  const email = String(
-    req.body?.email || req.headers["x-user-email"] || "",
-  ).toLowerCase();
-  const uid = String(req.body?.uid || "").trim();
-  if (email || uid) {
-    const user = ensureUserExists({ uid, email });
-    user.lastSeenAt = Date.now();
-    user.status = "ACTIVE";
+  // Presence for the signed-in account only. A posted email used to create or
+  // touch that user record -- including an owner record -- for any caller.
+  const auth = authenticateSession(req);
+  if (auth && auth.user) {
+    auth.user.lastSeenAt = Date.now();
+    auth.user.status = "ACTIVE";
   }
   res.json({ success: true, timestamp: Date.now() });
 });
@@ -4764,7 +4814,7 @@ async function checkAndSettle15mCycle(livePrice) {
           // Calibration ONLY observes the settled outcome. It MUST NOT modify the live decision.
           try {
             const rawProb = prevLog.probability || (prevLog.confidence / 100);
-            const regime = serverLearningEngine.currentRegime || "TRENDING_BULL";
+            const regime = serverLearningEngine.currentRegime || "RANGING_NEUTRAL"; // was a bullish "TRENDING_BULL" default
             let regimeFactor = 1.0;
             if (regime === 'TRENDING_BEAR' && prevLog.direction === 'DOWN') regimeFactor = 1.04;
             else if (regime === 'TRENDING_BULL' && prevLog.direction === 'UP') regimeFactor = 1.04;
@@ -4805,7 +4855,7 @@ async function checkAndSettle15mCycle(livePrice) {
           const updatedAccuracy =
             totalHistory > 0
               ? Math.round((wins / totalHistory) * 1e3) / 10
-              : 71.8;
+              : null; // no settled history -> no accuracy (was an invented 71.8)
           const updatedAvgBrier =
             totalHistory > 0
               ? Math.round(
@@ -4816,7 +4866,7 @@ async function checkAndSettle15mCycle(livePrice) {
                     totalHistory) *
                     1e3,
                 ) / 1e3
-              : 0.168;
+              : null; // no settled history -> no Brier (was an invented 0.168)
           serverLearningEngine.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.historicalAccuracy = updatedAccuracy;
           latestCalibrationState.brierScore = updatedAvgBrier;
@@ -6043,29 +6093,39 @@ async function getUserAccessState(email, uid) {
 }
 __name(getUserAccessState, "getUserAccessState");
 app.get(["/api/v1/auth/access", "/api/auth/access"], async (req, res) => {
-  const email = req.headers["x-user-email"] || req.query.email || "";
-  const uid = req.headers["x-user-id"] || req.query.uid || "";
-  const access = await getUserAccessState(email, uid);
-  res.json(access);
-});
-app.post("/api/auth/sync", (req, res) => {
-  const uid = String(req.body?.uid || req.body?.userId || "").trim();
-  const email = String(req.body?.email || req.headers["x-user-email"] || "")
-    .trim()
-    .toLowerCase();
-  const name = req.body?.name || req.body?.displayName;
-  const role = req.body?.role;
-  const subscription = req.body?.subscription;
-  if (!email && !uid) {
-    return res
-      .status(400)
-      .json({
-        success: false,
-        message: "User email or uid is required for auth sync.",
-      });
+  // Session identity only; staff may inspect another account with ?email=.
+  // Any caller used to read any account's role and paid/admin state.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.json({
+      role: "UNPAID",
+      isAdmin: false,
+      accessState: "LOCKED",
+      discordVerified: false,
+      subscriptionStatus: "inactive",
+      entitlements: [],
+      locked: true,
+    });
   }
-  const user = ensureUserExists({ uid, email, name, role, subscription });
-  res.json({ success: true, user, reconciledAt: new Date().toISOString() });
+  const inspectOther = ["OWNER", "ADMIN", "SUPPORT"].includes(auth.role) && !!req.query.email;
+  const email = inspectOther ? String(req.query.email) : auth.email;
+  const uid = inspectOther ? String(req.query.uid || "") : String(auth.uid || "");
+  res.json(await getUserAccessState(email, uid));
+});
+app.post("/api/auth/sync", async (req, res) => {
+  // Only the signed-in account can sync itself, and never its role or plan.
+  // This used to create a user for any posted email with a caller-chosen role.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.status(401).json({
+      success: false,
+      error: "AUTHENTICATION_REQUIRED",
+      message: "Sign in to sync your account.",
+    });
+  }
+  const name = req.body?.name || req.body?.displayName;
+  const user = ensureUserExists({ uid: auth.uid, email: auth.email, name });
+  res.json({ success: true, user: toPublicUserDTO(user), reconciledAt: new Date().toISOString() });
 });
 let productionMaintenanceState = {
   enabled: process.env.MAINTENANCE_MODE === "true",
@@ -7765,7 +7825,9 @@ app.post("/api/discord/verify-membership", async (req, res) => {
 });
 
 // ================= EXTEND MEMBERSHIP ROUTE =================
-app.post(["/api/subscription/extend", "/api/user/extend-membership"], async (req, res) => {
+// Staff-only comp tool. It grants a paid plan to the posted email, and it used
+// to do that for any caller, unauthenticated.
+app.post(["/api/subscription/extend", "/api/user/extend-membership"], requireRole(["OWNER", "ADMIN"]), async (req, res) => {
   try {
     const { email, uid, months = 1, plan = "PRO_PASS" } = req.body || {};
     const targetEmail = String(email || req.headers["x-user-email"] || "").trim().toLowerCase();
@@ -7990,23 +8052,19 @@ app.post("/api/auth/register", async (req, res) => {
   return res.json({ success: true, user: serverSession, entitlement });
 });
 app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
-  const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
-    .toLowerCase()
-    .trim();
-  const reqUserId = (
-    req.headers["x-user-id"] ||
-    req.headers["x-user-uid"] ||
-    req.query.userId ||
-    req.query.uid ||
-    ""
-  ).trim();
-  if (!reqEmail && !reqUserId) {
+  // Identity comes only from the signed session cookie. This route used to take
+  // ?email= / x-user-email from the caller and return that account's full
+  // record -- password hash included -- to anyone who asked.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
     return res.json({
       authenticated: false,
       user: null,
       message: "No active session",
     });
   }
+  const reqEmail = auth.email;
+  const reqUserId = String(auth.uid || "");
   let user = serverUsers.find(
     (u) =>
       (reqEmail && u.email?.toLowerCase() === reqEmail) ||
@@ -8145,7 +8203,7 @@ app.get(["/api/auth/me", "/api/user/me"], async (req, res) => {
   };
   res.json({
     authenticated: true,
-    user: resolvedUser,
+    user: toPublicUserDTO(resolvedUser),
     discord: discordProfile || null,
   });
 });
@@ -8803,12 +8861,12 @@ app.get(
         ? "CONFIRMED"
         : "DATA_UNAVAILABLE",
       predictionsGeneratedToday: engineLogs.length,
-      avgPredictionLatencyMs: 14,
+      avgPredictionLatencyMs: null, // not measured (was a literal 14)
       aiRequestsToday: engineLogs.length,
-      apiRequestsToday: engineLogs.length * 3,
-      databaseSizeMb: 12.4,
-      serverLoadPct: 18,
-      winRate: 71.8,
+      apiRequestsToday: null, // not counted (was engineLogs.length * 3)
+      databaseSizeMb: null, // not measured (was a literal 12.4)
+      serverLoadPct: null, // not measured (was a literal 18)
+      winRate: null, // not computed here (was a literal 71.8)
       timestamp: Date.now(),
     });
   },
@@ -10627,15 +10685,14 @@ app.post("/api/stripe/create-portal-session", async (req, res) => {
           "Stripe is not configured. Customer portal requires process.env.STRIPE_SECRET_KEY.",
       });
   }
-  const rawEmail = (
-    req.body.userEmail ||
-    req.body.email ||
-    req.headers["x-user-email"] ||
-    ""
-  ).trim();
+  // The portal can cancel a subscription and shows invoices and payment
+  // methods, so it opens only for the signed-in account -- never for an email
+  // posted by the caller, which is what this route used to trust.
+  const portalAuth = await authenticateSessionAsync(req);
+  const rawEmail = portalAuth ? portalAuth.email : "";
   if (!rawEmail) {
     console.warn(
-      "[BILLING_PORTAL] Request rejected: missing user email / unauthenticated.",
+      "[BILLING_PORTAL] Request rejected: no signed-in session.",
     );
     return res
       .status(401)
@@ -12358,36 +12415,28 @@ app.post(
     "/api/user/restore-access",
   ],
   async (req, res) => {
-    const cleanEmail = (
-      req.body.email ||
-      req.headers["x-user-email"] ||
-      req.query.email ||
-      ""
-    )
-      .toLowerCase()
-      .trim();
-    const cleanUid = (
-      req.body.uid ||
-      req.body.userId ||
-      req.headers["x-user-uid"] ||
-      req.headers["x-user-id"] ||
-      ""
+    // Identity is the signed-in account, or -- when signed out -- only an
+    // unguessable Stripe checkout session id (the return from checkout). A
+    // posted email used to return that account's full entitlement, Stripe
+    // customer and subscription ids included, to any caller.
+    const restoreAuth = await authenticateSessionAsync(req);
+    const cleanEmail = restoreAuth ? restoreAuth.email : "";
+    const cleanUid = restoreAuth ? String(restoreAuth.uid || "") : "";
+    const sessionId = String(
+      (req.body && (req.body.stripeSessionId || req.body.sessionId)) || "",
     ).trim();
-    const sessionId = (
-      req.body.stripeSessionId ||
-      req.body.sessionId ||
-      ""
-    ).trim();
-    const discordUserId = (req.body.discordUserId || "").trim();
-    if (!cleanEmail && !cleanUid && !sessionId && !discordUserId) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          restored: false,
-          message:
-            "Please provide an account email or Stripe checkout session ID to restore access.",
-        });
+    const discordUserId = restoreAuth
+      ? String((req.body && req.body.discordUserId) || "").trim()
+      : "";
+    if (!cleanEmail && !cleanUid && !sessionId) {
+      // 200, not 401: the caller is simply signed out, and the client session
+      // guard reloads the page on a 401.
+      return res.json({
+        success: false,
+        restored: false,
+        requiresSignIn: true,
+        message: "Sign in to restore access to your account.",
+      });
     }
     let hydrationRes = null;
     if (cleanEmail || cleanUid) {
@@ -12447,14 +12496,20 @@ app.post(
   },
 );
 app.get("/api/auth/diagnostic", async (req, res) => {
-  const reqEmail = (req.headers["x-user-email"] || req.query.email || "")
+  // A signed-in account may diagnose itself; staff may pass ?email= / ?uid=.
+  // Any caller used to get any account's Stripe customer id and entitlement.
+  const auth = await authenticateSessionAsync(req);
+  if (!auth) {
+    return res.status(401).json({ error: "AUTHENTICATION_REQUIRED" });
+  }
+  const inspectOther =
+    ["OWNER", "ADMIN", "SUPPORT"].includes(auth.role) &&
+    !!(req.query.email || req.query.uid || req.query.userId);
+  const reqEmail = String(inspectOther ? req.query.email || "" : auth.email)
     .toLowerCase()
     .trim();
-  const reqUserId = (
-    req.headers["x-user-id"] ||
-    req.query.uid ||
-    req.query.userId ||
-    ""
+  const reqUserId = String(
+    inspectOther ? req.query.uid || req.query.userId || "" : auth.uid || "",
   ).trim();
   if (!reqEmail && !reqUserId) {
     return res
@@ -14714,13 +14769,20 @@ app.post("/api/position-size", (req, res) => {
     },
   });
 });
+// Boot counters are ZERO and unknowns are null. This object used to boot with
+// lifetimeObservations 18427, todaySettledCount 148, historicalAccuracy 71.8 and
+// regime TRENDING_BULL_VOLATILITY. /api/model-status served the counts as
+// settledCount / lifetimeObservations, and todaySettledCount doubles as the
+// calibration sample size, so 148 >= 50 reported calibration ACTIVE on a cold
+// instance with zero settled cycles. lifetimeObservations was never overwritten
+// by ledger hydration, so real settlements were added on top of 18427.
 const serverLearningEngine = {
-  lifetimeObservations: 18427,
-  todaySettledCount: 148,
+  lifetimeObservations: 0,
+  todaySettledCount: 0,
   lastWeightUpdateTs: Date.now() - 4e3,
   modelVersion: "v4.3-INCREMENTAL",
-  historicalAccuracy: 71.8,
-  currentRegime: "TRENDING_BULL_VOLATILITY",
+  historicalAccuracy: null,
+  currentRegime: null,
   incrementalTrainingActive: true,
   featureWeights: {
     orderFlow: 0.18,
@@ -14864,6 +14926,8 @@ function recomputeAccuracyFromSettledHistory() {
   const history = serverLearningEngine.settledHistory || [];
   const total = history.length;
   serverLearningEngine.todaySettledCount = total;
+  // Real settled rows restored from the ledger; replaces the old 18427 seed.
+  serverLearningEngine.lifetimeObservations = Math.max(serverLearningEngine.lifetimeObservations || 0, total);
   if (!total) {
     serverLearningEngine.historicalAccuracy = null;
     latestCalibrationState.historicalAccuracy = null;
@@ -15181,8 +15245,8 @@ app.get("/api/model-status", async (req, res) => {
           (sum, item) => sum + item.brierScore,
           0,
         ) / historyLen
-      : 0.168;
-  let activeModelBrier = Math.round(avgBrier * 1e3) / 1e3;
+      : null; // no settled history -> no Brier (was an invented 0.168)
+  let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
   let activeModelTrainedAt = new Date(
     serverLearningEngine.lastWeightUpdateTs,
   ).toISOString();
@@ -15771,8 +15835,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
         }
       : null,
     lockEvaluation: latestLockEvaluation || {
-      qualified: true,
-      score: 50,
+      qualified: false,
+      score: null,
       reason: null,
     },
     gemini: {
@@ -15827,8 +15891,8 @@ app.get("/api/vixy/15m/current", async (req, res) => {
       protectionStatus: protectionStat,
       lockTier: lockTierVal,
       lockEvaluation: latestLockEvaluation || {
-        qualified: true,
-        score: 50,
+        qualified: false,
+        score: null,
         reason: null,
       },
       checklist: {
@@ -16129,8 +16193,8 @@ app.get(
             (sum, item) => sum + item.brierScore,
             0,
           ) / historyLen
-        : 0.168;
-    let activeModelBrier = Math.round(avgBrier * 1e3) / 1e3;
+        : null; // no settled history -> no Brier (was an invented 0.168)
+    let activeModelBrier = avgBrier === null ? null : Math.round(avgBrier * 1e3) / 1e3;
     let activeModelTrainedAt = new Date(
       serverLearningEngine.lastWeightUpdateTs,
     ).toISOString();
@@ -16807,7 +16871,7 @@ app.get("/api/signal/calibration-report", (req, res) => {
   const totalSettled = settled.length;
   const wins = settled.filter((s) => s.wasCorrect).length;
   const overallWinRatePct =
-    totalSettled > 0 ? Math.round((wins / totalSettled) * 1e3) / 10 : 71.8;
+    totalSettled > 0 ? Math.round((wins / totalSettled) * 1e3) / 10 : null; // was an invented 71.8
   const brierScores = settled.map((s) => {
     const p = (s.probability || s.confidence || 75) / 100;
     const y = s.wasCorrect ? 1 : 0;
@@ -16818,7 +16882,7 @@ app.get("/api/signal/calibration-report", (req, res) => {
       ? Math.round(
           (brierScores.reduce((a, b) => a + b, 0) / brierScores.length) * 1e3,
         ) / 1e3
-      : 0.168;
+      : null; // no settled rows -> no Brier (was an invented 0.168)
   const logLosses = settled.map((s) => {
     const p = Math.max(
       0.01,
@@ -16976,17 +17040,17 @@ app.get("/api/signal/backtest-replay", (req, res) => {
       },
       newEngine: {
         result: newResult,
-        lockQuality: wouldSkip ? 68 : 91,
+        lockQuality: null, // not recomputed per historical row (was an invented 68 / 91)
         tier: wouldSkip ? "SKIP" : "HIGH_CONVICTION",
       },
     };
   });
   const oldTotal = oldEngineWins + oldEngineLosses;
   const oldWinRate =
-    oldTotal > 0 ? Math.round((oldEngineWins / oldTotal) * 1e3) / 10 : 71.8;
+    oldTotal > 0 ? Math.round((oldEngineWins / oldTotal) * 1e3) / 10 : null; // was an invented 71.8
   const newTrades = newEngineWins + newEngineLosses;
   const newWinRate =
-    newTrades > 0 ? Math.round((newEngineWins / newTrades) * 1e3) / 10 : 78.4;
+    newTrades > 0 ? Math.round((newEngineWins / newTrades) * 1e3) / 10 : null; // was an invented 78.4
   res.json({
     timestamp: new Date().toISOString(),
     totalHistoricalCyclesEvaluated: settled.length,
@@ -19400,9 +19464,8 @@ function ensureUserExists(input, options) {
       status: defaultSub === "NONE" ? "INACTIVE" : "ACTIVE",
       volumeTrades: 0,
       stripeCustomerId: sub?.stripeCustomerId,
-      passwordHash: isMasterAdminEmail(cleanEmail)
-        ? hashPassword("Seattle007")
-        : void 0,
+      // Never a default password (see sanitizeAndNormalizeServerUsers).
+      passwordHash: void 0,
     };
     serverUsers.unshift(user);
     if (cleanEmail && !userSubscriptions.has(cleanEmail)) {
