@@ -22,6 +22,7 @@ import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
 import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi, extendMembershipApi } from '../services/api';
 import { describeMembershipWindow } from '../lib/membershipDates';
+import { DiscordTagTrialOffer } from './DiscordTagTrialOffer';
 
 const stripePublishableKey = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || 'pk_live_51TyidvCYsvFDvgUJoTUSzlu4HxZfVMq33TF3pXLnM4QisUgTwnGxDXmYN9631EIlMvzJaC5IYLTnLvlbmG9vYb1M00SkYFLSBF';
 const stripePromise = loadStripe(stripePublishableKey);
@@ -625,6 +626,18 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
               </>
             )}
           </div>
+
+          {/* Discord server-tag trial. Also where a claim lands when its popup
+              could not report back to the page that opened it. */}
+          {!['PRO', 'ELITE', 'ADMIN', 'OWNER'].includes(String(userRole).toUpperCase()) && (
+            <div className="max-w-xl mx-auto">
+              <DiscordTagTrialOffer
+                isAuthenticated={!!authState?.isAuthenticated}
+                onOpenAuth={() => onOpenAuth?.('register')}
+                onAccessGranted={onOpenTerminal}
+              />
+            </div>
+          )}
         </div>
       </div>
 

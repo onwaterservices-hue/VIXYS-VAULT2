@@ -89,11 +89,15 @@ export function createDiscordConnectHandler(getDb, authenticateSession, fx) {
 
     const state = crypto.randomBytes(32).toString("hex");
     const now = Date.now();
+    // What this link is for. Whitelisted here and bound into the single-use
+    // state, so the callback never takes a purpose from its own URL.
+    const requestedPurpose = String(req.query.purpose || "");
     const stateDoc = {
       vixyEmail: auth.user.email.toLowerCase(),
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + OAUTH_STATE_TTL_MS).toISOString(),
       used: false,
+      purpose: requestedPurpose === "tag_trial" ? "tag_trial" : null,
     };
     // Bounded retry (max 2 attempts total, never unbounded): a cold
     // Firestore connection can occasionally take longer than one timeout
@@ -140,8 +144,8 @@ export function createDiscordConnectHandler(getDb, authenticateSession, fx) {
  * from the validated, single-use OAuth state bound to the VIXY user at
  * /connect time, never from a client-supplied param.
  */
-export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser, syncLegacyUserRecord, fx) {
-  const { doc, setDoc, runTransaction } = fx;
+export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assignDiscordRoleToUser, syncLegacyUserRecord, fx, tagTrial) {
+  const { doc, getDoc, setDoc, runTransaction } = fx;
   return async (req, res) => {
     const db = getDb();
     const code = req.query.code;
@@ -150,13 +154,21 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
     // it can be inspected via /api/account/me afterwards -- the redirect
     // query param alone is easy to miss in a popup-based flow.
     let vixyEmailForDebug = null;
-    const fail = (reason) => {
+    // Set only from the validated state document, never from this request.
+    let purpose = null;
+    const fail = async (reason) => {
       if (db && vixyEmailForDebug) {
         setDoc(
           doc(db, "discord_oauth_debug", vixyEmailForDebug),
           { lastError: String(reason), at: new Date().toISOString() },
           { merge: true },
         ).catch(() => {});
+      }
+      if (purpose === "tag_trial") {
+        if (tagTrial && vixyEmailForDebug) {
+          await tagTrial.recordAttempt(vixyEmailForDebug, "FAILED", String(reason), null);
+        }
+        return sendTagTrialResult(res, "error", reason);
       }
       return res.redirect("/?discord_error=" + encodeURIComponent(String(reason)));
     };
@@ -166,12 +178,27 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
       return fail("service_unavailable");
     }
     if (!code || !state || typeof state !== "string") {
+      // Discord sends the user back with state but no code when they cancel.
+      // Read (without consuming) the state so a cancelled tag-trial claim is
+      // reported to the waiting offer card instead of silently timing out.
+      if (typeof state === "string" && state && typeof getDoc === "function") {
+        try {
+          const snap = await getDoc(doc(db, "discord_oauth_states", state));
+          const data = snap.exists() ? snap.data() : null;
+          if (data && !data.used && data.purpose === "tag_trial") {
+            purpose = "tag_trial";
+            vixyEmailForDebug = data.vixyEmail || null;
+          }
+        } catch {
+          /* fall through to the generic failure */
+        }
+      }
       return fail("missing_params");
     }
 
     let vixyEmail;
     try {
-      vixyEmail = await runTransaction(db, async (tx) => {
+      const consumed = await runTransaction(db, async (tx) => {
         const ref = doc(db, "discord_oauth_states", state);
         const snap = await tx.get(ref);
         if (!snap.exists()) return null;
@@ -179,8 +206,10 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
         if (data.used) return null;
         if (new Date(data.expiresAt).getTime() < Date.now()) return null;
         tx.set(ref, { used: true, consumedAt: new Date().toISOString() }, { merge: true });
-        return data.vixyEmail;
+        return { vixyEmail: data.vixyEmail, purpose: data.purpose === "tag_trial" ? "tag_trial" : null };
       });
+      vixyEmail = consumed && consumed.vixyEmail;
+      purpose = (consumed && consumed.purpose) || null;
     } catch (err) {
       console.error("[Discord OAuth] State validation error:", err && err.message);
       return fail("state_validation_failed");
@@ -219,6 +248,9 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
 
     let discordUserId;
     let discordUsername;
+    // Discord's own user object, kept whole: `primary_guild` on it is the only
+    // evidence the tag-trial claim accepts for "wearing the VIXY tag".
+    let discordUserObject = null;
     try {
       const meRes = await fetchWithTimeout(DISCORD_API + "/users/@me", {
         headers: { Authorization: "Bearer " + accessToken },
@@ -227,6 +259,7 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
         return fail("identity_fetch_failed");
       }
       const me = await meRes.json();
+      discordUserObject = me;
       discordUserId = me.id;
       discordUsername = me.global_name || me.username || "discord_user";
     } catch (err) {
@@ -334,8 +367,48 @@ export function createDiscordCallbackHandler(getDb, resolveEntitlementTier, assi
       console.error("[Discord OAuth] Role sync error (connection still succeeded):", err && err.message);
     }
 
+    if (purpose === "tag_trial") {
+      if (!tagTrial) return fail("tag_trial_unavailable");
+      let result;
+      try {
+        result = await tagTrial.claim({ vixyEmail, discordUserId, discordUser: discordUserObject });
+      } catch (err) {
+        console.error("[Discord OAuth] Tag trial claim error:", err && err.message);
+        await tagTrial.recordAttempt(vixyEmail, "REFUSED", "CLAIM_FAILED", discordUserId);
+        result = { granted: false, reason: "CLAIM_FAILED" };
+      }
+      return sendTagTrialResult(res, result.granted ? "granted" : "error", result.reason);
+    }
+
     return res.redirect("/?discord_connected=true");
   };
+}
+
+/**
+ * Result page for a tag-trial claim popup. It tells the opener to re-read the
+ * claim status and closes itself. Without an opener (popup blocked, or the
+ * Discord page severed window.opener) it goes to /pricing, where the offer card
+ * shows the recorded outcome. Only a sanitised reason code is ever echoed.
+ */
+function sendTagTrialResult(res, outcome, reason) {
+  const safeOutcome = outcome === "granted" ? "granted" : "error";
+  const code = String(reason || "").replace(/[^A-Za-z0-9_]/g, "").slice(0, 64);
+  const target = "/pricing?tag_trial=" + safeOutcome + (code ? "&tag_trial_reason=" + code : "");
+  const text =
+    safeOutcome === "granted"
+      ? "Your free server-tag trial is active. You can close this window."
+      : "The trial could not be activated. Return to VIXY Vault to see why.";
+  const message = JSON.stringify({ type: "VIXY_TAG_TRIAL_RESULT", outcome: safeOutcome, reason: code || null });
+  return res
+    .status(200)
+    .type("html")
+    .send(
+      '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>VIXY Vault</title></head>' +
+        '<body style="margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#06030e;color:#e9d5ff;font:14px system-ui,sans-serif;text-align:center;padding:24px">' +
+        "<div><p>" + text + '</p><p><a href="' + target + '" style="color:#c4b5fd">Return to VIXY Vault</a></p></div>' +
+        "<script>(function(){var m=" + message + ";try{if(window.opener&&!window.opener.closed){window.opener.postMessage(m,window.location.origin);window.close();return;}}catch(e){}window.location.replace(" + JSON.stringify(target) + ");})();</script>" +
+        "</body></html>",
+    );
 }
 
 /** GET /api/discord/status -- authenticated status check for the frontend. */

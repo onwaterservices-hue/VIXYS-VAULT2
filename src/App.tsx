@@ -420,11 +420,15 @@ export default function App() {
             mergedEnt.dayPass?.active;
 
           setHasRecurringPlan(hasRecurringPlanFrom(mergedEnt));
+          // A free Discord server-tag trial rides on the day-pass record; it must
+          // not be labelled as a paid pass or a card payment.
+          const isTagTrial = !!mergedEnt.dayPass?.active && mergedEnt.dayPass?.entitlementType === 'TAG_TRIAL';
+          const membershipWindow = describeMembershipWindow(mergedEnt);
           setSubscription({
             plan: resolvedPlan as any,
             status: isSubActive ? 'active' : (mergedEnt.status === 'past_due' ? 'past_due' : 'inactive'),
-            renewalDate: describeMembershipWindow(mergedEnt),
-            paymentMethod: 'Stripe Credit Card',
+            renewalDate: isTagTrial ? membershipWindow.replace(/^Pass ends/, 'Server tag trial ends') : membershipWindow,
+            paymentMethod: isTagTrial ? 'None (free trial)' : 'Stripe Credit Card',
             billingInterval: mergedEnt.billing === 'YEARLY' ? 'annual' : 'monthly',
           });
         }
