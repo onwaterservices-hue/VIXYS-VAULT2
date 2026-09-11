@@ -738,7 +738,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Market State Indicator (Requirement 13) */}
           <button
             onClick={() => setShowMarketRegimeModal(true)}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-[11px] font-bold font-sans cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${marketRegimeAssessment.badgeClass}`}
+            className={`flex items-center gap-2 px-3 py-2.5 sm:py-1.5 rounded-xl border text-[11px] font-bold font-sans cursor-pointer transition-all hover:scale-[1.02] active:scale-95 ${marketRegimeAssessment.badgeClass}`}
             title="Click to inspect real-time Market Regime telemetry"
           >
             <Activity className="w-3.5 h-3.5" />
@@ -754,7 +754,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Sound Toggle */}
           <button
             onClick={() => setAudioMuted(!audioMuted)}
-            className={`p-2 rounded-xl border transition-all cursor-pointer ${
+            className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
               audioMuted
                 ? 'bg-[#0d0722] border-purple-800/40 text-purple-400/60 hover:text-purple-300'
                 : 'bg-emerald-950/60 border-emerald-500/50 text-emerald-400 shadow-md'
@@ -770,7 +770,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
               <button
                 key={sym}
                 onClick={() => setSelectedAsset(sym)}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+                className={`px-2.5 sm:px-3 py-2.5 sm:py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
                   selectedAsset === sym
                     ? 'bg-purple-600 text-white shadow-md'
                     : 'text-purple-300 hover:text-white'
@@ -784,7 +784,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
           {/* Manual Refresh */}
           <button
             onClick={handleManualRefresh}
-            className={`p-2 rounded-xl bg-[#0d0722] border border-purple-800/40 text-purple-300 hover:text-white transition-all cursor-pointer ${
+            className={`p-2.5 rounded-xl bg-[#0d0722] border border-purple-800/40 text-purple-300 hover:text-white transition-all cursor-pointer ${
               isRefreshing ? 'animate-spin' : ''
             }`}
             title="Refresh Canonical Data"
@@ -1340,7 +1340,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
                   <span>LOCK QUALITY</span>
                   <button
                     onClick={() => setShowLockQualityTooltip(!showLockQualityTooltip)}
-                    className="text-purple-400 hover:text-purple-200 transition-colors cursor-pointer"
+                    className="p-2.5 -m-2.5 sm:p-0 sm:m-0 text-purple-400 hover:text-purple-200 transition-colors cursor-pointer"
                     title="What is Lock Quality?"
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
@@ -1632,7 +1632,7 @@ export const CryptoPredictionCenterView: React.FC<CryptoPredictionCenterViewProp
 
           <button
             onClick={() => setShowExplanationModal(true)}
-            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors px-3 py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-800/50 hover:border-cyan-500/70 shadow-[0_0_10px_rgba(6,182,212,0.15)]"
+            className="text-[11px] text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors px-3 py-2.5 sm:py-1.5 rounded-xl bg-cyan-950/40 border border-cyan-800/50 hover:border-cyan-500/70 shadow-[0_0_10px_rgba(6,182,212,0.15)]"
           >
             <Info className="w-3.5 h-3.5" />
             <span>What does this mean?</span>

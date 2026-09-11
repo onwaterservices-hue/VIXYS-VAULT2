@@ -76,5 +76,17 @@ check('15-second desk asset pills are taller on phones', /\['BTC', 'ETH', 'SOL',
 check('15-second desk audio toggle is 40px', /p-2\.5 rounded-xl border text-xs transition-all cursor-pointer \$\{\s*audioEnabled/.test(R('src/components/ScalpDecisionChart.tsx')));
 check('Risk Disclosure footer link is 40px tall', /inline-flex items-center min-h-\[40px\] hover:text-rose-300 text-rose-400\/90 font-bold transition-colors">Risk Disclosure/.test(R('src/App.tsx')));
 
+console.log('\n[7] Pass 3 (live 390px re-audit after pass 2)');
+const cpc = R('src/components/CryptoPredictionCenterView.tsx');
+check('prediction center pair tabs are taller on phones', /px-2\.5 sm:px-3 py-2\.5 sm:py-1\.5 rounded-lg text-xs font-bold/.test(cpc));
+check('prediction center refresh button is 40px', /p-2\.5 rounded-xl bg-\[#0d0722\] border border-purple-800\/40 text-purple-300/.test(cpc));
+check('prediction center regime chip is taller on phones', /gap-2 px-3 py-2\.5 sm:py-1\.5 rounded-xl border text-\[11px\]/.test(cpc));
+check('What does this mean? is taller on phones', /px-3 py-2\.5 sm:py-1\.5 rounded-xl bg-cyan-950\/40/.test(cpc));
+check('Lock Quality info icon has a phone-sized hit area', /p-2\.5 -m-2\.5 sm:p-0 sm:m-0 text-purple-400[\s\S]{0,160}What is Lock Quality\?/.test(cpc));
+check('audio mute toggle is 40px', /setAudioMuted\([^\n]*\n\s*className=\{?`p-2\.5 /.test(cpc));
+const oneHour = R('src/components/OneHourDeskView.tsx');
+check('1-hour desk inputs and select are taller on phones', (oneHour.match(/rounded-xl px-3 py-2\.5 sm:py-1\.5 text-white/g) || []).length === 4 && !/rounded-xl px-3 py-1\.5 text-white/.test(oneHour));
+check('Why This Signal? toggle is taller on phones', /px-2\.5 py-2\.5 sm:py-1 rounded-lg bg-purple-950\/60/.test(R('src/components/ScalpingDeskView.tsx')));
+
 console.log(`\nRESULT: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);
