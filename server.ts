@@ -6218,17 +6218,26 @@ app.get("/api/health/auth", (req, res) => {
     (u) =>
       u.email?.toLowerCase() === "vixyvault0@gmail.com" && u.role === "OWNER",
   );
+  // Readiness stays public for monitors. How many users, passes and paying
+  // subscriptions exist is business data, so the counts go to staff only --
+  // they were readable by anyone, competitors included.
+  const viewer = authenticateSession(req);
+  const viewerIsStaff = !!viewer && ["OWNER", "ADMIN", "SUPPORT"].includes(viewer.role);
   res.json({
     auth: "READY",
     authCache: serverUsers.length > 0 ? "HYDRATED" : "EMPTY",
     authSource: "MEMORY",
-    canonicalUserCount: serverUsers.length,
     entitlementCacheStatus: "ACTIVE",
     ownerPresent,
-    dayPassCount: userDayPasses?.size || 0,
-    activeSubscriptionCount: Array.from(userSubscriptions.values()).filter(
-      (s) => s.status === "ACTIVE",
-    ).length,
+    ...(viewerIsStaff
+      ? {
+          canonicalUserCount: serverUsers.length,
+          dayPassCount: userDayPasses?.size || 0,
+          activeSubscriptionCount: Array.from(userSubscriptions.values()).filter(
+            (s) => s.status === "ACTIVE",
+          ).length,
+        }
+      : {}),
     firestore: persistenceState,
     discord: botState.isReady ? "READY" : "DEGRADED",
     maintenance: productionMaintenanceState.enabled,
@@ -13369,6 +13378,11 @@ app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
       (s) => s.status === "ACTIVE" || s.status === "PAST_DUE",
     ).length,
   };
+  // Subscriber counts per plan are business data: staff only. This handler
+  // answers /api/stripe/diagnostics publicly (an earlier /api/stripe/health
+  // registration takes that path first).
+  const diagViewer = authenticateSession(req);
+  const diagViewerIsStaff = !!diagViewer && ["OWNER", "ADMIN", "SUPPORT"].includes(diagViewer.role);
   res.json({
     status:
       stripeKeyPresent && (liveApiWorking || !liveApiError)
@@ -13392,7 +13406,7 @@ app.get(["/api/stripe/health", "/api/stripe/diagnostics"], async (req, res) => {
       botTag: botStatus.botTag,
     },
     processedEventsCount: processedWebhookEvents.size,
-    subscribers: subscriberCounts,
+    ...(diagViewerIsStaff ? { subscribers: subscriberCounts } : {}),
     timestamp: new Date().toISOString(),
   });
 });
