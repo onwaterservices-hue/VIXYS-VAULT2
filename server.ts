@@ -2007,6 +2007,54 @@ let latestBtc15mPipeline = {
     lockApproved: false,
   },
 };
+// Real BTC-USD closes from Coinbase 1-minute candles covering the last ~20
+// minutes, oldest first, each stamped at its bar's CLOSE time. Read ONLY by the
+// timeframe lookbacks in getPriceAtAgo, and only when this instance's own ticks
+// do not reach back far enough. Realized volatility, price structure, VWAP and
+// order-flow deltas keep reading rollingBtcTicks, so minute bars never mix into
+// estimates built from ~3s ticks. Empty until the first fetch lands.
+let hydratedBtcCloses = [];
+let _historyHydrateInFlight = false;
+let _historyHydrateLastAttemptMs = 0;
+async function hydratePriceHistoryFromCandles(nowMs) {
+  const newestTs = hydratedBtcCloses.length ? hydratedBtcCloses[hydratedBtcCloses.length - 1].ts : 0;
+  if (_historyHydrateInFlight) return;
+  if (nowMs - newestTs < 90e3) return;                    // newest real close is recent enough
+  if (nowMs - _historyHydrateLastAttemptMs < 20e3) return; // space out retries
+  _historyHydrateInFlight = true;
+  _historyHydrateLastAttemptMs = nowMs;
+  try {
+    const start = new Date(nowMs - 20 * 60e3).toISOString();
+    const end = new Date(nowMs).toISOString();
+    const r = await fetchWithTimeout(
+      `https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`,
+      {},
+      4000,
+    );
+    if (!r.ok) throw new Error(`candles HTTP ${r.status}`);
+    const rows = await r.json();
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error("no candles returned");
+    const closes = [];
+    const cutoff = Date.now();
+    for (const c of rows) {
+      const closeTs = (Number(c[0]) + 60) * 1e3;           // [time(open, s), low, high, open, close, volume]
+      const close = parseFloat(c[4]);
+      // The in-progress bar is excluded: its close time is in the future and its
+      // "close" is only the latest trade so far.
+      if (close > 0 && Number.isFinite(closeTs) && closeTs <= cutoff) closes.push({ ts: closeTs, price: close });
+    }
+    if (closes.length === 0) throw new Error("candles carried no closed bars");
+    closes.sort((a, b) => a.ts - b.ts);
+    hydratedBtcCloses = closes;
+    console.log(`[VIXY_HISTORY_HYDRATED] ${closes.length} closed 1m candles, newest close ${new Date(closes[closes.length - 1].ts).toISOString()}`);
+  } catch (e) {
+    console.warn(`[VIXY_HISTORY_HYDRATE_FAILED] ${(e && e.message) || e}`);
+  } finally {
+    _historyHydrateInFlight = false;
+  }
+}
+__name(hydratePriceHistoryFromCandles, "hydratePriceHistoryFromCandles");
+
 function evaluateBtc15mHighConvictionPipeline(
   spot,
   strike,
@@ -2090,6 +2138,21 @@ function evaluateBtc15mHighConvictionPipeline(
     for (let i = rollingBtcTicks.length - 1; i >= 0; i--) {
       if (rollingBtcTicks[i].ts <= targetTs) {
         return rollingBtcTicks[i].price;
+      }
+    }
+    // The instance has not been alive long enough to have observed a price at
+    // the lookback. Without this, a 5m or 15m vote on an instance seconds old
+    // silently measured the move since the instance's first tick and labelled
+    // it 5 or 15 minutes. Measured 2026-09-11 03:19-03:21Z against Coinbase
+    // 1-minute candles: production's tf5m disagreed with real 5-minute momentum
+    // in 13 of 14 samples and tf15m in 9 of 14, including opposite signs.
+    // hydratedBtcCloses holds REAL closed 1-minute candle closes (see
+    // hydratePriceHistoryFromCandles); a close is used only if it is within 90s
+    // of the target, otherwise the previous behaviour stands.
+    for (let i = hydratedBtcCloses.length - 1; i >= 0; i--) {
+      if (hydratedBtcCloses[i].ts <= targetTs) {
+        if (targetTs - hydratedBtcCloses[i].ts <= 90e3) return hydratedBtcCloses[i].price;
+        break;
       }
     }
     return rollingBtcTicks[0]?.price || spot;
@@ -2973,6 +3036,9 @@ async function runMarketEngineTick() {
         Math.round((Math.abs(currentMomentum) * 0.75 + 0.52) * 100) / 100,
       ),
     );
+    // Single-flight and self-throttled; the first ticks of a cold instance run
+    // without it (as before) and later ticks read real minute history.
+    void hydratePriceHistoryFromCandles(now);
     latestBtc15mPipeline = evaluateBtc15mHighConvictionPipeline(
       livePrice,
       current15mStrikePrice,
