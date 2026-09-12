@@ -1301,9 +1301,6 @@ function sanitizeAndNormalizeServerUsers() {
     }
   });
 
-  if (typeof initializeProtectedAugust15Users === "function") {
-    initializeProtectedAugust15Users();
-  }
 }
 __name(sanitizeAndNormalizeServerUsers, "sanitizeAndNormalizeServerUsers");
 // [removed] old header-trust requireRole -- replaced above near isMasterAdminEmail with a real session-verified implementation
@@ -11396,108 +11393,31 @@ const AUGUST_15_COMPENSATED_USERS = [
   "vksminhkaka@gmail.com",
   "ogershey@gmail.com",
 ];
-function initializeProtectedAugust15Users() {
-  const aug19Expiration = "2026-08-19T23:59:59.999Z";
-  AUGUST_15_COMPENSATED_USERS.forEach((email) => {
-    const cleanEmail = email.toLowerCase().trim();
-    const existingPass = userDayPasses.get(cleanEmail);
-    if (!existingPass) {
-      const dp = {
-        entitlementId: `dp_aug15_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-        userId: `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`,
-        email: cleanEmail,
-        guildId: process.env.DISCORD_GUILD_ID || "1451337712937336985",
-        entitlementType: "DAY_PASS",
-        accessTier: "ELITE",
-        status: "ACTIVE",
-        duration: "August 15 Compensated Day Pass Access (Expires Aug 19)",
-        activatedAt: "2026-08-15T00:00:00.000Z",
-        startedAt: "2026-08-15T00:00:00.000Z",
-        expiresAt: aug19Expiration,
-        stripePaymentStatus: "PAID",
-        stripePaymentLink: "https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09",
-        stripePriceId:
-          process.env.STRIPE_DAY_PASS_PRICE_ID ||
-          "price_1U4cKTCYsvFDvgUJZHASVwRG",
-        discordRoleId: process.env.DISCORD_24H_ROLE_ID || "1538094678870593547",
-        discordRoleAssigned: false,
-        troubleshootingGraceApplied: true,
-        createdAt: "2026-08-15T00:00:00.000Z",
-        updatedAt: new Date().toISOString(),
-      };
-      userDayPasses.set(cleanEmail, dp);
-      userDayPasses.set(dp.userId, dp);
-    } else {
-      if (
-        new Date(existingPass.expiresAt).getTime() <
-        new Date(aug19Expiration).getTime()
-      ) {
-        existingPass.expiresAt = aug19Expiration;
-      }
-      existingPass.status = "ACTIVE";
-      existingPass.troubleshootingGraceApplied = true;
-    }
-    if (typeof serverUsers !== "undefined") {
-      const existingUser = serverUsers.find(
-        (u) => u.email?.toLowerCase() === cleanEmail,
-      );
-      if (!existingUser) {
-        const uId = `usr_${cleanEmail.replace(/[^a-zA-Z0-9_]/g, "_")}`;
-        serverUsers.push({
-          id: uId,
-          uid: uId,
-          email: cleanEmail,
-          name: cleanEmail.split("@")[0],
-          role: "USER",
-          subscription: "PRO_PASS",
-          joined: "2026-08-15",
-          status: "ACTIVE",
-          verificationStatus: "VERIFIED",
-        });
-      }
-    }
-  });
-  const wasanEmail = "wasan@cartwrightrn.com";
-  const wasanExisting = userDayPasses.get(wasanEmail);
-  const wasanExpires = new Date(Date.now() + 48 * 3600 * 1e3).toISOString();
-  if (!wasanExisting) {
-    const wasanDp = {
-      entitlementId: `dp_wasan_stacked_2x`,
-      userId: `usr_wasan_cartwrightrn_com`,
-      email: wasanEmail,
-      guildId: process.env.DISCORD_GUILD_ID || "1451337712937336985",
-      entitlementType: "DAY_PASS",
-      accessTier: "ELITE",
-      status: "ACTIVE",
-      duration: "Stacked Day Pass Access (48 Hours - 2x Purchases)",
-      activatedAt: new Date().toISOString(),
-      startedAt: new Date().toISOString(),
-      expiresAt: wasanExpires,
-      stripePaymentStatus: "PAID",
-      stripePaymentLink: "https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09",
-      stripePriceId:
-        process.env.STRIPE_DAY_PASS_PRICE_ID ||
-        "price_1U4cKTCYsvFDvgUJZHASVwRG",
-      discordRoleId: process.env.DISCORD_24H_ROLE_ID || "1538094678870593547",
-      discordRoleAssigned: false,
-      troubleshootingGraceApplied: true,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    userDayPasses.set(wasanEmail, wasanDp);
-    userDayPasses.set(wasanDp.userId, wasanDp);
-  } else {
-    wasanExisting.expiresAt = new Date(
-      Math.max(
-        new Date(wasanExisting.expiresAt).getTime(),
-        new Date(wasanExpires).getTime(),
-      ),
-    ).toISOString();
-    wasanExisting.status = "ACTIVE";
-  }
-}
-__name(initializeProtectedAugust15Users, "initializeProtectedAugust15Users");
-initializeProtectedAugust15Users();
+// [removed 2026-09-12] initializeProtectedAugust15Users() stood here. It ran at
+// module load and again from sanitizeAndNormalizeServerUsers on every store
+// load. Executing the real function against an empty map — what a cold Vercel
+// instance actually has — showed what it did:
+//
+//   - It minted a 48-hour ELITE day pass for one hardcoded customer address with
+//     a PAID payment status, a live Stripe payment link and a real price id, for
+//     a payment that never happened. grant_day_pass was fixed to record a comp as
+//     MANUAL_GRANT with null Stripe ids for exactly this reason; this seed was
+//     missed by that sweep.
+//   - Its else-branch RESURRECTED an expired record: status EXPIRED -> ACTIVE,
+//     expiresAt reset to now + 48h. Run on every store load, that entitlement
+//     could never expire.
+//   - It pushed ten synthesized rows into serverUsers marked subscription
+//     PRO_PASS / status ACTIVE / verificationStatus VERIFIED, which the admin
+//     user list and /api/admin/stats then counted as real active members.
+//   - It recreated the August 15 incident day passes, whose window closed on
+//     2026-08-19, on every boot three weeks after they had expired.
+//
+// No real access depends on this: durable entitlements live in Firestore and the
+// loader overwrites anything seeded here, and the two standing comp grants are
+// resolved further down by their own fixed-window branches. A new comp is granted
+// through the OWNER-gated grant_day_pass action, which records it honestly.
+// AUGUST_15_COMPENSATED_USERS is kept above: the entitlement diagnostics read it
+// to report compensationApplied.
 function getEntitlementsFromSubscription(
   planStr,
   statusStr,
