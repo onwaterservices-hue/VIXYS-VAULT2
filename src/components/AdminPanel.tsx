@@ -5,6 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
+import { PRICING, DAY_PASS_PRICE, usd } from '../config/pricing';
 import {
   ShieldCheck,
   ShieldAlert,
@@ -2516,7 +2517,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <span>24-Hour Day Passes Store & Active Grants</span>
                   </h2>
                   <p className="text-[11px] text-slate-400 font-mono mt-0.5">
-                    Real-time status of all $9.99 24-Hour Day Passes purchased
+                    Real-time status of all {DAY_PASS_PRICE} {PRICING.dayPass.hours}-Hour Day Passes purchased
                     via Stripe Checkout or granted by admins.
                   </p>
                 </div>
@@ -3882,17 +3883,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     onChange={(e) => setEditTier(e.target.value)}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-[#0B061A] border border-purple-900/60 text-purple-100 focus:border-purple-500 outline-none"
                   >
+                    {/* ELITE_PASS and PRO_PASS are granted entitlements, not
+                        purchasable plans -- stripeLinks.ts sells STARTER, PRO and
+                        ELITE only. These labels used to quote monthly prices for
+                        them that nothing charges. */}
                     <option value="ELITE_PASS">
-                      ELITE_PASS ($99/mo - Full Bot & Signal Access)
+                      ELITE_PASS (granted - Full Bot & Signal Access)
                     </option>
                     <option value="PRO_PASS">
-                      PRO_PASS ($49/mo - Standard Access)
+                      PRO_PASS (granted - Standard Access)
                     </option>
                     <option value="DAY_PASS">
-                      DAY_PASS ($9.99 - 24-Hour Access Pass)
+                      DAY_PASS ({DAY_PASS_PRICE} - {PRICING.dayPass.hours}-Hour Access Pass)
                     </option>
                     <option value="STARTER">
-                      STARTER ($24/mo - Beginner Access)
+                      STARTER ({usd(PRICING.plans.STARTER.monthlyUsd)}/mo - Beginner Access)
                     </option>
                     <option value="NONE">
                       NONE (Unpaid / Beginner)

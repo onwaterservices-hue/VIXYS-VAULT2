@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { UserSubscription, AuthState } from '../types';
 import { STRIPE_PAYMENT_LINKS, getStripePaymentUrl } from '../config/stripeLinks';
+import { PRICING, DAY_PASS_PRICE, PASS_VS_STARTER, usd } from '../config/pricing';
 import { getEntitlementsApi, createDayPassCheckoutApi, restoreAccessApi, extendMembershipApi } from '../services/api';
 import { describeMembershipWindow } from '../lib/membershipDates';
 import { DiscordTagTrialOffer } from './DiscordTagTrialOffer';
@@ -198,9 +199,10 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
   const plans = {
     STARTER: {
       name: 'VIXY Vault Starter',
-      // Live Stripe Payment Links: $24.00/month, or $228.00/year ($19.00/month billed annually).
-      monthlyPrice: 24,
-      annualPrice: 19,
+      // Prices come from src/config/pricing.ts, which mirrors the live Stripe
+      // Payment Links in stripeLinks.ts. Annual is shown per month.
+      monthlyPrice: PRICING.plans.STARTER.monthlyUsd,
+      annualPrice: PRICING.plans.STARTER.annualPerMonthUsd,
       desc: 'Essential 15m probability intelligence for individual prediction market traders.',
       features: [
         'Real-time 15m Candle Model Forecasts',
@@ -212,8 +214,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     },
     PRO: {
       name: 'VIXY Vault Pro',
-      monthlyPrice: 79,
-      annualPrice: 64,
+      monthlyPrice: PRICING.plans.PRO.monthlyUsd,
+      annualPrice: PRICING.plans.PRO.annualPerMonthUsd,
       desc: 'Complete L2 order flow, webhook automation, and historical setup matching.',
       features: [
         'Everything in Starter Plan',
@@ -226,8 +228,8 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
     },
     ELITE: {
       name: 'VIXY Vault Elite Quant',
-      monthlyPrice: 199,
-      annualPrice: 159,
+      monthlyPrice: PRICING.plans.ELITE.monthlyUsd,
+      annualPrice: PRICING.plans.ELITE.annualPerMonthUsd,
       desc: 'REST & WebSocket API keys, unlimited webhooks, and direct quant team priority support.',
       features: [
         'Everything in Professional Plan',
@@ -588,7 +590,7 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                     <span className="text-xs font-mono font-bold text-purple-200">Ends {passEndsLabel}</span>
                   </div>
                   <div className="text-[12px] text-slate-200 font-sans leading-relaxed">
-                    Three day passes cost <strong className="text-white font-mono">$29.97</strong>. Starter is <strong className="text-white font-mono">$24</strong> and runs all 30 days.
+                    {PASS_VS_STARTER}
                   </div>
                 </div>
                 <button
@@ -607,9 +609,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                   <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-500 text-slate-950">
                     DAY PASS
                   </span>
-                  <span className="text-xs font-mono font-bold text-amber-300">$9.99 / 24 HOURS</span>
+                  <span className="text-xs font-mono font-bold text-amber-300">{DAY_PASS_PRICE} / {PRICING.dayPass.hours} HOURS</span>
                 </div>
-                <div className="text-sm font-black text-white font-mono">24-Hour Terminal Access Pass</div>
+                <div className="text-sm font-black text-white font-mono">{PRICING.dayPass.hours}-Hour Terminal Access Pass</div>
                 <div className="text-[11px] text-slate-300">Instant unfiltered access to live predictions, Locks & Discord</div>
               </div>
               <button
@@ -618,11 +620,11 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
                 className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-2 whitespace-nowrap"
               >
                 {isProcessingStripe ? <Loader2 className="w-4 h-4 animate-spin text-slate-950" /> : <Sparkles className="w-4 h-4 text-slate-950" />}
-                <span>Get Day Pass ($9.99)</span>
+                <span>Get Day Pass ({DAY_PASS_PRICE})</span>
               </button>
             </div>
                 <p className="mt-2.5 text-[11px] text-slate-400 font-sans text-center">
-                  Three day passes cost <strong className="text-slate-200 font-mono">$29.97</strong>. Starter is <strong className="text-slate-200 font-mono">$24</strong> and runs all 30 days.
+                  {PASS_VS_STARTER}
                 </p>
               </>
             )}
@@ -905,9 +907,9 @@ export const SubscriptionView: React.FC<SubscriptionViewProps> = ({
             <thead>
               <tr className="text-purple-300/60">
                 <th className="py-3 px-4">Feature</th>
-                <th className="py-3 px-4">Starter ($24/mo)</th>
-                <th className="py-3 px-4 text-purple-300 font-bold">Professional ($79/mo)</th>
-                <th className="py-3 px-4 text-violet-300 font-bold">Elite Quant ($199/mo)</th>
+                <th className="py-3 px-4">Starter ({usd(PRICING.plans.STARTER.monthlyUsd)}/mo)</th>
+                <th className="py-3 px-4 text-purple-300 font-bold">Professional ({usd(PRICING.plans.PRO.monthlyUsd)}/mo)</th>
+                <th className="py-3 px-4 text-violet-300 font-bold">Elite Quant ({usd(PRICING.plans.ELITE.monthlyUsd)}/mo)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-purple-900/30 font-sans text-purple-200">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { PRICING, DAY_PASS_PRICE } from './config/pricing';
 import { Lock, ShieldCheck, Sparkles, MessageSquare, ArrowRight } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
@@ -1474,7 +1475,7 @@ export default function App() {
                       Create an Account to Unlock 24-Hour Access
                     </h2>
                     <p className="text-sm text-purple-300/70 font-sans max-w-lg mx-auto leading-relaxed">
-                      Register your secure VIXY account to activate your 24-Hour Day Pass ($9.99) and enter the live prediction terminal, order flow delta metrics, and real-time AI signal engine.
+                      Register your secure VIXY account to activate your {PRICING.dayPass.hours}-Hour Day Pass ({DAY_PASS_PRICE}) and enter the live prediction terminal, order flow delta metrics, and real-time AI signal engine.
                     </p>
                   </div>
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Clock, X, ArrowRight, CreditCard } from 'lucide-react';
+import { PASS_VS_STARTER } from '../config/pricing';
 
 /**
  * VIXY VAULT - DAY PASS UPGRADE PROMPT
@@ -15,10 +16,10 @@ import { Clock, X, ArrowRight, CreditCard } from 'lucide-react';
  *    ticks locally once a second. If `expiresAt` is missing we render NOTHING
  *    rather than counting down from an assumed 24 hours -- we do not claim a
  *    deadline we cannot source.
- *  - The only persuasion is arithmetic already printed on the pricing page:
- *    three passes are $29.97, Starter is $24 for 30 days. No invented discount,
- *    no "offer expires", no fabricated scarcity. The pass genuinely ends; that
- *    is the whole of the urgency.
+ *  - The only persuasion is arithmetic already printed on the pricing page,
+ *    generated from src/config/pricing.ts so it cannot drift away from what
+ *    Stripe charges. No invented discount, no "offer expires", no fabricated
+ *    scarcity. The pass genuinely ends; that is the whole of the urgency.
  *  - It deliberately does NOT use the engine aura classes (vx-aura-*). Those
  *    are a readout of the 15-minute decision engine's lifecycle, and spending
  *    that vocabulary on a commercial prompt would dilute what a glow means.
@@ -159,8 +160,7 @@ export const DayPassUpgradePrompt: React.FC<DayPassUpgradePromptProps> = ({
 
       <div className="rounded-xl border border-purple-800/50 bg-[#0d0722]/80 px-3 py-2.5">
         <p className="text-[11px] leading-relaxed text-purple-100/90">
-          Three day passes cost <strong className="font-mono text-white">$29.97</strong>.
-          Starter is <strong className="font-mono text-white">$24</strong> and runs all 30 days.
+          {PASS_VS_STARTER}
         </p>
       </div>
 

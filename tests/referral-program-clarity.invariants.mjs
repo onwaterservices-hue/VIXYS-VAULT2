@@ -55,25 +55,56 @@ check('the banner has an Invite to Earn segment fed by the program endpoint', /a
 check('the banner hardcodes no dollar amount or percentage', !/\$\d|\d+%|5\.80|39\.80|\b20%/.test(banner.replace(/\$\{[^}]*\}/g, '')));
 
 console.log('\n[3] Prices shown in the UI match what Stripe charges');
-const starterMentions = [
-  ['src/components/SubscriptionView.tsx', 'Starter ($24/mo)'],
-  ['src/components/AdminPanel.tsx', 'STARTER ($24/mo - Beginner Access)'],
-  ['src/components/LandingPage.tsx', '$24</strong> and runs for all 30 days.'],
-  ['src/components/DayPassUpgradePrompt.tsx', '$24</strong> and runs all 30 days.'],
-  ['src/components/TrialExpiredOverlay.tsx', 'The Starter plan is <strong className="text-purple-100 font-mono">$24</strong>'],
+// Verified live on 2026-09-11 by opening the Payment Links: Starter $24.00/mo,
+// Pro $79.00/mo, Elite $199.00/mo.
+//
+// These prices used to be typed out in ten files, which is how the site came to
+// say Starter was $29 in five places. They now live once in
+// src/config/pricing.ts; this section pins that file to Stripe, and pins every
+// surface to that file instead of to a literal of its own.
+const PRICING_CONFIG = 'src/config/pricing.ts';
+const pricingSrc = R(PRICING_CONFIG);
+const num = (re) => Number((pricingSrc.match(re) || [])[1]);
+const starterMonthly = num(/STARTER:\s*\{\s*monthlyUsd:\s*(\d+)/);
+const starterAnnual = num(/STARTER:\s*\{[^}]*annualPerMonthUsd:\s*(\d+)/);
+const proMonthly = num(/PRO:\s*\{\s*monthlyUsd:\s*(\d+)/);
+const proAnnual = num(/PRO:\s*\{[^}]*annualPerMonthUsd:\s*(\d+)/);
+const eliteMonthly = num(/ELITE:\s*\{\s*monthlyUsd:\s*(\d+)/);
+const eliteAnnual = num(/ELITE:\s*\{[^}]*annualPerMonthUsd:\s*(\d+)/);
+const dayPassUsd = num(/usd:\s*([\d.]+)/);
+check('pricing config: Starter $24/mo, $19/mo billed annually (Stripe $24.00 / $228.00)', starterMonthly === 24 && starterAnnual === 19, `${starterMonthly}/${starterAnnual}`);
+check('pricing config: Pro $79/$64 and Elite $199/$159 match Stripe', proMonthly === 79 && proAnnual === 64 && eliteMonthly === 199 && eliteAnnual === 159);
+check('pricing config: day pass $9.99', dayPassUsd === 9.99, String(dayPassUsd));
+
+// Every commercial surface renders those numbers instead of its own.
+const priceSurfaces = [
+  'src/components/SubscriptionView.tsx',
+  'src/components/AdminPanel.tsx',
+  'src/components/LandingPage.tsx',
+  'src/components/DayPassUpgradePrompt.tsx',
+  'src/components/TrialExpiredOverlay.tsx',
+  'src/components/Header.tsx',
+  'src/components/AuthModal.tsx',
+  'src/components/AuthView.tsx',
+  'src/components/TermsView.tsx',
 ];
-for (const [f, needle] of starterMentions) check(`${f.split('/').pop()} shows the $24 Starter price`, R(f).includes(needle));
-check('no Starter price of $29 remains in the UI (the $29.97 three-pass comparison is not a Starter price)', !/Starter[^\n$]{0,40}\$29(?![.\d])|\$29<\/strong> and (runs|keeps)|STARTER \(\$29/.test(starterMentions.map(([f]) => R(f)).join('\n')));
-const subView = R('src/components/SubscriptionView.tsx');
-const starterPlan = subView.slice(subView.indexOf("name: 'VIXY Vault Starter'"), subView.indexOf("name: 'VIXY Vault Pro'"));
-check('pricing page Starter card: $24 monthly, $19/mo billed annually (Stripe $24.00 / $228.00)', /monthlyPrice: 24,/.test(starterPlan) && /annualPrice: 19,/.test(starterPlan));
-check('pricing page Pro and Elite cards match Stripe ($79/$64, $199/$159)', /monthlyPrice: 79,\s*annualPrice: 64,/.test(subView) && /monthlyPrice: 199,\s*annualPrice: 159,/.test(subView));
-const landing = R('src/components/LandingPage.tsx');
-check('landing Starter card: $19 annual / $24 monthly', landing.includes("${billingInterval === 'annual' ? 19 : 24}"));
-check('landing Starter annual total matches Stripe ($228.00/year)', landing.includes("'Billed annually ($228/yr)'") && !landing.includes('$288/yr'));
-check('landing Pro and Elite cards match Stripe', landing.includes("${billingInterval === 'annual' ? 64 : 79}") && landing.includes("${billingInterval === 'annual' ? 159 : 199}"));
-check('the policy display price matches the Starter price shown ($24)', P.PLAN_MONTHLY_PRICE_CENTS.STARTER === 2400);
-check('Pro and Elite display prices match the pricing table', P.PLAN_MONTHLY_PRICE_CENTS.PRO_QUANT === 7900 && P.PLAN_MONTHLY_PRICE_CENTS.ELITE_QUANT === 19900 && R('src/components/SubscriptionView.tsx').includes('Professional ($79/mo)') && R('src/components/SubscriptionView.tsx').includes('Elite Quant ($199/mo)'));
+for (const f of priceSurfaces) {
+  const src = R(f);
+  check(`${f.split('/').pop()} reads prices from the pricing config`, /from '\.\.?\/config\/pricing'/.test(src));
+  // A dollar figure written straight into a component is what drifted before.
+  const literal = src.replace(/^\s*(\/\/|\*|\/\*).*$/gm, '').match(/\$\d+(\.\d+)?/);
+  check(`${f.split('/').pop()} states no price of its own`, literal === null, literal ? literal[0] : '');
+}
+check('the Starter card still shows monthly and annual from the config', R('src/components/SubscriptionView.tsx').includes('PRICING.plans.STARTER.monthlyUsd') && R('src/components/SubscriptionView.tsx').includes('PRICING.plans.STARTER.annualPerMonthUsd'));
+check('the landing plan cards switch interval using the config', R('src/components/LandingPage.tsx').includes("billingInterval === 'annual' ? PRICING.plans.STARTER.annualPerMonthUsd : PRICING.plans.STARTER.monthlyUsd"));
+// The annual total is now multiplied out from the per-month price rather than
+// typed, so it cannot say $288 while the price says $19 (a transposition this
+// check was originally written to catch).
+check('landing annual totals are multiplied out from the per-month price', (R('src/components/LandingPage.tsx').match(/Billed annually \(\$\{usd\(PRICING\.plans\.\w+\.annualPerMonthUsd \* 12\)\}\/yr\)/g) || []).length === 3);
+check('the annual per-month price really does multiply to the annual total', starterAnnual * 12 === 228, `${starterAnnual} x 12`);
+check('the referral policy derives its prices from the same config, not a copy', /PRICING\.plans\.STARTER\.monthlyUsd \* 100/.test(R('src/services/referral/referralPolicy.ts')));
+check('the policy display price matches the Starter price shown', P.PLAN_MONTHLY_PRICE_CENTS.STARTER === starterMonthly * 100);
+check('Pro and Elite policy prices match the pricing config', P.PLAN_MONTHLY_PRICE_CENTS.PRO_QUANT === proMonthly * 100 && P.PLAN_MONTHLY_PRICE_CENTS.ELITE_QUANT === eliteMonthly * 100);
 
 console.log('\n[4] Server and client Payment Links are identical');
 const links = R('src/config/stripeLinks.ts');

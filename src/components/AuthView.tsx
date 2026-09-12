@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PRICING, DAY_PASS_PRICE } from '../config/pricing';
 import {
   Lock,
   Mail,
@@ -226,7 +227,7 @@ export const AuthView: React.FC<AuthViewProps> = ({
             <div className="flex items-start gap-3 p-3 rounded-2xl bg-[#0a0518] border border-purple-900/50">
               <Flame className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
               <div>
-                <strong className="text-white block font-bold">24-Hour Day Pass ($9.99)</strong>
+                <strong className="text-white block font-bold">{PRICING.dayPass.hours}-Hour Day Pass ({DAY_PASS_PRICE})</strong>
                 <span className="text-purple-300/70 font-sans text-[11px]">
                   Instant unfiltered terminal access to live decision locks, calibration feeds, and signals.
                 </span>

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { createDayPassCheckoutApi, restoreAccessApi, getEntitlementsApi } from '../services/api';
 import { getStripeDayPassUrl } from '../config/stripeLinks';
+import { REFUND_GUARANTEE_SUMMARY } from '../config/refundTerms';
+import { PRICING, DAY_PASS_PRICE, PASS_VS_STARTER } from '../config/pricing';
 import { DiscordTagTrialOffer } from './DiscordTagTrialOffer';
 
 interface TrialExpiredOverlayProps {
@@ -257,18 +259,19 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
             ) : (
               <>
                 <Sparkles className="w-4 h-4 text-slate-950 group-hover:scale-110 transition-transform" />
-                <span>Get 24H Day Pass ($9.99) — Direct Checkout</span>
+                <span>Get {PRICING.dayPass.hours}H Day Pass ({DAY_PASS_PRICE}) — Direct Checkout</span>
                 <ArrowRight className="w-4 h-4 text-slate-950 group-hover:translate-x-1 transition-transform" />
               </>
             )}
           </button>
 
           {/* The arithmetic that makes the ladder legible, at the one moment the
-              visitor is actively choosing how to get back in. Both numbers are
-              live prices, not projections: 3 x $9.99 = $29.97 vs Starter $29. */}
+              visitor is actively choosing how to get back in. Both halves are
+              live Stripe prices generated from src/config/pricing.ts, not
+              projections — the comment that used to sit here named a Starter
+              price the copy below it did not charge. */}
           <p className="text-[10.5px] text-purple-300/75 font-sans text-center leading-relaxed px-1">
-            Buying a pass three times costs <strong className="text-purple-100 font-mono">$29.97</strong>.
-            The Starter plan is <strong className="text-purple-100 font-mono">$24</strong> and keeps the terminal open all month.
+            {PASS_VS_STARTER}
           </p>
 
           {/* View Plans */}
@@ -392,7 +395,7 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
                       onClick={handleDayPassCheckout}
                       className="px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-[10px] uppercase font-mono cursor-pointer"
                     >
-                      Get 24H Day Pass ($9.99)
+                      Get {PRICING.dayPass.hours}H Day Pass ({DAY_PASS_PRICE})
                     </button>
                     {onViewPricing && (
                       <button
@@ -410,9 +413,13 @@ export const TrialExpiredOverlay: React.FC<TrialExpiredOverlayProps> = ({
           </div>
         </div>
 
-        {/* Footer */}
-        <p className="text-[10px] text-purple-300/50 font-sans">
-          30-day money-back guarantee on all subscriptions. Cancel anytime in 1 click.
+        {/* Footer -- the guarantee a visitor decides on must be the guarantee
+            they can actually claim, so this sentence and the posted Refund &
+            Cancellation Policy are generated from the same constants. What the
+            hardcoded sentence here used to promise, and why it was wrong, is
+            recorded in src/config/refundTerms.ts. */}
+        <p className="text-[10px] text-purple-300/50 font-sans max-w-md mx-auto leading-relaxed">
+          {REFUND_GUARANTEE_SUMMARY}
         </p>
       </div>
     </div>

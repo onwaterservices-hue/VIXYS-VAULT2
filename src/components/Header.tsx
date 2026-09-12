@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { DAY_PASS_PRICE } from '../config/pricing';
 import {
   Bell,
   User,
@@ -603,12 +604,12 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
               <button
                 onClick={() => onOpenAuth('register')}
-                aria-label="Get Day Pass ($9.99)"
+                aria-label={`Get Day Pass (${DAY_PASS_PRICE})`}
                 className="px-2.5 sm:px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-purple-600 hover:from-amber-400 hover:to-purple-500 text-slate-950 font-black text-xs shadow-lg transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap"
               >
                 <Sparkles className="w-3.5 h-3.5 hidden sm:block" />
                 <span className="lg:hidden">Day Pass</span>
-                <span className="hidden lg:inline">Get Day Pass ($9.99)</span>
+                <span className="hidden lg:inline">Get Day Pass ({DAY_PASS_PRICE})</span>
               </button>
             </div>
           )}
