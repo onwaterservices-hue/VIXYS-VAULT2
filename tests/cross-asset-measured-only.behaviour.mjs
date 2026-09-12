@@ -52,10 +52,13 @@ t.check('correlation weight is tracked separately from return weight',
   /let corrWeight = 0;/.test(serverSrc) && /avgCorr = corrWeight > 0/.test(updater));
 
 t.section('no data means unknown, not a comfortable default');
-t.check('agreementRatio is null when no alt is valid', /agreeingAssets \/ totalValidAlts : null/.test(updater));
+// The denominator became comparableAlts: an alt with a live price still cannot
+// be compared when BTC's own direction is unmeasured. Same property, tighter.
+t.check('agreementRatio is null when nothing could be compared',
+  /agreeingAssets \/ comparableAlts : null/.test(updater));
 t.check('avgCorr is null when nothing was measured', /weightedCorrSum \/ corrWeight : null/.test(updater));
-t.check('divergence is null when there is no alt return to compare',
-  /totalWeight > 0 \? Math\.abs\(btcObj\.return15m - avgAltReturn\) : null/.test(updater));
+t.check('divergence is null when there is nothing to compare',
+  /totalWeight > 0 && btcReturnMeasured/.test(updater));
 t.check('the 0.8 agreement default is gone', !/totalValidAlts > 0 \? [^:]*: 0\.8/.test(updater));
 t.check('the 0.75 correlation default is gone', !/: 0\.75;/.test(updater));
 
