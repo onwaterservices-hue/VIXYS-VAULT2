@@ -13253,10 +13253,12 @@ app.get("/api/admin/test-entitlement-suite", requireRole(["OWNER", "ADMIN"]), as
       status: "ACTIVE",
       startedAt: new Date(nowMs).toISOString(),
       expiresAt: exp1,
-      stripePaymentStatus: "PAID",
-      stripePaymentLink: "direct",
-      stripePriceId: "price_test",
-      stripeCheckoutSessionId: "cs_stack_1",
+      // A fixture is not a sale. Nothing reads stripePaymentStatus; it tells the
+      // operator what a record is, and these records reach the day-pass ledger.
+      stripePaymentStatus: "TEST_FIXTURE",
+      stripePaymentLink: null,
+      stripePriceId: null,
+      stripeCheckoutSessionId: null,
       discordRoleAssigned: false,
       troubleshootingGraceApplied: true,
       createdAt: new Date().toISOString(),
@@ -13524,10 +13526,10 @@ app.get("/api/admin/test-entitlement-suite", requireRole(["OWNER", "ADMIN"]), as
       status: "ACTIVE",
       startedAt: new Date(Date.now() - 48 * 3600 * 1e3).toISOString(),
       expiresAt: new Date(Date.now() - 24 * 3600 * 1e3).toISOString(),
-      stripePaymentStatus: "PAID",
-      stripePaymentLink: "direct",
-      stripePriceId: "price_test",
-      stripeCheckoutSessionId: "cs_exp_1",
+      stripePaymentStatus: "TEST_FIXTURE",
+      stripePaymentLink: null,
+      stripePriceId: null,
+      stripeCheckoutSessionId: null,
       discordRoleAssigned: false,
       troubleshootingGraceApplied: true,
       createdAt: new Date().toISOString(),
@@ -13625,6 +13627,75 @@ app.get("/api/admin/test-entitlement-suite", requireRole(["OWNER", "ADMIN"]), as
       details: e.message,
     });
   }
+  // Tear down every fixture this suite created. It builds users, day passes and
+  // Firestore subscriptions under reserved @vixy.internal addresses -- eighteen
+  // tests' worth -- calls savePersistentStore() and updateSubscriptionInFirestore(),
+  // and removed none of it, so each run left fake ACTIVE members and entitlements
+  // in the admin user list, the day-pass ledger and Firestore.
+  //
+  // The sweep is by domain rather than by tracking each identity, which catches
+  // every fixture whichever test made it. ".internal" is not a routable TLD and is
+  // reserved here for exactly this, so no real customer address can match. Records
+  // are also keyed by user id, so entries are matched on the key OR the record's
+  // own email.
+  const FIXTURE_DOMAIN = "@vixy.internal";
+  const isFixture = (v) => typeof v === "string" && v.toLowerCase().endsWith(FIXTURE_DOMAIN);
+  const fixtureCleanup = { users: 0, dayPasses: 0, subscriptions: 0, failed: [] };
+  try {
+    const removedUserIds = [];
+    for (let i = serverUsers.length - 1; i >= 0; i--) {
+      if (isFixture(serverUsers[i]?.email)) {
+        removedUserIds.push(serverUsers[i].id || serverUsers[i].uid);
+        serverUsers.splice(i, 1);
+        fixtureCleanup.users++;
+      }
+    }
+    const dayPassKeys = [];
+    for (const [key, rec] of userDayPasses.entries()) {
+      if (isFixture(key) || isFixture(rec?.email)) dayPassKeys.push(key);
+    }
+    for (const key of dayPassKeys) {
+      userDayPasses.delete(key);
+      fixtureCleanup.dayPasses++;
+    }
+    const subKeys = [];
+    for (const [key, rec] of userSubscriptions.entries()) {
+      if (isFixture(key) || isFixture(rec?.email)) subKeys.push(key);
+    }
+    for (const key of subKeys) {
+      userSubscriptions.delete(key);
+      fixtureCleanup.subscriptions++;
+    }
+    savePersistentStore();
+    if (db && canAttemptFirestoreWrite()) {
+      const refs = [
+        ...removedUserIds.filter(Boolean).map((id) => ["users/" + id, doc(db, "users", id)]),
+        ...dayPassKeys.map((k) => ["day_passes/" + k, doc(db, "day_passes", k)]),
+        ...subKeys.map((k) => ["subscriptions/" + k, doc(db, "subscriptions", k)]),
+      ];
+      for (const [label, ref] of refs) {
+        try {
+          await deleteDoc(ref);
+        } catch (err) {
+          fixtureCleanup.failed.push(`${label}: ${err?.message || String(err)}`);
+        }
+      }
+    }
+  } catch (err) {
+    fixtureCleanup.failed.push(String(err?.message || err));
+  }
+  // Reported, never silent: a fixture that survived is a row the operator has to
+  // know about, and it fails the run.
+  tests.push({
+    id: tests.length + 1,
+    name: "Fixture Cleanup",
+    passed: fixtureCleanup.failed.length === 0,
+    details: fixtureCleanup.failed.length === 0
+      ? `Removed ${fixtureCleanup.users} user(s), ${fixtureCleanup.dayPasses} day pass(es), ${fixtureCleanup.subscriptions} subscription(s) under ${FIXTURE_DOMAIN}.`
+      : `Left behind: ${fixtureCleanup.failed.join(" | ")}. Remove these ${FIXTURE_DOMAIN} records by hand.`,
+  });
+  if (fixtureCleanup.failed.length === 0) passedCount++;
+
   res.json({
     success: passedCount === tests.length,
     timestamp: new Date().toISOString(),
@@ -13635,6 +13706,7 @@ app.get("/api/admin/test-entitlement-suite", requireRole(["OWNER", "ADMIN"]), as
       score: `${Math.round((passedCount / tests.length) * 100)}%`,
     },
     tests,
+    fixtureCleanup,
   });
 });
 app.get("/api/user/subscription", (req, res) => {
