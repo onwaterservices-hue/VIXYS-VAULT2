@@ -1,5 +1,10 @@
 import React from 'react';
 import { CreditCard, RefreshCw, CheckCircle2, AlertCircle, ArrowLeft, LifeBuoy } from 'lucide-react';
+// The window, the email and the cancellation path are stated once, in
+// src/config/refundTerms.ts, so a commercial surface cannot promise terms this
+// page does not grant. A paywall footer once promised 30 days on every
+// subscription while this page granted 14 on the first purchase.
+import { REFUND_TERMS, REFUND_REQUEST_SUBJECT } from '../config/refundTerms';
 
 interface RefundPolicyViewProps {
   onReturnToTerminal?: () => void;
@@ -64,7 +69,7 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             You may cancel your VIXY AI Starter, Professional, or Elite subscription at any time with zero hassle or support intervention required.
           </p>
           <div className="p-4 rounded-2xl bg-purple-950/50 border border-purple-800/40 text-xs text-purple-200/90 space-y-2">
-            <p className="font-mono font-bold text-purple-300">How to Cancel in 2 Clicks:</p>
+            <p className="font-mono font-bold text-purple-300">How to Cancel:</p>
             <ol className="list-decimal pl-5 space-y-1">
               <li>Navigate to <strong>Settings → Subscription & Billing</strong> inside the terminal.</li>
               <li>Click <strong>Manage Billing & Receipts (Stripe Customer Portal)</strong>.</li>
@@ -77,13 +82,13 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
         <section className="space-y-3">
           <div className="flex items-center gap-3 text-purple-300 font-mono font-black text-lg border-b border-purple-900/40 pb-2">
             <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-            <h2>2. 14-Day Money-Back Guarantee (First Purchase)</h2>
+            <h2>2. {REFUND_TERMS.windowDays}-Day Money-Back Guarantee (First Purchase)</h2>
           </div>
           <p className="text-purple-200/80">
-            If you are unsatisfied with your first subscription purchase on VIXY AI, you may request a <strong>100% full refund within 14 days</strong> of your initial signup date.
+            If you are unsatisfied with your first subscription purchase on VIXY AI, you may request a <strong>100% full refund within {REFUND_TERMS.windowDays} days</strong> of your initial signup date.
           </p>
           <p className="text-purple-200/80 text-xs">
-            To claim a first-purchase refund, simply send an email to <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span> with your registered email address and "14-Day Refund Request" in the subject line. Refunds are credited back to your original payment method via Stripe within 3-5 business days.
+            To claim a first-purchase refund, simply send an email to <span className="text-white font-mono font-bold">{REFUND_TERMS.billingEmail}</span> with your registered email address and "{REFUND_REQUEST_SUBJECT}" in the subject line. Refunds are credited back to your original payment method via Stripe within {REFUND_TERMS.processingTime}.
           </p>
         </section>
 
@@ -94,7 +99,7 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             <h2>3. Subsequent Billing Cycles & Partial Refunds</h2>
           </div>
           <p className="text-purple-200/80">
-            After the initial 14-day window, recurring subscription payments are non-refundable. When you cancel, you retain full access to all terminal features, API endpoints, and signals through the final date of your paid billing period.
+            After the initial {REFUND_TERMS.windowDays}-day window, recurring subscription payments are non-refundable. When you cancel, you retain full access to all terminal features, API endpoints, and signals through the final date of your paid billing period.
           </p>
         </section>
 
@@ -105,13 +110,13 @@ export const RefundPolicyView: React.FC<RefundPolicyViewProps> = ({
             <h2>4. Billing Inquiries & Dispute Prevention</h2>
           </div>
           <p className="text-purple-200/80">
-            Before initiating a credit card chargeback or bank dispute, please reach out directly to our dedicated billing desk at <span className="text-white font-mono font-bold">vixyvault0@gmail.com</span>. We respond to all billing inquiries within 24 hours and resolve any billing discrepancies immediately.
+            Before initiating a credit card chargeback or bank dispute, please reach out directly to our dedicated billing desk at <span className="text-white font-mono font-bold">{REFUND_TERMS.billingEmail}</span>. We respond to all billing inquiries within 24 hours and resolve any billing discrepancies immediately.
           </p>
         </section>
 
         {/* Footer */}
         <div className="pt-6 border-t border-purple-900/40 text-xs text-purple-400/80 flex flex-col sm:flex-row items-center justify-between gap-4 font-mono">
-          <div>Billing Desk: <span className="text-white">vixyvault0@gmail.com</span></div>
+          <div>Billing Desk: <span className="text-white">{REFUND_TERMS.billingEmail}</span></div>
           <div>Stripe Certified Secure Payments</div>
         </div>
 

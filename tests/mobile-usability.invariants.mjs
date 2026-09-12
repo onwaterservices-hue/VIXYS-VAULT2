@@ -106,9 +106,12 @@ const headerSrc = R('src/components/Header.tsx');
 const logoSrc = R('src/components/Logo.tsx');
 check('header row and both side groups use tighter gaps on phones', (headerSrc.match(/gap-2 sm:gap-3/g) || []).length >= 3);
 check('notification bell is hidden for signed-out visitors on phones', /\$\{isAuthenticated \? '' : 'hidden sm:block '\}relative/.test(headerSrc));
-check('day pass CTA uses a short label below lg and the full price label from lg', /<span className="lg:hidden">Day Pass<\/span>\s*<span className="hidden lg:inline">Get Day Pass \(\$9\.99\)<\/span>/.test(headerSrc));
-check('day pass CTA keeps the full price as its accessible name', /aria-label="Get Day Pass \(\$9\.99\)"/.test(headerSrc));
-const signedOutCluster = headerSrc.slice(headerSrc.indexOf("onOpenAuth('login')"), headerSrc.indexOf('Get Day Pass ($9.99)</span>'));
+// The price itself now comes from src/config/pricing.ts, so these match the
+// rendered expression rather than a literal that could drift from Stripe.
+check('day pass CTA uses a short label below lg and the full price label from lg', /<span className="lg:hidden">Day Pass<\/span>\s*<span className="hidden lg:inline">Get Day Pass \(\{DAY_PASS_PRICE\}\)<\/span>/.test(headerSrc));
+check('day pass CTA keeps the full price as its accessible name', /aria-label=\{`Get Day Pass \(\$\{DAY_PASS_PRICE\}\)`\}/.test(headerSrc));
+check('the header reads the price from the shared pricing config', /from '\.\.\/config\/pricing'/.test(headerSrc));
+const signedOutCluster = headerSrc.slice(headerSrc.indexOf("onOpenAuth('login')"), headerSrc.indexOf('Get Day Pass ({DAY_PASS_PRICE})</span>'));
 check('signed-out header CTAs never wrap to multiple lines', (signedOutCluster.match(/whitespace-nowrap"/g) || []).length === 2);
 check('logo subtitle is hidden on phones in the header', /subtitleClassName="hidden sm:block"/.test(headerSrc) && /\$\{subtitleClassName\}/.test(logoSrc));
 check('logo wordmark yields to the CTAs on narrow phones', /textClassName=\{isAuthenticated \? 'max-\[375px\]:hidden' : 'max-\[420px\]:hidden'\}/.test(headerSrc) && /\$\{textClassName\}/.test(logoSrc));

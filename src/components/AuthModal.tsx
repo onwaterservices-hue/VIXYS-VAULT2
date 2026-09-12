@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, Mail, User, ArrowRight, X, Sparkles, CheckCircle2, ShieldCheck, Key, Ticket } from 'lucide-react';
+import { PRICING, DAY_PASS_PRICE } from '../config/pricing';
 import { AuthState } from '../types';
 import { setPendingReferral } from '../hooks/useReferralCapture';
 
@@ -292,12 +293,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   <Ticket className="w-4 h-4" />
                 </div>
                 <div>
-                  <div className="font-bold text-white text-[11px]">24H DAY PASS READY</div>
-                  <div className="text-[10px] text-purple-300/80">$9.99 One-time payment after registration</div>
+                  <div className="font-bold text-white text-[11px]">{PRICING.dayPass.hours}H DAY PASS READY</div>
+                  <div className="text-[10px] text-purple-300/80">{DAY_PASS_PRICE} One-time payment after registration</div>
                 </div>
               </div>
               <span className="px-2 py-1 rounded bg-cyan-500 text-slate-950 text-[10px] font-black uppercase shrink-0">
-                $9.99
+                {DAY_PASS_PRICE}
               </span>
             </div>
           )}

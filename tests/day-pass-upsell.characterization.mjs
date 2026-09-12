@@ -46,8 +46,28 @@ for (const phrase of scarcity) {
 }
 
 // --- Persuasion is arithmetic already published on the pricing page -------
-t.check('anchors three passes at $29.97', code.includes('$29.97'));
-t.check('anchors Starter at $29', code.includes('$29<') || code.includes('>$29') || code.includes('$29'));
+// The prompt no longer types the prices out. It renders PASS_VS_STARTER from
+// src/config/pricing.ts, which is generated from the same numbers the Stripe
+// Payment Links charge, so the comparison cannot drift away from the till.
+//
+// The two checks that stood here were `code.includes('$29.97')` and an
+// "anchors Starter at $29" check that was satisfied by the substring `$29` of
+// `$29.97` -- it would have passed no matter what the Starter price was, and
+// the real Starter price is $24. They are replaced by checks with teeth.
+t.check('renders the shared comparison rather than typed-out prices', code.includes('{PASS_VS_STARTER}'));
+t.check('imports it from the pricing config', code.includes("from '../config/pricing'"));
+t.check('states no price of its own', !/\$\d/.test(code));
+
+const pricing = readRepoFile('src/config/pricing.ts');
+const dayPassUsd = Number((pricing.match(/usd:\s*([\d.]+)/) || [])[1]);
+const starterUsd = Number((pricing.match(/STARTER:\s*\{\s*monthlyUsd:\s*(\d+)/) || [])[1]);
+t.check('the day pass price is the live $9.99', dayPassUsd === 9.99, String(dayPassUsd));
+t.check('the Starter price is the live $24', starterUsd === 24, String(starterUsd));
+t.check(
+  'three passes really do cost more than a month of Starter -- the argument is true',
+  Math.round(3 * dayPassUsd * 100) / 100 > starterUsd,
+  `3 x ${dayPassUsd} = ${Math.round(3 * dayPassUsd * 100) / 100} vs ${starterUsd}`
+);
 
 // --- It must not spend the engine's visual vocabulary --------------------
 // vx-aura-* means "the decision engine is in this lifecycle state". Using it

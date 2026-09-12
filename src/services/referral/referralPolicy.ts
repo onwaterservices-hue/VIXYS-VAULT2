@@ -1,3 +1,7 @@
+// Explicit .ts extension: tests/referral_invariants.mjs imports this module
+// directly under Node's type stripping, which will not resolve an
+// extensionless relative specifier. tsconfig has allowImportingTsExtensions.
+import { PRICING } from '../../config/pricing.ts';
 /**
  * VIXY VAULT - Referral reward policy.
  * SINGLE SOURCE OF TRUTH for referral economics. Nothing else may hardcode a
@@ -32,16 +36,15 @@ export const TIER_REWARD_CREDITS: Record<string, number> = {
 };
 
 /**
- * Monthly list price per tier, in cents, as charged by the live Stripe Payment
- * Links (read on 2026-09-11: Starter $24.00, Pro $79.00, Elite $199.00 a month).
- * Used only to DISPLAY what share of a friend's plan a referral credit is -- it
- * never changes a reward. If a Stripe price changes, change it here; a test pins
- * the prices shown in the UI to these values.
+ * Monthly list price per tier, in cents, derived from src/config/pricing.ts so
+ * this file and the pricing UI cannot disagree about what Stripe charges. Used
+ * only to DISPLAY what share of a friend's plan a referral credit is -- it never
+ * changes a reward. A Stripe price change is made once, in that config.
  */
 export const PLAN_MONTHLY_PRICE_CENTS: Record<string, number> = {
-  STARTER: 2400,
-  PRO_QUANT: 7900,
-  ELITE_QUANT: 19900,
+  STARTER: PRICING.plans.STARTER.monthlyUsd * 100,
+  PRO_QUANT: PRICING.plans.PRO.monthlyUsd * 100,
+  ELITE_QUANT: PRICING.plans.ELITE.monthlyUsd * 100,
 };
 
 const PROGRAM_TIERS = [

@@ -1,4 +1,5 @@
 import React from 'react';
+import { PRICING, DAY_PASS_PRICE } from '../config/pricing';
 import { FileText, ShieldAlert, Scale, CheckCircle2, AlertTriangle, ArrowLeft } from 'lucide-react';
 
 interface TermsViewProps {
@@ -78,10 +79,10 @@ export const TermsView: React.FC<TermsViewProps> = ({ onReturnToTerminal }) => {
             <h2>Subscriptions, 24-Hour Day Passes & Billing</h2>
           </div>
           <p className="text-purple-200/80">
-            Access to VIXY AI prediction market intelligence is granted via recurring monthly/annual subscriptions or 24-Hour Day Passes ($9.99), processed securely through Stripe.
+            Access to VIXY AI prediction market intelligence is granted via recurring monthly/annual subscriptions or {PRICING.dayPass.hours}-Hour Day Passes ({DAY_PASS_PRICE}), processed securely through Stripe.
           </p>
           <ul className="list-disc pl-5 space-y-2 text-purple-200/80 text-xs">
-            <li><strong>24-Hour Day Pass ($9.99):</strong> Grants 24 full hours of continuous, unthrottled access to all Elite 15m signal streams, neural ribbon models, and Discord Elite VIP role access from the exact timestamp of payment completion. Day Passes are non-recurring, one-time charges.</li>
+            <li><strong>{PRICING.dayPass.hours}-Hour Day Pass ({DAY_PASS_PRICE}):</strong> Grants {PRICING.dayPass.hours} full hours of continuous, unthrottled access to all Elite 15m signal streams, neural ribbon models, and Discord Elite VIP role access from the exact timestamp of payment completion. Day Passes are non-recurring, one-time charges.</li>
             <li><strong>Auto-Renewal Subscriptions:</strong> Starter, Pro, and Elite monthly/annual subscriptions automatically renew at the end of each billing cycle unless cancelled prior to your renewal date via the Customer Portal.</li>
             <li><strong>Price Changes:</strong> We reserve the right to adjust plan pricing upon 30 days prior notice to active subscribers.</li>
             <li><strong>Payment Processing:</strong> Payments are processed securely via Stripe. We do not collect or store raw credit card numbers on our servers.</li>
