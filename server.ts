@@ -1661,18 +1661,39 @@ function computePearsonCorrelation(x, y, fallback) {
   return Math.max(-1, Math.min(1, Math.round(r * 1e3) / 1e3));
 }
 __name(computePearsonCorrelation, "computePearsonCorrelation");
+// Boots as "nothing measured yet", not as a reading.
+//
+// This object is served publicly on /api/signal as `crossAssetContext`. It used
+// to boot with rollingCorrelation 0.76, directionalAgreementRatio 0.8,
+// divergenceMagnitude 0.12, the sentence "Cross-asset evidence synchronized to
+// BTC leader" and a lastUpdated stamped at module load — while `assets` was {}.
+// So a cold instance served three invented correlation statistics, an assertion
+// that evidence was synchronized, and a timestamp saying it had just been
+// measured, with no asset data behind any of it. Observed live on 2026-09-12.
+// The engine log immediately below had the identical defect and was fixed; this
+// object was missed.
+//
+// updateCrossAssetFeeds() (every 4s) replaces this wholesale once it has real
+// readings. Until then every measured field is null and lastUpdated is null,
+// which is how a reader tells "not yet measured" from "measured as zero".
+//
+// The three fields the engine reads — state, riskPenalty and
+// directionalAgreementRatio — are unchanged in effect: the gate expressions are
+// `(riskPenalty || 0) < 5`, `state === "BTC_DIVERGENCE"` and
+// `directionalAgreementRatio === 0`, and null evaluates identically to the old
+// seeded 0 / "MIXED" / 0.8 in all three. No lock decision changes.
 let latestCrossAssetContext = {
-  state: "MIXED",
-  btcLeaderReturn15m: 0,
-  btcMomentum: 0,
-  rollingCorrelation: 0.76,
-  directionalAgreementRatio: 0.8,
-  divergenceMagnitude: 0.12,
-  regime: "RANGING_NEUTRAL",
+  state: "UNKNOWN",
+  btcLeaderReturn15m: null,
+  btcMomentum: null,
+  rollingCorrelation: null,
+  directionalAgreementRatio: null,
+  divergenceMagnitude: null,
+  regime: null,
   contextContribution: 0,
   riskPenalty: 0,
-  evidenceSummary: "Cross-asset evidence synchronized to BTC leader",
-  lastUpdated: new Date().toISOString(),
+  evidenceSummary: null,
+  lastUpdated: null,
   assets: {},
 };
 // Bounded, in-process idempotency guard: prevents the same committed
