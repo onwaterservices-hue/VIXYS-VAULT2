@@ -1553,89 +1553,95 @@ let persistenceSeconds = 0;
 const requiredPersistenceSeconds = 15;
 let errorCount = 0;
 const SERVER_SESSION_ID = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+// Boots with nothing: price 0 and lastUpdated 0, so no asset reads as fresh
+// until a real fetch lands. These fields used to be seeded with plausible
+// prices (BTC 65000, ETH 3450, SOL 145 ...) AND lastUpdated: Date.now(), so a
+// cold instance whose first Coinbase fetch failed published the seed as a LIVE
+// price for the 30s freshness window -- a failed request and a real quote
+// rendering identically.
 const trackedCrossAssets = {
   BTC: {
     symbol: "BTC",
-    price: 65e3,
-    openPrice: 65e3,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 1.2,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
   ETH: {
     symbol: "ETH",
-    price: 3450,
-    openPrice: 3450,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 1.5,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
   SOL: {
     symbol: "SOL",
-    price: 145,
-    openPrice: 145,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 2.1,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
   XRP: {
     symbol: "XRP",
-    price: 0.58,
-    openPrice: 0.58,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 1.8,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
   DOGE: {
     symbol: "DOGE",
-    price: 0.12,
-    openPrice: 0.12,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 2.5,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
   SUI: {
     symbol: "SUI",
-    price: 1.85,
-    openPrice: 1.85,
+    price: 0,
+    openPrice: 0,
     change24h: 0,
     return1m: 0,
     return3m: 0,
     return5m: 0,
     return15m: 0,
     momentum: 0,
-    volatility: 2.8,
-    lastUpdated: Date.now(),
+    volatility: null,
+    lastUpdated: 0,
     priceBuffer: [],
   },
 };
@@ -1877,9 +1883,29 @@ async function updateCrossAssetFeeds() {
   const btcReturns = btcObj.priceBuffer.map((p, idx, arr) =>
     idx === 0 ? 0 : (p.price - arr[idx - 1].price) / arr[idx - 1].price,
   );
-  const btcSign =
-    btcObj.return15m > 0.02 ? 1 : btcObj.return15m < -0.02 ? -1 : 0;
+  // btcObj.return15m sits at its initial 0 until this instance has collected two
+  // price samples, and |0| <= 0.02 made btcSign 0 -- which the agreement test
+  // below reads as "BTC has no direction, so everything agrees with it". Every
+  // asset then counted as agreeing and directionalAgreementRatio was published as
+  // 1, with the summary "BTC independent lead with 100% market agreement", off a
+  // BTC return nobody had measured. Observed live on 2026-09-12: every probe of a
+  // warm instance returned agreement 1.
+  //
+  // Unknown is now null and is excluded from the ratio. A measured-and-flat BTC
+  // still yields 0 and keeps its existing meaning.
+  const btcReturnMeasured = btcObj.priceBuffer.length >= 2;
+  const btcSign = !btcReturnMeasured
+    ? null
+    : btcObj.return15m > 0.02
+      ? 1
+      : btcObj.return15m < -0.02
+        ? -1
+        : 0;
   let agreeingAssets = 0;
+  // Alts whose direction could actually be compared against BTC's. Distinct from
+  // totalValidAlts, which counts alts with a live price regardless of whether
+  // BTC's own direction was known.
+  let comparableAlts = 0;
   let totalValidAlts = 0;
   let weightedCorrSum = 0;
   let weightedAltReturnSum = 0;
@@ -1915,8 +1941,9 @@ async function updateCrossAssetFeeds() {
       );
       const altSign =
         item.return15m > 0.02 ? 1 : item.return15m < -0.02 ? -1 : 0;
-      const agrees = btcSign === 0 || altSign === btcSign;
-      if (agrees) agreeingAssets++;
+      const agrees = btcSign === null ? null : btcSign === 0 || altSign === btcSign;
+      if (agrees === true) agreeingAssets++;
+      if (agrees !== null) comparableAlts++;
       const w = assetWeights[sym] || 0.2;
       if (empiricalCorr !== null) {
         weightedCorrSum += empiricalCorr * w;
@@ -1948,7 +1975,7 @@ async function updateCrossAssetFeeds() {
   // `directionalAgreementRatio === 0` divergence check unable to fire on no data
   // at all. Unknown is now null.
   const agreementRatio =
-    totalValidAlts > 0 ? agreeingAssets / totalValidAlts : null;
+    comparableAlts > 0 ? agreeingAssets / comparableAlts : null;
   const avgCorr = corrWeight > 0 ? weightedCorrSum / corrWeight : null;
   const avgAltReturn =
     totalWeight > 0 ? weightedAltReturnSum / totalWeight : btcObj.return15m;
@@ -1956,7 +1983,9 @@ async function updateCrossAssetFeeds() {
   // back to BTC's own return, which would report a divergence of exactly 0 --
   // "BTC agrees with a market we did not read".
   const divergence =
-    totalWeight > 0 ? Math.abs(btcObj.return15m - avgAltReturn) : null;
+    totalWeight > 0 && btcReturnMeasured
+      ? Math.abs(btcObj.return15m - avgAltReturn)
+      : null;
   let state = "MIXED";
   let contextContrib = 0;
   let riskPenalty = 0;
