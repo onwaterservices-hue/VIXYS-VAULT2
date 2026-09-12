@@ -204,6 +204,7 @@ import {
 import { createReferralStore, REFERRAL_COUPON_ID } from "./src/services/referral/referralService";
 import { createReferralHandlers } from "./src/services/referral/referralRoutes";
 import { referralProgramSummary } from "./src/services/referral/referralPolicy";
+import { PRICING, usd } from "./src/config/pricing";
 import { REFERRAL_DISCOUNT_PERCENT as REFERRAL_PROGRAM_DISCOUNT_PERCENT } from "./src/services/referral/referralService";
 import { qualifyReferralConversion, reverseReferralReward, getBalance, redeemCreditsForDay, openPayoutTicket, resolvePayoutTicket, reverseRewardsForReferredUser, rebuildLeaderboard, getLeaderboardWithRank, getAdminReferralOverview, useReferralRewardsDatapath } from "./src/services/referral/referralRewards";
 import { CREDITS_PER_DAY as REFERRAL_CREDITS_PER_DAY, PAYOUT_THRESHOLD_CREDITS as REFERRAL_PAYOUT_THRESHOLD } from "./src/services/referral/referralPolicy";
@@ -10370,11 +10371,15 @@ app.all(
   ["/api/admin/acceptance-matrix", "/api/admin/run-acceptance-matrix"],
   requireRole(["OWNER", "ADMIN"]),
   async (req, res) => {
+    // These labels priced Starter at $49 and Pro at $99. Stripe charges $24 and
+    // $79, and the admin tier selector mirrored the same two wrong figures. The
+    // report an owner reads to check billing must not quote prices the till does
+    // not take, so the names are built from src/config/pricing.ts.
     const plansToTest = [
-      { type: "DAY_PASS", name: "24-Hour Day Pass ($9.99 One-Time)" },
-      { type: "STARTER", name: "Starter Monthly / Annual ($49/mo)" },
-      { type: "PRO_QUANT", name: "Pro Quant Monthly / Annual ($99/mo)" },
-      { type: "ELITE_QUANT", name: "Elite Quant Monthly / Annual ($199/mo)" },
+      { type: "DAY_PASS", name: `${PRICING.dayPass.hours}-Hour Day Pass (${usd(PRICING.dayPass.usd)} One-Time)` },
+      { type: "STARTER", name: `Starter Monthly / Annual (${usd(PRICING.plans.STARTER.monthlyUsd)}/mo)` },
+      { type: "PRO_QUANT", name: `Pro Quant Monthly / Annual (${usd(PRICING.plans.PRO.monthlyUsd)}/mo)` },
+      { type: "ELITE_QUANT", name: `Elite Quant Monthly / Annual (${usd(PRICING.plans.ELITE.monthlyUsd)}/mo)` },
     ];
     const results = [];
     for (const p of plansToTest) {
@@ -11464,7 +11469,7 @@ function initializeProtectedAugust15Users() {
       entitlementType: "DAY_PASS",
       accessTier: "ELITE",
       status: "ACTIVE",
-      duration: "Stacked $24 Day Pass Access (48 Hours - 2x Purchases)",
+      duration: "Stacked Day Pass Access (48 Hours - 2x Purchases)",
       activatedAt: new Date().toISOString(),
       startedAt: new Date().toISOString(),
       expiresAt: wasanExpires,

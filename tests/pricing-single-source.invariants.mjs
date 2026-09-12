@@ -92,4 +92,15 @@ for (const rel of surfaces) {
 t.check('the referral policy derives its cents from the same config, not a copy',
   /PRICING\.plans\.STARTER\.monthlyUsd \* 100/.test(readRepoFile('src/services/referral/referralPolicy.ts')));
 
+t.section('the server states no plan price of its own');
+// The acceptance-matrix report an owner reads priced Starter at $49 and Pro at
+// $99 while Stripe charged $24 and $79, and the admin tier selector mirrored
+// those same two figures.
+const server = stripComments(readRepoFile('server.ts'));
+t.check('server.ts reads the pricing config', /from "\.\/src\/config\/pricing"/.test(server));
+const serverPeriod = server.match(PERIOD_PRICE);
+t.check('server.ts writes no price against a billing period', serverPeriod === null, serverPeriod ? serverPeriod[0] : '');
+const serverDayPass = server.match(DAY_PASS_LITERALS);
+t.check('server.ts writes no day-pass amount', serverDayPass === null, serverDayPass ? serverDayPass[0] : '');
+
 t.done();
