@@ -15,6 +15,7 @@
     "test:engine": "node tests/run-all.mjs",
     "verify:dev-isolation": "node scripts/verifyDevIsolation.mjs",
     "verify:replay-determinism": "node scripts/verifyReplayDeterminism.mjs",
+    "verify:boot": "node scripts/verifyServerBoot.mjs",
     "replay:15m": "tsx scripts/replay15m.ts",
     "vixy:verify": "node scripts/vixyVerify.mjs"
   },

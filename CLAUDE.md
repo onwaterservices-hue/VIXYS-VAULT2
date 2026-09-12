@@ -130,11 +130,13 @@ Taken from `package.json`. These are the real commands — do not invent others.
 | regime slices for the rule | `npx tsx scripts/replay15m/research/regimeSlices.ts <snippets.jsonl>` |
 | real-flow forecast test (E3b) | `npx tsx scripts/replay15m/research/flowSkill.ts <startIso> <endIso>` |
 | production build | `npm run build` |
+| boot the built bundle (what Vercel does) | `npm run verify:boot` (needs a build first) |
 | serve a local build | `npm start` (see the sign-in loop below) |
 
 `npm run vixy:verify` chains: typecheck → engine/settlement tests → dev/prod
-isolation → replay determinism + leakage → production build. A stage that
-cannot run reports SKIP with a reason; a skip is never counted as a pass.
+isolation → replay determinism + leakage → production build → boot the built
+bundle. A stage that cannot run reports SKIP with a reason; a skip is never
+counted as a pass.
 
 Git hygiene: inspect `git status`, `git diff` and `git diff --check` before
 committing, and stage named files — never `git add .`, which risks committing
