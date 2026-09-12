@@ -10135,11 +10135,17 @@ async function executePlanAcceptanceTest(planType, planName) {
         activatedAt: new Date(nowMs).toISOString(),
         expiresAt,
         startedAt: new Date(nowMs).toISOString(),
-        stripePaymentStatus: "PAID",
-        stripePaymentLink: "https://buy.stripe.com/fZu7sK7qr2Zs70M7Nn1oI09",
-        stripePaymentId: `pi_test_${testId}`,
-        stripeCheckoutSessionId: `cs_test_${testId}`,
-        stripePriceId: "price_1U4cKTCYsvFDvgUJZHASVwRG",
+        // A fixture is not a sale. This record used to carry "PAID" with the
+        // LIVE day-pass payment link and the real price id, plus invented
+        // pi_test_/cs_test_ identifiers, and it was persisted -- so every run of
+        // the acceptance matrix left a phantom purchase in the day-pass ledger.
+        // Nothing reads stripePaymentStatus; it exists to tell the operator what
+        // a record is.
+        stripePaymentStatus: "TEST_FIXTURE",
+        stripePaymentLink: null,
+        stripePaymentId: null,
+        stripeCheckoutSessionId: null,
+        stripePriceId: null,
         discordRoleId: "1538094678870593547",
         discordRoleAssigned: false,
         troubleshootingGraceApplied: true,
@@ -10350,13 +10356,68 @@ async function executePlanAcceptanceTest(planType, planName) {
   }
   const allPassed = steps.every((s) => s.status === "PASSED");
   const durationMs = Date.now() - startTs;
+
+  // Tear the fixture down. There was no cleanup of any kind: each run left a
+  // persisted user row marked ACTIVE/VERIFIED, a day-pass record and (for the
+  // subscription plans) a Firestore subscription behind, which then counted as a
+  // real member in the admin user list and the day-pass ledger.
+  //
+  // Scoped strictly to what this run created -- the generated
+  // accept_*@vixyvault.test address and its createdUserId -- so it can never
+  // reach a real account.
+  const cleanup = { removed: [], failed: [] };
+  try {
+    if (createdUserId && testEmail.endsWith("@vixyvault.test")) {
+      const idx = serverUsers.findIndex(
+        (u) => u.email === testEmail && u.id === createdUserId,
+      );
+      if (idx >= 0) {
+        serverUsers.splice(idx, 1);
+        cleanup.removed.push("user");
+      }
+      if (userDayPasses.delete(testEmail)) cleanup.removed.push("dayPass:email");
+      if (userDayPasses.delete(createdUserId)) cleanup.removed.push("dayPass:userId");
+      if (userSubscriptions.delete(testEmail)) cleanup.removed.push("subscription");
+      savePersistentStore();
+      if (db && canAttemptFirestoreWrite()) {
+        for (const [label, ref] of [
+          ["users", doc(db, "users", createdUserId)],
+          ["day_passes:email", doc(db, "day_passes", testEmail)],
+          ["day_passes:userId", doc(db, "day_passes", createdUserId)],
+          ["subscriptions", doc(db, "subscriptions", testEmail)],
+        ]) {
+          try {
+            await deleteDoc(ref);
+            cleanup.removed.push(label);
+          } catch (err) {
+            cleanup.failed.push(`${label}: ${err?.message || String(err)}`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    cleanup.failed.push(String(err?.message || err));
+  }
+  // Reported, never silent: a fixture that could not be removed is a row the
+  // operator has to know about.
+  steps.push({
+    step: steps.length + 1,
+    name: "Fixture Cleanup",
+    status: cleanup.failed.length === 0 ? "PASSED" : "FAILED",
+    details: cleanup.failed.length === 0
+      ? `Test account and entitlements removed (${cleanup.removed.join(", ") || "nothing persisted"}).`
+      : `Left behind: ${cleanup.failed.join(" | ")}. Remove ${testEmail} by hand.`,
+  });
+
+  const finalPassed = allPassed && cleanup.failed.length === 0;
   return {
     planType,
     planName,
     testEmail,
     userId: createdUserId,
     steps,
-    overallStatus: allPassed ? "PASSED" : "FAILED",
+    overallStatus: finalPassed ? "PASSED" : "FAILED",
+    cleanup,
     durationMs,
   };
 }
