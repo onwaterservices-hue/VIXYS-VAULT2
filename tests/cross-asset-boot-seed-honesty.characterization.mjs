@@ -71,8 +71,10 @@ t.check('the reversal-side veto fires the same way', veto2(OLD) === veto2(seed),
 t.section('the live updater still publishes real readings');
 t.check('updateCrossAssetFeeds replaces the object wholesale',
   /latestCrossAssetContext = \{[\s\S]{0,900}?assets: assetMap,/.test(serverSrc));
+// Still computed rather than seeded -- now guarded so an unmeasured average is
+// published as null instead of being rounded into a confident 0.
 t.check('its rollingCorrelation is computed, not seeded',
-  /rollingCorrelation: Math\.round\(avgCorr \* 1e3\) \/ 1e3/.test(serverSrc));
+  /rollingCorrelation: avgCorr === null \? null : Math\.round\(avgCorr \* 1e3\) \/ 1e3/.test(serverSrc));
 t.check('it stamps lastUpdated only when it has run',
   /lastUpdated: new Date\(\)\.toISOString\(\),\s*\n\s*assets: assetMap/.test(serverSrc));
 
