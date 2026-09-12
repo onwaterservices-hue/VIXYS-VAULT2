@@ -897,22 +897,22 @@ export interface ApiSignalResponse {
   sessionId?: string;
   crossAssetContext?: {
     state: string;
-    btcLeaderReturn15m: number;
-    btcMomentum: number;
-    rollingCorrelation: number;
-    directionalAgreementRatio: number;
-    divergenceMagnitude: number;
-    regime: string;
-    contextContribution: number;
-    riskPenalty: number;
-    evidenceSummary: string;
-    lastUpdated: string;
+    btcLeaderReturn15m: number | null;
+    btcMomentum: number | null;
+    rollingCorrelation: number | null;
+    directionalAgreementRatio: number | null;
+    divergenceMagnitude: number | null;
+    regime: string | null;
+    contextContribution: number | null;
+    riskPenalty: number | null;
+    evidenceSummary: string | null;
+    lastUpdated: string | null;
     assets: Record<string, {
       symbol: string;
       price: number;
       return15m: number;
       momentum: number;
-      correlationToBtc: number;
+      correlationToBtc: number | null;
       agreesWithBtc: boolean;
       weight: number;
     }>;
