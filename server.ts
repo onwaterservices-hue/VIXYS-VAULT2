@@ -1884,6 +1884,10 @@ async function updateCrossAssetFeeds() {
   let weightedCorrSum = 0;
   let weightedAltReturnSum = 0;
   let totalWeight = 0;
+  // Separate from totalWeight: an asset can have a live price but too few
+  // samples for a correlation, and must then weight the return average without
+  // weighting the correlation average.
+  let corrWeight = 0;
   const assetMap = {};
   alts.forEach((sym) => {
     const item = trackedCrossAssets[sym];
@@ -1895,17 +1899,29 @@ async function updateCrossAssetFeeds() {
       const itemReturns = item.priceBuffer.map((p, idx, arr) =>
         idx === 0 ? 0 : (p.price - arr[idx - 1].price) / arr[idx - 1].price,
       );
+      // null, not baselineCorrs[sym]. computePearsonCorrelation returns its
+      // fallback whenever there are fewer than five return samples or the
+      // variance is ~0, and the fallback used to be an invented per-asset
+      // constant (ETH 0.84, SOL 0.76, XRP 0.65, DOGE 0.58, SUI 0.62). That value
+      // was published as this asset's measured correlationToBtc AND folded into
+      // avgCorr, whose >= 0.5 threshold is what promotes the state to
+      // CONFIRMED_BULLISH / CONFIRMED_BEARISH and sizes the confidence
+      // contribution. An unmeasurable correlation now counts as unknown: the
+      // asset is excluded from the average rather than supporting it.
       const empiricalCorr = computePearsonCorrelation(
         btcReturns,
         itemReturns,
-        baselineCorrs[sym] || 0.7,
+        null,
       );
       const altSign =
         item.return15m > 0.02 ? 1 : item.return15m < -0.02 ? -1 : 0;
       const agrees = btcSign === 0 || altSign === btcSign;
       if (agrees) agreeingAssets++;
       const w = assetWeights[sym] || 0.2;
-      weightedCorrSum += empiricalCorr * w;
+      if (empiricalCorr !== null) {
+        weightedCorrSum += empiricalCorr * w;
+        corrWeight += w;
+      }
       weightedAltReturnSum += item.return15m * w;
       totalWeight += w;
       assetMap[sym] = {
@@ -1927,12 +1943,20 @@ async function updateCrossAssetFeeds() {
       };
     }
   });
+  // These used to fall back to 0.8 and 0.75 -- invented readings published as
+  // measurements, and in agreementRatio's case a value that made the
+  // `directionalAgreementRatio === 0` divergence check unable to fire on no data
+  // at all. Unknown is now null.
   const agreementRatio =
-    totalValidAlts > 0 ? agreeingAssets / totalValidAlts : 0.8;
-  const avgCorr = totalWeight > 0 ? weightedCorrSum / totalWeight : 0.75;
+    totalValidAlts > 0 ? agreeingAssets / totalValidAlts : null;
+  const avgCorr = corrWeight > 0 ? weightedCorrSum / corrWeight : null;
   const avgAltReturn =
     totalWeight > 0 ? weightedAltReturnSum / totalWeight : btcObj.return15m;
-  const divergence = Math.abs(btcObj.return15m - avgAltReturn);
+  // Unknown when there is no alt return to compare against: avgAltReturn falls
+  // back to BTC's own return, which would report a divergence of exactly 0 --
+  // "BTC agrees with a market we did not read".
+  const divergence =
+    totalWeight > 0 ? Math.abs(btcObj.return15m - avgAltReturn) : null;
   let state = "MIXED";
   let contextContrib = 0;
   let riskPenalty = 0;
@@ -1940,19 +1964,19 @@ async function updateCrossAssetFeeds() {
   if (totalValidAlts < 2) {
     state = "INSUFFICIENT_DATA";
     summary = "Multi-asset market feed warming up and collecting data";
-  } else if (divergence > 1.8 && agreementRatio <= 0.3) {
+  } else if (divergence !== null && divergence > 1.8 && agreementRatio !== null && agreementRatio <= 0.3) {
     state = "BTC_DIVERGENCE";
     contextContrib = -3.5;
     riskPenalty = 6;
     summary = `BTC diverging from broader crypto market (divergence: ${divergence.toFixed(2)}%, agreement: ${Math.round(agreementRatio * 100)}%)`;
-  } else if (btcSign > 0 && agreementRatio >= 0.7 && avgCorr >= 0.5) {
+  } else if (btcSign > 0 && agreementRatio !== null && agreementRatio >= 0.7 && avgCorr !== null && avgCorr >= 0.5) {
     state = "CONFIRMED_BULLISH";
     contextContrib = Math.min(
       5,
       Math.max(1.5, Math.round(avgCorr * agreementRatio * 50) / 10),
     );
     summary = `Broad market bull confirmation: ETH, SOL, XRP align with BTC (+${contextContrib}% confidence boost)`;
-  } else if (btcSign < 0 && agreementRatio >= 0.7 && avgCorr >= 0.5) {
+  } else if (btcSign < 0 && agreementRatio !== null && agreementRatio >= 0.7 && avgCorr !== null && avgCorr >= 0.5) {
     state = "CONFIRMED_BEARISH";
     contextContrib = Math.min(
       5,
@@ -1962,15 +1986,18 @@ async function updateCrossAssetFeeds() {
   } else {
     state = "MIXED";
     contextContrib = 0;
-    summary = `Mixed cross-asset momentum: BTC independent lead with ${Math.round(agreementRatio * 100)}% market agreement`;
+    summary = agreementRatio === null
+      ? "Mixed cross-asset momentum: BTC independent lead, market agreement not measured"
+      : `Mixed cross-asset momentum: BTC independent lead with ${Math.round(agreementRatio * 100)}% market agreement`;
   }
   latestCrossAssetContext = {
     state,
     btcLeaderReturn15m: btcObj.return15m,
     btcMomentum: btcObj.momentum,
-    rollingCorrelation: Math.round(avgCorr * 1e3) / 1e3,
-    directionalAgreementRatio: Math.round(agreementRatio * 100) / 100,
-    divergenceMagnitude: Math.round(divergence * 100) / 100,
+    rollingCorrelation: avgCorr === null ? null : Math.round(avgCorr * 1e3) / 1e3,
+    directionalAgreementRatio:
+      agreementRatio === null ? null : Math.round(agreementRatio * 100) / 100,
+    divergenceMagnitude: divergence === null ? null : Math.round(divergence * 100) / 100,
     regime: serverLearningEngine.currentRegime ?? null,
     contextContribution: contextContrib,
     riskPenalty,
