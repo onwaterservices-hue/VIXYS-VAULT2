@@ -41,6 +41,13 @@ const stages = [
     name: 'production build',
     run: () => run('npm', ['run', 'build']),
   },
+  {
+    // Must follow the build: it loads the artefact the build just produced,
+    // the way api/index.ts does on Vercel. tsc, the tests and the build all
+    // passed for PR #178, which then threw at module load in production.
+    name: 'boot the built bundle',
+    run: () => run(process.execPath, [join(ROOT, 'scripts/verifyServerBoot.mjs')]),
+  },
 ];
 
 let failed = 0, skipped = 0;
